@@ -1,0 +1,34 @@
+{
+  "fill" : "automatic",
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "image-name" : "0BFBF0BF-D55C-4C4C-BA9D-399588D88E01.png",
+          "name" : "0BFBF0BF-D55C-4C4C-BA9D-399588D88E01",
+          "position" : {
+            "scale" : 1.8,
+            "translation-in-points" : [
+              -2.1312500000001364,
+              99.37899676647976
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}
