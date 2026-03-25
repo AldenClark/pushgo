@@ -517,8 +517,13 @@ final class NotificationServiceProcessor {
             merged["body"] = body
         }
         if let channel = trimmed(item.payload["channel_id"] ?? item.payload["channel"]) {
-            content.threadIdentifier = channel
             merged["channel_id"] = channel
+        }
+        let bridgedUserInfo = merged.reduce(into: [AnyHashable: Any]()) { result, entry in
+            result[entry.key] = entry.value
+        }
+        if let threadIdentifier = NotificationPayloadSemantics.notificationThreadIdentifier(from: bridgedUserInfo) {
+            content.threadIdentifier = threadIdentifier
         }
         content.userInfo = merged
     }
@@ -560,6 +565,7 @@ final class NotificationServiceProcessor {
     private func persistMessage(for request: UNNotificationRequest, content: UNMutableNotificationContent) async {
         let store = localDataStore
         var unreadCount = 1
+        var persistenceFailed = false
         do {
             let outcome = await NotificationPersistenceCoordinator.persistIfNeeded(
                 request: request,
@@ -573,6 +579,7 @@ final class NotificationServiceProcessor {
             case .failed:
                 let counts = try await store.messageCounts()
                 unreadCount = counts.unread
+                persistenceFailed = true
             case .persisted:
                 await store.flushWrites()
                 let counts = try await store.messageCounts()
@@ -580,8 +587,21 @@ final class NotificationServiceProcessor {
                 DarwinNotificationPoster.post(name: AppConstants.messageSyncNotificationName)
             }
         } catch {
+            persistenceFailed = true
+        }
+        if persistenceFailed {
+            applyPersistenceFailureNotice(to: content)
         }
         content.badge = NSNumber(value: unreadCount)
+    }
+
+    private func applyPersistenceFailureNotice(to content: UNMutableNotificationContent) {
+        content.title = "收到消息"
+        content.body = "消息已收到，但入库失败。"
+        var userInfo = content.userInfo
+        userInfo["_skip_persist"] = "1"
+        userInfo["_persist_failed"] = "1"
+        content.userInfo = userInfo
     }
 
     private static func makeISOFormatter() -> ISO8601DateFormatter {

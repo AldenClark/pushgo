@@ -52,7 +52,12 @@ struct PushMessage: Identifiable, Codable, Equatable {
     var id: UUID
     var messageId: String?
     var title: String
-    var body: String
+    var body: String {
+        didSet {
+            bodyPreview = MessagePreviewExtractor.listPreview(from: body)
+        }
+    }
+    private(set) var bodyPreview: String
     var channel: String?
     var url: URL?
     var isRead: Bool
@@ -60,6 +65,21 @@ struct PushMessage: Identifiable, Codable, Equatable {
     var rawPayload: [String: AnyCodable]
     var status: Status
     var decryptionState: DecryptionState?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case messageId
+        case title
+        case body
+        case bodyPreview
+        case channel
+        case url
+        case isRead
+        case receivedAt
+        case rawPayload
+        case status
+        case decryptionState
+    }
 
     init(
         id: UUID = UUID(),
@@ -78,6 +98,7 @@ struct PushMessage: Identifiable, Codable, Equatable {
         self.messageId = messageId
         self.title = title
         self.body = body
+        self.bodyPreview = MessagePreviewExtractor.listPreview(from: body)
         self.channel = channel
         self.url = url
         self.isRead = isRead
@@ -85,6 +106,39 @@ struct PushMessage: Identifiable, Codable, Equatable {
         self.rawPayload = rawPayload
         self.status = status
         self.decryptionState = decryptionState
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        messageId = try container.decodeIfPresent(String.self, forKey: .messageId)
+        title = try container.decode(String.self, forKey: .title)
+        body = try container.decode(String.self, forKey: .body)
+        bodyPreview = try container.decodeIfPresent(String.self, forKey: .bodyPreview)
+            ?? MessagePreviewExtractor.listPreview(from: body)
+        channel = try container.decodeIfPresent(String.self, forKey: .channel)
+        url = try container.decodeIfPresent(URL.self, forKey: .url)
+        isRead = try container.decode(Bool.self, forKey: .isRead)
+        receivedAt = try container.decode(Date.self, forKey: .receivedAt)
+        rawPayload = try container.decode([String: AnyCodable].self, forKey: .rawPayload)
+        status = try container.decode(Status.self, forKey: .status)
+        decryptionState = try container.decodeIfPresent(DecryptionState.self, forKey: .decryptionState)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encodeIfPresent(messageId, forKey: .messageId)
+        try container.encode(title, forKey: .title)
+        try container.encode(body, forKey: .body)
+        try container.encode(bodyPreview, forKey: .bodyPreview)
+        try container.encodeIfPresent(channel, forKey: .channel)
+        try container.encodeIfPresent(url, forKey: .url)
+        try container.encode(isRead, forKey: .isRead)
+        try container.encode(receivedAt, forKey: .receivedAt)
+        try container.encode(rawPayload, forKey: .rawPayload)
+        try container.encode(status, forKey: .status)
+        try container.encodeIfPresent(decryptionState, forKey: .decryptionState)
     }
 }
 

@@ -17,6 +17,12 @@ enum MarkdownBlock: Equatable {
 
 struct MarkdownListItem: Equatable {
     let content: [MarkdownInline]
+    let ordinal: Int?
+
+    init(content: [MarkdownInline], ordinal: Int? = nil) {
+        self.content = content
+        self.ordinal = ordinal
+    }
 }
 
 struct MarkdownTable: Equatable {
@@ -267,7 +273,8 @@ private struct MarkdownRenderBuilder {
             let limit = maxListItems.map { min($0, items.count) } ?? items.count
             for (index, item) in items.prefix(limit).enumerated() {
                 if isTruncated { break }
-                appendText("\(index + 1). ", style: MarkdownRenderStyle())
+                let ordinal = item.ordinal ?? (index + 1)
+                appendText("\(ordinal). ", style: MarkdownRenderStyle())
                 appendInlines(item.content, style: MarkdownRenderStyle())
                 appendText("\n", style: MarkdownRenderStyle())
             }
@@ -645,9 +652,67 @@ struct PushGoMarkdownParser {
 
     private func parseTableRow(_ line: String) -> [String] {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "|"))
-        let rawCells = trimmed.split(separator: "|", omittingEmptySubsequences: false)
-        return rawCells.map { $0.trimmingCharacters(in: .whitespaces) }
+        guard !trimmed.isEmpty else { return [] }
+
+        let content: Substring = {
+            var start = trimmed.startIndex
+            var end = trimmed.endIndex
+            if trimmed[start] == "|" {
+                start = trimmed.index(after: start)
+            }
+            if start < end, trimmed[trimmed.index(before: end)] == "|" {
+                end = trimmed.index(before: end)
+            }
+            return trimmed[start..<end]
+        }()
+
+        var cells: [String] = []
+        var buffer = ""
+        var bracketDepth = 0
+        var parenDepth = 0
+        var inCode = false
+        var isEscaped = false
+
+        for char in content {
+            if isEscaped {
+                buffer.append(char)
+                isEscaped = false
+                continue
+            }
+
+            if char == "\\" {
+                isEscaped = true
+                buffer.append(char)
+                continue
+            }
+
+            if char == "`" {
+                inCode.toggle()
+                buffer.append(char)
+                continue
+            }
+
+            if !inCode {
+                if char == "[" {
+                    bracketDepth += 1
+                } else if char == "]" {
+                    bracketDepth = max(0, bracketDepth - 1)
+                } else if char == "(" {
+                    parenDepth += 1
+                } else if char == ")" {
+                    parenDepth = max(0, parenDepth - 1)
+                } else if char == "|" && bracketDepth == 0 && parenDepth == 0 {
+                    cells.append(buffer.trimmingCharacters(in: .whitespaces))
+                    buffer.removeAll(keepingCapacity: true)
+                    continue
+                }
+            }
+
+            buffer.append(char)
+        }
+
+        cells.append(buffer.trimmingCharacters(in: .whitespaces))
+        return cells
     }
 
     private func parseList(from lines: [String], startIndex: inout Int) -> MarkdownBlock? {
@@ -689,12 +754,14 @@ struct PushGoMarkdownParser {
                     options: [],
                     range: candidate.nsRange
                 ),
+                    let ordinalRange = Range(match.range(at: 1), in: candidate),
                     let range = Range(match.range(at: 2), in: candidate)
                 else {
                     break
                 }
                 let text = String(candidate[range]).trimmingCharacters(in: .whitespaces)
-                items.append(MarkdownListItem(content: parseInlines(text)))
+                let ordinal = Int(candidate[ordinalRange])
+                items.append(MarkdownListItem(content: parseInlines(text), ordinal: ordinal))
                 current += 1
                 if current < lines.count, lines[current].trimmingCharacters(in: .whitespaces).isEmpty {
                     break
@@ -856,23 +923,15 @@ struct PushGoMarkdownParser {
                 }
             }
 
-            if text[index] == "[" {
-                if let closingBracket = text.range(of: "]", range: text.index(after: index) ..< text.endIndex),
-                   closingBracket.upperBound < text.endIndex,
-                   text[closingBracket.upperBound] == "(",
-                   let closingParen = text.range(
-                       of: ")",
-                       range: text.index(after: closingBracket.upperBound) ..< text.endIndex
-                   )
-                {
-                    let linkText = String(text[text.index(after: index) ..< closingBracket.lowerBound])
-                    let urlText = String(text[text.index(after: closingBracket.upperBound) ..< closingParen.lowerBound])
-                    if urlText.lowercased().hasPrefix("http://") || urlText.lowercased().hasPrefix("https://") {
-                        flushBuffer()
-                        result.append(.link(text: parseInlines(linkText), url: urlText))
-                        index = closingParen.upperBound
-                        continue
-                    }
+            if text[index] == "[",
+               let linkMatch = parseLink(in: text, from: index)
+            {
+                let urlText = linkMatch.destination
+                if urlText.lowercased().hasPrefix("http://") || urlText.lowercased().hasPrefix("https://") {
+                    flushBuffer()
+                    result.append(.link(text: parseInlines(linkMatch.label), url: urlText))
+                    index = linkMatch.nextIndex
+                    continue
                 }
             }
 
@@ -882,6 +941,63 @@ struct PushGoMarkdownParser {
 
         flushBuffer()
         return tokenizeSpecials(inlines: result)
+    }
+
+    private func parseLink(in text: String, from start: String.Index) -> (label: String, destination: String, nextIndex: String.Index)? {
+        guard text[start] == "[" else { return nil }
+
+        let labelStart = text.index(after: start)
+        var index = labelStart
+        var bracketDepth = 1
+        var isEscaped = false
+
+        while index < text.endIndex {
+            let char = text[index]
+            if isEscaped {
+                isEscaped = false
+            } else if char == "\\" {
+                isEscaped = true
+            } else if char == "[" {
+                bracketDepth += 1
+            } else if char == "]" {
+                bracketDepth -= 1
+                if bracketDepth == 0 {
+                    break
+                }
+            }
+            index = text.index(after: index)
+        }
+
+        guard index < text.endIndex else { return nil }
+        let closingBracket = index
+        let openParen = text.index(after: closingBracket)
+        guard openParen < text.endIndex, text[openParen] == "(" else { return nil }
+
+        let destinationStart = text.index(after: openParen)
+        index = destinationStart
+        var parenDepth = 1
+        isEscaped = false
+
+        while index < text.endIndex {
+            let char = text[index]
+            if isEscaped {
+                isEscaped = false
+            } else if char == "\\" {
+                isEscaped = true
+            } else if char == "(" {
+                parenDepth += 1
+            } else if char == ")" {
+                parenDepth -= 1
+                if parenDepth == 0 {
+                    let label = String(text[labelStart..<closingBracket])
+                    let destination = String(text[destinationStart..<index]).trimmingCharacters(in: .whitespacesAndNewlines)
+                    return (label: label, destination: destination, nextIndex: text.index(after: index))
+                }
+            }
+            index = text.index(after: index)
+        }
+
+        return nil
     }
 
     private func tokenizeSpecials(inlines: [MarkdownInline]) -> [MarkdownInline] {

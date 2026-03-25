@@ -164,6 +164,9 @@ final class NotificationContentPreparer {
             : AppConstants.notificationEntityReminderCategoryIdentifier
         content.categoryIdentifier = categoryIdentifier
         content.userInfo["category"] = categoryIdentifier
+        if let threadIdentifier = NotificationPayloadSemantics.notificationThreadIdentifier(from: content.userInfo) {
+            content.threadIdentifier = threadIdentifier
+        }
 
         guard !Task.isCancelled else { return content }
         let mediaDeadline = Date().addingTimeInterval(Self.bestEffortAttachmentTimeout)

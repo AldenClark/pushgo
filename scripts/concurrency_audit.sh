@@ -16,8 +16,19 @@ read_lines() {
   local -a __items=()
   while IFS= read -r __line; do
     __items+=("$__line")
-  done < <("$@")
-  eval "$__target=(\"\${__items[@]}\")"
+  done < <("$@" || true)
+
+  eval "$__target=()"
+  if [[ ${#__items[@]} -eq 0 ]]; then
+    return 0
+  fi
+
+  local __quoted=""
+  local __item
+  for __item in "${__items[@]}"; do
+    printf -v __quoted '%s %q' "$__quoted" "$__item"
+  done
+  eval "$__target=(${__quoted# })"
 }
 
 read_lines ALLOWED_KEYS awk -F'|' 'NF>=2 && $1 !~ /^#/ { print $1 "|" $2 }' "$ALLOWLIST"
@@ -32,7 +43,24 @@ is_allowed() {
   return 1
 }
 
-read_lines MATCHES rg -n "@unchecked\\s+Sendable|nonisolated\\(unsafe\\)|@preconcurrency|Task\\.detached|DispatchQueue\\.global\\(|Unsafe(Mutable)?(Pointer|RawPointer)|Unmanaged<|MainActor\\.assumeIsolated" "$ROOT" --glob '*.swift'
+find_matches() {
+  local pattern="@unchecked[[:space:]]+Sendable|nonisolated\\(unsafe\\)|@preconcurrency|Task\\.detached|DispatchQueue\\.global\\(|Unsafe(Mutable)?(Pointer|RawPointer)|Unmanaged<|MainActor\\.assumeIsolated"
+  if command -v rg >/dev/null 2>&1; then
+    rg -n "$pattern" "$ROOT" --glob '*.swift'
+    return
+  fi
+
+  grep -R -n -E \
+    --include='*.swift' \
+    --exclude-dir='.build' \
+    --exclude-dir='build' \
+    --exclude-dir='.git' \
+    --exclude-dir='.deriveddata-concurrency' \
+    "$pattern" \
+    "$ROOT"
+}
+
+read_lines MATCHES find_matches
 
 if [[ ${#MATCHES[@]} -eq 0 ]]; then
   echo "concurrency audit: no risky patterns found"

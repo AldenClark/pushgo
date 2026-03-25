@@ -26,12 +26,11 @@ struct PushMessageSummary: Identifiable, Hashable, Sendable {
 
 extension PushMessageSummary {
     init(message: PushMessage) {
-        let preview = MessagePreviewExtractor.listPreview(from: message.body)
         self.init(
             id: message.id,
             messageId: message.messageId,
             title: message.title,
-            bodyPreview: preview,
+            bodyPreview: message.bodyPreview,
             channel: message.channel,
             url: message.url,
             isRead: message.isRead,
