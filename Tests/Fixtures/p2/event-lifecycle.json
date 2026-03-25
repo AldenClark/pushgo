@@ -1,0 +1,25 @@
+{
+  "messages": [
+    {
+      "id": "00000000-0000-0000-0000-00000000e001",
+      "message_id": "msg_p2_event_001",
+      "title": "P2 Event Active",
+      "body": "Event fixture for automation detail open.",
+      "channel_id": "p2",
+      "is_read": false,
+      "received_at": "2026-03-01T10:00:00Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_p2_active_001",
+        "event_id": "evt_p2_active_001",
+        "event_state": "active",
+        "severity": "high",
+        "event_title": "P2 Event Active",
+        "event_message": "Event fixture for automation detail open.",
+        "thing_id": "thing_p2_rich_001",
+        "projection_destination": "events"
+      },
+      "status": "normal"
+    }
+  ]
+}

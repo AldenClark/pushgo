@@ -1,0 +1,62 @@
+{
+  "message": {
+    "payload": {
+      "entity_type": "message",
+      "message_id": "msg-fixture-001",
+      "entity_id": "msg-fixture-001",
+      "title": "Fixture message",
+      "body": "Fixture body",
+      "severity": "high",
+      "url": "https://example.com/message",
+      "image": "https://example.com/message.png",
+      "sent_at": "4102444900"
+    },
+    "expected": {
+      "message_id": "msg-fixture-001",
+      "title": "Fixture message",
+      "body": "Fixture body",
+      "severity": "high",
+      "url": "https://example.com/message",
+      "image": "https://example.com/message.png"
+    }
+  },
+  "event": {
+    "payload": {
+      "entity_type": "event",
+      "event_id": "evt-fixture-001",
+      "entity_id": "evt-fixture-001",
+      "title": "Fixture event",
+      "body": "Event summary",
+      "event_state": "OPEN",
+      "severity": "critical",
+      "event_profile_json": "{\"title\":\"Fixture event\",\"description\":\"Event summary\",\"severity\":\"critical\",\"image\":\"https://example.com/event.png\"}",
+      "sent_at": "4102444901"
+    },
+    "expected": {
+      "event_id": "evt-fixture-001",
+      "title": "Fixture event",
+      "body": "Event summary",
+      "state": "OPEN",
+      "severity": "critical",
+      "image": "https://example.com/event.png"
+    }
+  },
+  "thing": {
+    "payload": {
+      "entity_type": "thing",
+      "thing_id": "thing-fixture-001",
+      "entity_id": "thing-fixture-001",
+      "title": "Fixture thing",
+      "thing_profile_json": "{\"title\":\"Fixture thing\",\"description\":\"Thing summary\",\"image\":\"https://example.com/thing.png\"}",
+      "thing_attrs_json": "{\"mode\":\"auto\",\"status\":\"ok\"}",
+      "observed_at": "4102444902"
+    },
+    "expected": {
+      "thing_id": "thing-fixture-001",
+      "title": "Fixture thing",
+      "body": "Thing summary",
+      "attrs_json": "{\"mode\":\"auto\",\"status\":\"ok\"}",
+      "image": "https://example.com/thing.png"
+    }
+  }
+}

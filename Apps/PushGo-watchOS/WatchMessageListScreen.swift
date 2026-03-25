@@ -1,99 +1,135 @@
 import SwiftUI
 
 struct WatchMessageListScreen: View {
-    @Environment(\.appEnvironment) private var environment: AppEnvironment
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
-    @State private var viewModel = MessageListViewModel()
-    @State private var navigationPath: [UUID] = []
-    @State private var showFilterSheet = false
+
+    let viewModel: WatchLightStoreViewModel
+    @State private var navigationPath: [String] = []
     @State private var didLoad = false
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
             List {
                 Section {
-                    if viewModel.filteredMessages.isEmpty {
+                    if viewModel.messages.isEmpty {
                         emptyState
                     } else {
-                        ForEach(viewModel.filteredMessages) { message in
-                            NavigationLink(value: message.id) {
-                                WatchMessageRowView(message: message)
-                            }
-                            .listRowInsets(EdgeInsets(top: 6, leading: 10, bottom: 6, trailing: 10))
-                            .onAppear {
-                                Task {
-                                    await viewModel.loadMoreIfNeeded(currentItem: message)
-                                }
+                        ForEach(viewModel.messages) { message in
+                            NavigationLink(value: message.messageId) {
+                                WatchLightMessageRowView(message: message)
                             }
                         }
                     }
                 }
             }
             .navigationTitle(localizationManager.localized("messages"))
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        showFilterSheet = true
-                    } label: {
-                        Image(systemName: isFilterActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                    }
-                }
-            }
-            .navigationDestination(for: UUID.self) { messageId in
-                WatchMessageDetailScreen(messageId: messageId)
-            }
-            .sheet(isPresented: $showFilterSheet) {
-                WatchFilterSheet(
-                    selectedChannel: viewModel.selectedChannel,
-                    channelSummaries: viewModel.channelSummaries,
-                    onSelectChannel: { viewModel.toggleChannelSelection($0) },
-                    onClearChannel: { viewModel.clearChannelSelection() }
-                )
-            }
-            .onChange(of: environment.messageStoreRevision) { _, _ in
-                Task {
-                    await viewModel.refresh()
-                }
-            }
-            .onChange(of: environment.pendingMessageToOpen) { _, id in
-                guard let id else { return }
-                navigationPath = [id]
+            .accessibilityIdentifier("screen.messages.list")
+            .navigationDestination(for: String.self) { messageId in
+                WatchMessageDetailScreen(messageId: messageId, viewModel: viewModel)
             }
             .onAppear {
-                guard !didLoad else { return }
-                didLoad = true
-                Task {
-                    await viewModel.refresh()
+                guard !didLoad else {
+                    openPendingMessageIfNeeded()
+                    return
                 }
-                if let id = environment.pendingMessageToOpen {
-                    navigationPath = [id]
+                didLoad = true
+                Task { @MainActor in
+                    await viewModel.reload()
+                    openPendingMessageIfNeeded()
                 }
             }
+            .onChange(of: viewModel.messages) { _, _ in
+                openPendingMessageIfNeeded()
+            }
+            .onChange(of: environment.pendingMessageToOpen) { _, _ in
+                openPendingMessageIfNeeded()
+            }
+#if DEBUG
+            .task(id: automationStateVersion) {
+                PushGoWatchAutomationRuntime.shared.publishState(
+                    environment: environment,
+                    activeTab: MainTab.messages.automationIdentifier,
+                    visibleScreen: navigationPath.last == nil ? "screen.messages.list" : "screen.message.detail",
+                    openedMessageId: navigationPath.last
+                )
+            }
+#endif
         }
     }
 
     @ViewBuilder
     private var emptyState: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: WatchEntityVisualTokens.sectionSpacing) {
             Image(systemName: "tray")
                 .font(.title3)
                 .foregroundStyle(.secondary)
-            Text(localizationManager
-                .localized(
-                    "you_can_use_the_pushgo_cli_or_other_integration_tools_to_send_a_test_push_to_the_current_device"
-                ))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+            Text(localizationManager.localized(
+                "you_can_use_the_pushgo_cli_or_other_integration_tools_to_send_a_test_push_to_the_current_device"
+            ))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .center)
         .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 12, trailing: 0))
     }
 
-    private var isFilterActive: Bool {
-        viewModel.selectedChannel != nil
+    private func openPendingMessageIfNeeded() {
+        let trimmed = environment.pendingMessageToOpen?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return }
+        guard viewModel.messages.contains(where: { $0.messageId == trimmed }) else { return }
+        navigationPath = [trimmed]
+        environment.pendingMessageToOpen = nil
+    }
+
+    private var automationStateVersion: String {
+        [
+            navigationPath.last ?? "",
+            environment.pendingMessageToOpen ?? "",
+            String(environment.unreadMessageCount),
+            String(environment.totalMessageCount),
+            String(viewModel.messages.count),
+        ].joined(separator: "|")
+    }
+}
+
+private struct WatchLightMessageRowView: View {
+    let message: WatchLightMessage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 8) {
+                Text(message.title)
+                    .font(.headline)
+                    .lineLimit(1)
+                Spacer(minLength: 6)
+                if let severity = message.severity, !severity.isEmpty {
+                    Text(severity.capitalized)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if !message.body.isEmpty {
+                Text(message.body)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+            }
+            HStack(spacing: 8) {
+                if !message.isRead {
+                    Image(systemName: "circle.fill")
+                        .font(.system(size: 6))
+                }
+                Text(watchDateText(message.receivedAt))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, WatchEntityVisualTokens.rowVerticalPadding)
     }
 }
 
 #Preview {
-    WatchMessageListScreen()
+    WatchMessageListScreen(viewModel: WatchLightStoreViewModel())
 }

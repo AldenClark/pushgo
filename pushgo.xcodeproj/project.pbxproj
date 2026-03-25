@@ -10,23 +10,26 @@
 		02C1C7A566ABB8EBB1B08D92 /* PushMessageSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36B8C43824CA496F9D0EDDC7 /* PushMessageSummary.swift */; };
 		0637F07C839C0C2D397AB069 /* NotificationServiceProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25CF4B72C6499CEADC594FC9 /* NotificationServiceProcessor.swift */; };
 		07C9B74592F74D57BA86DC45 /* MessageDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9015282D012D481CA0B5DEE7 /* MessageDetailViewModel.swift */; };
-		0A1C2D49E326267C3C032D39 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB2905A5569B461FA7E13E89 /* SettingsViewModel.swift */; };
 		0AB64B4D52C546C3964A4A7C /* MessageSearchIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0775D9BD1040ADA2E6126B /* MessageSearchIndex.swift */; };
+		0AC200002F90000100C0FFEE /* NotificationContentPreparer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AC200102F90000100C0FFEE /* NotificationContentPreparer.swift */; };
+		0AC200012F90000100C0FFEE /* WatchNotificationServiceProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AC200112F90000100C0FFEE /* WatchNotificationServiceProcessor.swift */; };
+		0AC200022F90000100C0FFEE /* WatchLightNotificationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AC200122F90000100C0FFEE /* WatchLightNotificationStore.swift */; };
+		0AC200032F90000100C0FFEE /* WatchStandaloneLightQuantizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AC200132F90000100C0FFEE /* WatchStandaloneLightQuantizer.swift */; };
+		0AC200042F90000100C0FFEE /* NotificationContentPreparer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AC200102F90000100C0FFEE /* NotificationContentPreparer.swift */; };
+		0AC200052F90000100C0FFEE /* NotificationContentPreparer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AC200102F90000100C0FFEE /* NotificationContentPreparer.swift */; };
 		10C96E0F516BE3B0A1357BB3 /* PushGoNotificationNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C332EF2359D00AD1834 /* PushGoNotificationNames.swift */; };
 		15359658F593774559F8D496 /* SharedImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C352EF2359D00AD1834 /* SharedImageCache.swift */; };
 		159B33CC9CF15A8C440BF97C /* LocalDataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C222EF2359D00AD1834 /* LocalDataStore.swift */; };
 		191B7610626749B9B12E1045 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB2905A5569B461FA7E13E89 /* SettingsViewModel.swift */; };
 		1E08B6C84A13AD8A716A9F21 /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1C2EF2359D00AD1834 /* AppError.swift */; };
 		1FC9840AEFDBEC3CA02971E2 /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2A2EF2359D00AD1834 /* AppConstants.swift */; };
-		261BA4C9936E4AA980F17DD8 /* PushMessageSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36B8C43824CA496F9D0EDDC7 /* PushMessageSummary.swift */; };
 		278EDCDB13F0B883D94FC08A /* NotificationHandling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ADFF5A76CA49E94408B363E /* NotificationHandling.swift */; };
 		298D2BC3AF041F5DCE79BCFB /* ServerConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1F2EF2359D00AD1834 /* ServerConfig.swift */; };
 		2B986C78E6B4496CBE7B2B02 /* LiquidGlassEffect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B3E6B01F1EF4D8FA6446875 /* LiquidGlassEffect.swift */; };
-		321F02FC2537D0D7B6F824AE /* NotificationServiceExtension.appex in Embed Watch Extensions */ = {isa = PBXBuildFile; fileRef = DE35C72B5C899D0FCCBAF070 /* NotificationServiceExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		321F02FC2537D0D7B6F824AE /* NotificationServiceExtensionWatch.appex in Embed Watch Extensions */ = {isa = PBXBuildFile; fileRef = DE35C72B5C899D0FCCBAF070 /* NotificationServiceExtensionWatch.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		32A8981C86EB3B8F6ADBA485 /* AnyCodable.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C282EF2359D00AD1834 /* AnyCodable.swift */; };
 		396B5824604CF29524F1D361 /* MessageSearchIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0775D9BD1040ADA2E6126B /* MessageSearchIndex.swift */; };
 		3BFC69EF8C9B3D182B771E0E /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2E2EF2359D00AD1834 /* KeychainStore.swift */; };
-		3EB939316F22CCE33235D2A7 /* PushMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1E2EF2359D00AD1834 /* PushMessage.swift */; };
 		436523C368454668836A3C38 /* MessageSearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7357BF59973E4BB4BBD5C2CC /* MessageSearchViewModel.swift */; };
 		457FB44314B7060E66E9D464 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82C9A591E410A5C90A91A022 /* NotificationService.swift */; };
 		45D5B21904F94A2197C2B349 /* MessageListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5F7201AE9644B8F9A6A4BD8 /* MessageListViewModel.swift */; };
@@ -36,7 +39,6 @@
 		54A6F2A3A28360343812D0B3 /* NotificationServiceProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25CF4B72C6499CEADC594FC9 /* NotificationServiceProcessor.swift */; };
 		54CE786A445773D4DDA7861B /* PushMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1E2EF2359D00AD1834 /* PushMessage.swift */; };
 		56865D3694AF43D2B03888C3 /* MessageSearchIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0775D9BD1040ADA2E6126B /* MessageSearchIndex.swift */; };
-		578044CE309B447566173BEF /* KeyboardDismiss.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85E1D5231456472CB97116B9 /* KeyboardDismiss.swift */; };
 		59C79E641E2F4024A613E768 /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = BE7F5A81433F49309DB30D36 /* libsqlite3.tbd */; };
 		59F7B3A12BEE41D0B3E3AA94 /* ToastView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40915CA9B3604BF1991DC27A /* ToastView.swift */; };
 		5A31804E304B439B8C4792C6 /* PushGoMarkdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4145756AA5A340C3AC329C64 /* PushGoMarkdownView.swift */; };
@@ -55,30 +57,24 @@
 		71F38D714BD4191EFC16C7AA /* PushGoMarkdownCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C322EF2359D00AD1834 /* PushGoMarkdownCore.swift */; };
 		7B2AEDB0F55042C6A81CF31E /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = BE7F5A81433F49309DB30D36 /* libsqlite3.tbd */; };
 		7D5B4196457C4AF884C6D0EA /* MessageSearchIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0775D9BD1040ADA2E6126B /* MessageSearchIndex.swift */; };
-		7DCB35B159FFEA7727046D5E /* LiquidGlassEffect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B3E6B01F1EF4D8FA6446875 /* LiquidGlassEffect.swift */; };
-		81748B093C114AFBBDC68E55 /* AppFormControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86F995116FFE4856B0C30372 /* AppFormControls.swift */; };
 		8279868F772401A6C1D34E4F /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2A2EF2359D00AD1834 /* AppConstants.swift */; };
 		82AEEFC39016CDDD6FADF11F /* LocalizationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C312EF2359D00AD1834 /* LocalizationProvider.swift */; };
 		85FC4AA3B4DC479085E8C56C /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 735E34FAF86E4F5A8F14A966 /* RootView.swift */; };
-		867075C450B0496E2E46E12C /* AppAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69A4B799BB9A4A75877FFEB4 /* AppAppearance.swift */; };
 		86B89463FB334808B21CED01 /* LiquidGlassEffect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B3E6B01F1EF4D8FA6446875 /* LiquidGlassEffect.swift */; };
 		8706A858609C487A9F28A4A5 /* MessageSearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7357BF59973E4BB4BBD5C2CC /* MessageSearchViewModel.swift */; };
-		89DD30AE11C04EA4BD57DC78 /* AppAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69A4B799BB9A4A75877FFEB4 /* AppAppearance.swift */; };
 		8BE8D5A5AFDD413593953B18 /* PushGoMarkdownCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C322EF2359D00AD1834 /* PushGoMarkdownCore.swift */; };
-		8C368FF2A2DEBD061FDEAAC9 /* RemoteImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2955959BFE8246FEB0B03EDA /* RemoteImageView.swift */; };
 		92D2AB2E26195994810976E0 /* ServerConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1F2EF2359D00AD1834 /* ServerConfig.swift */; };
-		9326295DFEBD912455EF14D8 /* MessageSearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7357BF59973E4BB4BBD5C2CC /* MessageSearchViewModel.swift */; };
-		935F5804F3A441BA8785E5BE /* AppAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69A4B799BB9A4A75877FFEB4 /* AppAppearance.swift */; };
 		94597579D3464B37971D63B0 /* PushGoMarkdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4145756AA5A340C3AC329C64 /* PushGoMarkdownView.swift */; };
-		9D289AC551EC1FAF4466AD0E /* SwiftDataModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1B2C3D4E5F60718293A4C /* SwiftDataModels.swift */; };
+		A0AA00012F70000100AA0004 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0014 /* Textual */; };
+		A0AA00012F70000100AA0005 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0015 /* Textual */; };
+		A0AA00012F70000100AA0006 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0016 /* Textual */; };
 		A0C860A2E41DB50A4FE52E2B /* BadgeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C242EF2359D00AD1834 /* BadgeManager.swift */; };
-		A345B0BEBB9CE8765365D721 /* LocalDataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C222EF2359D00AD1834 /* LocalDataStore.swift */; };
-		A53572B940EF3636095FD72C /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 735E34FAF86E4F5A8F14A966 /* RootView.swift */; };
+		A1E2D3C4B5A6978877665544 /* NotificationHandling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ADFF5A76CA49E94408B363E /* NotificationHandling.swift */; };
+		A1E2D3C4B5A6978877665545 /* NotificationHandling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ADFF5A76CA49E94408B363E /* NotificationHandling.swift */; };
 		A70D43F35FF502833D675806 /* LocalizationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C312EF2359D00AD1834 /* LocalizationProvider.swift */; };
+		AA0CDF6C2F61C4A500A7FF07 /* PrivateWakeupPullCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E2F3A4B5C6978877665544 /* PrivateWakeupPullCoordinator.swift */; };
 		AA49A1A32EE3E46C00C1EBF2 /* NotificationServiceExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA49A19C2EE3E46C00C1EBF2 /* NotificationServiceExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		AA49A23D2EE41C7900C1EBF2 /* UserNotifications.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA49A1AF2EE3E4BF00C1EBF2 /* UserNotifications.framework */; };
-		AA49A23E2EE41C7900C1EBF2 /* UserNotificationsUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA49A1B12EE3E4BF00C1EBF2 /* UserNotificationsUI.framework */; };
-		AA6603852F1A8AA20087E0F0 /* PushGo.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = AAFB52C12F0CA5F0009E61C5 /* PushGo.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AA6603852F1A8AA20087E0F0 /* PushGoWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = AAFB52C12F0CA5F0009E61C5 /* PushGoWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AA8E2C502EF2359D00AD1834 /* ServerConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1F2EF2359D00AD1834 /* ServerConfig.swift */; };
 		AA8E2C522EF2359D00AD1834 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2E2EF2359D00AD1834 /* KeychainStore.swift */; };
 		AA8E2C532EF2359D00AD1834 /* LocalDataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C222EF2359D00AD1834 /* LocalDataStore.swift */; };
@@ -112,10 +108,13 @@
 		AA8E2C9B2EF2359D00AD1834 /* PushGoNotificationNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C332EF2359D00AD1834 /* PushGoNotificationNames.swift */; };
 		AA8E2C9F2EF2359D00AD1834 /* BadgeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C242EF2359D00AD1834 /* BadgeManager.swift */; };
 		AAA6F04C8F1BA6004768B932 /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2A2EF2359D00AD1834 /* AppConstants.swift */; };
-		AAACA5102EE5C6E000CE7764 /* NotificationContentExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA49A23C2EE41C7900C1EBF2 /* NotificationContentExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AAC02D3B2F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0034 /* GRDB */; };
+		AAC02D3C2F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0037 /* GRDB */; };
+		AAC02D3D2F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0036 /* GRDB */; };
+		AAC02D3E2F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0039 /* GRDB */; };
+		AAC02D3F2F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0038 /* GRDB */; };
+		AAC02D402F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0035 /* GRDB */; };
 		AACFE1622F28511200701BB4 /* NotificationServiceExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AACFE15B2F28511200701BB4 /* NotificationServiceExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		AAE0B0A12F6A000100C0FFEE /* PushGoMarkdownCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C322EF2359D00AD1834 /* PushGoMarkdownCore.swift */; };
-		AAE0B0A22F6A000100C0FFEE /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2A2EF2359D00AD1834 /* AppConstants.swift */; };
 		AAE0B0B12F6A000100C0FFEE /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2A2EF2359D00AD1834 /* AppConstants.swift */; };
 		AAE0B0B22F6A000100C0FFEE /* ServerConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1F2EF2359D00AD1834 /* ServerConfig.swift */; };
 		AAE0B0B32F6A000100C0FFEE /* PushMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1E2EF2359D00AD1834 /* PushMessage.swift */; };
@@ -125,17 +124,16 @@
 		AAE0B0B72F6A000100C0FFEE /* AnyCodable.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C282EF2359D00AD1834 /* AnyCodable.swift */; };
 		AAE0B0B82F6A000100C0FFEE /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1C2EF2359D00AD1834 /* AppError.swift */; };
 		AAE0B0B92F6A000100C0FFEE /* LocalizationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C312EF2359D00AD1834 /* LocalizationProvider.swift */; };
-		AAE0B0BA2F6A000100C0FFEE /* SharedImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C352EF2359D00AD1834 /* SharedImageCache.swift */; };
 		AAE0B0BB2F6A000100C0FFEE /* PushGoMarkdownCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C322EF2359D00AD1834 /* PushGoMarkdownCore.swift */; };
 		ABB5C85DDC69BE814D6B8875 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2E2EF2359D00AD1834 /* KeychainStore.swift */; };
 		ACD50E96683A0EBE5AF671D6 /* UserInfoSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C362EF2359D00AD1834 /* UserInfoSanitizer.swift */; };
+		B1E7D1124F8A4C3DA9E8F101 /* EntityScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1E7D1124F8A4C3DA9E8F001 /* EntityScreens.swift */; };
+		B1E7D1124F8A4C3DA9E8F102 /* EntityScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1E7D1124F8A4C3DA9E8F001 /* EntityScreens.swift */; };
 		B2324A7F4E3B490A99C149D4 /* KeyboardDismiss.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85E1D5231456472CB97116B9 /* KeyboardDismiss.swift */; };
 		B49E95D553179EBD36CAE0AD /* PushGoMarkdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4145756AA5A340C3AC329C64 /* PushGoMarkdownView.swift */; };
 		B53BB245539441F3AF39A52F /* KeyboardDismiss.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85E1D5231456472CB97116B9 /* KeyboardDismiss.swift */; };
 		B5A80ED6449C41E48D6DD1BA /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 735E34FAF86E4F5A8F14A966 /* RootView.swift */; };
-		B7C0F0A1B2C3D4E5F6071829 /* NotificationServiceProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25CF4B72C6499CEADC594FC9 /* NotificationServiceProcessor.swift */; };
 		BEA519ACCE4649DA809B3E07 /* PlatformColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D54A0FAE6A44ADDB88F3B98 /* PlatformColor.swift */; };
-		BFB2F52D2D9BCACC65F51488 /* MessageFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1D2EF2359D00AD1834 /* MessageFilter.swift */; };
 		C0A1B2C3D4E5F60718293A5B /* SwiftDataModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1B2C3D4E5F60718293A4C /* SwiftDataModels.swift */; };
 		C0A1B2C3D4E5F60718293A5C /* SwiftDataModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1B2C3D4E5F60718293A4C /* SwiftDataModels.swift */; };
 		C0A1B2C3D4E5F60718293A5D /* SwiftDataModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1B2C3D4E5F60718293A4C /* SwiftDataModels.swift */; };
@@ -154,15 +152,46 @@
 		C0A1B2C3D4E5F60718293B1B /* ChannelPasswordValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1B2C3D4E5F60718293A73 /* ChannelPasswordValidator.swift */; };
 		C0A1B2C3D4E5F60718293C22 /* MessageStateCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1B2C3D4E5F60718293C21 /* MessageStateCoordinator.swift */; };
 		C0A1B2C3D4E5F60718293C23 /* MessageStateCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1B2C3D4E5F60718293C21 /* MessageStateCoordinator.swift */; };
-		C0A1B2C3D4E5F60718293C24 /* MessageStateCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1B2C3D4E5F60718293C21 /* MessageStateCoordinator.swift */; };
-		C0A1B2C3D4E5F60718293C25 /* MessageStateCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1B2C3D4E5F60718293C21 /* MessageStateCoordinator.swift */; };
-		C0A1B2C3D4E5F60718293C26 /* BadgeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C242EF2359D00AD1834 /* BadgeManager.swift */; };
+		C1D2E3F40102030405060801 /* NotificationPayloadSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060701 /* NotificationPayloadSemantics.swift */; };
+		C1D2E3F40102030405060802 /* ManualNotificationKeyValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060702 /* ManualNotificationKeyValidator.swift */; };
+		C1D2E3F40102030405060803 /* SearchQuerySemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060703 /* SearchQuerySemantics.swift */; };
+		C1D2E3F40102030405060804 /* ProjectionSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060704 /* ProjectionSemantics.swift */; };
+		C1D2E3F40102030405060805 /* PushRegistrationSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060705 /* PushRegistrationSemantics.swift */; };
+		C1D2E3F40102030405060806 /* PrivateWakeupAckSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060706 /* PrivateWakeupAckSemantics.swift */; };
+		C1D2E3F40102030405060811 /* NotificationPayloadSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060701 /* NotificationPayloadSemantics.swift */; };
+		C1D2E3F40102030405060812 /* ManualNotificationKeyValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060702 /* ManualNotificationKeyValidator.swift */; };
+		C1D2E3F40102030405060813 /* SearchQuerySemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060703 /* SearchQuerySemantics.swift */; };
+		C1D2E3F40102030405060814 /* ProjectionSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060704 /* ProjectionSemantics.swift */; };
+		C1D2E3F40102030405060815 /* PushRegistrationSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060705 /* PushRegistrationSemantics.swift */; };
+		C1D2E3F40102030405060816 /* PrivateWakeupAckSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060706 /* PrivateWakeupAckSemantics.swift */; };
+		C1D2E3F40102030405060821 /* NotificationPayloadSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060701 /* NotificationPayloadSemantics.swift */; };
+		C1D2E3F40102030405060822 /* ManualNotificationKeyValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060702 /* ManualNotificationKeyValidator.swift */; };
+		C1D2E3F40102030405060823 /* SearchQuerySemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060703 /* SearchQuerySemantics.swift */; };
+		C1D2E3F40102030405060824 /* ProjectionSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060704 /* ProjectionSemantics.swift */; };
+		C1D2E3F40102030405060825 /* PushRegistrationSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060705 /* PushRegistrationSemantics.swift */; };
+		C1D2E3F40102030405060826 /* PrivateWakeupAckSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060706 /* PrivateWakeupAckSemantics.swift */; };
+		C1D2E3F40102030405060831 /* NotificationPayloadSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060701 /* NotificationPayloadSemantics.swift */; };
+		C1D2E3F40102030405060832 /* ManualNotificationKeyValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060702 /* ManualNotificationKeyValidator.swift */; };
+		C1D2E3F40102030405060833 /* SearchQuerySemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060703 /* SearchQuerySemantics.swift */; };
+		C1D2E3F40102030405060834 /* ProjectionSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060704 /* ProjectionSemantics.swift */; };
+		C1D2E3F40102030405060835 /* PushRegistrationSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060705 /* PushRegistrationSemantics.swift */; };
+		C1D2E3F40102030405060836 /* PrivateWakeupAckSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060706 /* PrivateWakeupAckSemantics.swift */; };
+		C1D2E3F40102030405060841 /* NotificationPayloadSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060701 /* NotificationPayloadSemantics.swift */; };
+		C1D2E3F40102030405060842 /* ManualNotificationKeyValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060702 /* ManualNotificationKeyValidator.swift */; };
+		C1D2E3F40102030405060843 /* SearchQuerySemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060703 /* SearchQuerySemantics.swift */; };
+		C1D2E3F40102030405060844 /* ProjectionSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060704 /* ProjectionSemantics.swift */; };
+		C1D2E3F40102030405060845 /* PushRegistrationSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060705 /* PushRegistrationSemantics.swift */; };
+		C1D2E3F40102030405060846 /* PrivateWakeupAckSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060706 /* PrivateWakeupAckSemantics.swift */; };
+		C1D2E3F40102030405060851 /* NotificationPayloadSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060701 /* NotificationPayloadSemantics.swift */; };
 		C2492E8A9B92E26ABD448A9E /* PushGoMarkdownCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C322EF2359D00AD1834 /* PushGoMarkdownCore.swift */; };
 		C2AD0D750D535F07437BA084 /* LocalizationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C312EF2359D00AD1834 /* LocalizationProvider.swift */; };
-		C9EA988963204070865E615F /* MessageListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5F7201AE9644B8F9A6A4BD8 /* MessageListViewModel.swift */; };
 		C9F7E726998368ADAA5295EA /* ServerConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1F2EF2359D00AD1834 /* ServerConfig.swift */; };
 		CAE45C474E77474FBD0A94AE /* RemoteImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2955959BFE8246FEB0B03EDA /* RemoteImageView.swift */; };
 		CEAF7737211A4518B56C2730 /* MessageListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5F7201AE9644B8F9A6A4BD8 /* MessageListViewModel.swift */; };
+		D1E2F3A4B5C6978877665545 /* PrivateWakeupPullCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E2F3A4B5C6978877665544 /* PrivateWakeupPullCoordinator.swift */; };
+		D1E2F3A4B5C6978877665546 /* PrivateWakeupPullCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E2F3A4B5C6978877665544 /* PrivateWakeupPullCoordinator.swift */; };
+		D1E2F3A4B5C6978877665547 /* PrivateWakeupPullCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E2F3A4B5C6978877665544 /* PrivateWakeupPullCoordinator.swift */; };
+		D1E2F3A4B5C6978877665548 /* PrivateWakeupPullCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E2F3A4B5C6978877665544 /* PrivateWakeupPullCoordinator.swift */; };
 		D236376962B4225163DB0E47 /* LocalDataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C222EF2359D00AD1834 /* LocalDataStore.swift */; };
 		D80B500FD9AD4C54B7A7F003 /* SharedImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C352EF2359D00AD1834 /* SharedImageCache.swift */; };
 		DCF33C971B121AABEEEE708F /* PushMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1E2EF2359D00AD1834 /* PushMessage.swift */; };
@@ -170,31 +199,28 @@
 		E75A2C6D9F284EE9ADB39B99 /* MessageDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9015282D012D481CA0B5DEE7 /* MessageDetailViewModel.swift */; };
 		E7BAE8A0353490E88EF117FA /* UserInfoSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C362EF2359D00AD1834 /* UserInfoSanitizer.swift */; };
 		E8B28E450BED486DEF29C10F /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1C2EF2359D00AD1834 /* AppError.swift */; };
-		E9DE356D2887AD6739FB5F6A /* MessageDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9015282D012D481CA0B5DEE7 /* MessageDetailViewModel.swift */; };
 		EE139F8339CFDFCA5E04BA38 /* AnyCodable.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C282EF2359D00AD1834 /* AnyCodable.swift */; };
 		EFD9BB707D214FEC819105B4 /* PushMessageSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36B8C43824CA496F9D0EDDC7 /* PushMessageSummary.swift */; };
 		F0A1B2C3D4E5F60718293A11 /* ChannelSubscriptionSyncStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A1B2C3D4E5F60718293A10 /* ChannelSubscriptionSyncStore.swift */; };
 		F0A1B2C3D4E5F60718293A12 /* ChannelSubscriptionSyncStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A1B2C3D4E5F60718293A10 /* ChannelSubscriptionSyncStore.swift */; };
 		F0A1B2C3D4E5F60718293A13 /* ChannelSubscriptionSyncStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A1B2C3D4E5F60718293A10 /* ChannelSubscriptionSyncStore.swift */; };
 		F1A0C4A13B2E4F7E9D1C2B3A /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2E2EF2359D00AD1834 /* KeychainStore.swift */; };
+		F3B4C5D6E7F80910A1B2C3D4 /* NotificationHandling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ADFF5A76CA49E94408B363E /* NotificationHandling.swift */; };
 		F4A576A17767CA76088BD0AF /* PushMessageSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36B8C43824CA496F9D0EDDC7 /* PushMessageSummary.swift */; };
-		F4B245B84FA88E33F4215189 /* MessageSearchIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0775D9BD1040ADA2E6126B /* MessageSearchIndex.swift */; };
 		F7A96C4E69FDC176051175F9 /* PushRegistrationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C262EF2359D00AD1834 /* PushRegistrationService.swift */; };
-		F9A1B2C3D4E5F60718293C01 /* AnyCodable.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C282EF2359D00AD1834 /* AnyCodable.swift */; };
-		F9A1B2C3D4E5F60718293C02 /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1C2EF2359D00AD1834 /* AppError.swift */; };
-		F9A1B2C3D4E5F60718293C03 /* LocalizationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C312EF2359D00AD1834 /* LocalizationProvider.swift */; };
-		F9A1B2C3D4E5F60718293C04 /* ServerConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1F2EF2359D00AD1834 /* ServerConfig.swift */; };
-		F9A1B2C3D4E5F60718293C05 /* PushMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1E2EF2359D00AD1834 /* PushMessage.swift */; };
-		F9A1B2C3D4E5F60718293C06 /* PushMessageSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36B8C43824CA496F9D0EDDC7 /* PushMessageSummary.swift */; };
-		F9A1B2C3D4E5F60718293C07 /* UserInfoSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C362EF2359D00AD1834 /* UserInfoSanitizer.swift */; };
-		F9A1B2C3D4E5F60718293C08 /* LocalDataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C222EF2359D00AD1834 /* LocalDataStore.swift */; };
-		F9A1B2C3D4E5F60718293C09 /* SwiftDataModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1B2C3D4E5F60718293A4C /* SwiftDataModels.swift */; };
-		F9A1B2C3D4E5F60718293C0A /* MessageSearchIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0775D9BD1040ADA2E6126B /* MessageSearchIndex.swift */; };
-		F9A1B2C3D4E5F60718293C0B /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2E2EF2359D00AD1834 /* KeychainStore.swift */; };
 		F9A2B6DEFBBC4B419839D8E9 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB2905A5569B461FA7E13E89 /* SettingsViewModel.swift */; };
-		FAD22C3E668564D735AB7EB6 /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1C2EF2359D00AD1834 /* AppError.swift */; };
-		FDE510553EE8FE695275EDFC /* PlatformColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D54A0FAE6A44ADDB88F3B98 /* PlatformColor.swift */; };
 		FE2C0ABFC6BCA89762F248D1 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2E2EF2359D00AD1834 /* KeychainStore.swift */; };
+		FEE100002F80000100C0FFEE /* WatchLightModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEE100102F80000100C0FFEE /* WatchLightModels.swift */; };
+		FEE100022F80000100C0FFEE /* WatchLightModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEE100102F80000100C0FFEE /* WatchLightModels.swift */; };
+		FEE100032F80000100C0FFEE /* WatchLightQuantizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEE100112F80000100C0FFEE /* WatchLightQuantizer.swift */; };
+		FEE100042F80000100C0FFEE /* WatchLightModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEE100102F80000100C0FFEE /* WatchLightModels.swift */; };
+		FEE100052F80000100C0FFEE /* WatchLightQuantizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEE100112F80000100C0FFEE /* WatchLightQuantizer.swift */; };
+		FEE100062F80000100C0FFEE /* WatchLightModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEE100102F80000100C0FFEE /* WatchLightModels.swift */; };
+		FEE100072F80000100C0FFEE /* WatchLightQuantizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEE100112F80000100C0FFEE /* WatchLightQuantizer.swift */; };
+		FEE100082F80000100C0FFEE /* WatchLightModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEE100102F80000100C0FFEE /* WatchLightModels.swift */; };
+		FEE100092F80000100C0FFEE /* WatchLightQuantizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEE100112F80000100C0FFEE /* WatchLightQuantizer.swift */; };
+		FEE1000A2F80000100C0FFEE /* WatchLightModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEE100102F80000100C0FFEE /* WatchLightModels.swift */; };
+		FEE1000B2F80000100C0FFEE /* WatchLightQuantizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEE100112F80000100C0FFEE /* WatchLightQuantizer.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -226,19 +252,26 @@
 			remoteGlobalIDString = AA49A19B2EE3E46C00C1EBF2;
 			remoteInfo = "PushGoNSE-iOS";
 		};
-		AAACA5112EE5C6E000CE7764 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = AA49A1822EE3E31500C1EBF2 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = AA49A23B2EE41C7900C1EBF2;
-			remoteInfo = "PushGoNCE-iOS";
-		};
 		AACFE1602F28511200701BB4 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = AA49A1822EE3E31500C1EBF2 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = AACFE15A2F28511200701BB4;
 			remoteInfo = "PushGoNSE-macOS";
+		};
+		D90000112F7F000100A10008 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA49A1822EE3E31500C1EBF2 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA49A1892EE3E31500C1EBF2;
+			remoteInfo = "PushGo-iOS";
+		};
+		D90000212F7F000100A10008 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA49A1822EE3E31500C1EBF2 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA240E502EF1BEA400F812DA;
+			remoteInfo = "PushGo-macOS";
 		};
 /* End PBXContainerItemProxy section */
 
@@ -250,7 +283,6 @@
 			dstSubfolderSpec = 13;
 			files = (
 				AA49A1A32EE3E46C00C1EBF2 /* NotificationServiceExtension.appex in Embed Foundation Extensions */,
-				AAACA5102EE5C6E000CE7764 /* NotificationContentExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -261,7 +293,7 @@
 			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
 			dstSubfolderSpec = 16;
 			files = (
-				AA6603852F1A8AA20087E0F0 /* PushGo.app in Embed Watch Content */,
+				AA6603852F1A8AA20087E0F0 /* PushGoWatch.app in Embed Watch Content */,
 			);
 			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -283,7 +315,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				321F02FC2537D0D7B6F824AE /* NotificationServiceExtension.appex in Embed Watch Extensions */,
+				321F02FC2537D0D7B6F824AE /* NotificationServiceExtensionWatch.appex in Embed Watch Extensions */,
 			);
 			name = "Embed Watch Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -291,6 +323,10 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		0AC200102F90000100C0FFEE /* NotificationContentPreparer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationContentPreparer.swift; sourceTree = "<group>"; };
+		0AC200112F90000100C0FFEE /* WatchNotificationServiceProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchNotificationServiceProcessor.swift; sourceTree = "<group>"; };
+		0AC200122F90000100C0FFEE /* WatchLightNotificationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchLightNotificationStore.swift; sourceTree = "<group>"; };
+		0AC200132F90000100C0FFEE /* WatchStandaloneLightQuantizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchStandaloneLightQuantizer.swift; sourceTree = "<group>"; };
 		25CF4B72C6499CEADC594FC9 /* NotificationServiceProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationServiceProcessor.swift; sourceTree = "<group>"; };
 		2955959BFE8246FEB0B03EDA /* RemoteImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteImageView.swift; sourceTree = "<group>"; };
 		36B8C43824CA496F9D0EDDC7 /* PushMessageSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushMessageSummary.swift; sourceTree = "<group>"; };
@@ -298,7 +334,6 @@
 		40915CA9B3604BF1991DC27A /* ToastView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastView.swift; sourceTree = "<group>"; };
 		4145756AA5A340C3AC329C64 /* PushGoMarkdownView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushGoMarkdownView.swift; sourceTree = "<group>"; };
 		4D54A0FAE6A44ADDB88F3B98 /* PlatformColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformColor.swift; sourceTree = "<group>"; };
-		69A4B799BB9A4A75877FFEB4 /* AppAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAppearance.swift; sourceTree = "<group>"; };
 		6ADFF5A76CA49E94408B363E /* NotificationHandling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationHandling.swift; sourceTree = "<group>"; };
 		702354665CA14943EFB6ED7D /* pushgowatch NotificationServiceExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "pushgowatch NotificationServiceExtension.entitlements"; sourceTree = "<group>"; };
 		7357BF59973E4BB4BBD5C2CC /* MessageSearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageSearchViewModel.swift; sourceTree = "<group>"; };
@@ -312,7 +347,6 @@
 		AA49A19C2EE3E46C00C1EBF2 /* NotificationServiceExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NotificationServiceExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA49A1AF2EE3E4BF00C1EBF2 /* UserNotifications.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotifications.framework; path = System/Library/Frameworks/UserNotifications.framework; sourceTree = SDKROOT; };
 		AA49A1B12EE3E4BF00C1EBF2 /* UserNotificationsUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotificationsUI.framework; path = System/Library/Frameworks/UserNotificationsUI.framework; sourceTree = SDKROOT; };
-		AA49A23C2EE41C7900C1EBF2 /* NotificationContentExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NotificationContentExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA8E2C1C2EF2359D00AD1834 /* AppError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppError.swift; sourceTree = "<group>"; };
 		AA8E2C1D2EF2359D00AD1834 /* MessageFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageFilter.swift; sourceTree = "<group>"; };
 		AA8E2C1E2EF2359D00AD1834 /* PushMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushMessage.swift; sourceTree = "<group>"; };
@@ -330,7 +364,8 @@
 		AA8E2C352EF2359D00AD1834 /* SharedImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedImageCache.swift; sourceTree = "<group>"; };
 		AA8E2C362EF2359D00AD1834 /* UserInfoSanitizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserInfoSanitizer.swift; sourceTree = "<group>"; };
 		AACFE15B2F28511200701BB4 /* NotificationServiceExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NotificationServiceExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		AAFB52C12F0CA5F0009E61C5 /* PushGo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PushGo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AAFB52C12F0CA5F0009E61C5 /* PushGoWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PushGoWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B1E7D1124F8A4C3DA9E8F001 /* EntityScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntityScreens.swift; sourceTree = "<group>"; };
 		BE7F5A81433F49309DB30D36 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = text; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
 		C0A1B2C3D4E5F60718293A4C /* SwiftDataModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftDataModels.swift; sourceTree = "<group>"; };
 		C0A1B2C3D4E5F60718293A70 /* ChannelSubscriptionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelSubscriptionStore.swift; sourceTree = "<group>"; };
@@ -338,11 +373,22 @@
 		C0A1B2C3D4E5F60718293A72 /* ChannelNameValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelNameValidator.swift; sourceTree = "<group>"; };
 		C0A1B2C3D4E5F60718293A73 /* ChannelPasswordValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelPasswordValidator.swift; sourceTree = "<group>"; };
 		C0A1B2C3D4E5F60718293C21 /* MessageStateCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageStateCoordinator.swift; sourceTree = "<group>"; };
-		DE35C72B5C899D0FCCBAF070 /* NotificationServiceExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NotificationServiceExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		C1D2E3F40102030405060701 /* NotificationPayloadSemantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationPayloadSemantics.swift; sourceTree = "<group>"; };
+		C1D2E3F40102030405060702 /* ManualNotificationKeyValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualNotificationKeyValidator.swift; sourceTree = "<group>"; };
+		C1D2E3F40102030405060703 /* SearchQuerySemantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchQuerySemantics.swift; sourceTree = "<group>"; };
+		C1D2E3F40102030405060704 /* ProjectionSemantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectionSemantics.swift; sourceTree = "<group>"; };
+		C1D2E3F40102030405060705 /* PushRegistrationSemantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushRegistrationSemantics.swift; sourceTree = "<group>"; };
+		C1D2E3F40102030405060706 /* PrivateWakeupAckSemantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateWakeupAckSemantics.swift; sourceTree = "<group>"; };
+		D1E2F3A4B5C6978877665544 /* PrivateWakeupPullCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateWakeupPullCoordinator.swift; sourceTree = "<group>"; };
+		D90000112F7F000100A10001 /* PushGo-iOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "PushGo-iOSUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		D90000212F7F000100A10001 /* PushGo-macOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "PushGo-macOSUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		DE35C72B5C899D0FCCBAF070 /* NotificationServiceExtensionWatch.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NotificationServiceExtensionWatch.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		EB2905A5569B461FA7E13E89 /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
 		F0A1B2C3D4E5F60718293A10 /* ChannelSubscriptionSyncStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelSubscriptionSyncStore.swift; sourceTree = "<group>"; };
 		F5F7201AE9644B8F9A6A4BD8 /* MessageListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageListViewModel.swift; sourceTree = "<group>"; };
 		FE0775D9BD1040ADA2E6126B /* MessageSearchIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageSearchIndex.swift; sourceTree = "<group>"; };
+		FEE100102F80000100C0FFEE /* WatchLightModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchLightModels.swift; sourceTree = "<group>"; };
+		FEE100112F80000100C0FFEE /* WatchLightQuantizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchLightQuantizer.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -350,15 +396,8 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Sounds/alert.caf,
-				"Sounds/arcade-sound.caf",
 				"Sounds/bubble-pop.caf",
-				"Sounds/cartoon-blinking.caf",
-				"Sounds/cute-chime.caf",
-				"Sounds/festive-chime.caf",
 				"Sounds/level-up.caf",
-				"Sounds/notification-sound.caf",
-				Sounds/pop.caf,
-				"Sounds/quick-whoosh.caf",
 			);
 			target = CF8A576C8ED05746DC334102 /* PushGoNSE-watchOS */;
 		};
@@ -366,15 +405,8 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Sounds/alert.caf,
-				"Sounds/arcade-sound.caf",
 				"Sounds/bubble-pop.caf",
-				"Sounds/cartoon-blinking.caf",
-				"Sounds/cute-chime.caf",
-				"Sounds/festive-chime.caf",
 				"Sounds/level-up.caf",
-				"Sounds/notification-sound.caf",
-				Sounds/pop.caf,
-				"Sounds/quick-whoosh.caf",
 			);
 			target = AA49A19B2EE3E46C00C1EBF2 /* PushGoNSE-iOS */;
 		};
@@ -391,13 +423,6 @@
 				Info.plist,
 			);
 			target = AA49A19B2EE3E46C00C1EBF2 /* PushGoNSE-iOS */;
-		};
-		AAF0E1D22F6B000100C0FF02 /* Exceptions for "Extensions/PushGoNCE-iOS" folder in "PushGoNCE-iOS" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = AA49A23B2EE41C7900C1EBF2 /* PushGoNCE-iOS */;
 		};
 		AAF0E1D22F6B000100C0FF03 /* Exceptions for "Extensions/PushGoNSE-macOS" folder in "PushGoNSE-macOS" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
@@ -437,14 +462,6 @@
 			path = "Extensions/PushGoNSE-iOS";
 			sourceTree = "<group>";
 		};
-		AA49A23F2EE41C7900C1EBF2 /* Extensions/PushGoNCE-iOS */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				AAF0E1D22F6B000100C0FF02 /* Exceptions for "Extensions/PushGoNCE-iOS" folder in "PushGoNCE-iOS" target */,
-			);
-			path = "Extensions/PushGoNCE-iOS";
-			sourceTree = "<group>";
-		};
 		AA8E2B3C2EF2292800AD1834 /* Resources */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -468,6 +485,16 @@
 			path = "Apps/PushGo-watchOS";
 			sourceTree = "<group>";
 		};
+		D90000112F7F000100A10002 /* Tests/PushGo-iOSUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Tests/PushGo-iOSUITests";
+			sourceTree = "<group>";
+		};
+		D90000212F7F000100A10002 /* Tests/PushGo-macOSUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Tests/PushGo-macOSUITests";
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -475,6 +502,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AAC02D402F682C3900A179C3 /* GRDB in Frameworks */,
+				A0AA00012F70000100AA0005 /* Textual in Frameworks */,
 				E2C4896A4A74480E9AAD78EA /* libsqlite3.tbd in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -483,6 +512,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AAC02D3B2F682C3900A179C3 /* GRDB in Frameworks */,
+				A0AA00012F70000100AA0004 /* Textual in Frameworks */,
 				59C79E641E2F4024A613E768 /* libsqlite3.tbd in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -491,16 +522,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AAC02D3C2F682C3900A179C3 /* GRDB in Frameworks */,
 				7B2AEDB0F55042C6A81CF31E /* libsqlite3.tbd in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		AA49A2392EE41C7900C1EBF2 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				AA49A23E2EE41C7900C1EBF2 /* UserNotificationsUI.framework in Frameworks */,
-				AA49A23D2EE41C7900C1EBF2 /* UserNotifications.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -508,10 +531,27 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AAC02D3F2F682C3900A179C3 /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		AAFB52BE2F0CA5F0009E61C5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAC02D3D2F682C3900A179C3 /* GRDB in Frameworks */,
+				A0AA00012F70000100AA0006 /* Textual in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D90000112F7F000100A10003 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D90000212F7F000100A10003 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -522,6 +562,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AAC02D3E2F682C3900A179C3 /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -531,8 +572,8 @@
 		6043147E6DB742B8BA382131 /* UI */ = {
 			isa = PBXGroup;
 			children = (
-				69A4B799BB9A4A75877FFEB4 /* AppAppearance.swift */,
 				86F995116FFE4856B0C30372 /* AppFormControls.swift */,
+				B1E7D1124F8A4C3DA9E8F001 /* EntityScreens.swift */,
 				85E1D5231456472CB97116B9 /* KeyboardDismiss.swift */,
 				3B3E6B01F1EF4D8FA6446875 /* LiquidGlassEffect.swift */,
 				4D54A0FAE6A44ADDB88F3B98 /* PlatformColor.swift */,
@@ -553,11 +594,12 @@
 			children = (
 				AA49A18C2EE3E31500C1EBF2 /* Apps/PushGo-iOS */,
 				AA49A19D2EE3E46C00C1EBF2 /* Extensions/PushGoNSE-iOS */,
-				AA49A23F2EE41C7900C1EBF2 /* Extensions/PushGoNCE-iOS */,
 				AA240E522EF1BEA400F812DA /* Apps/PushGo-macOS */,
 				D498F7BDCDB2E45FD9D0CA9C /* Extensions/PushGoNSE-watchOS */,
 				AAFB52C52F0CA5F0009E61C5 /* Apps/PushGo-watchOS */,
 				AACFE15C2F28511200701BB4 /* Extensions/PushGoNSE-macOS */,
+				D90000112F7F000100A10002 /* Tests/PushGo-iOSUITests */,
+				D90000212F7F000100A10002 /* Tests/PushGo-macOSUITests */,
 				AA49A1AE2EE3E4BF00C1EBF2 /* Frameworks */,
 				AA49A18B2EE3E31500C1EBF2 /* Products */,
 				AA8E2B3C2EF2292800AD1834 /* Resources */,
@@ -570,11 +612,12 @@
 			children = (
 				AA49A18A2EE3E31500C1EBF2 /* PushGo.app */,
 				AA49A19C2EE3E46C00C1EBF2 /* NotificationServiceExtension.appex */,
-				AA49A23C2EE41C7900C1EBF2 /* NotificationContentExtension.appex */,
 				AA240E512EF1BEA400F812DA /* PushGo.app */,
-				AAFB52C12F0CA5F0009E61C5 /* PushGo.app */,
-				DE35C72B5C899D0FCCBAF070 /* NotificationServiceExtension.appex */,
+				AAFB52C12F0CA5F0009E61C5 /* PushGoWatch.app */,
+				DE35C72B5C899D0FCCBAF070 /* NotificationServiceExtensionWatch.appex */,
 				AACFE15B2F28511200701BB4 /* NotificationServiceExtension.appex */,
+				D90000112F7F000100A10001 /* PushGo-iOSUITests.xctest */,
+				D90000212F7F000100A10001 /* PushGo-macOSUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -597,6 +640,7 @@
 				AA8E2C1E2EF2359D00AD1834 /* PushMessage.swift */,
 				36B8C43824CA496F9D0EDDC7 /* PushMessageSummary.swift */,
 				AA8E2C1F2EF2359D00AD1834 /* ServerConfig.swift */,
+				FEE100102F80000100C0FFEE /* WatchLightModels.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -620,6 +664,8 @@
 				C0A1B2C3D4E5F60718293A71 /* ChannelSubscriptionService.swift */,
 				C0A1B2C3D4E5F60718293C21 /* MessageStateCoordinator.swift */,
 				AA8E2C262EF2359D00AD1834 /* PushRegistrationService.swift */,
+				D1E2F3A4B5C6978877665544 /* PrivateWakeupPullCoordinator.swift */,
+				0AC200102F90000100C0FFEE /* NotificationContentPreparer.swift */,
 				25CF4B72C6499CEADC594FC9 /* NotificationServiceProcessor.swift */,
 				6ADFF5A76CA49E94408B363E /* NotificationHandling.swift */,
 			);
@@ -636,10 +682,17 @@
 				AA8E2C2E2EF2359D00AD1834 /* KeychainStore.swift */,
 				AA8E2C302EF2359D00AD1834 /* LocalizationManager.swift */,
 				AA8E2C312EF2359D00AD1834 /* LocalizationProvider.swift */,
+				C1D2E3F40102030405060702 /* ManualNotificationKeyValidator.swift */,
+				C1D2E3F40102030405060701 /* NotificationPayloadSemantics.swift */,
+				C1D2E3F40102030405060706 /* PrivateWakeupAckSemantics.swift */,
+				C1D2E3F40102030405060704 /* ProjectionSemantics.swift */,
 				AA8E2C322EF2359D00AD1834 /* PushGoMarkdownCore.swift */,
 				AA8E2C332EF2359D00AD1834 /* PushGoNotificationNames.swift */,
+				C1D2E3F40102030405060705 /* PushRegistrationSemantics.swift */,
+				C1D2E3F40102030405060703 /* SearchQuerySemantics.swift */,
 				AA8E2C352EF2359D00AD1834 /* SharedImageCache.swift */,
 				AA8E2C362EF2359D00AD1834 /* UserInfoSanitizer.swift */,
+				FEE100112F80000100C0FFEE /* WatchLightQuantizer.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -660,6 +713,9 @@
 			isa = PBXGroup;
 			children = (
 				82C9A591E410A5C90A91A022 /* NotificationService.swift */,
+				0AC200112F90000100C0FFEE /* WatchNotificationServiceProcessor.swift */,
+				0AC200122F90000100C0FFEE /* WatchLightNotificationStore.swift */,
+				0AC200132F90000100C0FFEE /* WatchStandaloneLightQuantizer.swift */,
 				702354665CA14943EFB6ED7D /* pushgowatch NotificationServiceExtension.entitlements */,
 			);
 			path = "Extensions/PushGoNSE-watchOS";
@@ -689,6 +745,8 @@
 			);
 			name = "PushGo-macOS";
 			packageProductDependencies = (
+				A0AA00012F70000100AA0015 /* Textual */,
+				A0AA00012F70000100AA0035 /* GRDB */,
 			);
 			productName = PushGo;
 			productReference = AA240E512EF1BEA400F812DA /* PushGo.app */;
@@ -708,7 +766,6 @@
 			);
 			dependencies = (
 				AA49A1A22EE3E46C00C1EBF2 /* PBXTargetDependency */,
-				AAACA5122EE5C6E000CE7764 /* PBXTargetDependency */,
 				AA6603842F1A8AA20087E0F0 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
@@ -717,6 +774,8 @@
 			);
 			name = "PushGo-iOS";
 			packageProductDependencies = (
+				A0AA00012F70000100AA0014 /* Textual */,
+				A0AA00012F70000100AA0034 /* GRDB */,
 			);
 			productName = PushGo;
 			productReference = AA49A18A2EE3E31500C1EBF2 /* PushGo.app */;
@@ -739,31 +798,10 @@
 			);
 			name = "PushGoNSE-iOS";
 			packageProductDependencies = (
+				A0AA00012F70000100AA0037 /* GRDB */,
 			);
 			productName = NotificationServiceExtension;
 			productReference = AA49A19C2EE3E46C00C1EBF2 /* NotificationServiceExtension.appex */;
-			productType = "com.apple.product-type.app-extension";
-		};
-		AA49A23B2EE41C7900C1EBF2 /* PushGoNCE-iOS */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = AA49A24A2EE41C7900C1EBF2 /* Build configuration list for PBXNativeTarget "PushGoNCE-iOS" */;
-			buildPhases = (
-				AA49A2382EE41C7900C1EBF2 /* Sources */,
-				AA49A2392EE41C7900C1EBF2 /* Frameworks */,
-				AA49A23A2EE41C7900C1EBF2 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				AA49A23F2EE41C7900C1EBF2 /* Extensions/PushGoNCE-iOS */,
-			);
-			name = "PushGoNCE-iOS";
-			packageProductDependencies = (
-			);
-			productName = NotificationContentExtension;
-			productReference = AA49A23C2EE41C7900C1EBF2 /* NotificationContentExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 		AACFE15A2F28511200701BB4 /* PushGoNSE-macOS */ = {
@@ -783,6 +821,7 @@
 			);
 			name = "PushGoNSE-macOS";
 			packageProductDependencies = (
+				A0AA00012F70000100AA0038 /* GRDB */,
 			);
 			productName = PushgoNotificationServiceExtension;
 			productReference = AACFE15B2F28511200701BB4 /* NotificationServiceExtension.appex */;
@@ -808,9 +847,11 @@
 			);
 			name = "PushGo-watchOS";
 			packageProductDependencies = (
+				A0AA00012F70000100AA0016 /* Textual */,
+				A0AA00012F70000100AA0036 /* GRDB */,
 			);
 			productName = PushGo;
-			productReference = AAFB52C12F0CA5F0009E61C5 /* PushGo.app */;
+			productReference = AAFB52C12F0CA5F0009E61C5 /* PushGoWatch.app */;
 			productType = "com.apple.product-type.application";
 		};
 		CF8A576C8ED05746DC334102 /* PushGoNSE-watchOS */ = {
@@ -827,10 +868,57 @@
 			);
 			name = "PushGoNSE-watchOS";
 			packageProductDependencies = (
+				A0AA00012F70000100AA0039 /* GRDB */,
 			);
 			productName = pushgowatchNotificationServiceExtension;
-			productReference = DE35C72B5C899D0FCCBAF070 /* NotificationServiceExtension.appex */;
+			productReference = DE35C72B5C899D0FCCBAF070 /* NotificationServiceExtensionWatch.appex */;
 			productType = "com.apple.product-type.app-extension";
+		};
+		D90000112F7F000100A10006 /* PushGo-iOSUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D90000112F7F000100A1000B /* Build configuration list for PBXNativeTarget "PushGo-iOSUITests" */;
+			buildPhases = (
+				D90000112F7F000100A10005 /* Sources */,
+				D90000112F7F000100A10003 /* Frameworks */,
+				D90000112F7F000100A10004 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D90000112F7F000100A10007 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				D90000112F7F000100A10002 /* Tests/PushGo-iOSUITests */,
+			);
+			name = "PushGo-iOSUITests";
+			packageProductDependencies = (
+			);
+			productName = "$(TARGET_NAME)";
+			productReference = D90000112F7F000100A10001 /* PushGo-iOSUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		D90000212F7F000100A10006 /* PushGo-macOSUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D90000212F7F000100A1000B /* Build configuration list for PBXNativeTarget "PushGo-macOSUITests" */;
+			buildPhases = (
+				D90000212F7F000100A10005 /* Sources */,
+				D90000212F7F000100A10003 /* Frameworks */,
+				D90000212F7F000100A10004 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D90000212F7F000100A10007 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				D90000212F7F000100A10002 /* Tests/PushGo-macOSUITests */,
+			);
+			name = "PushGo-macOSUITests";
+			packageProductDependencies = (
+			);
+			productName = "$(TARGET_NAME)";
+			productReference = D90000212F7F000100A10001 /* PushGo-macOSUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
 
@@ -851,9 +939,6 @@
 					AA49A19B2EE3E46C00C1EBF2 = {
 						CreatedOnToolsVersion = 26.1.1;
 					};
-					AA49A23B2EE41C7900C1EBF2 = {
-						CreatedOnToolsVersion = 26.1.1;
-					};
 					AACFE15A2F28511200701BB4 = {
 						CreatedOnToolsVersion = 26.2;
 					};
@@ -861,6 +946,12 @@
 						CreatedOnToolsVersion = 26.2;
 					};
 					CF8A576C8ED05746DC334102 = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					D90000112F7F000100A10006 = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					D90000212F7F000100A10006 = {
 						CreatedOnToolsVersion = 26.2;
 					};
 				};
@@ -878,6 +969,10 @@
 			);
 			mainGroup = AA49A1812EE3E31500C1EBF2;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A0AA00012F70000100AA0033 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
+				A0AA00012F70000100AA0022 /* XCRemoteSwiftPackageReference "textual" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = AA49A18B2EE3E31500C1EBF2 /* Products */;
 			projectDirPath = "";
@@ -885,11 +980,12 @@
 			targets = (
 				AA49A1892EE3E31500C1EBF2 /* PushGo-iOS */,
 				AA49A19B2EE3E46C00C1EBF2 /* PushGoNSE-iOS */,
-				AA49A23B2EE41C7900C1EBF2 /* PushGoNCE-iOS */,
 				CF8A576C8ED05746DC334102 /* PushGoNSE-watchOS */,
 				AA240E502EF1BEA400F812DA /* PushGo-macOS */,
 				AAFB52C02F0CA5F0009E61C5 /* PushGo-watchOS */,
 				AACFE15A2F28511200701BB4 /* PushGoNSE-macOS */,
+				D90000112F7F000100A10006 /* PushGo-iOSUITests */,
+				D90000212F7F000100A10006 /* PushGo-macOSUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -923,13 +1019,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		AA49A23A2EE41C7900C1EBF2 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		AACFE1592F28511200701BB4 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -944,6 +1033,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D90000112F7F000100A10004 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D90000212F7F000100A10004 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -952,21 +1055,20 @@
 			buildActionMask = 2147483647;
 			files = (
 				457FB44314B7060E66E9D464 /* NotificationService.swift in Sources */,
-				B7C0F0A1B2C3D4E5F6071829 /* NotificationServiceProcessor.swift in Sources */,
+				0AC200012F90000100C0FFEE /* WatchNotificationServiceProcessor.swift in Sources */,
+				0AC200022F90000100C0FFEE /* WatchLightNotificationStore.swift in Sources */,
+				0AC200032F90000100C0FFEE /* WatchStandaloneLightQuantizer.swift in Sources */,
+				0AC200002F90000100C0FFEE /* NotificationContentPreparer.swift in Sources */,
+				C1D2E3F40102030405060851 /* NotificationPayloadSemantics.swift in Sources */,
 				8BE8D5A5AFDD413593953B18 /* PushGoMarkdownCore.swift in Sources */,
 				AAA6F04C8F1BA6004768B932 /* AppConstants.swift in Sources */,
 				32A8981C86EB3B8F6ADBA485 /* AnyCodable.swift in Sources */,
-				FAD22C3E668564D735AB7EB6 /* AppError.swift in Sources */,
 				C2AD0D750D535F07437BA084 /* LocalizationProvider.swift in Sources */,
 				92D2AB2E26195994810976E0 /* ServerConfig.swift in Sources */,
-				3EB939316F22CCE33235D2A7 /* PushMessage.swift in Sources */,
-				261BA4C9936E4AA980F17DD8 /* PushMessageSummary.swift in Sources */,
 				47149B48AA28628BBD2D912D /* UserInfoSanitizer.swift in Sources */,
-				A345B0BEBB9CE8765365D721 /* LocalDataStore.swift in Sources */,
-				9D289AC551EC1FAF4466AD0E /* SwiftDataModels.swift in Sources */,
-				F4B245B84FA88E33F4215189 /* MessageSearchIndex.swift in Sources */,
 				15359658F593774559F8D496 /* SharedImageCache.swift in Sources */,
 				ABB5C85DDC69BE814D6B8875 /* KeychainStore.swift in Sources */,
+				FEE100002F80000100C0FFEE /* WatchLightModels.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -975,6 +1077,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				6A4744330FF5443C3E79BAC6 /* NotificationHandling.swift in Sources */,
+				D1E2F3A4B5C6978877665546 /* PrivateWakeupPullCoordinator.swift in Sources */,
+				C1D2E3F40102030405060811 /* NotificationPayloadSemantics.swift in Sources */,
+				C1D2E3F40102030405060812 /* ManualNotificationKeyValidator.swift in Sources */,
+				C1D2E3F40102030405060813 /* SearchQuerySemantics.swift in Sources */,
+				C1D2E3F40102030405060814 /* ProjectionSemantics.swift in Sources */,
+				C1D2E3F40102030405060815 /* PushRegistrationSemantics.swift in Sources */,
+				C1D2E3F40102030405060816 /* PrivateWakeupAckSemantics.swift in Sources */,
 				C0A1B2C3D4E5F60718293C23 /* MessageStateCoordinator.swift in Sources */,
 				AA8E2C7C2EF2359D00AD1834 /* ServerConfig.swift in Sources */,
 				AA8E2C7E2EF2359D00AD1834 /* KeychainStore.swift in Sources */,
@@ -1000,7 +1109,6 @@
 				AA8E2C972EF2359D00AD1834 /* UserInfoSanitizer.swift in Sources */,
 				AA8E2C9B2EF2359D00AD1834 /* PushGoNotificationNames.swift in Sources */,
 				AA8E2C9F2EF2359D00AD1834 /* BadgeManager.swift in Sources */,
-				89DD30AE11C04EA4BD57DC78 /* AppAppearance.swift in Sources */,
 				2B986C78E6B4496CBE7B2B02 /* LiquidGlassEffect.swift in Sources */,
 				94597579D3464B37971D63B0 /* PushGoMarkdownView.swift in Sources */,
 				6D2F01C44A114051A8C20752 /* ToastView.swift in Sources */,
@@ -1013,6 +1121,9 @@
 				61354C5D3790413DBD29BCFB /* PlatformColor.swift in Sources */,
 				CAE45C474E77474FBD0A94AE /* RemoteImageView.swift in Sources */,
 				E75A2C6D9F284EE9ADB39B99 /* MessageDetailViewModel.swift in Sources */,
+				B1E7D1124F8A4C3DA9E8F102 /* EntityScreens.swift in Sources */,
+				FEE100022F80000100C0FFEE /* WatchLightModels.swift in Sources */,
+				FEE100032F80000100C0FFEE /* WatchLightQuantizer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1021,6 +1132,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				278EDCDB13F0B883D94FC08A /* NotificationHandling.swift in Sources */,
+				D1E2F3A4B5C6978877665545 /* PrivateWakeupPullCoordinator.swift in Sources */,
+				C1D2E3F40102030405060801 /* NotificationPayloadSemantics.swift in Sources */,
+				C1D2E3F40102030405060802 /* ManualNotificationKeyValidator.swift in Sources */,
+				C1D2E3F40102030405060803 /* SearchQuerySemantics.swift in Sources */,
+				C1D2E3F40102030405060804 /* ProjectionSemantics.swift in Sources */,
+				C1D2E3F40102030405060805 /* PushRegistrationSemantics.swift in Sources */,
+				C1D2E3F40102030405060806 /* PrivateWakeupAckSemantics.swift in Sources */,
 				C0A1B2C3D4E5F60718293C22 /* MessageStateCoordinator.swift in Sources */,
 				AA8E2C502EF2359D00AD1834 /* ServerConfig.swift in Sources */,
 				AA8E2C522EF2359D00AD1834 /* KeychainStore.swift in Sources */,
@@ -1046,7 +1164,6 @@
 				AA8E2C6B2EF2359D00AD1834 /* UserInfoSanitizer.swift in Sources */,
 				AA8E2C6F2EF2359D00AD1834 /* PushGoNotificationNames.swift in Sources */,
 				AA8E2C732EF2359D00AD1834 /* BadgeManager.swift in Sources */,
-				935F5804F3A441BA8785E5BE /* AppAppearance.swift in Sources */,
 				86B89463FB334808B21CED01 /* LiquidGlassEffect.swift in Sources */,
 				5A31804E304B439B8C4792C6 /* PushGoMarkdownView.swift in Sources */,
 				59F7B3A12BEE41D0B3E3AA94 /* ToastView.swift in Sources */,
@@ -1059,6 +1176,9 @@
 				BEA519ACCE4649DA809B3E07 /* PlatformColor.swift in Sources */,
 				4A211E68CCB14F5896840D76 /* RemoteImageView.swift in Sources */,
 				07C9B74592F74D57BA86DC45 /* MessageDetailViewModel.swift in Sources */,
+				B1E7D1124F8A4C3DA9E8F101 /* EntityScreens.swift in Sources */,
+				FEE100042F80000100C0FFEE /* WatchLightModels.swift in Sources */,
+				FEE100052F80000100C0FFEE /* WatchLightQuantizer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1067,6 +1187,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				0637F07C839C0C2D397AB069 /* NotificationServiceProcessor.swift in Sources */,
+				0AC200042F90000100C0FFEE /* NotificationContentPreparer.swift in Sources */,
+				D1E2F3A4B5C6978877665547 /* PrivateWakeupPullCoordinator.swift in Sources */,
+				A1E2D3C4B5A6978877665544 /* NotificationHandling.swift in Sources */,
+				C1D2E3F40102030405060821 /* NotificationPayloadSemantics.swift in Sources */,
+				C1D2E3F40102030405060822 /* ManualNotificationKeyValidator.swift in Sources */,
+				C1D2E3F40102030405060823 /* SearchQuerySemantics.swift in Sources */,
+				C1D2E3F40102030405060824 /* ProjectionSemantics.swift in Sources */,
+				C1D2E3F40102030405060825 /* PushRegistrationSemantics.swift in Sources */,
+				C1D2E3F40102030405060826 /* PrivateWakeupAckSemantics.swift in Sources */,
 				AAE0B0BB2F6A000100C0FFEE /* PushGoMarkdownCore.swift in Sources */,
 				AAE0B0B12F6A000100C0FFEE /* AppConstants.swift in Sources */,
 				AAE0B0B72F6A000100C0FFEE /* AnyCodable.swift in Sources */,
@@ -1081,29 +1210,8 @@
 				0AB64B4D52C546C3964A4A7C /* MessageSearchIndex.swift in Sources */,
 				AAE0B0B62F6A000100C0FFEE /* SharedImageCache.swift in Sources */,
 				F1A0C4A13B2E4F7E9D1C2B3A /* KeychainStore.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		AA49A2382EE41C7900C1EBF2 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				C0A1B2C3D4E5F60718293C25 /* MessageStateCoordinator.swift in Sources */,
-				C0A1B2C3D4E5F60718293C26 /* BadgeManager.swift in Sources */,
-				AAE0B0A22F6A000100C0FFEE /* AppConstants.swift in Sources */,
-				AAE0B0A12F6A000100C0FFEE /* PushGoMarkdownCore.swift in Sources */,
-				F9A1B2C3D4E5F60718293C01 /* AnyCodable.swift in Sources */,
-				F9A1B2C3D4E5F60718293C02 /* AppError.swift in Sources */,
-				F9A1B2C3D4E5F60718293C03 /* LocalizationProvider.swift in Sources */,
-				F9A1B2C3D4E5F60718293C04 /* ServerConfig.swift in Sources */,
-				F9A1B2C3D4E5F60718293C05 /* PushMessage.swift in Sources */,
-				F9A1B2C3D4E5F60718293C06 /* PushMessageSummary.swift in Sources */,
-				F9A1B2C3D4E5F60718293C07 /* UserInfoSanitizer.swift in Sources */,
-				F9A1B2C3D4E5F60718293C08 /* LocalDataStore.swift in Sources */,
-				F9A1B2C3D4E5F60718293C09 /* SwiftDataModels.swift in Sources */,
-				F9A1B2C3D4E5F60718293C0A /* MessageSearchIndex.swift in Sources */,
-				AAE0B0BA2F6A000100C0FFEE /* SharedImageCache.swift in Sources */,
-				F9A1B2C3D4E5F60718293C0B /* KeychainStore.swift in Sources */,
+				FEE100062F80000100C0FFEE /* WatchLightModels.swift in Sources */,
+				FEE100072F80000100C0FFEE /* WatchLightQuantizer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1112,6 +1220,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				54A6F2A3A28360343812D0B3 /* NotificationServiceProcessor.swift in Sources */,
+				0AC200052F90000100C0FFEE /* NotificationContentPreparer.swift in Sources */,
+				D1E2F3A4B5C6978877665548 /* PrivateWakeupPullCoordinator.swift in Sources */,
+				A1E2D3C4B5A6978877665545 /* NotificationHandling.swift in Sources */,
+				C1D2E3F40102030405060831 /* NotificationPayloadSemantics.swift in Sources */,
+				C1D2E3F40102030405060832 /* ManualNotificationKeyValidator.swift in Sources */,
+				C1D2E3F40102030405060833 /* SearchQuerySemantics.swift in Sources */,
+				C1D2E3F40102030405060834 /* ProjectionSemantics.swift in Sources */,
+				C1D2E3F40102030405060835 /* PushRegistrationSemantics.swift in Sources */,
+				C1D2E3F40102030405060836 /* PrivateWakeupAckSemantics.swift in Sources */,
 				C2492E8A9B92E26ABD448A9E /* PushGoMarkdownCore.swift in Sources */,
 				8279868F772401A6C1D34E4F /* AppConstants.swift in Sources */,
 				65F43DA819F3DB0B9D12AE54 /* AnyCodable.swift in Sources */,
@@ -1126,6 +1243,8 @@
 				396B5824604CF29524F1D361 /* MessageSearchIndex.swift in Sources */,
 				622F64CE0545F54BBF5C9995 /* SharedImageCache.swift in Sources */,
 				FE2C0ABFC6BCA89762F248D1 /* KeychainStore.swift in Sources */,
+				FEE100082F80000100C0FFEE /* WatchLightModels.swift in Sources */,
+				FEE100092F80000100C0FFEE /* WatchLightQuantizer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1133,9 +1252,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C0A1B2C3D4E5F60718293C24 /* MessageStateCoordinator.swift in Sources */,
+				F3B4C5D6E7F80910A1B2C3D4 /* NotificationHandling.swift in Sources */,
+				AA0CDF6C2F61C4A500A7FF07 /* PrivateWakeupPullCoordinator.swift in Sources */,
+				C1D2E3F40102030405060841 /* NotificationPayloadSemantics.swift in Sources */,
+				C1D2E3F40102030405060842 /* ManualNotificationKeyValidator.swift in Sources */,
+				C1D2E3F40102030405060843 /* SearchQuerySemantics.swift in Sources */,
+				C1D2E3F40102030405060844 /* ProjectionSemantics.swift in Sources */,
+				C1D2E3F40102030405060845 /* PushRegistrationSemantics.swift in Sources */,
+				C1D2E3F40102030405060846 /* PrivateWakeupAckSemantics.swift in Sources */,
 				1E08B6C84A13AD8A716A9F21 /* AppError.swift in Sources */,
-				BFB2F52D2D9BCACC65F51488 /* MessageFilter.swift in Sources */,
 				54CE786A445773D4DDA7861B /* PushMessage.swift in Sources */,
 				02C1C7A566ABB8EBB1B08D92 /* PushMessageSummary.swift in Sources */,
 				C9F7E726998368ADAA5295EA /* ServerConfig.swift in Sources */,
@@ -1146,21 +1271,10 @@
 				A0C860A2E41DB50A4FE52E2B /* BadgeManager.swift in Sources */,
 				C0A1B2C3D4E5F60718293B15 /* ChannelSubscriptionService.swift in Sources */,
 				F7A96C4E69FDC176051175F9 /* PushRegistrationService.swift in Sources */,
-				867075C450B0496E2E46E12C /* AppAppearance.swift in Sources */,
-				578044CE309B447566173BEF /* KeyboardDismiss.swift in Sources */,
-				7DCB35B159FFEA7727046D5E /* LiquidGlassEffect.swift in Sources */,
 				C0A1B2C3D4E5F60718293B18 /* ChannelNameValidator.swift in Sources */,
 				C0A1B2C3D4E5F60718293B1B /* ChannelPasswordValidator.swift in Sources */,
-				E9DE356D2887AD6739FB5F6A /* MessageDetailViewModel.swift in Sources */,
-				C9EA988963204070865E615F /* MessageListViewModel.swift in Sources */,
-				9326295DFEBD912455EF14D8 /* MessageSearchViewModel.swift in Sources */,
 				B49E95D553179EBD36CAE0AD /* PushGoMarkdownView.swift in Sources */,
-				FDE510553EE8FE695275EDFC /* PlatformColor.swift in Sources */,
-				8C368FF2A2DEBD061FDEAAC9 /* RemoteImageView.swift in Sources */,
-				A53572B940EF3636095FD72C /* RootView.swift in Sources */,
-				0A1C2D49E326267C3C032D39 /* SettingsViewModel.swift in Sources */,
 				6176829B302E1663E05959E7 /* ToastView.swift in Sources */,
-				81748B093C114AFBBDC68E55 /* AppFormControls.swift in Sources */,
 				EE139F8339CFDFCA5E04BA38 /* AnyCodable.swift in Sources */,
 				1FC9840AEFDBEC3CA02971E2 /* AppConstants.swift in Sources */,
 				3BFC69EF8C9B3D182B771E0E /* KeychainStore.swift in Sources */,
@@ -1171,6 +1285,22 @@
 				10C96E0F516BE3B0A1357BB3 /* PushGoNotificationNames.swift in Sources */,
 				D80B500FD9AD4C54B7A7F003 /* SharedImageCache.swift in Sources */,
 				E7BAE8A0353490E88EF117FA /* UserInfoSanitizer.swift in Sources */,
+				FEE1000A2F80000100C0FFEE /* WatchLightModels.swift in Sources */,
+				FEE1000B2F80000100C0FFEE /* WatchLightQuantizer.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D90000112F7F000100A10005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D90000212F7F000100A10005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1192,11 +1322,6 @@
 			target = AA49A19B2EE3E46C00C1EBF2 /* PushGoNSE-iOS */;
 			targetProxy = AA6606022F1B2B040087E0F0 /* PBXContainerItemProxy */;
 		};
-		AAACA5122EE5C6E000CE7764 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = AA49A23B2EE41C7900C1EBF2 /* PushGoNCE-iOS */;
-			targetProxy = AAACA5112EE5C6E000CE7764 /* PBXContainerItemProxy */;
-		};
 		AACFE1612F28511200701BB4 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = AACFE15A2F28511200701BB4 /* PushGoNSE-macOS */;
@@ -1207,6 +1332,16 @@
 			target = CF8A576C8ED05746DC334102 /* PushGoNSE-watchOS */;
 			targetProxy = 29A4854062D73B0B95959D75 /* PBXContainerItemProxy */;
 		};
+		D90000112F7F000100A10007 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA49A1892EE3E31500C1EBF2 /* PushGo-iOS */;
+			targetProxy = D90000112F7F000100A10008 /* PBXContainerItemProxy */;
+		};
+		D90000212F7F000100A10007 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA240E502EF1BEA400F812DA /* PushGo-macOS */;
+			targetProxy = D90000212F7F000100A10008 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -1215,9 +1350,10 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-watchOS/pushgowatch NotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 30;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "Extensions/PushGoNSE-watchOS/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = NotificationServiceExtension;
@@ -1228,7 +1364,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.watchkitapp.NotificationServiceExtension;
-				PRODUCT_NAME = NotificationServiceExtension;
+				PRODUCT_NAME = NotificationServiceExtensionWatch;
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -1237,11 +1373,12 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 4;
 				VALIDATE_PRODUCT = YES;
-				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+				WATCHOS_DEPLOYMENT_TARGET = 11.0;
 			};
 			name = Release;
 		};
@@ -1254,12 +1391,12 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-macOS/pushgomac.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 30;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
@@ -1273,6 +1410,7 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = PushGo;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
@@ -1281,7 +1419,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo;
 				PRODUCT_NAME = PushGo;
@@ -1298,6 +1436,7 @@
 				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
 			};
@@ -1312,12 +1451,12 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-macOS/pushgomac.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 30;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
@@ -1331,6 +1470,7 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = PushGo;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
@@ -1339,7 +1479,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo;
 				PRODUCT_NAME = PushGo;
@@ -1356,6 +1496,7 @@
 				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
 			};
@@ -1410,6 +1551,7 @@
 					"DEBUG=1",
 					"$(inherited)",
 				);
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
 				GCC_WARN_UNDECLARED_SELECTOR = YES;
@@ -1424,6 +1566,8 @@
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
@@ -1471,6 +1615,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
 				GCC_WARN_UNDECLARED_SELECTOR = YES;
@@ -1483,6 +1628,8 @@
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
@@ -1495,7 +1642,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-iOS/pushgo.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 30;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -1512,20 +1659,20 @@
 				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "Apps/PushGo-iOS/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = PushGo;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
-				INFOPLIST_KEY_NSUserActivityTypes = INSendMessageIntent;
 				INFOPLIST_KEY_PushGoKeychainAccessGroup = "$(AppIdentifierPrefix)io.ethan.pushgo.shared";
 				INFOPLIST_KEY_UIApplicationSceneManifest = "{UIApplicationSupportsMultipleScenes=YES;}";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo;
 				PRODUCT_NAME = PushGo;
@@ -1539,6 +1686,7 @@
 				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -1554,7 +1702,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-iOS/pushgo.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 30;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -1571,20 +1719,20 @@
 				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "Apps/PushGo-iOS/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = PushGo;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
-				INFOPLIST_KEY_NSUserActivityTypes = INSendMessageIntent;
 				INFOPLIST_KEY_PushGoKeychainAccessGroup = "$(AppIdentifierPrefix)io.ethan.pushgo.shared";
 				INFOPLIST_KEY_UIApplicationSceneManifest = "{UIApplicationSupportsMultipleScenes=YES;}";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo;
 				PRODUCT_NAME = PushGo;
@@ -1598,6 +1746,7 @@
 				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -1610,7 +1759,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-iOS/NotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 30;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1626,16 +1775,17 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "Extensions/PushGoNSE-iOS/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = NotificationServiceExtension;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.NotificationServiceExtension;
 				PRODUCT_NAME = NotificationServiceExtension;
@@ -1650,6 +1800,7 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -1661,19 +1812,20 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-iOS/NotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 30;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "Extensions/PushGoNSE-iOS/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = NotificationServiceExtension;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.NotificationServiceExtension;
 				PRODUCT_NAME = NotificationServiceExtension;
@@ -1688,79 +1840,7 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = complete;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = 1;
-				VALIDATE_PRODUCT = YES;
-			};
-			name = Release;
-		};
-		AA49A24B2EE41C7900C1EBF2 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNCE-iOS/NotificationContentExtension.entitlements";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
-				DEVELOPMENT_TEAM = W6H9P5MVUB;
-				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = "Extensions/PushGoNCE-iOS/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = NotificationContentExtension;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.NotificationContentExtension;
-				PRODUCT_NAME = NotificationContentExtension;
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_STRICT_CONCURRENCY = complete;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = 1;
-			};
-			name = Debug;
-		};
-		AA49A24C2EE41C7900C1EBF2 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNCE-iOS/NotificationContentExtension.entitlements";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
-				DEVELOPMENT_TEAM = W6H9P5MVUB;
-				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = "Extensions/PushGoNCE-iOS/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = NotificationContentExtension;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.NotificationContentExtension;
-				PRODUCT_NAME = NotificationContentExtension;
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -1774,7 +1854,7 @@
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 30;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1791,6 +1871,7 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "Extensions/PushGoNSE-macOS/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = NotificationServiceExtension;
@@ -1800,7 +1881,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.NotificationServiceExtension;
 				PRODUCT_NAME = NotificationServiceExtension;
@@ -1816,6 +1897,8 @@
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
 			};
@@ -1827,7 +1910,7 @@
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 30;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1844,6 +1927,7 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "Extensions/PushGoNSE-macOS/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = NotificationServiceExtension;
@@ -1853,7 +1937,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.NotificationServiceExtension;
 				PRODUCT_NAME = NotificationServiceExtension;
@@ -1869,6 +1953,8 @@
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
 			};
@@ -1881,9 +1967,10 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-watchOS/pushgowatch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 30;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_PREVIEWS = YES;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = PushGo;
 				INFOPLIST_KEY_PushGoKeychainAccessGroup = "$(AppIdentifierPrefix)io.ethan.pushgo.shared";
@@ -1896,17 +1983,20 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.watchkitapp;
-				PRODUCT_NAME = PushGo;
+				PRODUCT_NAME = PushGoWatch;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+				WATCHOS_DEPLOYMENT_TARGET = 11.0;
 			};
 			name = Debug;
 		};
@@ -1917,9 +2007,10 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-watchOS/pushgowatch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 30;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_PREVIEWS = YES;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = PushGo;
 				INFOPLIST_KEY_PushGoKeychainAccessGroup = "$(AppIdentifierPrefix)io.ethan.pushgo.shared";
@@ -1932,18 +2023,111 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.watchkitapp;
-				PRODUCT_NAME = PushGo;
+				PRODUCT_NAME = PushGoWatch;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 4;
 				VALIDATE_PRODUCT = YES;
-				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+				WATCHOS_DEPLOYMENT_TARGET = 11.0;
+			};
+			name = Release;
+		};
+		D90000112F7F000100A10009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = W6H9P5MVUB;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = "PushGo-iOS";
+			};
+			name = Debug;
+		};
+		D90000112F7F000100A1000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = W6H9P5MVUB;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = "PushGo-iOS";
+			};
+			name = Release;
+		};
+		D90000212F7F000100A10009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = W6H9P5MVUB;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.macosuitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_VERSION = 6.0;
+				TEST_TARGET_NAME = "PushGo-macOS";
+			};
+			name = Debug;
+		};
+		D90000212F7F000100A1000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = W6H9P5MVUB;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.macosuitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_VERSION = 6.0;
+				TEST_TARGET_NAME = "PushGo-macOS";
 			};
 			name = Release;
 		};
@@ -1952,9 +2136,10 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-watchOS/pushgowatch NotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 30;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "Extensions/PushGoNSE-watchOS/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = NotificationServiceExtension;
@@ -1965,7 +2150,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.watchkitapp.NotificationServiceExtension;
-				PRODUCT_NAME = NotificationServiceExtension;
+				PRODUCT_NAME = NotificationServiceExtensionWatch;
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
@@ -1974,10 +2159,11 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+				WATCHOS_DEPLOYMENT_TARGET = 11.0;
 			};
 			name = Debug;
 		};
@@ -2020,15 +2206,6 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		AA49A24A2EE41C7900C1EBF2 /* Build configuration list for PBXNativeTarget "PushGoNCE-iOS" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				AA49A24B2EE41C7900C1EBF2 /* Debug */,
-				AA49A24C2EE41C7900C1EBF2 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		AACFE1632F28511200701BB4 /* Build configuration list for PBXNativeTarget "PushGoNSE-macOS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -2047,6 +2224,24 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		D90000112F7F000100A1000B /* Build configuration list for PBXNativeTarget "PushGo-iOSUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D90000112F7F000100A10009 /* Debug */,
+				D90000112F7F000100A1000A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D90000212F7F000100A1000B /* Build configuration list for PBXNativeTarget "PushGo-macOSUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D90000212F7F000100A10009 /* Debug */,
+				D90000212F7F000100A1000A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		E40BE75C5AB620F78288B988 /* Build configuration list for PBXNativeTarget "PushGoNSE-watchOS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -2057,6 +2252,73 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A0AA00012F70000100AA0022 /* XCRemoteSwiftPackageReference "textual" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/gonzalezreal/textual";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.3.1;
+			};
+		};
+		A0AA00012F70000100AA0033 /* XCRemoteSwiftPackageReference "GRDB.swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/groue/GRDB.swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 7.6.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A0AA00012F70000100AA0014 /* Textual */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A0AA00012F70000100AA0022 /* XCRemoteSwiftPackageReference "textual" */;
+			productName = Textual;
+		};
+		A0AA00012F70000100AA0015 /* Textual */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A0AA00012F70000100AA0022 /* XCRemoteSwiftPackageReference "textual" */;
+			productName = Textual;
+		};
+		A0AA00012F70000100AA0016 /* Textual */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A0AA00012F70000100AA0022 /* XCRemoteSwiftPackageReference "textual" */;
+			productName = Textual;
+		};
+		A0AA00012F70000100AA0034 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A0AA00012F70000100AA0033 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
+			productName = GRDB;
+		};
+		A0AA00012F70000100AA0035 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A0AA00012F70000100AA0033 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
+			productName = GRDB;
+		};
+		A0AA00012F70000100AA0036 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A0AA00012F70000100AA0033 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
+			productName = GRDB;
+		};
+		A0AA00012F70000100AA0037 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A0AA00012F70000100AA0033 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
+			productName = GRDB;
+		};
+		A0AA00012F70000100AA0038 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A0AA00012F70000100AA0033 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
+			productName = GRDB;
+		};
+		A0AA00012F70000100AA0039 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A0AA00012F70000100AA0033 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
+			productName = GRDB;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = AA49A1822EE3E31500C1EBF2 /* Project object */;
 }

@@ -1,0 +1,27 @@
+name: Apple Concurrency Gate
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  strict-concurrency:
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Resolve SwiftPM
+        run: |
+          swift package resolve
+
+      - name: Run Apple concurrency gate
+        run: |
+          ./scripts/apple_concurrency_gate.sh

@@ -23,12 +23,47 @@ struct ServerConfig: Identifiable, Codable, Equatable, Sendable {
         }
 
         var algorithm: Algorithm
-        var keyBase64: String
+        var keyData: Data
         var ivBase64: String?
         var updatedAt: Date
 
         var isConfigured: Bool {
-            !keyBase64.isEmpty
+            !keyData.isEmpty
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case algorithm
+            case keyData
+            case ivBase64
+            case updatedAt
+        }
+
+        init(
+            algorithm: Algorithm,
+            keyData: Data,
+            ivBase64: String? = nil,
+            updatedAt: Date,
+        ) {
+            self.algorithm = algorithm
+            self.keyData = keyData
+            self.ivBase64 = ivBase64
+            self.updatedAt = updatedAt
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            algorithm = try container.decode(Algorithm.self, forKey: .algorithm)
+            ivBase64 = try container.decodeIfPresent(String.self, forKey: .ivBase64)
+            updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+            keyData = try container.decode(Data.self, forKey: .keyData)
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(algorithm, forKey: .algorithm)
+            try container.encode(keyData, forKey: .keyData)
+            try container.encodeIfPresent(ivBase64, forKey: .ivBase64)
+            try container.encode(updatedAt, forKey: .updatedAt)
         }
     }
 

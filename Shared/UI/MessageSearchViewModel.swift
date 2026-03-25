@@ -111,7 +111,7 @@ final class MessageSearchViewModel {
             guard !Task.isCancelled else { return }
             totalResults = count
             displayedResults = page
-            nextCursor = page.last.map { MessagePageCursor(receivedAt: $0.receivedAt) }
+            nextCursor = page.last.map { MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id) }
             hasMoreResults = displayedResults.count < totalResults
         } catch {
             totalResults = 0
@@ -135,7 +135,7 @@ final class MessageSearchViewModel {
                 return
             }
             displayedResults.append(contentsOf: page)
-            nextCursor = page.last.map { MessagePageCursor(receivedAt: $0.receivedAt) }
+            nextCursor = page.last.map { MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id) }
             hasMoreResults = displayedResults.count < totalResults
             trimCachedResultsIfNeeded()
             hasMoreResults = displayedResults.count < totalResults

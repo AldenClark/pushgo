@@ -23,6 +23,11 @@ enum KeychainStoreError: LocalizedError, Equatable {
 }
 
 struct KeychainStore {
+    private struct AutomationStoredItem: Codable {
+        let account: String
+        let dataBase64: String
+    }
+
     let service: String
     let accessGroup: String?
     let synchronizable: Bool?
@@ -34,6 +39,18 @@ struct KeychainStore {
     }
 
     func read(account: String) throws -> Data? {
+        if let itemURL = automationItemURL(account: account) {
+            guard FileManager.default.fileExists(atPath: itemURL.path) else {
+                return nil
+            }
+            let data = try Data(contentsOf: itemURL)
+            let stored = try JSONDecoder().decode(AutomationStoredItem.self, from: data)
+            guard let decoded = Data(base64Encoded: stored.dataBase64) else {
+                throw KeychainStoreError.unexpectedData
+            }
+            return decoded
+        }
+
         var query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
@@ -67,6 +84,15 @@ struct KeychainStore {
     }
 
     func write(account: String, data: Data) throws {
+        if let itemURL = automationItemURL(account: account) {
+            let directory = itemURL.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let stored = AutomationStoredItem(account: account, dataBase64: data.base64EncodedString())
+            let encoded = try JSONEncoder().encode(stored)
+            try encoded.write(to: itemURL, options: [.atomic])
+            return
+        }
+
         var query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
@@ -101,6 +127,13 @@ struct KeychainStore {
     }
 
     func delete(account: String) throws {
+        if let itemURL = automationItemURL(account: account) {
+            if FileManager.default.fileExists(atPath: itemURL.path) {
+                try FileManager.default.removeItem(at: itemURL)
+            }
+            return
+        }
+
         var query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
@@ -120,6 +153,23 @@ struct KeychainStore {
     }
 
     func readAll() throws -> [(account: String, data: Data)] {
+        if let directory = automationServiceDirectoryURL {
+            guard FileManager.default.fileExists(atPath: directory.path) else { return [] }
+            let urls = try FileManager.default.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )
+            return try urls.compactMap { url in
+                let data = try Data(contentsOf: url)
+                let stored = try JSONDecoder().decode(AutomationStoredItem.self, from: data)
+                guard let decoded = Data(base64Encoded: stored.dataBase64) else {
+                    throw KeychainStoreError.unexpectedData
+                }
+                return (account: stored.account, data: decoded)
+            }
+        }
+
         var query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
@@ -165,10 +215,28 @@ struct KeychainStore {
         }
         return nil
     }
+
+    private var automationServiceDirectoryURL: URL? {
+        PushGoAutomationContext.keychainDirectoryURL?
+            .appendingPathComponent(Self.filesystemComponent(service), isDirectory: true)
+    }
+
+    private func automationItemURL(account: String) -> URL? {
+        automationServiceDirectoryURL?
+            .appendingPathComponent(Self.filesystemComponent(account))
+            .appendingPathExtension("json")
+    }
+
+    private static func filesystemComponent(_ value: String) -> String {
+        Data(value.utf8)
+            .base64EncodedString()
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "=", with: "")
+    }
 }
 
 struct ManualKeyPreferences: Codable, Hashable {
-    var length: Int?
     var encoding: String?
 }
 
@@ -212,13 +280,13 @@ struct LocalKeychainConfigStore {
 
     func loadManualKeyPreferences() throws -> ManualKeyPreferences {
         guard let data = try keychain.read(account: Self.manualKeyPrefsAccount) else {
-            return ManualKeyPreferences(length: nil, encoding: nil)
+            return ManualKeyPreferences(encoding: nil)
         }
         return try decoder.decode(ManualKeyPreferences.self, from: data)
     }
 
     func saveManualKeyPreferences(_ preferences: ManualKeyPreferences) throws {
-        let hasValue = preferences.length != nil || preferences.encoding != nil
+        let hasValue = preferences.encoding != nil
         guard hasValue else {
             try keychain.delete(account: Self.manualKeyPrefsAccount)
             return
@@ -228,13 +296,98 @@ struct LocalKeychainConfigStore {
     }
 }
 
+struct ProviderDeviceKeyStore {
+    private static let service = "io.ethan.pushgo.provider.device-key"
+    private static let accountPrefix = "provider.device_key."
+    private static let accessGroupSuffix = "io.ethan.pushgo.shared"
+
+    private let keychain: KeychainStore
+
+    init() {
+        keychain = KeychainStore(
+            service: Self.service,
+            accessGroup: KeychainStore.accessGroup(matchingSuffix: Self.accessGroupSuffix),
+            synchronizable: false
+        )
+    }
+
+    func load(platform: String) -> String? {
+        let account = accountName(platform: platform)
+        guard let data = try? keychain.read(account: account),
+              let value = String(data: data, encoding: .utf8)
+        else {
+            return nil
+        }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    func save(deviceKey: String?, platform: String) {
+        let account = accountName(platform: platform)
+        let trimmed = deviceKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else {
+            try? keychain.delete(account: account)
+            return
+        }
+        guard let data = trimmed.data(using: .utf8) else { return }
+        try? keychain.write(account: account, data: data)
+    }
+
+    private func accountName(platform: String) -> String {
+        let normalized = platform.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return Self.accountPrefix + normalized
+    }
+}
+
+struct PushTokenStore {
+    private static let service = "io.ethan.pushgo.push-token"
+    private static let accountPrefix = "push.token."
+    private static let accessGroupSuffix = "io.ethan.pushgo.shared"
+
+    private let keychain: KeychainStore
+
+    init() {
+        keychain = KeychainStore(
+            service: Self.service,
+            accessGroup: KeychainStore.accessGroup(matchingSuffix: Self.accessGroupSuffix),
+            synchronizable: false
+        )
+    }
+
+    func load(platform: String) throws -> String? {
+        let account = accountName(platform: platform)
+        guard let data = try keychain.read(account: account),
+              let value = String(data: data, encoding: .utf8)
+        else {
+            return nil
+        }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    func save(token: String?, platform: String) throws {
+        let account = accountName(platform: platform)
+        let trimmed = token?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else {
+            try keychain.delete(account: account)
+            return
+        }
+        guard let data = trimmed.data(using: .utf8) else { return }
+        try keychain.write(account: account, data: data)
+    }
+
+    private func accountName(platform: String) -> String {
+        let normalized = platform.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return Self.accountPrefix + normalized
+    }
+}
+
 struct KeychainChannelSubscription: Codable, Hashable {
     var channelId: String
     var displayName: String
     var password: String
     var updatedAt: Date
     var lastSyncedAt: Date?
-    var autoCleanupEnabled: Bool
     var isDeleted: Bool
     var deletedAt: Date?
 
@@ -244,7 +397,6 @@ struct KeychainChannelSubscription: Codable, Hashable {
         case password
         case updatedAt
         case lastSyncedAt
-        case autoCleanupEnabled
         case isDeleted
         case deletedAt
     }
@@ -256,7 +408,6 @@ struct KeychainChannelSubscription: Codable, Hashable {
         password = (try? container.decode(String.self, forKey: .password)) ?? ""
         updatedAt = (try? container.decode(Date.self, forKey: .updatedAt)) ?? Date.distantPast
         lastSyncedAt = try? container.decodeIfPresent(Date.self, forKey: .lastSyncedAt)
-        autoCleanupEnabled = (try? container.decode(Bool.self, forKey: .autoCleanupEnabled)) ?? true
         isDeleted = (try? container.decode(Bool.self, forKey: .isDeleted)) ?? false
         deletedAt = try? container.decodeIfPresent(Date.self, forKey: .deletedAt)
     }
@@ -267,7 +418,6 @@ struct KeychainChannelSubscription: Codable, Hashable {
         password: String,
         updatedAt: Date,
         lastSyncedAt: Date?,
-        autoCleanupEnabled: Bool,
         isDeleted: Bool,
         deletedAt: Date?
     ) {
@@ -276,62 +426,16 @@ struct KeychainChannelSubscription: Codable, Hashable {
         self.password = password
         self.updatedAt = updatedAt
         self.lastSyncedAt = lastSyncedAt
-        self.autoCleanupEnabled = autoCleanupEnabled
         self.isDeleted = isDeleted
         self.deletedAt = deletedAt
     }
 }
 
-private struct LegacyGatewaySubscriptions: Codable, Hashable {
-    var updatedAt: Date
-    var subscriptions: [KeychainChannelSubscription]
-
-    enum CodingKeys: String, CodingKey {
-        case updatedAt
-        case subscriptions
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        updatedAt = (try? container.decode(Date.self, forKey: .updatedAt)) ?? Date.distantPast
-        subscriptions = (try? container.decode([KeychainChannelSubscription].self, forKey: .subscriptions)) ?? []
-    }
-
-    init(updatedAt: Date, subscriptions: [KeychainChannelSubscription]) {
-        self.updatedAt = updatedAt
-        self.subscriptions = subscriptions
-    }
-}
-
-private struct LegacyDevicePayload: Codable, Hashable {
-    var updatedAt: Date
-    var gateways: [String: LegacyGatewaySubscriptions]
-
-    enum CodingKeys: String, CodingKey {
-        case updatedAt
-        case gateways
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        updatedAt = (try? container.decode(Date.self, forKey: .updatedAt)) ?? Date.distantPast
-        gateways = (try? container.decode([String: LegacyGatewaySubscriptions].self, forKey: .gateways)) ?? [:]
-    }
-
-    init(updatedAt: Date, gateways: [String: LegacyGatewaySubscriptions]) {
-        self.updatedAt = updatedAt
-        self.gateways = gateways
-    }
-}
-
 struct ChannelSubscriptionStore {
     private static let service = "io.ethan.pushgo.channel.subscriptions"
-    private static let legacySyncService = "io.ethan.pushgo.channel.subscriptions.sync"
-    private static let migrationFlagAccount = "migration.completed.v1"
     private static let accessGroupSuffix = "io.ethan.pushgo.shared"
 
     private let keychain: KeychainStore
-    private let legacySyncKeychain: KeychainStore
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
@@ -342,16 +446,10 @@ struct ChannelSubscriptionStore {
             accessGroup: accessGroup,
             synchronizable: false
         )
-        legacySyncKeychain = KeychainStore(
-            service: Self.legacySyncService,
-            accessGroup: accessGroup,
-            synchronizable: true
-        )
         encoder = JSONEncoder()
         decoder = JSONDecoder()
         encoder.dateEncodingStrategy = .iso8601
         decoder.dateDecodingStrategy = .iso8601
-        migrateIfNeeded()
     }
 
     private func withRetry<T>(
@@ -399,60 +497,6 @@ struct ChannelSubscriptionStore {
 
     private func normalizeGatewayKey(_ gatewayKey: String) -> String {
         gatewayKey.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func migrationCompleted() -> Bool {
-        (try? withRetry(operation: { try keychain.read(account: Self.migrationFlagAccount) })) != nil
-    }
-
-    private func markMigrationCompleted() {
-        let data = Data("1".utf8)
-        try? withRetry(operation: { try keychain.write(account: Self.migrationFlagAccount, data: data) })
-    }
-
-    private func loadLocalEntries() -> [(account: String, data: Data)] {
-        guard let entries = try? withRetry(operation: { try keychain.readAll() }) else { return [] }
-        return entries.filter { $0.account != Self.migrationFlagAccount }
-    }
-
-    private func migrateIfNeeded() {
-        guard migrationCompleted() == false else { return }
-        defer { markMigrationCompleted() }
-
-        let localEntries = loadLocalEntries()
-        guard localEntries.isEmpty else { return }
-
-        guard let legacyEntries = try? withRetry(operation: { try legacySyncKeychain.readAll() }),
-              !legacyEntries.isEmpty
-        else { return }
-
-        var merged: [String: [String: KeychainChannelSubscription]] = [:]
-
-        for entry in legacyEntries {
-            guard let payload = try? decoder.decode(LegacyDevicePayload.self, from: entry.data) else { continue }
-            for (gateway, gatewayPayload) in payload.gateways {
-                let trimmedGateway = normalizeGatewayKey(gateway)
-                guard !trimmedGateway.isEmpty else { continue }
-                for item in gatewayPayload.subscriptions {
-                    let trimmedId = item.channelId.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !trimmedId.isEmpty else { continue }
-                    var perGateway = merged[trimmedGateway] ?? [:]
-                    if let existing = perGateway[trimmedId] {
-                        if item.updatedAt > existing.updatedAt {
-                            perGateway[trimmedId] = item
-                        }
-                    } else {
-                        perGateway[trimmedId] = item
-                    }
-                    merged[trimmedGateway] = perGateway
-                }
-            }
-        }
-
-        for (gateway, itemsById) in merged {
-            guard let data = try? encoder.encode(Array(itemsById.values)) else { continue }
-            try? withRetry(operation: { try keychain.write(account: gateway, data: data) })
-        }
     }
 }
 

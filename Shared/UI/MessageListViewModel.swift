@@ -69,6 +69,7 @@ final class MessageListViewModel {
     }()
     private var nextCursor: MessagePageCursor?
     private var channelOrderById: [String: Int] = [:]
+    @ObservationIgnored private var shouldLoadChannelSummaries = false
     @ObservationIgnored private var isRefreshingCountsAndChannels = false
     @ObservationIgnored private var pendingCountsAndChannels = false
 
@@ -96,6 +97,14 @@ final class MessageListViewModel {
 
     func refresh() async {
         await reloadFromStore(resetPaging: true, clearBeforeLoading: false)
+    }
+
+    func enableChannelSummaries() {
+        guard shouldLoadChannelSummaries == false else { return }
+        shouldLoadChannelSummaries = true
+        Task { @MainActor in
+            await refreshCountsAndChannels()
+        }
     }
 
     func setFilter(_ filter: MessageFilter) {
@@ -164,13 +173,10 @@ final class MessageListViewModel {
     }
     func markCurrentChannelAsRead() async -> Int {
         do {
-            let start = DispatchTime.now().uptimeNanoseconds
             let changed = try await environment.messageStateCoordinator.markMessagesRead(
                 filter: currentQueryFilter(),
                 channel: currentChannelRawValue()
             )
-            let elapsedMs = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000
-            await PerformanceMonitor.shared.record(operation: .bulkRead, durationMs: elapsedMs)
             guard changed > 0 else { return 0 }
             for index in filteredMessages.indices {
                 filteredMessages[index].isRead = true
@@ -200,15 +206,12 @@ final class MessageListViewModel {
     }
 
     func cleanupCurrentChannel(kind: ChannelCleanupKind) async -> Int {
-        guard let channel = selectedChannel?.rawChannelValue else { return 0 }
+        let channel = selectedChannel?.rawChannelValue
         do {
-            let start = DispatchTime.now().uptimeNanoseconds
             let deleted = try await environment.messageStateCoordinator.deleteMessages(
                 channel: channel,
                 readState: kind.readState
             )
-            let elapsedMs = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000
-            await PerformanceMonitor.shared.record(operation: .bulkDelete, durationMs: elapsedMs)
             if deleted > 0 {
                 await refreshCountsAndChannels()
             }
@@ -224,13 +227,10 @@ final class MessageListViewModel {
     func cleanupReadMessages() async -> Int {
         let channel = selectedChannel?.rawChannelValue
         do {
-            let start = DispatchTime.now().uptimeNanoseconds
             let deleted = try await environment.messageStateCoordinator.deleteMessages(
                 channel: channel,
                 readState: true
             )
-            let elapsedMs = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000
-            await PerformanceMonitor.shared.record(operation: .bulkDelete, durationMs: elapsedMs)
             if deleted > 0 {
                 await refreshCountsAndChannels()
             }
@@ -291,17 +291,11 @@ final class MessageListViewModel {
         var lastPageCount = 0
 
         while results.count < targetCount {
-            let start = DispatchTime.now().uptimeNanoseconds
             let page = try await dataStore.loadMessageSummariesPage(
                 before: cursor,
                 limit: pageSize,
                 filter: mapFilter(selectedFilter),
                 channel: selectedChannel?.rawChannelValue,
-            )
-            let elapsedMs = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000
-            await PerformanceMonitor.shared.record(
-                operation: performanceOperation(for: cursor),
-                durationMs: elapsedMs
             )
             lastPageCount = page.count
 
@@ -311,19 +305,19 @@ final class MessageListViewModel {
 
             if results.count + page.count <= targetCount {
                 results.append(contentsOf: page)
-                cursor = page.last.map { MessagePageCursor(receivedAt: $0.receivedAt) }
+                cursor = page.last.map { MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id) }
                 if page.count < pageSize {
                     return RefreshSnapshot(messages: results, nextCursor: cursor, hasMorePages: false)
                 }
             } else {
                 let needed = targetCount - results.count
                 results.append(contentsOf: page.prefix(needed))
-                cursor = results.last.map { MessagePageCursor(receivedAt: $0.receivedAt) }
+                cursor = results.last.map { MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id) }
                 return RefreshSnapshot(messages: results, nextCursor: cursor, hasMorePages: true)
             }
         }
 
-        let next = results.last.map { MessagePageCursor(receivedAt: $0.receivedAt) }
+        let next = results.last.map { MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id) }
         let mayHaveMore = results.count >= targetCount && lastPageCount == pageSize
         return RefreshSnapshot(messages: results, nextCursor: next, hasMorePages: mayHaveMore)
     }
@@ -334,23 +328,17 @@ final class MessageListViewModel {
         defer { isLoadingPage = false }
 
         do {
-            let start = DispatchTime.now().uptimeNanoseconds
             let page = try await dataStore.loadMessageSummariesPage(
                 before: nextCursor,
                 limit: pageSize,
                 filter: mapFilter(selectedFilter),
                 channel: selectedChannel?.rawChannelValue,
             )
-            let elapsedMs = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000
-            await PerformanceMonitor.shared.record(
-                operation: performanceOperation(for: nextCursor),
-                durationMs: elapsedMs
-            )
             if resetStaleSelectionIfNeeded() {
                 return
             }
             filteredMessages.append(contentsOf: page)
-            nextCursor = page.last.map { MessagePageCursor(receivedAt: $0.receivedAt) }
+            nextCursor = page.last.map { MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id) }
             hasMorePages = page.count == pageSize
             trimCachedMessagesIfNeeded()
         } catch let appError as AppError {
@@ -382,17 +370,17 @@ final class MessageListViewModel {
 
         repeat {
             pendingCountsAndChannels = false
-            async let countsTask = dataStore.messageCounts()
-            async let channelsTask = dataStore.messageChannelCounts()
             do {
-                let counts = try await countsTask
+                let counts = try await dataStore.messageCounts()
                 totalMessageCount = counts.total
                 unreadMessageCount = counts.unread
 
-                let rawChannels = try await channelsTask
-                channelSummaries = buildChannelSummaries(from: rawChannels)
-                if let selectedChannel, channelSummaries.contains(where: { $0.key == selectedChannel }) == false {
-                    self.selectedChannel = nil
+                if shouldLoadChannelSummaries {
+                    let rawChannels = try await dataStore.messageChannelCounts()
+                    channelSummaries = buildChannelSummaries(from: rawChannels)
+                    if let selectedChannel, channelSummaries.contains(where: { $0.key == selectedChannel }) == false {
+                        self.selectedChannel = nil
+                    }
                 }
             } catch {
                 await refreshCounts()
@@ -406,18 +394,11 @@ final class MessageListViewModel {
         guard overflow > 0 else { return }
         if environment.isMessageListAtTop {
             filteredMessages.removeLast(overflow)
-            nextCursor = filteredMessages.last.map { MessagePageCursor(receivedAt: $0.receivedAt) }
+            nextCursor = filteredMessages.last.map { MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id) }
         } else {
             filteredMessages.removeFirst(overflow)
         }
         hasMorePages = true
-    }
-
-    private func performanceOperation(for cursor: MessagePageCursor?) -> PerformanceOperation {
-        if selectedChannel != nil {
-            return .channelFilter
-        }
-        return cursor == nil ? .listRefresh : .listPageLoad
     }
 
     private func buildChannelSummaries(from groups: [MessageChannelCount]) -> [MessageChannelSummary] {

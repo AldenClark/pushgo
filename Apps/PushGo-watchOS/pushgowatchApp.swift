@@ -7,7 +7,6 @@ struct pushgowatch_Watch_AppApp: App {
     @WKApplicationDelegateAdaptor(PushGoWatchAppDelegate.self) private var appDelegate
 
     @State private var environment = AppEnvironment.shared
-    @State private var appState = AppState()
     @State private var localizationManager = LocalizationManager.shared
 
     var body: some Scene {
@@ -15,18 +14,17 @@ struct pushgowatch_Watch_AppApp: App {
             ContentView()
                 .withAppContext(
                     environment: environment,
-                    appState: appState,
                     localizationManager: localizationManager,
                     bootstrap: true
                 )
         }
         WKNotificationScene(
             controller: NotificationHostingController.self,
-            category: AppConstants.nceMarkdownCategoryIdentifier
+            category: AppConstants.notificationDefaultCategoryIdentifier
         )
         WKNotificationScene(
             controller: NotificationHostingController.self,
-            category: AppConstants.ncePlainCategoryIdentifier
+            category: AppConstants.notificationEntityReminderCategoryIdentifier
         )
     }
 }

@@ -12,14 +12,12 @@ import UserNotifications
             case denied
 
             init(status: UNAuthorizationStatus) {
-                switch status {
-                case .authorized, .provisional, .ephemeral:
+                switch PushRegistrationSemantics.authorizationState(for: status) {
+                case .authorized:
                     self = .authorized
                 case .denied:
                     self = .denied
                 case .notDetermined:
-                    self = .notDetermined
-                @unknown default:
                     self = .notDetermined
                 }
             }
@@ -30,9 +28,60 @@ import UserNotifications
         private(set) var authorizationState: AuthorizationState = .notDetermined
         private(set) var apnsToken: String?
 
+        private let automationProviderToken: String?
+        private let bypassPushAuthorizationPrompt: Bool
         private var tokenWaiters: [UUID: CheckedContinuation<String, Error>] = [:]
 
-        private init() {}
+        private init(
+            automationProviderToken: String? = PushGoAutomationContext.providerToken,
+            bypassPushAuthorizationPrompt: Bool = PushGoAutomationContext.bypassPushAuthorizationPrompt
+        ) {
+            let normalizedAutomationProviderToken = Self.normalizedAutomationProviderToken(automationProviderToken)
+            self.automationProviderToken = normalizedAutomationProviderToken
+            self.bypassPushAuthorizationPrompt = bypassPushAuthorizationPrompt
+            let bootstrap = PushRegistrationSemantics.bootstrapState(
+                providerToken: normalizedAutomationProviderToken,
+                bypassPushAuthorizationPrompt: bypassPushAuthorizationPrompt
+            )
+            apnsToken = bootstrap.apnsToken
+            switch bootstrap.authorizationState {
+            case .authorized:
+                authorizationState = .authorized
+            case .denied:
+                authorizationState = .denied
+            case .notDetermined:
+                authorizationState = .notDetermined
+            }
+        }
+
+#if DEBUG
+        static func testing(
+            automationProviderToken: String? = nil,
+            bypassPushAuthorizationPrompt: Bool = false,
+            bootstrapStateOverride: PushRegistrationSemantics.BootstrapState? = nil
+        ) -> PushRegistrationService {
+            let service = PushRegistrationService(
+                automationProviderToken: automationProviderToken,
+                bypassPushAuthorizationPrompt: bypassPushAuthorizationPrompt
+            )
+            if let bootstrapStateOverride {
+                switch bootstrapStateOverride.authorizationState {
+                case .authorized:
+                    service.authorizationState = .authorized
+                case .denied:
+                    service.authorizationState = .denied
+                case .notDetermined:
+                    service.authorizationState = .notDetermined
+                }
+                service.apnsToken = bootstrapStateOverride.apnsToken
+            }
+            return service
+        }
+
+        var testingTokenWaiterCount: Int {
+            tokenWaiters.count
+        }
+#endif
 
         func awaitToken(timeout: TimeInterval = 10) async throws -> String {
             if let token = apnsToken {
@@ -58,11 +107,25 @@ import UserNotifications
         }
 
         func refreshAuthorizationStatus() async {
+            if bypassPushAuthorizationPrompt {
+                authorizationState = .authorized
+                if apnsToken == nil {
+                    apnsToken = automationProviderToken
+                }
+                return
+            }
             let settings = await UNUserNotificationCenter.current().notificationSettings()
             authorizationState = AuthorizationState(status: settings.authorizationStatus)
         }
 
         func requestAuthorization() async throws {
+            if bypassPushAuthorizationPrompt {
+                authorizationState = .authorized
+                if apnsToken == nil {
+                    apnsToken = automationProviderToken
+                }
+                return
+            }
             do {
                 let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [
                     .alert,
@@ -80,7 +143,7 @@ import UserNotifications
         }
 
         func handleDeviceToken(_ deviceToken: Data) {
-            let token = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
+            let token = PushRegistrationSemantics.hexEncodedToken(deviceToken)
             apnsToken = token
             resolveWaiters(with: .success(token))
         }
@@ -120,6 +183,12 @@ import UserNotifications
                     waiter.resume(throwing: error)
                 }
             }
+        }
+
+        private static func normalizedAutomationProviderToken(_ token: String?) -> String? {
+            guard let token else { return nil }
+            let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
         }
     }
 

@@ -1,9 +1,15 @@
 import Foundation
-import SwiftData
+import GRDB
 import UserNotifications
 
 struct MessagePageCursor: Hashable, Sendable {
     let receivedAt: Date
+    let id: UUID
+}
+
+struct EntityProjectionPageCursor: Hashable, Sendable {
+    let receivedAt: Date
+    let id: UUID
 }
 
 enum MessageQueryFilter: Hashable, Sendable {
@@ -11,7 +17,7 @@ enum MessageQueryFilter: Hashable, Sendable {
     case unreadOnly
     case readOnly
     case withURLOnly
-    case byServer(UUID)
+    case byServer(String)
 }
 
 struct MessageChannelCount: Hashable, Sendable {
@@ -23,28 +29,238 @@ struct MessageChannelCount: Hashable, Sendable {
 }
 
 struct AppSettingsSnapshot: Hashable, Sendable {
-    var manualKeyLength: Int?
     var manualKeyEncoding: String?
     var launchAtLoginEnabled: Bool?
-    var autoCleanupEnabled: Bool?
+    var messagePageEnabled: Bool?
+    var eventPageEnabled: Bool?
+    var thingPageEnabled: Bool?
     var pushTokenData: Data?
-    var legacyMigrationVersion: Int
+    var watchModeRawValue: String? = nil
+    var watchEffectiveModeRawValue: String? = nil
+    var watchStandaloneReady: Bool? = nil
+    var watchModeSwitchStatusRawValue: String? = nil
+    var watchLastConfirmedControlGeneration: Int64? = nil
+    var watchLastObservedReportedGeneration: Int64? = nil
+    var watchControlGeneration: Int64? = nil
+    var watchMirrorSnapshotGeneration: Int64? = nil
+    var watchStandaloneProvisioningGeneration: Int64? = nil
+    var watchMirrorActionAckGeneration: Int64? = nil
+    var watchMirrorSnapshotContentDigest: String? = nil
+    var watchStandaloneProvisioningContentDigest: String? = nil
+    var watchProvisioningServerConfigData: Data? = nil
+    var watchProvisioningSchemaVersion: Int? = nil
+    var watchProvisioningGeneration: Int64? = nil
+    var watchProvisioningContentDigest: String? = nil
+    var watchProvisioningAppliedAt: Date? = nil
+    var watchProvisioningModeRawValue: String? = nil
+    var watchProvisioningSourceControlGeneration: Int64? = nil
 
     static let empty = AppSettingsSnapshot(
-        manualKeyLength: nil,
         manualKeyEncoding: nil,
         launchAtLoginEnabled: nil,
-        autoCleanupEnabled: nil,
+        messagePageEnabled: nil,
+        eventPageEnabled: nil,
+        thingPageEnabled: nil,
         pushTokenData: nil,
-        legacyMigrationVersion: 0
+        watchModeRawValue: nil,
+        watchEffectiveModeRawValue: nil,
+        watchStandaloneReady: nil,
+        watchModeSwitchStatusRawValue: nil,
+        watchLastConfirmedControlGeneration: nil,
+        watchLastObservedReportedGeneration: nil,
+        watchControlGeneration: nil,
+        watchMirrorSnapshotGeneration: nil,
+        watchStandaloneProvisioningGeneration: nil,
+        watchMirrorActionAckGeneration: nil,
+        watchMirrorSnapshotContentDigest: nil,
+        watchStandaloneProvisioningContentDigest: nil,
+        watchProvisioningServerConfigData: nil,
+        watchProvisioningSchemaVersion: nil,
+        watchProvisioningGeneration: nil,
+        watchProvisioningContentDigest: nil,
+        watchProvisioningAppliedAt: nil,
+        watchProvisioningModeRawValue: nil,
+        watchProvisioningSourceControlGeneration: nil
     )
+}
+
+struct WatchPublicationState: Hashable, Sendable {
+    var syncGenerations: WatchSyncGenerationState
+    var mirrorSnapshotContentDigest: String?
+    var standaloneProvisioningContentDigest: String?
+
+    static let empty = WatchPublicationState(
+        syncGenerations: .zero,
+        mirrorSnapshotContentDigest: nil,
+        standaloneProvisioningContentDigest: nil
+    )
+}
+
+struct WatchModeControlPersistenceState: Hashable, Sendable {
+    var desiredMode: WatchMode
+    var effectiveMode: WatchMode
+    var standaloneReady: Bool
+    var switchStatus: WatchModeSwitchStatus
+    var lastConfirmedControlGeneration: Int64
+    var lastObservedReportedGeneration: Int64
+
+    static let initial = WatchModeControlPersistenceState(
+        desiredMode: .mirror,
+        effectiveMode: .mirror,
+        standaloneReady: false,
+        switchStatus: .idle,
+        lastConfirmedControlGeneration: 0,
+        lastObservedReportedGeneration: 0
+    )
+}
+
+struct DataPageVisibilitySnapshot: Hashable, Sendable {
+    var messageEnabled: Bool
+    var eventEnabled: Bool
+    var thingEnabled: Bool
+
+    static let `default` = DataPageVisibilitySnapshot(
+        messageEnabled: true,
+        eventEnabled: true,
+        thingEnabled: true
+    )
+}
+
+struct WatchProvisioningState: Hashable, Sendable {
+    let schemaVersion: Int
+    let generation: Int64
+    let contentDigest: String
+    let appliedAt: Date
+    let modeAtApply: WatchMode
+    let sourceControlGeneration: Int64
+}
+
+struct EntityOpenTarget: Hashable, Sendable {
+    let entityType: String
+    let entityId: String
+}
+
+enum InboundDeliveryState: Hashable, Sendable {
+    case missing
+    case persisted
+    case acked
+}
+
+enum NotificationStoreSaveOutcome: Sendable {
+    case persisted(PushMessage)
+    case duplicateRequest(PushMessage)
+    case duplicateMessage(PushMessage)
+}
+
+private struct OperationScopeIdentity: Hashable, Sendable {
+    let scopeKey: String
+    let opId: String
+    let channelId: String?
+    let entityType: String
+    let entityId: String
+    let deliveryId: String?
+}
+
+private func normalizeOperationField(_ value: String?) -> String? {
+    let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return trimmed.isEmpty ? nil : trimmed
+}
+
+private func resolveOperationScopeIdentity(from message: PushMessage) -> OperationScopeIdentity? {
+    guard let opId = normalizeOperationField(message.operationId) else {
+        return nil
+    }
+
+    let entityType = normalizeOperationField(message.entityType)?.lowercased() ?? "message"
+    let entityId = normalizeOperationField(message.entityId)
+        ?? normalizeOperationField(message.eventId)
+        ?? normalizeOperationField(message.thingId)
+        ?? normalizeOperationField(message.deliveryId)
+        ?? normalizeOperationField(message.messageId)
+    guard let entityId else {
+        return nil
+    }
+
+    let channelId = normalizeOperationField(message.channel)
+    let scopeKey = "\(channelId ?? "_")|\(entityType)|\(entityId)|\(opId)"
+    return OperationScopeIdentity(
+        scopeKey: scopeKey,
+        opId: opId,
+        channelId: channelId,
+        entityType: entityType,
+        entityId: entityId,
+        deliveryId: normalizeOperationField(message.deliveryId)
+    )
+}
+
+private func normalizeEntityReference(_ value: String?) -> String? {
+    let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return trimmed.isEmpty ? nil : trimmed
+}
+
+private func isTopLevelMessage(_ message: PushMessage) -> Bool {
+    let entityType = message.entityType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard entityType == "message" else { return false }
+    return normalizeEntityReference(message.eventId) == nil
+        && normalizeEntityReference(message.thingId) == nil
+}
+
+private func normalizedEntityType(_ message: PushMessage) -> String {
+    message.entityType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+}
+
+private func isReferencedEntityMessage(_ message: PushMessage) -> Bool {
+    normalizedEntityType(message) == "message"
+        && (
+            normalizeEntityReference(message.eventId) != nil
+                || normalizeEntityReference(message.thingId) != nil
+        )
+}
+
+private func isTopLevelEventProjection(_ message: PushMessage) -> Bool {
+    ProjectionSemantics.isTopLevelEventProjection(
+        entityType: normalizedEntityType(message),
+        eventId: normalizeEntityReference(message.eventId),
+        thingId: normalizeEntityReference(message.thingId),
+        projectionDestination: message.projectionDestination
+    )
+}
+
+private func isEntityScopedWrite(_ message: PushMessage) -> Bool {
+    let entityType = normalizedEntityType(message)
+    if entityType == "event" || entityType == "thing" {
+        return true
+    }
+    return isReferencedEntityMessage(message)
+}
+
+private func referencedThingIdRequiringExistingParent(_ message: PushMessage) -> String? {
+    guard normalizedEntityType(message) != "thing" else { return nil }
+    return normalizeEntityReference(message.thingId)
+}
+
+private func stableMessageDedupKey(for message: PushMessage) -> String? {
+    if normalizedEntityType(message) == "message" {
+        return normalizeOperationField(message.messageId)
+    }
+    return normalizeOperationField(message.messageId)
+        ?? normalizeOperationField(message.deliveryId)
+}
+
+private func canonicalizedMessageForPersistence(_ message: PushMessage) -> PushMessage {
+    let stableMessageId = stableMessageDedupKey(for: message) ?? message.id.uuidString
+    if message.messageId == stableMessageId {
+        return message
+    }
+    var mutable = message
+    mutable.messageId = stableMessageId
+    return mutable
 }
 
 actor LocalDataStore {
     struct StorageState: Sendable, Equatable {
         enum Mode: Sendable {
             case persistent
-            case inMemory
             case unavailable
         }
 
@@ -53,57 +269,46 @@ actor LocalDataStore {
     }
 
     nonisolated let storageState: StorageState
-    private let backend: SwiftDataStore?
+    private let backend: GRDBStore?
     private let searchIndex: MessageSearchIndex?
+    private let metadataIndex: MessageMetadataIndex?
+    private let fileManager: FileManager
+    private let appGroupIdentifier: String
     private let channelSubscriptionStore = ChannelSubscriptionStore()
     private let localConfigStore = LocalKeychainConfigStore()
-    private let pendingInsertBatchSize: Int = 20
-    private let pendingInsertFlushDelay: TimeInterval = 0.2
-    private var pendingInsertFlushTask: Task<Void, Never>?
-    private var pendingInsertById: [UUID: PushMessage] = [:]
-    private var pendingInsertMessageIdIndex: [UUID: UUID] = [:]
-    private var pendingInsertRequestIdIndex: [String: UUID] = [:]
+    private let pushTokenStore = PushTokenStore()
+    private let providerDeviceKeyStore = ProviderDeviceKeyStore()
 
     init(
         fileManager: FileManager = .default,
-        encoder: JSONEncoder = JSONEncoder(),
-        decoder: JSONDecoder = JSONDecoder(),
         appGroupIdentifier: String = AppConstants.appGroupIdentifier,
     ) {
-        encoder.dateEncodingStrategy = .iso8601
-        decoder.dateDecodingStrategy = .iso8601
+        self.fileManager = fileManager
+        self.appGroupIdentifier = appGroupIdentifier
 
-        let resolvedBackend: SwiftDataStore?
+        let resolvedBackend: GRDBStore?
         let resolvedStorageState: StorageState
         do {
-            resolvedBackend = try SwiftDataStore(
+            let directory = try GRDBStore.databaseDirectory(
                 fileManager: fileManager,
-                encoder: encoder,
-                decoder: decoder,
-                appGroupIdentifier: appGroupIdentifier,
+                appGroupIdentifier: appGroupIdentifier
+            )
+            let storeURL = directory.appendingPathComponent(AppConstants.databaseStoreFilename)
+            resolvedBackend = try GRDBStore(
+                storeURL: storeURL
             )
             resolvedStorageState = StorageState(mode: .persistent, reason: nil)
         } catch {
-            let persistentReason = error.localizedDescription
-            do {
-                resolvedBackend = try SwiftDataStore.inMemory(
-                    encoder: encoder,
-                    decoder: decoder,
-                )
-                resolvedStorageState = StorageState(mode: .inMemory, reason: persistentReason)
-            } catch {
-                let inMemoryReason = error.localizedDescription
-                let combined = persistentReason == inMemoryReason
-                    ? persistentReason
-                    : "\(persistentReason) | \(inMemoryReason)"
-                resolvedBackend = nil
-                resolvedStorageState = StorageState(mode: .unavailable, reason: combined)
-            }
+            resolvedBackend = nil
+            resolvedStorageState = StorageState(mode: .unavailable, reason: error.localizedDescription)
         }
         backend = resolvedBackend
         storageState = resolvedStorageState
 
         searchIndex = try? MessageSearchIndex(
+            appGroupIdentifier: appGroupIdentifier
+        )
+        metadataIndex = try? MessageMetadataIndex(
             appGroupIdentifier: appGroupIdentifier
         )
     }
@@ -112,109 +317,43 @@ actor LocalDataStore {
         AppError.localStore(storageState.reason ?? "Local store unavailable.")
     }
 
-    private func requireBackend() throws -> SwiftDataStore {
+    private func requireBackend() throws -> GRDBStore {
         guard let backend else {
             throw storeUnavailableError
         }
         return backend
     }
 
-    private func decodePushTokenMap(_ data: Data?) -> [String: String] {
-        guard let data else { return [:] }
-        return (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
-    }
-
-    private func encodePushTokenMap(_ map: [String: String]) -> Data? {
-        guard !map.isEmpty else { return nil }
-        return try? JSONEncoder().encode(map)
-    }
-
     func flushWrites() async {
-        await flushPendingInserts()
+        // Durability-first mode: disable in-memory write buffering.
     }
 
-    private func enqueuePendingInsert(_ message: PushMessage) {
-        if let messageId = message.messageId,
-           pendingInsertMessageIdIndex[messageId] != nil
-        {
-            return
-        }
-        if pendingInsertById[message.id] != nil {
-            removePendingIndexes(for: message.id)
-        }
-        pendingInsertById[message.id] = message
-        if let messageId = message.messageId {
-            pendingInsertMessageIdIndex[messageId] = message.id
-        }
-        if let requestId = message.notificationRequestId {
-            pendingInsertRequestIdIndex[requestId] = message.id
-        }
-
-        if pendingInsertById.count >= pendingInsertBatchSize {
-            pendingInsertFlushTask?.cancel()
-            pendingInsertFlushTask = Task { [weak self] in
-                await self?.flushPendingInserts()
-            }
-            return
-        }
-
-        schedulePendingInsertFlush()
-    }
-
-    private func schedulePendingInsertFlush() {
-        guard pendingInsertFlushTask == nil else { return }
-        let delay = pendingInsertFlushDelay
-        pendingInsertFlushTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            await self?.flushPendingInserts()
+    func rebuildPersistentStoresForRecovery() throws {
+        let directory = try GRDBStore.databaseDirectory(
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier
+        )
+        let targets = [
+            AppConstants.databaseStoreFilename,
+            "pushgo.index.\(AppConstants.databaseVersion).sqlite",
+            "pushgo.search.\(AppConstants.databaseVersion).sqlite",
+            "pushgo.metadata.\(AppConstants.databaseVersion).sqlite",
+        ]
+        for filename in targets {
+            let baseURL = directory.appendingPathComponent(filename)
+            try Self.removeSQLiteArtifacts(fileManager: fileManager, baseURL: baseURL)
         }
     }
 
-    private func flushPendingInserts() async {
-        pendingInsertFlushTask?.cancel()
-        pendingInsertFlushTask = nil
-        guard !pendingInsertById.isEmpty else { return }
-
-        let batch = Array(pendingInsertById.values)
-        pendingInsertById.removeAll(keepingCapacity: true)
-        pendingInsertMessageIdIndex.removeAll(keepingCapacity: true)
-        pendingInsertRequestIdIndex.removeAll(keepingCapacity: true)
-
-        do {
-            let backend = try requireBackend()
-            let start = DispatchTime.now().uptimeNanoseconds
-            try await backend.saveMessagesBatch(batch)
-            let elapsedMs = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000
-            await PerformanceMonitor.shared.record(operation: .writeBatch, durationMs: elapsedMs)
-            if let searchIndex {
-                let entries = batch.map { message in
-                    MessageSearchIndex.Entry(
-                        id: message.id,
-                        title: message.title,
-                        body: message.resolvedBody.rawText,
-                        channel: message.channel,
-                        receivedAt: message.receivedAt
-                    )
-                }
-                try? await searchIndex.bulkUpsert(entries: entries)
-            }
-            await pruneMessagesIfNeededDuringFlush(
-                maxCount: AppConstants.maxStoredMessages,
-                batchSize: AppConstants.pruneBatchSize
-            )
-        } catch {
-            batch.forEach { pending in
-                pendingInsertById[pending.id] = pending
-                if let messageId = pending.messageId {
-                    pendingInsertMessageIdIndex[messageId] = pending.id
-                }
-                if let requestId = pending.notificationRequestId {
-                    pendingInsertRequestIdIndex[requestId] = pending.id
-                }
-            }
-            if backend != nil {
-                schedulePendingInsertFlush()
-            }
+    private static func removeSQLiteArtifacts(fileManager: FileManager, baseURL: URL) throws {
+        let candidates = [
+            baseURL,
+            URL(fileURLWithPath: baseURL.path + "-wal"),
+            URL(fileURLWithPath: baseURL.path + "-shm"),
+            URL(fileURLWithPath: baseURL.path + "-journal"),
+        ]
+        for candidate in candidates where fileManager.fileExists(atPath: candidate.path) {
+            try fileManager.removeItem(at: candidate)
         }
     }
 
@@ -223,14 +362,9 @@ actor LocalDataStore {
         includePending: Bool,
         limit: Int?
     ) -> [PushMessage] {
-        guard includePending, !pendingInsertById.isEmpty else {
-            return messages
-        }
-        let pending = pendingInsertById.values
-        var combined = pending + messages.filter { pendingInsertById[$0.id] == nil }
-        combined.sort { $0.receivedAt > $1.receivedAt }
-        guard let limit, limit > 0 else { return combined }
-        return Array(combined.prefix(limit))
+        _ = includePending
+        _ = limit
+        return messages
     }
 
     private func applyPendingInsertsToSummaries(
@@ -238,76 +372,50 @@ actor LocalDataStore {
         includePending: Bool,
         limit: Int?
     ) -> [PushMessageSummary] {
-        guard includePending, !pendingInsertById.isEmpty else {
-            return summaries
-        }
-        let pending = pendingInsertById.values.map { PushMessageSummary(message: $0) }
-        var combined = pending + summaries.filter { pendingInsertById[$0.id] == nil }
-        combined.sort { $0.receivedAt > $1.receivedAt }
-        guard let limit, limit > 0 else { return combined }
-        return Array(combined.prefix(limit))
+        _ = includePending
+        _ = limit
+        return summaries
     }
 
     private func applyPendingInserts(
         to counts: [MessageChannelCount]
     ) -> [MessageChannelCount] {
-        guard !pendingInsertById.isEmpty else { return counts }
-        var map = Dictionary(uniqueKeysWithValues: counts.map { ($0.channel ?? "", $0) })
-        let existingKeys = Set(map.keys)
-        for message in pendingInsertById.values {
-            let key = normalizeChannelKey(message.channel)
-            let mapKey = key ?? ""
-            if let existing = map[mapKey] {
-                let total = existing.totalCount + 1
-                let unread = existing.unreadCount + (message.isRead ? 0 : 1)
-                let latestReceivedAt = max(existing.latestReceivedAt ?? message.receivedAt, message.receivedAt)
-                let latestUnreadAt: Date? = {
-                    guard !message.isRead else { return existing.latestUnreadAt }
-                    return max(existing.latestUnreadAt ?? message.receivedAt, message.receivedAt)
-                }()
-                map[mapKey] = MessageChannelCount(
-                    channel: existing.channel,
-                    totalCount: total,
-                    unreadCount: unread,
-                    latestReceivedAt: latestReceivedAt,
-                    latestUnreadAt: latestUnreadAt
-                )
-            } else {
-                map[mapKey] = MessageChannelCount(
-                    channel: key,
-                    totalCount: 1,
-                    unreadCount: message.isRead ? 0 : 1,
-                    latestReceivedAt: message.receivedAt,
-                    latestUnreadAt: message.isRead ? nil : message.receivedAt
-                )
-            }
+        return counts
+    }
+
+    private func applyPendingProjectionMessages(
+        to messages: [PushMessage],
+        includePending: Bool,
+        limit: Int?,
+        where predicate: (PushMessage) -> Bool
+    ) -> [PushMessage] {
+        _ = includePending
+        _ = limit
+        return messages.filter(predicate)
+    }
+
+    private func eventTime(for message: PushMessage) -> Date? {
+        let rawValue = message.rawPayload["event_time"]?.value
+        if let int = rawValue as? Int {
+            return Date(timeIntervalSince1970: TimeInterval(int))
         }
-        var result: [MessageChannelCount] = []
-        result.reserveCapacity(map.count)
-        for item in counts {
-            let mapKey = item.channel ?? ""
-            if let updated = map[mapKey] {
-                result.append(updated)
-            }
+        if let int64 = rawValue as? Int64 {
+            return Date(timeIntervalSince1970: TimeInterval(int64))
         }
-        for (key, value) in map where !existingKeys.contains(key) {
-            result.append(value)
+        if let number = rawValue as? NSNumber {
+            return Date(timeIntervalSince1970: number.doubleValue)
         }
-        return result
+        if let text = rawValue as? String,
+           let parsed = TimeInterval(text.trimmingCharacters(in: .whitespacesAndNewlines))
+        {
+            return Date(timeIntervalSince1970: parsed)
+        }
+        return nil
     }
 
     private func normalizeChannelKey(_ channel: String?) -> String? {
         let trimmed = channel?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed
-    }
-
-    private func removePendingIndexes(for id: UUID) {
-        if let messageId = pendingInsertMessageIdIndex.first(where: { $0.value == id })?.key {
-            pendingInsertMessageIdIndex[messageId] = nil
-        }
-        if let requestId = pendingInsertRequestIdIndex.first(where: { $0.value == id })?.key {
-            pendingInsertRequestIdIndex[requestId] = nil
-        }
     }
 
     private func pruneMessagesIfNeededDuringFlush(
@@ -329,6 +437,9 @@ actor LocalDataStore {
             for id in deletedIds {
                 try? await searchIndex.remove(id: id)
             }
+        }
+        if let metadataIndex {
+            try? await metadataIndex.bulkRemove(ids: deletedIds)
         }
         removeDeliveredNotifications(identifiers: notificationRequestIds(from: candidates))
     }
@@ -354,8 +465,7 @@ actor LocalDataStore {
             channelId: item.channelId,
             displayName: item.displayName,
             updatedAt: item.updatedAt,
-            lastSyncedAt: item.lastSyncedAt,
-            autoCleanupEnabled: item.autoCleanupEnabled
+            lastSyncedAt: item.lastSyncedAt
         )
     }
 
@@ -365,6 +475,12 @@ actor LocalDataStore {
     ) async throws -> [ChannelSubscription] {
         let trimmedGateway = normalizeGatewayKey(gateway)
         guard !trimmedGateway.isEmpty else { return [] }
+        if let backend {
+            let stored = try await backend.loadChannelSubscriptions(includeDeleted: includeDeleted)
+            return stored
+                .filter { normalizeGatewayKey($0.gateway) == trimmedGateway }
+                .sorted { $0.updatedAt > $1.updatedAt }
+        }
         let stored = try channelSubscriptionStore.loadSubscriptions(
             gatewayKey: trimmedGateway
         )
@@ -398,14 +514,12 @@ actor LocalDataStore {
         let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedName = trimmedName.isEmpty ? trimmedChannelId : trimmedName
         let trimmedPassword = (password ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let existing = items.first(where: { $0.channelId == trimmedChannelId })
         let updated = KeychainChannelSubscription(
             channelId: trimmedChannelId,
             displayName: resolvedName,
             password: trimmedPassword,
             updatedAt: now,
             lastSyncedAt: lastSyncedAt,
-            autoCleanupEnabled: existing?.autoCleanupEnabled ?? true,
             isDeleted: false,
             deletedAt: nil
         )
@@ -420,13 +534,24 @@ actor LocalDataStore {
             gatewayKey: trimmedGateway,
             subscriptions: items
         )
+        if let backend {
+            try await backend.upsertChannelSubscription(
+                gateway: trimmedGateway,
+                channelId: trimmedChannelId,
+                displayName: resolvedName,
+                password: trimmedPassword,
+                lastSyncedAt: lastSyncedAt,
+                updatedAt: now,
+                isDeleted: false,
+                deletedAt: nil
+            )
+        }
         return ChannelSubscription(
             gateway: trimmedGateway,
             channelId: trimmedChannelId,
             displayName: resolvedName,
             updatedAt: now,
-            lastSyncedAt: lastSyncedAt,
-            autoCleanupEnabled: updated.autoCleanupEnabled
+            lastSyncedAt: lastSyncedAt
         )
     }
 
@@ -455,29 +580,6 @@ actor LocalDataStore {
         )
     }
 
-    func setChannelAutoCleanupEnabled(
-        gateway: String,
-        channelId: String,
-        isEnabled: Bool
-    ) async throws -> ChannelSubscription? {
-        let trimmedGateway = normalizeGatewayKey(gateway)
-        guard !trimmedGateway.isEmpty else { throw AppError.noServer }
-        var items = try channelSubscriptionStore.loadSubscriptions(
-            gatewayKey: trimmedGateway
-        )
-        let trimmedChannelId = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let index = items.firstIndex(where: { $0.channelId == trimmedChannelId }) else {
-            return nil
-        }
-        items[index].autoCleanupEnabled = isEnabled
-        items[index].updatedAt = Date()
-        try channelSubscriptionStore.saveSubscriptions(
-            gatewayKey: trimmedGateway,
-            subscriptions: items
-        )
-        return mapToDomain(items[index], gateway: trimmedGateway)
-    }
-
     func updateChannelDisplayName(
         gateway: String,
         channelId: String,
@@ -504,6 +606,13 @@ actor LocalDataStore {
             gatewayKey: trimmedGateway,
             subscriptions: items
         )
+        if let backend {
+            try await backend.updateChannelDisplayName(
+                gateway: trimmedGateway,
+                channelId: trimmedChannelId,
+                displayName: resolvedName
+            )
+        }
     }
 
     func updateChannelLastSynced(
@@ -525,6 +634,13 @@ actor LocalDataStore {
             gatewayKey: trimmedGateway,
             subscriptions: items
         )
+        if let backend {
+            try await backend.updateChannelLastSynced(
+                gateway: trimmedGateway,
+                channelId: trimmedChannelId,
+                date: date
+            )
+        }
     }
 
     func softDeleteChannelSubscription(
@@ -547,6 +663,13 @@ actor LocalDataStore {
             gatewayKey: trimmedGateway,
             subscriptions: items
         )
+        if let backend {
+            try await backend.softDeleteChannelSubscription(
+                gateway: trimmedGateway,
+                channelId: trimmedChannelId,
+                deletedAt: item.deletedAt ?? Date()
+            )
+        }
     }
 
     func softDeleteChannelSubscription(
@@ -584,6 +707,12 @@ actor LocalDataStore {
         let trimmedGateway = normalizeGatewayKey(gateway)
         guard !trimmedGateway.isEmpty else { return nil }
         let trimmedChannelId = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let backend,
+           let credential = try? await backend.loadChannelCredentials(gateway: trimmedGateway)
+            .first(where: { $0.channelId == trimmedChannelId })
+        {
+            return credential.password
+        }
         guard let item = try? channelSubscriptionStore
             .loadSubscriptions(gatewayKey: trimmedGateway)
             .first(where: { $0.channelId == trimmedChannelId })
@@ -598,6 +727,9 @@ actor LocalDataStore {
     ) async throws -> [(channelId: String, password: String)] {
         let trimmedGateway = normalizeGatewayKey(gateway)
         guard !trimmedGateway.isEmpty else { return [] }
+        if let backend {
+            return try await backend.loadChannelCredentials(gateway: trimmedGateway)
+        }
         let stored = try channelSubscriptionStore.loadSubscriptions(
             gatewayKey: trimmedGateway
         )
@@ -612,34 +744,42 @@ actor LocalDataStore {
     }
 
     func cachedPushToken(for platform: String) async -> String? {
-        guard let backend else { return nil }
-        guard let settings = try? await backend.loadAppSettings() else { return nil }
-        return decodePushTokenMap(settings.pushTokenData)[platform]
+        let normalizedPlatform = platform.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalizedPlatform.isEmpty else { return nil }
+        return try? pushTokenStore.load(platform: normalizedPlatform)
     }
 
     func saveCachedPushToken(_ token: String?, for platform: String) async {
-        guard let backend else { return }
-        var settings = (try? await backend.loadAppSettings()) ?? .empty
-        var tokens = decodePushTokenMap(settings.pushTokenData)
-        if let trimmed = token?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !trimmed.isEmpty
-        {
-            tokens[platform] = trimmed
-        } else {
-            tokens.removeValue(forKey: platform)
-        }
-        settings.pushTokenData = encodePushTokenMap(tokens)
-        try? await backend.saveAppSettings(settings)
+        let normalizedPlatform = platform.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalizedPlatform.isEmpty else { return }
+
+        let normalizedToken = token?.trimmingCharacters(in: .whitespacesAndNewlines)
+        try? pushTokenStore.save(
+            token: normalizedToken?.isEmpty == false ? normalizedToken : nil,
+            platform: normalizedPlatform
+        )
     }
 
-    func loadManualKeyPreferences() async -> (length: Int?, encoding: String?) {
+    func cachedProviderDeviceKey(for platform: String) async -> String? {
+        let normalizedPlatform = platform.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalizedPlatform.isEmpty else { return nil }
+        return providerDeviceKeyStore.load(platform: normalizedPlatform)
+    }
+
+    func saveCachedProviderDeviceKey(_ deviceKey: String?, for platform: String) async {
+        let normalizedPlatform = platform.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalizedPlatform.isEmpty else { return }
+        providerDeviceKeyStore.save(deviceKey: deviceKey, platform: normalizedPlatform)
+    }
+
+    func loadManualKeyPreferences() async -> String? {
         let prefs = (try? localConfigStore.loadManualKeyPreferences())
-            ?? ManualKeyPreferences(length: nil, encoding: nil)
-        return (prefs.length, prefs.encoding)
+            ?? ManualKeyPreferences(encoding: nil)
+        return prefs.encoding
     }
 
-    func saveManualKeyPreferences(length: Int?, encoding: String?) async {
-        let prefs = ManualKeyPreferences(length: length, encoding: encoding)
+    func saveManualKeyPreferences(encoding: String?) async {
+        let prefs = ManualKeyPreferences(encoding: encoding)
         try? localConfigStore.saveManualKeyPreferences(prefs)
     }
 
@@ -656,47 +796,227 @@ actor LocalDataStore {
         try? await backend.saveAppSettings(settings)
     }
 
-    func loadAutoCleanupPreference() async -> Bool? {
-        guard let backend else { return nil }
-        guard let settings = try? await backend.loadAppSettings() else { return nil }
-        if let cached = settings.autoCleanupEnabled {
-            cacheAutoCleanupPreference(cached)
-        }
-        return settings.autoCleanupEnabled
+    func loadDataPageVisibility() async -> DataPageVisibilitySnapshot {
+        guard let backend else { return .default }
+        guard let settings = try? await backend.loadAppSettings() else { return .default }
+        return DataPageVisibilitySnapshot(
+            messageEnabled: settings.messagePageEnabled ?? true,
+            eventEnabled: settings.eventPageEnabled ?? true,
+            thingEnabled: settings.thingPageEnabled ?? true
+        )
     }
 
-    func saveAutoCleanupPreference(_ isEnabled: Bool) async {
-        cacheAutoCleanupPreference(isEnabled)
+    func saveDataPageVisibility(_ visibility: DataPageVisibilitySnapshot) async {
         guard let backend else { return }
         var settings = (try? await backend.loadAppSettings()) ?? .empty
-        settings.autoCleanupEnabled = isEnabled
+        settings.messagePageEnabled = visibility.messageEnabled
+        settings.eventPageEnabled = visibility.eventEnabled
+        settings.thingPageEnabled = visibility.thingEnabled
         try? await backend.saveAppSettings(settings)
     }
 
-    nonisolated func cachedAutoCleanupPreference() -> Bool? {
-        let defaults = UserDefaults(suiteName: AppConstants.appGroupIdentifier)
-        guard let object = defaults?.object(forKey: AppConstants.autoCleanupEnabledKey) else { return nil }
-        return object as? Bool
-    }
-
-    private func cacheAutoCleanupPreference(_ isEnabled: Bool) {
-        UserDefaults(suiteName: AppConstants.appGroupIdentifier)?
-            .set(isEnabled, forKey: AppConstants.autoCleanupEnabledKey)
-    }
-
-    func loadDefaultRingtoneFilename() async -> String? {
-        UserDefaults(suiteName: AppConstants.appGroupIdentifier)?
-            .string(forKey: AppConstants.defaultRingtoneFilenameKey)
-    }
-
-    func saveDefaultRingtoneFilename(_ filename: String?) async {
-        let defaults = UserDefaults(suiteName: AppConstants.appGroupIdentifier)
-        let trimmed = filename?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if trimmed.isEmpty {
-            defaults?.removeObject(forKey: AppConstants.defaultRingtoneFilenameKey)
-        } else {
-            defaults?.set(trimmed, forKey: AppConstants.defaultRingtoneFilenameKey)
+    func loadWatchMode() async -> WatchMode {
+        guard let backend else { return .mirror }
+        guard let settings = try? await backend.loadAppSettings(),
+              let rawValue = settings.watchModeRawValue,
+              let mode = WatchMode(rawValue: rawValue)
+        else {
+            return .mirror
         }
+        return mode
+    }
+
+    func saveWatchMode(_ mode: WatchMode) async {
+        guard let backend else { return }
+        var settings = (try? await backend.loadAppSettings()) ?? .empty
+        settings.watchModeRawValue = mode.rawValue
+        try? await backend.saveAppSettings(settings)
+    }
+
+    func loadWatchModeControlState() async -> WatchModeControlPersistenceState {
+        guard let backend,
+              let settings = try? await backend.loadAppSettings()
+        else {
+            return .initial
+        }
+        let desiredMode = settings.watchModeRawValue.flatMap { WatchMode(rawValue: $0) } ?? .mirror
+        let effectiveMode = settings.watchEffectiveModeRawValue.flatMap { WatchMode(rawValue: $0) } ?? desiredMode
+        let standaloneReady = settings.watchStandaloneReady ?? false
+        let switchStatus = settings.watchModeSwitchStatusRawValue
+            .flatMap { WatchModeSwitchStatus(rawValue: $0) }
+            ?? .idle
+        return WatchModeControlPersistenceState(
+            desiredMode: desiredMode,
+            effectiveMode: effectiveMode,
+            standaloneReady: standaloneReady,
+            switchStatus: switchStatus,
+            lastConfirmedControlGeneration: settings.watchLastConfirmedControlGeneration ?? 0,
+            lastObservedReportedGeneration: settings.watchLastObservedReportedGeneration ?? 0
+        )
+    }
+
+    func saveWatchModeControlState(_ state: WatchModeControlPersistenceState) async {
+        guard let backend else { return }
+        var settings = (try? await backend.loadAppSettings()) ?? .empty
+        settings.watchModeRawValue = state.desiredMode.rawValue
+        settings.watchEffectiveModeRawValue = state.effectiveMode.rawValue
+        settings.watchStandaloneReady = state.standaloneReady
+        settings.watchModeSwitchStatusRawValue = state.switchStatus.rawValue
+        settings.watchLastConfirmedControlGeneration = state.lastConfirmedControlGeneration
+        settings.watchLastObservedReportedGeneration = state.lastObservedReportedGeneration
+        try? await backend.saveAppSettings(settings)
+    }
+
+    func loadWatchSyncGenerationState() async -> WatchSyncGenerationState {
+        let publicationState = await loadWatchPublicationState()
+        return publicationState.syncGenerations
+    }
+
+    func saveWatchSyncGenerationState(_ state: WatchSyncGenerationState) async {
+        guard let backend else { return }
+        var settings = (try? await backend.loadAppSettings()) ?? .empty
+        settings.watchControlGeneration = state.controlGeneration
+        settings.watchMirrorSnapshotGeneration = state.mirrorSnapshotGeneration
+        settings.watchStandaloneProvisioningGeneration = state.standaloneProvisioningGeneration
+        settings.watchMirrorActionAckGeneration = state.mirrorActionAckGeneration
+        try? await backend.saveAppSettings(settings)
+    }
+
+    func loadWatchPublicationState() async -> WatchPublicationState {
+        guard let backend,
+              let settings = try? await backend.loadAppSettings()
+        else {
+            return .empty
+        }
+        return WatchPublicationState(
+            syncGenerations: WatchSyncGenerationState(
+                controlGeneration: settings.watchControlGeneration ?? 0,
+                mirrorSnapshotGeneration: settings.watchMirrorSnapshotGeneration ?? 0,
+                standaloneProvisioningGeneration: settings.watchStandaloneProvisioningGeneration ?? 0,
+                mirrorActionAckGeneration: settings.watchMirrorActionAckGeneration ?? 0
+            ),
+            mirrorSnapshotContentDigest: settings.watchMirrorSnapshotContentDigest,
+            standaloneProvisioningContentDigest: settings.watchStandaloneProvisioningContentDigest
+        )
+    }
+
+    func saveWatchPublicationState(_ state: WatchPublicationState) async {
+        guard let backend else { return }
+        var settings = (try? await backend.loadAppSettings()) ?? .empty
+        settings.watchControlGeneration = state.syncGenerations.controlGeneration
+        settings.watchMirrorSnapshotGeneration = state.syncGenerations.mirrorSnapshotGeneration
+        settings.watchStandaloneProvisioningGeneration = state.syncGenerations.standaloneProvisioningGeneration
+        settings.watchMirrorActionAckGeneration = state.syncGenerations.mirrorActionAckGeneration
+        settings.watchMirrorSnapshotContentDigest = state.mirrorSnapshotContentDigest
+        settings.watchStandaloneProvisioningContentDigest = state.standaloneProvisioningContentDigest
+        try? await backend.saveAppSettings(settings)
+    }
+
+    func loadWatchProvisioningServerConfig() async throws -> ServerConfig? {
+        let backend = try requireBackend()
+        return try await backend.loadWatchProvisioningServerConfig()
+    }
+
+    func saveWatchProvisioningServerConfig(_ config: ServerConfig?) async throws {
+        let backend = try requireBackend()
+        try await backend.saveWatchProvisioningServerConfig(config)
+    }
+
+    func loadWatchProvisioningState() async -> WatchProvisioningState? {
+        guard let backend else { return nil }
+        return try? await backend.loadWatchProvisioningState()
+    }
+
+    func saveWatchProvisioningState(_ state: WatchProvisioningState?) async {
+        guard let backend else { return }
+        try? await backend.saveWatchProvisioningState(state)
+    }
+
+    func applyWatchStandaloneProvisioning(
+        _ snapshot: WatchStandaloneProvisioningSnapshot,
+        sourceControlGeneration: Int64
+    ) async throws -> WatchProvisioningState {
+        try await performBackendWrite { backend in
+            try await backend.applyWatchStandaloneProvisioning(
+                snapshot,
+                sourceControlGeneration: sourceControlGeneration
+            )
+        }
+    }
+
+    func mergeWatchMirrorSnapshot(_ snapshot: WatchMirrorSnapshot) async throws {
+        let backend = try requireBackend()
+        try await backend.mergeWatchMirrorSnapshot(snapshot)
+    }
+
+    func clearWatchLightStore() async throws {
+        let backend = try requireBackend()
+        try await backend.clearWatchLightStore()
+    }
+
+    func loadWatchLightMessages() async throws -> [WatchLightMessage] {
+        let backend = try requireBackend()
+        return try await backend.loadWatchLightMessages()
+    }
+
+    func loadWatchLightMessage(messageId: String) async throws -> WatchLightMessage? {
+        let backend = try requireBackend()
+        return try await backend.loadWatchLightMessage(messageId: messageId)
+    }
+
+    func loadWatchLightMessage(notificationRequestId: String) async throws -> WatchLightMessage? {
+        let backend = try requireBackend()
+        return try await backend.loadWatchLightMessage(notificationRequestId: notificationRequestId)
+    }
+
+    func loadWatchLightEvents() async throws -> [WatchLightEvent] {
+        let backend = try requireBackend()
+        return try await backend.loadWatchLightEvents()
+    }
+
+    func loadWatchLightEvent(eventId: String) async throws -> WatchLightEvent? {
+        let backend = try requireBackend()
+        return try await backend.loadWatchLightEvent(eventId: eventId)
+    }
+
+    func loadWatchLightThings() async throws -> [WatchLightThing] {
+        let backend = try requireBackend()
+        return try await backend.loadWatchLightThings()
+    }
+
+    func loadWatchLightThing(thingId: String) async throws -> WatchLightThing? {
+        let backend = try requireBackend()
+        return try await backend.loadWatchLightThing(thingId: thingId)
+    }
+
+    func upsertWatchLightPayload(_ payload: WatchLightPayload) async throws {
+        let backend = try requireBackend()
+        try await backend.upsertWatchLightPayload(payload)
+    }
+
+    func markWatchLightMessageRead(messageId: String) async throws -> WatchLightMessage? {
+        let backend = try requireBackend()
+        return try await backend.markWatchLightMessageRead(messageId: messageId)
+    }
+
+    func deleteWatchLightMessage(messageId: String) async throws {
+        let backend = try requireBackend()
+        try await backend.deleteWatchLightMessage(messageId: messageId)
+    }
+
+    func enqueueWatchMirrorAction(_ action: WatchMirrorAction) async throws {
+        let backend = try requireBackend()
+        try await backend.enqueueWatchMirrorAction(action)
+    }
+
+    func loadWatchMirrorActions() async throws -> [WatchMirrorAction] {
+        let backend = try requireBackend()
+        return try await backend.loadWatchMirrorActions()
+    }
+
+    func deleteWatchMirrorActions(actionIds: [String]) async throws {
+        let backend = try requireBackend()
+        try await backend.deleteWatchMirrorActions(actionIds: actionIds)
     }
 
     func loadMessages() async throws -> [PushMessage] {
@@ -722,32 +1042,153 @@ actor LocalDataStore {
         )
     }
 
+    func loadEventMessagesForProjection() async throws -> [PushMessage] {
+        let backend = try requireBackend()
+        let messages = try await backend.loadEventMessagesForProjection()
+        return applyPendingProjectionMessages(
+            to: messages,
+            includePending: true,
+            limit: nil,
+            where: isTopLevelEventProjection
+        )
+    }
+
+    func loadEventMessagesForProjection(eventId: String) async throws -> [PushMessage] {
+        let normalized = eventId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return [] }
+        let backend = try requireBackend()
+        let messages = try await backend.loadEventMessagesForProjection(eventId: normalized)
+        return applyPendingProjectionMessages(
+            to: messages,
+            includePending: true,
+            limit: nil,
+            where: { $0.eventId == normalized }
+        )
+    }
+
+    func loadEventMessagesForProjectionPage(
+        before cursor: EntityProjectionPageCursor?,
+        limit: Int
+    ) async throws -> [PushMessage] {
+        let backend = try requireBackend()
+        let messages = try await backend.loadEventMessagesForProjectionPage(before: cursor, limit: limit)
+        return applyPendingProjectionMessages(
+            to: messages,
+            includePending: cursor == nil,
+            limit: limit,
+            where: isTopLevelEventProjection
+        )
+    }
+
+    func loadThingMessagesForProjection() async throws -> [PushMessage] {
+        let backend = try requireBackend()
+        let messages = try await backend.loadThingMessagesForProjection()
+        return applyPendingProjectionMessages(
+            to: messages,
+            includePending: true,
+            limit: nil,
+            where: { $0.thingId != nil }
+        )
+    }
+
+    func loadThingMessagesForProjection(thingId: String) async throws -> [PushMessage] {
+        let normalized = thingId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return [] }
+        let backend = try requireBackend()
+        let messages = try await backend.loadThingMessagesForProjection(thingId: normalized)
+        return applyPendingProjectionMessages(
+            to: messages,
+            includePending: true,
+            limit: nil,
+            where: { $0.thingId == normalized }
+        )
+    }
+
+    func loadThingMessagesForProjectionPage(
+        before cursor: EntityProjectionPageCursor?,
+        limit: Int
+    ) async throws -> [PushMessage] {
+        let backend = try requireBackend()
+        let messages = try await backend.loadThingMessagesForProjectionPage(before: cursor, limit: limit)
+        return applyPendingProjectionMessages(
+            to: messages,
+            includePending: cursor == nil,
+            limit: limit,
+            where: { $0.thingId != nil }
+        )
+    }
+
     func loadMessage(id: UUID) async throws -> PushMessage? {
-        if let pending = pendingInsertById[id] {
-            return pending
-        }
         let backend = try requireBackend()
         return try await backend.loadMessage(id: id)
     }
 
-    func loadMessage(messageId: UUID) async throws -> PushMessage? {
-        if let pendingId = pendingInsertMessageIdIndex[messageId],
-           let pending = pendingInsertById[pendingId]
-        {
-            return pending
-        }
+    func loadMessage(messageId: String) async throws -> PushMessage? {
         let backend = try requireBackend()
         return try await backend.loadMessage(messageId: messageId)
     }
 
+    func loadMessage(deliveryId: String) async throws -> PushMessage? {
+        let backend = try requireBackend()
+        return try await backend.loadMessage(deliveryId: deliveryId)
+    }
+
     func loadMessage(notificationRequestId: String) async throws -> PushMessage? {
-        if let pendingId = pendingInsertRequestIdIndex[notificationRequestId],
-           let pending = pendingInsertById[pendingId]
-        {
-            return pending
-        }
         let backend = try requireBackend()
         return try await backend.loadMessage(notificationRequestId: notificationRequestId)
+    }
+
+    func loadEntityOpenTarget(notificationRequestId: String) async throws -> EntityOpenTarget? {
+        let backend = try requireBackend()
+        return try await backend.loadEntityOpenTarget(notificationRequestId: notificationRequestId)
+    }
+
+    func loadEntityOpenTarget(messageId: String) async throws -> EntityOpenTarget? {
+        let backend = try requireBackend()
+        return try await backend.loadEntityOpenTarget(messageId: messageId)
+    }
+
+    func inboundDeliveryState(deliveryId: String) async throws -> InboundDeliveryState {
+        let backend = try requireBackend()
+        return try await backend.inboundDeliveryState(deliveryId: deliveryId)
+    }
+
+    func markInboundDeliveryPersisted(
+        deliveryId: String,
+        source: String = "private_wakeup_pull"
+    ) async throws {
+        let backend = try requireBackend()
+        try await backend.markInboundDeliveryPersisted(
+            deliveryId: deliveryId,
+            source: source
+        )
+    }
+
+    func markInboundDeliveryAcked(
+        deliveryId: String,
+        source: String = "private_wakeup_pull"
+    ) async throws {
+        let backend = try requireBackend()
+        try await backend.markInboundDeliveryAcked(
+            deliveryId: deliveryId,
+            source: source
+        )
+    }
+
+    func enqueueInboundDeliveryAcks(
+        deliveryIds: [String],
+        source: String = "private_wakeup_pull"
+    ) async throws {
+        let backend = try requireBackend()
+        try await backend.enqueueInboundDeliveryAcks(
+            deliveryIds: deliveryIds,
+            source: source
+        )
+    }
+
+    func loadPendingInboundDeliveryAckIds(limit: Int = 200) async throws -> [String] {
+        let backend = try requireBackend()
+        return try await backend.loadPendingInboundDeliveryAckIds(limit: limit)
     }
 
     func loadMessagesPage(
@@ -798,9 +1239,7 @@ actor LocalDataStore {
 
     func messageCounts() async throws -> (total: Int, unread: Int) {
         let backend = try requireBackend()
-        let base = try await backend.messageCounts()
-        let pendingUnread = pendingInsertById.values.filter { !$0.isRead }.count
-        return (total: base.total + pendingInsertById.count, unread: base.unread + pendingUnread)
+        return try await backend.messageCounts()
     }
 
     func searchMessagesCount(query: String) async throws -> Int {
@@ -839,7 +1278,12 @@ actor LocalDataStore {
         if let searchIndex {
             await ensureSearchIndexReady()
             let ftsQuery = Self.searchIndexQuery(from: trimmed)
-            if let ids = try? await searchIndex.searchIDs(query: ftsQuery, before: cursor?.receivedAt, limit: limit),
+            if let ids = try? await searchIndex.searchIDs(
+                query: ftsQuery,
+                before: cursor?.receivedAt,
+                beforeID: cursor?.id,
+                limit: limit
+            ),
                !ids.isEmpty
             {
                 return try await backend.loadMessageSummaries(ids: ids)
@@ -848,121 +1292,237 @@ actor LocalDataStore {
         return try await backend.searchMessageSummariesFallback(query: trimmed, before: cursor, limit: limit)
     }
 
-    func saveMessages(_ messages: [PushMessage]) async throws {
+    private func performBackendWrite<T>(
+        operation: StaticString = #function,
+        _ action: (GRDBStore) async throws -> T
+    ) async throws -> T {
         await flushWrites()
         let backend = try requireBackend()
-        try await backend.saveMessages(messages)
-        await rebuildSearchIndex(with: messages)
+        do {
+            return try await action(backend)
+        } catch {
+            throw mapWriteOperationError(error, operation: operation)
+        }
+    }
+
+    private func mapWriteOperationError(
+        _ error: Error,
+        operation: StaticString
+    ) -> Error {
+        if let appError = error as? AppError {
+            switch appError {
+            case let .localStore(message):
+                let operationName = String(describing: operation)
+                if message.contains(operationName) {
+                    return appError
+                }
+                return AppError.localStore("[\(operationName)] \(message)")
+            default:
+                return appError
+            }
+        }
+        let nsError = error as NSError
+        let detail = nsError.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        let message = detail.isEmpty
+            ? "Persistent write failed in \(String(describing: operation)). [domain=\(nsError.domain) code=\(nsError.code)]"
+            : "Persistent write failed in \(String(describing: operation)): \(detail) [domain=\(nsError.domain) code=\(nsError.code)]"
+        return AppError.localStore(message)
+    }
+
+    func saveMessages(_ messages: [PushMessage]) async throws {
+        let canonicalMessages = messages.map(canonicalizedMessageForPersistence)
+        try await performBackendWrite { backend in
+            try await backend.saveMessages(canonicalMessages)
+        }
+        let searchable = canonicalMessages.filter(isTopLevelMessage)
+        await rebuildSearchIndex(with: searchable)
+        await rebuildMetadataIndex(with: searchable)
+    }
+
+    func saveEntityRecords(_ messages: [PushMessage]) async throws {
+        try await performBackendWrite { backend in
+            try await backend.saveEntityRecords(messages)
+        }
     }
 
     func saveMessage(_ message: PushMessage) async throws {
-        enqueuePendingInsert(message)
+        let canonicalMessage = canonicalizedMessageForPersistence(message)
+        try await performBackendWrite { backend in
+            try await backend.saveMessages([canonicalMessage])
+        }
+        let searchable = isTopLevelMessage(canonicalMessage) ? [canonicalMessage] : []
+        await rebuildSearchIndex(with: searchable)
+        await rebuildMetadataIndex(with: searchable)
+    }
+
+    func persistNotificationMessageIfNeeded(
+        _ message: PushMessage
+    ) async throws -> NotificationStoreSaveOutcome {
+        let canonicalMessage = canonicalizedMessageForPersistence(message)
+        let outcome = try await performBackendWrite { backend in
+            try await backend.persistNotificationMessageIfNeeded(canonicalMessage)
+        }
+        let searchable: [PushMessage] = {
+            switch outcome {
+            case let .persisted(stored), let .duplicateRequest(stored), let .duplicateMessage(stored):
+                return isTopLevelMessage(stored) ? [stored] : []
+            }
+        }()
+        await rebuildSearchIndex(with: searchable)
+        await rebuildMetadataIndex(with: searchable)
+        return outcome
     }
 
     func saveMessagesBatch(_ messages: [PushMessage]) async throws {
         guard !messages.isEmpty else { return }
-        messages.forEach { enqueuePendingInsert($0) }
+        let canonicalMessages = messages.map(canonicalizedMessageForPersistence)
+        try await performBackendWrite { backend in
+            try await backend.saveMessages(canonicalMessages)
+        }
+        let searchable = canonicalMessages.filter(isTopLevelMessage)
+        await rebuildSearchIndex(with: searchable)
+        await rebuildMetadataIndex(with: searchable)
     }
 
     func setMessageReadState(id: UUID, isRead: Bool) async throws {
-        if let pending = pendingInsertById[id] {
-            var updated = pending
-            updated.isRead = isRead
-            pendingInsertById[id] = updated
-            return
+        try await performBackendWrite { backend in
+            try await backend.setMessageReadState(id: id, isRead: isRead)
         }
-        await flushWrites()
-        let backend = try requireBackend()
-        try await backend.setMessageReadState(id: id, isRead: isRead)
     }
 
     func markMessagesRead(
         filter: MessageQueryFilter,
         channel: String?
     ) async throws -> Int {
-        await flushWrites()
-        let backend = try requireBackend()
-        return try await backend.markMessagesRead(filter: filter, channel: channel)
+        try await performBackendWrite { backend in
+            try await backend.markMessagesRead(filter: filter, channel: channel)
+        }
     }
 
     func deleteMessage(id: UUID) async throws {
-        if pendingInsertById.removeValue(forKey: id) != nil {
-            removePendingIndexes(for: id)
-            return
+        try await performBackendWrite { backend in
+            try await backend.deleteMessage(id: id)
         }
-        await flushWrites()
-        let backend = try requireBackend()
-        try await backend.deleteMessage(id: id)
         if let searchIndex {
             try? await searchIndex.remove(id: id)
+        }
+        if let metadataIndex {
+            try? await metadataIndex.remove(id: id)
         }
     }
 
     func deleteMessage(notificationRequestId: String) async throws {
-        if let pendingId = pendingInsertRequestIdIndex[notificationRequestId] {
-            _ = pendingInsertById.removeValue(forKey: pendingId)
-            removePendingIndexes(for: pendingId)
-            return
-        }
-        await flushWrites()
-        let backend = try requireBackend()
-        if let message = try await backend.loadMessage(notificationRequestId: notificationRequestId) {
-            try await backend.deleteMessage(notificationRequestId: notificationRequestId)
-            if let searchIndex {
-                try? await searchIndex.remove(id: message.id)
+        let deletedMessageId = try await performBackendWrite { backend -> UUID? in
+            if let message = try await backend.loadMessage(notificationRequestId: notificationRequestId) {
+                try await backend.deleteMessage(notificationRequestId: notificationRequestId)
+                return message.id
             }
-        } else {
             try await backend.deleteMessage(notificationRequestId: notificationRequestId)
+            return nil
+        }
+        if let deletedMessageId {
+            if let searchIndex {
+                try? await searchIndex.remove(id: deletedMessageId)
+            }
+            if let metadataIndex {
+                try? await metadataIndex.remove(id: deletedMessageId)
+            }
+        }
+    }
+
+    func deleteEventRecords(eventId: String) async throws -> Int {
+        let normalized = eventId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return 0 }
+        return try await performBackendWrite { backend in
+            try await backend.deleteEventRecords(eventId: normalized)
+        }
+    }
+
+    func deleteEventRecords(channel: String?) async throws -> Int {
+        let normalized = channel?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return try await performBackendWrite { backend in
+            try await backend.deleteEventRecords(channel: normalized)
+        }
+    }
+
+    func deleteThingRecords(thingId: String) async throws -> Int {
+        let normalized = thingId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return 0 }
+        return try await performBackendWrite { backend in
+            try await backend.deleteThingRecords(thingId: normalized)
+        }
+    }
+
+    func deleteThingRecords(channel: String?) async throws -> Int {
+        let normalized = channel?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return try await performBackendWrite { backend in
+            try await backend.deleteThingRecords(channel: normalized)
         }
     }
 
     func deleteAllMessages() async throws {
-        await flushWrites()
-        let backend = try requireBackend()
-        try await backend.deleteAllMessages()
-        pendingInsertById.removeAll(keepingCapacity: true)
-        pendingInsertMessageIdIndex.removeAll(keepingCapacity: true)
-        pendingInsertRequestIdIndex.removeAll(keepingCapacity: true)
+        try await performBackendWrite { backend in
+            try await backend.deleteAllMessages()
+            try await backend.deleteAllEntityRecords()
+        }
         if let searchIndex {
             try? await searchIndex.clear()
+        }
+        if let metadataIndex {
+            try? await metadataIndex.clear()
         }
     }
 
     func deleteMessages(readState: Bool?, before cutoff: Date?) async throws -> Int {
-        await flushWrites()
-        let backend = try requireBackend()
         if readState == nil && cutoff == nil {
-            let total = (try? await backend.messageCounts().total) ?? 0
-            try await backend.deleteAllMessages()
+            let total = try await performBackendWrite { backend in
+                let count = (try? await backend.messageCounts().total) ?? 0
+                try await backend.deleteAllMessages()
+                return count
+            }
             if let searchIndex {
                 try? await searchIndex.clear()
+            }
+            if let metadataIndex {
+                try? await metadataIndex.clear()
             }
             return total
         }
 
-        let deletedIds = try await backend.deleteMessages(readState: readState, before: cutoff)
+        let deletedIds = try await performBackendWrite { backend in
+            try await backend.deleteMessages(readState: readState, before: cutoff)
+        }
         if let searchIndex, !deletedIds.isEmpty {
             try? await searchIndex.bulkRemove(ids: deletedIds)
+        }
+        if let metadataIndex, !deletedIds.isEmpty {
+            try? await metadataIndex.bulkRemove(ids: deletedIds)
         }
         return deletedIds.count
     }
 
     func deleteMessages(channel: String) async throws -> Int {
-        await flushWrites()
-        let backend = try requireBackend()
-        let deletedIds = try await backend.deleteMessages(channel: channel)
+        let deletedIds = try await performBackendWrite { backend in
+            try await backend.deleteMessages(channel: channel)
+        }
         if let searchIndex, !deletedIds.isEmpty {
             try? await searchIndex.bulkRemove(ids: deletedIds)
+        }
+        if let metadataIndex, !deletedIds.isEmpty {
+            try? await metadataIndex.bulkRemove(ids: deletedIds)
         }
         return deletedIds.count
     }
 
     func deleteMessages(channel: String?, readState: Bool?) async throws -> Int {
-        await flushWrites()
-        let backend = try requireBackend()
-        let deletedIds = try await backend.deleteMessages(channel: channel, readState: readState)
+        let deletedIds = try await performBackendWrite { backend in
+            try await backend.deleteMessages(channel: channel, readState: readState)
+        }
         if let searchIndex, !deletedIds.isEmpty {
             try? await searchIndex.bulkRemove(ids: deletedIds)
+        }
+        if let metadataIndex, !deletedIds.isEmpty {
+            try? await metadataIndex.bulkRemove(ids: deletedIds)
         }
         return deletedIds.count
     }
@@ -985,14 +1545,17 @@ actor LocalDataStore {
         excludingChannels: [String] = []
     ) async throws -> Int {
         guard limit > 0 else { return 0 }
-        await flushWrites()
-        let backend = try requireBackend()
-        let deletedIds = try await backend.deleteOldestReadMessages(
-            limit: limit,
-            excludingChannels: excludingChannels
-        )
+        let deletedIds = try await performBackendWrite { backend in
+            try await backend.deleteOldestReadMessages(
+                limit: limit,
+                excludingChannels: excludingChannels
+            )
+        }
         if let searchIndex, !deletedIds.isEmpty {
             try? await searchIndex.bulkRemove(ids: deletedIds)
+        }
+        if let metadataIndex, !deletedIds.isEmpty {
+            try? await metadataIndex.bulkRemove(ids: deletedIds)
         }
         return deletedIds.count
     }
@@ -1021,6 +1584,9 @@ actor LocalDataStore {
                 try? await searchIndex.remove(id: id)
             }
         }
+        if let metadataIndex {
+            try? await metadataIndex.bulkRemove(ids: deletedIds)
+        }
         return deletedIds.count
     }
     func warmCachesIfNeeded() async {
@@ -1028,11 +1594,11 @@ actor LocalDataStore {
         guard let backend else { return }
         await backend.prepareStatsIfNeeded(progressive: true)
         await rebuildSearchIndexIfNeeded(batchSize: 200, yieldBetweenBatches: true)
+        await rebuildMetadataIndexIfNeeded(batchSize: 200, yieldBetweenBatches: true)
     }
 
     private func rebuildSearchIndex(with messages: [PushMessage]) async {
         guard let searchIndex else { return }
-        try? await searchIndex.clear()
         guard !messages.isEmpty else { return }
         let batchSize = 500
         var index = 0
@@ -1049,6 +1615,26 @@ actor LocalDataStore {
                 )
             }
             try? await searchIndex.bulkUpsert(entries: entries)
+            index = upper
+        }
+    }
+
+    private func rebuildMetadataIndex(with messages: [PushMessage]) async {
+        guard let metadataIndex else { return }
+        guard !messages.isEmpty else { return }
+        let batchSize = 500
+        var index = 0
+        while index < messages.count {
+            let upper = min(messages.count, index + batchSize)
+            let slice = messages[index..<upper]
+            let entries = slice.map { message in
+                MessageMetadataIndex.Entry(
+                    id: message.id,
+                    receivedAt: message.receivedAt,
+                    items: message.metadata
+                )
+            }
+            try? await metadataIndex.bulkReplace(entries: entries)
             index = upper
         }
     }
@@ -1085,7 +1671,7 @@ actor LocalDataStore {
             let entries = try? await backend.searchIndexEntriesPage(before: cursor, limit: batchSize)
             guard let entries, !entries.isEmpty else { break }
             try? await searchIndex.bulkUpsert(entries: entries)
-            cursor = entries.last.map { MessagePageCursor(receivedAt: $0.receivedAt) }
+            cursor = entries.last.map { MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id) }
             if entries.count < batchSize { break }
             if yieldBetweenBatches {
                 await Task.yield()
@@ -1093,144 +1679,1416 @@ actor LocalDataStore {
         }
     }
 
+    private func rebuildMetadataIndexIfNeeded(
+        batchSize: Int,
+        yieldBetweenBatches: Bool
+    ) async {
+        guard let metadataIndex else { return }
+        guard let isEmpty = try? await metadataIndex.isEmpty(), isEmpty else { return }
+        guard let backend else { return }
+        let total = (try? await backend.messageCounts().total) ?? 0
+        guard total > 0 else { return }
+
+        var cursor: MessagePageCursor?
+        try? await metadataIndex.clear()
+        while true {
+            let messages = try? await backend.loadMessagesPage(
+                before: cursor,
+                limit: batchSize,
+                filter: .all,
+                channel: nil
+            )
+            guard let messages, !messages.isEmpty else { break }
+            let entries = messages.map { message in
+                MessageMetadataIndex.Entry(
+                    id: message.id,
+                    receivedAt: message.receivedAt,
+                    items: message.metadata
+                )
+            }
+            try? await metadataIndex.bulkReplace(entries: entries)
+            cursor = messages.last.map { MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id) }
+            if messages.count < batchSize { break }
+            if yieldBetweenBatches {
+                await Task.yield()
+            }
+        }
+    }
+
     private static func searchIndexQuery(from raw: String) -> String {
-        let tokens = raw.split(whereSeparator: { $0.isWhitespace })
-        if tokens.isEmpty { return raw }
-        return tokens
-            .map { String($0).replacingOccurrences(of: "\"", with: "") }
-            .map { "\"\($0)\"" }
-            .joined(separator: " AND ")
+        SearchQuerySemantics.normalizedSearchIndexQuery(from: raw)
     }
 }
 
-private final class SwiftDataStore {
-    private let encoder: JSONEncoder
-    private let decoder: JSONDecoder
-    private let modelContainer: ModelContainer
-    private let appSettingsId = "default"
+private struct GRDBMessageRecord {
+    let id: UUID
+    let messageId: String
+    let title: String
+    let body: String
+    let channel: String?
+    let url: String?
+    let isRead: Bool
+    let receivedAt: Date
+    let rawPayloadJSON: String
+    let status: String
+    let decryptionState: String?
+    let notificationRequestId: String?
+    let deliveryId: String?
+    let operationId: String?
+    let entityType: String
+    let entityId: String?
+    let eventId: String?
+    let thingId: String?
+    let projectionDestination: String?
+    let eventState: String?
+    let eventTimeEpoch: Int64?
+    let observedTimeEpoch: Int64?
+    let topLevelMessage: Bool
 
     init(
-        fileManager: FileManager,
-        encoder: JSONEncoder,
-        decoder: JSONDecoder,
-        appGroupIdentifier: String,
-    ) throws {
-        self.encoder = encoder
-        self.decoder = decoder
-
-        let schema = Schema([
-            StoredPushMessage.self,
-            StoredServerConfig.self,
-            StoredChannelSubscription.self,
-            StoredAppSettings.self,
-            StoredMessageStats.self,
-            StoredMessageChannelStats.self,
-        ])
-        let storeURL = try Self.storeURL(
-            fileManager: fileManager,
-            appGroupIdentifier: appGroupIdentifier,
-        )
-        let configuration = ModelConfiguration(schema: schema, url: storeURL)
-        modelContainer = try ModelContainer(for: schema, configurations: [configuration])
-    }
-
-    static func inMemory(
-        encoder: JSONEncoder,
-        decoder: JSONDecoder,
-    ) throws -> SwiftDataStore {
-        let schema = Schema([
-            StoredPushMessage.self,
-            StoredServerConfig.self,
-            StoredChannelSubscription.self,
-            StoredAppSettings.self,
-            StoredMessageStats.self,
-            StoredMessageChannelStats.self,
-        ])
-        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
-        let container = (try? ModelContainer(for: schema, configurations: [configuration]))
-            ?? (try? ModelContainer(for: schema))
-        guard let container else {
-            throw AppError.localStore("SwiftData ModelContainer initialization failed.")
-        }
-        return SwiftDataStore(
-            encoder: encoder,
-            decoder: decoder,
-            modelContainer: container
-        )
-    }
-
-    private init(
-        encoder: JSONEncoder,
-        decoder: JSONDecoder,
-        modelContainer: ModelContainer,
+        id: UUID,
+        messageId: String,
+        title: String,
+        body: String,
+        channel: String?,
+        url: String?,
+        isRead: Bool,
+        receivedAt: Date,
+        rawPayloadJSON: String,
+        status: String,
+        decryptionState: String?,
+        notificationRequestId: String?,
+        deliveryId: String?,
+        operationId: String?,
+        entityType: String,
+        entityId: String?,
+        eventId: String?,
+        thingId: String?,
+        projectionDestination: String?,
+        eventState: String?,
+        eventTimeEpoch: Int64?,
+        observedTimeEpoch: Int64?,
+        topLevelMessage: Bool
     ) {
+        self.id = id
+        self.messageId = messageId
+        self.title = title
+        self.body = body
+        self.channel = channel
+        self.url = url
+        self.isRead = isRead
+        self.receivedAt = receivedAt
+        self.rawPayloadJSON = rawPayloadJSON
+        self.status = status
+        self.decryptionState = decryptionState
+        self.notificationRequestId = notificationRequestId
+        self.deliveryId = deliveryId
+        self.operationId = operationId
+        self.entityType = entityType
+        self.entityId = entityId
+        self.eventId = eventId
+        self.thingId = thingId
+        self.projectionDestination = projectionDestination
+        self.eventState = eventState
+        self.eventTimeEpoch = eventTimeEpoch
+        self.observedTimeEpoch = observedTimeEpoch
+        self.topLevelMessage = topLevelMessage
+    }
+
+    init(row: Row) {
+        let idString: String = row["id"]
+        id = UUID(uuidString: idString) ?? UUID()
+        messageId = row["message_id"]
+        title = row["title"]
+        body = row["body"]
+        channel = row["channel"]
+        url = row["url"]
+        let isReadInt: Int64 = row["is_read"]
+        isRead = isReadInt != 0
+        let receivedAtEpoch: Double = row["received_at"]
+        receivedAt = Date(timeIntervalSince1970: receivedAtEpoch)
+        rawPayloadJSON = row["raw_payload_json"]
+        status = row["status"]
+        decryptionState = row["decryption_state"]
+        notificationRequestId = row["notification_request_id"]
+        deliveryId = row["delivery_id"]
+        operationId = row["operation_id"]
+        entityType = row["entity_type"]
+        entityId = row["entity_id"]
+        eventId = row["event_id"]
+        thingId = row["thing_id"]
+        projectionDestination = row["projection_destination"]
+        eventState = row["event_state"]
+        eventTimeEpoch = row["event_time_epoch"]
+        observedTimeEpoch = row["observed_time_epoch"]
+        let topLevelInt: Int64 = row["is_top_level_message"]
+        topLevelMessage = topLevelInt != 0
+    }
+
+    func toPushMessage(decoder: JSONDecoder) -> PushMessage {
+        let payloadData = rawPayloadJSON.data(using: .utf8) ?? Data("{}".utf8)
+        let payload = (try? decoder.decode([String: AnyCodable].self, from: payloadData)) ?? [:]
+        let resolvedStatus = PushMessage.Status(rawValue: status) ?? .normal
+        let resolvedDecryptionState = decryptionState.flatMap(PushMessage.DecryptionState.init(rawValue:))
+        return PushMessage(
+            id: id,
+            messageId: messageId,
+            title: title,
+            body: body,
+            channel: channel,
+            url: url.flatMap(URL.init(string:)),
+            isRead: isRead,
+            receivedAt: receivedAt,
+            rawPayload: payload,
+            status: resolvedStatus,
+            decryptionState: resolvedDecryptionState
+        )
+    }
+
+    static func from(message: PushMessage, encoder: JSONEncoder) throws -> GRDBMessageRecord {
+        let canonicalMessage = canonicalizedMessageForPersistence(message)
+        let payloadData = try encoder.encode(canonicalMessage.rawPayload)
+        let rawPayloadJSON = String(data: payloadData, encoding: .utf8) ?? "{}"
+        let normalizedMessageId = canonicalMessage.messageId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let entityType = canonicalMessage.entityType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if entityType == "message", normalizedMessageId?.isEmpty != false {
+            throw AppError.localStore("top-level message requires message_id")
+        }
+        let messageId = (normalizedMessageId?.isEmpty == false)
+            ? normalizedMessageId!
+            : canonicalMessage.id.uuidString
+
+        return GRDBMessageRecord(
+            id: canonicalMessage.id,
+            messageId: messageId,
+            title: canonicalMessage.title,
+            body: canonicalMessage.body,
+            channel: normalizeOptional(canonicalMessage.channel),
+            url: canonicalMessage.url?.absoluteString,
+            isRead: canonicalMessage.isRead,
+            receivedAt: canonicalMessage.receivedAt,
+            rawPayloadJSON: rawPayloadJSON,
+            status: canonicalMessage.status.rawValue,
+            decryptionState: canonicalMessage.decryptionState?.rawValue,
+            notificationRequestId: normalizeOptional(canonicalMessage.notificationRequestId),
+            deliveryId: normalizeOptional(canonicalMessage.deliveryId),
+            operationId: normalizeOptional(canonicalMessage.operationId),
+            entityType: canonicalMessage.entityType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+            entityId: normalizeOptional(canonicalMessage.entityId),
+            eventId: normalizeOptional(canonicalMessage.eventId),
+            thingId: normalizeOptional(canonicalMessage.thingId),
+            projectionDestination: normalizeOptional(canonicalMessage.projectionDestination),
+            eventState: normalizeOptional(canonicalMessage.eventState),
+            eventTimeEpoch: Self.epochSeconds(from: canonicalMessage.rawPayload["event_time"]?.value),
+            observedTimeEpoch: Self.epochSeconds(from: canonicalMessage.rawPayload["observed_at"]?.value),
+            topLevelMessage: isTopLevelMessage(canonicalMessage)
+        )
+    }
+
+    private static func normalizeOptional(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func epochSeconds(from value: Any?) -> Int64? {
+        switch value {
+        case let int as Int:
+            return Int64(int)
+        case let int64 as Int64:
+            return int64
+        case let number as NSNumber:
+            return number.int64Value
+        case let double as Double:
+            return Int64(double)
+        case let text as String:
+            return Int64(text.trimmingCharacters(in: .whitespacesAndNewlines))
+        default:
+            return nil
+        }
+    }
+}
+
+private struct GRDBOperationLedgerRecord {
+    let scopeKey: String
+    let messageId: String
+    let opId: String
+    let channelId: String?
+    let entityType: String
+    let entityId: String
+    let deliveryId: String?
+    let appliedAt: Date
+
+    init(row: Row) {
+        scopeKey = row["scope_key"]
+        messageId = row["message_id"]
+        opId = row["op_id"]
+        channelId = row["channel_id"]
+        entityType = row["entity_type"]
+        entityId = row["entity_id"]
+        deliveryId = row["delivery_id"]
+        let appliedAtEpoch: Double = row["applied_at"]
+        appliedAt = Date(timeIntervalSince1970: appliedAtEpoch)
+    }
+}
+
+private struct GRDBWatchLightMessageRecord {
+    let messageId: String
+    let title: String
+    let body: String
+    let imageURL: String?
+    let url: String?
+    let severity: String?
+    let receivedAt: Date
+    let isRead: Bool
+    let entityType: String
+    let entityId: String?
+    let notificationRequestId: String?
+
+    init(row: Row) {
+        messageId = row["message_id"]
+        title = row["title"]
+        body = row["body"]
+        imageURL = row["image_url"]
+        url = row["url"]
+        severity = row["severity"]
+        let receivedAtEpoch: Double = row["received_at"]
+        receivedAt = Date(timeIntervalSince1970: receivedAtEpoch)
+        let isReadInt: Int64 = row["is_read"]
+        isRead = isReadInt != 0
+        entityType = row["entity_type"]
+        entityId = row["entity_id"]
+        notificationRequestId = row["notification_request_id"]
+    }
+
+    func toModel() -> WatchLightMessage {
+        WatchLightMessage(
+            messageId: messageId,
+            title: title,
+            body: body,
+            imageURL: imageURL.flatMap { URLSanitizer.resolveHTTPSURL(from: $0) },
+            url: url.flatMap { URLSanitizer.resolveHTTPSURL(from: $0) },
+            severity: severity,
+            receivedAt: receivedAt,
+            isRead: isRead,
+            entityType: entityType,
+            entityId: entityId,
+            notificationRequestId: notificationRequestId
+        )
+    }
+}
+
+private struct GRDBWatchLightEventRecord {
+    let eventId: String
+    let title: String
+    let summary: String?
+    let state: String?
+    let severity: String?
+    let imageURL: String?
+    let updatedAt: Date
+
+    init(row: Row) {
+        eventId = row["event_id"]
+        title = row["title"]
+        summary = row["summary"]
+        state = row["state"]
+        severity = row["severity"]
+        imageURL = row["image_url"]
+        let updatedAtEpoch: Double = row["updated_at"]
+        updatedAt = Date(timeIntervalSince1970: updatedAtEpoch)
+    }
+
+    func toModel() -> WatchLightEvent {
+        WatchLightEvent(
+            eventId: eventId,
+            title: title,
+            summary: summary,
+            state: state,
+            severity: severity,
+            imageURL: imageURL.flatMap { URLSanitizer.resolveHTTPSURL(from: $0) },
+            updatedAt: updatedAt
+        )
+    }
+}
+
+private struct GRDBWatchLightThingRecord {
+    let thingId: String
+    let title: String
+    let summary: String?
+    let attrsJSON: String?
+    let imageURL: String?
+    let updatedAt: Date
+
+    init(row: Row) {
+        thingId = row["thing_id"]
+        title = row["title"]
+        summary = row["summary"]
+        attrsJSON = row["attrs_json"]
+        imageURL = row["image_url"]
+        let updatedAtEpoch: Double = row["updated_at"]
+        updatedAt = Date(timeIntervalSince1970: updatedAtEpoch)
+    }
+
+    func toModel() -> WatchLightThing {
+        WatchLightThing(
+            thingId: thingId,
+            title: title,
+            summary: summary,
+            attrsJSON: attrsJSON,
+            imageURL: imageURL.flatMap { URLSanitizer.resolveHTTPSURL(from: $0) },
+            updatedAt: updatedAt
+        )
+    }
+}
+
+private struct GRDBWatchMirrorActionRecord {
+    let actionId: String
+    let kind: String
+    let messageId: String
+    let issuedAt: Date
+
+    init(row: Row) {
+        actionId = row["action_id"]
+        kind = row["kind"]
+        messageId = row["message_id"]
+        let issuedAtEpoch: Double = row["issued_at"]
+        issuedAt = Date(timeIntervalSince1970: issuedAtEpoch)
+    }
+
+    func toModel() -> WatchMirrorAction? {
+        guard let kind = WatchMirrorActionKind(rawValue: kind) else { return nil }
+        return WatchMirrorAction(
+            actionId: actionId,
+            kind: kind,
+            messageId: messageId,
+            issuedAt: issuedAt
+        )
+    }
+}
+
+private actor GRDBStore {
+    private static let maxCursorUUID = UUID(uuidString: "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF")!
+    private let encoder: JSONEncoder
+    private let decoder: JSONDecoder
+    private let dbQueue: DatabaseQueue
+
+    init(storeURL: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
         self.encoder = encoder
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
         self.decoder = decoder
-        self.modelContainer = modelContainer
-    }
 
-    func loadServerConfig() async throws -> ServerConfig? {
-        let modelContext = ModelContext(modelContainer)
-        let descriptor = FetchDescriptor<StoredServerConfig>(
-            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)],
-        )
-        let stored = try modelContext.fetch(descriptor).first
-        return try stored?.toDomain(decoder: decoder)
-    }
-
-    func saveServerConfig(_ config: ServerConfig?) async throws {
-        let modelContext = ModelContext(modelContainer)
-
-        guard let config else {
-            let existing = try modelContext.fetch(FetchDescriptor<StoredServerConfig>())
-            existing.forEach { modelContext.delete($0) }
-            if modelContext.hasChanges {
-                do {
-                    try modelContext.save()
-                } catch {
-                    throw error
-                }
-            }
-            return
+        var configuration = Configuration()
+        configuration.prepareDatabase { db in
+            try db.execute(sql: "PRAGMA journal_mode = WAL;")
+            try db.execute(sql: "PRAGMA synchronous = NORMAL;")
+            try db.execute(sql: "PRAGMA foreign_keys = ON;")
+            try db.execute(sql: "PRAGMA busy_timeout = 5000;")
         }
+        dbQueue = try DatabaseQueue(path: storeURL.path, configuration: configuration)
+        try Self.migrator.migrate(dbQueue)
+    }
 
-        let descriptor = FetchDescriptor<StoredServerConfig>(
-            predicate: #Predicate { $0.id == config.id },
+    private static let migrator: DatabaseMigrator = {
+        var migrator = DatabaseMigrator()
+        migrator.registerMigration("v1_grdb_primary_store") { db in
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS messages (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    message_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    channel TEXT,
+                    url TEXT,
+                    is_read INTEGER NOT NULL,
+                    received_at REAL NOT NULL,
+                    raw_payload_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    decryption_state TEXT,
+                    notification_request_id TEXT,
+                    delivery_id TEXT,
+                    operation_id TEXT,
+                    entity_type TEXT NOT NULL,
+                    entity_id TEXT,
+                    event_id TEXT,
+                    thing_id TEXT,
+                    projection_destination TEXT,
+                    event_state TEXT,
+                    event_time_epoch INTEGER,
+                    observed_time_epoch INTEGER,
+                    is_top_level_message INTEGER NOT NULL,
+                    CHECK (length(trim(message_id)) > 0)
+                );
+                """)
+
+            try db.execute(sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_message_id_unique ON messages(message_id);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_received_at ON messages(received_at DESC, id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_top_level_received_at ON messages(is_top_level_message, received_at DESC, id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_notification_request_id ON messages(notification_request_id);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_channel_received_at ON messages(channel, received_at DESC, id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_read_state_received_at ON messages(is_read, received_at DESC, id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_entity_projection ON messages(entity_type, event_time_epoch DESC, received_at DESC, id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_event_projection ON messages(event_id, event_time_epoch DESC, received_at DESC, id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_thing_projection ON messages(thing_id, observed_time_epoch DESC, event_time_epoch DESC, received_at DESC, id DESC);")
+
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS operation_ledger (
+                    scope_key TEXT PRIMARY KEY NOT NULL,
+                    message_id TEXT NOT NULL,
+                    op_id TEXT NOT NULL,
+                    channel_id TEXT,
+                    entity_type TEXT NOT NULL,
+                    entity_id TEXT NOT NULL,
+                    delivery_id TEXT,
+                    applied_at REAL NOT NULL,
+                    CHECK (length(trim(scope_key)) > 0),
+                    CHECK (length(trim(message_id)) > 0)
+                );
+                """)
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_operation_ledger_applied_at ON operation_ledger(applied_at DESC);")
+
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS channel_subscriptions (
+                    gateway TEXT NOT NULL,
+                    channel_id TEXT NOT NULL,
+                    display_name TEXT NOT NULL,
+                    password TEXT NOT NULL,
+                    last_synced_at REAL,
+                    updated_at REAL NOT NULL,
+                    is_deleted INTEGER NOT NULL,
+                    deleted_at REAL,
+                    PRIMARY KEY (gateway, channel_id),
+                    CHECK (length(trim(gateway)) > 0),
+                    CHECK (length(trim(channel_id)) > 0)
+                );
+                """)
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_channel_subscriptions_updated_at ON channel_subscriptions(updated_at DESC);")
+
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS app_settings (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    manual_key_encoding TEXT,
+                    launch_at_login_enabled INTEGER,
+                    message_page_enabled INTEGER,
+                    event_page_enabled INTEGER,
+                    thing_page_enabled INTEGER,
+                    push_token_data_base64 TEXT,
+                    watch_mode_raw_value TEXT,
+                    updated_at REAL NOT NULL
+                );
+                """)
+
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS inbound_delivery_ledger (
+                    delivery_id TEXT PRIMARY KEY NOT NULL,
+                    persisted_at REAL,
+                    acked_at REAL,
+                    updated_at REAL NOT NULL,
+                    source TEXT,
+                    CHECK (length(trim(delivery_id)) > 0)
+                );
+                """)
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_inbound_delivery_acked_at ON inbound_delivery_ledger(acked_at, updated_at DESC);")
+
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS inbound_ack_outbox (
+                    delivery_id TEXT PRIMARY KEY NOT NULL,
+                    enqueued_at REAL NOT NULL,
+                    source TEXT,
+                    CHECK (length(trim(delivery_id)) > 0)
+                );
+                """)
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_inbound_ack_outbox_enqueued_at ON inbound_ack_outbox(enqueued_at ASC);")
+
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS watch_light_messages (
+                    message_id TEXT PRIMARY KEY NOT NULL,
+                    title TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    image_url TEXT,
+                    url TEXT,
+                    severity TEXT,
+                    received_at REAL NOT NULL,
+                    is_read INTEGER NOT NULL,
+                    entity_type TEXT NOT NULL,
+                    entity_id TEXT,
+                    notification_request_id TEXT,
+                    CHECK (length(trim(message_id)) > 0)
+                );
+                """)
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_watch_light_messages_received_at ON watch_light_messages(received_at DESC, message_id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_watch_light_messages_notification_request_id ON watch_light_messages(notification_request_id);")
+
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS watch_light_events (
+                    event_id TEXT PRIMARY KEY NOT NULL,
+                    title TEXT NOT NULL,
+                    summary TEXT,
+                    state TEXT,
+                    severity TEXT,
+                    image_url TEXT,
+                    updated_at REAL NOT NULL,
+                    CHECK (length(trim(event_id)) > 0)
+                );
+                """)
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_watch_light_events_updated_at ON watch_light_events(updated_at DESC, event_id DESC);")
+
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS watch_light_things (
+                    thing_id TEXT PRIMARY KEY NOT NULL,
+                    title TEXT NOT NULL,
+                    summary TEXT,
+                    attrs_json TEXT,
+                    image_url TEXT,
+                    updated_at REAL NOT NULL,
+                    CHECK (length(trim(thing_id)) > 0)
+                );
+                """)
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_watch_light_things_updated_at ON watch_light_things(updated_at DESC, thing_id DESC);")
+
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS watch_mirror_action_queue (
+                    action_id TEXT PRIMARY KEY NOT NULL,
+                    kind TEXT NOT NULL,
+                    message_id TEXT NOT NULL,
+                    issued_at REAL NOT NULL,
+                    CHECK (length(trim(action_id)) > 0),
+                    CHECK (length(trim(message_id)) > 0)
+                );
+                """)
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_watch_mirror_action_queue_issued_at ON watch_mirror_action_queue(issued_at ASC, action_id ASC);")
+        }
+        migrator.registerMigration("v2_watch_sync_state_columns") { db in
+            let existingColumns = Set(try Row.fetchAll(db, sql: "PRAGMA table_info(app_settings);").compactMap {
+                $0["name"] as String?
+            })
+            let pendingColumns: [(name: String, sqlType: String)] = [
+                ("watch_mode_raw_value", "TEXT"),
+                ("watch_control_generation", "INTEGER"),
+                ("watch_mirror_snapshot_generation", "INTEGER"),
+                ("watch_standalone_provisioning_generation", "INTEGER"),
+                ("watch_mirror_action_ack_generation", "INTEGER"),
+                ("watch_mirror_snapshot_content_digest", "TEXT"),
+                ("watch_standalone_provisioning_content_digest", "TEXT"),
+            ]
+            for column in pendingColumns where !existingColumns.contains(column.name) {
+                try db.execute(sql: "ALTER TABLE app_settings ADD COLUMN \(column.name) \(column.sqlType);")
+            }
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_delivery_id ON messages(delivery_id);")
+        }
+        migrator.registerMigration("v3_watch_provisioning_columns") { db in
+            let existingColumns = Set(try Row.fetchAll(db, sql: "PRAGMA table_info(app_settings);").compactMap {
+                $0["name"] as String?
+            })
+            let pendingColumns: [(name: String, sqlType: String)] = [
+                ("watch_provisioning_server_config_data_base64", "TEXT"),
+                ("watch_provisioning_schema_version", "INTEGER"),
+                ("watch_provisioning_generation", "INTEGER"),
+                ("watch_provisioning_content_digest", "TEXT"),
+                ("watch_provisioning_applied_at", "REAL"),
+                ("watch_provisioning_mode_raw_value", "TEXT"),
+                ("watch_provisioning_source_control_generation", "INTEGER"),
+            ]
+            for column in pendingColumns where !existingColumns.contains(column.name) {
+                try db.execute(sql: "ALTER TABLE app_settings ADD COLUMN \(column.name) \(column.sqlType);")
+            }
+        }
+        migrator.registerMigration("v4_watch_mode_control_state_columns") { db in
+            let existingColumns = Set(try Row.fetchAll(db, sql: "PRAGMA table_info(app_settings);").compactMap {
+                $0["name"] as String?
+            })
+            let pendingColumns: [(name: String, sqlType: String)] = [
+                ("watch_effective_mode_raw_value", "TEXT"),
+                ("watch_mode_switch_status_raw_value", "TEXT"),
+                ("watch_last_confirmed_control_generation", "INTEGER"),
+                ("watch_last_observed_reported_generation", "INTEGER"),
+            ]
+            for column in pendingColumns where !existingColumns.contains(column.name) {
+                try db.execute(sql: "ALTER TABLE app_settings ADD COLUMN \(column.name) \(column.sqlType);")
+            }
+        }
+        migrator.registerMigration("v5_watch_mode_control_readiness_column") { db in
+            let existingColumns = Set(try Row.fetchAll(db, sql: "PRAGMA table_info(app_settings);").compactMap {
+                $0["name"] as String?
+            })
+            let pendingColumns: [(name: String, sqlType: String)] = [
+                ("watch_standalone_ready", "INTEGER"),
+            ]
+            for column in pendingColumns where !existingColumns.contains(column.name) {
+                try db.execute(sql: "ALTER TABLE app_settings ADD COLUMN \(column.name) \(column.sqlType);")
+            }
+        }
+        migrator.registerMigration("v6_watch_publication_digest_columns") { db in
+            let existingColumns = Set(try Row.fetchAll(db, sql: "PRAGMA table_info(app_settings);").compactMap {
+                $0["name"] as String?
+            })
+            let pendingColumns: [(name: String, sqlType: String)] = [
+                ("watch_mirror_snapshot_content_digest", "TEXT"),
+                ("watch_standalone_provisioning_content_digest", "TEXT"),
+            ]
+            for column in pendingColumns where !existingColumns.contains(column.name) {
+                try db.execute(sql: "ALTER TABLE app_settings ADD COLUMN \(column.name) \(column.sqlType);")
+            }
+        }
+        migrator.registerMigration("v7_watch_light_notify_columns") { db in
+            _ = db
+        }
+        migrator.registerMigration("v8_rebuild_snake_case_schema") { db in
+            // No backward-compatibility for legacy camelCase local schema.
+            try db.execute(sql: "DROP TABLE IF EXISTS message_search;")
+            try db.execute(sql: "DROP TABLE IF EXISTS message_metadata_index;")
+            try db.execute(sql: "DROP TABLE IF EXISTS watch_mirror_action_queue;")
+            try db.execute(sql: "DROP TABLE IF EXISTS watch_light_things;")
+            try db.execute(sql: "DROP TABLE IF EXISTS watch_light_events;")
+            try db.execute(sql: "DROP TABLE IF EXISTS watch_light_messages;")
+            try db.execute(sql: "DROP TABLE IF EXISTS inbound_ack_outbox;")
+            try db.execute(sql: "DROP TABLE IF EXISTS inbound_delivery_ledger;")
+            try db.execute(sql: "DROP TABLE IF EXISTS app_settings;")
+            try db.execute(sql: "DROP TABLE IF EXISTS channel_subscriptions;")
+            try db.execute(sql: "DROP TABLE IF EXISTS operation_ledger;")
+            try db.execute(sql: "DROP TABLE IF EXISTS messages;")
+
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS messages (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    message_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    channel TEXT,
+                    url TEXT,
+                    is_read INTEGER NOT NULL,
+                    received_at REAL NOT NULL,
+                    raw_payload_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    decryption_state TEXT,
+                    notification_request_id TEXT,
+                    delivery_id TEXT,
+                    operation_id TEXT,
+                    entity_type TEXT NOT NULL,
+                    entity_id TEXT,
+                    event_id TEXT,
+                    thing_id TEXT,
+                    projection_destination TEXT,
+                    event_state TEXT,
+                    event_time_epoch INTEGER,
+                    observed_time_epoch INTEGER,
+                    is_top_level_message INTEGER NOT NULL,
+                    CHECK (length(trim(message_id)) > 0)
+                );
+                """)
+            try db.execute(sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_message_id_unique ON messages(message_id);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_received_at ON messages(received_at DESC, id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_top_level_received_at ON messages(is_top_level_message, received_at DESC, id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_notification_request_id ON messages(notification_request_id);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_channel_received_at ON messages(channel, received_at DESC, id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_read_state_received_at ON messages(is_read, received_at DESC, id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_entity_projection ON messages(entity_type, event_time_epoch DESC, received_at DESC, id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_event_projection ON messages(event_id, event_time_epoch DESC, received_at DESC, id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_thing_projection ON messages(thing_id, observed_time_epoch DESC, event_time_epoch DESC, received_at DESC, id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_delivery_id ON messages(delivery_id);")
+
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS operation_ledger (
+                    scope_key TEXT PRIMARY KEY NOT NULL,
+                    message_id TEXT NOT NULL,
+                    op_id TEXT NOT NULL,
+                    channel_id TEXT,
+                    entity_type TEXT NOT NULL,
+                    entity_id TEXT NOT NULL,
+                    delivery_id TEXT,
+                    applied_at REAL NOT NULL,
+                    CHECK (length(trim(scope_key)) > 0),
+                    CHECK (length(trim(message_id)) > 0)
+                );
+                """)
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_operation_ledger_applied_at ON operation_ledger(applied_at DESC);")
+
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS channel_subscriptions (
+                    gateway TEXT NOT NULL,
+                    channel_id TEXT NOT NULL,
+                    display_name TEXT NOT NULL,
+                    password TEXT NOT NULL,
+                    last_synced_at REAL,
+                    updated_at REAL NOT NULL,
+                    is_deleted INTEGER NOT NULL,
+                    deleted_at REAL,
+                    PRIMARY KEY (gateway, channel_id),
+                    CHECK (length(trim(gateway)) > 0),
+                    CHECK (length(trim(channel_id)) > 0)
+                );
+                """)
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_channel_subscriptions_updated_at ON channel_subscriptions(updated_at DESC);")
+
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS app_settings (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    manual_key_encoding TEXT,
+                    launch_at_login_enabled INTEGER,
+                    message_page_enabled INTEGER,
+                    event_page_enabled INTEGER,
+                    thing_page_enabled INTEGER,
+                    push_token_data_base64 TEXT,
+                    watch_mode_raw_value TEXT,
+                    watch_effective_mode_raw_value TEXT,
+                    watch_standalone_ready INTEGER,
+                    watch_mode_switch_status_raw_value TEXT,
+                    watch_last_confirmed_control_generation INTEGER,
+                    watch_last_observed_reported_generation INTEGER,
+                    watch_control_generation INTEGER,
+                    watch_mirror_snapshot_generation INTEGER,
+                    watch_standalone_provisioning_generation INTEGER,
+                    watch_mirror_action_ack_generation INTEGER,
+                    watch_mirror_snapshot_content_digest TEXT,
+                    watch_standalone_provisioning_content_digest TEXT,
+                    watch_provisioning_server_config_data_base64 TEXT,
+                    watch_provisioning_schema_version INTEGER,
+                    watch_provisioning_generation INTEGER,
+                    watch_provisioning_content_digest TEXT,
+                    watch_provisioning_applied_at REAL,
+                    watch_provisioning_mode_raw_value TEXT,
+                    watch_provisioning_source_control_generation INTEGER,
+                    updated_at REAL NOT NULL
+                );
+                """)
+
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS inbound_delivery_ledger (
+                    delivery_id TEXT PRIMARY KEY NOT NULL,
+                    persisted_at REAL,
+                    acked_at REAL,
+                    updated_at REAL NOT NULL,
+                    source TEXT,
+                    CHECK (length(trim(delivery_id)) > 0)
+                );
+                """)
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_inbound_delivery_acked_at ON inbound_delivery_ledger(acked_at, updated_at DESC);")
+
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS inbound_ack_outbox (
+                    delivery_id TEXT PRIMARY KEY NOT NULL,
+                    enqueued_at REAL NOT NULL,
+                    source TEXT,
+                    CHECK (length(trim(delivery_id)) > 0)
+                );
+                """)
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_inbound_ack_outbox_enqueued_at ON inbound_ack_outbox(enqueued_at ASC);")
+
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS watch_light_messages (
+                    message_id TEXT PRIMARY KEY NOT NULL,
+                    title TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    image_url TEXT,
+                    url TEXT,
+                    severity TEXT,
+                    received_at REAL NOT NULL,
+                    is_read INTEGER NOT NULL,
+                    entity_type TEXT NOT NULL,
+                    entity_id TEXT,
+                    notification_request_id TEXT,
+                    CHECK (length(trim(message_id)) > 0)
+                );
+                """)
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_watch_light_messages_received_at ON watch_light_messages(received_at DESC, message_id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_watch_light_messages_notification_request_id ON watch_light_messages(notification_request_id);")
+
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS watch_light_events (
+                    event_id TEXT PRIMARY KEY NOT NULL,
+                    title TEXT NOT NULL,
+                    summary TEXT,
+                    state TEXT,
+                    severity TEXT,
+                    image_url TEXT,
+                    updated_at REAL NOT NULL,
+                    CHECK (length(trim(event_id)) > 0)
+                );
+                """)
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_watch_light_events_updated_at ON watch_light_events(updated_at DESC, event_id DESC);")
+
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS watch_light_things (
+                    thing_id TEXT PRIMARY KEY NOT NULL,
+                    title TEXT NOT NULL,
+                    summary TEXT,
+                    attrs_json TEXT,
+                    image_url TEXT,
+                    updated_at REAL NOT NULL,
+                    CHECK (length(trim(thing_id)) > 0)
+                );
+                """)
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_watch_light_things_updated_at ON watch_light_things(updated_at DESC, thing_id DESC);")
+
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS watch_mirror_action_queue (
+                    action_id TEXT PRIMARY KEY NOT NULL,
+                    kind TEXT NOT NULL,
+                    message_id TEXT NOT NULL,
+                    issued_at REAL NOT NULL,
+                    CHECK (length(trim(action_id)) > 0),
+                    CHECK (length(trim(message_id)) > 0)
+                );
+                """)
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_watch_mirror_action_queue_issued_at ON watch_mirror_action_queue(issued_at ASC, action_id ASC);")
+        }
+        return migrator
+    }()
+
+    private static func sqlQuoted(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "''"))'"
+    }
+
+    private static func sqlOptionalText(_ value: String?) -> String {
+        guard let value else { return "NULL" }
+        return sqlQuoted(value)
+    }
+
+    private static func sqlOptionalDouble(_ value: Double?) -> String {
+        guard let value else { return "NULL" }
+        return String(value)
+    }
+
+    private static func sqlOptionalInt64(_ value: Int64?) -> String {
+        guard let value else { return "NULL" }
+        return String(value)
+    }
+
+    private static func sqlOptionalBool(_ value: Bool?) -> String {
+        guard let value else { return "NULL" }
+        return value ? "1" : "0"
+    }
+
+    private static func normalizeOptional(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func normalizeGateway(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func read<T>(_ action: (Database) throws -> T) throws -> T {
+        try dbQueue.read(action)
+    }
+
+    private func write<T>(_ action: (Database) throws -> T) throws -> T {
+        try dbQueue.write(action)
+    }
+
+    private func loadAppSettings(_ db: Database) throws -> AppSettingsSnapshot? {
+        let sql = "SELECT * FROM app_settings WHERE id = 'default' LIMIT 1;"
+        guard let row = try Row.fetchOne(db, sql: sql) else { return nil }
+        let manualKeyEncoding: String? = row["manual_key_encoding"]
+        let launchAtLoginInt: Int64? = row["launch_at_login_enabled"]
+        let messagePageInt: Int64? = row["message_page_enabled"]
+        let eventPageInt: Int64? = row["event_page_enabled"]
+        let thingPageInt: Int64? = row["thing_page_enabled"]
+        let pushTokenDataBase64: String? = row["push_token_data_base64"]
+        let watchModeRawValue: String? = row["watch_mode_raw_value"]
+        let watchEffectiveModeRawValue: String? = row["watch_effective_mode_raw_value"]
+        let watchStandaloneReadyInt: Int64? = row["watch_standalone_ready"]
+        let watchModeSwitchStatusRawValue: String? = row["watch_mode_switch_status_raw_value"]
+        let watchLastConfirmedControlGeneration: Int64? = row["watch_last_confirmed_control_generation"]
+        let watchLastObservedReportedGeneration: Int64? = row["watch_last_observed_reported_generation"]
+        let watchControlGeneration: Int64? = row["watch_control_generation"]
+        let watchMirrorSnapshotGeneration: Int64? = row["watch_mirror_snapshot_generation"]
+        let watchStandaloneProvisioningGeneration: Int64? = row["watch_standalone_provisioning_generation"]
+        let watchMirrorActionAckGeneration: Int64? = row["watch_mirror_action_ack_generation"]
+        let watchMirrorSnapshotContentDigest: String? = row["watch_mirror_snapshot_content_digest"]
+        let watchStandaloneProvisioningContentDigest: String? = row["watch_standalone_provisioning_content_digest"]
+        let watchProvisioningServerConfigDataBase64: String? = row["watch_provisioning_server_config_data_base64"]
+        let watchProvisioningSchemaVersion: Int? = row["watch_provisioning_schema_version"]
+        let watchProvisioningGeneration: Int64? = row["watch_provisioning_generation"]
+        let watchProvisioningContentDigest: String? = row["watch_provisioning_content_digest"]
+        let watchProvisioningAppliedAtEpoch: Double? = row["watch_provisioning_applied_at"]
+        let watchProvisioningModeRawValue: String? = row["watch_provisioning_mode_raw_value"]
+        let watchProvisioningSourceControlGeneration: Int64? = row["watch_provisioning_source_control_generation"]
+
+        return AppSettingsSnapshot(
+            manualKeyEncoding: manualKeyEncoding,
+            launchAtLoginEnabled: launchAtLoginInt.map { $0 != 0 },
+            messagePageEnabled: messagePageInt.map { $0 != 0 },
+            eventPageEnabled: eventPageInt.map { $0 != 0 },
+            thingPageEnabled: thingPageInt.map { $0 != 0 },
+            pushTokenData: pushTokenDataBase64.flatMap { Data(base64Encoded: $0) },
+            watchModeRawValue: watchModeRawValue,
+            watchEffectiveModeRawValue: watchEffectiveModeRawValue,
+            watchStandaloneReady: watchStandaloneReadyInt.map { $0 != 0 },
+            watchModeSwitchStatusRawValue: watchModeSwitchStatusRawValue,
+            watchLastConfirmedControlGeneration: watchLastConfirmedControlGeneration,
+            watchLastObservedReportedGeneration: watchLastObservedReportedGeneration,
+            watchControlGeneration: watchControlGeneration,
+            watchMirrorSnapshotGeneration: watchMirrorSnapshotGeneration,
+            watchStandaloneProvisioningGeneration: watchStandaloneProvisioningGeneration,
+            watchMirrorActionAckGeneration: watchMirrorActionAckGeneration,
+            watchMirrorSnapshotContentDigest: watchMirrorSnapshotContentDigest,
+            watchStandaloneProvisioningContentDigest: watchStandaloneProvisioningContentDigest,
+            watchProvisioningServerConfigData: watchProvisioningServerConfigDataBase64.flatMap { Data(base64Encoded: $0) },
+            watchProvisioningSchemaVersion: watchProvisioningSchemaVersion,
+            watchProvisioningGeneration: watchProvisioningGeneration,
+            watchProvisioningContentDigest: watchProvisioningContentDigest,
+            watchProvisioningAppliedAt: watchProvisioningAppliedAtEpoch.map { Date(timeIntervalSince1970: $0) },
+            watchProvisioningModeRawValue: watchProvisioningModeRawValue,
+            watchProvisioningSourceControlGeneration: watchProvisioningSourceControlGeneration
         )
-        if let stored = try modelContext.fetch(descriptor).first {
-            try stored.update(from: config, encoder: encoder)
+    }
+
+    private func saveAppSettings(_ snapshot: AppSettingsSnapshot, db: Database) throws {
+        let pushTokenDataBase64 = snapshot.pushTokenData?.base64EncodedString()
+        let watchProvisioningServerConfigDataBase64 = snapshot.watchProvisioningServerConfigData?.base64EncodedString()
+        let sql = """
+            INSERT INTO app_settings (
+                id, manual_key_encoding, launch_at_login_enabled, message_page_enabled,
+                event_page_enabled, thing_page_enabled, push_token_data_base64, watch_mode_raw_value,
+                watch_effective_mode_raw_value, watch_standalone_ready, watch_mode_switch_status_raw_value,
+                watch_last_confirmed_control_generation, watch_last_observed_reported_generation,
+                watch_control_generation, watch_mirror_snapshot_generation,
+                watch_standalone_provisioning_generation, watch_mirror_action_ack_generation,
+                watch_mirror_snapshot_content_digest, watch_standalone_provisioning_content_digest,
+                watch_provisioning_server_config_data_base64, watch_provisioning_schema_version,
+                watch_provisioning_generation, watch_provisioning_content_digest,
+                watch_provisioning_applied_at, watch_provisioning_mode_raw_value,
+                watch_provisioning_source_control_generation, updated_at
+            ) VALUES (
+                'default',
+                \(Self.sqlOptionalText(snapshot.manualKeyEncoding)),
+                \(Self.sqlOptionalBool(snapshot.launchAtLoginEnabled)),
+                \(Self.sqlOptionalBool(snapshot.messagePageEnabled)),
+                \(Self.sqlOptionalBool(snapshot.eventPageEnabled)),
+                \(Self.sqlOptionalBool(snapshot.thingPageEnabled)),
+                \(Self.sqlOptionalText(pushTokenDataBase64)),
+                \(Self.sqlOptionalText(snapshot.watchModeRawValue)),
+                \(Self.sqlOptionalText(snapshot.watchEffectiveModeRawValue)),
+                \(Self.sqlOptionalBool(snapshot.watchStandaloneReady)),
+                \(Self.sqlOptionalText(snapshot.watchModeSwitchStatusRawValue)),
+                \(Self.sqlOptionalInt64(snapshot.watchLastConfirmedControlGeneration)),
+                \(Self.sqlOptionalInt64(snapshot.watchLastObservedReportedGeneration)),
+                \(Self.sqlOptionalInt64(snapshot.watchControlGeneration)),
+                \(Self.sqlOptionalInt64(snapshot.watchMirrorSnapshotGeneration)),
+                \(Self.sqlOptionalInt64(snapshot.watchStandaloneProvisioningGeneration)),
+                \(Self.sqlOptionalInt64(snapshot.watchMirrorActionAckGeneration)),
+                \(Self.sqlOptionalText(snapshot.watchMirrorSnapshotContentDigest)),
+                \(Self.sqlOptionalText(snapshot.watchStandaloneProvisioningContentDigest)),
+                \(Self.sqlOptionalText(watchProvisioningServerConfigDataBase64)),
+                \(snapshot.watchProvisioningSchemaVersion.map(String.init) ?? "NULL"),
+                \(Self.sqlOptionalInt64(snapshot.watchProvisioningGeneration)),
+                \(Self.sqlOptionalText(snapshot.watchProvisioningContentDigest)),
+                \(Self.sqlOptionalDouble(snapshot.watchProvisioningAppliedAt?.timeIntervalSince1970)),
+                \(Self.sqlOptionalText(snapshot.watchProvisioningModeRawValue)),
+                \(Self.sqlOptionalInt64(snapshot.watchProvisioningSourceControlGeneration)),
+                \(Date().timeIntervalSince1970)
+            )
+            ON CONFLICT(id) DO UPDATE SET
+                manual_key_encoding = excluded.manual_key_encoding,
+                launch_at_login_enabled = excluded.launch_at_login_enabled,
+                message_page_enabled = excluded.message_page_enabled,
+                event_page_enabled = excluded.event_page_enabled,
+                thing_page_enabled = excluded.thing_page_enabled,
+                push_token_data_base64 = excluded.push_token_data_base64,
+                watch_mode_raw_value = excluded.watch_mode_raw_value,
+                watch_effective_mode_raw_value = excluded.watch_effective_mode_raw_value,
+                watch_standalone_ready = excluded.watch_standalone_ready,
+                watch_mode_switch_status_raw_value = excluded.watch_mode_switch_status_raw_value,
+                watch_last_confirmed_control_generation = excluded.watch_last_confirmed_control_generation,
+                watch_last_observed_reported_generation = excluded.watch_last_observed_reported_generation,
+                watch_control_generation = excluded.watch_control_generation,
+                watch_mirror_snapshot_generation = excluded.watch_mirror_snapshot_generation,
+                watch_standalone_provisioning_generation = excluded.watch_standalone_provisioning_generation,
+                watch_mirror_action_ack_generation = excluded.watch_mirror_action_ack_generation,
+                watch_mirror_snapshot_content_digest = excluded.watch_mirror_snapshot_content_digest,
+                watch_standalone_provisioning_content_digest = excluded.watch_standalone_provisioning_content_digest,
+                watch_provisioning_server_config_data_base64 = excluded.watch_provisioning_server_config_data_base64,
+                watch_provisioning_schema_version = excluded.watch_provisioning_schema_version,
+                watch_provisioning_generation = excluded.watch_provisioning_generation,
+                watch_provisioning_content_digest = excluded.watch_provisioning_content_digest,
+                watch_provisioning_applied_at = excluded.watch_provisioning_applied_at,
+                watch_provisioning_mode_raw_value = excluded.watch_provisioning_mode_raw_value,
+                watch_provisioning_source_control_generation = excluded.watch_provisioning_source_control_generation,
+                updated_at = excluded.updated_at;
+            """
+        try db.execute(sql: sql)
+    }
+
+    private func decodeWatchProvisioningServerConfig(
+        from settings: AppSettingsSnapshot?
+    ) throws -> ServerConfig? {
+        guard let data = settings?.watchProvisioningServerConfigData else { return nil }
+        return try decoder.decode(ServerConfig.self, from: data)
+    }
+
+    private func encodeWatchProvisioningServerConfig(_ config: ServerConfig?) throws -> Data? {
+        guard let config else { return nil }
+        return try encoder.encode(config)
+    }
+
+    private func localStoreError(_ message: String) -> AppError {
+        AppError.localStore(message)
+    }
+
+    private func buildMessageRecord(from message: PushMessage) throws -> GRDBMessageRecord {
+        try GRDBMessageRecord.from(message: message, encoder: encoder)
+    }
+
+    private func hasThingParentRecord(
+        thingId: String,
+        db: Database
+    ) throws -> Bool {
+        let sql = """
+            SELECT 1
+            FROM messages
+            WHERE entity_type = 'thing'
+              AND (
+                entity_id = \(Self.sqlQuoted(thingId))
+                OR thing_id = \(Self.sqlQuoted(thingId))
+              )
+            LIMIT 1;
+            """
+        return try Row.fetchOne(db, sql: sql) != nil
+    }
+
+    private func insertOrUpdateMessage(
+        _ record: GRDBMessageRecord,
+        db: Database,
+        updateOnConflict: Bool
+    ) throws {
+        let baseInsertSQL = """
+            INSERT INTO messages (
+                id, message_id, title, body, channel, url, is_read, received_at,
+                raw_payload_json, status, decryption_state, notification_request_id,
+                delivery_id, operation_id, entity_type, entity_id, event_id, thing_id,
+                projection_destination, event_state, event_time_epoch, observed_time_epoch,
+                is_top_level_message
+            ) VALUES (
+                \(Self.sqlQuoted(record.id.uuidString)),
+                \(Self.sqlQuoted(record.messageId)),
+                \(Self.sqlQuoted(record.title)),
+                \(Self.sqlQuoted(record.body)),
+                \(Self.sqlOptionalText(record.channel)),
+                \(Self.sqlOptionalText(record.url)),
+                \(record.isRead ? 1 : 0),
+                \(record.receivedAt.timeIntervalSince1970),
+                \(Self.sqlQuoted(record.rawPayloadJSON)),
+                \(Self.sqlQuoted(record.status)),
+                \(Self.sqlOptionalText(record.decryptionState)),
+                \(Self.sqlOptionalText(record.notificationRequestId)),
+                \(Self.sqlOptionalText(record.deliveryId)),
+                \(Self.sqlOptionalText(record.operationId)),
+                \(Self.sqlQuoted(record.entityType)),
+                \(Self.sqlOptionalText(record.entityId)),
+                \(Self.sqlOptionalText(record.eventId)),
+                \(Self.sqlOptionalText(record.thingId)),
+                \(Self.sqlOptionalText(record.projectionDestination)),
+                \(Self.sqlOptionalText(record.eventState)),
+                \(Self.sqlOptionalInt64(record.eventTimeEpoch)),
+                \(Self.sqlOptionalInt64(record.observedTimeEpoch)),
+                \(record.topLevelMessage ? 1 : 0)
+            )
+            """
+
+        if updateOnConflict {
+            let sql = baseInsertSQL + """
+                ON CONFLICT(message_id) DO UPDATE SET
+                    title = excluded.title,
+                    body = excluded.body,
+                    channel = excluded.channel,
+                    url = excluded.url,
+                    is_read = excluded.is_read,
+                    received_at = excluded.received_at,
+                    raw_payload_json = excluded.raw_payload_json,
+                    status = excluded.status,
+                    decryption_state = excluded.decryption_state,
+                    notification_request_id = excluded.notification_request_id,
+                    delivery_id = excluded.delivery_id,
+                    operation_id = excluded.operation_id,
+                    entity_type = excluded.entity_type,
+                    entity_id = excluded.entity_id,
+                    event_id = excluded.event_id,
+                    thing_id = excluded.thing_id,
+                    projection_destination = excluded.projection_destination,
+                    event_state = excluded.event_state,
+                    event_time_epoch = excluded.event_time_epoch,
+                    observed_time_epoch = excluded.observed_time_epoch,
+                    is_top_level_message = excluded.is_top_level_message;
+                """
+            try db.execute(sql: sql)
         } else {
-            try modelContext.insert(StoredServerConfig(from: config, encoder: encoder))
+            try db.execute(sql: baseInsertSQL + " ON CONFLICT(message_id) DO NOTHING;")
+        }
+    }
+
+    private func loadMessageRecord(where condition: String, db: Database) throws -> GRDBMessageRecord? {
+        let sql = "SELECT * FROM messages WHERE \(condition) ORDER BY received_at DESC, id DESC LIMIT 1;"
+        return try Row.fetchOne(db, sql: sql).map(GRDBMessageRecord.init(row:))
+    }
+
+    private func loadMessageRecordByMessageId(_ messageId: String, db: Database) throws -> GRDBMessageRecord? {
+        let trimmed = messageId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return try loadMessageRecord(where: "message_id = \(Self.sqlQuoted(trimmed))", db: db)
+    }
+
+    private func loadMessageRecordByNotificationRequestId(
+        _ notificationRequestId: String,
+        db: Database
+    ) throws -> GRDBMessageRecord? {
+        let trimmed = notificationRequestId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return try loadMessageRecord(where: "notification_request_id = \(Self.sqlQuoted(trimmed))", db: db)
+    }
+
+    private func loadMessageRecordByUUID(_ id: UUID, db: Database) throws -> GRDBMessageRecord? {
+        try loadMessageRecord(where: "id = \(Self.sqlQuoted(id.uuidString))", db: db)
+    }
+
+    private func resolveEntityOpenTarget(
+        entityType: String,
+        entityId: String?,
+        thingId: String?
+    ) -> EntityOpenTarget? {
+        let type = entityType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let id = entityId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if (type == "event" || type == "thing"), !id.isEmpty {
+            return EntityOpenTarget(entityType: type, entityId: id)
+        }
+        if let normalizedThingId = normalizeEntityReference(thingId) {
+            return EntityOpenTarget(entityType: "thing", entityId: normalizedThingId)
+        }
+        return nil
+    }
+
+    private func baseMessageConditions(
+        includeTopLevelOnly: Bool,
+        filter: MessageQueryFilter,
+        channel: String?,
+        cursor: MessagePageCursor?
+    ) -> [String] {
+        var conditions: [String] = []
+        if includeTopLevelOnly {
+            conditions.append("is_top_level_message = 1")
         }
 
-        let stale = try modelContext.fetch(
-            FetchDescriptor<StoredServerConfig>(predicate: #Predicate { $0.id != config.id }),
-        )
-        stale.forEach { modelContext.delete($0) }
-
-        if modelContext.hasChanges {
-            do {
-                try modelContext.save()
-            } catch {
-                throw error
+        switch filter {
+        case .all:
+            break
+        case .unreadOnly:
+            conditions.append("is_read = 0")
+        case .readOnly:
+            conditions.append("is_read = 1")
+        case .withURLOnly:
+            conditions.append("url IS NOT NULL AND trim(url) <> ''")
+        case let .byServer(messageId):
+            let trimmed = messageId.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                conditions.append("0")
+            } else {
+                conditions.append("message_id = \(Self.sqlQuoted(trimmed))")
             }
         }
+
+        if let channel {
+            let normalized = channel.trimmingCharacters(in: .whitespacesAndNewlines)
+            if normalized.isEmpty {
+                conditions.append("(channel IS NULL OR trim(channel) = '')")
+            } else {
+                conditions.append("channel = \(Self.sqlQuoted(normalized))")
+            }
+        }
+
+        if let cursor {
+            conditions.append(
+                "(received_at < \(cursor.receivedAt.timeIntervalSince1970) OR (received_at = \(cursor.receivedAt.timeIntervalSince1970) AND id < \(Self.sqlQuoted(cursor.id.uuidString))))"
+            )
+        }
+
+        return conditions
+    }
+
+    private func fetchMessageRecords(
+        db: Database,
+        where conditions: [String],
+        orderBy: String,
+        limit: Int?
+    ) throws -> [GRDBMessageRecord] {
+        let whereClause = conditions.isEmpty ? "1" : conditions.joined(separator: " AND ")
+        let limitClause: String
+        if let limit {
+            limitClause = " LIMIT \(max(0, limit))"
+        } else {
+            limitClause = ""
+        }
+        let sql = "SELECT * FROM messages WHERE \(whereClause) ORDER BY \(orderBy)\(limitClause);"
+        return try Row.fetchAll(db, sql: sql).map(GRDBMessageRecord.init(row:))
+    }
+
+    private func fetchMessages(
+        db: Database,
+        where conditions: [String],
+        orderBy: String,
+        limit: Int?
+    ) throws -> [PushMessage] {
+        try fetchMessageRecords(db: db, where: conditions, orderBy: orderBy, limit: limit)
+            .map { $0.toPushMessage(decoder: decoder) }
+    }
+
+    private func loadMessages(
+        filter: MessageQueryFilter,
+        channel: String?,
+        before cursor: MessagePageCursor?,
+        limit: Int?
+    ) throws -> [PushMessage] {
+        try read { db in
+            let conditions = baseMessageConditions(
+                includeTopLevelOnly: true,
+                filter: filter,
+                channel: channel,
+                cursor: cursor
+            )
+            return try fetchMessages(
+                db: db,
+                where: conditions,
+                orderBy: "received_at DESC, id DESC",
+                limit: limit
+            )
+        }
+    }
+
+    private func loadEntityProjectionMessages(
+        entityConditions: [String],
+        cursor: EntityProjectionPageCursor?,
+        limit: Int?
+    ) throws -> [PushMessage] {
+        try read { db in
+            var conditions = entityConditions
+            if let cursor {
+                conditions.append(
+                    "(received_at < \(cursor.receivedAt.timeIntervalSince1970) OR (received_at = \(cursor.receivedAt.timeIntervalSince1970) AND id < \(Self.sqlQuoted(cursor.id.uuidString))))"
+                )
+            }
+            return try fetchMessages(
+                db: db,
+                where: conditions,
+                orderBy: "COALESCE(event_time_epoch, observed_time_epoch, CAST(received_at AS INTEGER)) DESC, received_at DESC, id DESC",
+                limit: limit
+            )
+        }
+    }
+
+    private func matchesSearchQuery(_ message: PushMessage, query: String) -> Bool {
+        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return true }
+        let loweredQuery = normalized.lowercased()
+        let candidates = [
+            message.messageId,
+            message.title,
+            message.body,
+            message.channel,
+            message.eventId,
+            message.thingId,
+        ]
+        for candidate in candidates {
+            guard let candidate else { continue }
+            if candidate.lowercased().contains(loweredQuery) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func unreadPredicateCondition(
+        filter: MessageQueryFilter,
+        channel: String?
+    ) -> String {
+        let channelCondition: String = {
+            guard let channel else { return "1" }
+            let trimmed = channel.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                return "(channel IS NULL OR trim(channel) = '')"
+            }
+            return "channel = \(Self.sqlQuoted(trimmed))"
+        }()
+
+        switch filter {
+        case .all, .unreadOnly:
+            return "is_read = 0 AND \(channelCondition)"
+        case .readOnly:
+            return "0"
+        case .withURLOnly:
+            return "is_read = 0 AND url IS NOT NULL AND trim(url) <> '' AND \(channelCondition)"
+        case let .byServer(messageId):
+            let trimmed = messageId.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                return "0"
+            }
+            return "is_read = 0 AND message_id = \(Self.sqlQuoted(trimmed)) AND \(channelCondition)"
+        }
+    }
+
+    private func fetchOperationLedger(
+        scopeKey: String,
+        db: Database
+    ) throws -> GRDBOperationLedgerRecord? {
+        let sql = "SELECT * FROM operation_ledger WHERE scope_key = \(Self.sqlQuoted(scopeKey)) LIMIT 1;"
+        return try Row.fetchOne(db, sql: sql).map(GRDBOperationLedgerRecord.init(row:))
+    }
+
+    private func upsertOperationLedger(
+        identity: OperationScopeIdentity,
+        messageId: String,
+        appliedAt: Date,
+        db: Database
+    ) throws {
+        let sql = """
+            INSERT INTO operation_ledger (
+                scope_key, message_id, op_id, channel_id, entity_type, entity_id, delivery_id, applied_at
+            ) VALUES (
+                \(Self.sqlQuoted(identity.scopeKey)),
+                \(Self.sqlQuoted(messageId)),
+                \(Self.sqlQuoted(identity.opId)),
+                \(Self.sqlOptionalText(identity.channelId)),
+                \(Self.sqlQuoted(identity.entityType)),
+                \(Self.sqlQuoted(identity.entityId)),
+                \(Self.sqlOptionalText(identity.deliveryId)),
+                \(appliedAt.timeIntervalSince1970)
+            )
+            ON CONFLICT(scope_key) DO UPDATE SET
+                message_id = excluded.message_id,
+                op_id = excluded.op_id,
+                channel_id = excluded.channel_id,
+                entity_type = excluded.entity_type,
+                entity_id = excluded.entity_id,
+                delivery_id = excluded.delivery_id,
+                applied_at = excluded.applied_at;
+            """
+        try db.execute(sql: sql)
     }
 
     func loadChannelSubscriptions(includeDeleted: Bool) async throws -> [ChannelSubscription] {
-        let modelContext = ModelContext(modelContainer)
-        let sort = SortDescriptor(\StoredChannelSubscription.updatedAt, order: .reverse)
-        let descriptor: FetchDescriptor<StoredChannelSubscription>
-        if includeDeleted {
-            descriptor = FetchDescriptor(sortBy: [sort])
-        } else {
-            descriptor = FetchDescriptor(
-                predicate: #Predicate { $0.isDeleted == false },
-                sortBy: [sort]
-            )
+        try read { db in
+            let whereClause = includeDeleted ? "1" : "is_deleted = 0"
+            let sql = """
+                SELECT gateway, channel_id, display_name, updated_at, last_synced_at
+                FROM channel_subscriptions
+                WHERE \(whereClause)
+                ORDER BY updated_at DESC;
+                """
+            return try Row.fetchAll(db, sql: sql).map { row in
+                let gateway: String = row["gateway"]
+                let channelId: String = row["channel_id"]
+                let displayName: String = row["display_name"]
+                let updatedAtEpoch: Double = row["updated_at"]
+                let lastSyncedAtEpoch: Double? = row["last_synced_at"]
+                return ChannelSubscription(
+                    gateway: gateway,
+                    channelId: channelId,
+                    displayName: displayName,
+                    updatedAt: Date(timeIntervalSince1970: updatedAtEpoch),
+                    lastSyncedAt: lastSyncedAtEpoch.map { Date(timeIntervalSince1970: $0) }
+                )
+            }
         }
-        let stored = try modelContext.fetch(descriptor)
-        return stored.map { $0.toDomain() }
     }
 
     func upsertChannelSubscription(
@@ -1243,93 +3101,41 @@ private final class SwiftDataStore {
         isDeleted: Bool,
         deletedAt: Date?
     ) async throws {
-        let modelContext = ModelContext(modelContainer)
-        let descriptor = FetchDescriptor<StoredChannelSubscription>(
-            predicate: #Predicate { $0.channelId == channelId },
-        )
-        if let stored = try modelContext.fetch(descriptor).first {
-            stored.gateway = gateway
-            stored.displayName = displayName
-            stored.password = password
-            stored.lastSyncedAt = lastSyncedAt
-            stored.updatedAt = updatedAt
-            stored.isDeleted = isDeleted
-            stored.deletedAt = deletedAt
-        } else {
-            modelContext.insert(StoredChannelSubscription(
-                channelId: channelId,
-                gateway: gateway,
-                displayName: displayName,
-                password: password,
-                updatedAt: updatedAt,
-                lastSyncedAt: lastSyncedAt,
-                autoCleanupEnabled: true,
-                isDeleted: isDeleted,
-                deletedAt: deletedAt
-            ))
+        let normalizedGateway = Self.normalizeGateway(gateway)
+        let normalizedChannelId = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedGateway.isEmpty, !normalizedChannelId.isEmpty else {
+            throw localStoreError("Invalid gateway/channel_id for channel subscription upsert.")
         }
-        if modelContext.hasChanges {
-            try modelContext.save()
-        }
-    }
 
-    func updateChannelAutoCleanupEnabled(channelId: String, isEnabled: Bool) async throws {
-        let modelContext = ModelContext(modelContainer)
-        let descriptor = FetchDescriptor<StoredChannelSubscription>(
-            predicate: #Predicate { $0.channelId == channelId },
-        )
-        guard let stored = try modelContext.fetch(descriptor).first else { return }
-        stored.autoCleanupEnabled = isEnabled
-        stored.updatedAt = Date()
-        if modelContext.hasChanges {
-            try modelContext.save()
-        }
-    }
+        let normalizedDisplayName: String = {
+            let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? normalizedChannelId : trimmed
+        }()
+        let normalizedPassword = (password ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
 
-    func updateChannelDisplayName(
-        channelId: String,
-        displayName: String,
-        updatedAt: Date
-    ) async throws {
-        let modelContext = ModelContext(modelContainer)
-        let descriptor = FetchDescriptor<StoredChannelSubscription>(
-            predicate: #Predicate { $0.channelId == channelId },
-        )
-        guard let stored = try modelContext.fetch(descriptor).first else { return }
-        stored.displayName = displayName
-        stored.updatedAt = updatedAt
-        if stored.isDeleted {
-            stored.isDeleted = false
-            stored.deletedAt = nil
-        }
-        if modelContext.hasChanges {
-            try modelContext.save()
-        }
-    }
-
-    func updateChannelLastSynced(channelId: String, date: Date) async throws {
-        let modelContext = ModelContext(modelContainer)
-        let descriptor = FetchDescriptor<StoredChannelSubscription>(
-            predicate: #Predicate { $0.channelId == channelId },
-        )
-        guard let stored = try modelContext.fetch(descriptor).first else { return }
-        stored.lastSyncedAt = date
-        if modelContext.hasChanges {
-            try modelContext.save()
-        }
-    }
-
-    func softDeleteChannelSubscription(channelId: String, deletedAt: Date) async throws {
-        let modelContext = ModelContext(modelContainer)
-        let descriptor = FetchDescriptor<StoredChannelSubscription>(
-            predicate: #Predicate { $0.channelId == channelId },
-        )
-        guard let stored = try modelContext.fetch(descriptor).first else { return }
-        stored.isDeleted = true
-        stored.deletedAt = deletedAt
-        stored.password = nil
-        if modelContext.hasChanges {
-            try modelContext.save()
+        try write { db in
+            let sql = """
+                INSERT INTO channel_subscriptions (
+                    gateway, channel_id, display_name, password, last_synced_at, updated_at, is_deleted, deleted_at
+                ) VALUES (
+                    \(Self.sqlQuoted(normalizedGateway)),
+                    \(Self.sqlQuoted(normalizedChannelId)),
+                    \(Self.sqlQuoted(normalizedDisplayName)),
+                    \(Self.sqlQuoted(normalizedPassword)),
+                    \(Self.sqlOptionalDouble(lastSyncedAt?.timeIntervalSince1970)),
+                    \(updatedAt.timeIntervalSince1970),
+                    \(isDeleted ? 1 : 0),
+                    \(Self.sqlOptionalDouble(deletedAt?.timeIntervalSince1970))
+                )
+                ON CONFLICT(gateway, channel_id) DO UPDATE SET
+                    display_name = excluded.display_name,
+                    password = excluded.password,
+                    last_synced_at = excluded.last_synced_at,
+                    updated_at = excluded.updated_at,
+                    is_deleted = excluded.is_deleted,
+                    deleted_at = excluded.deleted_at;
+                """
+            try db.execute(sql: sql)
         }
     }
 
@@ -1338,275 +3144,1041 @@ private final class SwiftDataStore {
         channelId: String,
         deletedAt: Date
     ) async throws {
-        let modelContext = ModelContext(modelContainer)
-        let descriptor = FetchDescriptor<StoredChannelSubscription>(
-            predicate: #Predicate { $0.channelId == channelId && $0.gateway == gateway },
-        )
-        guard let stored = try modelContext.fetch(descriptor).first else { return }
-        stored.isDeleted = true
-        stored.deletedAt = deletedAt
-        stored.password = nil
-        if modelContext.hasChanges {
-            try modelContext.save()
+        let normalizedGateway = Self.normalizeGateway(gateway)
+        let normalizedChannelId = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedGateway.isEmpty, !normalizedChannelId.isEmpty else { return }
+
+        try write { db in
+            let sql = """
+                UPDATE channel_subscriptions
+                SET is_deleted = 1,
+                    deleted_at = \(deletedAt.timeIntervalSince1970),
+                    password = '',
+                    updated_at = \(deletedAt.timeIntervalSince1970)
+                WHERE gateway = \(Self.sqlQuoted(normalizedGateway))
+                  AND channel_id = \(Self.sqlQuoted(normalizedChannelId));
+                """
+            try db.execute(sql: sql)
         }
     }
 
-    func loadChannelPassword(channelId: String) async throws -> String? {
-        let modelContext = ModelContext(modelContainer)
-        let descriptor = FetchDescriptor<StoredChannelSubscription>(
-            predicate: #Predicate { $0.channelId == channelId },
-        )
-        guard let stored = try modelContext.fetch(descriptor).first else { return nil }
-        guard stored.isDeleted == false else { return nil }
-        return stored.password
-    }
+    func softDeleteChannelSubscription(
+        channelId: String,
+        deletedAt: Date
+    ) async throws {
+        let normalizedChannelId = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedChannelId.isEmpty else { return }
 
-    func loadActiveChannelCredentials() async throws -> [(channelId: String, password: String)] {
-        let modelContext = ModelContext(modelContainer)
-        let descriptor = FetchDescriptor<StoredChannelSubscription>(
-            predicate: #Predicate { $0.isDeleted == false },
-        )
-        let stored = try modelContext.fetch(descriptor)
-        var results: [(channelId: String, password: String)] = []
-        results.reserveCapacity(stored.count)
-
-        for entry in stored {
-            if let password = entry.password,
-               !password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            {
-                results.append((channelId: entry.channelId, password: password))
-            }
+        try write { db in
+            let sql = """
+                UPDATE channel_subscriptions
+                SET is_deleted = 1,
+                    deleted_at = \(deletedAt.timeIntervalSince1970),
+                    password = '',
+                    updated_at = \(deletedAt.timeIntervalSince1970)
+                WHERE channel_id = \(Self.sqlQuoted(normalizedChannelId));
+                """
+            try db.execute(sql: sql)
         }
-
-        return results
     }
 
     func loadAppSettings() async throws -> AppSettingsSnapshot? {
-        let modelContext = ModelContext(modelContainer)
-        let descriptor = FetchDescriptor<StoredAppSettings>(
-            predicate: #Predicate { $0.id == appSettingsId },
-        )
-        guard let stored = try modelContext.fetch(descriptor).first else { return nil }
-        return AppSettingsSnapshot(
-            manualKeyLength: stored.manualKeyLength,
-            manualKeyEncoding: stored.manualKeyEncoding,
-            launchAtLoginEnabled: stored.launchAtLoginEnabled,
-            autoCleanupEnabled: stored.autoCleanupEnabled,
-            pushTokenData: stored.pushTokenData,
-            legacyMigrationVersion: stored.legacyMigrationVersion
-        )
+        try read { db in
+            try loadAppSettings(db)
+        }
     }
 
     func saveAppSettings(_ snapshot: AppSettingsSnapshot) async throws {
-        let modelContext = ModelContext(modelContainer)
-        let descriptor = FetchDescriptor<StoredAppSettings>(
-            predicate: #Predicate { $0.id == appSettingsId },
-        )
-        if let stored = try modelContext.fetch(descriptor).first {
-            stored.manualKeyLength = snapshot.manualKeyLength
-            stored.manualKeyEncoding = snapshot.manualKeyEncoding
-            stored.launchAtLoginEnabled = snapshot.launchAtLoginEnabled
-            stored.autoCleanupEnabled = snapshot.autoCleanupEnabled
-            stored.pushTokenData = snapshot.pushTokenData
-            stored.legacyMigrationVersion = snapshot.legacyMigrationVersion
-        } else {
-            modelContext.insert(StoredAppSettings(
-                id: appSettingsId,
-                manualKeyLength: snapshot.manualKeyLength,
-                manualKeyEncoding: snapshot.manualKeyEncoding,
-                launchAtLoginEnabled: snapshot.launchAtLoginEnabled,
-                autoCleanupEnabled: snapshot.autoCleanupEnabled,
-                pushTokenData: snapshot.pushTokenData,
-                legacyMigrationVersion: snapshot.legacyMigrationVersion
-            ))
-        }
-        if modelContext.hasChanges {
-            try modelContext.save()
+        try write { db in
+            try saveAppSettings(snapshot, db: db)
         }
     }
 
-    func saveMessage(_ message: PushMessage) async throws {
-        let modelContext = ModelContext(modelContainer)
-        try saveMessagesBatch([message], in: modelContext)
+    func loadWatchProvisioningServerConfig() async throws -> ServerConfig? {
+        try read { db in
+            try decodeWatchProvisioningServerConfig(from: try loadAppSettings(db))
+        }
     }
 
-    func saveMessagesBatch(_ messages: [PushMessage]) async throws {
-        guard !messages.isEmpty else { return }
-        let modelContext = ModelContext(modelContainer)
-        try saveMessagesBatch(messages, in: modelContext)
+    func saveWatchProvisioningServerConfig(_ config: ServerConfig?) async throws {
+        let normalized = config?.normalized()
+        try write { db in
+            var settings = try loadAppSettings(db) ?? .empty
+            settings.watchProvisioningServerConfigData = try encodeWatchProvisioningServerConfig(normalized)
+            try saveAppSettings(settings, db: db)
+        }
     }
 
-    fileprivate func saveMessagesBatch(
-        _ messages: [PushMessage],
-        in modelContext: ModelContext
-    ) throws {
-        guard !messages.isEmpty else { return }
-        let idSet = Set(messages.map(\.id))
-        let descriptor = FetchDescriptor<StoredPushMessage>(
-            predicate: #Predicate { idSet.contains($0.id) },
+    func loadWatchProvisioningState() async throws -> WatchProvisioningState? {
+        try read { db in
+            let settings = try loadAppSettings(db)
+            guard let schemaVersion = settings?.watchProvisioningSchemaVersion,
+                  let generation = settings?.watchProvisioningGeneration,
+                  let contentDigest = settings?.watchProvisioningContentDigest,
+                  let appliedAt = settings?.watchProvisioningAppliedAt,
+                  let modeRawValue = settings?.watchProvisioningModeRawValue,
+                  let modeAtApply = WatchMode(rawValue: modeRawValue)
+            else {
+                return nil
+            }
+            return WatchProvisioningState(
+                schemaVersion: schemaVersion,
+                generation: generation,
+                contentDigest: contentDigest,
+                appliedAt: appliedAt,
+                modeAtApply: modeAtApply,
+                sourceControlGeneration: settings?.watchProvisioningSourceControlGeneration ?? 0
+            )
+        }
+    }
+
+    func saveWatchProvisioningState(_ state: WatchProvisioningState?) async throws {
+        try write { db in
+            var settings = try loadAppSettings(db) ?? .empty
+            settings.watchProvisioningSchemaVersion = state?.schemaVersion
+            settings.watchProvisioningGeneration = state?.generation
+            settings.watchProvisioningContentDigest = state?.contentDigest
+            settings.watchProvisioningAppliedAt = state?.appliedAt
+            settings.watchProvisioningModeRawValue = state?.modeAtApply.rawValue
+            settings.watchProvisioningSourceControlGeneration = state?.sourceControlGeneration
+            try saveAppSettings(settings, db: db)
+        }
+    }
+
+    func applyWatchStandaloneProvisioning(
+        _ snapshot: WatchStandaloneProvisioningSnapshot,
+        sourceControlGeneration: Int64
+    ) async throws -> WatchProvisioningState {
+        let normalizedConfig = snapshot.serverConfig?.normalized()
+        let normalizedChannels = snapshot.channels.map {
+            (
+                gateway: Self.normalizeGateway($0.gateway),
+                channelId: $0.channelId.trimmingCharacters(in: .whitespacesAndNewlines),
+                displayName: $0.displayName.trimmingCharacters(in: .whitespacesAndNewlines),
+                password: $0.password.trimmingCharacters(in: .whitespacesAndNewlines),
+                updatedAt: $0.updatedAt
+            )
+        }.filter { !$0.gateway.isEmpty && !$0.channelId.isEmpty && !$0.password.isEmpty }
+        let provisioningState = WatchProvisioningState(
+            schemaVersion: WatchConnectivitySchema.currentVersion,
+            generation: snapshot.generation,
+            contentDigest: snapshot.contentDigest,
+            appliedAt: Date(),
+            modeAtApply: .standalone,
+            sourceControlGeneration: sourceControlGeneration
         )
-        let existing = try modelContext.fetch(descriptor)
-        let existingById = Dictionary(uniqueKeysWithValues: existing.map { ($0.id, $0) })
 
-        for message in messages {
-            if let stored = existingById[message.id] {
-                let snapshot = StoredMessageSnapshot(
-                    channelKey: normalizeChannelKey(stored.channel),
-                    isRead: stored.isRead,
-                    receivedAt: stored.receivedAt
-                )
-                try stored.update(from: message, encoder: encoder)
-                try updateStatsForUpdate(
-                    snapshot: snapshot,
-                    newMessage: message,
-                    modelContext: modelContext
-                )
-            } else {
-                try modelContext.insert(StoredPushMessage(from: message, encoder: encoder))
-                try updateStatsForInsert(message: message, modelContext: modelContext)
+        try write { db in
+            var settings = try loadAppSettings(db) ?? .empty
+            settings.watchProvisioningServerConfigData = try encodeWatchProvisioningServerConfig(normalizedConfig)
+            settings.watchProvisioningSchemaVersion = provisioningState.schemaVersion
+            settings.watchProvisioningGeneration = provisioningState.generation
+            settings.watchProvisioningContentDigest = provisioningState.contentDigest
+            settings.watchProvisioningAppliedAt = provisioningState.appliedAt
+            settings.watchProvisioningModeRawValue = provisioningState.modeAtApply.rawValue
+            settings.watchProvisioningSourceControlGeneration = provisioningState.sourceControlGeneration
+            try saveAppSettings(settings, db: db)
+
+            let existingRows = try Row.fetchAll(
+                db,
+                sql: "SELECT gateway, channel_id FROM channel_subscriptions WHERE is_deleted = 0;"
+            )
+            let existingKeys = existingRows.compactMap { row -> String? in
+                let gateway: String? = row["gateway"]
+                let channelId: String? = row["channel_id"]
+                guard let gateway, let channelId else { return nil }
+                return "\(Self.normalizeGateway(gateway))|\(channelId.trimmingCharacters(in: .whitespacesAndNewlines))"
+            }
+            let incomingKeys = Set(normalizedChannels.map { "\($0.gateway)|\($0.channelId)" })
+
+            for channel in normalizedChannels {
+                let displayName = channel.displayName.isEmpty ? channel.channelId : channel.displayName
+                let sql = """
+                    INSERT INTO channel_subscriptions (
+                        gateway, channel_id, display_name, password, last_synced_at, updated_at, is_deleted, deleted_at
+                    ) VALUES (
+                        \(Self.sqlQuoted(channel.gateway)),
+                        \(Self.sqlQuoted(channel.channelId)),
+                        \(Self.sqlQuoted(displayName)),
+                        \(Self.sqlQuoted(channel.password)),
+                        NULL,
+                        \(channel.updatedAt.timeIntervalSince1970),
+                        0,
+                        NULL
+                    )
+                    ON CONFLICT(gateway, channel_id) DO UPDATE SET
+                        display_name = excluded.display_name,
+                        password = excluded.password,
+                        last_synced_at = excluded.last_synced_at,
+                        updated_at = excluded.updated_at,
+                        is_deleted = 0,
+                        deleted_at = NULL;
+                    """
+                try db.execute(sql: sql)
+            }
+
+            let deletedAt = provisioningState.appliedAt
+            for key in existingKeys where !incomingKeys.contains(key) {
+                let parts = key.split(separator: "|", maxSplits: 1).map(String.init)
+                guard parts.count == 2 else { continue }
+                let sql = """
+                    UPDATE channel_subscriptions
+                    SET is_deleted = 1,
+                        deleted_at = \(deletedAt.timeIntervalSince1970),
+                        password = '',
+                        updated_at = \(deletedAt.timeIntervalSince1970)
+                    WHERE gateway = \(Self.sqlQuoted(parts[0]))
+                      AND channel_id = \(Self.sqlQuoted(parts[1]));
+                    """
+                try db.execute(sql: sql)
             }
         }
 
-        if modelContext.hasChanges {
-            do {
-                try modelContext.save()
-            } catch {
-                throw error
+        return provisioningState
+    }
+
+    func updateChannelDisplayName(
+        gateway: String,
+        channelId: String,
+        displayName: String
+    ) async throws {
+        let normalizedGateway = Self.normalizeGateway(gateway)
+        let normalizedChannelId = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedGateway.isEmpty, !normalizedChannelId.isEmpty else { return }
+        let normalizedDisplayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedDisplayName = normalizedDisplayName.isEmpty ? normalizedChannelId : normalizedDisplayName
+        try write { db in
+            let sql = """
+                UPDATE channel_subscriptions
+                SET display_name = \(Self.sqlQuoted(resolvedDisplayName)),
+                    updated_at = \(Date().timeIntervalSince1970),
+                    is_deleted = 0,
+                    deleted_at = NULL
+                WHERE gateway = \(Self.sqlQuoted(normalizedGateway))
+                  AND channel_id = \(Self.sqlQuoted(normalizedChannelId));
+                """
+            try db.execute(sql: sql)
+        }
+    }
+
+    func updateChannelLastSynced(
+        gateway: String,
+        channelId: String,
+        date: Date
+    ) async throws {
+        let normalizedGateway = Self.normalizeGateway(gateway)
+        let normalizedChannelId = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedGateway.isEmpty, !normalizedChannelId.isEmpty else { return }
+        try write { db in
+            let sql = """
+                UPDATE channel_subscriptions
+                SET last_synced_at = \(date.timeIntervalSince1970)
+                WHERE gateway = \(Self.sqlQuoted(normalizedGateway))
+                  AND channel_id = \(Self.sqlQuoted(normalizedChannelId));
+                """
+            try db.execute(sql: sql)
+        }
+    }
+
+    func loadChannelCredentials(
+        gateway: String
+    ) async throws -> [(channelId: String, password: String)] {
+        let normalizedGateway = Self.normalizeGateway(gateway)
+        guard !normalizedGateway.isEmpty else { return [] }
+        return try read { db in
+            let sql = """
+                SELECT channel_id, password
+                FROM channel_subscriptions
+                WHERE gateway = \(Self.sqlQuoted(normalizedGateway))
+                  AND is_deleted = 0
+                ORDER BY updated_at DESC;
+                """
+            return try Row.fetchAll(db, sql: sql).compactMap { row in
+                let channelId: String = row["channel_id"]
+                let password: String = row["password"]
+                let trimmedChannelId = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
+                let trimmedPassword = password.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmedChannelId.isEmpty, !trimmedPassword.isEmpty else { return nil }
+                return (channelId: trimmedChannelId, password: trimmedPassword)
+            }
+        }
+    }
+
+    func mergeWatchMirrorSnapshot(_ snapshot: WatchMirrorSnapshot) async throws {
+        try write { db in
+            for message in snapshot.messages {
+                try upsertWatchLightMessage(message, db: db)
+            }
+            for event in snapshot.events {
+                try upsertWatchLightEvent(event, db: db)
+            }
+            for thing in snapshot.things {
+                try upsertWatchLightThing(thing, db: db)
+            }
+        }
+    }
+
+    func clearWatchLightStore() async throws {
+        try write { db in
+            try db.execute(sql: "DELETE FROM watch_light_messages;")
+            try db.execute(sql: "DELETE FROM watch_light_events;")
+            try db.execute(sql: "DELETE FROM watch_light_things;")
+            try db.execute(sql: "DELETE FROM watch_mirror_action_queue;")
+        }
+    }
+
+    func loadWatchLightMessages() async throws -> [WatchLightMessage] {
+        try read { db in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT * FROM watch_light_messages
+                    ORDER BY received_at DESC, message_id DESC;
+                    """
+            )
+            return rows.map { GRDBWatchLightMessageRecord(row: $0).toModel() }
+        }
+    }
+
+    func loadWatchLightMessage(messageId: String) async throws -> WatchLightMessage? {
+        let normalizedMessageId = messageId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedMessageId.isEmpty else { return nil }
+        return try read { db in
+            guard let row = try Row.fetchOne(
+                db,
+                sql: """
+                    SELECT * FROM watch_light_messages
+                    WHERE message_id = \(Self.sqlQuoted(normalizedMessageId))
+                    LIMIT 1;
+                    """
+            ) else {
+                return nil
+            }
+            return GRDBWatchLightMessageRecord(row: row).toModel()
+        }
+    }
+
+    func loadWatchLightMessage(notificationRequestId: String) async throws -> WatchLightMessage? {
+        let normalizedRequestId = notificationRequestId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedRequestId.isEmpty else { return nil }
+        return try read { db in
+            guard let row = try Row.fetchOne(
+                db,
+                sql: """
+                    SELECT * FROM watch_light_messages
+                    WHERE notification_request_id = \(Self.sqlQuoted(normalizedRequestId))
+                    ORDER BY received_at DESC, message_id DESC
+                    LIMIT 1;
+                    """
+            ) else {
+                return nil
+            }
+            return GRDBWatchLightMessageRecord(row: row).toModel()
+        }
+    }
+
+    func loadWatchLightEvents() async throws -> [WatchLightEvent] {
+        try read { db in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT * FROM watch_light_events
+                    ORDER BY updated_at DESC, event_id DESC;
+                    """
+            )
+            return rows.map { GRDBWatchLightEventRecord(row: $0).toModel() }
+        }
+    }
+
+    func loadWatchLightEvent(eventId: String) async throws -> WatchLightEvent? {
+        let normalizedEventId = eventId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedEventId.isEmpty else { return nil }
+        return try read { db in
+            guard let row = try Row.fetchOne(
+                db,
+                sql: """
+                    SELECT * FROM watch_light_events
+                    WHERE event_id = \(Self.sqlQuoted(normalizedEventId))
+                    LIMIT 1;
+                    """
+            ) else {
+                return nil
+            }
+            return GRDBWatchLightEventRecord(row: row).toModel()
+        }
+    }
+
+    func loadWatchLightThings() async throws -> [WatchLightThing] {
+        try read { db in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT * FROM watch_light_things
+                    ORDER BY updated_at DESC, thing_id DESC;
+                    """
+            )
+            return rows.map { GRDBWatchLightThingRecord(row: $0).toModel() }
+        }
+    }
+
+    func loadWatchLightThing(thingId: String) async throws -> WatchLightThing? {
+        let normalizedThingId = thingId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedThingId.isEmpty else { return nil }
+        return try read { db in
+            guard let row = try Row.fetchOne(
+                db,
+                sql: """
+                    SELECT * FROM watch_light_things
+                    WHERE thing_id = \(Self.sqlQuoted(normalizedThingId))
+                    LIMIT 1;
+                    """
+            ) else {
+                return nil
+            }
+            return GRDBWatchLightThingRecord(row: row).toModel()
+        }
+    }
+
+    func upsertWatchLightPayload(_ payload: WatchLightPayload) async throws {
+        try write { db in
+            switch payload {
+            case let .message(message):
+                try upsertWatchLightMessage(message, db: db)
+            case let .event(event):
+                try upsertWatchLightEvent(event, db: db)
+            case let .thing(thing):
+                try upsertWatchLightThing(thing, db: db)
+            }
+        }
+    }
+
+    func markWatchLightMessageRead(messageId: String) async throws -> WatchLightMessage? {
+        let normalizedMessageId = messageId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedMessageId.isEmpty else { return nil }
+        return try write { db in
+            try db.execute(
+                sql: """
+                    UPDATE watch_light_messages
+                    SET is_read = 1
+                    WHERE message_id = \(Self.sqlQuoted(normalizedMessageId));
+                    """
+            )
+            guard let row = try Row.fetchOne(
+                db,
+                sql: """
+                    SELECT * FROM watch_light_messages
+                    WHERE message_id = \(Self.sqlQuoted(normalizedMessageId))
+                    LIMIT 1;
+                    """
+            ) else {
+                return nil
+            }
+            return GRDBWatchLightMessageRecord(row: row).toModel()
+        }
+    }
+
+    func deleteWatchLightMessage(messageId: String) async throws {
+        let normalizedMessageId = messageId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedMessageId.isEmpty else { return }
+        try write { db in
+            try db.execute(
+                sql: """
+                    DELETE FROM watch_light_messages
+                    WHERE message_id = \(Self.sqlQuoted(normalizedMessageId));
+                    """
+            )
+        }
+    }
+
+    func enqueueWatchMirrorAction(_ action: WatchMirrorAction) async throws {
+        try write { db in
+            try db.execute(
+                sql: """
+                    INSERT INTO watch_mirror_action_queue (action_id, kind, message_id, issued_at)
+                    VALUES (
+                        \(Self.sqlQuoted(action.actionId)),
+                        \(Self.sqlQuoted(action.kind.rawValue)),
+                        \(Self.sqlQuoted(action.messageId)),
+                        \(action.issuedAt.timeIntervalSince1970)
+                    )
+                    ON CONFLICT(action_id) DO UPDATE SET
+                        kind = excluded.kind,
+                        message_id = excluded.message_id,
+                        issued_at = excluded.issued_at;
+                    """
+            )
+        }
+    }
+
+    func loadWatchMirrorActions() async throws -> [WatchMirrorAction] {
+        try read { db in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT * FROM watch_mirror_action_queue
+                    ORDER BY issued_at ASC, action_id ASC;
+                    """
+            )
+            return rows.compactMap { GRDBWatchMirrorActionRecord(row: $0).toModel() }
+        }
+    }
+
+    func deleteWatchMirrorActions(actionIds: [String]) async throws {
+        let normalized = actionIds
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !normalized.isEmpty else { return }
+        let quoted = normalized.map(Self.sqlQuoted).joined(separator: ", ")
+        try write { db in
+            try db.execute(
+                sql: """
+                    DELETE FROM watch_mirror_action_queue
+                    WHERE action_id IN (\(quoted));
+                    """
+            )
+        }
+    }
+
+    private func upsertWatchLightMessage(_ message: WatchLightMessage, db: Database) throws {
+        try db.execute(
+            sql: """
+                INSERT INTO watch_light_messages (
+                    message_id, title, body, image_url, url, severity, received_at,
+                    is_read, entity_type, entity_id, notification_request_id
+                ) VALUES (
+                    \(Self.sqlQuoted(message.messageId)),
+                    \(Self.sqlQuoted(message.title)),
+                    \(Self.sqlQuoted(message.body)),
+                    \(Self.sqlOptionalText(message.imageURL?.absoluteString)),
+                    \(Self.sqlOptionalText(message.url?.absoluteString)),
+                    \(Self.sqlOptionalText(message.severity)),
+                    \(message.receivedAt.timeIntervalSince1970),
+                    \(message.isRead ? 1 : 0),
+                    \(Self.sqlQuoted(message.entityType)),
+                    \(Self.sqlOptionalText(message.entityId)),
+                    \(Self.sqlOptionalText(message.notificationRequestId))
+                )
+                ON CONFLICT(message_id) DO UPDATE SET
+                    title = excluded.title,
+                    body = excluded.body,
+                    image_url = excluded.image_url,
+                    url = excluded.url,
+                    severity = excluded.severity,
+                    received_at = excluded.received_at,
+                    is_read = excluded.is_read,
+                    entity_type = excluded.entity_type,
+                    entity_id = excluded.entity_id,
+                    notification_request_id = excluded.notification_request_id;
+                """
+        )
+    }
+
+    private func upsertWatchLightEvent(_ event: WatchLightEvent, db: Database) throws {
+        try db.execute(
+            sql: """
+                INSERT INTO watch_light_events (
+                    event_id, title, summary, state, severity, image_url, updated_at
+                ) VALUES (
+                    \(Self.sqlQuoted(event.eventId)),
+                    \(Self.sqlQuoted(event.title)),
+                    \(Self.sqlOptionalText(event.summary)),
+                    \(Self.sqlOptionalText(event.state)),
+                    \(Self.sqlOptionalText(event.severity)),
+                    \(Self.sqlOptionalText(event.imageURL?.absoluteString)),
+                    \(event.updatedAt.timeIntervalSince1970)
+                )
+                ON CONFLICT(event_id) DO UPDATE SET
+                    title = excluded.title,
+                    summary = excluded.summary,
+                    state = excluded.state,
+                    severity = excluded.severity,
+                    image_url = excluded.image_url,
+                    updated_at = excluded.updated_at;
+                """
+        )
+    }
+
+    private func upsertWatchLightThing(_ thing: WatchLightThing, db: Database) throws {
+        try db.execute(
+            sql: """
+                INSERT INTO watch_light_things (
+                    thing_id, title, summary, attrs_json, image_url, updated_at
+                ) VALUES (
+                    \(Self.sqlQuoted(thing.thingId)),
+                    \(Self.sqlQuoted(thing.title)),
+                    \(Self.sqlOptionalText(thing.summary)),
+                    \(Self.sqlOptionalText(thing.attrsJSON)),
+                    \(Self.sqlOptionalText(thing.imageURL?.absoluteString)),
+                    \(thing.updatedAt.timeIntervalSince1970)
+                )
+                ON CONFLICT(thing_id) DO UPDATE SET
+                    title = excluded.title,
+                    summary = excluded.summary,
+                    attrs_json = excluded.attrs_json,
+                    image_url = excluded.image_url,
+                    updated_at = excluded.updated_at;
+                """
+        )
+    }
+
+    func persistNotificationMessageIfNeeded(
+        _ message: PushMessage
+    ) async throws -> NotificationStoreSaveOutcome {
+        try write { db in
+            let canonicalMessage = canonicalizedMessageForPersistence(message)
+            if let thingId = referencedThingIdRequiringExistingParent(canonicalMessage),
+               try !hasThingParentRecord(thingId: thingId, db: db)
+            {
+                return .duplicateMessage(canonicalMessage)
+            }
+            let record = try buildMessageRecord(from: canonicalMessage)
+
+            if let notificationRequestId = record.notificationRequestId,
+               let existing = try loadMessageRecordByNotificationRequestId(notificationRequestId, db: db)
+            {
+                var updatedRecord = record
+                updatedRecord = GRDBMessageRecord(
+                    id: existing.id,
+                    messageId: existing.messageId,
+                    title: record.title,
+                    body: record.body,
+                    channel: record.channel,
+                    url: record.url,
+                    isRead: record.isRead,
+                    receivedAt: record.receivedAt,
+                    rawPayloadJSON: record.rawPayloadJSON,
+                    status: record.status,
+                    decryptionState: record.decryptionState,
+                    notificationRequestId: existing.notificationRequestId,
+                    deliveryId: record.deliveryId,
+                    operationId: record.operationId,
+                    entityType: record.entityType,
+                    entityId: record.entityId,
+                    eventId: record.eventId,
+                    thingId: record.thingId,
+                    projectionDestination: record.projectionDestination,
+                    eventState: record.eventState,
+                    eventTimeEpoch: record.eventTimeEpoch,
+                    observedTimeEpoch: record.observedTimeEpoch,
+                    topLevelMessage: record.topLevelMessage
+                )
+                try insertOrUpdateMessage(updatedRecord, db: db, updateOnConflict: true)
+                return .duplicateRequest(updatedRecord.toPushMessage(decoder: decoder))
+            }
+
+            if let identity = resolveOperationScopeIdentity(from: canonicalMessage),
+               let ledger = try fetchOperationLedger(scopeKey: identity.scopeKey, db: db),
+               let existing = try loadMessageRecordByMessageId(ledger.messageId, db: db)
+            {
+                return .duplicateMessage(existing.toPushMessage(decoder: decoder))
+            }
+
+            if let existing = try loadMessageRecordByMessageId(record.messageId, db: db) {
+                return .duplicateMessage(existing.toPushMessage(decoder: decoder))
+            }
+
+            try insertOrUpdateMessage(record, db: db, updateOnConflict: false)
+            if let identity = resolveOperationScopeIdentity(from: canonicalMessage) {
+                try upsertOperationLedger(
+                    identity: identity,
+                    messageId: record.messageId,
+                    appliedAt: Date(),
+                    db: db
+                )
+            }
+            return .persisted(record.toPushMessage(decoder: decoder))
+        }
+    }
+
+    func saveEntityRecords(_ messages: [PushMessage]) async throws {
+        guard !messages.isEmpty else { return }
+        try write { db in
+            for message in messages {
+                let canonical = canonicalizedMessageForPersistence(message)
+                guard isEntityScopedWrite(canonical) else { continue }
+                if let thingId = referencedThingIdRequiringExistingParent(canonical),
+                   try !hasThingParentRecord(thingId: thingId, db: db)
+                {
+                    continue
+                }
+                let record = try buildMessageRecord(from: canonical)
+
+                if try loadMessageRecordByMessageId(record.messageId, db: db) != nil {
+                    continue
+                }
+
+                if let identity = resolveOperationScopeIdentity(from: canonical),
+                   try fetchOperationLedger(scopeKey: identity.scopeKey, db: db) != nil
+                {
+                    continue
+                }
+
+                try insertOrUpdateMessage(record, db: db, updateOnConflict: false)
+                if let identity = resolveOperationScopeIdentity(from: canonical) {
+                    try upsertOperationLedger(
+                        identity: identity,
+                        messageId: record.messageId,
+                        appliedAt: Date(),
+                        db: db
+                    )
+                }
+            }
+        }
+    }
+
+    func saveMessages(_ messages: [PushMessage]) async throws {
+        guard !messages.isEmpty else { return }
+        try write { db in
+            for message in messages {
+                if let thingId = referencedThingIdRequiringExistingParent(message),
+                   try !hasThingParentRecord(thingId: thingId, db: db)
+                {
+                    continue
+                }
+                let record = try buildMessageRecord(from: message)
+                try insertOrUpdateMessage(record, db: db, updateOnConflict: true)
             }
         }
     }
 
     func loadMessages() async throws -> [PushMessage] {
-        let modelContext = ModelContext(modelContainer)
-        let descriptor = FetchDescriptor<StoredPushMessage>(
-            sortBy: [SortDescriptor(\.receivedAt, order: .reverse)],
-        )
-        let stored = try modelContext.fetch(descriptor)
-        return try stored.map { try $0.toDomain(decoder: decoder) }
+        try loadMessages(filter: .all, channel: nil, before: nil, limit: nil)
     }
 
-    func loadMessage(id: UUID) async throws -> PushMessage? {
-        let modelContext = ModelContext(modelContainer)
-        var descriptor = FetchDescriptor<StoredPushMessage>(predicate: #Predicate { $0.id == id })
-        descriptor.fetchLimit = 1
-        return try modelContext.fetch(descriptor).first.map { try $0.toDomain(decoder: decoder) }
-    }
-
-    func loadMessage(messageId: UUID) async throws -> PushMessage? {
-        let modelContext = ModelContext(modelContainer)
-        var descriptor = FetchDescriptor<StoredPushMessage>(
-            predicate: #Predicate { $0.messageId == messageId },
-        )
-        descriptor.fetchLimit = 1
-        return try modelContext.fetch(descriptor).first.map { try $0.toDomain(decoder: decoder) }
-    }
-
-    func loadMessage(notificationRequestId: String) async throws -> PushMessage? {
-        let modelContext = ModelContext(modelContainer)
-        var descriptor = FetchDescriptor<StoredPushMessage>(
-            predicate: #Predicate { $0.notificationRequestId == notificationRequestId },
-        )
-        descriptor.fetchLimit = 1
-        return try modelContext.fetch(descriptor).first.map { try $0.toDomain(decoder: decoder) }
+    func loadMessages(
+        filter: MessageQueryFilter,
+        channel: String?
+    ) async throws -> [PushMessage] {
+        try loadMessages(filter: filter, channel: channel, before: nil, limit: nil)
     }
 
     func loadMessagesPage(
         before cursor: MessagePageCursor?,
         limit: Int,
         filter: MessageQueryFilter,
-        channel: String?,
+        channel: String?
     ) async throws -> [PushMessage] {
-        let modelContext = ModelContext(modelContainer)
-        let predicate = buildMessagesPagePredicate(
-            cursor: cursor,
-            filter: filter,
-            channel: channel,
-        )
-        var descriptor = FetchDescriptor<StoredPushMessage>(
-            predicate: predicate,
-            sortBy: [SortDescriptor(\.receivedAt, order: .reverse)],
-        )
-        descriptor.fetchLimit = max(0, limit)
-        let stored = try modelContext.fetch(descriptor)
-        return try stored.map { try $0.toDomain(decoder: decoder) }
+        guard limit > 0 else { return [] }
+        return try loadMessages(filter: filter, channel: channel, before: cursor, limit: limit)
     }
 
     func loadMessageSummariesPage(
         before cursor: MessagePageCursor?,
         limit: Int,
         filter: MessageQueryFilter,
-        channel: String?,
+        channel: String?
     ) async throws -> [PushMessageSummary] {
-        let modelContext = ModelContext(modelContainer)
-        let predicate = buildMessagesPagePredicate(
-            cursor: cursor,
-            filter: filter,
-            channel: channel,
-        )
-        var descriptor = FetchDescriptor<StoredPushMessage>(
-            predicate: predicate,
-            sortBy: [SortDescriptor(\.receivedAt, order: .reverse)],
-        )
-        descriptor.fetchLimit = max(0, limit)
-        let stored = try modelContext.fetch(descriptor)
-        let summaries = stored.map { $0.toSummary() }
-        if modelContext.hasChanges {
-            try modelContext.save()
-        }
-        return summaries
+        try await loadMessagesPage(before: cursor, limit: limit, filter: filter, channel: channel)
+            .map(PushMessageSummary.init(message:))
     }
 
     func loadMessageSummaries(ids: [UUID]) async throws -> [PushMessageSummary] {
         guard !ids.isEmpty else { return [] }
-        let modelContext = ModelContext(modelContainer)
-        let idSet = Set(ids)
-        let descriptor = FetchDescriptor<StoredPushMessage>(
-            predicate: #Predicate { idSet.contains($0.id) },
-        )
-        let stored = try modelContext.fetch(descriptor)
-        let summaries = stored.map { $0.toSummary() }
-        if modelContext.hasChanges {
-            try modelContext.save()
+        var summaries: [PushMessageSummary] = []
+        summaries.reserveCapacity(ids.count)
+        for id in ids {
+            if let message = try await loadMessage(id: id) {
+                summaries.append(PushMessageSummary(message: message))
+            }
         }
-        let byId = Dictionary(uniqueKeysWithValues: summaries.map { ($0.id, $0) })
-        return ids.compactMap { byId[$0] }
+        return summaries
     }
 
-    func loadMessages(
-        filter: MessageQueryFilter,
-        channel: String?,
-    ) async throws -> [PushMessage] {
-        let modelContext = ModelContext(modelContainer)
-        let predicate = buildMessagesPagePredicate(
+    func loadEventMessagesForProjection() async throws -> [PushMessage] {
+        try loadEntityProjectionMessages(entityConditions: ["entity_type = 'event'"], cursor: nil, limit: nil)
+            .filter(isTopLevelEventProjection)
+    }
+
+    func loadEventMessagesForProjection(eventId: String) async throws -> [PushMessage] {
+        let normalized = eventId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return [] }
+        return try loadEntityProjectionMessages(
+            entityConditions: [
+                "entity_type = 'event'",
+                "event_id = \(Self.sqlQuoted(normalized))",
+            ],
             cursor: nil,
-            filter: filter,
-            channel: channel,
+            limit: nil
+        ).filter { $0.eventId == normalized }
+    }
+
+    func loadEventMessagesForProjectionPage(
+        before cursor: EntityProjectionPageCursor?,
+        limit: Int
+    ) async throws -> [PushMessage] {
+        guard limit > 0 else { return [] }
+        var collected: [PushMessage] = []
+        var pageCursor = cursor
+        let fetchBatchSize = max(limit * 2, 80)
+        while collected.count < limit {
+            let batch = try loadEntityProjectionMessages(
+                entityConditions: ["entity_type = 'event'"],
+                cursor: pageCursor,
+                limit: fetchBatchSize
+            )
+            if batch.isEmpty { break }
+            for message in batch where isTopLevelEventProjection(message) {
+                collected.append(message)
+                if collected.count == limit { break }
+            }
+            guard let last = batch.last else { break }
+            pageCursor = EntityProjectionPageCursor(receivedAt: last.receivedAt, id: last.id)
+            if batch.count < fetchBatchSize { break }
+        }
+        return collected
+    }
+
+    func loadThingMessagesForProjection() async throws -> [PushMessage] {
+        try loadEntityProjectionMessages(
+            entityConditions: ["((thing_id IS NOT NULL AND trim(thing_id) <> '') OR entity_type = 'thing')"],
+            cursor: nil,
+            limit: nil
+        ).filter { $0.thingId != nil }
+    }
+
+    func loadThingMessagesForProjection(thingId: String) async throws -> [PushMessage] {
+        let normalized = thingId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return [] }
+        let raw = try loadEntityProjectionMessages(
+            entityConditions: [
+                "((thing_id = \(Self.sqlQuoted(normalized))) OR (entity_type = 'thing' AND entity_id = \(Self.sqlQuoted(normalized))))",
+            ],
+            cursor: nil,
+            limit: nil
         )
-        let descriptor = FetchDescriptor<StoredPushMessage>(
-            predicate: predicate,
-            sortBy: [SortDescriptor(\.receivedAt, order: .reverse)],
-        )
-        let stored = try modelContext.fetch(descriptor)
-        return try stored.map { try $0.toDomain(decoder: decoder) }
+        return raw.filter { $0.thingId == normalized }
+    }
+
+    func loadThingMessagesForProjectionPage(
+        before cursor: EntityProjectionPageCursor?,
+        limit: Int
+    ) async throws -> [PushMessage] {
+        guard limit > 0 else { return [] }
+        var collected: [PushMessage] = []
+        var pageCursor = cursor
+        let fetchBatchSize = max(limit * 2, 80)
+        while collected.count < limit {
+            let batch = try loadEntityProjectionMessages(
+                entityConditions: ["((thing_id IS NOT NULL AND trim(thing_id) <> '') OR entity_type = 'thing')"],
+                cursor: pageCursor,
+                limit: fetchBatchSize
+            )
+            if batch.isEmpty { break }
+            for message in batch where message.thingId != nil {
+                collected.append(message)
+                if collected.count == limit { break }
+            }
+            guard let last = batch.last else { break }
+            pageCursor = EntityProjectionPageCursor(receivedAt: last.receivedAt, id: last.id)
+            if batch.count < fetchBatchSize { break }
+        }
+        return collected
+    }
+
+    func loadMessage(id: UUID) async throws -> PushMessage? {
+        try read { db in
+            try loadMessageRecordByUUID(id, db: db)?.toPushMessage(decoder: decoder)
+        }
+    }
+
+    func loadMessage(messageId: String) async throws -> PushMessage? {
+        try read { db in
+            try loadMessageRecordByMessageId(messageId, db: db)?.toPushMessage(decoder: decoder)
+        }
+    }
+
+    func loadMessage(deliveryId: String) async throws -> PushMessage? {
+        let trimmed = deliveryId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return try read { db in
+            try loadMessageRecord(where: "delivery_id = \(Self.sqlQuoted(trimmed))", db: db)?
+                .toPushMessage(decoder: decoder)
+        }
+    }
+
+    func loadMessage(notificationRequestId: String) async throws -> PushMessage? {
+        try read { db in
+            try loadMessageRecordByNotificationRequestId(notificationRequestId, db: db)?.toPushMessage(decoder: decoder)
+        }
+    }
+
+    func loadEntityOpenTarget(notificationRequestId: String) async throws -> EntityOpenTarget? {
+        try read { db in
+            guard let record = try loadMessageRecordByNotificationRequestId(notificationRequestId, db: db) else {
+                return nil
+            }
+            return resolveEntityOpenTarget(
+                entityType: record.entityType,
+                entityId: record.entityId,
+                thingId: record.thingId
+            )
+        }
+    }
+
+    func loadEntityOpenTarget(messageId: String) async throws -> EntityOpenTarget? {
+        try read { db in
+            guard let record = try loadMessageRecordByMessageId(messageId, db: db) else { return nil }
+            return resolveEntityOpenTarget(
+                entityType: record.entityType,
+                entityId: record.entityId,
+                thingId: record.thingId
+            )
+        }
+    }
+
+    func inboundDeliveryState(deliveryId: String) async throws -> InboundDeliveryState {
+        let normalized = deliveryId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return .missing }
+
+        return try read { db in
+            let sql = "SELECT persisted_at, acked_at FROM inbound_delivery_ledger WHERE delivery_id = \(Self.sqlQuoted(normalized)) LIMIT 1;"
+            guard let row = try Row.fetchOne(db, sql: sql) else { return .missing }
+            let ackedAt: Double? = row["acked_at"]
+            if ackedAt != nil { return .acked }
+            let persistedAt: Double? = row["persisted_at"]
+            if persistedAt != nil { return .persisted }
+            return .missing
+        }
+    }
+
+    func markInboundDeliveryPersisted(
+        deliveryId: String,
+        source: String
+    ) async throws {
+        let normalized = deliveryId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return }
+        let now = Date().timeIntervalSince1970
+        let normalizedSource = source.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        try write { db in
+            let sql = """
+                INSERT INTO inbound_delivery_ledger (
+                    delivery_id, persisted_at, acked_at, updated_at, source
+                ) VALUES (
+                    \(Self.sqlQuoted(normalized)),
+                    \(now),
+                    NULL,
+                    \(now),
+                    \(Self.sqlOptionalText(normalizedSource.isEmpty ? nil : normalizedSource))
+                )
+                ON CONFLICT(delivery_id) DO UPDATE SET
+                    persisted_at = COALESCE(inbound_delivery_ledger.persisted_at, excluded.persisted_at),
+                    updated_at = excluded.updated_at,
+                    source = excluded.source;
+                """
+            try db.execute(sql: sql)
+        }
+    }
+
+    func markInboundDeliveryAcked(
+        deliveryId: String,
+        source: String
+    ) async throws {
+        let normalized = deliveryId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return }
+        let now = Date().timeIntervalSince1970
+        let normalizedSource = source.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        try write { db in
+            let upsertSQL = """
+                INSERT INTO inbound_delivery_ledger (
+                    delivery_id, persisted_at, acked_at, updated_at, source
+                ) VALUES (
+                    \(Self.sqlQuoted(normalized)),
+                    NULL,
+                    \(now),
+                    \(now),
+                    \(Self.sqlOptionalText(normalizedSource.isEmpty ? nil : normalizedSource))
+                )
+                ON CONFLICT(delivery_id) DO UPDATE SET
+                    acked_at = excluded.acked_at,
+                    updated_at = excluded.updated_at,
+                    source = excluded.source;
+                """
+            try db.execute(sql: upsertSQL)
+            try db.execute(sql: "DELETE FROM inbound_ack_outbox WHERE delivery_id = \(Self.sqlQuoted(normalized));")
+        }
+    }
+
+    func enqueueInboundDeliveryAcks(
+        deliveryIds: [String],
+        source: String
+    ) async throws {
+        guard !deliveryIds.isEmpty else { return }
+        let normalizedSource = source.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var normalizedIds: [String] = []
+        var seen = Set<String>()
+        for deliveryId in deliveryIds {
+            let trimmed = deliveryId.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            if seen.insert(trimmed).inserted {
+                normalizedIds.append(trimmed)
+            }
+        }
+        guard !normalizedIds.isEmpty else { return }
+
+        try write { db in
+            for deliveryId in normalizedIds {
+                let ackedCheckSQL = """
+                    SELECT acked_at
+                    FROM inbound_delivery_ledger
+                    WHERE delivery_id = \(Self.sqlQuoted(deliveryId))
+                    LIMIT 1;
+                    """
+                if let row = try Row.fetchOne(db, sql: ackedCheckSQL) {
+                    let ackedAt: Double? = row["acked_at"]
+                    if ackedAt != nil {
+                        continue
+                    }
+                }
+                let now = Date().timeIntervalSince1970
+                let insertSQL = """
+                    INSERT INTO inbound_ack_outbox (delivery_id, enqueued_at, source)
+                    VALUES (
+                        \(Self.sqlQuoted(deliveryId)),
+                        \(now),
+                        \(Self.sqlOptionalText(normalizedSource.isEmpty ? nil : normalizedSource))
+                    )
+                    ON CONFLICT(delivery_id) DO NOTHING;
+                    """
+                try db.execute(sql: insertSQL)
+            }
+        }
+    }
+
+    func loadPendingInboundDeliveryAckIds(limit: Int) async throws -> [String] {
+        guard limit > 0 else { return [] }
+        return try read { db in
+            let sql = """
+                SELECT delivery_id
+                FROM inbound_ack_outbox
+                ORDER BY enqueued_at ASC
+                LIMIT \(max(0, limit));
+                """
+            return try Row.fetchAll(db, sql: sql).compactMap { row in
+                let id: String? = row["delivery_id"]
+                return Self.normalizeOptional(id)
+            }
+        }
     }
 
     func searchIndexEntriesPage(
         before cursor: MessagePageCursor?,
-        limit: Int,
+        limit: Int
     ) async throws -> [MessageSearchIndex.Entry] {
-        let modelContext = ModelContext(modelContainer)
-        let cutoff = cursor?.receivedAt ?? Date.distantFuture
-        var descriptor = FetchDescriptor<StoredPushMessage>(
-            predicate: #Predicate { $0.receivedAt < cutoff },
-            sortBy: [SortDescriptor(\.receivedAt, order: .reverse)],
+        guard limit > 0 else { return [] }
+        let messages = try await loadMessagesPage(
+            before: cursor,
+            limit: limit,
+            filter: .all,
+            channel: nil
         )
-        descriptor.fetchLimit = max(0, limit)
-        let stored = try modelContext.fetch(descriptor)
-        return stored.map { message in
+        return messages.map { message in
             MessageSearchIndex.Entry(
                 id: message.id,
                 title: message.title,
-                body: message.resolvedBodyText,
+                body: message.body,
                 channel: message.channel,
                 receivedAt: message.receivedAt
             )
@@ -1614,165 +4186,99 @@ private final class SwiftDataStore {
     }
 
     func prepareStatsIfNeeded(progressive: Bool) async {
-        do {
-            let hasStats: Bool
-            do {
-                let modelContext = ModelContext(modelContainer)
-                hasStats = try modelContext.fetch(FetchDescriptor<StoredMessageStats>()).first != nil
-            }
-            if hasStats {
-                return
-            }
-            let total: Int
-            do {
-                let modelContext = ModelContext(modelContainer)
-                total = try modelContext.fetchCount(FetchDescriptor<StoredPushMessage>())
-            }
-            if total == 0 {
-                let modelContext = ModelContext(modelContainer)
-                modelContext.insert(StoredMessageStats(totalCount: 0, unreadCount: 0))
-                if modelContext.hasChanges {
-                    try modelContext.save()
-                }
-                return
-            }
-
-            if progressive {
-                _ = try await rebuildStatsProgressively(pageSize: 500)
-            } else {
-                let modelContext = ModelContext(modelContainer)
-                _ = try rebuildStats(modelContext)
-                if modelContext.hasChanges {
-                    try modelContext.save()
-                }
-            }
-        } catch {
-            return
-        }
+        _ = progressive
     }
 
     func messageCounts() async throws -> (total: Int, unread: Int) {
-        let modelContext = ModelContext(modelContainer)
-        let preparation = try ensureStatsReady(modelContext)
-        if modelContext.hasChanges {
-            try modelContext.save()
+        try read { db in
+            let totalSql = "SELECT COUNT(*) AS count FROM messages WHERE is_top_level_message = 1;"
+            let unreadSql = "SELECT COUNT(*) AS count FROM messages WHERE is_top_level_message = 1 AND is_read = 0;"
+            let total = try Int.fetchOne(db, sql: totalSql) ?? 0
+            let unread = try Int.fetchOne(db, sql: unreadSql) ?? 0
+            return (total: total, unread: unread)
         }
-        return (total: preparation.stats.totalCount, unread: preparation.stats.unreadCount)
     }
 
     func messageChannelCounts() async throws -> [MessageChannelCount] {
-        let modelContext = ModelContext(modelContainer)
-        _ = try ensureStatsReady(modelContext)
-        let stored = try modelContext.fetch(FetchDescriptor<StoredMessageChannelStats>())
-        if modelContext.hasChanges {
-            try modelContext.save()
-        }
-        return stored.map { item in
-            MessageChannelCount(
-                channel: item.channelKey.isEmpty ? nil : item.channelKey,
-                totalCount: item.totalCount,
-                unreadCount: item.unreadCount,
-                latestReceivedAt: item.latestReceivedAt,
-                latestUnreadAt: item.latestUnreadAt,
-            )
+        try read { db in
+            let sql = """
+                SELECT
+                    CASE
+                        WHEN channel IS NULL OR trim(channel) = '' THEN NULL
+                        ELSE channel
+                    END AS channel_key,
+                    COUNT(*) AS total_count,
+                    SUM(CASE WHEN is_read = 0 THEN 1 ELSE 0 END) AS unread_count,
+                    MAX(received_at) AS latest_received_at,
+                    MAX(CASE WHEN is_read = 0 THEN received_at ELSE NULL END) AS latest_unread_at
+                FROM messages
+                WHERE is_top_level_message = 1
+                GROUP BY channel_key
+                ORDER BY latest_received_at DESC;
+                """
+            return try Row.fetchAll(db, sql: sql).map { row in
+                let channel: String? = row["channel_key"]
+                let totalCount: Int = row["total_count"]
+                let unreadCount: Int = row["unread_count"]
+                let latestReceivedAtEpoch: Double? = row["latest_received_at"]
+                let latestUnreadAtEpoch: Double? = row["latest_unread_at"]
+                return MessageChannelCount(
+                    channel: channel,
+                    totalCount: totalCount,
+                    unreadCount: unreadCount,
+                    latestReceivedAt: latestReceivedAtEpoch.map { Date(timeIntervalSince1970: $0) },
+                    latestUnreadAt: latestUnreadAtEpoch.map { Date(timeIntervalSince1970: $0) }
+                )
+            }
         }
     }
 
     func searchMessagesCount(query: String) async throws -> Int {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return 0 }
-        let modelContext = ModelContext(modelContainer)
-        let predicate = buildSearchPredicate(query: trimmed, cursor: nil)
-        return try modelContext.fetchCount(FetchDescriptor<StoredPushMessage>(predicate: predicate))
+        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return 0 }
+        let messages = try await loadMessages()
+        return messages.filter { matchesSearchQuery($0, query: normalized) }.count
     }
 
-    func searchMessagesPage(query: String, before cursor: MessagePageCursor?, limit: Int) async throws -> [PushMessage] {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return [] }
-        let modelContext = ModelContext(modelContainer)
-        let predicate = buildSearchPredicate(query: trimmed, cursor: cursor)
-        var descriptor = FetchDescriptor<StoredPushMessage>(
-            predicate: predicate,
-            sortBy: [SortDescriptor(\.receivedAt, order: .reverse)],
-        )
-        descriptor.fetchLimit = max(0, limit)
-        let stored = try modelContext.fetch(descriptor)
-        return try stored.map { try $0.toDomain(decoder: decoder) }
+    func searchMessagesPage(
+        query: String,
+        before cursor: MessagePageCursor?,
+        limit: Int
+    ) async throws -> [PushMessage] {
+        guard limit > 0 else { return [] }
+        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return [] }
+        let allMessages = try await loadMessages()
+        let filtered = allMessages.filter { matchesSearchQuery($0, query: normalized) }
+        let paged: [PushMessage]
+        if let cursor {
+            paged = filtered.filter {
+                $0.receivedAt < cursor.receivedAt
+                    || ($0.receivedAt == cursor.receivedAt && $0.id.uuidString < cursor.id.uuidString)
+            }
+        } else {
+            paged = filtered
+        }
+        return Array(paged.prefix(limit))
     }
 
     func searchMessageSummariesFallback(
         query: String,
         before cursor: MessagePageCursor?,
-        limit: Int,
+        limit: Int
     ) async throws -> [PushMessageSummary] {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return [] }
-        let modelContext = ModelContext(modelContainer)
-        let predicate = buildSearchPredicate(query: trimmed, cursor: cursor)
-        var descriptor = FetchDescriptor<StoredPushMessage>(
-            predicate: predicate,
-            sortBy: [SortDescriptor(\.receivedAt, order: .reverse)],
-        )
-        descriptor.fetchLimit = max(0, limit)
-        let stored = try modelContext.fetch(descriptor)
-        let summaries = stored.map { $0.toSummary() }
-        if modelContext.hasChanges {
-            try modelContext.save()
-        }
-        return summaries
-    }
-
-    func saveMessages(_ messages: [PushMessage]) async throws {
-        try await deleteAllMessages()
-        guard !messages.isEmpty else { return }
-
-        let modelContext = ModelContext(modelContainer)
-        let batchSize = 500
-        var index = 0
-        while index < messages.count {
-            let upper = min(messages.count, index + batchSize)
-            let slice = messages[index..<upper]
-            for message in slice {
-                try modelContext.insert(StoredPushMessage(from: message, encoder: encoder))
-            }
-            if modelContext.hasChanges {
-                try modelContext.save()
-            }
-            index = upper
-        }
-
-        _ = try rebuildStats(modelContext)
-
-        if modelContext.hasChanges {
-            try modelContext.save()
-        }
+        try await searchMessagesPage(query: query, before: cursor, limit: limit)
+            .map(PushMessageSummary.init(message:))
     }
 
     func setMessageReadState(id: UUID, isRead: Bool) async throws {
-        let modelContext = ModelContext(modelContainer)
-        try setMessageReadState(id: id, isRead: isRead, in: modelContext)
-    }
-
-    fileprivate func setMessageReadState(
-        id: UUID,
-        isRead: Bool,
-        in modelContext: ModelContext
-    ) throws {
-        let descriptor = FetchDescriptor<StoredPushMessage>(predicate: #Predicate { $0.id == id })
-        guard let stored = try modelContext.fetch(descriptor).first else { return }
-        let snapshot = StoredMessageSnapshot(
-            channelKey: normalizeChannelKey(stored.channel),
-            isRead: stored.isRead,
-            receivedAt: stored.receivedAt
-        )
-        stored.isRead = isRead
-        try updateStatsForReadChange(
-            snapshot: snapshot,
-            newIsRead: isRead,
-            modelContext: modelContext
-        )
-        if modelContext.hasChanges {
-            try modelContext.save()
+        try write { db in
+            let sql = """
+                UPDATE messages
+                SET is_read = \(isRead ? 1 : 0)
+                WHERE id = \(Self.sqlQuoted(id.uuidString));
+                """
+            try db.execute(sql: sql)
         }
     }
 
@@ -1780,114 +4286,141 @@ private final class SwiftDataStore {
         filter: MessageQueryFilter,
         channel: String?
     ) async throws -> Int {
-        let modelContext = ModelContext(modelContainer)
-        let batchSize = 500
-        var changed = 0
-        var touchedChannels = Set<String>()
+        try write { db in
+            let unreadCondition = unreadPredicateCondition(filter: filter, channel: channel)
+            guard unreadCondition != "0" else { return 0 }
 
-        while true {
-            var descriptor = FetchDescriptor<StoredPushMessage>(
-                predicate: buildUnreadMessagesPredicate(filter: filter, channel: channel),
-                sortBy: [SortDescriptor(\.receivedAt, order: .forward)],
-            )
-            descriptor.fetchLimit = batchSize
-            let matches = try modelContext.fetch(descriptor)
-            guard !matches.isEmpty else { break }
-
-            for stored in matches {
-                stored.isRead = true
-                changed += 1
-                touchedChannels.insert(normalizeChannelKey(stored.channel))
+            let idsSQL = "SELECT id FROM messages WHERE is_top_level_message = 1 AND \(unreadCondition);"
+            let ids = try Row.fetchAll(db, sql: idsSQL).compactMap { row -> String? in
+                let id: String? = row["id"]
+                return id
             }
+            guard !ids.isEmpty else { return 0 }
 
-            if modelContext.hasChanges {
-                try modelContext.save()
-            }
+            let joined = ids.map(Self.sqlQuoted).joined(separator: ",")
+            try db.execute(sql: "UPDATE messages SET is_read = 1 WHERE id IN (\(joined));")
+            return ids.count
         }
-
-        guard changed > 0 else { return 0 }
-        let statsContext = ModelContext(modelContainer)
-        try updateStatsForBulkReadChange(
-            readCount: changed,
-            channelKeys: touchedChannels,
-            modelContext: statsContext
-        )
-        if statsContext.hasChanges {
-            try statsContext.save()
-        }
-        return changed
     }
 
     func deleteMessage(id: UUID) async throws {
-        let modelContext = ModelContext(modelContainer)
-        try deleteMessage(id: id, in: modelContext)
-    }
-
-    fileprivate func deleteMessage(id: UUID, in modelContext: ModelContext) throws {
-        let descriptor = FetchDescriptor<StoredPushMessage>(predicate: #Predicate { $0.id == id })
-        let matches = try modelContext.fetch(descriptor)
-        for stored in matches {
-            let snapshot = StoredMessageSnapshot(
-                channelKey: normalizeChannelKey(stored.channel),
-                isRead: stored.isRead,
-                receivedAt: stored.receivedAt
-            )
-            modelContext.delete(stored)
-            try updateStatsForDelete(snapshot: snapshot, modelContext: modelContext)
-        }
-        if modelContext.hasChanges {
-            try modelContext.save()
+        try write { db in
+            try db.execute(sql: "DELETE FROM messages WHERE id = \(Self.sqlQuoted(id.uuidString));")
         }
     }
 
     func deleteMessage(notificationRequestId: String) async throws {
-        let modelContext = ModelContext(modelContainer)
-        try deleteMessage(notificationRequestId: notificationRequestId, in: modelContext)
-    }
-
-    fileprivate func deleteMessage(
-        notificationRequestId: String,
-        in modelContext: ModelContext
-    ) throws {
-        let descriptor = FetchDescriptor<StoredPushMessage>(
-            predicate: #Predicate { $0.notificationRequestId == notificationRequestId },
-        )
-        let matches = try modelContext.fetch(descriptor)
-        for stored in matches {
-            let snapshot = StoredMessageSnapshot(
-                channelKey: normalizeChannelKey(stored.channel),
-                isRead: stored.isRead,
-                receivedAt: stored.receivedAt
-            )
-            modelContext.delete(stored)
-            try updateStatsForDelete(snapshot: snapshot, modelContext: modelContext)
-        }
-        if modelContext.hasChanges {
-            try modelContext.save()
+        let normalized = notificationRequestId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return }
+        try write { db in
+            try db.execute(sql: "DELETE FROM messages WHERE notification_request_id = \(Self.sqlQuoted(normalized));")
         }
     }
 
     func deleteAllMessages() async throws {
-        let modelContext = ModelContext(modelContainer)
-        let batchSize = 500
-        while true {
-            var descriptor = FetchDescriptor<StoredPushMessage>(
-                sortBy: [SortDescriptor(\.receivedAt, order: .forward)]
-            )
-            descriptor.fetchLimit = batchSize
-            let existing = try modelContext.fetch(descriptor)
-            guard !existing.isEmpty else { break }
-            existing.forEach { modelContext.delete($0) }
-            if modelContext.hasChanges {
-                try modelContext.save()
-            }
+        try write { db in
+            try db.execute(sql: "DELETE FROM messages;")
         }
-        let stats = try modelContext.fetch(FetchDescriptor<StoredMessageStats>())
-        stats.forEach { modelContext.delete($0) }
-        let groups = try modelContext.fetch(FetchDescriptor<StoredMessageChannelStats>())
-        groups.forEach { modelContext.delete($0) }
-        if modelContext.hasChanges {
-            try modelContext.save()
+    }
+
+    func deleteAllEntityRecords() async throws {
+        try write { db in
+            try db.execute(sql: "DELETE FROM messages WHERE is_top_level_message = 0 OR entity_type <> 'message';")
+            try db.execute(sql: "DELETE FROM operation_ledger;")
+        }
+    }
+
+    func deleteEventRecords(eventId: String) async throws -> Int {
+        let normalized = eventId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return 0 }
+        return try write { db in
+            let idsSQL = """
+                SELECT id
+                FROM messages
+                WHERE event_id = \(Self.sqlQuoted(normalized))
+                  AND (entity_type = 'event' OR entity_type = 'message');
+                """
+            let ids = try Row.fetchAll(db, sql: idsSQL).compactMap { row -> String? in
+                let id: String? = row["id"]
+                return id
+            }
+            guard !ids.isEmpty else { return 0 }
+            let joined = ids.map(Self.sqlQuoted).joined(separator: ",")
+            try db.execute(sql: "DELETE FROM messages WHERE id IN (\(joined));")
+            return ids.count
+        }
+    }
+
+    func deleteEventRecords(channel: String?) async throws -> Int {
+        let normalized = channel?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return try write { db in
+            let channelCondition: String
+            if let normalized, !normalized.isEmpty {
+                channelCondition = "channel = \(Self.sqlQuoted(normalized))"
+            } else {
+                channelCondition = "1"
+            }
+            let idsSQL = """
+                SELECT id
+                FROM messages
+                WHERE entity_type = 'event'
+                  AND \(channelCondition);
+                """
+            let ids = try Row.fetchAll(db, sql: idsSQL).compactMap { row -> String? in
+                let id: String? = row["id"]
+                return id
+            }
+            guard !ids.isEmpty else { return 0 }
+            let joined = ids.map(Self.sqlQuoted).joined(separator: ",")
+            try db.execute(sql: "DELETE FROM messages WHERE id IN (\(joined));")
+            return ids.count
+        }
+    }
+
+    func deleteThingRecords(thingId: String) async throws -> Int {
+        let normalized = thingId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return 0 }
+        return try write { db in
+            let idsSQL = """
+                SELECT id
+                FROM messages
+                WHERE thing_id = \(Self.sqlQuoted(normalized))
+                   OR (entity_type = 'thing' AND entity_id = \(Self.sqlQuoted(normalized)));
+                """
+            let ids = try Row.fetchAll(db, sql: idsSQL).compactMap { row -> String? in
+                let id: String? = row["id"]
+                return id
+            }
+            guard !ids.isEmpty else { return 0 }
+            let joined = ids.map(Self.sqlQuoted).joined(separator: ",")
+            try db.execute(sql: "DELETE FROM messages WHERE id IN (\(joined));")
+            return ids.count
+        }
+    }
+
+    func deleteThingRecords(channel: String?) async throws -> Int {
+        let normalized = channel?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return try write { db in
+            let channelCondition: String
+            if let normalized, !normalized.isEmpty {
+                channelCondition = "channel = \(Self.sqlQuoted(normalized))"
+            } else {
+                channelCondition = "1"
+            }
+            let idsSQL = """
+                SELECT id
+                FROM messages
+                WHERE ((thing_id IS NOT NULL AND trim(thing_id) <> '') OR entity_type = 'thing')
+                  AND \(channelCondition);
+                """
+            let ids = try Row.fetchAll(db, sql: idsSQL).compactMap { row -> String? in
+                let id: String? = row["id"]
+                return id
+            }
+            guard !ids.isEmpty else { return 0 }
+            let joined = ids.map(Self.sqlQuoted).joined(separator: ",")
+            try db.execute(sql: "DELETE FROM messages WHERE id IN (\(joined));")
+            return ids.count
         }
     }
 
@@ -1895,895 +4428,155 @@ private final class SwiftDataStore {
         readState: Bool?,
         before cutoff: Date?
     ) async throws -> [UUID] {
-        let modelContext = ModelContext(modelContainer)
-        let batchSize = 500
-        var deletedIds: [UUID] = []
-        var removedTotal = 0
-        var removedUnread = 0
-        var touchedChannels = Set<String>()
-
-        while true {
-            var descriptor = FetchDescriptor<StoredPushMessage>(
-                predicate: buildDeletePredicate(readState: readState, before: cutoff),
-                sortBy: [SortDescriptor(\.receivedAt, order: .forward)]
-            )
-            descriptor.fetchLimit = batchSize
-            let matches = try modelContext.fetch(descriptor)
-            guard !matches.isEmpty else { break }
-
-            for stored in matches {
-                deletedIds.append(stored.id)
-                removedTotal += 1
-                if !stored.isRead {
-                    removedUnread += 1
-                }
-                touchedChannels.insert(normalizeChannelKey(stored.channel))
-                modelContext.delete(stored)
+        try write { db in
+            var conditions: [String] = ["is_top_level_message = 1"]
+            if let readState {
+                conditions.append("is_read = \(readState ? 1 : 0)")
             }
-
-            if modelContext.hasChanges {
-                try modelContext.save()
+            if let cutoff {
+                conditions.append("received_at < \(cutoff.timeIntervalSince1970)")
             }
+            let whereClause = conditions.joined(separator: " AND ")
+            let idsSQL = "SELECT id FROM messages WHERE \(whereClause);"
+            let ids = try Row.fetchAll(db, sql: idsSQL).compactMap { row -> UUID? in
+                let raw: String? = row["id"]
+                return raw.flatMap(UUID.init(uuidString:))
+            }
+            guard !ids.isEmpty else { return [] }
+            let joined = ids.map { Self.sqlQuoted($0.uuidString) }.joined(separator: ",")
+            try db.execute(sql: "DELETE FROM messages WHERE id IN (\(joined));")
+            return ids
         }
-
-        guard !deletedIds.isEmpty else { return [] }
-        let statsContext = ModelContext(modelContainer)
-        try updateStatsForBulkDelete(
-            totalRemoved: removedTotal,
-            unreadRemoved: removedUnread,
-            channelKeys: touchedChannels,
-            modelContext: statsContext
-        )
-        if statsContext.hasChanges {
-            try statsContext.save()
-        }
-        return deletedIds
     }
 
     func deleteMessages(channel: String) async throws -> [UUID] {
-        let modelContext = ModelContext(modelContainer)
-        let batchSize = 500
-        var deletedIds: [UUID] = []
-        var removedTotal = 0
-        var removedUnread = 0
-        var touchedChannels = Set<String>()
-
-        while true {
-            var descriptor = FetchDescriptor<StoredPushMessage>(
-                predicate: #Predicate { $0.channel == channel },
-                sortBy: [SortDescriptor(\.receivedAt, order: .forward)]
-            )
-            descriptor.fetchLimit = batchSize
-            let matches = try modelContext.fetch(descriptor)
-            guard !matches.isEmpty else { break }
-
-            for stored in matches {
-                deletedIds.append(stored.id)
-                removedTotal += 1
-                if !stored.isRead {
-                    removedUnread += 1
-                }
-                touchedChannels.insert(normalizeChannelKey(stored.channel))
-                modelContext.delete(stored)
-            }
-
-            if modelContext.hasChanges {
-                try modelContext.save()
-            }
-        }
-
-        guard !deletedIds.isEmpty else { return [] }
-        let statsContext = ModelContext(modelContainer)
-        try updateStatsForBulkDelete(
-            totalRemoved: removedTotal,
-            unreadRemoved: removedUnread,
-            channelKeys: touchedChannels,
-            modelContext: statsContext
-        )
-        if statsContext.hasChanges {
-            try statsContext.save()
-        }
-        return deletedIds
+        let normalized = channel.trimmingCharacters(in: .whitespacesAndNewlines)
+        return try await deleteMessages(channel: normalized.isEmpty ? nil : normalized, readState: nil)
     }
 
     func deleteMessages(channel: String?, readState: Bool?) async throws -> [UUID] {
-        let modelContext = ModelContext(modelContainer)
-        let batchSize = 500
-        var deletedIds: [UUID] = []
-        var removedTotal = 0
-        var removedUnread = 0
-        var touchedChannels = Set<String>()
-
-        while true {
-            var descriptor = FetchDescriptor<StoredPushMessage>(
-                predicate: buildDeletePredicate(channel: channel, readState: readState),
-                sortBy: [SortDescriptor(\.receivedAt, order: .forward)]
-            )
-            descriptor.fetchLimit = batchSize
-            let matches = try modelContext.fetch(descriptor)
-            guard !matches.isEmpty else { break }
-
-            for stored in matches {
-                deletedIds.append(stored.id)
-                removedTotal += 1
-                if !stored.isRead {
-                    removedUnread += 1
+        try write { db in
+            var conditions: [String] = ["is_top_level_message = 1"]
+            if let readState {
+                conditions.append("is_read = \(readState ? 1 : 0)")
+            }
+            if let channel {
+                let normalized = channel.trimmingCharacters(in: .whitespacesAndNewlines)
+                if normalized.isEmpty {
+                    conditions.append("(channel IS NULL OR trim(channel) = '')")
+                } else {
+                    conditions.append("channel = \(Self.sqlQuoted(normalized))")
                 }
-                touchedChannels.insert(normalizeChannelKey(stored.channel))
-                modelContext.delete(stored)
             }
-
-            if modelContext.hasChanges {
-                try modelContext.save()
+            let whereClause = conditions.joined(separator: " AND ")
+            let idsSQL = "SELECT id FROM messages WHERE \(whereClause);"
+            let ids = try Row.fetchAll(db, sql: idsSQL).compactMap { row -> UUID? in
+                let raw: String? = row["id"]
+                return raw.flatMap(UUID.init(uuidString:))
             }
+            guard !ids.isEmpty else { return [] }
+            let joined = ids.map { Self.sqlQuoted($0.uuidString) }.joined(separator: ",")
+            try db.execute(sql: "DELETE FROM messages WHERE id IN (\(joined));")
+            return ids
         }
-
-        guard !deletedIds.isEmpty else { return [] }
-        let statsContext = ModelContext(modelContainer)
-        try updateStatsForBulkDelete(
-            totalRemoved: removedTotal,
-            unreadRemoved: removedUnread,
-            channelKeys: touchedChannels,
-            modelContext: statsContext
-        )
-        if statsContext.hasChanges {
-            try statsContext.save()
-        }
-        return deletedIds
     }
 
     func loadOldestReadMessages(
         limit: Int,
         excludingChannels: [String]
     ) async throws -> [PushMessage] {
-        let modelContext = ModelContext(modelContainer)
-        let trimmedExclusions = excludingChannels
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        let predicate: Predicate<StoredPushMessage>
-        if trimmedExclusions.isEmpty {
-            predicate = #Predicate { $0.isRead }
-        } else {
-            predicate = #Predicate { $0.isRead && !trimmedExclusions.contains($0.channel ?? "") }
+        guard limit > 0 else { return [] }
+        return try read { db in
+            var conditions: [String] = [
+                "is_top_level_message = 1",
+                "is_read = 1",
+            ]
+            let normalizedExcluded = excludingChannels
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            if !normalizedExcluded.isEmpty {
+                let inClause = normalizedExcluded.map(Self.sqlQuoted).joined(separator: ",")
+                conditions.append("(channel IS NULL OR channel NOT IN (\(inClause)))")
+            }
+            let whereClause = conditions.joined(separator: " AND ")
+            let records = try fetchMessageRecords(
+                db: db,
+                where: conditions,
+                orderBy: "received_at ASC, id ASC",
+                limit: limit
+            )
+            _ = whereClause
+            return records.map { $0.toPushMessage(decoder: decoder) }
         }
-        var descriptor = FetchDescriptor<StoredPushMessage>(
-            predicate: predicate,
-            sortBy: [SortDescriptor(\.receivedAt, order: .forward)]
-        )
-        descriptor.fetchLimit = limit
-        let matches = try modelContext.fetch(descriptor)
-        guard !matches.isEmpty else { return [] }
-        return try matches.map { try $0.toDomain(decoder: decoder) }
     }
 
     func deleteOldestReadMessages(
         limit: Int,
         excludingChannels: [String]
     ) async throws -> [UUID] {
-        let modelContext = ModelContext(modelContainer)
-        let trimmedExclusions = excludingChannels
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        let predicate: Predicate<StoredPushMessage>
-        if trimmedExclusions.isEmpty {
-            predicate = #Predicate { $0.isRead }
-        } else {
-            predicate = #Predicate { $0.isRead && !trimmedExclusions.contains($0.channel ?? "") }
+        let messages = try await loadOldestReadMessages(limit: limit, excludingChannels: excludingChannels)
+        let ids = messages.map(\.id)
+        guard !ids.isEmpty else { return [] }
+        try write { db in
+            let joined = ids.map { Self.sqlQuoted($0.uuidString) }.joined(separator: ",")
+            try db.execute(sql: "DELETE FROM messages WHERE id IN (\(joined));")
         }
-        var descriptor = FetchDescriptor<StoredPushMessage>(
-            predicate: predicate,
-            sortBy: [SortDescriptor(\.receivedAt, order: .forward)]
-        )
-        descriptor.fetchLimit = limit
-        let matches = try modelContext.fetch(descriptor)
-        guard !matches.isEmpty else { return [] }
-
-        var deletedIds: [UUID] = []
-        deletedIds.reserveCapacity(matches.count)
-        var removedTotal = 0
-        var removedUnread = 0
-        var touchedChannels = Set<String>()
-
-        for stored in matches {
-            deletedIds.append(stored.id)
-            removedTotal += 1
-            if !stored.isRead {
-                removedUnread += 1
-            }
-            touchedChannels.insert(normalizeChannelKey(stored.channel))
-            modelContext.delete(stored)
-        }
-
-        if modelContext.hasChanges {
-            try modelContext.save()
-        }
-
-        let statsContext = ModelContext(modelContainer)
-        try updateStatsForBulkDelete(
-            totalRemoved: removedTotal,
-            unreadRemoved: removedUnread,
-            channelKeys: touchedChannels,
-            modelContext: statsContext
-        )
-        if statsContext.hasChanges {
-            try statsContext.save()
-        }
-        return deletedIds
+        return ids
     }
 
-    func loadPruneCandidates(
-        maxCount: Int,
-        batchSize: Int
-    ) async throws -> [PushMessage] {
-        let modelContext = ModelContext(modelContainer)
-        let total = try modelContext.fetchCount(FetchDescriptor<StoredPushMessage>())
-        let overflow = total - maxCount
-        guard overflow > 0 else { return [] }
-
-        var descriptor = FetchDescriptor<StoredPushMessage>(
-            sortBy: [SortDescriptor(\.receivedAt, order: .forward)]
-        )
-        descriptor.fetchLimit = min(overflow, batchSize)
-        let matches = try modelContext.fetch(descriptor)
-        guard !matches.isEmpty else { return [] }
-        return try matches.map { try $0.toDomain(decoder: decoder) }
-    }
-
-    func pruneMessagesIfNeeded(
-        maxCount: Int,
-        batchSize: Int
-    ) async throws -> [UUID] {
-        let modelContext = ModelContext(modelContainer)
-        let total = try modelContext.fetchCount(FetchDescriptor<StoredPushMessage>())
-        let overflow = total - maxCount
-        guard overflow > 0 else { return [] }
-
-        var descriptor = FetchDescriptor<StoredPushMessage>(
-            sortBy: [SortDescriptor(\.receivedAt, order: .forward)]
-        )
-        descriptor.fetchLimit = min(overflow, batchSize)
-        let toDelete = try modelContext.fetch(descriptor)
-        guard !toDelete.isEmpty else { return [] }
-
-        var deletedIds: [UUID] = []
-        deletedIds.reserveCapacity(toDelete.count)
-
-        for stored in toDelete {
-            let snapshot = StoredMessageSnapshot(
-                channelKey: normalizeChannelKey(stored.channel),
-                isRead: stored.isRead,
-                receivedAt: stored.receivedAt
-            )
-            deletedIds.append(stored.id)
-            modelContext.delete(stored)
-            try updateStatsForDelete(snapshot: snapshot, modelContext: modelContext)
-        }
-
-        if modelContext.hasChanges {
-            try modelContext.save()
-        }
-
-        return deletedIds
-    }
-
-    private struct StoredMessageSnapshot {
-        let channelKey: String
-        let isRead: Bool
-        let receivedAt: Date
-    }
-
-    private struct StatsPreparation {
-        let stats: StoredMessageStats
-        let didRebuild: Bool
-    }
-
-    private struct StatsSample {
-        let channel: String?
-        let isRead: Bool
-        let receivedAt: Date
-    }
-
-    private struct ChannelAccumulator {
-        var totalCount: Int = 0
-        var unreadCount: Int = 0
-        var latestReceivedAt: Date?
-        var latestUnreadAt: Date?
-    }
-
-    private func fetchStoredMessagesPage(
-        modelContext: ModelContext? = nil,
-        before cursor: MessagePageCursor?,
-        limit: Int,
-    ) throws -> [StoredPushMessage] {
-        let context = modelContext ?? ModelContext(modelContainer)
-        let cutoff = cursor?.receivedAt ?? Date.distantFuture
-        var descriptor = FetchDescriptor<StoredPushMessage>(
-            predicate: #Predicate { $0.receivedAt < cutoff },
-            sortBy: [SortDescriptor(\.receivedAt, order: .reverse)],
-        )
-        descriptor.fetchLimit = max(0, limit)
-        return try context.fetch(descriptor)
-    }
-
-    private func buildMessagesPagePredicate(
-        cursor: MessagePageCursor?,
-        filter: MessageQueryFilter,
-        channel: String?,
-    ) -> Predicate<StoredPushMessage> {
-        let cutoff = cursor?.receivedAt ?? Date.distantFuture
-        enum ChannelFilter {
-            case none
-            case ungrouped
-            case named(String)
-        }
-
-        let channelFilter: ChannelFilter = {
-            guard let channel else { return .none }
-            let trimmed = channel.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? .ungrouped : .named(trimmed)
-        }()
-
-        switch (filter, channelFilter) {
-        case (.all, .none):
-            return #Predicate<StoredPushMessage> { $0.receivedAt < cutoff }
-        case (.all, .ungrouped):
-            return #Predicate<StoredPushMessage> { $0.receivedAt < cutoff && ($0.channel == nil || $0.channel == "") }
-        case let (.all, .named(channelId)):
-            return #Predicate<StoredPushMessage> { $0.receivedAt < cutoff && $0.channel == channelId }
-        case (.unreadOnly, .none):
-            return #Predicate<StoredPushMessage> { $0.receivedAt < cutoff && !$0.isRead }
-        case (.unreadOnly, .ungrouped):
-            return #Predicate<StoredPushMessage> { $0.receivedAt < cutoff && !$0.isRead && ($0.channel == nil || $0.channel == "") }
-        case let (.unreadOnly, .named(channelId)):
-            return #Predicate<StoredPushMessage> { $0.receivedAt < cutoff && !$0.isRead && $0.channel == channelId }
-        case (.readOnly, .none):
-            return #Predicate<StoredPushMessage> { $0.receivedAt < cutoff && $0.isRead }
-        case (.readOnly, .ungrouped):
-            return #Predicate<StoredPushMessage> { $0.receivedAt < cutoff && $0.isRead && ($0.channel == nil || $0.channel == "") }
-        case let (.readOnly, .named(channelId)):
-            return #Predicate<StoredPushMessage> { $0.receivedAt < cutoff && $0.isRead && $0.channel == channelId }
-        case (.withURLOnly, .none):
-            return #Predicate<StoredPushMessage> { $0.receivedAt < cutoff && $0.url != nil }
-        case (.withURLOnly, .ungrouped):
-            return #Predicate<StoredPushMessage> { $0.receivedAt < cutoff && $0.url != nil && ($0.channel == nil || $0.channel == "") }
-        case let (.withURLOnly, .named(channelId)):
-            return #Predicate<StoredPushMessage> { $0.receivedAt < cutoff && $0.url != nil && $0.channel == channelId }
-        case let (.byServer(messageId), .none):
-            return #Predicate<StoredPushMessage> { $0.receivedAt < cutoff && $0.messageId == messageId }
-        case let (.byServer(messageId), .ungrouped):
-            return #Predicate<StoredPushMessage> { $0.receivedAt < cutoff && $0.messageId == messageId && ($0.channel == nil || $0.channel == "") }
-        case let (.byServer(messageId), .named(channelId)):
-            return #Predicate<StoredPushMessage> { $0.receivedAt < cutoff && $0.messageId == messageId && $0.channel == channelId }
-        }
-    }
-
-    private func buildSearchPredicate(
-        query: String,
-        cursor: MessagePageCursor?,
-    ) -> Predicate<StoredPushMessage> {
-        let cutoff = cursor?.receivedAt ?? Date.distantFuture
-        return #Predicate<StoredPushMessage> { message in
-            message.receivedAt < cutoff &&
-                (message.title.localizedStandardContains(query) ||
-                    message.resolvedBodyText.localizedStandardContains(query) ||
-                    (message.channel?.localizedStandardContains(query) == true))
-        }
-    }
-
-    private func buildUnreadMessagesPredicate(
-        filter: MessageQueryFilter,
-        channel: String?
-    ) -> Predicate<StoredPushMessage> {
-        enum ChannelFilter {
-            case none
-            case ungrouped
-            case named(String)
-        }
-
-        let channelFilter: ChannelFilter = {
-            guard let channel else { return .none }
-            let trimmed = channel.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? .ungrouped : .named(trimmed)
-        }()
-
-        switch (filter, channelFilter) {
-        case (.all, .none):
-            return #Predicate<StoredPushMessage> { !$0.isRead }
-        case (.all, .ungrouped):
-            return #Predicate<StoredPushMessage> { !$0.isRead && ($0.channel == nil || $0.channel == "") }
-        case let (.all, .named(channelId)):
-            return #Predicate<StoredPushMessage> { !$0.isRead && $0.channel == channelId }
-        case (.unreadOnly, .none):
-            return #Predicate<StoredPushMessage> { !$0.isRead }
-        case (.unreadOnly, .ungrouped):
-            return #Predicate<StoredPushMessage> { !$0.isRead && ($0.channel == nil || $0.channel == "") }
-        case let (.unreadOnly, .named(channelId)):
-            return #Predicate<StoredPushMessage> { !$0.isRead && $0.channel == channelId }
-        case (.readOnly, .none):
-            return #Predicate<StoredPushMessage> { _ in false }
-        case (.readOnly, .ungrouped):
-            return #Predicate<StoredPushMessage> { _ in false }
-        case (.readOnly, .named(_)):
-            return #Predicate<StoredPushMessage> { _ in false }
-        case (.withURLOnly, .none):
-            return #Predicate<StoredPushMessage> { !$0.isRead && $0.url != nil }
-        case (.withURLOnly, .ungrouped):
-            return #Predicate<StoredPushMessage> { !$0.isRead && $0.url != nil && ($0.channel == nil || $0.channel == "") }
-        case let (.withURLOnly, .named(channelId)):
-            return #Predicate<StoredPushMessage> { !$0.isRead && $0.url != nil && $0.channel == channelId }
-        case let (.byServer(messageId), .none):
-            return #Predicate<StoredPushMessage> { !$0.isRead && $0.messageId == messageId }
-        case let (.byServer(messageId), .ungrouped):
-            return #Predicate<StoredPushMessage> {
-                !$0.isRead && $0.messageId == messageId && ($0.channel == nil || $0.channel == "")
-            }
-        case let (.byServer(messageId), .named(channelId)):
-            return #Predicate<StoredPushMessage> { !$0.isRead && $0.messageId == messageId && $0.channel == channelId }
-        }
-    }
-
-    private func buildDeletePredicate(
-        readState: Bool?,
-        before cutoff: Date?
-    ) -> Predicate<StoredPushMessage>? {
-        switch (readState, cutoff) {
-        case (nil, nil):
-            return nil
-        case let (state?, nil):
-            return #Predicate<StoredPushMessage> { $0.isRead == state }
-        case (nil, let date?):
-            return #Predicate<StoredPushMessage> { $0.receivedAt < date }
-        case let (state?, date?):
-            return #Predicate<StoredPushMessage> { $0.isRead == state && $0.receivedAt < date }
-        }
-    }
-
-    private func buildDeletePredicate(
-        channel: String?,
-        readState: Bool?
-    ) -> Predicate<StoredPushMessage>? {
-        let trimmed = channel?.trimmingCharacters(in: .whitespacesAndNewlines)
-        switch (trimmed, readState) {
-        case (nil, nil):
-            return nil
-        case let (value?, nil) where value.isEmpty:
-            return #Predicate<StoredPushMessage> { $0.channel == nil || $0.channel == "" }
-        case let (value?, nil):
-            return #Predicate<StoredPushMessage> { $0.channel == value }
-        case (nil, let state?):
-            return #Predicate<StoredPushMessage> { $0.isRead == state }
-        case let (value?, state?) where value.isEmpty:
-            return #Predicate<StoredPushMessage> { $0.isRead == state && ($0.channel == nil || $0.channel == "") }
-        case let (value?, state?):
-            return #Predicate<StoredPushMessage> { $0.isRead == state && $0.channel == value }
-        }
-    }
-
-    private func normalizeChannelKey(_ channel: String?) -> String {
-        (channel ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func ensureStatsReady(_ modelContext: ModelContext) throws -> StatsPreparation {
-        if let stats = try modelContext.fetch(FetchDescriptor<StoredMessageStats>()).first {
-            return StatsPreparation(stats: stats, didRebuild: false)
-        }
-        let total = try modelContext.fetchCount(FetchDescriptor<StoredPushMessage>())
-        if total == 0 {
-            let stats = StoredMessageStats(totalCount: 0, unreadCount: 0)
-            modelContext.insert(stats)
-            return StatsPreparation(stats: stats, didRebuild: false)
-        }
-        let rebuilt = try rebuildStats(modelContext)
-        return StatsPreparation(stats: rebuilt, didRebuild: true)
-    }
-
-    private func rebuildStats(_ modelContext: ModelContext) throws -> StoredMessageStats {
-        let pageSize = 1000
-        var cursor: MessagePageCursor?
-        var accumulators: [String: ChannelAccumulator] = [:]
-        var hasMore = true
-        var total = 0
-        var unread = 0
-
-        while hasMore {
-            let page = try fetchStoredMessagesPage(
-                modelContext: modelContext,
-                before: cursor,
-                limit: pageSize
-            )
-            if page.isEmpty { break }
-            for message in page {
-                total += 1
-                if !message.isRead {
-                    unread += 1
-                }
-                let channelKey = normalizeChannelKey(message.channel)
-                var stats = accumulators[channelKey] ?? ChannelAccumulator()
-                stats.totalCount += 1
-                if !message.isRead {
-                    stats.unreadCount += 1
-                }
-                if let latest = stats.latestReceivedAt {
-                    if message.receivedAt > latest { stats.latestReceivedAt = message.receivedAt }
-                } else {
-                    stats.latestReceivedAt = message.receivedAt
-                }
-                if !message.isRead {
-                    if let latestUnread = stats.latestUnreadAt {
-                        if message.receivedAt > latestUnread { stats.latestUnreadAt = message.receivedAt }
-                    } else {
-                        stats.latestUnreadAt = message.receivedAt
-                    }
-                }
-                accumulators[channelKey] = stats
-            }
-            cursor = page.last.map { MessagePageCursor(receivedAt: $0.receivedAt) }
-            hasMore = page.count == pageSize
-        }
-
-        let existingStats = try modelContext.fetch(FetchDescriptor<StoredMessageStats>())
-        existingStats.forEach { modelContext.delete($0) }
-        let existingGroups = try modelContext.fetch(FetchDescriptor<StoredMessageChannelStats>())
-        existingGroups.forEach { modelContext.delete($0) }
-
-        let stats = StoredMessageStats(totalCount: total, unreadCount: unread)
-        modelContext.insert(stats)
-        for (channelKey, channelStats) in accumulators where channelStats.totalCount > 0 {
-            modelContext.insert(
-                StoredMessageChannelStats(
-                    channelKey: channelKey,
-                    totalCount: channelStats.totalCount,
-                    unreadCount: channelStats.unreadCount,
-                    latestReceivedAt: channelStats.latestReceivedAt,
-                    latestUnreadAt: channelStats.latestUnreadAt
-                )
-            )
-        }
-        return stats
-    }
-
-    private func rebuildStatsProgressively(
-        pageSize: Int
-    ) async throws -> StoredMessageStats {
-        var cursor: MessagePageCursor?
-        var accumulators: [String: ChannelAccumulator] = [:]
-        var hasMore = true
-        var total = 0
-        var unread = 0
-
-        while hasMore {
-            let page = try fetchStatsSamplesPage(before: cursor, limit: pageSize)
-            if page.isEmpty { break }
-            for message in page {
-                total += 1
-                if !message.isRead {
-                    unread += 1
-                }
-                let channelKey = normalizeChannelKey(message.channel)
-                var stats = accumulators[channelKey] ?? ChannelAccumulator()
-                stats.totalCount += 1
-                if !message.isRead {
-                    stats.unreadCount += 1
-                }
-                if let latest = stats.latestReceivedAt {
-                    if message.receivedAt > latest { stats.latestReceivedAt = message.receivedAt }
-                } else {
-                    stats.latestReceivedAt = message.receivedAt
-                }
-                if !message.isRead {
-                    if let latestUnread = stats.latestUnreadAt {
-                        if message.receivedAt > latestUnread { stats.latestUnreadAt = message.receivedAt }
-                    } else {
-                        stats.latestUnreadAt = message.receivedAt
-                    }
-                }
-                accumulators[channelKey] = stats
-            }
-            cursor = page.last.map { MessagePageCursor(receivedAt: $0.receivedAt) }
-            hasMore = page.count == pageSize
-            if Task.isCancelled {
-                throw CancellationError()
-            }
-            await Task.yield()
-        }
-
-        return try persistStats(accumulators: accumulators, total: total, unread: unread)
-    }
-
-    private func fetchStatsSamplesPage(
-        before cursor: MessagePageCursor?,
-        limit: Int
-    ) throws -> [StatsSample] {
-        let modelContext = ModelContext(modelContainer)
-        let cutoff = cursor?.receivedAt ?? Date.distantFuture
-        var descriptor = FetchDescriptor<StoredPushMessage>(
-            predicate: #Predicate { $0.receivedAt < cutoff },
-            sortBy: [SortDescriptor(\.receivedAt, order: .reverse)],
-        )
-        descriptor.fetchLimit = max(0, limit)
-        let stored = try modelContext.fetch(descriptor)
-        return stored.map { message in
-            StatsSample(
-                channel: message.channel,
-                isRead: message.isRead,
-                receivedAt: message.receivedAt
+    func loadPruneCandidates(maxCount: Int, batchSize: Int) async throws -> [PushMessage] {
+        guard maxCount > 0, batchSize > 0 else { return [] }
+        let (total, _) = try await messageCounts()
+        guard total > maxCount else { return [] }
+        let removeCount = min(batchSize, total - maxCount)
+        return try read { db in
+            let conditions = ["is_top_level_message = 1"]
+            return try fetchMessages(
+                db: db,
+                where: conditions,
+                orderBy: "received_at ASC, id ASC",
+                limit: removeCount
             )
         }
     }
 
-    private func persistStats(
-        accumulators: [String: ChannelAccumulator],
-        total: Int,
-        unread: Int
-    ) throws -> StoredMessageStats {
-        let modelContext = ModelContext(modelContainer)
-        let existingStats = try modelContext.fetch(FetchDescriptor<StoredMessageStats>())
-        existingStats.forEach { modelContext.delete($0) }
-        let existingGroups = try modelContext.fetch(FetchDescriptor<StoredMessageChannelStats>())
-        existingGroups.forEach { modelContext.delete($0) }
-
-        let stats = StoredMessageStats(totalCount: total, unreadCount: unread)
-        modelContext.insert(stats)
-        for (channelKey, channelStats) in accumulators where channelStats.totalCount > 0 {
-            modelContext.insert(
-                StoredMessageChannelStats(
-                    channelKey: channelKey,
-                    totalCount: channelStats.totalCount,
-                    unreadCount: channelStats.unreadCount,
-                    latestReceivedAt: channelStats.latestReceivedAt,
-                    latestUnreadAt: channelStats.latestUnreadAt
-                )
-            )
+    func pruneMessagesIfNeeded(maxCount: Int, batchSize: Int) async throws -> [UUID] {
+        let candidates = try await loadPruneCandidates(maxCount: maxCount, batchSize: batchSize)
+        let ids = candidates.map(\.id)
+        guard !ids.isEmpty else { return [] }
+        try write { db in
+            let joined = ids.map { Self.sqlQuoted($0.uuidString) }.joined(separator: ",")
+            try db.execute(sql: "DELETE FROM messages WHERE id IN (\(joined));")
         }
-        if modelContext.hasChanges {
-            try modelContext.save()
-        }
-        return stats
+        return ids
     }
 
-    private func updateStatsForInsert(
-        message: PushMessage,
-        modelContext: ModelContext,
-    ) throws {
-        let preparation = try ensureStatsReady(modelContext)
-        if preparation.didRebuild { return }
-        let stats = preparation.stats
-        stats.totalCount += 1
-        if !message.isRead {
-            stats.unreadCount += 1
-        }
-        stats.updatedAt = Date()
-
-        let channelKey = normalizeChannelKey(message.channel)
-        if let channelStats = try fetchChannelStats(modelContext, channelKey: channelKey) {
-            channelStats.totalCount += 1
-            if !message.isRead {
-                channelStats.unreadCount += 1
-            }
-            if let latest = channelStats.latestReceivedAt {
-                if message.receivedAt > latest { channelStats.latestReceivedAt = message.receivedAt }
-            } else {
-                channelStats.latestReceivedAt = message.receivedAt
-            }
-            if !message.isRead {
-                if let latestUnread = channelStats.latestUnreadAt {
-                    if message.receivedAt > latestUnread { channelStats.latestUnreadAt = message.receivedAt }
-                } else {
-                    channelStats.latestUnreadAt = message.receivedAt
-                }
-            }
-        } else {
-            modelContext.insert(
-                StoredMessageChannelStats(
-                    channelKey: channelKey,
-                    totalCount: 1,
-                    unreadCount: message.isRead ? 0 : 1,
-                    latestReceivedAt: message.receivedAt,
-                    latestUnreadAt: message.isRead ? nil : message.receivedAt
-                )
-            )
-        }
-    }
-
-    private func updateStatsForUpdate(
-        snapshot: StoredMessageSnapshot,
-        newMessage: PushMessage,
-        modelContext: ModelContext,
-    ) throws {
-        let preparation = try ensureStatsReady(modelContext)
-        if preparation.didRebuild { return }
-        let stats = preparation.stats
-        if snapshot.isRead != newMessage.isRead {
-            stats.unreadCount += newMessage.isRead ? -1 : 1
-        }
-        stats.updatedAt = Date()
-
-        let newChannelKey = normalizeChannelKey(newMessage.channel)
-        if snapshot.channelKey != newChannelKey {
-            try recalculateChannelStats(modelContext, channelKey: snapshot.channelKey)
-            try recalculateChannelStats(modelContext, channelKey: newChannelKey)
-        } else if snapshot.isRead != newMessage.isRead || snapshot.receivedAt != newMessage.receivedAt {
-            try recalculateChannelStats(modelContext, channelKey: newChannelKey)
-        }
-    }
-
-    private func updateStatsForReadChange(
-        snapshot: StoredMessageSnapshot,
-        newIsRead: Bool,
-        modelContext: ModelContext,
-    ) throws {
-        guard snapshot.isRead != newIsRead else { return }
-        let preparation = try ensureStatsReady(modelContext)
-        if preparation.didRebuild { return }
-        let stats = preparation.stats
-        stats.unreadCount += newIsRead ? -1 : 1
-        stats.updatedAt = Date()
-
-        guard let channelStats = try fetchChannelStats(modelContext, channelKey: snapshot.channelKey) else {
-            try recalculateChannelStats(modelContext, channelKey: snapshot.channelKey)
-            return
-        }
-
-        if newIsRead {
-            channelStats.unreadCount = max(0, channelStats.unreadCount - 1)
-            if channelStats.unreadCount == 0 {
-                channelStats.latestUnreadAt = nil
-            } else if channelStats.latestUnreadAt == snapshot.receivedAt {
-                let unreadPredicate = channelPredicate(channelKey: snapshot.channelKey, unreadOnly: true)
-                channelStats.latestUnreadAt = try latestReceivedAt(modelContext, predicate: unreadPredicate)
-            }
-        } else {
-            channelStats.unreadCount += 1
-            if let latestUnread = channelStats.latestUnreadAt {
-                if snapshot.receivedAt > latestUnread {
-                    channelStats.latestUnreadAt = snapshot.receivedAt
-                }
-            } else {
-                channelStats.latestUnreadAt = snapshot.receivedAt
-            }
-        }
-    }
-
-    private func updateStatsForDelete(
-        snapshot: StoredMessageSnapshot,
-        modelContext: ModelContext,
-    ) throws {
-        let preparation = try ensureStatsReady(modelContext)
-        if preparation.didRebuild { return }
-        let stats = preparation.stats
-        stats.totalCount = max(0, stats.totalCount - 1)
-        if !snapshot.isRead {
-            stats.unreadCount = max(0, stats.unreadCount - 1)
-        }
-        stats.updatedAt = Date()
-        try recalculateChannelStats(modelContext, channelKey: snapshot.channelKey)
-    }
-
-    private func updateStatsForBulkReadChange(
-        readCount: Int,
-        channelKeys: Set<String>,
-        modelContext: ModelContext,
-    ) throws {
-        guard readCount > 0 else { return }
-        let preparation = try ensureStatsReady(modelContext)
-        if preparation.didRebuild { return }
-        let stats = preparation.stats
-        stats.unreadCount = max(0, stats.unreadCount - readCount)
-        stats.updatedAt = Date()
-
-        for channelKey in channelKeys {
-            try recalculateChannelStats(modelContext, channelKey: channelKey)
-        }
-    }
-
-    private func updateStatsForBulkDelete(
-        totalRemoved: Int,
-        unreadRemoved: Int,
-        channelKeys: Set<String>,
-        modelContext: ModelContext,
-    ) throws {
-        guard totalRemoved > 0 else { return }
-        let preparation = try ensureStatsReady(modelContext)
-        if preparation.didRebuild { return }
-        let stats = preparation.stats
-        stats.totalCount = max(0, stats.totalCount - totalRemoved)
-        stats.unreadCount = max(0, stats.unreadCount - unreadRemoved)
-        stats.updatedAt = Date()
-
-        for channelKey in channelKeys {
-            try recalculateChannelStats(modelContext, channelKey: channelKey)
-        }
-    }
-
-    private func fetchChannelStats(
-        _ modelContext: ModelContext,
-        channelKey: String,
-    ) throws -> StoredMessageChannelStats? {
-        let descriptor = FetchDescriptor<StoredMessageChannelStats>(
-            predicate: #Predicate { $0.channelKey == channelKey },
-        )
-        return try modelContext.fetch(descriptor).first
-    }
-
-    private func recalculateChannelStats(
-        _ modelContext: ModelContext,
-        channelKey: String,
-    ) throws {
-        let predicate = channelPredicate(channelKey: channelKey, unreadOnly: false)
-        let total = try modelContext.fetchCount(FetchDescriptor<StoredPushMessage>(predicate: predicate))
-        if total == 0 {
-            if let existing = try fetchChannelStats(modelContext, channelKey: channelKey) {
-                modelContext.delete(existing)
-            }
-            return
-        }
-        let unreadPredicate = channelPredicate(channelKey: channelKey, unreadOnly: true)
-        let unread = try modelContext.fetchCount(FetchDescriptor<StoredPushMessage>(predicate: unreadPredicate))
-        let latestReceivedDate = try latestReceivedAt(
-            modelContext,
-            predicate: predicate
-        )
-        let latestUnreadDate = unread > 0
-            ? try latestReceivedAt(modelContext, predicate: unreadPredicate)
-            : nil
-
-        if let stats = try fetchChannelStats(modelContext, channelKey: channelKey) {
-            stats.totalCount = total
-            stats.unreadCount = unread
-            stats.latestReceivedAt = latestReceivedDate
-            stats.latestUnreadAt = latestUnreadDate
-        } else {
-            modelContext.insert(
-                StoredMessageChannelStats(
-                    channelKey: channelKey,
-                    totalCount: total,
-                    unreadCount: unread,
-                    latestReceivedAt: latestReceivedDate,
-                    latestUnreadAt: latestUnreadDate
-                )
-            )
-        }
-    }
-
-    private func channelPredicate(
-        channelKey: String,
-        unreadOnly: Bool,
-    ) -> Predicate<StoredPushMessage> {
-        if channelKey.isEmpty {
-            if unreadOnly {
-                return #Predicate<StoredPushMessage> { !$0.isRead && ($0.channel == nil || $0.channel == "") }
-            }
-            return #Predicate<StoredPushMessage> { $0.channel == nil || $0.channel == "" }
-        }
-        if unreadOnly {
-            return #Predicate<StoredPushMessage> { !$0.isRead && $0.channel == channelKey }
-        }
-        return #Predicate<StoredPushMessage> { $0.channel == channelKey }
-    }
-
-    private func latestReceivedAt(
-        _ modelContext: ModelContext,
-        predicate: Predicate<StoredPushMessage>,
-    ) throws -> Date? {
-        var descriptor = FetchDescriptor<StoredPushMessage>(
-            predicate: predicate,
-            sortBy: [SortDescriptor(\.receivedAt, order: .reverse)],
-        )
-        descriptor.fetchLimit = 1
-        return try modelContext.fetch(descriptor).first?.receivedAt
-    }
-
-    private static func storeURL(
+    static func databaseDirectory(
         fileManager: FileManager,
-        appGroupIdentifier: String,
+        appGroupIdentifier: String
     ) throws -> URL {
-        guard let url = fileManager.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier) else {
+        guard let url = AppConstants.appGroupContainerURL(
+            fileManager: fileManager,
+            identifier: appGroupIdentifier
+        ) else {
             throw AppError.missingAppGroup(appGroupIdentifier)
         }
         let directory = url.appendingPathComponent("Database", isDirectory: true)
         if !fileManager.fileExists(atPath: directory.path) {
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         }
-        return directory.appendingPathComponent("pushgo.store")
+        return directory
+    }
+
+    private static func storeURL(
+        fileManager: FileManager,
+        appGroupIdentifier: String,
+        filename: String
+    ) throws -> URL {
+        let directory = try databaseDirectory(
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier
+        )
+        return directory.appendingPathComponent(filename)
     }
 }

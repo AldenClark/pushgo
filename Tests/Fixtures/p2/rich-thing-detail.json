@@ -1,0 +1,23 @@
+{
+  "messages": [
+    {
+      "id": "00000000-0000-0000-0000-00000000a001",
+      "message_id": "msg_p2_thing_001",
+      "title": "P2 Thing Rich",
+      "body": "Thing fixture for automation detail open.",
+      "channel_id": "p2",
+      "is_read": false,
+      "received_at": "2026-03-01T10:01:00Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_p2_rich_001",
+        "thing_id": "thing_p2_rich_001",
+        "thing_title": "P2 Thing Rich",
+        "thing_summary": "Fixture thing summary",
+        "attrs": "{\"region\":\"cn-sh\",\"owner\":\"qa\"}",
+        "projection_destination": "things"
+      },
+      "status": "normal"
+    }
+  ]
+}

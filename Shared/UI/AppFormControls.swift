@@ -14,7 +14,7 @@ enum AppControlMetrics {
     static let focusedStrokeOpacity: Double = 0.3
     static let unfocusedStrokeOpacity: Double = 0.08
     static let fieldFillOpacity: Double = 0.02
-    static let buttonHeight: CGFloat = 50
+    static let buttonHeight: CGFloat = 36
 }
 
 struct AppLabeledField<Content: View, Accessory: View>: View {
@@ -245,6 +245,119 @@ struct AppFormAccessoryButton: View {
         .buttonStyle(.plain)
         .contentShape(Rectangle())
         .accessibilityLabel(accessibilityLabel ?? Text(systemName))
+    }
+}
+
+enum AppActionButtonVariant {
+    case primary
+    case secondary
+    case plain
+}
+
+struct AppActionButton<Label: View>: View {
+    let variant: AppActionButtonVariant
+    let role: ButtonRole?
+    let isLoading: Bool
+    let fullWidth: Bool
+    let action: () -> Void
+    private let label: Label
+
+    init(
+        variant: AppActionButtonVariant = .primary,
+        role: ButtonRole? = nil,
+        isLoading: Bool = false,
+        fullWidth: Bool = true,
+        action: @escaping () -> Void,
+        @ViewBuilder label: () -> Label
+    ) {
+        self.variant = variant
+        self.role = role
+        self.isLoading = isLoading
+        self.fullWidth = fullWidth
+        self.action = action
+        self.label = label()
+    }
+
+    init(
+        _ title: LocalizedStringKey,
+        variant: AppActionButtonVariant = .primary,
+        role: ButtonRole? = nil,
+        isLoading: Bool = false,
+        fullWidth: Bool = true,
+        action: @escaping () -> Void
+    ) where Label == Text {
+        self.init(
+            variant: variant,
+            role: role,
+            isLoading: isLoading,
+            fullWidth: fullWidth,
+            action: action
+        ) {
+            Text(title)
+        }
+    }
+
+    init(
+        title: String,
+        variant: AppActionButtonVariant = .primary,
+        role: ButtonRole? = nil,
+        isLoading: Bool = false,
+        fullWidth: Bool = true,
+        action: @escaping () -> Void
+    ) where Label == Text {
+        self.init(
+            variant: variant,
+            role: role,
+            isLoading: isLoading,
+            fullWidth: fullWidth,
+            action: action
+        ) {
+            Text(title)
+        }
+    }
+
+    init(
+        text: Text,
+        variant: AppActionButtonVariant = .primary,
+        role: ButtonRole? = nil,
+        isLoading: Bool = false,
+        fullWidth: Bool = true,
+        action: @escaping () -> Void
+    ) where Label == Text {
+        self.init(
+            variant: variant,
+            role: role,
+            isLoading: isLoading,
+            fullWidth: fullWidth,
+            action: action
+        ) {
+            text
+        }
+    }
+
+    var body: some View {
+        let button = Button(role: role, action: action) {
+            ZStack {
+                label
+                    .opacity(isLoading ? 0 : 1)
+                    .frame(maxWidth: fullWidth ? .infinity : nil)
+                if isLoading {
+                    ProgressView()
+                }
+            }
+            .frame(minHeight: AppControlMetrics.buttonHeight)
+            .frame(maxWidth: fullWidth ? .infinity : nil)
+        }
+        .disabled(isLoading)
+
+        switch variant {
+        case .primary:
+            button.buttonStyle(.borderedProminent)
+        case .secondary:
+            button.buttonStyle(.bordered)
+        case .plain:
+            button.buttonStyle(.plain)
+        }
     }
 }
 

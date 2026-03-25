@@ -10,15 +10,12 @@ final class MenuBarViewModel {
     private let environment: AppEnvironment
 
     init(
-        dataStore: LocalDataStore = LocalDataStore(),
+        dataStore: LocalDataStore? = nil,
         environment: AppEnvironment? = nil
     ) {
-        self.dataStore = dataStore
-        if let environment {
-            self.environment = environment
-        } else {
-            self.environment = AppEnvironment.shared
-        }
+        let resolvedEnvironment = environment ?? AppEnvironment.shared
+        self.environment = resolvedEnvironment
+        self.dataStore = dataStore ?? resolvedEnvironment.dataStore
     }
 
     func refreshUnread(maxCount: Int = 8) async {

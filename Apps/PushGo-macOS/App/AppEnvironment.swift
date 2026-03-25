@@ -1,31 +1,16 @@
 import Foundation
+import Darwin
 import Observation
 import ServiceManagement
 import SwiftUI
 import UserNotifications
-#if canImport(AppKit)
 import AppKit
-#endif
-
-private struct AppEnvironmentKey: EnvironmentKey {
-    static let defaultValue: AppEnvironment = .shared
-}
-
-extension EnvironmentValues {
-    var appEnvironment: AppEnvironment {
-        get { self[AppEnvironmentKey.self] }
-        set { self[AppEnvironmentKey.self] = newValue }
-    }
-}
 
 @MainActor
 @Observable
 final class AppEnvironment {
     @MainActor
-    private static let _shared = AppEnvironment()
-    nonisolated static var shared: AppEnvironment {
-        MainActor.assumeIsolated { _shared }
-    }
+    static let shared = AppEnvironment()
 
     let dataStore: LocalDataStore
     let pushRegistrationService: PushRegistrationService
@@ -38,7 +23,6 @@ final class AppEnvironment {
         }
     )
     @ObservationIgnored private var messageSyncObserver: DarwinNotificationObserver?
-    @ObservationIgnored private var performanceObserver: NSObjectProtocol?
     @ObservationIgnored private var pendingCountsRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var pendingMessageListRefreshTask: Task<Void, Never>?
 
@@ -47,13 +31,24 @@ final class AppEnvironment {
     @ObservationIgnored private let messageListRefreshDelay: TimeInterval = 0.35
     @ObservationIgnored private var pendingMessageListRefresh = false
     @ObservationIgnored private var isMainWindowVisible = true
+    @ObservationIgnored private var isPrivateWakeupPullInFlight = false
+    @ObservationIgnored private var privateWakeupPullPending = false
+    @ObservationIgnored private var lastWakeupRouteFingerprint: String?
 
     private(set) var serverConfig: ServerConfig? = AppEnvironment.makeDefaultServerConfig()
     private(set) var totalMessageCount: Int = 0
     private(set) var unreadMessageCount: Int = 0
     private(set) var messageStoreRevision: UUID = UUID()
     private(set) var toastMessage: ToastMessage?
+    private(set) var localStoreRecoveryState: LocalStoreRecoveryState?
+    private(set) var shouldPresentNotificationPermissionAlert: Bool = false
     var pendingMessageToOpen: UUID?
+    var pendingEventToOpen: String?
+    var pendingThingToOpen: String?
+    private(set) var isMessagePageEnabled: Bool = true
+    private(set) var isEventPageEnabled: Bool = true
+    private(set) var isThingPageEnabled: Bool = true
+    private(set) var launchAtLoginEnabled: Bool = false
     private(set) var activeMainTab: MainTab = .messages
     private(set) var isMessageListAtTop: Bool = true
     private(set) var channelSubscriptions: [ChannelSubscription] = []
@@ -61,6 +56,9 @@ final class AppEnvironment {
     private var isSceneActive = false
 
     private let channelSubscriptionService = ChannelSubscriptionService()
+    @ObservationIgnored private let localStoreFailureStreakThreshold = 3
+    @ObservationIgnored private let localStoreFailureStreakKey = "pushgo.local_store.failure_streak"
+    @ObservationIgnored private let localStoreFailureDefaults = AppConstants.sharedUserDefaults()
 
     private init(
         dataStore: LocalDataStore = LocalDataStore(),
@@ -76,179 +74,56 @@ final class AppEnvironment {
                 await self.reloadMessagesFromStore()
             }
         }
-        performanceObserver = NotificationCenter.default.addObserver(
-            forName: Notification.Name(AppConstants.performanceDegradationNotificationName),
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let self else { return }
-            Task { @MainActor in
-                await self.handlePerformanceDegradation()
-            }
-        }
         registerDefaultNotificationCategories()
-        Task.detached(priority: .utility) {
-            Self.syncBuiltInRingtonesToAppGroup()
-        }
     }
 
     func bootstrap() async {
-        Task(priority: .userInitiated) { @MainActor in
-            await loadPersistedState()
-        }
+        await loadPersistedState()
         Task(priority: .utility) { @MainActor in
             await preparePushInfrastructure()
         }
         let store = dataStore
-        Task.detached(priority: .utility) {
+        Task(priority: .utility) {
             await store.warmCachesIfNeeded()
         }
-    }
-
-    private nonisolated static func syncBuiltInRingtonesToAppGroup() {
-        let fileManager = FileManager.default
-        guard let containerURL = fileManager.containerURL(
-            forSecurityApplicationGroupIdentifier: AppConstants.appGroupIdentifier
-        ) else {
-            return
-        }
-
-        let soundsDirectory = containerURL.appendingPathComponent(
-            AppConstants.customRingtoneRelativePath,
-            isDirectory: true
-        )
-        if !fileManager.fileExists(atPath: soundsDirectory.path) {
-            do {
-                try fileManager.createDirectory(at: soundsDirectory, withIntermediateDirectories: true)
-            } catch {
-                return
-            }
-        }
-
-        let allowedExtensions = ["caf", "wav", "aif", "aiff"]
-        var bundleSoundURLs: [URL] = []
-        for fileExtension in allowedExtensions {
-            if let urls = Bundle.main.urls(forResourcesWithExtension: fileExtension, subdirectory: nil) {
-                bundleSoundURLs.append(contentsOf: urls)
-            }
-            if let urls = Bundle.main.urls(forResourcesWithExtension: fileExtension, subdirectory: "Sounds") {
-                bundleSoundURLs.append(contentsOf: urls)
-            }
-        }
-        if bundleSoundURLs.isEmpty {
-            return
-        }
-
-        var seenFilenames = Set<String>()
-        for url in bundleSoundURLs {
-            let filename = url.lastPathComponent
-            guard !filename.isEmpty else { continue }
-            if !seenFilenames.insert(filename).inserted {
-                continue
-            }
-            let destinationURL = soundsDirectory.appendingPathComponent(filename)
-            if fileManager.fileExists(atPath: destinationURL.path) {
-                continue
-            }
-            try? fileManager.copyItem(at: url, to: destinationURL)
-        }
+        schedulePrivateWakeupAckDrainIfNeeded()
     }
 
     private static func makeDefaultServerConfig() -> ServerConfig? {
         guard let url = AppConstants.defaultServerURL else { return nil }
-        return ServerConfig(baseURL: url, token: nil, notificationKeyMaterial: nil, updatedAt: Date())
-    }
-
-    private func handlePerformanceDegradation() async {
-        let stored = await dataStore.loadAutoCleanupPreference()
-        let defaultEnabled = false
-        let isEnabled = stored ?? defaultEnabled
-        if stored == nil {
-            await dataStore.saveAutoCleanupPreference(defaultEnabled)
-        }
-
-        if isEnabled {
-            let excludedChannels = channelSubscriptions
-                .filter { !$0.autoCleanupEnabled }
-                .map { $0.channelId }
-            _ = (try? await messageStateCoordinator.deleteOldestReadMessages(
-                limit: AppConstants.autoCleanupBatchSize,
-                excludingChannels: excludedChannels
-            )) ?? 0
-            showToast(
-                message: localizationManager.localized("auto_cleanup_manual_suggestion"),
-                style: .info,
-                duration: 2.5
-            )
-            return
-        }
-
-        showToast(
-            message: localizationManager.localized("auto_cleanup_suggestion"),
-            style: .info,
-            duration: 2.5
+        return ServerConfig(
+            baseURL: url,
+            token: AppConstants.defaultGatewayToken,
+            notificationKeyMaterial: nil,
+            updatedAt: Date()
         )
-    }
-
-    func resolvedAutoCleanupEnabled() async -> Bool {
-        let stored = await dataStore.loadAutoCleanupPreference()
-        let defaultEnabled = false
-        if stored == nil {
-            await dataStore.saveAutoCleanupPreference(defaultEnabled)
-        }
-        return stored ?? defaultEnabled
-    }
-
-    func setChannelAutoCleanupEnabled(channelId: String, isEnabled: Bool) async throws {
-        guard let gatewayKey = serverConfig?.gatewayKey else { throw AppError.noServer }
-        _ = try await dataStore.setChannelAutoCleanupEnabled(
-            gateway: gatewayKey,
-            channelId: channelId,
-            isEnabled: isEnabled
-        )
-        await refreshChannelSubscriptions()
     }
 
     private func registerDefaultNotificationCategories() {
-        let actions = [
-            UNNotificationAction(
-                identifier: AppConstants.actionCopyIdentifier,
-                title: LocalizationManager.localizedSync("copy_content"),
-                options: [.foreground]
-            ),
-            UNNotificationAction(
-                identifier: AppConstants.actionMarkReadIdentifier,
-                title: LocalizationManager.localizedSync("mark_as_read"),
-                options: []
-            ),
-            UNNotificationAction(
-                identifier: AppConstants.actionDeleteIdentifier,
-                title: LocalizationManager.localizedSync("delete"),
-                options: [.destructive]
-            ),
-        ]
-
-        let categories = AppConstants.nceCategories.map {
-            UNNotificationCategory(
-                identifier: $0,
-                actions: actions,
-                intentIdentifiers: [],
-                options: []
-            )
-        }
-        UNUserNotificationCenter.current().setNotificationCategories(Set(categories))
+        let category = UNNotificationCategory(
+            identifier: AppConstants.notificationDefaultCategoryIdentifier,
+            actions: [],
+            intentIdentifiers: [],
+            options: []
+        )
+        let entityReminderCategory = UNNotificationCategory(
+            identifier: AppConstants.notificationEntityReminderCategoryIdentifier,
+            actions: [],
+            intentIdentifiers: [],
+            options: []
+        )
+        UNUserNotificationCenter.current().setNotificationCategories([category, entityReminderCategory])
     }
 
     private func syncLaunchAtLoginPreferenceIfNeeded() async {
         let stored = await dataStore.loadLaunchAtLoginPreference()
-        let shouldEnable = stored ?? true
-        if stored == nil {
-            await dataStore.saveLaunchAtLoginPreference(true)
-        }
+        let shouldEnable = stored ?? false
+        launchAtLoginEnabled = shouldEnable
         applyLaunchAtLoginPreference(shouldEnable)
     }
 
     func updateLaunchAtLogin(isEnabled: Bool) {
+        launchAtLoginEnabled = isEnabled
         Task { @MainActor in
             await dataStore.saveLaunchAtLoginPreference(isEnabled)
         }
@@ -256,7 +131,6 @@ final class AppEnvironment {
     }
 
     private func applyLaunchAtLoginPreference(_ isEnabled: Bool) {
-        guard #available(macOS 13.0, *) else { return }
         do {
             if isEnabled {
                 try SMAppService.mainApp.register()
@@ -268,17 +142,26 @@ final class AppEnvironment {
     }
 
     func updateServerConfig(_ config: ServerConfig?) async throws {
+        let previousConfig = serverConfig
+        let previousDeviceKey = await dataStore.cachedProviderDeviceKey(for: platformIdentifier())?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         let normalized = config?.normalized()
         try await dataStore.saveServerConfig(normalized)
         serverConfig = normalized
         await refreshChannelSubscriptions()
+        await syncPrivateChannelState()
+        scheduleLegacyGatewayDeviceCleanup(
+            previousConfig: previousConfig,
+            previousDeviceKey: previousDeviceKey,
+            nextConfig: normalized
+        )
     }
 
     func replaceMessages(_ newMessages: [PushMessage]) async {
         do {
             let sanitized = newMessages.map { message in
                 var copy = message
-                copy.url = URLSanitizer.sanitizeHTTPSURL(message.url)
+                copy.url = URLSanitizer.sanitizeExternalOpenURL(message.url)
                 return copy
             }
             try await dataStore.saveMessages(sanitized.sorted { $0.receivedAt > $1.receivedAt })
@@ -331,6 +214,12 @@ final class AppEnvironment {
         }
     }
 
+    func publishStoreRefreshForAutomation() {
+        pendingMessageListRefreshTask?.cancel()
+        pendingMessageListRefresh = false
+        messageStoreRevision = UUID()
+    }
+
     func addLocalMessage(
         title: String,
         body: String,
@@ -338,19 +227,15 @@ final class AppEnvironment {
         url: URL?,
         rawPayload: [String: Any],
         decryptionState: PushMessage.DecryptionState? = nil,
-        messageId: UUID? = nil,
-    ) async {
-        if let messageId {
-            do {
-                if let _ = try await dataStore.loadMessage(messageId: messageId) {
-                    return
-                }
-            } catch {
-            }
+        messageId: String? = nil,
+        operationId: String? = nil,
+        titleWasExplicit: Bool = true,
+    ) async -> Bool {
+        let bridgedPayload: [AnyHashable: Any] = rawPayload.reduce(into: [:]) { result, element in
+            result[element.key] = element.value
         }
-
-        var payload = rawPayload
-        if payload["title"] == nil {
+        var payload = UserInfoSanitizer.sanitize(bridgedPayload)
+        if payload["title"] == nil || !titleWasExplicit {
             payload["title"] = title
         }
         if payload["body"] == nil {
@@ -361,40 +246,57 @@ final class AppEnvironment {
         if let trimmedChannel, !trimmedChannel.isEmpty, payload["channel_id"] == nil {
             payload["channel_id"] = trimmedChannel
         }
-        let sanitizedURL = URLSanitizer.sanitizeHTTPSURL(url)
+        let sanitizedURL = URLSanitizer.sanitizeExternalOpenURL(url)
         if let sanitizedURL, payload["url"] == nil {
             payload["url"] = sanitizedURL.absoluteString
         }
-
-        let mappedPayload = payload.reduce(into: [String: AnyCodable]()) { result, element in
-            result[element.key] = AnyCodable(element.value)
+        if payload["decryption_state"] == nil,
+           let decryptionState
+        {
+            payload["decryption_state"] = decryptionState.rawValue
         }
-
-        let channel = ((payload["channel_id"] as? String)
-            ?? (payload["channel"] as? String))?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedChannel = channel?.isEmpty == true ? nil : channel
-
-        let message = PushMessage(
-            messageId: messageId,
-            title: title,
-            body: body,
-            channel: resolvedChannel,
-            url: sanitizedURL,
-            isRead: false,
-            receivedAt: Date(),
-            rawPayload: mappedPayload,
-            status: .normal,
-            decryptionState: decryptionState,
+        if payload["op_id"] == nil,
+           let operationId = operationId?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !operationId.isEmpty
+        {
+            payload["op_id"] = operationId
+        }
+        if NotificationHandling.shouldSkipPersistence(for: payload) {
+            return true
+        }
+        let fallbackRequestId: String? = {
+            let deliveryId = (payload["delivery_id"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !deliveryId.isEmpty {
+                return deliveryId
+            }
+            let normalizedMessageId = messageId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return normalizedMessageId.isEmpty ? nil : normalizedMessageId
+        }()
+        let outcome = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
+            payload,
+            requestIdentifier: fallbackRequestId,
+            dataStore: dataStore,
+            beforeSave: { [weak self] message in
+                guard let self else { return }
+                await self.autoEnableDataPageIfNeeded(for: message)
+            }
         )
-        do {
-            try await dataStore.saveMessage(message)
-            await refreshMessageCountsAndNotify()
-        } catch {
+        switch outcome {
+        case .duplicateRequest, .duplicateMessage:
+            scheduleCountsRefresh()
+            return true
+        case .persisted:
+            scheduleCountsRefresh()
+            return true
+        case .skipped:
+            return false
+        case .failed:
             showToast(message: localizationManager.localized(
                 "failed_to_save_message_placeholder",
-                error.localizedDescription,
+                "notification persistence failed",
             ))
+            return false
         }
     }
 
@@ -451,6 +353,46 @@ final class AppEnvironment {
         }
     }
 
+    private func recordAutomationRuntimeError(
+        _ error: Error,
+        source: String,
+        category: String = "runtime"
+    ) {
+        #if DEBUG
+        let message: String
+        let code: String?
+        if let appError = error as? AppError {
+            message = appError.errorDescription ?? String(describing: appError)
+            code = appError.code
+        } else {
+            message = error.localizedDescription
+            code = nil
+        }
+        PushGoAutomationRuntime.shared.recordRuntimeError(
+            source: source,
+            category: category,
+            code: code,
+            message: message
+        )
+        #endif
+    }
+
+    private func recordAutomationRuntimeMessage(
+        _ message: String,
+        source: String,
+        category: String = "runtime",
+        code: String? = nil
+    ) {
+        #if DEBUG
+        PushGoAutomationRuntime.shared.recordRuntimeError(
+            source: source,
+            category: category,
+            code: code,
+            message: message
+        )
+        #endif
+    }
+
     func dismissToast(id: UUID) {
         if toastMessage?.id == id {
             toastDismissTask?.cancel()
@@ -476,17 +418,111 @@ final class AppEnvironment {
         }
     }
 
+    struct LocalStoreRecoveryState: Equatable {
+        let title: String
+        let message: String
+        let canRebuild: Bool
+    }
+
     private func announceAccessibility(_ message: String) {
-        #if canImport(AppKit)
         NSAccessibility.post(
             element: NSApplication.shared,
             notification: .announcementRequested,
             userInfo: [NSAccessibility.NotificationUserInfoKey.announcement: message]
         )
-        #endif
     }
 
-    func refreshPushAuthorization(requestAuthorization: Bool = false) async {
+    func dismissLocalStoreRecovery() {
+        localStoreRecoveryState = nil
+    }
+
+    func dismissNotificationPermissionAlert() {
+        shouldPresentNotificationPermissionAlert = false
+    }
+
+    func openSystemNotificationSettings() {
+        guard !PushGoAutomationContext.blocksCrossAppDataAccess else { return }
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") else {
+            return
+        }
+        _ = PushGoSystemInteraction.openExternalURL(url)
+    }
+
+    private func presentNotificationPermissionAlertIfNeeded() {
+        guard !PushGoAutomationContext.isActive else { return }
+        shouldPresentNotificationPermissionAlert = true
+    }
+
+    func terminateForLocalStoreFailure() {
+        NSApp.terminate(nil)
+    }
+
+    func rebuildLocalStoreForRecoveryAndTerminate() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await dataStore.rebuildPersistentStoresForRecovery()
+                clearLocalStoreFailureStreak()
+                terminateForLocalStoreFailure()
+            } catch {
+                showToast(message: localizationManager.localized(
+                    "initialization_failed_placeholder",
+                    error.localizedDescription
+                ))
+            }
+        }
+    }
+
+    private func incrementLocalStoreFailureStreak() -> Int {
+        let next = localStoreFailureDefaults.integer(forKey: localStoreFailureStreakKey) + 1
+        localStoreFailureDefaults.set(next, forKey: localStoreFailureStreakKey)
+        return next
+    }
+
+    private func clearLocalStoreFailureStreak() {
+        localStoreFailureDefaults.removeObject(forKey: localStoreFailureStreakKey)
+    }
+
+    private func isLikelyLocalStoreLockContention(reason: String?) -> Bool {
+        guard let reason else { return false }
+        let lowered = reason.lowercased()
+        return lowered.contains("database is locked")
+            || lowered.contains("database is busy")
+            || lowered.contains("sqlite_busy")
+            || lowered.contains("sqlite_locked")
+            || lowered.contains("lock contention")
+            || lowered.contains("locked")
+    }
+
+    private func handleLocalStoreUnavailable(_ state: LocalDataStore.StorageState) {
+        let streak = incrementLocalStoreFailureStreak()
+        let canRebuild = streak >= localStoreFailureStreakThreshold
+        var lines: [String] = [
+            localizationManager.localized("local_store_unavailable"),
+            "请点击“退出应用”并重新打开。",
+        ]
+        if let reason = state.reason?.trimmingCharacters(in: .whitespacesAndNewlines), !reason.isEmpty {
+            lines.append(reason)
+            if isLikelyLocalStoreLockContention(reason: reason) {
+                lines.append("检测到可能的数据库锁占用，请先彻底退出所有 PushGo 进程/扩展后重试。")
+            }
+        }
+        if canRebuild {
+            lines.append("该错误已连续出现多次，请上报日志；也可以选择“重建数据库并退出”。")
+        } else {
+            lines.append("若问题反复出现，请上报错误日志。")
+        }
+        localStoreRecoveryState = LocalStoreRecoveryState(
+            title: localizationManager.localized("local_store_unavailable"),
+            message: lines.joined(separator: "\n"),
+            canRebuild: canRebuild
+        )
+    }
+
+    func refreshPushAuthorization(
+        requestAuthorization: Bool = false,
+        presentDeniedPrompt: Bool = false
+    ) async {
         do {
             if requestAuthorization {
                 try await pushRegistrationService.requestAuthorization()
@@ -497,17 +533,30 @@ final class AppEnvironment {
                 }
             }
 
-            guard pushRegistrationService.authorizationState == .authorized else {
+            if pushRegistrationService.authorizationState == .denied {
+                if presentDeniedPrompt {
+                    presentNotificationPermissionAlertIfNeeded()
+                    return
+                }
                 throw AppError.apnsDenied
+            }
+            guard pushRegistrationService.authorizationState == .authorized else {
+                return
             }
 
             Task(priority: .utility) { @MainActor [weak self] in
                 await self?.syncSubscriptionsOnLaunch()
             }
         } catch let appError as AppError {
+            if appError == .apnsDenied, presentDeniedPrompt {
+                presentNotificationPermissionAlertIfNeeded()
+                return
+            }
+            recordAutomationRuntimeError(appError, source: "push.authorization.refresh")
             showToast(message: appError.errorDescription ?? localizationManager
                 .localized("unable_to_obtain_apns_token"))
         } catch {
+            recordAutomationRuntimeError(error, source: "push.authorization.refresh")
             showToast(message: localizationManager.localized(
                 "unable_to_obtain_apns_token_placeholder",
                 error.localizedDescription,
@@ -519,9 +568,27 @@ final class AppEnvironment {
         do {
             try await syncSubscriptionsIfNeeded()
         } catch let appError as AppError {
+            recordAutomationRuntimeError(appError, source: "channel.sync.launch")
             showToast(message: appError.errorDescription ?? localizationManager
                 .localized("unable_to_sync_channels"))
         } catch {
+            recordAutomationRuntimeError(error, source: "channel.sync.launch")
+            showToast(message: localizationManager.localized(
+                "unable_to_sync_channels_placeholder",
+                error.localizedDescription,
+            ))
+        }
+    }
+
+    func syncSubscriptionsOnChannelListEntry() async {
+        do {
+            try await syncSubscriptionsIfNeeded()
+        } catch let appError as AppError {
+            recordAutomationRuntimeError(appError, source: "channel.sync.entry")
+            showToast(message: appError.errorDescription ?? localizationManager
+                .localized("unable_to_sync_channels"))
+        } catch {
+            recordAutomationRuntimeError(error, source: "channel.sync.entry")
             showToast(message: localizationManager.localized(
                 "unable_to_sync_channels_placeholder",
                 error.localizedDescription,
@@ -531,50 +598,36 @@ final class AppEnvironment {
 
     private func ensureActivePushToken(serverConfig: ServerConfig) async throws -> String {
         let token = try await pushRegistrationService.awaitToken()
-        let platform = platformIdentifier()
-        let cached = await dataStore.cachedPushToken(for: platform)
-        if let cached, cached != token {
-            _ = try? await channelSubscriptionService.retire(
-                baseURL: serverConfig.baseURL,
-                token: serverConfig.token,
-                deviceToken: cached,
-                platform: platform
-            )
-        }
-        await dataStore.saveCachedPushToken(token, for: platform)
+        await persistPushTokenAndRotateRoute(config: serverConfig, token: token)
         return token
-    }
-
-    private func resolvedDeviceTokens(primaryToken: String) -> [ChannelSubscriptionService.DeviceTokenRegistration] {
-        [
-            .init(deviceToken: primaryToken, platform: platformIdentifier()),
-        ]
     }
 
     func syncSubscriptionsIfNeeded() async throws {
         guard let config = serverConfig else { throw AppError.noServer }
         let gatewayKey = config.gatewayKey
-        let token = try await ensureActivePushToken(serverConfig: config)
-        let deviceTokens = resolvedDeviceTokens(primaryToken: token)
-
         let credentials = try await dataStore.activeChannelCredentials(gateway: gatewayKey)
+        let token = try await ensureActivePushToken(serverConfig: config)
+        _ = try await ensureProviderRoute(config: config, providerToken: token)
         let channels = credentials.map {
             ChannelSubscriptionService.SyncItem(channelId: $0.channelId, password: $0.password)
         }
         guard !channels.isEmpty else {
             await refreshChannelSubscriptions()
+            await syncPrivateChannelState()
             return
         }
+        let deviceKey = try await ensureProviderRoute(config: config, providerToken: token)
 
         let payload = try await channelSubscriptionService.sync(
             baseURL: config.baseURL,
             token: config.token,
-            deviceTokens: deviceTokens,
+            deviceKey: deviceKey,
             channels: channels
         )
 
         let syncedAt = Date()
         var staleChannels: [String] = []
+        var passwordMismatchChannels: [String] = []
         for result in payload.channels {
             if result.subscribed {
                 try? await dataStore.updateChannelDisplayName(
@@ -587,17 +640,35 @@ final class AppEnvironment {
                     channelId: result.channelId,
                     date: syncedAt
                 )
-            } else if result.errorCode == "channel_not_found" {
-                staleChannels.append(result.channelId)
+            } else {
+                switch result.errorCode {
+                case "channel_not_found":
+                    staleChannels.append(result.channelId)
+                case "password_mismatch":
+                    passwordMismatchChannels.append(result.channelId)
+                default:
+                    break
+                }
             }
         }
-        for channelId in staleChannels {
+        for channelId in staleChannels + passwordMismatchChannels {
             try? await dataStore.softDeleteChannelSubscription(
                 gateway: gatewayKey,
                 channelId: channelId
             )
         }
+        if !passwordMismatchChannels.isEmpty {
+            let limited = Array(passwordMismatchChannels.prefix(3))
+            let suffix = passwordMismatchChannels.count > 3 ? "..." : ""
+            showToast(
+                message: localizationManager.localized(
+                    "channel_password_mismatch_removed",
+                    "\(limited.joined(separator: ", "))\(suffix)"
+                )
+            )
+        }
         await refreshChannelSubscriptions()
+        await syncPrivateChannelState()
     }
 
     func updateNotificationMaterial(_ material: ServerConfig.NotificationKeyMaterial) async {
@@ -625,22 +696,116 @@ final class AppEnvironment {
         serverConfig?.notificationKeyMaterial
     }
 
+    func setMessagePageEnabled(_ isEnabled: Bool) {
+        updateDataPageVisibility(messageEnabled: isEnabled)
+    }
+
+    func setEventPageEnabled(_ isEnabled: Bool) {
+        updateDataPageVisibility(eventEnabled: isEnabled)
+    }
+
+    func setThingPageEnabled(_ isEnabled: Bool) {
+        updateDataPageVisibility(thingEnabled: isEnabled)
+    }
+
+    private func updateDataPageVisibility(
+        messageEnabled: Bool? = nil,
+        eventEnabled: Bool? = nil,
+        thingEnabled: Bool? = nil
+    ) {
+        var next = DataPageVisibilitySnapshot(
+            messageEnabled: isMessagePageEnabled,
+            eventEnabled: isEventPageEnabled,
+            thingEnabled: isThingPageEnabled
+        )
+        if let messageEnabled {
+            next.messageEnabled = messageEnabled
+        }
+        if let eventEnabled {
+            next.eventEnabled = eventEnabled
+        }
+        if let thingEnabled {
+            next.thingEnabled = thingEnabled
+        }
+        applyDataPageVisibility(next, persist: true)
+    }
+
+    private func applyDataPageVisibility(
+        _ visibility: DataPageVisibilitySnapshot,
+        persist: Bool
+    ) {
+        let changed = isMessagePageEnabled != visibility.messageEnabled
+            || isEventPageEnabled != visibility.eventEnabled
+            || isThingPageEnabled != visibility.thingEnabled
+        guard changed else { return }
+        isMessagePageEnabled = visibility.messageEnabled
+        isEventPageEnabled = visibility.eventEnabled
+        isThingPageEnabled = visibility.thingEnabled
+        if persist {
+            let store = self.dataStore
+            Task(priority: .utility) {
+                await store.saveDataPageVisibility(visibility)
+            }
+        }
+    }
+
+    private func loadDataPageVisibility() async {
+        let visibility = await dataStore.loadDataPageVisibility()
+        applyDataPageVisibility(visibility, persist: false)
+    }
+
+    private func autoEnableDataPageIfNeeded(for message: PushMessage) {
+        let normalized = message.entityType
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        switch normalized {
+        case "event", "thing":
+            autoEnableDataPage(for: normalized)
+        default:
+            autoEnableDataPage(for: "message")
+        }
+    }
+
+    private func autoEnableDataPage(for entityType: String) {
+        switch entityType {
+        case "event":
+            if !isEventPageEnabled {
+                updateDataPageVisibility(eventEnabled: true)
+            }
+        case "thing":
+            if !isThingPageEnabled {
+                updateDataPageVisibility(thingEnabled: true)
+            }
+        default:
+            if !isMessagePageEnabled {
+                updateDataPageVisibility(messageEnabled: true)
+            }
+        }
+    }
+
     private func loadPersistedState() async {
         await syncLaunchAtLoginPreferenceIfNeeded()
         var bootstrapErrors: [String] = []
         let storeState = dataStore.storageState
         switch storeState.mode {
-        case .inMemory:
-            bootstrapErrors.append(localizationManager.localized("local_store_in_memory_fallback"))
         case .unavailable:
-            bootstrapErrors.append(localizationManager.localized("local_store_unavailable"))
+            recordAutomationRuntimeMessage(
+                storeState.reason ?? localizationManager.localized("local_store_unavailable"),
+                source: "storage.bootstrap",
+                category: "storage",
+                code: "E_LOCAL_STORE_UNAVAILABLE"
+            )
+            handleLocalStoreUnavailable(storeState)
+            return
         case .persistent:
+            clearLocalStoreFailureStreak()
             break
         }
         do {
             serverConfig = try await dataStore.loadServerConfig()?.normalized()
         } catch {
             serverConfig = nil
+            recordAutomationRuntimeError(error, source: "storage.load_server_config", category: "storage")
             bootstrapErrors.append(localizationManager.localized("server_configuration_read_failed"))
         }
 
@@ -650,12 +815,14 @@ final class AppEnvironment {
             do {
                 try await dataStore.saveServerConfig(normalized)
             } catch {
+                recordAutomationRuntimeError(error, source: "storage.save_server_config", category: "storage")
                 bootstrapErrors.append(localizationManager.localized(
                     "failed_to_save_server_configuration_placeholder",
                     error.localizedDescription
                 ))
             }
         }
+        await loadDataPageVisibility()
 
         do {
             let counts = try await dataStore.messageCounts()
@@ -665,6 +832,7 @@ final class AppEnvironment {
         } catch {
             totalMessageCount = 0
             unreadMessageCount = 0
+            recordAutomationRuntimeError(error, source: "storage.message_counts", category: "storage")
             bootstrapErrors.append(localizationManager.localized("failed_to_read_historical_messages"))
         }
 
@@ -675,6 +843,7 @@ final class AppEnvironment {
             showToast(message: localizationManager.localized("initialization_failed_placeholder", mergedReasons))
         }
         await refreshChannelSubscriptions()
+        await syncPrivateChannelState()
     }
 
     private func preparePushInfrastructure() async {
@@ -684,6 +853,7 @@ final class AppEnvironment {
             do {
                 try await pushRegistrationService.requestAuthorization()
             } catch {
+                recordAutomationRuntimeError(error, source: "push.authorization.request", category: "permission")
                 showToast(message: localizationManager.localized(
                     "request_for_notification_permission_failed_placeholder",
                     error.localizedDescription,
@@ -692,7 +862,23 @@ final class AppEnvironment {
             }
         }
 
-        await refreshPushAuthorization(requestAuthorization: false)
+        await refreshPushAuthorization(
+            requestAuthorization: false,
+            presentDeniedPrompt: true
+        )
+        await prepareAutomationPushStateIfNeeded()
+    }
+
+    private func prepareAutomationPushStateIfNeeded() async {
+        guard let token = PushGoAutomationContext.providerToken?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !token.isEmpty
+        else { return }
+        let platform = platformIdentifier()
+        await dataStore.saveCachedPushToken(token, for: platform)
+        guard let config = serverConfig else { return }
+        _ = await ensureProviderDeviceKey(config: config, platform: platform)
+        await syncProviderPullRoute(config: config, providerToken: token)
     }
 
     func refreshChannelSubscriptions() async {
@@ -717,10 +903,6 @@ final class AppEnvironment {
             channelSubscriptions = []
             channelSubscriptionLookup = [:]
         }
-    }
-
-    func updateDefaultRingtoneFilename(_ filename: String?) async {
-        await dataStore.saveDefaultRingtoneFilename(filename)
     }
 
     func channelDisplayName(for channelId: String?) -> String? {
@@ -761,14 +943,12 @@ final class AppEnvironment {
         let gatewayKey = config.gatewayKey
         let validatedPassword = try ChannelPasswordValidator.validate(password)
         let token = try await ensureActivePushToken(serverConfig: config)
-
-        let payload = try await channelSubscriptionService.subscribe(
-            baseURL: config.baseURL,
-            token: config.token,
+        let payload = try await subscribeWithDeviceKeyRecovery(
+            config: config,
+            providerToken: token,
             channelId: channelId,
-            channelName: alias,
-            password: validatedPassword,
-            deviceTokens: resolvedDeviceTokens(primaryToken: token)
+            alias: alias,
+            password: validatedPassword
         )
 
         guard payload.subscribed else {
@@ -784,7 +964,59 @@ final class AppEnvironment {
             lastSyncedAt: Date()
         )
         await refreshChannelSubscriptions()
+        await syncPrivateChannelState()
         return payload
+    }
+
+    private func subscribeWithDeviceKeyRecovery(
+        config: ServerConfig,
+        providerToken: String,
+        channelId: String?,
+        alias: String?,
+        password: String
+    ) async throws -> ChannelSubscriptionService.SubscribePayload {
+        let platform = platformIdentifier()
+        let initialDeviceKey = try await ensureProviderRoute(config: config, providerToken: providerToken)
+        do {
+            return try await channelSubscriptionService.subscribe(
+                baseURL: config.baseURL,
+                token: config.token,
+                deviceKey: initialDeviceKey,
+                channelId: channelId,
+                channelName: alias,
+                password: password
+            )
+        } catch {
+            guard isDeviceKeyNotFoundError(error) else {
+                throw error
+            }
+            let registered = try await channelSubscriptionService.registerDevice(
+                baseURL: config.baseURL,
+                token: config.token,
+                platform: platform,
+                existingDeviceKey: initialDeviceKey
+            )
+            let refreshedDeviceKey = registered.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !refreshedDeviceKey.isEmpty {
+                await dataStore.saveCachedProviderDeviceKey(refreshedDeviceKey, for: platform)
+            }
+            let ensuredDeviceKey = try await ensureProviderRoute(config: config, providerToken: providerToken)
+            return try await channelSubscriptionService.subscribe(
+                baseURL: config.baseURL,
+                token: config.token,
+                deviceKey: ensuredDeviceKey,
+                channelId: channelId,
+                channelName: alias,
+                password: password
+            )
+        }
+    }
+
+    private func isDeviceKeyNotFoundError(_ error: Error) -> Bool {
+        let text = error.localizedDescription.lowercased()
+        return text.contains("device_key_not_found")
+            || text.contains("device_key not found")
+            || text.contains("device key not found")
     }
 
     func renameChannel(channelId: String, alias: String) async throws {
@@ -817,25 +1049,120 @@ final class AppEnvironment {
         let gatewayKey = config.gatewayKey
         let normalized = try ChannelIdValidator.normalize(channelId)
         let token = try await ensureActivePushToken(serverConfig: config)
+        let deviceKey = try await ensureProviderRoute(config: config, providerToken: token)
 
         _ = try await channelSubscriptionService.unsubscribe(
             baseURL: config.baseURL,
             token: config.token,
-            channelId: normalized,
-            deviceTokens: resolvedDeviceTokens(primaryToken: token)
+            deviceKey: deviceKey,
+            channelId: normalized
         )
 
         try await dataStore.softDeleteChannelSubscription(gateway: gatewayKey, channelId: normalized)
         await refreshChannelSubscriptions()
+        await syncPrivateChannelState()
 
         guard deleteLocalMessages else { return 0 }
         return try await messageStateCoordinator.deleteMessages(channel: normalized, readState: nil)
     }
 
+    func closeEvent(
+        eventId: String,
+        thingId: String?,
+        channelId: String,
+        status: String? = nil,
+        message: String? = nil,
+        severity: String? = nil
+    ) async throws {
+        guard let config = serverConfig else { throw AppError.noServer }
+        let gatewayKey = config.gatewayKey
+        let normalizedChannelId = try ChannelIdValidator.normalize(channelId)
+        let normalizedEventId = eventId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedEventId.isEmpty else {
+            throw AppError.unknown("event_id required")
+        }
+        let trimmedThingId = thingId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedThingId = (trimmedThingId?.isEmpty == false) ? trimmedThingId : nil
+        let normalizedStatus = status?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedMessage = message?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedSeverity = severity?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let localizedStatus = localizationManager
+            .localized("event_status_closed_default")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedStatus: String = {
+            let statusCandidate = normalizedStatus.flatMap { $0.isEmpty ? nil : $0 } ?? localizedStatus
+            if statusCandidate.isEmpty
+                || statusCandidate == "event_status_closed_default"
+                || statusCandidate.count > 24
+            {
+                return "closed"
+            }
+            return statusCandidate
+        }()
+        let localizedMessage = localizationManager
+            .localized("event_message_closed_default")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedMessage: String = {
+            let messageCandidate = normalizedMessage.flatMap { $0.isEmpty ? nil : $0 } ?? localizedMessage
+            if messageCandidate.isEmpty || messageCandidate == "event_message_closed_default" {
+                return "closed"
+            }
+            return messageCandidate
+        }()
+        let resolvedSeverity: String = {
+            guard let severity = normalizedSeverity,
+                  ["critical", "high", "normal", "low"].contains(severity)
+            else {
+                return "normal"
+            }
+            return severity
+        }()
+
+        guard let password = await dataStore.channelPassword(gateway: gatewayKey, for: normalizedChannelId) else {
+            throw AppError.unknown(localizationManager.localized("channel_password_missing"))
+        }
+
+        let endpointPath: String
+        if let normalizedThingId {
+            endpointPath = "/thing/\(escapedGatewayPathComponent(normalizedThingId))/event/close"
+        } else {
+            endpointPath = "/event/close"
+        }
+
+        var payload: [String: Any] = [
+            "channel_id": normalizedChannelId,
+            "password": password,
+            "op_id": OpaqueId.generateHex128(),
+            "event_id": normalizedEventId,
+            "event_time": Int64(Date().timeIntervalSince1970),
+            "status": resolvedStatus,
+            "message": resolvedMessage,
+            "attrs": [String: Any](),
+        ]
+        if let normalizedThingId {
+            payload["thing_id"] = normalizedThingId
+        }
+        payload["severity"] = resolvedSeverity
+        try await postGatewayPayload(payload, endpointPath: endpointPath, config: config)
+    }
+
     func handlePushTokenUpdate() {
         Task { @MainActor in
             do {
+                if let latestToken = try? await pushRegistrationService.awaitToken() {
+                    if let config = serverConfig {
+                        await persistPushTokenAndRotateRoute(config: config, token: latestToken)
+                    } else {
+                        await dataStore.saveCachedPushToken(latestToken, for: platformIdentifier())
+                    }
+                }
                 try await syncSubscriptionsIfNeeded()
+                if let config = serverConfig,
+                   let token = await dataStore.cachedPushToken(for: platformIdentifier())?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !token.isEmpty
+                {
+                    await syncProviderPullRoute(config: config, providerToken: token)
+                }
             } catch {
                 let message = (error as? AppError)?.errorDescription ?? error.localizedDescription
                 showToast(message: localizationManager.localized(
@@ -843,6 +1170,7 @@ final class AppEnvironment {
                     message
                 ))
             }
+            await syncPrivateChannelState()
         }
     }
 
@@ -860,15 +1188,81 @@ final class AppEnvironment {
             flushPendingMessageListRefreshIfNeeded()
             Task { @MainActor in
                 await refreshChannelSubscriptions()
+                await syncPrivateChannelState()
+                schedulePrivateWakeupAckDrainIfNeeded()
             }
         case .background, .inactive:
             isSceneActive = false
             Task {
                 await dataStore.flushWrites()
             }
+            Task { @MainActor in
+                await syncPrivateChannelState()
+            }
         @unknown default:
             isSceneActive = false
         }
+    }
+
+    private func syncPrivateChannelState() async {
+        guard let config = serverConfig else { return }
+        if let token = await dataStore.cachedPushToken(for: platformIdentifier())?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !token.isEmpty
+        {
+            await syncProviderPullRoute(config: config, providerToken: token)
+        }
+    }
+
+    private func schedulePrivateWakeupAckDrainIfNeeded() {
+        guard let config = serverConfig else { return }
+        let platform = platformIdentifier()
+        Task { [self] in
+            guard let token = await self.dataStore.cachedPushToken(for: platform)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                !token.isEmpty
+            else { return }
+            await self.syncProviderPullRoute(config: config, providerToken: token)
+            guard let deviceKey = await self.ensureProviderDeviceKey(config: config, platform: platform) else {
+                return
+            }
+            await PrivateWakeupAckOutboxWorker.scheduleDrain(
+                dataStore: self.dataStore,
+                acknowledge: { [self] deliveryIds in
+                    try await self.channelSubscriptionService.ackMessages(
+                        baseURL: config.baseURL,
+                        token: config.token,
+                        deviceKey: deviceKey,
+                        deliveryIds: deliveryIds
+                    )
+                }
+            )
+        }
+    }
+
+    func drainPrivateWakeupAckOutboxForSystemWake() async -> PrivateWakeupAckDrainOutcome {
+        guard let config = serverConfig else { return .idle }
+        let platform = platformIdentifier()
+        guard let token = await dataStore.cachedPushToken(for: platform)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !token.isEmpty
+        else {
+            return .idle
+        }
+        await syncProviderPullRoute(config: config, providerToken: token)
+        guard let deviceKey = await ensureProviderDeviceKey(config: config, platform: platform) else {
+            return .failed
+        }
+        return await PrivateWakeupAckOutboxWorker.drainPendingAcks(
+            dataStore: dataStore,
+            acknowledge: { [self] deliveryIds in
+                try await self.channelSubscriptionService.ackMessages(
+                    baseURL: config.baseURL,
+                    token: config.token,
+                    deviceKey: deviceKey,
+                    deliveryIds: deliveryIds
+                )
+            }
+        )
     }
 
     func updateMainWindowVisibility(isVisible: Bool) {
@@ -890,51 +1284,357 @@ final class AppEnvironment {
         clearDeliveredSystemNotifications()
     }
 
-    func shouldPresentForegroundNotification() -> Bool {
-        !shouldSuppressForegroundNotifications
+    func shouldPresentForegroundNotification(payload: [AnyHashable: Any]? = nil) -> Bool {
+        guard !shouldSuppressForegroundNotifications else {
+            return false
+        }
+        guard let payload else {
+            return true
+        }
+        return NotificationHandling.shouldPresentUserAlert(from: payload)
     }
-    func persistNotificationIfNeeded(_ notification: UNNotification) async {
-        let request = notification.request
-        let requestId = request.identifier
 
-        do {
-            if let _ = try await dataStore.loadMessage(notificationRequestId: requestId) {
-                return
-            }
-        } catch {
+    private struct PrivatePulledNotification: Sendable {
+        let title: String
+        let body: String
+        let channel: String?
+        let messageId: String?
+        let deliveryId: String
+        let categoryIdentifier: String
+        let entityType: String?
+        let entityId: String?
+        let thingId: String?
+    }
+
+    private actor PrivatePulledCollector {
+        private var items: [PrivatePulledNotification] = []
+
+        func append(_ item: PrivatePulledNotification) {
+            items.append(item)
         }
 
-        let receivedAt = Date()
-        let content = request.content
-        let normalized = NotificationPayloadNormalizer.normalize(content: content, requestId: requestId)
-        let messageId = normalized.messageId
-        if let messageId {
-            do {
-                if let _ = try await dataStore.loadMessage(messageId: messageId) {
-                    return
-                }
-            } catch {
-            }
+        func all() -> [PrivatePulledNotification] {
+            items
         }
+    }
 
-        let message = PushMessage(
-            messageId: messageId,
-            title: normalized.title,
-            body: normalized.body,
-            channel: normalized.channel,
-            url: normalized.url,
-            isRead: false,
-            receivedAt: receivedAt,
-            rawPayload: normalized.rawPayload,
-            status: .normal,
-            decryptionState: normalized.decryptionState,
+    func triggerPrivateWakeupPull(presentLocalNotifications: Bool = false) async {
+        if isPrivateWakeupPullInFlight {
+            privateWakeupPullPending = true
+            return
+        }
+        isPrivateWakeupPullInFlight = true
+        defer { isPrivateWakeupPullInFlight = false }
+        repeat {
+            privateWakeupPullPending = false
+            let collector = PrivatePulledCollector()
+            await pullViaHttpWakeup(onPulled: { pulled in
+                guard presentLocalNotifications else { return }
+                await collector.append(pulled)
+            })
+            let pulledForPresentation = await collector.all()
+            guard presentLocalNotifications, !pulledForPresentation.isEmpty else { continue }
+            for pulled in pulledForPresentation {
+                await postLocalNotificationForPrivatePull(pulled)
+            }
+        } while privateWakeupPullPending
+    }
+
+    private func pullViaHttpWakeup(
+        onPulled: (@Sendable (PrivatePulledNotification) async -> Void)? = nil
+    ) async {
+        guard let config = serverConfig else {
+            return
+        }
+        let gatewayKey = config.gatewayKey
+        let channels = (try? await dataStore.activeChannelCredentials(gateway: gatewayKey)) ?? []
+        guard !channels.isEmpty else {
+            return
+        }
+        let platform = platformIdentifier()
+        guard let token = await dataStore.cachedPushToken(for: platform)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !token.isEmpty
+        else {
+            return
+        }
+        await syncProviderPullRoute(config: config, providerToken: token)
+        guard let deviceKey = await ensureProviderDeviceKey(config: config, platform: platform) else {
+            return
+        }
+        _ = await PrivateWakeupAckOutboxWorker.drainPendingAcks(
+            dataStore: dataStore,
+            acknowledge: { [self] deliveryIds in
+                try await self.channelSubscriptionService.ackMessages(
+                    baseURL: config.baseURL,
+                    token: config.token,
+                    deviceKey: deviceKey,
+                    deliveryIds: deliveryIds
+                )
+            }
         )
-
-        do {
-            try await dataStore.saveMessage(message)
-            scheduleCountsRefresh()
-        } catch {
+        for channel in channels {
+            let pulled: [ChannelSubscriptionService.PullItem]
+            do {
+                pulled = try await channelSubscriptionService.pullMessages(
+                    baseURL: config.baseURL,
+                    token: config.token,
+                    deviceKey: deviceKey,
+                    channelId: channel.channelId,
+                    password: channel.password,
+                    limit: 100
+                )
+            } catch {
+                continue
+            }
+            _ = await PrivateWakeupPullCoordinator.processPulledItems(
+                pulled.map { item in
+                    PrivateWakeupPullItem(deliveryId: item.deliveryId, payload: item.payload)
+                },
+                dataStore: dataStore,
+                acknowledge: { [self] deliveryIds in
+                    try await self.channelSubscriptionService.ackMessages(
+                        baseURL: config.baseURL,
+                        token: config.token,
+                        deviceKey: deviceKey,
+                        deliveryIds: deliveryIds
+                    )
+                },
+                processItem: { normalized, deliveryId, anyPayload, deliveryState in
+                    switch deliveryState {
+                    case .missing:
+                        let isPersisted = await addLocalMessage(
+                            title: normalized.title,
+                            body: normalized.body,
+                            channel: normalized.channel,
+                            url: normalized.url,
+                            rawPayload: normalized.rawPayload,
+                            decryptionState: normalized.decryptionState,
+                            messageId: normalized.messageId,
+                            operationId: normalized.operationId,
+                            titleWasExplicit: normalized.hasExplicitTitle
+                        )
+                        guard isPersisted else { return false }
+                        do {
+                            try await dataStore.markInboundDeliveryPersisted(
+                                deliveryId: deliveryId
+                            )
+                        } catch { return false }
+                        let shouldPresentReminder = NotificationHandling.shouldPresentUserAlert(
+                            from: anyPayload
+                        )
+                        if shouldPresentReminder, let onPulled {
+                            await onPulled(
+                                PrivatePulledNotification(
+                                    title: normalized.title,
+                                    body: normalized.body,
+                                    channel: normalized.channel,
+                                    messageId: normalized.messageId,
+                                    deliveryId: deliveryId,
+                                    categoryIdentifier: NotificationHandling.notificationCategoryIdentifier(for: anyPayload),
+                                    entityType: normalized.entityType == "message" ? nil : normalized.entityType,
+                                    entityId: normalized.entityId,
+                                    thingId: normalized.thingId
+                                )
+                            )
+                        }
+                        return true
+                    case .persisted: return true
+                    case .acked: return false
+                    }
+                }
+            )
         }
+    }
+
+    private func postLocalNotificationForPrivatePull(_ pulled: PrivatePulledNotification) async {
+        let center = UNUserNotificationCenter.current()
+        let content = UNMutableNotificationContent()
+        content.title = pulled.title
+        content.body = pulled.body
+        content.sound = .default
+        content.categoryIdentifier = pulled.categoryIdentifier
+
+        var userInfo: [String: Any] = [
+            "title": pulled.title,
+            "body": pulled.body,
+            "private_wakeup_handled": "1",
+            "_notification_source": "private_pull",
+            "category": pulled.categoryIdentifier,
+            "_skip_persist": "1",
+            "delivery_id": pulled.deliveryId
+        ]
+        if let channel = pulled.channel {
+            userInfo["channel_id"] = channel
+            content.threadIdentifier = channel
+        }
+        if let messageId = pulled.messageId, !messageId.isEmpty {
+            userInfo["message_id"] = messageId
+        }
+        if let entityType = pulled.entityType {
+            userInfo["entity_type"] = entityType
+        }
+        if let entityId = pulled.entityId {
+            userInfo["entity_id"] = entityId
+            if pulled.entityType == "event" {
+                userInfo["event_id"] = entityId
+            }
+        }
+        if let thingId = pulled.thingId {
+            userInfo["thing_id"] = thingId
+        }
+        content.userInfo = userInfo
+
+        let request = UNNotificationRequest(
+            identifier: "private.pull.\(UUID().uuidString)",
+            content: content,
+            trigger: nil
+        )
+        try? await center.add(request)
+    }
+
+    private func ensureProviderDeviceKey(config: ServerConfig, platform: String) async -> String? {
+        let existing = await dataStore.cachedProviderDeviceKey(for: platform)
+        if let existing, !existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return existing
+        }
+        let registered = try? await channelSubscriptionService.registerDevice(
+            baseURL: config.baseURL,
+            token: config.token,
+            platform: platform,
+            existingDeviceKey: existing
+        )
+        guard let deviceKey = registered?.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines),
+              !deviceKey.isEmpty
+        else { return existing }
+        await dataStore.saveCachedProviderDeviceKey(deviceKey, for: platform)
+        return deviceKey
+    }
+
+    private func syncProviderPullRoute(config: ServerConfig, providerToken: String) async {
+        let normalizedToken = providerToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedToken.isEmpty else { return }
+        let platform = platformIdentifier()
+        let cachedDeviceKey = await dataStore.cachedProviderDeviceKey(for: platform)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let cachedDeviceKey, !cachedDeviceKey.isEmpty else { return }
+        let fingerprint = "\(platform)|\(cachedDeviceKey)|\(normalizedToken)"
+        guard lastWakeupRouteFingerprint != fingerprint else {
+            return
+        }
+        if let ensuredDeviceKey = try? await ensureProviderRoute(
+            config: config,
+            providerToken: normalizedToken
+        ) {
+            lastWakeupRouteFingerprint = "\(platform)|\(ensuredDeviceKey)|\(normalizedToken)"
+        }
+    }
+
+    private func persistPushTokenAndRotateRoute(config: ServerConfig, token: String) async {
+        let normalizedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedToken.isEmpty else { return }
+        let platform = platformIdentifier()
+        let previousRaw = await dataStore.cachedPushToken(for: platform)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedPrevious = (previousRaw?.isEmpty == false) ? previousRaw : nil
+        await dataStore.saveCachedPushToken(normalizedToken, for: platform)
+        guard let resolvedPrevious, resolvedPrevious != normalizedToken else {
+            return
+        }
+        await retireProviderToken(config: config, providerToken: resolvedPrevious)
+    }
+
+    private func retireProviderToken(config: ServerConfig, providerToken: String) async {
+        let normalized = providerToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return }
+        let platform = platformIdentifier()
+        guard let bootstrapDeviceKey = await ensureProviderDeviceKey(config: config, platform: platform) else {
+            return
+        }
+        do {
+            let route = try await channelSubscriptionService.upsertDeviceChannel(
+                baseURL: config.baseURL,
+                token: config.token,
+                deviceKey: bootstrapDeviceKey,
+                platform: platform,
+                channelType: "apns",
+                providerToken: normalized
+            )
+            let resolvedDeviceKeyRaw = route.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            let resolvedDeviceKey = resolvedDeviceKeyRaw.isEmpty ? bootstrapDeviceKey : resolvedDeviceKeyRaw
+            await dataStore.saveCachedProviderDeviceKey(resolvedDeviceKey, for: platform)
+            try await channelSubscriptionService.deleteDeviceChannel(
+                baseURL: config.baseURL,
+                token: config.token,
+                deviceKey: resolvedDeviceKey,
+                channelType: "apns"
+            )
+        } catch {}
+    }
+
+    private func ensureProviderRoute(config: ServerConfig, providerToken: String) async throws -> String {
+        let platform = platformIdentifier()
+        guard let bootstrapDeviceKey = await ensureProviderDeviceKey(config: config, platform: platform) else {
+            throw AppError.unknown(localizationManager.localized("operation_failed"))
+        }
+        let route = try await channelSubscriptionService.upsertDeviceChannel(
+            baseURL: config.baseURL,
+            token: config.token,
+            deviceKey: bootstrapDeviceKey,
+            platform: platform,
+            channelType: "apns",
+            providerToken: providerToken
+        )
+        let resolvedDeviceKeyRaw = route.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedDeviceKey = resolvedDeviceKeyRaw.isEmpty ? bootstrapDeviceKey : resolvedDeviceKeyRaw
+        await dataStore.saveCachedProviderDeviceKey(resolvedDeviceKey, for: platform)
+        return resolvedDeviceKey
+    }
+
+    private func scheduleLegacyGatewayDeviceCleanup(
+        previousConfig: ServerConfig?,
+        previousDeviceKey: String?,
+        nextConfig: ServerConfig?
+    ) {
+        guard let previousConfig else { return }
+        let trimmedDeviceKey = previousDeviceKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmedDeviceKey.isEmpty else { return }
+        guard gatewayIdentity(previousConfig) != gatewayIdentity(nextConfig) else { return }
+        let service = channelSubscriptionService
+        Task(priority: .utility) {
+            do {
+                try await service.deleteDeviceChannel(
+                    baseURL: previousConfig.baseURL,
+                    token: previousConfig.token,
+                    deviceKey: trimmedDeviceKey,
+                    channelType: "apns"
+                )
+            } catch {}
+        }
+    }
+
+    private func gatewayIdentity(_ config: ServerConfig?) -> String {
+        guard let config else { return "" }
+        let token = config.token?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return "\(config.baseURL.absoluteString)|\(token)"
+    }
+
+    @discardableResult
+    func persistNotificationIfNeeded(_ notification: UNNotification) async -> NotificationPersistenceOutcome {
+        let outcome = await NotificationPersistenceCoordinator.persistIfNeeded(
+            notification,
+            dataStore: dataStore,
+            beforeSave: { [weak self] message in
+                guard let self else { return }
+                await self.autoEnableDataPageIfNeeded(for: message)
+            }
+        )
+        switch outcome {
+        case .persisted:
+            scheduleCountsRefresh()
+        case .skipped, .duplicateRequest, .duplicateMessage, .failed:
+            break
+        }
+        return outcome
     }
     func handleNotificationOpen(notificationRequestId: String) async {
         await handleNotificationOpenInternal(
@@ -944,11 +1644,17 @@ final class AppEnvironment {
         )
     }
 
-    func handleNotificationOpen(messageId: UUID) async {
+    func handleNotificationOpen(messageId: String) async {
         await handleNotificationOpenInternal(
             messageId: messageId,
             markAsReadInStore: true,
             removeFromNotificationCenter: true
+        )
+    }
+
+    func handleNotificationOpen(entityType: String, entityId: String) async {
+        await handleEntityOpenTarget(
+            EntityOpenTarget(entityType: entityType, entityId: entityId)
         )
     }
     func handleNotificationOpenFromCopy(notificationRequestId: String) async {
@@ -960,14 +1666,18 @@ final class AppEnvironment {
         removeFromNotificationCenter: Bool
     ) async {
         do {
-            guard let target = try await dataStore.loadMessage(notificationRequestId: notificationRequestId) else {
+            if let target = try await dataStore.loadMessage(notificationRequestId: notificationRequestId) {
+                await handleNotificationOpenTarget(
+                    target,
+                    markAsReadInStore: markAsReadInStore,
+                    removeFromNotificationCenter: removeFromNotificationCenter
+                )
                 return
             }
-            await handleNotificationOpenTarget(
-                target,
-                markAsReadInStore: markAsReadInStore,
-                removeFromNotificationCenter: removeFromNotificationCenter
-            )
+            if let entityTarget = try await dataStore.loadEntityOpenTarget(notificationRequestId: notificationRequestId) {
+                await handleEntityOpenTarget(entityTarget)
+                return
+            }
         } catch {
             showToast(message: localizationManager.localized(
                 "sync_message_failed_placeholder",
@@ -977,19 +1687,23 @@ final class AppEnvironment {
     }
 
     private func handleNotificationOpenInternal(
-        messageId: UUID,
+        messageId: String,
         markAsReadInStore: Bool,
         removeFromNotificationCenter: Bool
     ) async {
         do {
-            guard let target = try await dataStore.loadMessage(messageId: messageId) else {
+            if let target = try await dataStore.loadMessage(messageId: messageId) {
+                await handleNotificationOpenTarget(
+                    target,
+                    markAsReadInStore: markAsReadInStore,
+                    removeFromNotificationCenter: removeFromNotificationCenter
+                )
                 return
             }
-            await handleNotificationOpenTarget(
-                target,
-                markAsReadInStore: markAsReadInStore,
-                removeFromNotificationCenter: removeFromNotificationCenter
-            )
+            if let entityTarget = try await dataStore.loadEntityOpenTarget(messageId: messageId) {
+                await handleEntityOpenTarget(entityTarget)
+                return
+            }
         } catch {
             showToast(message: localizationManager.localized(
                 "sync_message_failed_placeholder",
@@ -1013,8 +1727,24 @@ final class AppEnvironment {
                 removeDeliveredNotificationIfNeeded(for: target)
             }
         }
+        autoEnableDataPage(for: "message")
 
+        pendingEventToOpen = nil
+        pendingThingToOpen = nil
         pendingMessageToOpen = targetId
+    }
+
+    private func handleEntityOpenTarget(_ target: EntityOpenTarget) async {
+        pendingMessageToOpen = nil
+        if target.entityType == "event" {
+            autoEnableDataPage(for: "event")
+            pendingThingToOpen = nil
+            pendingEventToOpen = target.entityId
+        } else if target.entityType == "thing" {
+            autoEnableDataPage(for: "thing")
+            pendingEventToOpen = nil
+            pendingThingToOpen = target.entityId
+        }
     }
 
     private func clearDeliveredSystemNotifications() {
@@ -1032,6 +1762,65 @@ final class AppEnvironment {
         guard pendingMessageListRefresh, canRefreshMessageList else { return }
         messageStoreRevision = UUID()
         pendingMessageListRefresh = false
+    }
+
+    private func postGatewayPayload(
+        _ payload: [String: Any],
+        endpointPath: String,
+        config: ServerConfig
+    ) async throws {
+        guard JSONSerialization.isValidJSONObject(payload) else {
+            throw AppError.invalidURL
+        }
+        guard var components = URLComponents(url: config.baseURL, resolvingAgainstBaseURL: false) else {
+            throw AppError.invalidURL
+        }
+        var path = components.path
+        if path.hasSuffix("/") {
+            path.removeLast()
+        }
+        components.path = path + endpointPath
+        guard let url = components.url else {
+            throw AppError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = AppConstants.deviceRegistrationTimeout
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let token = config.token, !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw AppError.serverUnreachable
+        }
+        if http.statusCode == 401 || http.statusCode == 403 {
+            throw AppError.authFailed
+        }
+        if !(200 ... 299).contains(http.statusCode) {
+            throw AppError.unknown("HTTP \(http.statusCode): request failed")
+        }
+
+        if let decoded = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
+            if let success = decoded["success"] as? Bool, success {
+                return
+            }
+            if let message = decoded["error"] as? String,
+               !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
+                throw AppError.unknown(message)
+            }
+        }
+    }
+
+    private func escapedGatewayPathComponent(_ raw: String) -> String {
+        var allowed = CharacterSet.urlPathAllowed
+        allowed.remove(charactersIn: "/")
+        return raw.addingPercentEncoding(withAllowedCharacters: allowed) ?? raw
     }
 
 }

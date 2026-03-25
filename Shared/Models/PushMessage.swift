@@ -15,6 +15,28 @@ struct PushMessage: Identifiable, Codable, Equatable {
         case decryptFailed
     }
 
+    enum Severity: String, Codable {
+        case low
+        case medium
+        case high
+        case critical
+
+        static func from(raw: String?) -> Severity? {
+            switch raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "low":
+                return .low
+            case "medium", "normal":
+                return .medium
+            case "high":
+                return .high
+            case "critical":
+                return .critical
+            default:
+                return nil
+            }
+        }
+    }
+
     struct ResolvedBody: Equatable {
         let rawText: String
         let isMarkdown: Bool
@@ -22,12 +44,13 @@ struct PushMessage: Identifiable, Codable, Equatable {
     }
 
     enum BodySource: String, Codable {
-        case ciphertextBody
         case body
     }
 
+    typealias Metadata = [String: String]
+
     var id: UUID
-    var messageId: UUID?
+    var messageId: String?
     var title: String
     var body: String
     var channel: String?
@@ -40,7 +63,7 @@ struct PushMessage: Identifiable, Codable, Equatable {
 
     init(
         id: UUID = UUID(),
-        messageId: UUID?,
+        messageId: String?,
         title: String,
         body: String,
         channel: String? = nil,
@@ -65,53 +88,54 @@ struct PushMessage: Identifiable, Codable, Equatable {
     }
 }
 
-extension PushMessage: @unchecked Sendable {}
-
 extension PushMessage {
-    var originalUserInfoPayload: [String: AnyCodable]? {
-        guard let raw = rawPayload["_originalUserInfo"]?.value as? [String: Any] else {
-            return nil
-        }
-        return raw.reduce(into: [String: AnyCodable]()) { result, element in
-            result[element.key] = AnyCodable(element.value)
-        }
-    }
-    var payloadForDisplay: [String: AnyCodable] {
-        originalUserInfoPayload ?? rawPayload
-    }
-
     var resolvedBody: ResolvedBody {
-        let ciphertextBody = stringValue(forKeys: ["ciphertext_body"], in: rawPayload)
-        let isMarkdownOverride = rawPayload["body_render_is_markdown"]?.value as? Bool
-
-        return MessageBodyResolver.resolve(
-            ciphertextBody: ciphertextBody,
-            envelopeBody: body,
-            isMarkdownOverride: isMarkdownOverride,
-        )
+        MessageBodyResolver.resolve(envelopeBody: body)
     }
 
-    var iconURL: URL? {
-        urlValue(forKeys: ["icon", "iconUrl", "icon_url"])
+    var imageURLs: [URL] {
+        var urls: [URL] = []
+        appendURLValues(forKeys: ["images"], into: &urls)
+        return urls
     }
 
     var imageURL: URL? {
-        urlValue(forKeys: ["image", "imageUrl", "image_url", "picture", "pic"])
+        imageURLs.first
     }
 
     var isEncrypted: Bool {
         if decryptionState != nil { return true }
-        let encryptedKeys = ["ciphertext", "encrypted"]
-        return encryptedKeys.contains { rawPayload[$0] != nil || metaValue(forKey: $0) != nil }
+        return rawPayload["ciphertext"] != nil
+    }
+
+    var metadata: Metadata {
+        guard let raw = rawPayload["metadata"]?.value else { return [:] }
+        return Self.decodeMetadataMap(from: raw)
+    }
+
+    var tags: [String] {
+        guard let raw = rawPayload["tags"]?.value else { return [] }
+        return Self.decodeTags(from: raw)
+    }
+
+    var severity: Severity? {
+        Severity.from(raw: stringValue(forKeys: ["severity"]))
     }
 
     private func urlValue(forKeys keys: [String]) -> URL? {
         guard let text = stringValue(forKeys: keys),
-              let url = URLSanitizer.resolveHTTPSURL(from: text)
+              let url = URLSanitizer.resolveExternalOpenURL(from: text)
         else {
             return nil
         }
         return url
+    }
+
+    private func appendURLValues(forKeys keys: [String], into urls: inout [URL]) {
+        for key in keys {
+            guard let raw = rawPayload[key]?.value else { continue }
+            Self.appendResolvedURLs(from: raw, into: &urls)
+        }
     }
 
     private func stringValue(
@@ -127,94 +151,160 @@ extension PushMessage {
 
 
     private func stringValue(forKeys keys: [String]) -> String? {
-        if let value = keys.compactMap({ key in
-            (rawPayload[key]?.value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        }).first(where: { !$0.isEmpty }) {
-            return value
-        }
-
-        if let meta = rawPayload["meta"]?.value as? [String: AnyCodable],
-           let value = keys.compactMap({ key in
-               (meta[key]?.value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-           }).first(where: { !$0.isEmpty })
-        {
-            return value
-        }
-
-        if let meta = rawPayload["meta"]?.value as? [String: Any],
-           let value = keys.compactMap({ key in
-               (meta[key] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-           }).first(where: { !$0.isEmpty })
-        {
-            return value
-        }
-
-        if let value = apsValue(forKeys: keys) {
-            return value
-        }
-
-        return nil
-    }
-
-    private func apsValue(forKeys keys: [String], in aps: [String: AnyCodable]) -> String? {
         keys.compactMap { key in
-            (aps[key]?.value as? String)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+            (rawPayload[key]?.value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         .first(where: { !$0.isEmpty })
-    }
-
-    private func apsValue(forKeys keys: [String]) -> String? {
-        if let aps = rawPayload["aps"]?.value as? [String: AnyCodable],
-           let value = apsValue(forKeys: keys, in: aps)
-        {
-            return value
-        }
-
-        if let aps = rawPayload["aps"]?.value as? [String: Any],
-           let value = keys.compactMap({ key in
-               (aps[key] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-           }).first(where: { !$0.isEmpty })
-        {
-            return value
-        }
-
-        return nil
-    }
-
-    private func metaValue(forKey key: String) -> Any? {
-        if let meta = rawPayload["meta"]?.value as? [String: AnyCodable] {
-            return meta[key]?.value
-        }
-        if let meta = rawPayload["meta"]?.value as? [String: Any] {
-            return meta[key]
-        }
-        return nil
     }
 
     var notificationRequestId: String? {
         rawPayload["_notificationRequestId"]?.value as? String
     }
+
+    var deliveryId: String? {
+        stringValue(forKeys: ["delivery_id"])
+    }
+
+    var operationId: String? {
+        stringValue(forKeys: ["op_id"])
+    }
+
+    var entityType: String {
+        resolvedEntityType()
+    }
+
+    var entityId: String? {
+        stringValue(forKeys: ["entity_id"])
+    }
+
+    var eventId: String? {
+        stringValue(forKeys: ["event_id"])
+    }
+
+    var thingId: String? {
+        stringValue(forKeys: ["thing_id"])
+    }
+
+    var projectionDestination: String? {
+        stringValue(forKeys: ["projection_destination"])
+    }
+
+    var eventState: String? {
+        stringValue(forKeys: ["event_state"])
+    }
+
+    private static func decodeMetadataMap(from raw: Any) -> Metadata {
+        guard let text = raw as? String else { return [:] }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let data = trimmed.data(using: .utf8) else { return [:] }
+        guard let decoded = try? JSONSerialization.jsonObject(with: data, options: []) else {
+            return [:]
+        }
+        return decodeMetadataMap(fromJSONObject: decoded)
+    }
+
+    private static func decodeMetadataMap(fromJSONObject raw: Any) -> Metadata {
+        if let object = raw as? [String: Any] {
+            var output: Metadata = [:]
+            for (rawKey, rawValue) in object {
+                let key = rawKey.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !key.isEmpty, let value = metadataValueString(rawValue) else { continue }
+                output[key] = value
+            }
+            return output
+        }
+        return [:]
+    }
+
+    private static func decodeTags(from raw: Any) -> [String] {
+        let values: [String]
+        switch raw {
+        case let raw as String:
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return [] }
+            if let data = trimmed.data(using: .utf8),
+               let decoded = try? JSONSerialization.jsonObject(with: data, options: [])
+            {
+                if let array = decoded as? [Any] {
+                    values = array.compactMap(metadataValueString)
+                } else {
+                    values = []
+                }
+            } else {
+                values = []
+            }
+        default:
+            values = []
+        }
+
+        var output: [String] = []
+        output.reserveCapacity(values.count)
+        var seen = Set<String>()
+        for value in values {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, seen.insert(trimmed).inserted else { continue }
+            output.append(trimmed)
+        }
+        return output
+    }
+
+    private static func metadataValueString(_ raw: Any?) -> String? {
+        switch raw {
+        case let value as String:
+            return value.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        case let value as Int:
+            return String(value)
+        case let value as Int64:
+            return String(value)
+        case let value as Double:
+            return String(value)
+        case let value as Bool:
+            return value ? "true" : "false"
+        default:
+            return nil
+        }
+    }
+
+    private static func appendResolvedURLs(from raw: Any, into urls: inout [URL]) {
+        switch raw {
+        case let value as String:
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            if let data = trimmed.data(using: .utf8),
+               let decoded = try? JSONSerialization.jsonObject(with: data),
+               let array = decoded as? [Any]
+            {
+                for item in array {
+                    appendResolvedURLs(from: item, into: &urls)
+                }
+                return
+            }
+            if let url = URLSanitizer.resolveHTTPSURL(from: trimmed),
+               !urls.contains(where: { $0.absoluteString == url.absoluteString })
+            {
+                urls.append(url)
+            }
+        default:
+            return
+        }
+    }
+
+    private func resolvedEntityType() -> String {
+        switch stringValue(forKeys: ["entity_type"])?.lowercased() {
+        case "event":
+            return "event"
+        case "thing":
+            return "thing"
+        default:
+            return "message"
+        }
+    }
 }
 
 enum MessageBodyResolver {
-    static func resolve(
-        ciphertextBody: String?,
-        envelopeBody: String,
-        isMarkdownOverride: Bool?,
-    ) -> PushMessage.ResolvedBody {
-        if let cipherBody = trimmed(ciphertextBody) {
-            let isMarkdown = isMarkdownOverride ?? PushGoMarkdownDetector.containsMarkdownSyntax(cipherBody)
-            return PushMessage.ResolvedBody(
-                rawText: cipherBody,
-                isMarkdown: isMarkdown,
-                source: .ciphertextBody,
-            )
-        }
-
+    static func resolve(envelopeBody: String) -> PushMessage.ResolvedBody {
         let rawText = trimmed(envelopeBody) ?? ""
-        let isMarkdown = isMarkdownOverride ?? PushGoMarkdownDetector.containsMarkdownSyntax(rawText)
-        return PushMessage.ResolvedBody(rawText: rawText, isMarkdown: isMarkdown, source: .body)
+        return PushMessage.ResolvedBody(rawText: rawText, isMarkdown: true, source: .body)
     }
 
     private static func trimmed(_ value: String?) -> String? {
@@ -296,7 +386,7 @@ private enum InlineRegex {
     private static func makeNoMatchRegex() -> NSRegularExpression {
         if let regex = try? NSRegularExpression(pattern: "(?!)") { return regex }
         if let regex = try? NSRegularExpression(pattern: "a^") { return regex }
-        return try! NSRegularExpression(pattern: "(?!)")
+        fatalError("Failed to compile internal fallback regex patterns for inline markdown detection.")
     }
 }
 
@@ -321,10 +411,14 @@ private enum BlockRegex {
     private static func makeNoMatchRegex() -> NSRegularExpression {
         if let regex = try? NSRegularExpression(pattern: "(?!)") { return regex }
         if let regex = try? NSRegularExpression(pattern: "a^") { return regex }
-        return try! NSRegularExpression(pattern: "(?!)")
+        fatalError("Failed to compile internal fallback regex patterns for block markdown detection.")
     }
 }
 
 private extension String {
     var nsRange: NSRange { NSRange(location: 0, length: utf16.count) }
+
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
+    }
 }

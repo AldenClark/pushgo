@@ -5,7 +5,7 @@ enum MessageFilter: Equatable, Hashable, Sendable {
     case unread
     case read
     case withURL
-    case byServer(UUID)
+    case byServer(String)
 
     var title: String {
         switch self {
@@ -22,7 +22,7 @@ enum MessageFilter: Equatable, Hashable, Sendable {
         }
     }
 
-    static func availableFilters(messageId: UUID?) -> [MessageFilter] {
+    static func availableFilters(messageId: String?) -> [MessageFilter] {
         var filters: [MessageFilter] = [.all, .unread, .read, .withURL]
         if let id = messageId {
             filters.append(.byServer(id))
