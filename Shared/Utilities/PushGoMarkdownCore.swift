@@ -159,79 +159,6 @@ struct MarkdownRenderBudget: Equatable, Hashable, Sendable {
     let maxTableRows: Int?
 }
 
-enum MarkdownRenderPayloadSizing {
-    static func listPayload(for text: String, isMarkdown: Bool) -> MarkdownRenderPayload? {
-        let budget = listBudget(for: text.count)
-        return MarkdownRenderPayload.buildIfMarkdown(text: text, isMarkdown: isMarkdown, budget: budget)
-    }
-
-    static func userInfoPayloadJSONString(text: String, isMarkdown: Bool) -> String? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard isMarkdown, !trimmed.isEmpty else { return nil }
-
-        let maxChars = min(
-            trimmed.count,
-            AppConstants.markdownRenderPayloadUserInfoMaxCharacters
-        )
-        let minChars = min(
-            maxChars,
-            AppConstants.markdownRenderPayloadUserInfoMinCharacters
-        )
-
-        var current = maxChars
-        while true {
-            let budget = userInfoBudget(for: trimmed.count, maxCharacters: current)
-            if let payload = MarkdownRenderPayload.buildIfMarkdown(
-                text: trimmed,
-                isMarkdown: isMarkdown,
-                budget: budget
-            ),
-            let payloadJSON = payload.encodeToJSONString(),
-            payloadJSON.utf8.count <= AppConstants.markdownRenderPayloadUserInfoMaxBytes
-            {
-                return payloadJSON
-            }
-
-            if current <= minChars {
-                return nil
-            }
-            current = max(minChars, current / 2)
-        }
-    }
-
-    private static func listBudget(for textCount: Int) -> MarkdownRenderBudget {
-        MarkdownRenderBudget(
-            maxCharacters: listMaxCharacters(for: textCount),
-            maxListItems: 10,
-            maxTableRows: 8
-        )
-    }
-
-    private static func userInfoBudget(for textCount: Int, maxCharacters: Int) -> MarkdownRenderBudget {
-        MarkdownRenderBudget(
-            maxCharacters: maxCharacters,
-            maxListItems: 6,
-            maxTableRows: 4
-        )
-    }
-
-    private static func listMaxCharacters(for textCount: Int) -> Int {
-        let hardCap = AppConstants.markdownRenderPayloadMaxCharacters
-        let softCap = min(AppConstants.markdownRenderPayloadListSoftCap, hardCap)
-
-        if textCount <= 600 {
-            return min(textCount, hardCap)
-        }
-        if textCount <= 1800 {
-            return min(900, hardCap)
-        }
-        if textCount <= 3600 {
-            return min(1800, hardCap)
-        }
-        return min(softCap, hardCap)
-    }
-}
-
 extension MarkdownRenderPayload {
     static func buildIfMarkdown(
         text: String,
@@ -1068,7 +995,7 @@ private enum MarkdownRegex {
     private static func makeNoMatchRegex() -> NSRegularExpression {
         if let regex = try? NSRegularExpression(pattern: "(?!)") { return regex }
         if let regex = try? NSRegularExpression(pattern: "a^") { return regex }
-        return try! NSRegularExpression(pattern: "(?!)")
+        fatalError("Failed to compile internal fallback regex patterns for markdown parser.")
     }
 }
 

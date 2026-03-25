@@ -1,0 +1,19 @@
+{
+  "messages": [
+    {
+      "id": "00000000-0000-0000-0000-00000000b001",
+      "message_id": "msg_p2_seed_001",
+      "title": "P2 Split Seed Message",
+      "body": "Seeded from fixture.seed_messages for UI validation.",
+      "channel_id": "p2",
+      "is_read": false,
+      "received_at": "2026-03-01T10:02:00Z",
+      "raw_payload": {
+        "entity_type": "message",
+        "entity_id": "msg_p2_seed_001",
+        "projection_destination": "messages"
+      },
+      "status": "normal"
+    }
+  ]
+}

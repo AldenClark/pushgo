@@ -4,6 +4,8 @@ build/
 xcuserdata/
 .build/
 .swiftpm/
+.deriveddata-*/
+artifacts/
 
 *.xcuserstate
 *.xccheckout

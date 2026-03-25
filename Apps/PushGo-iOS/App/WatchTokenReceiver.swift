@@ -1,184 +1,183 @@
 import Foundation
-import WatchConnectivity
 
 @MainActor
-final class WatchTokenReceiver: NSObject, WCSessionDelegate {
+final class WatchTokenReceiver {
     static let shared = WatchTokenReceiver()
 
-    private let session: WCSession? = WCSession.isSupported() ? WCSession.default : nil
-    private var isActivated = false
-    private var pendingNotificationKeyMaterial: ServerConfig.NotificationKeyMaterial?
-    private var hasPendingNotificationKeyMaterial = false
-    private var pendingChannelSubscriptions: [ChannelSubscription] = []
-    private var hasPendingChannelSubscriptions = false
-    private var pendingDefaultRingtoneFilename: String?
-    private var hasPendingDefaultRingtoneFilename = false
+    private let coordinator = WatchConnectivityCoordinator.shared
+    private(set) var isWatchCompanionAvailable = false
 
-    private override init() {
-        super.init()
+    private init() {
+        coordinator.installHandlers(
+            .init(
+                linkStateDidChange: { [weak self] state in
+                    guard let self else { return }
+                    self.refreshAvailability(from: state)
+                    await AppEnvironment.shared.handleWatchSessionStateDidChange()
+                },
+                manifestDidReceive: { manifest in
+                    await Self.handleIncomingManifest(manifest)
+                },
+                eventDidReceive: { event in
+                    await Self.handleIncomingEvent(event)
+                },
+                mirrorPackageDidReceive: nil,
+                standalonePackageDidReceive: nil,
+                latestManifestRequested: {
+                    await AppEnvironment.shared.handleWatchLatestManifestRequested()
+                }
+            )
+        )
+        refreshAvailability(from: coordinator.refreshCachedLinkState())
     }
 
     func activateIfNeeded() {
-        guard let session else { return }
-        if session.delegate == nil {
-            session.delegate = self
-        }
-        if !isActivated {
-            session.activate()
-            isActivated = true
-        }
+        coordinator.activateIfNeeded()
+        refreshAvailability(from: coordinator.refreshCachedLinkState())
     }
 
-    nonisolated func session(
-        _ session: WCSession,
-        activationDidCompleteWith activationState: WCSessionActivationState,
-        error: Error?
-    ) {
-        _ = (session, activationState, error)
-        Task { @MainActor in
-            self.flushPendingPayloadsIfPossible()
-        }
+    @discardableResult
+    func refreshCompanionAvailability() -> Bool {
+        activateIfNeeded()
+        return isWatchCompanionAvailable
     }
 
-    nonisolated func sessionDidBecomeInactive(_ session: WCSession) {
-        _ = session
+    func consumeForcedReconfigureFlag() async -> Bool {
+        await coordinator.consumeForcedReconfigureFlag()
     }
 
-    nonisolated func sessionDidDeactivate(_ session: WCSession) {
-        session.activate()
+    func clearPersistentState() async {
+        await coordinator.clearPersistentState()
     }
 
-    nonisolated func sessionWatchStateDidChange(_ session: WCSession) {
-        Task { @MainActor in
-            self.flushPendingPayloadsIfPossible()
-        }
+    func publishControlContext(_ context: WatchControlContext) {
+        coordinator.publishControlManifest(context)
     }
 
-    nonisolated func session(
-        _ session: WCSession,
-        didReceiveApplicationContext applicationContext: [String: Any]
-    ) {
-        handlePayload(applicationContext)
+    func replayLatestManifestIfPossible() {
+        coordinator.replayLatestManifestIfPossible()
     }
 
-    nonisolated func session(
-        _ session: WCSession,
-        didReceiveMessage message: [String: Any]
-    ) {
-        handlePayload(message)
+    func sendMirrorSnapshot(_ snapshot: WatchMirrorSnapshot) {
+        coordinator.prepareMirrorSnapshot(snapshot)
     }
 
-    nonisolated func session(
-        _ session: WCSession,
-        didReceiveUserInfo userInfo: [String: Any]
-    ) {
-        handlePayload(userInfo)
+    func sendStandaloneProvisioning(_ snapshot: WatchStandaloneProvisioningSnapshot) {
+        coordinator.prepareStandaloneProvisioning(snapshot)
     }
 
-    private nonisolated func handlePayload(_ payload: [String: Any]) {
-        guard let token = payload["watch_apns_token"] as? String else { return }
-        Task { @MainActor in
+    func sendMirrorActionAck(_ ack: WatchMirrorActionAck) {
+        coordinator.enqueueReliableMirrorActionAck(ack)
+    }
+
+    private func refreshAvailability(from state: WatchLinkState) {
+        isWatchCompanionAvailable = state.isCompanionAvailable
+    }
+
+    private static func handleIncomingEvent(_ event: WatchEventEnvelope) async {
+        switch event.kind {
+        case .mirrorActionBatch:
+            guard let batch = WatchConnectivityWire.decode(WatchMirrorActionBatch.self, from: event.payload) else {
+                return
+            }
+            await AppEnvironment.shared.applyWatchMirrorActionBatch(batch)
+        case .pushTokenUpdate:
+            guard let token = WatchConnectivityWire.decode(String.self, from: event.payload) else {
+                return
+            }
             await AppEnvironment.shared.updateWatchPushToken(token)
-        }
-    }
-
-    func sendNotificationKeyMaterial(_ material: ServerConfig.NotificationKeyMaterial?) {
-        pendingNotificationKeyMaterial = material
-        hasPendingNotificationKeyMaterial = true
-        activateIfNeeded()
-        flushPendingPayloadsIfPossible()
-    }
-
-    func sendChannelSubscriptions(_ subscriptions: [ChannelSubscription]) {
-        pendingChannelSubscriptions = subscriptions
-        hasPendingChannelSubscriptions = true
-        activateIfNeeded()
-        flushPendingPayloadsIfPossible()
-    }
-
-    func sendDefaultRingtoneFilename(_ filename: String?) {
-        pendingDefaultRingtoneFilename = filename
-        hasPendingDefaultRingtoneFilename = true
-        activateIfNeeded()
-        flushPendingPayloadsIfPossible()
-    }
-
-    private func flushPendingPayloadsIfPossible() {
-        guard let session, shouldUseSession(session) else { return }
-
-        if hasPendingNotificationKeyMaterial {
-            let payload = buildNotificationKeyMaterialPayload(pendingNotificationKeyMaterial)
-            if sendPayload(payload, session: session) {
-                hasPendingNotificationKeyMaterial = false
+        case .standaloneProvisioningAck:
+            guard let ack = WatchConnectivityWire.decode(WatchStandaloneProvisioningAck.self, from: event.payload) else {
+                return
             }
-        }
-
-        if hasPendingChannelSubscriptions {
-            let payload = buildChannelSubscriptionsPayload(pendingChannelSubscriptions)
-            if sendPayload(payload, session: session) {
-                hasPendingChannelSubscriptions = false
+            await AppEnvironment.shared.handleWatchStandaloneProvisioningAck(ack)
+        case .standaloneProvisioningNack:
+            guard let nack = WatchConnectivityWire.decode(WatchStandaloneProvisioningNack.self, from: event.payload) else {
+                return
             }
-        }
-
-        if hasPendingDefaultRingtoneFilename {
-            let payload = buildDefaultRingtonePayload(pendingDefaultRingtoneFilename)
-            if sendPayload(payload, session: session) {
-                hasPendingDefaultRingtoneFilename = false
+            await AppEnvironment.shared.handleWatchStandaloneProvisioningNack(nack)
+        case .mirrorSnapshotAck:
+            guard let ack = WatchConnectivityWire.decode(WatchMirrorSnapshotAck.self, from: event.payload) else {
+                return
             }
+            await AppEnvironment.shared.handleWatchMirrorSnapshotAck(ack)
+        case .mirrorSnapshotNack:
+            guard let nack = WatchConnectivityWire.decode(WatchMirrorSnapshotNack.self, from: event.payload) else {
+                return
+            }
+            await AppEnvironment.shared.handleWatchMirrorSnapshotNack(nack)
+        case .mirrorActionAck, .mirrorSnapshotInline, .standaloneProvisioningInline:
+            break
         }
     }
 
-    private func buildNotificationKeyMaterialPayload(
-        _ material: ServerConfig.NotificationKeyMaterial?
-    ) -> [String: Any] {
-        var payload: [String: Any] = [
-            "notification_key_material_present": material != nil,
-        ]
-        if let material {
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
-            payload["notification_key_material"] = try? encoder.encode(material)
-        }
-        return payload
-    }
-
-    private func buildChannelSubscriptionsPayload(
-        _ subscriptions: [ChannelSubscription]
-    ) -> [String: Any] {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        return [
-            "channel_subscriptions": (try? encoder.encode(subscriptions)) ?? Data(),
-        ]
-    }
-
-    private func buildDefaultRingtonePayload(_ filename: String?) -> [String: Any] {
-        var payload: [String: Any] = [:]
-        if let trimmed = filename?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !trimmed.isEmpty
-        {
-            payload["default_ringtone_filename"] = trimmed
+    private static func handleIncomingManifest(_ manifest: WatchSyncManifest) async {
+        if let effectiveModeStatus = manifest.effectiveModeStatus {
+            await AppEnvironment.shared.handleWatchEffectiveModeStatus(effectiveModeStatus)
         } else {
-            payload["default_ringtone_filename"] = ""
-        }
-        return payload
-    }
-
-    private func sendPayload(_ payload: [String: Any], session: WCSession) -> Bool {
-        do {
-            try session.updateApplicationContext(payload)
-        } catch {
-            return false
-        }
-
-        if session.isReachable {
-            session.sendMessage(payload, replyHandler: nil, errorHandler: nil)
+            await AppEnvironment.shared.handleWatchEffectiveModeStatus(
+                WatchEffectiveModeStatus(
+                    effectiveMode: manifest.mode,
+                    sourceControlGeneration: manifest.controlGeneration,
+                    appliedAt: Date(),
+                    noop: false,
+                    status: .applied,
+                    failureReason: nil
+                )
+            )
         }
 
-        return true
-    }
+        if let standaloneReadinessStatus = manifest.standaloneReadinessStatus {
+            await AppEnvironment.shared.handleWatchStandaloneReadinessStatus(standaloneReadinessStatus)
+        } else if manifest.mode == .mirror {
+            await AppEnvironment.shared.handleWatchStandaloneReadinessStatus(
+                WatchStandaloneReadinessStatus(
+                    effectiveMode: .mirror,
+                    standaloneReady: false,
+                    sourceControlGeneration: manifest.controlGeneration,
+                    provisioningGeneration: manifest.standalonePackage?.generation ?? 0,
+                    reportedAt: Date(),
+                    failureReason: nil
+                )
+            )
+        }
 
-    private nonisolated func shouldUseSession(_ session: WCSession) -> Bool {
-        session.isPaired && session.isWatchAppInstalled
+        if let mirrorAck = manifest.mirrorSnapshotAck,
+           mirrorAck.generation > 0
+        {
+            await AppEnvironment.shared.handleWatchMirrorSnapshotAck(
+                WatchMirrorSnapshotAck(
+                    generation: mirrorAck.generation,
+                    contentDigest: mirrorAck.contentDigest,
+                    appliedAt: mirrorAck.appliedAt
+                )
+            )
+        }
+
+        if let standaloneAck = manifest.standaloneProvisioningAck,
+           standaloneAck.generation > 0
+        {
+            await AppEnvironment.shared.handleWatchStandaloneProvisioningAck(
+                WatchStandaloneProvisioningAck(
+                    generation: standaloneAck.generation,
+                    contentDigest: standaloneAck.contentDigest,
+                    appliedAt: standaloneAck.appliedAt
+                )
+            )
+        }
+
+        guard manifest.mode == .mirror,
+              let generation = manifest.ackCursor?.generation,
+              generation > 0
+        else {
+            return
+        }
+        await AppEnvironment.shared.handleWatchMirrorSnapshotAck(
+            WatchMirrorSnapshotAck(
+                generation: generation,
+                contentDigest: "",
+                appliedAt: Date()
+            )
+        )
     }
 }

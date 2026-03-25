@@ -1,167 +1,247 @@
 import SwiftUI
-import UniformTypeIdentifiers
-import AppKit
 
 struct MainTabContainerView: View {
-    @Environment(\.appEnvironment) private var environment: AppEnvironment
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     @State private var searchViewModel = MessageSearchViewModel()
     @State private var messageListViewModel = MessageListViewModel()
+    @State private var entityViewModel = EntityProjectionViewModel()
     @State private var sidebarSelection: SidebarSelection? = .messagesAll
 
     @State private var selectedMessageId: UUID?
     @State private var selectedMessageSnapshot: PushMessage?
-    @State private var pendingNotificationSelectionId: UUID?
+    @State private var selectedEventId: String?
+    @State private var selectedThingId: String?
 
-    @State private var isExportingMessages = false
-    @State private var exportDocument = MessagesExportDocument(messages: [])
-    @State private var exportFilename = ""
-    @State private var exportChannelDisplayName = LocalizationManager.localizedSync("all_groups")
-
-    @State private var ignoreMessageStoreRevisionsUntil: Date?
-    @State private var ignoreRevisionResetTask: Task<Void, Never>?
     @State private var didRefreshAuthorizationStatus: Bool = false
-    @State private var showChannelCleanupConfirmation = false
-    @State private var isCleaningChannel = false
 
     var body: some View {
+        configuredRootView(splitViewContent)
+    }
+
+    private var splitViewContent: some View {
         NavigationSplitView {
             sidebarMenu
                 .navigationSplitViewColumnWidth(min: 220, ideal: 220, max: 240)
         } detail: {
             detailContent
         }
-        .environment(searchViewModel)
-        .alert(
-            localizationManager.localized("confirm_cleanup_messages"),
-            isPresented: $showChannelCleanupConfirmation
-        ) {
-            Button(localizationManager.localized("confirm")) {
-                guard !isCleaningChannel else { return }
-                isCleaningChannel = true
-                Task {
-                    _ = await messageListViewModel.cleanupReadMessages()
-                    isCleaningChannel = false
+    }
+
+    @ViewBuilder
+    private func configuredRootView<Content: View>(_ content: Content) -> some View {
+        let taskView = AnyView(
+            content
+                .task {
+                    guard !didRefreshAuthorizationStatus else { return }
+                    didRefreshAuthorizationStatus = true
+                    await environment.pushRegistrationService.refreshAuthorizationStatus()
+                    await entityViewModel.reload()
+                    environment.updateActiveTab(activeTab)
+                    if environment.pendingEventToOpen != nil || environment.pendingThingToOpen != nil {
+                        openPendingEntityIfNeeded()
+                    }
+                    ensureSidebarSelectionIsVisible()
                 }
-            }
-            Button(localizationManager.localized("cancel"), role: .cancel) {}
-        } message: {
-            Text(cleanupConfirmationMessage)
-        }
-        .task {
-            guard !didRefreshAuthorizationStatus else { return }
-            didRefreshAuthorizationStatus = true
-            await environment.pushRegistrationService.refreshAuthorizationStatus()
-            environment.updateActiveTab(activeTab)
-            if activeTab == .messages {
-                await refreshMessagesIfNeeded()
-            }
-            if environment.pendingMessageToOpen != nil {
-                openPendingMessageIfNeeded()
-            }
-        }
-        .task {
-            for await _ in NotificationCenter.default.notifications(named: .pushgoOpenSettingsFromMenuBar) {
-                sidebarSelection = .settings
-            }
-        }
+                .task {
+                    for await _ in NotificationCenter.default.notifications(named: .pushgoOpenSettingsFromMenuBar) {
+                        sidebarSelection = .settings
+                    }
+                }
+#if DEBUG
+                .task {
+                    for await notification in NotificationCenter.default.notifications(
+                        named: .pushgoAutomationSelectTab
+                    ) {
+                        guard let requestedTab = notification.object as? String else { continue }
+                        switch requestedTab {
+                        case "messages":
+                            sidebarSelection = .messagesAll
+                        case "events":
+                            sidebarSelection = .events
+                        case "things":
+                            sidebarSelection = .things
+                        case "channels":
+                            sidebarSelection = .channels
+                        case "settings":
+                            sidebarSelection = .settings
+                        default:
+                            continue
+                        }
+                    }
+                }
+                .task(id: automationStateVersion) {
+                    publishAutomationState()
+                }
+#endif
+        )
+
+        taskView
         .onChange(of: environment.pendingMessageToOpen) { _, id in
             if id != nil {
-                openPendingMessageIfNeeded()
+                sidebarSelection = .messagesAll
             }
         }
-        .onChange(of: localizationManager.locale) { _, _ in
-            exportChannelDisplayName = localizationManager.localized("all_groups")
+        .onChange(of: environment.pendingEventToOpen) { _, id in
+            if id != nil {
+                openPendingEntityIfNeeded()
+            }
+        }
+        .onChange(of: environment.pendingThingToOpen) { _, id in
+            if id != nil {
+                openPendingEntityIfNeeded()
+            }
         }
         .onChange(of: sidebarSelection) { oldValue, newValue in
             applySidebarSelection(previous: oldValue, current: newValue)
         }
-        .onChange(of: messageListViewModel.selectedChannel) { _, _ in
-            syncSidebarSelectionIfNeeded()
-        }
         .onChange(of: environment.messageStoreRevision) { _, _ in
-            guard !shouldIgnoreMessageStoreRevision() else { return }
-            Task { await refreshMessagesForStoreChange() }
-        }
-        .onChange(of: messageListViewModel.filteredMessages) { _, _ in
-            guard activeTab == .messages else { return }
-            ensureMessagesSelectionIfNeeded()
-            Task { await syncSelectedMessageSnapshot(for: selectedMessageId, markRead: false) }
-        }
-        .onChange(of: searchViewModel.displayedResults) { _, _ in
-            guard activeTab == .messages else { return }
-            ensureMessagesSelectionIfNeeded()
-            Task { await syncSelectedMessageSnapshot(for: selectedMessageId, markRead: false) }
-        }
-        .onChange(of: selectedMessageId) { _, newValue in
-            guard activeTab == .messages else { return }
-            if newValue != pendingNotificationSelectionId {
-                pendingNotificationSelectionId = nil
+            Task {
+                await entityViewModel.reload()
+                ensureSidebarSelectionIsVisible()
             }
-            ensureMessagesSelectionIfNeeded()
-            Task { await syncSelectedMessageSnapshot(for: newValue, markRead: true) }
+        }
+        .onChange(of: visibleNavigationSignature) { _, _ in
+            ensureSidebarSelectionIsVisible()
+        }
+        .onChange(of: searchViewModel.query) { _, newValue in
+#if DEBUG
+            PushGoAutomationRuntime.shared.recordSearchResultsUpdated(
+                query: newValue,
+                resultCount: searchViewModel.totalResults
+            )
+#endif
+        }
+        .onChange(of: searchViewModel.totalResults) { _, newValue in
+#if DEBUG
+            PushGoAutomationRuntime.shared.recordSearchResultsUpdated(
+                query: searchViewModel.query,
+                resultCount: newValue
+            )
+#endif
         }
     }
+
+#if DEBUG
+    private var automationStateVersion: String {
+        [
+            activeTab.automationIdentifier,
+            selectedMessageId?.uuidString ?? "",
+            environment.pendingMessageToOpen?.uuidString ?? "",
+            environment.pendingEventToOpen ?? "",
+            environment.pendingThingToOpen ?? "",
+            "\(environment.unreadMessageCount)",
+            "\(environment.totalMessageCount)",
+        ].joined(separator: "|")
+    }
+
+    private func publishAutomationState() {
+        guard activeTab.automationPublishesFromRoot else { return }
+        PushGoAutomationRuntime.shared.publishState(
+            environment: environment,
+            activeTab: activeTab.automationIdentifier,
+            visibleScreen: selectedMessageId == nil ? activeTab.automationVisibleScreen : "screen.message.detail",
+            openedMessageId: selectedMessageSnapshot?.messageId ?? selectedMessageId?.uuidString
+        )
+    }
+#endif
 
     private var activeTab: MainTab {
         sidebarSelection?.mainTab ?? .messages
     }
 
-    private var sidebarChannelSummaries: [MessageChannelSummary] {
-        let summaries = messageListViewModel.channelSummaries
-        let hasNamedChannel = summaries.contains { summary in
-            if case .named = summary.key {
-                return true
+    @ViewBuilder
+    private var sidebarMenu: some View {
+        List(selection: $sidebarSelection) {
+            if showsMessagesEntry {
+                sidebarPrimaryRow(.messages)
+                    .tag(SidebarSelection.messagesAll)
             }
-            return false
+            if showsEventsEntry {
+                sidebarPrimaryRow(.events)
+                    .tag(SidebarSelection.events)
+            }
+            if showsThingsEntry {
+                sidebarPrimaryRow(.things)
+                    .tag(SidebarSelection.things)
+            }
+            sidebarPrimaryRow(.channels)
+                .tag(SidebarSelection.channels)
+            sidebarPrimaryRow(.settings)
+                .tag(SidebarSelection.settings)
         }
-        return hasNamedChannel ? summaries : []
+        .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            sidebarFooter
+        }
     }
 
     @ViewBuilder
-    private var sidebarMenu: some View {
-        if sidebarChannelSummaries.isEmpty {
-            List(selection: $sidebarSelection) {
-                sidebarPrimaryRow(.messages)
-                    .tag(SidebarSelection.messagesAll)
-                sidebarPrimaryRow(.channels)
-                    .tag(SidebarSelection.channels)
-                sidebarPrimaryRow(.devices)
-                    .tag(SidebarSelection.devices)
-                sidebarPrimaryRow(.settings)
-                    .tag(SidebarSelection.settings)
-            }
-            .listStyle(.sidebar)
-            .scrollContentBackground(.hidden)
-        } else {
-            VStack(spacing: 0) {
-                List(selection: $sidebarSelection) {
-                    sidebarPrimaryRow(.messages)
-                        .tag(SidebarSelection.messagesAll)
-                    ForEach(sidebarChannelSummaries) { summary in
-                        sidebarChannelRow(summary)
-                            .tag(SidebarSelection.messagesChannel(summary.key))
-                    }
-                }
-                .listStyle(.sidebar)
-                .scrollContentBackground(.hidden)
-                .frame(maxHeight: .infinity)
-
-                List(selection: $sidebarSelection) {
-                    sidebarPrimaryRow(.channels)
-                        .tag(SidebarSelection.channels)
-                    sidebarPrimaryRow(.devices)
-                        .tag(SidebarSelection.devices)
-                    sidebarPrimaryRow(.settings)
-                        .tag(SidebarSelection.settings)
-                }
-                .listStyle(.sidebar)
-                .scrollContentBackground(.hidden)
-                .scrollDisabled(true)
-                .frame(height: SidebarLayout.bottomListHeight)
-            }
+    private var sidebarFooter: some View {
+        if !environment.launchAtLoginEnabled {
+            launchAtLoginReminder
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
         }
+    }
+
+    private var launchAtLoginReminder: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "power.dotted")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.orange)
+                    .frame(width: 30, height: 30)
+                    .background(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(Color.orange.opacity(0.14))
+                    )
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("sidebar_launch_at_login_reminder_title")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text("sidebar_launch_at_login_reminder_detail")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Button {
+                environment.updateLaunchAtLogin(isEnabled: true)
+            } label: {
+                Text("sidebar_launch_at_login_reminder_action")
+                    .font(.callout.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("sidebar-enable-launch-at-login")
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(nsColor: .controlBackgroundColor),
+                            Color.orange.opacity(0.08),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.orange.opacity(0.18), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
     }
 
     private func sidebarPrimaryRow(_ tab: MainTab) -> some View {
@@ -177,32 +257,8 @@ struct MainTabContainerView: View {
         .listRowSeparator(.hidden)
     }
 
-    @ViewBuilder
-    private func sidebarChannelRow(_ summary: MessageChannelSummary) -> some View {
-        let channelName = resolvedChannelDisplayName(for: summary.key) ?? summary.title
-        let baseText = Text(channelName)
-            .font(.callout)
-            .foregroundStyle(.primary)
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .padding(.vertical, SidebarLayout.channelRowVerticalPadding)
-            .padding(.leading, SidebarLayout.channelRowLeadingPadding)
-            .padding(.trailing, SidebarLayout.channelRowTrailingPadding)
-            .listRowSeparator(.hidden)
-        if summary.unreadCount > 0 {
-            baseText.badge(summary.unreadCount)
-        } else {
-            baseText
-        }
-    }
-
     private enum SidebarLayout {
         static let primaryRowVerticalPadding: CGFloat = 6
-        static let primaryRowEstimatedHeight: CGFloat = 32
-        static let bottomListHeight: CGFloat = primaryRowEstimatedHeight * 3 + 32
-        static let channelRowVerticalPadding: CGFloat = 4
-        static let channelRowLeadingPadding: CGFloat = 12
-        static let channelRowTrailingPadding: CGFloat = 0
     }
 
     private func sidebarIcon(systemImageName: String) -> some View {
@@ -214,64 +270,41 @@ struct MainTabContainerView: View {
 
     @ViewBuilder
     private var detailContent: some View {
-        if activeTab == .messages {
-            messagesContent
-        } else {
-            detailView(for: activeTab)
-        }
-    }
-
-    private var messagesContent: some View {
-        let baseView = HSplitView {
-            MessageListScreen(viewModel: messageListViewModel, selection: $selectedMessageId)
-                .frame(minWidth: 280, idealWidth: 300, maxWidth: 320)
-                .toolbar { messageListToolbarContent }
-            messagesDetail
-                .toolbar { messageDetailToolbarContent }
-        }
-        return applyToolbarSearchIfNeeded(baseView)
-        .fileExporter(
-            isPresented: $isExportingMessages,
-            document: exportDocument,
-            contentType: UTType.json,
-            defaultFilename: exportFilename,
-        ) { result in
-            switch result {
-            case .success:
-                environment.showToast(
-                    message: localizationManager.localized("placeholder_export_successful", exportChannelDisplayName),
-                    style: .success,
-                    duration: 1.5,
-                )
-            case let .failure(error):
-                environment.showToast(
-                    message: localizationManager.localized("export_failed_placeholder", error.localizedDescription),
-                    style: .error,
-                    duration: 2,
-                )
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func applyToolbarSearchIfNeeded<Content: View>(_ content: Content) -> some View {
-        if #available(macOS 26.0, *) {
-            content.modifier(MessagesSearchModifier(
-                localizationManager: localizationManager,
-                searchViewModel: searchViewModel,
-            ))
-        } else {
-            content
-        }
+        detailView(for: activeTab)
     }
 
     @ViewBuilder
     private func detailView(for tab: MainTab) -> some View {
         switch tab {
         case .messages:
-            messagesDetail
-        case .devices:
-            PushScreen()
+            MessageSplitScreen(
+                messageListViewModel: messageListViewModel,
+                searchViewModel: searchViewModel,
+                selection: $selectedMessageId,
+                selectedMessageSnapshot: $selectedMessageSnapshot,
+                openMessageId: environment.pendingMessageToOpen,
+                onOpenMessageHandled: {
+                    environment.pendingMessageToOpen = nil
+                }
+            )
+        case .events:
+            EventSplitScreen(
+                viewModel: entityViewModel,
+                selection: $selectedEventId,
+                openEventId: environment.pendingEventToOpen,
+                onOpenEventHandled: {
+                    environment.pendingEventToOpen = nil
+                }
+            )
+        case .things:
+            ThingSplitScreen(
+                viewModel: entityViewModel,
+                selection: $selectedThingId,
+                openThingId: environment.pendingThingToOpen,
+                onOpenThingHandled: {
+                    environment.pendingThingToOpen = nil
+                }
+            )
         case .channels:
             ChannelManagementView()
         case .settings:
@@ -279,404 +312,23 @@ struct MainTabContainerView: View {
         }
     }
 
-    private var messagesDetail: some View {
-        Group {
-            if let messageId = selectedMessageId {
-                MessageDetailScreen(
-                    messageId: messageId,
-                    message: selectedMessageSnapshot,
-                    onDelete: {
-                        selectedMessageId = nil
-                        selectedMessageSnapshot = nil
-                    },
-                    shouldDismissOnDelete: false,
-                    useNavigationContainer: false,
-                )
-                .id(messageId)
-            } else {
-                VStack(spacing: 12) {
-                    Image(systemName: "rectangle.split.2x1")
-                        .font(.title.weight(.semibold))
-                        .foregroundColor(.secondary)
-                    Text(localizationManager.localized("select_a_message_to_view_details"))
-                        .font(.headline)
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(messageDetailEmptyBackground)
-            }
-        }
-    }
-
-    private var messageDetailEmptyBackground: Color {
-        if #available(macOS 26.0, *) {
-            Color.appWindowBackground
-        } else {
-            Color.messageListBackground
-        }
-    }
-
-    @MainActor
-    private func refreshMessagesIfNeeded() async {
-        await messageListViewModel.refresh()
-        searchViewModel.refreshMessagesIfNeeded()
-        ensureMessagesSelectionIfNeeded()
-        await syncSelectedMessageSnapshot(for: selectedMessageId, markRead: false)
-    }
-
-    @MainActor
-    private func refreshMessagesForStoreChange() async {
-        if activeTab == .messages {
-            await refreshMessagesIfNeeded()
-        } else {
-            await messageListViewModel.refresh()
-            searchViewModel.refreshMessagesIfNeeded()
-        }
-    }
-
-    private func ensureMessagesSelectionIfNeeded() {
-        guard let selectedMessageId else { return }
-
-        let existsInMessages = messageListViewModel.filteredMessages.contains(where: { $0.id == selectedMessageId })
-        let existsInSearch = searchViewModel.displayedResults.contains(where: { $0.id == selectedMessageId })
-
-        if pendingNotificationSelectionId == selectedMessageId {
-            if existsInMessages || existsInSearch {
-                pendingNotificationSelectionId = nil
-            }
+    private func openPendingEntityIfNeeded() {
+        if environment.pendingThingToOpen != nil {
+            environment.pendingEventToOpen = nil
+            sidebarSelection = .things
             return
         }
-
-        if searchViewModel.hasSearched {
-            if !existsInSearch {
-                self.selectedMessageId = nil
-            }
-        } else {
-            if !existsInMessages {
-                self.selectedMessageId = nil
-            }
+        if environment.pendingEventToOpen != nil {
+            environment.pendingThingToOpen = nil
+            sidebarSelection = .events
         }
-    }
-
-    private func syncSelectedMessageSnapshot(for messageId: UUID?, markRead: Bool) async {
-        guard let messageId else {
-            await MainActor.run {
-                selectedMessageSnapshot = nil
-            }
-            return
-        }
-
-        let existingSnapshot = await MainActor.run { selectedMessageSnapshot }
-        if let existingSnapshot, existingSnapshot.id == messageId {
-            if markRead {
-                await markMessageReadIfNeeded(existingSnapshot, messageId: messageId)
-            }
-            return
-        }
-
-        let loaded = try? await environment.dataStore.loadMessage(id: messageId)
-        await MainActor.run {
-            guard selectedMessageId == messageId else { return }
-            selectedMessageSnapshot = loaded
-        }
-        guard markRead, let loaded else { return }
-        await markMessageReadIfNeeded(loaded, messageId: messageId)
-    }
-
-    private func openPendingMessageIfNeeded() {
-        guard let targetId = environment.pendingMessageToOpen else { return }
-        Task {
-            let loaded = try? await environment.dataStore.loadMessage(id: targetId)
-            guard let message = loaded else { return }
-            await MainActor.run {
-                if activeTab != .messages {
-                    sidebarSelection = messagesSidebarSelection
-                }
-                pendingNotificationSelectionId = targetId
-                selectedMessageId = targetId
-                selectedMessageSnapshot = message
-                environment.pendingMessageToOpen = nil
-            }
-        }
-    }
-
-    private func markMessageReadIfNeeded(_ message: PushMessage, messageId: UUID) async {
-        guard !message.isRead else { return }
-        await MainActor.run {
-            ignoreNextMessageStoreRevisions()
-        }
-        await messageListViewModel.markRead(PushMessageSummary(message: message), isRead: true)
-        await MainActor.run {
-            guard selectedMessageId == messageId else { return }
-            selectedMessageSnapshot?.isRead = true
-        }
-    }
-
-    private func handleMarkAllAsRead() async {
-        _ = await messageListViewModel.markCurrentChannelAsRead()
-    }
-
-    private func toggleSelectedMessageReadState() {
-        guard let message = selectedMessageSnapshot, !message.isRead else { return }
-        let currentId = selectedMessageId
-        ignoreNextMessageStoreRevisions(for: 1.0)
-        Task {
-            await messageListViewModel.markRead(PushMessageSummary(message: message), isRead: true)
-            await MainActor.run {
-                guard selectedMessageId == currentId else { return }
-                selectedMessageSnapshot?.isRead = true
-            }
-        }
-    }
-
-    private func deleteSelectedMessage() {
-        guard let message = selectedMessageSnapshot else { return }
-        ignoreNextMessageStoreRevisions(for: 1.2)
-        Task {
-            await messageListViewModel.delete(PushMessageSummary(message: message))
-            await MainActor.run {
-                selectedMessageId = nil
-                selectedMessageSnapshot = nil
-                ensureMessagesSelectionIfNeeded()
-            }
-        }
-    }
-
-    private func copySelectedMessageContent() {
-        guard let message = selectedMessageSnapshot else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(message.resolvedBody.rawText, forType: .string)
-        environment.showToast(
-            message: localizationManager.localized("message_content_copied"),
-            style: .success,
-            duration: 1.2
-        )
-    }
-
-    private func startMessagesExport() {
-        Task {
-            do {
-                let messages = try await environment.dataStore.loadMessages(
-                    filter: messageListViewModel.currentQueryFilter(),
-                    channel: messageListViewModel.currentChannelRawValue(),
-                )
-                guard !messages.isEmpty else {
-                    await MainActor.run {
-                        environment.showToast(
-                            message: localizationManager.localized(
-                                "placeholder_no_exported_messages_yet",
-                                resolvedChannelDisplayName(for: messageListViewModel.selectedChannel)
-                                    ?? localizationManager.localized("all_groups")
-                            ),
-                            style: .info,
-                            duration: 1.5,
-                        )
-                    }
-                    return
-                }
-                await MainActor.run {
-                    exportDocument = MessagesExportDocument(messages: messages)
-                    exportFilename = exportFilenameForExport(channel: messageListViewModel.selectedChannel)
-                    exportChannelDisplayName = resolvedChannelDisplayName(for: messageListViewModel.selectedChannel)
-                        ?? localizationManager.localized("all_groups")
-                    isExportingMessages = true
-                }
-            } catch {
-                await MainActor.run {
-                    environment.showToast(
-                        message: localizationManager.localized("export_failed_placeholder", error.localizedDescription),
-                        style: .error,
-                        duration: 2,
-                    )
-                }
-            }
-        }
-    }
-
-    private func exportFilenameForExport(channel: MessageChannelKey?) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd-HHmmss"
-        let timestamp = formatter.string(from: Date())
-        let channelComponent: String = if let channel {
-            sanitizedFilenameComponent(resolvedChannelDisplayName(for: channel) ?? channel.displayName)
-        } else {
-            "all"
-        }
-        return "pushgo-\(channelComponent)-\(timestamp)"
-    }
-
-    private func resolvedChannelDisplayName(for channel: MessageChannelKey?) -> String? {
-        guard let channel else { return nil }
-        if channel.rawChannelValue == "" {
-            return localizationManager.localized("not_grouped")
-        }
-        return environment.channelDisplayName(for: channel.rawChannelValue) ?? channel.displayName
-    }
-
-    private func sanitizedFilenameComponent(_ raw: String) -> String {
-        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
-        var buffer = ""
-        var previousWasSeparator = false
-        for scalar in raw.unicodeScalars {
-            if allowed.contains(scalar) {
-                buffer.append(Character(scalar))
-                previousWasSeparator = false
-            } else if !previousWasSeparator {
-                buffer.append("-")
-                previousWasSeparator = true
-            }
-        }
-        let trimmed = buffer.trimmingCharacters(in: CharacterSet(charactersIn: "-_"))
-        return trimmed.isEmpty ? "channel" : trimmed
-    }
-
-    private func ignoreNextMessageStoreRevisions(for interval: TimeInterval = 0.7) {
-        ignoreMessageStoreRevisionsUntil = Date().addingTimeInterval(interval)
-        ignoreRevisionResetTask?.cancel()
-        ignoreRevisionResetTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: UInt64((interval + 0.2) * 1_000_000_000))
-            guard let until = ignoreMessageStoreRevisionsUntil else { return }
-            if until <= Date() {
-                ignoreMessageStoreRevisionsUntil = nil
-            }
-        }
-    }
-
-    private var shouldShowExportButton: Bool {
-        !messageListViewModel.filteredMessages.isEmpty
-    }
-
-    private var hasMessages: Bool {
-        messageListViewModel.totalMessageCount > 0
-    }
-
-    private var cleanupConfirmationMessage: String {
-        if let channel = messageListViewModel.selectedChannel {
-            let displayName = resolvedChannelDisplayName(for: channel) ?? channel.displayName
-            let action = localizationManager.localized("clean_channel_read_placeholder", displayName)
-            return localizationManager.localized("confirm_cleanup_messages_placeholder", action)
-        }
-        let action = localizationManager.localized("clean_all_read_messages")
-        return localizationManager.localized("confirm_cleanup_messages_placeholder", action)
-    }
-
-    private var shouldShowMarkAllAsReadButton: Bool {
-        if let channel = messageListViewModel.selectedChannel {
-            return messageListViewModel.channelSummaries.first(where: { $0.key == channel })?.hasUnread ?? false
-        }
-        return messageListViewModel.unreadMessageCount > 0
-    }
-
-    @ToolbarContentBuilder
-    private var messageListToolbarContent: some ToolbarContent {
-        if #available(macOS 26.0, *) {
-            ToolbarItemGroup(placement: .primaryAction) {
-                messageListToolbarButtons
-            }
-        } else {
-            ToolbarItemGroup(placement: .navigation) {
-                messageListToolbarButtons
-            }
-        }
-    }
-
-    @ToolbarContentBuilder
-    private var messageDetailToolbarContent: some ToolbarContent {
-        if #available(macOS 26.0, *) {
-            ToolbarItemGroup(placement: .secondaryAction) {
-                messageDetailToolbarButtons
-            }
-        } else {
-            ToolbarItemGroup(placement: .primaryAction) {
-                messageDetailToolbarButtons
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var messageListToolbarButtons: some View {
-        if shouldShowMarkAllAsReadButton {
-            Button {
-                ignoreNextMessageStoreRevisions(for: 1.2)
-                Task { await handleMarkAllAsRead() }
-            } label: {
-                Image(systemName: "envelope.open.fill")
-            }
-            .help(localizationManager.localized("mark_all_as_read"))
-            .accessibilityLabel(localizationManager.localized("mark_all_as_read"))
-        }
-
-        if hasMessages {
-            Button {
-                showChannelCleanupConfirmation = true
-            } label: {
-                Image(systemName: "bin.xmark")
-            }
-            .help(localizationManager.localized("clean_all_read_messages"))
-            .accessibilityLabel(localizationManager.localized("clean_all_read_messages"))
-            .disabled(isCleaningChannel)
-        }
-
-        if shouldShowExportButton {
-            Button {
-                startMessagesExport()
-            } label: {
-                Image(systemName: "square.and.arrow.up")
-            }
-            .help(localizationManager.localized("export_messages"))
-            .accessibilityLabel(localizationManager.localized("export_messages"))
-        }
-    }
-
-    @ViewBuilder
-    private var messageDetailToolbarButtons: some View {
-        if let selectedMessageSnapshot, !selectedMessageSnapshot.isRead {
-            Button {
-                toggleSelectedMessageReadState()
-            } label: {
-                Image(systemName: "envelope.open")
-            }
-            .help(localizationManager.localized("mark_as_read"))
-            .accessibilityLabel(localizationManager.localized("mark_as_read"))
-        }
-
-        Button(role: .destructive) {
-            deleteSelectedMessage()
-        } label: {
-            Image(systemName: "trash")
-        }
-        .help(localizationManager.localized("delete"))
-        .accessibilityLabel(localizationManager.localized("delete"))
-        .disabled(selectedMessageSnapshot == nil)
-
-        Button {
-            copySelectedMessageContent()
-        } label: {
-            Image(systemName: "doc.on.doc")
-        }
-        .help(localizationManager.localized("copy_content"))
-        .accessibilityLabel(localizationManager.localized("copy_content"))
-        .disabled(selectedMessageSnapshot == nil)
-    }
-
-    private func shouldIgnoreMessageStoreRevision() -> Bool {
-        guard let until = ignoreMessageStoreRevisionsUntil else { return false }
-        if until > Date() {
-            return true
-        }
-        ignoreMessageStoreRevisionsUntil = nil
-        return false
     }
 
     private var messagesSidebarSelection: SidebarSelection {
-        if let channel = messageListViewModel.selectedChannel {
-            return .messagesChannel(channel)
-        }
         return .messagesAll
     }
 
-    private func applySidebarSelection(previous: SidebarSelection?, current: SidebarSelection?) {
-        let previousTab = previous?.mainTab ?? .messages
+    private func applySidebarSelection(previous _: SidebarSelection?, current: SidebarSelection?) {
         let nextTab = current?.mainTab ?? .messages
         environment.updateActiveTab(nextTab)
         guard nextTab == .messages else { return }
@@ -685,62 +337,88 @@ struct MainTabContainerView: View {
             if messageListViewModel.selectedChannel != nil {
                 messageListViewModel.clearChannelSelection()
             }
-        case let .messagesChannel(channel):
-            if messageListViewModel.selectedChannel != channel {
-                messageListViewModel.toggleChannelSelection(channel)
-            }
-        case .channels, .devices, .settings:
+        case .events, .things, .channels, .settings:
             break
-        }
-        if previousTab != .messages {
-            Task { await refreshMessagesIfNeeded() }
-        }
-    }
-
-    private func syncSidebarSelectionIfNeeded() {
-        guard activeTab == .messages else { return }
-        let desired = messagesSidebarSelection
-        if sidebarSelection != desired {
-            sidebarSelection = desired
+        case .messagesChannel:
+            if messageListViewModel.selectedChannel != nil {
+                messageListViewModel.clearChannelSelection()
+            }
         }
     }
-}
 
-private struct MessagesSearchModifier: ViewModifier {
-    let localizationManager: LocalizationManager
-    let searchViewModel: MessageSearchViewModel
+    private var showsMessagesEntry: Bool {
+        environment.isMessagePageEnabled
+    }
 
-    func body(content: Content) -> some View {
-        content.searchable(
-            text: Binding(
-                get: { searchViewModel.query },
-                set: { newValue in searchViewModel.updateQuery(newValue) }
-            ),
-            placement: .toolbar,
-            prompt: Text(localizationManager.localized("search_messages"))
-        )
+    private var showsEventsEntry: Bool {
+        environment.isEventPageEnabled
+    }
+
+    private var showsThingsEntry: Bool {
+        environment.isThingPageEnabled
+    }
+
+    private var visibleNavigationSignature: String {
+        "\(showsMessagesEntry)|\(showsEventsEntry)|\(showsThingsEntry)"
+    }
+
+    private func ensureSidebarSelectionIsVisible() {
+        let visibleTabs: Set<MainTab> = {
+            var tabs: Set<MainTab> = [.channels, .settings]
+            if showsMessagesEntry {
+                tabs.insert(.messages)
+            }
+            if showsEventsEntry {
+                tabs.insert(.events)
+            }
+            if showsThingsEntry {
+                tabs.insert(.things)
+            }
+            return tabs
+        }()
+
+        if let current = sidebarSelection, visibleTabs.contains(current.mainTab) {
+            if current.mainTab == .messages, !showsMessagesEntry {
+                sidebarSelection = .channels
+            }
+            return
+        }
+
+        if showsMessagesEntry {
+            sidebarSelection = messagesSidebarSelection
+        } else if showsEventsEntry {
+            sidebarSelection = .events
+        } else if showsThingsEntry {
+            sidebarSelection = .things
+        } else {
+            sidebarSelection = .channels
+        }
     }
 }
 
 enum MainTab: Hashable, CaseIterable {
     case messages
+    case events
+    case things
     case channels
-    case devices
     case settings
 
     var title: String {
         switch self {
         case .messages:
             "messages"
+        case .events:
+            "push_type_event"
+        case .things:
+            "push_type_thing"
         case .channels:
             "channels"
-        case .devices:
-            "push"
         case .settings:
             "settings"
         }
     }
 
+    @MainActor
     func localizedTitle(using localizationManager: LocalizationManager) -> String {
         localizationManager.localized(title)
     }
@@ -749,10 +427,12 @@ enum MainTab: Hashable, CaseIterable {
         switch self {
         case .messages:
             "tray.full"
+        case .events:
+            "waveform.path.ecg"
+        case .things:
+            "cpu"
         case .channels:
             "dot.radiowaves.left.and.right"
-        case .devices:
-            "link"
         case .settings:
             "gearshape"
         }
@@ -762,31 +442,77 @@ enum MainTab: Hashable, CaseIterable {
         switch self {
         case .messages:
             "messages"
+        case .events:
+            "events"
+        case .things:
+            "things"
         case .channels:
             "channels"
-        case .devices:
-            "devices"
         case .settings:
             "settings"
         }
     }
+
+#if DEBUG
+    var automationIdentifier: String {
+        switch self {
+        case .messages:
+            return "messages"
+        case .events:
+            return "events"
+        case .things:
+            return "things"
+        case .channels:
+            return "channels"
+        case .settings:
+            return "settings"
+        }
+    }
+
+    var automationVisibleScreen: String {
+        switch self {
+        case .messages:
+            return "screen.messages.list"
+        case .events:
+            return "screen.events.list"
+        case .things:
+            return "screen.things.list"
+        case .channels:
+            return "screen.channels"
+        case .settings:
+            return "screen.settings"
+        }
+    }
+
+    var automationPublishesFromRoot: Bool {
+        switch self {
+        case .events, .things, .settings:
+            return false
+        case .messages, .channels:
+            return true
+        }
+    }
+#endif
 }
 
 enum SidebarSelection: Hashable {
     case messagesAll
     case messagesChannel(MessageChannelKey)
+    case events
+    case things
     case channels
-    case devices
     case settings
 
     var mainTab: MainTab {
         switch self {
         case .messagesAll, .messagesChannel:
             .messages
+        case .events:
+            .events
+        case .things:
+            .things
         case .channels:
             .channels
-        case .devices:
-            .devices
         case .settings:
             .settings
         }

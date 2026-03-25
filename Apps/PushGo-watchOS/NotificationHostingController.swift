@@ -22,8 +22,6 @@ final class NotificationHostingController: WKUserNotificationHostingController<N
 final class NotificationViewModel: ObservableObject {
     @Published var title = ""
     @Published var body = ""
-    @Published var isMarkdown = false
-    @Published var markdownPayload: MarkdownRenderPayload?
     @Published var image: CGImage?
 
     func update(with notification: UNNotification) {
@@ -31,43 +29,17 @@ final class NotificationViewModel: ObservableObject {
         title = content.title
 
         let resolvedBody = resolveBody(content: content)
-        let shouldRenderMarkdown = shouldUseMarkdown(content: content, resolvedBody: resolvedBody)
         body = resolvedBody.rawText
-        isMarkdown = shouldRenderMarkdown
-
-        if shouldRenderMarkdown,
-           let payloadText = content.userInfo[AppConstants.markdownRenderPayloadKey] as? String,
-           let payload = MarkdownRenderPayload.decode(from: payloadText)
-        {
-            markdownPayload = payload
-        } else {
-            markdownPayload = nil
-        }
 
         image = loadAttachmentImage(from: content.attachments)
-        markReadIfNeeded(for: content)
-        loadMessageForDisplayIfNeeded(for: content)
+        markReadIfNeeded(for: notification)
+        loadMessageForDisplayIfNeeded(for: notification)
     }
 
     private func resolveBody(content: UNNotificationContent) -> ResolvedBody {
-        let ciphertextBody = stringValue(forKeys: ["ciphertext_body"], in: content.userInfo)
         let envelopeBody = stringValue(forKeys: ["body"], in: content.userInfo) ?? content.body
-        let resolved = MessageBodyResolver.resolve(
-            ciphertextBody: ciphertextBody,
-            envelopeBody: envelopeBody,
-            isMarkdownOverride: markdownOverride(from: content.userInfo)
-        )
-        return ResolvedBody(rawText: resolved.rawText, isMarkdown: resolved.isMarkdown)
-    }
-
-    private func shouldUseMarkdown(content: UNNotificationContent, resolvedBody: ResolvedBody) -> Bool {
-        if content.categoryIdentifier == AppConstants.nceMarkdownCategoryIdentifier {
-            return true
-        }
-        if let override = markdownOverride(from: content.userInfo) {
-            return override
-        }
-        return resolvedBody.isMarkdown
+        let resolved = MessageBodyResolver.resolve(envelopeBody: envelopeBody)
+        return ResolvedBody(rawText: resolved.rawText)
     }
 
     private func stringValue(forKeys keys: [String], in userInfo: [AnyHashable: Any]) -> String? {
@@ -77,18 +49,6 @@ final class NotificationViewModel: ObservableObject {
             {
                 return value
             }
-        }
-        return nil
-    }
-
-    private func markdownOverride(from userInfo: [AnyHashable: Any]) -> Bool? {
-        guard let value = userInfo["body_render_is_markdown"] else { return nil }
-        if let flag = value as? Bool { return flag }
-        if let number = value as? NSNumber { return number.boolValue }
-        if let string = value as? String {
-            let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            if trimmed == "true" || trimmed == "1" || trimmed == "yes" { return true }
-            if trimmed == "false" || trimmed == "0" || trimmed == "no" { return false }
         }
         return nil
     }
@@ -108,36 +68,44 @@ final class NotificationViewModel: ObservableObject {
         return Self.makeCGImage(from: data)
     }
 
-    private func markReadIfNeeded(for content: UNNotificationContent) {
-        guard let messageId = extractMessageId(from: content.userInfo) else { return }
+    private func markReadIfNeeded(for notification: UNNotification) {
         Task { @MainActor in
-            _ = try? await AppEnvironment.shared.messageStateCoordinator.markRead(messageId: messageId)
-        }
-    }
-
-    private func loadMessageForDisplayIfNeeded(for content: UNNotificationContent) {
-        guard let messageId = extractMessageId(from: content.userInfo) else { return }
-        Task { @MainActor in
+            guard let message = await resolveLightMessage(for: notification) else { return }
             let dataStore = AppEnvironment.shared.dataStore
-            guard let message = try? await dataStore.loadMessage(messageId: messageId) else {
-                return
-            }
-            let resolved = message.resolvedBody
-            guard !resolved.rawText.isEmpty else { return }
-            body = resolved.rawText
-            isMarkdown = resolved.isMarkdown
-            if resolved.isMarkdown,
-               let payloadText = message.rawPayload[AppConstants.markdownRenderPayloadKey]?.value as? String,
-               let payload = MarkdownRenderPayload.decode(from: payloadText)
-            {
-                markdownPayload = payload
+            if AppEnvironment.shared.watchMode == .mirror {
+                try? await AppEnvironment.shared.enqueueMirrorMessageAction(kind: .read, messageId: message.messageId)
             } else {
-                markdownPayload = nil
+                _ = try? await dataStore.markWatchLightMessageRead(messageId: message.messageId)
+                await AppEnvironment.shared.refreshWatchLightCountsAndNotify()
             }
         }
     }
 
-    private func extractMessageId(from payload: [AnyHashable: Any]) -> UUID? {
+    private func loadMessageForDisplayIfNeeded(for notification: UNNotification) {
+        Task { @MainActor in
+            guard let message = await resolveLightMessage(for: notification) else { return }
+            guard !message.body.isEmpty else { return }
+            body = message.body
+        }
+    }
+
+    private func resolveLightMessage(for notification: UNNotification) async -> WatchLightMessage? {
+        let dataStore = AppEnvironment.shared.dataStore
+        if let messageId = extractMessageId(from: notification.request.content.userInfo),
+           let message = try? await dataStore.loadWatchLightMessage(messageId: messageId)
+        {
+            return message
+        }
+        let requestId = notification.request.identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !requestId.isEmpty,
+           let message = try? await dataStore.loadWatchLightMessage(notificationRequestId: requestId)
+        {
+            return message
+        }
+        return nil
+    }
+
+    private func extractMessageId(from payload: [AnyHashable: Any]) -> String? {
         let mapped = payload.reduce(into: [String: Any]()) { result, element in
             guard let key = element.key as? String else { return }
             result[key] = element.value
@@ -158,7 +126,6 @@ final class NotificationViewModel: ObservableObject {
 
     private struct ResolvedBody {
         let rawText: String
-        let isMarkdown: Bool
     }
 }
 
@@ -174,24 +141,12 @@ struct NotificationView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                if model.isMarkdown {
-                    if let payload = model.markdownPayload {
-                        MarkdownRenderPayloadView(payload: payload)
-                    } else {
-                        let document = PushGoMarkdownParser().parse(model.body)
-                        if document.blocks.isEmpty {
-                            Text(model.body)
-                                .font(.body)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        } else {
-                            PushGoMarkdownView(document: document)
-                        }
-                    }
-                } else {
-                    Text(model.body.isEmpty ? " " : model.body)
-                        .font(.body)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                MarkdownRenderer(
+                    text: model.body.isEmpty ? " " : model.body,
+                    font: .body,
+                    foreground: .primary
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 if let image = model.image {
                     Image(decorative: image, scale: 1)
@@ -204,20 +159,5 @@ struct NotificationView: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
         }
-    }
-}
-
-struct MarkdownRenderPayloadView: View {
-    let payload: MarkdownRenderPayload
-    var textStyle: Font.TextStyle = .body
-    var foreground: Color = .primary
-
-    var body: some View {
-        Text(payload.attributedString(textStyle: textStyle))
-            .font(.system(textStyle))
-            .foregroundColor(foreground)
-            .lineLimit(nil)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

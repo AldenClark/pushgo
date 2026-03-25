@@ -3,7 +3,7 @@ import SwiftUI
 import AppKit
 
 struct MacMenuBarContentView: View {
-    @Environment(\.appEnvironment) private var environment: AppEnvironment
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss

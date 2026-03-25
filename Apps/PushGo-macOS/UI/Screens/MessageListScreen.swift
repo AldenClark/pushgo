@@ -1,3 +1,4 @@
+import AppKit
 import Observation
 import SwiftUI
 
@@ -11,7 +12,12 @@ struct MessageListScreen: View {
     @State private var pendingScrollTarget: UUID?
 
     private enum Layout {
-        static let rowInsets = EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8)
+        static let rowInsets = EdgeInsets(
+            top: EntityVisualTokens.listRowInsetVertical,
+            leading: EntityVisualTokens.listRowInsetHorizontal,
+            bottom: EntityVisualTokens.listRowInsetVertical + 2,
+            trailing: EntityVisualTokens.listRowInsetHorizontal
+        )
     }
 
     var body: some View {
@@ -26,6 +32,11 @@ struct MessageListScreen: View {
                 messagesList
             }
         }
+        .task {
+            try? await Task.sleep(nanoseconds: 180_000_000)
+            viewModel.enableChannelSummaries()
+        }
+        .accessibilityIdentifier("screen.messages.list")
         .navigationTitle(localizationManager.localized("messages"))
         let titledView = applyTitleToolbarIfNeeded(baseView)
         return applySearchIfNeeded(titledView)
@@ -47,22 +58,7 @@ struct MessageListScreen: View {
 
     @ViewBuilder
     private func applySearchIfNeeded<Content: View>(_ content: Content) -> some View {
-#if os(macOS)
-        if #available(macOS 26.0, *) {
-            content
-        } else {
-            content.searchable(
-                text: Binding(
-                    get: { searchViewModel.query },
-                    set: { newValue in searchViewModel.updateQuery(newValue) }
-                ),
-                placement: .toolbar,
-                prompt: Text(localizationManager.localized("search_messages"))
-            )
-        }
-#else
         content
-#endif
     }
 
     private var isShowingSearchResults: Bool {
@@ -74,17 +70,24 @@ struct MessageListScreen: View {
             List(selection: $selection) {
                 ForEach(viewModel.filteredMessages) { message in
                     MessageRowView(message: message)
+                        .accessibilityIdentifier("message.row.\(message.id.uuidString)")
                         .tag(message.id)
                         .id(message.id)
                         .listRowInsets(Layout.rowInsets)
+                        .alignmentGuide(.listRowSeparatorLeading) { dimensions in
+                            dimensions[.leading]
+                        }
+                        .alignmentGuide(.listRowSeparatorTrailing) { dimensions in
+                            dimensions[.trailing] - Layout.rowInsets.trailing
+                        }
                         .listRowBackground(selectedRowBackground(isSelected: selection == message.id))
                         .onAppear { Task { await viewModel.loadMoreIfNeeded(currentItem: message) } }
                 }
             }
-            .background(ListBlankClickBlocker())
-            .background(ListSelectionHighlightDisabler())
-            .background(AutoHidingOverlayScrollbars())
             .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(EntityVisualTokens.pageBackground)
+            .background(ListScrollStyleStabilizer())
             .onAppear { scrollToSelectionIfNeeded(proxy) }
             .onChange(of: selection) { _, newValue in
                 pendingScrollTarget = newValue
@@ -104,10 +107,17 @@ struct MessageListScreen: View {
                 } else {
                     Section {
                         ForEach(searchViewModel.displayedResults) { message in
-                            MessageSearchResultRow(message: message, query: searchViewModel.query)
+                            MessageRowView(message: message)
+                                .accessibilityIdentifier("message.row.\(message.id.uuidString)")
                                 .tag(message.id)
                                 .id(message.id)
                                 .listRowInsets(Layout.rowInsets)
+                                .alignmentGuide(.listRowSeparatorLeading) { dimensions in
+                                    dimensions[.leading]
+                                }
+                                .alignmentGuide(.listRowSeparatorTrailing) { dimensions in
+                                    dimensions[.trailing] - Layout.rowInsets.trailing
+                                }
                                 .listRowBackground(selectedRowBackground(isSelected: selection == message.id))
                                 .onAppear { searchViewModel.loadMoreIfNeeded(currentItem: message) }
                         }
@@ -125,9 +135,9 @@ struct MessageListScreen: View {
                 }
             }
             .listStyle(.plain)
-            .background(ListBlankClickBlocker())
-            .background(ListSelectionHighlightDisabler())
-            .background(AutoHidingOverlayScrollbars())
+            .scrollContentBackground(.hidden)
+            .background(EntityVisualTokens.pageBackground)
+            .background(ListScrollStyleStabilizer())
             .onAppear { scrollToSelectionIfNeeded(proxy) }
             .onChange(of: selection) { _, newValue in
                 pendingScrollTarget = newValue
@@ -197,302 +207,5 @@ struct MessageListScreen: View {
         } else {
             Color.clear
         }
-    }
-}
-struct ListBlankClickBlocker: NSViewRepresentable {
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    func makeNSView(context: Context) -> NSView {
-        let v = NSView()
-        v.postsFrameChangedNotifications = true
-        return v
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        Task { @MainActor in
-            await Task.yield()
-            context.coordinator.attachIfNeeded(from: nsView)
-        }
-    }
-
-    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
-        coordinator.detach()
-    }
-
-    @MainActor
-    final class Coordinator: @unchecked Sendable {
-        private weak var scrollView: NSScrollView?
-        private weak var tableView: NSTableView?
-        private weak var outlineView: NSOutlineView?
-        private var monitor: Any?
-
-        func attachIfNeeded(from anchor: NSView) {
-            guard let sv = anchor.findAncestor(of: NSScrollView.self) else { return }
-            if scrollView === sv, monitor != nil { return }
-
-            detach()
-
-            scrollView = sv
-            if let ov = sv.documentView as? NSOutlineView {
-                outlineView = ov
-                if ov.selectionHighlightStyle != .none { ov.selectionHighlightStyle = .none }
-            } else if let tv = sv.documentView as? NSTableView {
-                tableView = tv
-                if tv.selectionHighlightStyle != .none { tv.selectionHighlightStyle = .none }
-            } else {
-                if let tv = sv.documentView?.firstDescendant(of: NSTableView.self) {
-                    tableView = tv
-                    if tv.selectionHighlightStyle != .none { tv.selectionHighlightStyle = .none }
-                }
-                if let ov = sv.documentView?.firstDescendant(of: NSOutlineView.self) {
-                    outlineView = ov
-                    if ov.selectionHighlightStyle != .none { ov.selectionHighlightStyle = .none }
-                }
-            }
-
-            guard monitor == nil else { return }
-            guard let window = anchor.window else { return }
-
-            monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] event in
-                guard let self else { return event }
-                guard event.window === window else { return event }
-                guard let sv = self.scrollView else { return event }
-                let pInWindow = event.locationInWindow
-                let pInSV = sv.convert(pInWindow, from: nil)
-                guard sv.contentView.bounds.contains(pInSV) else { return event }
-                let pInDoc = sv.documentView?.convert(pInWindow, from: nil) ?? .zero
-
-                if let ov = self.outlineView {
-                    let row = ov.row(at: pInDoc)
-                    if row == -1 {
-                        return nil
-                    }
-                } else if let tv = self.tableView {
-                    let row = tv.row(at: pInDoc)
-                    if row == -1 {
-                        return nil
-                    }
-                }
-
-                return event
-            }
-        }
-
-        func detach() {
-            if let monitor {
-                NSEvent.removeMonitor(monitor)
-            }
-            monitor = nil
-            scrollView = nil
-            tableView = nil
-            outlineView = nil
-        }
-    }
-}
-struct ListSelectionHighlightDisabler: NSViewRepresentable {
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    func makeNSView(context: Context) -> NSView {
-        NSView()
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        Task { @MainActor in
-            await Task.yield()
-            context.coordinator.attachIfNeeded(from: nsView)
-        }
-    }
-
-    @MainActor
-    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
-        coordinator.detach()
-    }
-
-    @MainActor
-    final class Coordinator {
-        private weak var scrollView: NSScrollView?
-
-        func attachIfNeeded(from anchor: NSView) {
-            guard let sv = anchor.findAncestor(of: NSScrollView.self) else { return }
-            if scrollView === sv { return }
-            scrollView = sv
-
-            if let ov = sv.documentView as? NSOutlineView {
-                if ov.selectionHighlightStyle != .none { ov.selectionHighlightStyle = .none }
-            } else if let tv = sv.documentView as? NSTableView {
-                if tv.selectionHighlightStyle != .none { tv.selectionHighlightStyle = .none }
-            } else {
-                if let tv = sv.documentView?.firstDescendant(of: NSTableView.self) {
-                    if tv.selectionHighlightStyle != .none { tv.selectionHighlightStyle = .none }
-                }
-                if let ov = sv.documentView?.firstDescendant(of: NSOutlineView.self) {
-                    if ov.selectionHighlightStyle != .none { ov.selectionHighlightStyle = .none }
-                }
-            }
-        }
-
-        func detach() {
-            scrollView = nil
-        }
-    }
-}
-struct AutoHidingOverlayScrollbars: NSViewRepresentable {
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    func makeNSView(context: Context) -> NSView {
-        NSView()
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        Task { @MainActor in
-            await Task.yield()
-            context.coordinator.attachIfNeeded(from: nsView)
-        }
-    }
-
-    @MainActor
-    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
-        coordinator.detach()
-    }
-
-    @MainActor
-    final class Coordinator: NSObject {
-        private weak var scrollView: NSScrollView?
-        private var hideTask: Task<Void, Never>?
-
-        func attachIfNeeded(from anchor: NSView) {
-            guard let sv = anchor.findAncestor(of: NSScrollView.self) else { return }
-            if scrollView === sv { return }
-
-            detach()
-            scrollView = sv
-
-            applyScrollerStyle(to: sv)
-            hideScrollers(animated: false)
-
-            sv.contentView.postsBoundsChangedNotifications = true
-            NotificationCenter.default.addObserver(
-                self,
-                selector: #selector(handleBoundsChanged(_:)),
-                name: NSView.boundsDidChangeNotification,
-                object: sv.contentView
-            )
-        }
-
-        func detach() {
-            hideTask?.cancel()
-            hideTask = nil
-
-            NotificationCenter.default.removeObserver(
-                self,
-                name: NSView.boundsDidChangeNotification,
-                object: scrollView?.contentView
-            )
-            scrollView = nil
-        }
-
-        private func applyScrollerStyle(to sv: NSScrollView) {
-            if sv.scrollerStyle != .overlay { sv.scrollerStyle = .overlay }
-            if sv.autohidesScrollers != true { sv.autohidesScrollers = true }
-            if sv.usesPredominantAxisScrolling != true { sv.usesPredominantAxisScrolling = true }
-            if sv.verticalScroller?.controlSize != .mini { sv.verticalScroller?.controlSize = .mini }
-            if sv.horizontalScroller?.controlSize != .mini { sv.horizontalScroller?.controlSize = .mini }
-        }
-
-        private func handleDidScroll() {
-            showScrollers(animated: true)
-
-            hideTask?.cancel()
-            let scrollViewBox = WeakBox(scrollView)
-            hideTask = Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 600_000_000)
-                guard !Task.isCancelled else { return }
-                guard let scrollView = scrollViewBox.value else { return }
-                Self.hideScrollers(on: scrollView, animated: true)
-            }
-        }
-
-        private func showScrollers(animated: Bool) {
-            guard let sv = scrollView else { return }
-            sv.verticalScroller?.isHidden = false
-            sv.horizontalScroller?.isHidden = false
-
-            let apply = {
-                sv.verticalScroller?.alphaValue = 1.0
-                sv.horizontalScroller?.alphaValue = 1.0
-            }
-
-            if animated {
-                NSAnimationContext.runAnimationGroup { ctx in
-                    ctx.duration = 0.12
-                    apply()
-                }
-            } else {
-                apply()
-            }
-        }
-
-        @objc
-        private func handleBoundsChanged(_: Notification) {
-            handleDidScroll()
-        }
-
-        private func hideScrollers(animated: Bool) {
-            guard let sv = scrollView else { return }
-            Self.hideScrollers(on: sv, animated: animated)
-        }
-
-        private static func hideScrollers(on sv: NSScrollView, animated: Bool) {
-            let apply = {
-                sv.verticalScroller?.alphaValue = 0.0
-                sv.horizontalScroller?.alphaValue = 0.0
-            }
-
-            if animated {
-                let scrollViewBox = WeakBox(sv)
-                NSAnimationContext.runAnimationGroup { ctx in
-                    ctx.duration = 0.2
-                    apply()
-                } completionHandler: {
-                    Task { @MainActor in
-                        guard let sv = scrollViewBox.value else { return }
-                        sv.verticalScroller?.isHidden = true
-                        sv.horizontalScroller?.isHidden = true
-                    }
-                }
-            } else {
-                apply()
-                sv.verticalScroller?.isHidden = true
-                sv.horizontalScroller?.isHidden = true
-            }
-        }
-
-        private final class WeakBox<Value: AnyObject>: @unchecked Sendable {
-            weak var value: Value?
-
-            init(_ value: Value?) {
-                self.value = value
-            }
-        }
-    }
-}
-
-@MainActor
-private extension NSView {
-    func findAncestor<T: NSView>(of type: T.Type) -> T? {
-        var v: NSView? = self
-        while let cur = v {
-            if let match = cur as? T { return match }
-            v = cur.superview
-        }
-        return nil
-    }
-
-    func firstDescendant<T: NSView>(of type: T.Type) -> T? {
-        for sub in subviews {
-            if let t = sub as? T { return t }
-            if let hit: T = sub.firstDescendant(of: type) { return hit }
-        }
-        return nil
     }
 }

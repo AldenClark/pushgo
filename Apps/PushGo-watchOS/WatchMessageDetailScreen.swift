@@ -2,20 +2,20 @@ import SwiftUI
 
 struct WatchMessageDetailScreen: View {
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
-    @State private var viewModel: MessageDetailViewModel
+
+    let messageId: String
+    let viewModel: WatchLightStoreViewModel
+
     @State private var showDeleteConfirmation = false
     @State private var didLoad = false
 
-    init(messageId: UUID, message: PushMessage? = nil) {
-        _viewModel = State(wrappedValue: MessageDetailViewModel(
-            messageId: messageId,
-            initialMessage: message
-        ))
+    private var message: WatchLightMessage? {
+        viewModel.message(messageId: messageId)
     }
 
     var body: some View {
         List {
-            if let message = viewModel.message {
+            if let message {
                 Section {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(message.title)
@@ -23,15 +23,32 @@ struct WatchMessageDetailScreen: View {
                         Text(message.receivedAt.formatted(date: .complete, time: .standard))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                        watchMessageSeverityBadge(for: message.severity)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 6)
                 }
 
                 Section {
-                    let resolvedBody = message.resolvedBody
-                    MarkdownRenderer(text: resolvedBody.rawText, font: .body, foreground: .primary)
+                    Text(message.body.isEmpty ? " " : message.body)
                         .padding(.vertical, 6)
+                }
+
+                if let imageURL = message.imageURL {
+                    Section(localizationManager.localized("image")) {
+                        AsyncImage(url: imageURL) { phase in
+                            switch phase {
+                            case let .success(image):
+                                image
+                                    .resizable()
+                                    .scaledToFit()
+                            default:
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(Color.secondary.opacity(0.2))
+                                    .frame(height: 90)
+                            }
+                        }
+                    }
                 }
 
                 if let url = message.url {
@@ -43,7 +60,9 @@ struct WatchMessageDetailScreen: View {
                 Section {
                     if !message.isRead {
                         Button {
-                            Task { await viewModel.markRead(true) }
+                            Task { @MainActor in
+                                await viewModel.markMessageRead(message)
+                            }
                         } label: {
                             Label(
                                 localizationManager.localized("mark_as_read"),
@@ -67,23 +86,15 @@ struct WatchMessageDetailScreen: View {
             }
         }
         .navigationTitle(localizationManager.localized("messages"))
-        .alert(isPresented: Binding(
-            get: { viewModel.alertMessage != nil },
-            set: { if !$0 { viewModel.alertMessage = nil } }
-        )) {
-            Alert(
-                title: Text(viewModel.alertMessage ?? ""),
-                dismissButton: .default(Text(localizationManager.localized("ok")))
-            )
-        }
         .alert(isPresented: $showDeleteConfirmation) {
             Alert(
                 title: Text(localizationManager.localized(
                     "are_you_sure_you_want_to_delete_this_message_once_deleted_it_cannot_be_recovered"
                 )),
                 primaryButton: .destructive(Text(localizationManager.localized("delete"))) {
-                    Task {
-                        await viewModel.deleteMessage()
+                    guard let message else { return }
+                    Task { @MainActor in
+                        await viewModel.deleteMessage(message)
                     }
                 },
                 secondaryButton: .cancel(Text(localizationManager.localized("cancel")))
@@ -92,14 +103,30 @@ struct WatchMessageDetailScreen: View {
         .onAppear {
             guard !didLoad else { return }
             didLoad = true
-            Task {
-                viewModel.refresh()
-                await viewModel.markAsReadIfNeeded()
+            if let message, !message.isRead {
+                Task { @MainActor in
+                    await viewModel.markMessageRead(message)
+                }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func watchMessageSeverityBadge(for severity: String?) -> some View {
+        if let severity, !severity.isEmpty {
+            Text(severity.capitalized)
+                .font(.caption2.weight(.semibold))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.primary.opacity(0.12))
+                )
+                .foregroundStyle(.secondary)
         }
     }
 }
 
 #Preview {
-    WatchMessageDetailScreen(messageId: UUID())
+    WatchMessageDetailScreen(messageId: "preview-message", viewModel: WatchLightStoreViewModel())
 }

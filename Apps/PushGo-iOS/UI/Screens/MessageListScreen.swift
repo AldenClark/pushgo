@@ -1,9 +1,8 @@
 import SwiftUI
-import UniformTypeIdentifiers
 import Observation
 
 struct MessageListScreen: View {
-    @Environment(\.appEnvironment) private var environment: AppEnvironment
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @Environment(MessageSearchViewModel.self) private var searchViewModel: MessageSearchViewModel
     @Environment(\.scenePhase) private var scenePhase
@@ -11,12 +10,6 @@ struct MessageListScreen: View {
     @Bindable private var viewModel: MessageListViewModel
     @State private var selectedMessage: PushMessageSummary?
     @State private var pendingMessageStoreRefresh = false
-    @State private var isExportingChannelMessages = false
-    @State private var exportDocument = MessagesExportDocument(messages: [])
-    @State private var exportFilename = ""
-    @State private var exportChannelDisplayName = LocalizationManager.localizedSync("all_groups")
-    @State private var showChannelCleanupConfirmation = false
-    @State private var isCleaningChannel = false
     private let onSelect: ((PushMessageSummary) -> Void)?
     private let autoSelectFirstMessage: Bool
     private let useNavigationContainer: Bool
@@ -42,44 +35,47 @@ struct MessageListScreen: View {
     @ViewBuilder
     private var containerView: some View {
         containerCore
-            .fileExporter(
-                isPresented: $isExportingChannelMessages,
-                document: exportDocument,
-                contentType: UTType.json,
-                defaultFilename: exportFilename,
-            ) { result in
-                switch result {
-                case .success:
-                    environment.showToast(
-                        message: localizationManager.localized("placeholder_export_successful", exportChannelDisplayName),
-                        style: .success,
-                        duration: 1.5,
-                    )
-                case let .failure(error):
-                    environment.showToast(
-                        message: localizationManager.localized("export_failed_placeholder", error.localizedDescription),
-                        style: .error,
-                        duration: 2,
-                    )
-                }
-            }
-            .onChange(of: localizationManager.locale) { _, _ in
-                exportChannelDisplayName = localizationManager.localized("all_groups")
-                Task {
-                    await viewModel.refresh()
-                }
-            }
+            .accessibilityIdentifier("screen.messages.list")
             .onAppear {
                 environment.updateMessageListPosition(isAtTop: true)
                 openPendingMessageIfNeeded()
+#if DEBUG
+                publishAutomationState()
+#endif
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 180_000_000)
+                    viewModel.enableChannelSummaries()
+                }
             }
             .onChange(of: environment.pendingMessageToOpen) { _, _ in
                 openPendingMessageIfNeeded()
+#if DEBUG
+                publishAutomationState()
+#endif
             }
             .onChange(of: scenePhase) { _, newValue in
                 if newValue == .active {
                     openPendingMessageIfNeeded()
                 }
+#if DEBUG
+                publishAutomationState()
+#endif
+            }
+            .onChange(of: searchViewModel.query) { _, newValue in
+#if DEBUG
+                PushGoAutomationRuntime.shared.recordSearchResultsUpdated(
+                    query: newValue,
+                    resultCount: searchViewModel.totalResults
+                )
+#endif
+            }
+            .onChange(of: searchViewModel.totalResults) { _, newValue in
+#if DEBUG
+                PushGoAutomationRuntime.shared.recordSearchResultsUpdated(
+                    query: searchViewModel.query,
+                    resultCount: newValue
+                )
+#endif
             }
     }
 
@@ -104,8 +100,13 @@ struct MessageListScreen: View {
             }
             .sheet(item: selectedMessageBinding) { message in
                 MessageDetailScreen(messageId: message.id, message: nil)
+                    .pushgoSheetSizing(.detail)
+                    .accessibilityIdentifier("sheet.message.detail")
             }
             .onChange(of: selectedMessage) { _, newValue in
+#if DEBUG
+                publishAutomationState()
+#endif
                 guard newValue == nil, pendingMessageStoreRefresh else { return }
                 pendingMessageStoreRefresh = false
                 handleMessageStoreRevisionChange()
@@ -120,23 +121,18 @@ struct MessageListScreen: View {
                 applyDefaultSelectionIfNeeded()
             }
             .toolbar { toolbarContent }
-            .alert(
-                localizationManager.localized("confirm_cleanup_messages"),
-                isPresented: $showChannelCleanupConfirmation
-            ) {
-                Button(localizationManager.localized("confirm")) {
-                    guard !isCleaningChannel else { return }
-                    isCleaningChannel = true
-                    Task {
-                        _ = await viewModel.cleanupReadMessages()
-                        isCleaningChannel = false
-                    }
-                }
-                Button(localizationManager.localized("cancel"), role: .cancel) {}
-            } message: {
-                Text(cleanupConfirmationMessage)
-            }
     }
+
+#if DEBUG
+    private func publishAutomationState() {
+        PushGoAutomationRuntime.shared.publishState(
+            environment: environment,
+            activeTab: "messages",
+            visibleScreen: selectedMessage == nil ? "screen.messages.list" : "screen.message.detail",
+            openedMessageId: selectedMessage?.messageId ?? selectedMessage?.id.uuidString
+        )
+    }
+#endif
 
     @ViewBuilder
     private var screenContent: some View {
@@ -150,39 +146,17 @@ struct MessageListScreen: View {
         }
     }
 
-    private var cleanupConfirmationMessage: String {
-        if let channel = viewModel.selectedChannel {
-            let displayName = resolvedChannelDisplayName(for: channel) ?? channel.displayName
-            let action = localizationManager.localized("clean_channel_read_placeholder", displayName)
-            return localizationManager.localized("confirm_cleanup_messages_placeholder", action)
-        }
-        let action = localizationManager.localized("clean_all_read_messages")
-        return localizationManager.localized("confirm_cleanup_messages_placeholder", action)
-    }
     private var isShowingSearchResults: Bool {
         searchViewModel.hasSearched
     }
 
     private var hasMessages: Bool { viewModel.totalMessageCount > 0 }
 
-    private var currentChannelMessages: [PushMessageSummary] {
-        viewModel.messagesForCurrentChannel()
-    }
-
-    private var currentChannelDisplayName: String {
-        resolvedChannelDisplayName(for: viewModel.selectedChannel)
-            ?? localizationManager.localized("all_groups")
-    }
-
-    private var shouldShowExportButton: Bool {
-        !viewModel.filteredMessages.isEmpty
-    }
-
-    private var shouldShowMarkAllAsReadButton: Bool {
-        if let channel = viewModel.selectedChannel {
-            return viewModel.channelSummaries.first(where: { $0.key == channel })?.hasUnread ?? false
+    private var hasVisibleMessageRows: Bool {
+        if isShowingSearchResults {
+            return !searchViewModel.displayedResults.isEmpty
         }
-        return viewModel.unreadMessageCount > 0
+        return !viewModel.filteredMessages.isEmpty
     }
 
     private var displayedChannelSummaries: [MessageChannelSummary] {
@@ -193,10 +167,6 @@ struct MessageListScreen: View {
         }
         return hasNamedChannel ? summaries : []
     }
-    private var shouldShowChannelRow: Bool {
-        !displayedChannelSummaries.isEmpty
-    }
-
     @ViewBuilder
     private var messageList: some View {
         ScrollViewReader { proxy in
@@ -206,38 +176,19 @@ struct MessageListScreen: View {
                         searchPlaceholderRow
                     } else {
                         Section {
-                            ForEach(
-                                Array(searchViewModel.displayedResults.enumerated()),
-                                id: \.element.id,
-                            ) { index, message in
-                                Button {
-                                    if !message.isRead {
-                                        Task { await viewModel.markRead(message, isRead: true) }
-                                    }
-                                    handleSelect(message)
-                                } label: {
-                                    MessageSearchResultRow(
-                                        message: message,
-                                        query: searchViewModel.query,
-                                    )
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.vertical, 10)
-                                    .padding(.horizontal, 12)
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.appPlain)
-                                .listRowInsets(EdgeInsets(
-                                    top: 4,
-                                    leading: 0,
-                                    bottom: 4,
-                                    trailing: 0,
-                                ))
+                            ForEach(Array(searchViewModel.displayedResults.enumerated()), id: \.element.id) { index, message in
+                                messageRow(for: message, at: index)
                                 .onAppear {
                                     searchViewModel.loadMoreIfNeeded(currentItem: message)
                                 }
                                 .modifier(
                                     TopSeparatorModifier(
                                         hide: index == 0,
+                                    ),
+                                )
+                                .modifier(
+                                    BottomSeparatorModifier(
+                                        hide: index == searchViewModel.displayedResults.count - 1,
                                     ),
                                 )
                             }
@@ -253,9 +204,6 @@ struct MessageListScreen: View {
                         }
                     }
                 } else {
-                    if shouldShowChannelRow {
-                        channelFilterListRow
-                    }
                     ForEach(Array(viewModel.filteredMessages.enumerated()), id: \.element.id) { index, message in
                         messageRow(for: message, at: index)
                             .id(message.id)
@@ -264,13 +212,18 @@ struct MessageListScreen: View {
                                     hide: index == 0,
                                 ),
                             )
+                            .modifier(
+                                BottomSeparatorModifier(
+                                    hide: index == viewModel.filteredMessages.count - 1,
+                                ),
+                            )
                             .onAppear {
                                 Task { await viewModel.loadMoreIfNeeded(currentItem: message) }
                             }
                     }
                 }
             }
-            .modifier(MessageListSearchableModifier(searchViewModel: searchViewModel))
+            .modifier(MessageListSearchableModifier(searchViewModel: searchViewModel, enabled: hasMessages))
             .modifier(
                 ScrollObserverModifier(enabled: true) { topOffset, pullDistance in
                     _ = pullDistance
@@ -295,7 +248,6 @@ struct MessageListScreen: View {
 
     @ViewBuilder
     private func messageRow(for message: PushMessageSummary, at index: Int) -> some View {
-        let topInset: CGFloat = index == 0 && shouldShowChannelRow ? 0 : 8
         Button {
             if !message.isRead {
                 Task { await viewModel.markRead(message, isRead: true) }
@@ -305,14 +257,15 @@ struct MessageListScreen: View {
             MessageRowView(message: message)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 0)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, EntityVisualTokens.listRowInsetHorizontal)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.appPlain)
+        .accessibilityIdentifier("message.row.\(message.id.uuidString)")
         .listRowInsets(EdgeInsets(
-            top: topInset,
+            top: EntityVisualTokens.listRowInsetVertical,
             leading: 0,
-            bottom: 12,
+            bottom: EntityVisualTokens.listRowInsetVertical + 2,
             trailing: 0,
         ))
         .swipeActions {
@@ -342,100 +295,6 @@ struct MessageListScreen: View {
         } label: {
             Label(localizationManager.localized("delete"), systemImage: "trash")
         }
-    }
-
-    private var channelFilterBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                channelChip(
-                    title: "all",
-                    unreadCount: viewModel.unreadMessageCount,
-                    isSelected: viewModel.selectedChannel == nil,
-                ) {
-                    viewModel.clearChannelSelection()
-                }
-
-                ForEach(displayedChannelSummaries) { summary in
-                    channelChip(
-                        title: resolvedChannelDisplayName(for: summary.key) ?? summary.title,
-                        unreadCount: summary.unreadCount,
-                        isSelected: viewModel.selectedChannel == summary.key,
-                    ) {
-                        viewModel.toggleChannelSelection(summary.key)
-                    }
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, channelFilterVerticalPadding)
-        }
-        .accessibilityIdentifier("message-channel-filter")
-    }
-
-    private var channelFilterListRow: some View {
-        channelFilterBar
-            .listRowInsets(EdgeInsets())
-            .listRowBackground(
-                Group { Color.clear },
-            )
-            .hideListSeparator()
-    }
-
-    private var channelFilterVerticalPadding: CGFloat {
-        0
-    }
-
-    private func channelChip(
-        title: String,
-        unreadCount: Int,
-        isSelected: Bool,
-        action: @escaping () -> Void,
-    ) -> some View {
-        let displayTitle = truncatedChannelTitle(title)
-
-        return Button {
-            if reduceMotion {
-                action()
-            } else {
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
-                    action()
-                }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Text(displayTitle)
-                    .font(.caption)
-                    .fontWeight(isSelected ? .semibold : .regular)
-                    .foregroundColor(isSelected ? .accentColor : .primary)
-                    .lineLimit(1)
-                if unreadCount > 0 {
-                    Text("\(unreadCount)")
-                        .font(.caption2)
-                        .fontWeight(.semibold)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(Color.accentColor),
-                        )
-                        .foregroundColor(.white)
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(
-                        isSelected
-                            ? Color.accentColor.opacity(0.12)
-                            : Color.primary.opacity(0.025),
-                    ),
-            )
-        }
-        .buttonStyle(.appPlain)
-    }
-
-    private func truncatedChannelTitle(_ title: String) -> String {
-        String(title.prefix(16))
     }
 
     private func updateMessageListTopState(topOffset: CGFloat) {
@@ -498,22 +357,18 @@ private struct ScrollObserverModifier: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         if enabled {
-            if #available(iOS 18, *) {
-                content
-                    .onScrollGeometryChange(
-                        for: CGFloat.self,
-                        of: { geom in
-                            geom.contentOffset.y
-                        },
-                        action: { _, newY in
-                            let topOffset = newY
-                            let pull = max(0, -newY)
-                            onChange(topOffset, pull)
-                        },
-                    )
-            } else {
-                content
-            }
+            content
+                .onScrollGeometryChange(
+                    for: CGFloat.self,
+                    of: { geom in
+                        geom.contentOffset.y
+                    },
+                    action: { _, newY in
+                        let topOffset = newY
+                        let pull = max(0, -newY)
+                        onChange(topOffset, pull)
+                    },
+                )
         } else {
             content
         }
@@ -532,6 +387,14 @@ private struct TopSeparatorModifier: ViewModifier {
     }
 }
 
+private struct BottomSeparatorModifier: ViewModifier {
+    let hide: Bool
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        content.listRowSeparator(hide ? .hidden : .visible, edges: .bottom)
+    }
+}
+
 private struct HideListBackgroundIfAvailable: ViewModifier {
     func body(content: Content) -> some View {
         content.scrollContentBackground(.hidden)
@@ -547,14 +410,16 @@ private struct MessageListScrollDismissModifier: ViewModifier {
 
 private struct MessageListSearchableModifier: ViewModifier {
     @Bindable var searchViewModel: MessageSearchViewModel
+    let enabled: Bool
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     func body(content: Content) -> some View {
+        guard enabled else { return AnyView(content) }
         let queryBinding = Binding(
             get: { searchViewModel.query },
             set: { searchViewModel.updateQuery($0) },
         )
-        return content
+        return AnyView(content
             .searchable(
                 text: queryBinding,
                 placement: .navigationBarDrawer(displayMode: .automatic),
@@ -562,7 +427,7 @@ private struct MessageListSearchableModifier: ViewModifier {
             )
             .onSubmit(of: .search) {
                 searchViewModel.applySearchTextImmediately(searchViewModel.query)
-            }
+            })
     }
 }
 
@@ -571,7 +436,7 @@ private extension View {
     func listClearBackground() -> some View {
         self
             .scrollContentBackground(.hidden)
-            .background(Color.clear)
+            .background(EntityVisualTokens.pageBackground)
     }
 
     @ViewBuilder
@@ -609,103 +474,12 @@ private extension MessageListScreen {
         }
     }
 
-    func handleMarkAllAsRead() {
-        Task {
-            let updated = await viewModel.markCurrentChannelAsRead()
-            if updated > 0 {
-                environment.showToast(
-                    message: localizationManager.localized(
-                        "placeholder_number_items_read",
-                        currentChannelDisplayName,
-                        updated,
-                    ),
-                    style: .success,
-                    duration: 1.5,
-                )
-            } else {
-                environment.showToast(
-                    message: localizationManager.localized("placeholder_no_unread_messages", currentChannelDisplayName),
-                    style: .info,
-                    duration: 1.5,
-                )
-            }
-        }
-    }
-
-    func startCurrentChannelExport() {
-        Task {
-            do {
-                let messages = try await environment.dataStore.loadMessages(
-                    filter: viewModel.currentQueryFilter(),
-                    channel: viewModel.currentChannelRawValue(),
-                )
-                guard !messages.isEmpty else {
-                    await MainActor.run {
-                        environment.showToast(
-                            message: localizationManager.localized(
-                                "placeholder_no_exported_messages_yet",
-                                currentChannelDisplayName
-                            ),
-                            style: .info,
-                            duration: 1.5,
-                        )
-                    }
-                    return
-                }
-                await MainActor.run {
-                    exportDocument = MessagesExportDocument(messages: messages)
-                    exportFilename = exportFilename(for: viewModel.selectedChannel)
-                    exportChannelDisplayName = currentChannelDisplayName
-                    isExportingChannelMessages = true
-                }
-            } catch {
-                await MainActor.run {
-                    environment.showToast(
-                        message: localizationManager.localized("export_failed_placeholder", error.localizedDescription),
-                        style: .error,
-                        duration: 2,
-                    )
-                }
-            }
-        }
-    }
-
-    func exportFilename(for channel: MessageChannelKey?) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd-HHmmss"
-        let timestamp = formatter.string(from: Date())
-        let channelComponent: String = if let channel {
-            sanitizedFilenameComponent(resolvedChannelDisplayName(for: channel) ?? channel.displayName)
-        } else {
-            "all"
-        }
-        return "pushgo-\(channelComponent)-\(timestamp)"
-    }
-
     private func resolvedChannelDisplayName(for channel: MessageChannelKey?) -> String? {
         guard let channel else { return nil }
         if channel.rawChannelValue == "" {
             return localizationManager.localized("not_grouped")
         }
         return environment.channelDisplayName(for: channel.rawChannelValue) ?? channel.displayName
-    }
-
-    func sanitizedFilenameComponent(_ raw: String) -> String {
-        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
-        var buffer = ""
-        var previousWasSeparator = false
-        for scalar in raw.unicodeScalars {
-            if allowed.contains(scalar) {
-                let character = Character(scalar)
-                buffer.append(character)
-                previousWasSeparator = false
-            } else if !previousWasSeparator {
-                buffer.append("-")
-                previousWasSeparator = true
-            }
-        }
-        let trimmed = buffer.trimmingCharacters(in: CharacterSet(charactersIn: "-_"))
-        return trimmed.isEmpty ? "channel" : trimmed
     }
 
     private var selectedMessageBinding: Binding<PushMessageSummary?> {
@@ -718,33 +492,52 @@ private extension MessageListScreen {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
-            if shouldShowMarkAllAsReadButton {
-                Button {
-                    handleMarkAllAsRead()
-                } label: {
-                    Image(systemName: "envelope.open.fill")
-                }
-                .accessibilityLabel(localizationManager.localized("mark_all_as_read"))
+            Menu {
+                channelFilterMenuContent
+            } label: {
+                Image(systemName: viewModel.selectedChannel == nil ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
             }
+            .accessibilityLabel(localizationManager.localized("channel"))
 
-            if hasMessages {
-                Button {
-                    showChannelCleanupConfirmation = true
-                } label: {
-                    Image(systemName: "bin.xmark")
-                }
-                .accessibilityLabel(localizationManager.localized("clean_all_read_messages"))
-                .disabled(isCleaningChannel)
+            Button {
+                let nextFilter: MessageFilter = viewModel.selectedFilter == .unread ? .all : .unread
+                viewModel.setFilter(nextFilter)
+            } label: {
+                Image(systemName: viewModel.selectedFilter == .unread ? "envelope.badge.fill" : "envelope.badge")
             }
+            .accessibilityLabel(localizationManager.localized("unread"))
+        }
+    }
 
-            if shouldShowExportButton {
-                Button {
-                    startCurrentChannelExport()
-                } label: {
-                    Image(systemName: "square.and.arrow.up")
-                }
-                .accessibilityLabel(localizationManager.localized("export_messages"))
+    @ViewBuilder
+    private var channelFilterMenuContent: some View {
+        Button {
+            viewModel.clearChannelSelection()
+        } label: {
+            channelFilterMenuItemLabel(
+                title: localizationManager.localized("all_groups"),
+                isSelected: viewModel.selectedChannel == nil
+            )
+        }
+
+        ForEach(displayedChannelSummaries) { summary in
+            Button {
+                viewModel.toggleChannelSelection(summary.key)
+            } label: {
+                channelFilterMenuItemLabel(
+                    title: resolvedChannelDisplayName(for: summary.key) ?? summary.title,
+                    isSelected: viewModel.selectedChannel == summary.key
+                )
             }
+        }
+    }
+
+    private func channelFilterMenuItemLabel(title: String, isSelected: Bool) -> some View {
+        HStack(spacing: 8) {
+            if isSelected {
+                Image(systemName: "checkmark")
+            }
+            Text(title)
         }
     }
 
@@ -756,14 +549,26 @@ private extension MessageListScreen {
     }
     private func openPendingMessageIfNeeded() {
         guard let targetId = environment.pendingMessageToOpen else { return }
-        Task {
-            let loaded = try? await environment.dataStore.loadMessage(id: targetId)
-            guard let message = loaded ?? nil else { return }
-            let summary = PushMessageSummary(message: message)
-            await MainActor.run {
-                handleSelect(summary)
-                pendingScrollTarget = targetId
-                environment.pendingMessageToOpen = nil
+        Task { @MainActor in
+            let maxAttempts = 20
+            for attempt in 0..<maxAttempts {
+                if let summary = viewModel.filteredMessages.first(where: { $0.id == targetId }) {
+                    handleSelect(summary)
+                    pendingScrollTarget = targetId
+                    environment.pendingMessageToOpen = nil
+                    return
+                }
+                if let message = try? await environment.dataStore.loadMessage(id: targetId) {
+                    let summary = PushMessageSummary(message: message)
+                    handleSelect(summary)
+                    pendingScrollTarget = targetId
+                    environment.pendingMessageToOpen = nil
+                    return
+                }
+                guard environment.pendingMessageToOpen == targetId else { return }
+                if attempt + 1 < maxAttempts {
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                }
             }
         }
     }

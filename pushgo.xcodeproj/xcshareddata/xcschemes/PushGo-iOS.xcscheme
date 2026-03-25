@@ -21,6 +21,20 @@
                ReferencedContainer = "container:pushgo.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "D90000112F7F000100A10006"
+               BuildableName = "PushGo-iOSUITests.xctest"
+               BlueprintName = "PushGo-iOSUITests"
+               ReferencedContainer = "container:pushgo.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -29,6 +43,28 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES"
       shouldAutocreateTestPlan = "YES">
+      <MacroExpansion>
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "AA49A1892EE3E31500C1EBF2"
+            BuildableName = "PushGo.app"
+            BlueprintName = "PushGo-iOS"
+            ReferencedContainer = "container:pushgo.xcodeproj">
+         </BuildableReference>
+      </MacroExpansion>
+      <Testables>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "D90000112F7F000100A10006"
+               BuildableName = "PushGo-iOSUITests.xctest"
+               BlueprintName = "PushGo-iOSUITests"
+               ReferencedContainer = "container:pushgo.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+      </Testables>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Release"

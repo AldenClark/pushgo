@@ -16,7 +16,7 @@ struct MessageSearchScreen: View {
 private struct MessageSearchScreenModern: View {
     private let embedsInNavigationContainer: Bool
 
-    @Environment(\.appEnvironment) private var environment: AppEnvironment
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(MessageSearchViewModel.self) private var viewModel: MessageSearchViewModel
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
@@ -40,24 +40,42 @@ private struct MessageSearchScreenModern: View {
         .onChange(of: environment.messageStoreRevision) { _, _ in
             viewModel.refreshMessagesIfNeeded()
         }
+        .onChange(of: viewModel.query) { _, newValue in
+#if DEBUG
+            PushGoAutomationRuntime.shared.recordSearchResultsUpdated(
+                query: newValue,
+                resultCount: viewModel.totalResults
+            )
+#endif
+        }
+        .onChange(of: viewModel.totalResults) { _, newValue in
+#if DEBUG
+            PushGoAutomationRuntime.shared.recordSearchResultsUpdated(
+                query: viewModel.query,
+                resultCount: newValue
+            )
+#endif
+        }
         .sheet(item: $selectedMessage) { message in
             MessageDetailScreen(messageId: message.id, message: nil)
+                .pushgoSheetSizing(.detail)
         }
         .searchableOnSupportedPlatforms(binding: searchFieldBinding)
     }
 
     private var searchScaffold: some View {
         ScrollView {
-            VStack(spacing: 16) {
+            VStack(spacing: EntityVisualTokens.detailSectionSpacing) {
                 if isSearchBarVisibleOnThisPlatform {
                     searchBar
                 }
 
                 searchStateContent
             }
-            .padding(.vertical, 16)
-            .padding(.horizontal, 16)
+            .padding(.vertical, EntityVisualTokens.detailPaddingVertical)
+            .padding(.horizontal, EntityVisualTokens.detailPaddingHorizontal)
         }
+        .background(EntityVisualTokens.pageBackground.ignoresSafeArea())
         .modifier(MessageSearchScrollDismissModifier())
         .simultaneousGesture(dismissTapGesture, including: .subviews)
         .navigationBarTitleDisplayMode(.inline)
@@ -126,7 +144,7 @@ private struct MessageSearchScreenModern: View {
     }
 
     private var resultsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: EntityVisualTokens.detailSectionSpacing) {
             Text(localizationManager.localized("found_number_results", viewModel.totalResults))
                 .font(.headline)
 
@@ -136,7 +154,7 @@ private struct MessageSearchScreenModern: View {
                         selectMessage(message)
                     } label: {
                         MessageSearchResultRow(message: message, query: viewModel.query)
-                            .padding(.vertical, 12)
+                            .padding(.vertical, EntityVisualTokens.listRowInsetVertical)
                     }
                     .buttonStyle(.appPlain)
                     .contentShape(Rectangle())
@@ -146,7 +164,7 @@ private struct MessageSearchScreenModern: View {
 
                     if index < viewModel.displayedResults.count - 1 {
                         Divider()
-                            .padding(.vertical, 6)
+                            .padding(.vertical, EntityVisualTokens.rowVerticalPadding)
                     }
                 }
 
@@ -157,7 +175,7 @@ private struct MessageSearchScreenModern: View {
                             .progressViewStyle(.circular)
                         Spacer()
                     }
-                    .padding(.vertical, 12)
+                    .padding(.vertical, EntityVisualTokens.listRowInsetVertical)
                 }
             }
         }
@@ -250,30 +268,12 @@ struct MessageSearchPlaceholderView: View {
 struct MessageSearchResultRow: View {
     let message: PushMessageSummary
     let query: String
-    @Environment(\.appEnvironment) private var environment: AppEnvironment
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 10) {
-                if let iconURL = message.iconURL {
-                    RemoteImageView(url: iconURL) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    } placeholder: {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color.primary.opacity(0.05))
-                                    .overlay(
-                                        Image(systemName: "bell.badge.fill")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary),
-                                    )
-                    }
-                    .frame(width: 40, height: 40)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                }
-
+            HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         HighlightedText(text: message.title, query: query)
@@ -292,7 +292,7 @@ struct MessageSearchResultRow: View {
                     HighlightedText(text: message.bodyPreview, query: query)
                         .font(.subheadline)
                         .foregroundColor(.secondary)
-                        .lineLimit(3)
+                        .lineLimit(4)
 
                     HStack(spacing: 12) {
                         Label(
@@ -315,28 +315,28 @@ struct MessageSearchResultRow: View {
                         }
                     }
                 }
-            }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 if let imageURL = message.imageURL {
-                    RemoteImageView(url: imageURL) { image in
+                    RemoteImageView(url: imageURL, rendition: .listThumbnail) { image in
                         image
                             .resizable()
                             .scaledToFill()
                     } placeholder: {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color.primary.opacity(0.05))
+                        RoundedRectangle(cornerRadius: EntityVisualTokens.radiusSmall, style: .continuous)
+                            .fill(EntityVisualTokens.subtleFill)
                     }
                     .accessibilityLabel(LocalizedStringKey("image_attachment"))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 140)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Color.primary.opacity(0.08), lineWidth: 0.6),
-                )
+                    .frame(width: 56, height: 56)
+                    .clipShape(RoundedRectangle(cornerRadius: EntityVisualTokens.radiusSmall, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: EntityVisualTokens.radiusSmall, style: .continuous)
+                            .stroke(EntityVisualTokens.subtleStroke, lineWidth: 0.6),
+                    )
+                }
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, EntityVisualTokens.rowVerticalPadding + 2)
         .accessibilityElement(children: .combine)
     }
 }

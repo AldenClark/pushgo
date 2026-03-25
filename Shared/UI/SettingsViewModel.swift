@@ -4,41 +4,10 @@ import Observation
 @MainActor
 @Observable
 final class SettingsViewModel {
-    enum KeyLength: Int, CaseIterable, Identifiable {
-        case bits128 = 128
-        case bits192 = 192
-        case bits256 = 256
-
-        var id: Int { rawValue }
-
-        var displayName: String {
-            "\(rawValue)-bit"
-        }
-
-        var byteCount: Int {
-            rawValue / 8
-        }
-    }
-
-    enum KeyEncoding: String, CaseIterable, Identifiable {
-        case plaintext
-        case base64
-        case hex
-
-        var id: String { rawValue }
-
-        var displayName: String {
-            switch self {
-            case .plaintext: "Plaintext"
-            case .base64: "Base64"
-            case .hex: "Hex"
-            }
-        }
-    }
+    typealias KeyEncoding = ManualNotificationKeyEncoding
 
     struct ManualKeyInput: Equatable {
         var key: String = ""
-        var selectedLength: KeyLength = .bits128
         var encoding: KeyEncoding = .plaintext
         var isExpanded: Bool = false
         var isSecretVisible: Bool = false
@@ -53,6 +22,14 @@ final class SettingsViewModel {
 
     private(set) var notificationStatus: PushRegistrationService.AuthorizationState = .notDetermined
     private(set) var notificationKeyMaterial: ServerConfig.NotificationKeyMaterial?
+    private(set) var isWatchCompanionAvailable: Bool = false
+#if os(iOS)
+    private(set) var watchMode: WatchMode = .mirror
+    private(set) var effectiveWatchMode: WatchMode = .mirror
+    private(set) var standaloneReady: Bool = false
+    private(set) var watchModeSwitchStatus: WatchModeSwitchStatus = .idle
+    private(set) var isSwitchingWatchMode: Bool = false
+#endif
     var manualKeyInput = ManualKeyInput() {
         didSet { persistManualKeyPreferences(oldValue: oldValue) }
     }
@@ -69,20 +46,10 @@ final class SettingsViewModel {
     private let localizationManager: LocalizationManager
     private let dataStore: LocalDataStore
     @ObservationIgnored private var isInitializing = true
-
-    var launchAtLoginEnabled: Bool = true {
+    var launchAtLoginEnabled: Bool = false {
         didSet {
             guard !isInitializing, oldValue != launchAtLoginEnabled else { return }
             persistLaunchAtLoginPreference()
-        }
-    }
-
-    var autoCleanupEnabled: Bool = true {
-        didSet {
-            guard !isInitializing, oldValue != autoCleanupEnabled else { return }
-            Task { @MainActor in
-                await dataStore.saveAutoCleanupPreference(autoCleanupEnabled)
-            }
         }
     }
 
@@ -93,77 +60,92 @@ final class SettingsViewModel {
         if let environment {
             self.environment = environment
         } else {
-            self.environment = AppEnvironment.shared
+        self.environment = AppEnvironment.shared
         }
         self.localizationManager = localizationManager ?? LocalizationManager.shared
         self.dataStore = self.environment.dataStore
         notificationKeyMaterial = self.environment.currentNotificationMaterial
-        autoCleanupEnabled = dataStore.cachedAutoCleanupPreference() ?? resolveDefaultAutoCleanupEnabled()
         loadPersistedPreferences()
     }
 
     func refresh() {
         notificationStatus = environment.pushRegistrationService.authorizationState
         notificationKeyMaterial = environment.currentNotificationMaterial
+#if os(iOS)
+        watchMode = environment.watchMode
+        effectiveWatchMode = environment.effectiveWatchMode
+        standaloneReady = environment.standaloneReady
+        watchModeSwitchStatus = environment.watchModeSwitchStatus
+        isWatchCompanionAvailable = environment.isWatchCompanionAvailable
+#else
+        isWatchCompanionAvailable = false
+#endif
         if let material = notificationKeyMaterial {
             manualKeyInput.key = ""
             manualKeyInput.isExpanded = false
             manualKeyInput.isSecretVisible = false
-            manualKeyInput.hasConfiguredKey = !material.keyBase64.isEmpty
+            manualKeyInput.hasConfiguredKey = material.isConfigured
         } else {
             manualKeyInput.hasConfiguredKey = false
         }
+    }
+
+    var standaloneModeEnabled: Bool {
+#if os(iOS)
+        watchMode == .standalone
+#else
+        false
+#endif
+    }
+
+    func setStandaloneModeEnabled(_ isEnabled: Bool) async {
+#if os(iOS)
+        await environment.refreshWatchCompanionAvailability()
+        if isEnabled, !environment.isWatchCompanionAvailable {
+            refresh()
+            error = .saveConfig(reason: localizationManager.localized("watch_companion_not_available"))
+            return
+        }
+        isSwitchingWatchMode = true
+        defer { isSwitchingWatchMode = false }
+        do {
+            let result = try await environment.requestWatchModeChangeApplied(isEnabled ? .standalone : .mirror)
+            refresh()
+            if result == .applied {
+                successMessage = localizationManager.localized(
+                    isEnabled ? "watch_standalone_mode_enabled_success" : "watch_mirror_mode_enabled_success"
+                )
+            }
+        } catch let appError as AppError {
+            refresh()
+            error = appError
+        } catch let underlying {
+            refresh()
+            error = .saveConfig(reason: underlying.localizedDescription)
+        }
+#else
+        _ = isEnabled
+#endif
     }
 
     private func loadPersistedPreferences() {
         Task { @MainActor in
             let manualPrefs = await dataStore.loadManualKeyPreferences()
             var input = manualKeyInput
-            if let storedLength = manualPrefs.length,
-               let resolved = KeyLength(rawValue: storedLength)
-            {
-                input.selectedLength = resolved
-            }
-            if let storedEncoding = manualPrefs.encoding,
-               let resolved = KeyEncoding(rawValue: storedEncoding)
-            {
+            if let storedEncoding = manualPrefs,
+               let resolved = KeyEncoding(rawValue: storedEncoding) {
                 input.encoding = resolved
             }
             manualKeyInput = input
 
             let storedLaunch = await dataStore.loadLaunchAtLoginPreference()
-            launchAtLoginEnabled = storedLaunch ?? true
-            if storedLaunch == nil {
-                await dataStore.saveLaunchAtLoginPreference(true)
-            }
-
-            let storedAutoCleanup = await dataStore.loadAutoCleanupPreference()
-            let defaultAutoCleanup = resolveDefaultAutoCleanupEnabled()
-            autoCleanupEnabled = storedAutoCleanup ?? defaultAutoCleanup
-            if storedAutoCleanup == nil {
-                await dataStore.saveAutoCleanupPreference(defaultAutoCleanup)
-            }
+            launchAtLoginEnabled = storedLaunch ?? false
             isInitializing = false
         }
     }
 
     private func persistLaunchAtLoginPreference() {
         environment.updateLaunchAtLogin(isEnabled: launchAtLoginEnabled)
-    }
-
-    private func resolveDefaultAutoCleanupEnabled() -> Bool {
-        #if os(watchOS)
-        return true
-        #elseif os(iOS)
-        if #available(iOS 18, *) {
-            return false
-        }
-        return true
-        #elseif os(macOS)
-        return false
-        #else
-        return true
-        #endif
     }
 
     func prepareServerEditor() {
@@ -235,23 +217,34 @@ final class SettingsViewModel {
     func saveManualKeyConfig() async {
         let trimmedKey = manualKeyInput.key.trimmingCharacters(in: .whitespacesAndNewlines)
         let encoding = manualKeyInput.encoding
-        let keyLength = manualKeyInput.selectedLength
-        guard !trimmedKey.isEmpty else {
-            let message = manualKeyInput.hasConfiguredKey
-                ? localizationManager.localized("the_key_has_been_saved_please_enter_a_new_value_to_overwrite_it")
-                : localizationManager.localized("please_enter_the_key_first")
-            error = .saveConfig(reason: message)
+        if trimmedKey.isEmpty {
+            isSaving = true
+            defer { isSaving = false }
+            let material = ServerConfig.NotificationKeyMaterial(
+                algorithm: .aesGcm,
+                keyData: Data(),
+                ivBase64: nil,
+                updatedAt: Date(),
+            )
+            await environment.updateNotificationMaterial(material)
+            successMessage = localizationManager.localized("decryption_configuration_saved")
+            notificationKeyMaterial = material
+            var input = manualKeyInput
+            input.key = ""
+            input.hasConfiguredKey = false
+            input.isSecretVisible = false
+            input.isExpanded = false
+            manualKeyInput = input
             return
         }
 
-        let normalizedKey: String
+        let normalizedKey: Data
         do {
-            normalizedKey = try normalizedKeyBase64(
+            normalizedKey = try ManualNotificationKeyValidator.normalizedKeyData(
                 from: trimmedKey,
                 encoding: encoding,
-                keyLength: keyLength,
             )
-        } catch let validation as ManualKeyValidationError {
+        } catch let validation as ManualNotificationKeyValidationError {
             self.error = .saveConfig(
                 reason: validation.errorDescription ?? localizationManager
                     .localized("the_decryption_configuration_is_not_in_the_correct_format_please_check_your_input"),
@@ -267,7 +260,7 @@ final class SettingsViewModel {
         defer { isSaving = false }
         let material = ServerConfig.NotificationKeyMaterial(
             algorithm: .aesGcm,
-            keyBase64: normalizedKey,
+            keyData: normalizedKey,
             ivBase64: nil,
             updatedAt: Date(),
         )
@@ -379,77 +372,14 @@ final class SettingsViewModel {
         }
     }
 
-    private func normalizedKeyBase64(from input: String, encoding: KeyEncoding, keyLength: KeyLength) throws -> String {
-        let data: Data
-        switch encoding {
-        case .plaintext:
-            data = Data(input.utf8)
-        case .base64:
-            guard let decoded = Data(base64Encoded: input) else {
-                throw ManualKeyValidationError.invalidBase64
-            }
-            data = decoded
-        case .hex:
-            var bytes = [UInt8]()
-            let clean = input.filter { !$0.isWhitespace }
-            guard clean.count % 2 == 0 else { throw ManualKeyValidationError.invalidHex }
-            var index = clean.startIndex
-            while index < clean.endIndex {
-                let next = clean.index(index, offsetBy: 2)
-                let byteString = clean[index ..< next]
-                guard let value = UInt8(byteString, radix: 16) else {
-                    throw ManualKeyValidationError.invalidHex
-                }
-                bytes.append(value)
-                index = next
-            }
-            data = Data(bytes)
-        }
-
-        guard data.count == keyLength.byteCount else {
-            throw ManualKeyValidationError.invalidLength(expected: keyLength.byteCount, actual: data.count)
-        }
-
-        return data.base64EncodedString()
-    }
-
     private func persistManualKeyPreferences(oldValue: ManualKeyInput) {
         guard !isInitializing else { return }
-        guard manualKeyInput.selectedLength != oldValue.selectedLength
-            || manualKeyInput.encoding != oldValue.encoding
-        else {
+        guard manualKeyInput.encoding != oldValue.encoding else {
             return
         }
         Task { @MainActor in
-            await dataStore.saveManualKeyPreferences(
-                length: manualKeyInput.selectedLength.rawValue,
-                encoding: manualKeyInput.encoding.rawValue
-            )
+            await dataStore.saveManualKeyPreferences(encoding: manualKeyInput.encoding.rawValue)
         }
     }
 
-}
-
-private enum ManualKeyValidationError: LocalizedError {
-    case invalidBase64
-    case invalidHex
-    case invalidLength(expected: Int, actual: Int)
-
-    var errorDescription: String? {
-        let l10n = LocalizationProvider.localized
-        switch self {
-        case .invalidBase64:
-            return l10n("the_selected_format_is_not_valid_base64_please_check_your_input")
-        case .invalidHex:
-            return l10n("the_selected_format_is_not_a_valid_hex_please_check_your_input")
-        case let .invalidLength(expected, actual):
-            let expectedBits = expected * 8
-            return l10n(
-                "incorrect_key_length_number_bytes_required_number_bits_currently_number_bytes",
-                expected,
-                expectedBits,
-                actual,
-            )
-        }
-    }
 }

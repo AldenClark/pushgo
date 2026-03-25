@@ -27,7 +27,7 @@ final class MessageStateCoordinator {
     }
 
     @discardableResult
-    func markRead(notificationRequestId: String, messageId: UUID?) async throws -> PushMessage? {
+    func markRead(notificationRequestId: String, messageId: String?) async throws -> PushMessage? {
         if let messageId, let message = try await dataStore.loadMessage(messageId: messageId) {
             let updated = try await markRead(messageId: message.id)
             removeDeliveredNotifications(identifiers: [notificationRequestId])
@@ -62,7 +62,7 @@ final class MessageStateCoordinator {
         await refreshCountsAndNotify()
     }
 
-    func deleteMessage(notificationRequestId: String, messageId: UUID?) async throws {
+    func deleteMessage(notificationRequestId: String, messageId: String?) async throws {
         var message: PushMessage?
         if let messageId {
             message = try await dataStore.loadMessage(messageId: messageId)

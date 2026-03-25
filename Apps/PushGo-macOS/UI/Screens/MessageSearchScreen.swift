@@ -16,7 +16,7 @@ struct MessageSearchScreen: View {
 private struct MessageSearchScreenModern: View {
     private let embedsInNavigationContainer: Bool
 
-    @Environment(\.appEnvironment) private var environment: AppEnvironment
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(MessageSearchViewModel.self) private var viewModel: MessageSearchViewModel
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
@@ -231,30 +231,12 @@ struct MessageSearchPlaceholderView: View {
 struct MessageSearchResultRow: View {
     let message: PushMessageSummary
     let query: String
-    @Environment(\.appEnvironment) private var environment: AppEnvironment
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 10) {
-                if let iconURL = message.iconURL {
-                    RemoteImageView(url: iconURL) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    } placeholder: {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color.primary.opacity(0.05))
-                                    .overlay(
-                                        Image(systemName: "bell.badge.fill")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary),
-                                    )
-                    }
-                    .frame(width: 40, height: 40)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                }
-
+            HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         HighlightedText(text: message.title, query: query)
@@ -273,7 +255,7 @@ struct MessageSearchResultRow: View {
                     HighlightedText(text: message.bodyPreview, query: query)
                         .font(.subheadline)
                         .foregroundColor(.secondary)
-                        .lineLimit(3)
+                        .lineLimit(4)
 
                     HStack(spacing: 12) {
                         Label(
@@ -296,25 +278,25 @@ struct MessageSearchResultRow: View {
                         }
                     }
                 }
-            }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            if let imageURL = message.imageURL {
-                RemoteImageView(url: imageURL) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                } placeholder: {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color.primary.opacity(0.05))
+                if let imageURL = message.imageURL {
+                    RemoteImageView(url: imageURL, rendition: .listThumbnail) { image in
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    } placeholder: {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color.primary.opacity(0.05))
+                    }
+                    .accessibilityLabel(LocalizedStringKey("image_attachment"))
+                    .frame(width: 56, height: 56)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(Color.primary.opacity(0.08), lineWidth: 0.6),
+                    )
                 }
-                .accessibilityLabel(LocalizedStringKey("image_attachment"))
-                .frame(maxWidth: .infinity)
-                .frame(height: 140)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Color.primary.opacity(0.08), lineWidth: 0.6),
-                )
             }
         }
         .padding(.vertical, 8)

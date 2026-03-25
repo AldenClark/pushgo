@@ -10,9 +10,7 @@ PushGo for Apple platforms (iOS/macOS/watchOS) is the official client app for Pu
 
 ## TestFlight (IMPORTANT)
 
-The iOS/macOS/watchOS apps are currently in TestFlight testing.
 
-Join the public test via:
 https://testflight.apple.com/join/xhYmNZH8
 
 The public App Store release is expected before February 28, 2026.

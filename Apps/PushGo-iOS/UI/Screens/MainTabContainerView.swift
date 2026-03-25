@@ -1,120 +1,198 @@
 import SwiftUI
 
 struct MainTabContainerView: View {
-    @Environment(\.appEnvironment) private var environment: AppEnvironment
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     @State private var messageListViewModel = MessageListViewModel()
     @State private var searchViewModel = MessageSearchViewModel()
+    @State private var entityViewModel = EntityProjectionViewModel()
     @State private var selection: MainTab = .messages
     @State private var didRefreshAuthorizationStatus: Bool = false
 
     var body: some View {
         tabLayout
+            .pushgoTabBarMinimizeOnScroll()
             .environment(searchViewModel)
             .task {
                 guard !didRefreshAuthorizationStatus else { return }
                 didRefreshAuthorizationStatus = true
                 await environment.pushRegistrationService.refreshAuthorizationStatus()
+                await entityViewModel.reload()
                 environment.updateActiveTab(selection)
                 if environment.pendingMessageToOpen != nil {
                     selection = .messages
+                } else if environment.pendingThingToOpen != nil {
+                    selection = .things
+                } else if environment.pendingEventToOpen != nil {
+                    selection = .events
+                }
+                ensureSelectionIsVisible()
+            }
+#if DEBUG
+            .task {
+                for await notification in NotificationCenter.default.notifications(
+                    named: .pushgoAutomationSelectTab
+                ) {
+                    guard let requestedTab = notification.object as? String,
+                          let tab = MainTab(automationIdentifier: requestedTab)
+                    else {
+                        continue
+                    }
+                    selection = tab
+                    ensureSelectionIsVisible()
                 }
             }
+            .task(id: automationStateVersion) {
+                guard selection.automationPublishesFromRoot else { return }
+                PushGoAutomationRuntime.shared.publishState(
+                    environment: environment,
+                    activeTab: selection.automationIdentifier,
+                    visibleScreen: selection.automationVisibleScreen
+                )
+            }
+#endif
             .onChange(of: environment.pendingMessageToOpen) { _, id in
                 if id != nil {
                     selection = .messages
                 }
             }
+            .onChange(of: environment.pendingEventToOpen) { _, id in
+                if id != nil && environment.pendingThingToOpen == nil {
+                    selection = .events
+                }
+            }
+            .onChange(of: environment.pendingThingToOpen) { _, id in
+                if id != nil {
+                    selection = .things
+                }
+            }
             .onChange(of: selection) { _, newValue in
                 environment.updateActiveTab(newValue)
             }
+            .onChange(of: environment.messageStoreRevision) { _, _ in
+                Task { @MainActor in
+                    await entityViewModel.reload()
+                    ensureSelectionIsVisible()
+                }
+            }
+            .onChange(of: visibleTabsSignature) { _, _ in
+                ensureSelectionIsVisible()
+            }
     }
+
+#if DEBUG
+    private var automationStateVersion: String {
+        [
+            selection.automationIdentifier,
+            environment.pendingMessageToOpen?.uuidString ?? "",
+            environment.pendingEventToOpen ?? "",
+            environment.pendingThingToOpen ?? "",
+            "\(environment.unreadMessageCount)",
+            "\(environment.totalMessageCount)",
+        ].joined(separator: "|")
+    }
+#endif
 
     @ViewBuilder
     private var tabLayout: some View {
-        if #available(iOS 18, *) {
-            TabView(selection: $selection) {
-                let unreadCount = messageListViewModel.unreadMessageCount
+        let unreadCount = messageListViewModel.unreadMessageCount
+        TabView(selection: $selection) {
+            if showsMessagesTab {
                 Tab(LocalizationManager.localizedSync("messages"), systemImage: "tray.full", value: MainTab.messages) {
                     MessageListScreen(viewModel: messageListViewModel)
                 }
                 .badge(unreadCount > 0 ? Text("\(unreadCount)") : nil)
+            }
 
-                Tab(LocalizationManager.localizedSync("push"), systemImage: "link", value: MainTab.devices) {
-                    PushScreen()
-                }
-
-                Tab(LocalizationManager.localizedSync("settings"), systemImage: "gearshape", value: MainTab.settings) {
-                    SettingsView()
-                }
-
-                if #available(iOS 26, *) {
-                    Tab(
-                        LocalizationManager.localizedSync("search"),
-                        systemImage: "magnifyingglass",
-                        value: MainTab.search,
-                        role: .search,
-                    ) {
-                        MessageSearchScreen()
+            if showsEventsTab {
+                Tab(LocalizationManager.localizedSync("push_type_event"), systemImage: "waveform.path.ecg", value: MainTab.events) {
+                    navigationContainer {
+                        EventListScreen(
+                            viewModel: entityViewModel,
+                            openEventId: environment.pendingEventToOpen,
+                            onOpenEventHandled: {
+                                environment.pendingEventToOpen = nil
+                            }
+                        )
                     }
                 }
             }
-        } else {
-            legacyTabLayout
+
+            if showsThingsTab {
+                Tab(LocalizationManager.localizedSync("push_type_thing"), systemImage: "cpu", value: MainTab.things) {
+                    navigationContainer {
+                        ThingListScreen(
+                            viewModel: entityViewModel,
+                            openThingId: environment.pendingThingToOpen,
+                            onOpenThingHandled: {
+                                environment.pendingThingToOpen = nil
+                            }
+                        )
+                    }
+                }
+            }
+
+            Tab(LocalizationManager.localizedSync("channels"), systemImage: "dot.radiowaves.left.and.right", value: MainTab.channels) {
+                ChannelManagementScreen()
+            }
         }
     }
 
-    @ViewBuilder
-    private var legacyTabLayout: some View {
-        let unreadCount = messageListViewModel.unreadMessageCount
-        TabView(selection: $selection) {
-            MessageListScreen(viewModel: messageListViewModel)
-                .tabItem { Label(localizationManager.localized("messages"), systemImage: "tray.full") }
-                .tag(MainTab.messages)
-                .applyBadgeIfNeeded(unreadCount)
-
-            PushScreen()
-                .tabItem { Label(localizationManager.localized("push"), systemImage: "link") }
-                .tag(MainTab.devices)
-
-            SettingsView()
-                .tabItem { Label(localizationManager.localized("settings"), systemImage: "gearshape") }
-                .tag(MainTab.settings)
-        }
+    private var showsMessagesTab: Bool {
+        environment.isMessagePageEnabled
     }
-}
 
-private extension View {
-    @ViewBuilder
-    func applyBadgeIfNeeded(_ count: Int) -> some View {
-        if count > 0 {
-            self.badge(count)
-        } else {
-            self
+    private var showsEventsTab: Bool {
+        environment.isEventPageEnabled
+    }
+
+    private var showsThingsTab: Bool {
+        environment.isThingPageEnabled
+    }
+
+    private var visibleTabsSignature: String {
+        "\(showsMessagesTab)|\(showsEventsTab)|\(showsThingsTab)"
+    }
+
+    private func ensureSelectionIsVisible() {
+        var visibleTabs: [MainTab] = []
+        if showsMessagesTab {
+            visibleTabs.append(.messages)
+        }
+        if showsEventsTab {
+            visibleTabs.append(.events)
+        }
+        if showsThingsTab {
+            visibleTabs.append(.things)
+        }
+        visibleTabs.append(.channels)
+        if !visibleTabs.contains(selection) {
+            selection = visibleTabs.first ?? .channels
         }
     }
 }
 
 enum MainTab: Hashable, CaseIterable {
     case messages
-    case devices
-    case settings
-    case search
+    case events
+    case things
+    case channels
 
     var title: String {
         switch self {
         case .messages:
             "messages"
-        case .devices:
-            "push"
-        case .settings:
-            "settings"
-        case .search:
-            "search"
+        case .events:
+            "push_type_event"
+        case .things:
+            "push_type_thing"
+        case .channels:
+            "channels"
         }
     }
 
+    @MainActor
     func localizedTitle(using localizationManager: LocalizationManager) -> String {
         localizationManager.localized(title)
     }
@@ -122,13 +200,13 @@ enum MainTab: Hashable, CaseIterable {
     var systemImageName: String {
         switch self {
         case .messages:
-            "tray.full"
-        case .devices:
-            "link"
-        case .settings:
-            "gearshape"
-        case .search:
-            "magnifyingglass"
+            return "tray.full"
+        case .events:
+            return "waveform.path.ecg"
+        case .things:
+            return "cpu"
+        case .channels:
+            return "dot.radiowaves.left.and.right"
         }
     }
 
@@ -136,12 +214,64 @@ enum MainTab: Hashable, CaseIterable {
         switch self {
         case .messages:
             "messages"
-        case .devices:
-            "devices"
-        case .settings:
-            "settings"
-        case .search:
-            "search"
+        case .events:
+            "events"
+        case .things:
+            "things"
+        case .channels:
+            "channels"
         }
     }
+
+#if DEBUG
+    init?(automationIdentifier: String) {
+        switch automationIdentifier {
+        case "messages":
+            self = .messages
+        case "events":
+            self = .events
+        case "things":
+            self = .things
+        case "channels":
+            self = .channels
+        default:
+            return nil
+        }
+    }
+
+    var automationIdentifier: String {
+        switch self {
+        case .messages:
+            return "messages"
+        case .events:
+            return "events"
+        case .things:
+            return "things"
+        case .channels:
+            return "channels"
+        }
+    }
+
+    var automationVisibleScreen: String {
+        switch self {
+        case .messages:
+            return "screen.messages.list"
+        case .events:
+            return "screen.events.list"
+        case .things:
+            return "screen.things.list"
+        case .channels:
+            return "screen.channels"
+        }
+    }
+
+    var automationPublishesFromRoot: Bool {
+        switch self {
+        case .channels:
+            return true
+        case .messages, .events, .things:
+            return false
+        }
+    }
+#endif
 }

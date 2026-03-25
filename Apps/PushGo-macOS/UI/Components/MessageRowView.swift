@@ -3,37 +3,27 @@ import SwiftUI
 
 struct MessageRowView: View {
     let message: PushMessageSummary
-    @Environment(\.appEnvironment) private var environment: AppEnvironment
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
 
     private enum Layout {
         static let bodyImageSize: CGFloat = 48
-        static let bodyImageCornerRadius: CGFloat = 10
+        static let bodyImageCornerRadius: CGFloat = EntityVisualTokens.radiusSmall
         static let bodyMaxLines: Int = 8
-    }
-
-    private var placeholderIcon: some View {
-        RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(Color.clear)
-            .overlay(
-                Image(systemName: "bell.badge.fill")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .accessibilityHidden(true)
-            )
+        static let imagePreviewLimit: Int = 4
+        static let imageSpacing: CGFloat = 8
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: EntityVisualTokens.stackSpacing) {
             HStack(alignment: .center, spacing: 4) {
                 HStack(alignment: .center, spacing: 8) {
-                    titleIcon
-
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
                             Text(message.title)
                                 .font(.headline)
-                                .fontWeight(message.isRead ? .regular : .semibold)
+                                .fontWeight(.semibold)
                                 .lineLimit(2)
+                            MessageSeverityListBadge(severity: message.severity)
                             if !message.isRead {
                                 UnreadDotView()
                                     .padding(.leading, 8)
@@ -66,30 +56,56 @@ struct MessageRowView: View {
                 }
             }
 
-            HStack(alignment: .top, spacing: 12) {
+            if hasBodyPreview {
                 bodyPreviewView
+            }
 
-                if let imageURL = message.imageURL {
-                    RemoteImageView(url: imageURL) { image in
+            if !message.tags.isEmpty {
+                Text(message.tags.joined(separator: " · "))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+            }
+
+            if !message.imageURLs.isEmpty {
+                messageImageRow
+            }
+        }
+        .padding(.vertical, verticalPadding)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var messageImageRow: some View {
+        GeometryReader { proxy in
+            HStack(spacing: Layout.imageSpacing) {
+                ForEach(Array(message.imageURLs.prefix(visibleImageCount(for: proxy.size.width))), id: \.absoluteString) { imageURL in
+                    RemoteImageView(url: imageURL, rendition: .listThumbnail) { image in
                         image
                             .resizable()
                             .scaledToFill()
                     } placeholder: {
                         RoundedRectangle(cornerRadius: Layout.bodyImageCornerRadius, style: .continuous)
-                            .fill(Color.clear)
+                            .fill(EntityVisualTokens.secondarySurface)
                     }
                     .accessibilityLabel(LocalizedStringKey("image_attachment"))
                     .frame(width: Layout.bodyImageSize, height: Layout.bodyImageSize)
                     .clipShape(RoundedRectangle(cornerRadius: Layout.bodyImageCornerRadius, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: Layout.bodyImageCornerRadius, style: .continuous)
-                            .stroke(Color.primary.opacity(0.08), lineWidth: 0.6),
+                            .stroke(EntityVisualTokens.subtleStroke, lineWidth: 0.6),
                     )
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, verticalPadding)
-        .accessibilityElement(children: .combine)
+        .frame(height: Layout.bodyImageSize)
+    }
+
+    private func visibleImageCount(for availableWidth: CGFloat) -> Int {
+        guard availableWidth > 0 else { return Layout.imagePreviewLimit }
+        let unit = Layout.bodyImageSize + Layout.imageSpacing
+        let count = Int(((availableWidth + Layout.imageSpacing) / unit).rounded(.down))
+        return max(1, count)
     }
 
     private var bodyPreviewMaxHeight: CGFloat {
@@ -100,47 +116,22 @@ struct MessageRowView: View {
 
     @ViewBuilder
     private var bodyPreviewView: some View {
-        if let payload = message.bodyRenderPayload {
-            Text(payload.attributedString(textStyle: .subheadline))
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .lineLimit(Layout.bodyMaxLines)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .layoutPriority(1)
-                .frame(maxHeight: bodyPreviewMaxHeight, alignment: .top)
-                .clipped()
-        } else {
-            Text(message.bodyPreview)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .lineLimit(Layout.bodyMaxLines)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .layoutPriority(1)
-                .frame(maxHeight: bodyPreviewMaxHeight, alignment: .top)
-                .clipped()
-        }
-    }
-
-    @ViewBuilder
-    private var titleIcon: some View {
-        if let iconURL = message.iconURL {
-            RemoteImageView(url: iconURL) { image in
-                image
-                    .resizable()
-                    .scaledToFill()
-            } placeholder: {
-                placeholderIcon
-            }
-            .frame(width: 20, height: 20)
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-            .accessibilityHidden(true)
-        } else {
-            EmptyView()
-        }
+        Text(message.bodyPreview)
+            .font(.subheadline)
+            .foregroundColor(.secondary)
+            .lineLimit(Layout.bodyMaxLines)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
+            .frame(maxHeight: bodyPreviewMaxHeight, alignment: .top)
+            .clipped()
     }
 
     private var verticalPadding: CGFloat {
-        10
+        EntityVisualTokens.rowVerticalPadding
+    }
+
+    private var hasBodyPreview: Bool {
+        !message.bodyPreview.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     @ViewBuilder
@@ -172,5 +163,43 @@ private struct UnreadDotView: View {
             .fill(Color.accentColor)
             .frame(width: 8, height: 8)
             .accessibilityLabel(LocalizedStringKey("unread"))
+    }
+}
+
+private struct MessageSeverityListBadge: View {
+    let severity: PushMessage.Severity?
+
+    private var style: (label: LocalizedStringKey, background: Color, foreground: Color)? {
+        switch severity {
+        case .high:
+            return (
+                LocalizedStringKey("message_severity_high_compact"),
+                Color.orange.opacity(0.16),
+                Color.orange
+            )
+        case .critical:
+            return (
+                LocalizedStringKey("message_severity_critical_compact"),
+                Color.red.opacity(0.14),
+                Color.red
+            )
+        default:
+            return nil
+        }
+    }
+
+    var body: some View {
+        if let style {
+            Text(style.label)
+                .font(.caption2.weight(.semibold))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(style.background)
+                )
+                .foregroundStyle(style.foreground)
+                .accessibilityLabel(style.label)
+        }
     }
 }

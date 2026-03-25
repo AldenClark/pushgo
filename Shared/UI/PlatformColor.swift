@@ -20,7 +20,7 @@ extension Color {
 
     static var platformGroupedBackground: Color {
 #if os(iOS)
-        Color(UIColor.systemGroupedBackground)
+        appWindowBackground
 #elseif os(watchOS)
         Color.black
 #else
@@ -44,7 +44,7 @@ extension Color {
 #elseif os(watchOS)
         Color.black
 #else
-        Color(nsColor: NSColor.textBackgroundColor)
+        appWindowBackground
 #endif
     }
 }

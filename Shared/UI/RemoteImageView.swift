@@ -10,6 +10,7 @@ typealias PlatformImage = NSImage
 #endif
 struct RemoteImageView<Content: View, Placeholder: View>: View {
     let url: URL?
+    let rendition: SharedImageCache.Rendition
     let content: (Image) -> Content
     let placeholder: () -> Placeholder
 
@@ -24,10 +25,12 @@ struct RemoteImageView<Content: View, Placeholder: View>: View {
 
     init(
         url: URL?,
+        rendition: SharedImageCache.Rendition = .original,
         @ViewBuilder content: @escaping (Image) -> Content,
         @ViewBuilder placeholder: @escaping () -> Placeholder = { Color.clear },
     ) {
         self.url = url
+        self.rendition = rendition
         self.content = content
         self.placeholder = placeholder
     }
@@ -42,22 +45,22 @@ struct RemoteImageView<Content: View, Placeholder: View>: View {
             }
         }
         .task(id: url) {
-            await load(url: url)
+            await load(url: url, rendition: rendition)
         }
         .onAppear {
             guard case .failure = phase else { return }
-            Task { await load(url: url) }
+            Task { await load(url: url, rendition: rendition) }
         }
     }
 
-    private func load(url: URL?) async {
+    private func load(url: URL?, rendition: SharedImageCache.Rendition) async {
         guard let url else {
             await MainActor.run {
                 phase = .failure
             }
             return
         }
-        if let cached = RemoteImageCache.cachedImage(for: url) {
+        if let cached = await RemoteImageCache.cachedImage(for: url, rendition: rendition) {
             await MainActor.run {
                 phase = .success(Self.makeImage(from: cached))
             }
@@ -70,7 +73,7 @@ struct RemoteImageView<Content: View, Placeholder: View>: View {
             phase = .loading
         }
         do {
-            let platformImage = try await RemoteImageCache.loadImage(from: url)
+            let platformImage = try await RemoteImageCache.loadImage(from: url, rendition: rendition)
             await MainActor.run {
                 phase = .success(Self.makeImage(from: platformImage))
             }
@@ -94,8 +97,22 @@ struct RemoteImageView<Content: View, Placeholder: View>: View {
 }
 
 enum RemoteImageCache {
-    private final class MemoryCache: @unchecked Sendable {
-        let cache = NSCache<NSURL, PlatformImage>()
+    private static let decodeQueue = DispatchQueue(label: "io.ethan.pushgo.remote-image-decode", qos: .userInitiated)
+
+    private actor MemoryCache {
+        private let cache = NSCache<NSURL, PlatformImage>()
+
+        func image(for key: NSURL) -> PlatformImage? {
+            cache.object(forKey: key)
+        }
+
+        func set(_ image: PlatformImage, for key: NSURL) {
+            cache.setObject(image, forKey: key)
+        }
+
+        func remove(for key: NSURL) {
+            cache.removeObject(forKey: key)
+        }
     }
 
     private actor InflightImages {
@@ -118,40 +135,42 @@ enum RemoteImageCache {
     private static let cache = MemoryCache()
     private static let inflight = InflightImages()
 
-    static func cachedImage(for url: URL) -> PlatformImage? {
-        let cacheKey = SharedImageCache.cacheKeyURL(for: url)
-        return cache.cache.object(forKey: cacheKey)
+    static func cachedImage(for url: URL, rendition: SharedImageCache.Rendition) async -> PlatformImage? {
+        let cacheKey = SharedImageCache.cacheKeyURL(for: url, rendition: rendition)
+        return await cache.image(for: cacheKey)
     }
 
-    static func loadImage(from url: URL) async throws -> PlatformImage {
-        let cacheKey = SharedImageCache.cacheKeyURL(for: url)
-        if let cached = cache.cache.object(forKey: cacheKey) {
+    static func loadImage(from url: URL, rendition: SharedImageCache.Rendition) async throws -> PlatformImage {
+        let cacheKey = SharedImageCache.cacheKeyURL(for: url, rendition: rendition)
+        if let cached = await cache.image(for: cacheKey) {
             return cached
         }
         let task = await inflight.task(for: cacheKey) {
             Task {
                 defer { Task { await inflight.remove(cacheKey) } }
-                let image = try await loadImageUncached(from: url)
-                cache.cache.setObject(image, forKey: cacheKey)
+                let image = try await loadImageUncached(from: url, rendition: rendition)
+                await cache.set(image, for: cacheKey)
                 return image
             }
         }
         let image = try await task.value
-        cache.cache.setObject(image, forKey: cacheKey)
+        await cache.set(image, for: cacheKey)
         return image
     }
 
     static func purge(urls: [URL]) async {
         for url in urls {
-            let cacheKey = SharedImageCache.cacheKeyURL(for: url)
-            cache.cache.removeObject(forKey: cacheKey)
+            for rendition in SharedImageCache.Rendition.allCases {
+                let cacheKey = SharedImageCache.cacheKeyURL(for: url, rendition: rendition)
+                await cache.remove(for: cacheKey)
+            }
         }
         await SharedImageCache.purge(urls: urls)
     }
 
     private static func decodeImage(from data: Data) async throws -> PlatformImage {
         try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
+            decodeQueue.async {
                 if let image = PlatformImage(data: data) {
                     continuation.resume(returning: image)
                 } else {
@@ -161,12 +180,16 @@ enum RemoteImageCache {
         }
     }
 
-    private static func loadImageUncached(from url: URL) async throws -> PlatformImage {
-        if let data = await SharedImageCache.cachedData(for: url) {
+    private static func loadImageUncached(
+        from url: URL,
+        rendition: SharedImageCache.Rendition
+    ) async throws -> PlatformImage {
+        if let data = await SharedImageCache.cachedData(for: url, rendition: rendition) {
             return try await decodeImage(from: data)
         }
         let data = try await SharedImageCache.fetchData(
             from: url,
+            rendition: rendition,
             maxBytes: AppConstants.maxMessageImageBytes,
             timeout: 10
         )

@@ -16,12 +16,12 @@ final class MainWindowController {
     }
 
     func captureMainWindow(_ window: NSWindow) {
-        guard mainWindow !== window else { return }
-        mainWindow = window
-        window.identifier = mainWindowIdentifier
-        window.contentMinSize = NSSize(width: 1100, height: 640)
-
-        configureTitlebarForSplitDivider(window)
+        if mainWindow !== window {
+            mainWindow = window
+            window.identifier = mainWindowIdentifier
+            window.contentMinSize = NSSize(width: 1100, height: 640)
+        }
+        configureWindowChrome(window)
     }
     func prepareForShowingMainWindow() {
         preventAccessoryUntil = Date().addingTimeInterval(2.0)
@@ -32,7 +32,11 @@ final class MainWindowController {
     }
     func focusMainWindowIfExists() -> Bool {
         guard let window = resolveMainWindow() else { return false }
+        captureMainWindow(window)
         window.makeKeyAndOrderFront(nil)
+        Task { @MainActor in
+            self.configureWindowChrome(window)
+        }
         return true
     }
     func showMainWindow() {
@@ -47,7 +51,7 @@ final class MainWindowController {
         return NSApp.windows.first(where: { $0.identifier == mainWindowIdentifier })
     }
 
-    private func configureTitlebarForSplitDivider(_ window: NSWindow) {
+    private func configureWindowChrome(_ window: NSWindow) {
         window.titleVisibility = .hidden
         window.toolbarStyle = .unified
         if #available(macOS 26.0, *) {
@@ -60,6 +64,9 @@ final class MainWindowController {
             window.backgroundColor = NSColor.windowBackgroundColor
         }
         window.titlebarSeparatorStyle = .none
+        if #unavailable(macOS 15.0) {
+            window.toolbar?.showsBaselineSeparator = false
+        }
         window.isOpaque = true
     }
 }

@@ -2,17 +2,22 @@ import SwiftUI
 import UserNotifications
 
 import AppKit
-import ObjectiveC.runtime
 @MainActor
-final class PushGoAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate, NSMenuDelegate {
+    private var statusItem: NSStatusItem?
+    private var privateAckDrainScheduler: NSBackgroundActivityScheduler?
+
+    func applicationWillFinishLaunching(_: Notification) {
+        activateForAutomationIfNeeded()
+    }
+
     func applicationDidFinishLaunching(_: Notification) {
-        LocalizationProvider.installTranslator { key, args in
-            LocalizationManager.shared.localized(key, arguments: args)
-        }
         NSApp.setActivationPolicy(.regular)
-        configureGlobalScrollAppearance()
+        activateForAutomationIfNeeded()
         UNUserNotificationCenter.current().delegate = self
         _ = AppEnvironment.shared
+        bootstrapAutomationRuntimeIfNeeded()
+        configureStatusItem()
 
         NSApp.registerForRemoteNotifications(matching: [.alert, .badge, .sound])
         Task {
@@ -28,13 +33,44 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificati
         }
         Task { @MainActor in
             await Task.yield()
+            activateForAutomationIfNeeded()
+            if PushGoAutomationContext.forceForegroundApp {
+                MainWindowController.shared.showMainWindow()
+            }
             ensureMainWindowKey(retries: 25, delay: 0.08)
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            NSScrollView.pushgoApplyOverlayStyleInExistingWindows()
             observeWindowLifecycle()
         }
+        configurePrivateAckDrainScheduler()
     }
+
+    private func bootstrapAutomationRuntimeIfNeeded() {
+#if DEBUG
+        Task { @MainActor in
+            PushGoAutomationRuntime.shared.configureFromProcessEnvironment()
+            PushGoAutomationRuntime.shared.recordBootstrapCheckpoint("macos.app_delegate.did_finish_launching.enter")
+            guard PushGoAutomationContext.isActive else { return }
+            let environment = AppEnvironment.shared
+            PushGoAutomationRuntime.shared.recordBootstrapCheckpoint("macos.app_delegate.bootstrap.begin")
+            await environment.bootstrap()
+            if PushGoAutomationContext.forceForegroundApp {
+                MainWindowController.shared.showMainWindow()
+                ensureMainWindowKey(retries: 25, delay: 0.08)
+            }
+            await Task.yield()
+            PushGoAutomationRuntime.shared.recordBootstrapCheckpoint("macos.app_delegate.before_fixture_import")
+            await PushGoAutomationRuntime.shared.importStartupFixtureIfNeeded(environment: environment)
+            PushGoAutomationRuntime.shared.recordBootstrapCheckpoint("macos.app_delegate.after_fixture_import")
+            await PushGoAutomationRuntime.shared.executeStartupRequestIfNeeded(environment: environment)
+            PushGoAutomationRuntime.shared.recordBootstrapCheckpoint("macos.app_delegate.after_request_execute")
+        }
+#endif
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool {
+        if PushGoAutomationContext.forceForegroundApp {
+            AppEnvironment.shared.updateMainWindowVisibility(isVisible: false)
+            return false
+        }
         if MainWindowController.shared.shouldPreventAccessory {
             return false
         }
@@ -62,6 +98,7 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificati
     ) {
         Task { @MainActor in
             await handleRemoteNotification(userInfo)
+            _ = await AppEnvironment.shared.drainPrivateWakeupAckOutboxForSystemWake()
         }
     }
 
@@ -70,9 +107,22 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificati
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
+        if isPurePrivateWakeupPayload(notification.request.content.userInfo) {
+            Task { @MainActor in
+                await AppEnvironment.shared.triggerPrivateWakeupPull(presentLocalNotifications: true)
+                completionHandler([])
+            }
+            return
+        }
         Task { @MainActor in
-            await AppEnvironment.shared.persistNotificationIfNeeded(notification)
-            let shouldPresent = AppEnvironment.shared.shouldPresentForegroundNotification()
+            let outcome = await persistNotificationAndSyncEntityIfNeeded(notification)
+            guard case .persisted = outcome else {
+                completionHandler([])
+                return
+            }
+            let shouldPresent = AppEnvironment.shared.shouldPresentForegroundNotification(
+                payload: notification.request.content.userInfo
+            )
             if shouldPresent {
                 completionHandler([.banner, .list, .sound, .badge])
             } else {
@@ -86,90 +136,76 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificati
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        let actionID = response.actionIdentifier
-        let messageId = extractMessageId(from: response.notification.request.content.userInfo)
-
-        switch actionID {
-        case AppConstants.actionCopyIdentifier:
-            Task {
-                await AppEnvironment.shared.persistNotificationIfNeeded(response.notification)
-                await MainActor.run {
-                    self.copyFullText(from: response.notification)
-                }
-                if let messageId {
-                    await AppEnvironment.shared.handleNotificationOpen(messageId: messageId)
+        if isPurePrivateWakeupPayload(response.notification.request.content.userInfo) {
+            Task { @MainActor in
+                await AppEnvironment.shared.triggerPrivateWakeupPull(presentLocalNotifications: true)
+                completionHandler()
+            }
+            return
+        }
+        Task {
+            let actionID = response.actionIdentifier
+            let userInfo = response.notification.request.content.userInfo
+            let messageId = extractMessageId(from: userInfo)
+            let entityTarget = NotificationHandling.entityOpenTargetComponents(from: userInfo)
+            let requestId = response.notification.request.identifier
+            let persistenceOutcome = await persistNotificationAndSyncEntityIfNeeded(response.notification)
+            if await shouldAbortActionForPersistenceFailure(persistenceOutcome) {
+                completionHandler()
+                return
+            }
+            switch actionID {
+            case UNNotificationDismissActionIdentifier:
+                if entityTarget != nil {
+                    removeDeliveredNotification(requestId: requestId)
                 } else {
-                    await AppEnvironment.shared.handleNotificationOpenFromCopy(
-                        notificationRequestId: response.notification.request.identifier
-                    )
-                }
-                await MainActor.run {
-                    AppEnvironment.shared.showToast(
-                        message: LocalizationManager.shared.localized("message_content_copied"),
-                        style: .success,
-                        duration: 1.2
-                    )
+                    await handleDismiss(response: response, messageId: messageId)
                 }
                 completionHandler()
-            }
-        case AppConstants.actionMarkReadIdentifier:
-            Task {
-                await AppEnvironment.shared.persistNotificationIfNeeded(response.notification)
-                await handleMarkRead(response: response, messageId: messageId)
-                completionHandler()
-            }
-        case AppConstants.actionDeleteIdentifier:
-            Task {
-                await AppEnvironment.shared.persistNotificationIfNeeded(response.notification)
-                await handleDelete(response: response, messageId: messageId)
-                completionHandler()
-            }
-        case UNNotificationDismissActionIdentifier:
-            Task {
-                await AppEnvironment.shared.persistNotificationIfNeeded(response.notification)
-                await handleDismiss(response: response, messageId: messageId)
-                completionHandler()
-            }
-        case UNNotificationDefaultActionIdentifier:
-            Task {
-                await AppEnvironment.shared.persistNotificationIfNeeded(response.notification)
-                if let messageId {
+            case UNNotificationDefaultActionIdentifier:
+                if let entityTarget {
+                    await AppEnvironment.shared.handleNotificationOpen(
+                        entityType: entityTarget.entityType,
+                        entityId: entityTarget.entityId
+                    )
+                } else if let messageId {
                     await AppEnvironment.shared.handleNotificationOpen(messageId: messageId)
                 } else {
                     await AppEnvironment.shared.handleNotificationOpen(
-                        notificationRequestId: response.notification.request.identifier
+                        notificationRequestId: requestId
                     )
                 }
                 completionHandler()
+            default:
+                completionHandler()
             }
-        default:
-            completionHandler()
         }
     }
-    
-    private func copyFullText(from notification: UNNotification) {
-        guard let text = NotificationHandling.notificationTextForCopy(from: notification.request.content) else {
-            return
+
+    private func shouldAbortActionForPersistenceFailure(
+        _ outcome: NotificationPersistenceOutcome
+    ) async -> Bool {
+        guard case .failed = outcome else {
+            return false
         }
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        await AppEnvironment.shared.triggerPrivateWakeupPull()
+        return true
     }
 
     private func handleRemoteNotification(_ userInfo: [String: Any]) async {
-        guard let normalized = NotificationHandling.normalizeRemoteNotification(userInfo) else { return }
-        await AppEnvironment.shared.addLocalMessage(
-            title: normalized.title,
-            body: normalized.body,
-            channel: normalized.channel,
-            url: normalized.url,
-            rawPayload: normalized.rawPayload,
-            decryptionState: normalized.decryptionState,
-            messageId: normalized.messageId
-        )
+        if isPurePrivateWakeupPayload(userInfo) {
+            await AppEnvironment.shared.triggerPrivateWakeupPull(presentLocalNotifications: true)
+            return
+        }
+        guard let normalized = NotificationHandling.normalizeRemoteNotification(userInfo) else {
+            return
+        }
+        if normalized.entityType == "event" || normalized.entityType == "thing" {
+            await AppEnvironment.shared.triggerPrivateWakeupPull()
+        }
     }
 
-    private func handleMarkRead(response: UNNotificationResponse, messageId: UUID?) async {
+    private func handleDismiss(response: UNNotificationResponse, messageId: String?) async {
         let identifier = response.notification.request.identifier
         do {
             _ = try await AppEnvironment.shared.messageStateCoordinator
@@ -178,31 +214,142 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificati
         }
     }
 
-    private func handleDelete(response: UNNotificationResponse, messageId: UUID?) async {
-        let identifier = response.notification.request.identifier
-        do {
-            try await AppEnvironment.shared.messageStateCoordinator
-                .deleteMessage(notificationRequestId: identifier, messageId: messageId)
-        } catch {
-        }
+    private func removeDeliveredNotification(requestId: String) {
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [requestId])
     }
 
-    private func handleDismiss(response: UNNotificationResponse, messageId: UUID?) async {
-        let identifier = response.notification.request.identifier
-        do {
-            _ = try await AppEnvironment.shared.messageStateCoordinator
-                .markRead(notificationRequestId: identifier, messageId: messageId)
-        } catch {
-        }
-    }
-
-    private nonisolated func extractMessageId(from payload: [AnyHashable: Any]) -> UUID? {
+    private nonisolated func extractMessageId(from payload: [AnyHashable: Any]) -> String? {
         NotificationHandling.extractMessageId(from: payload)
     }
 
-    private nonisolated func extractMessageId(from payload: [String: Any]) -> UUID? {
+    private nonisolated func extractMessageId(from payload: [String: Any]) -> String? {
         MessageIdExtractor.extract(from: payload)
     }
+
+    private nonisolated func isPrivateWakeupPayload(_ payload: [AnyHashable: Any]) -> Bool {
+        if let mode = payload["private_mode"] as? String, mode == "wakeup" {
+            return true
+        }
+        if let wakeup = payload["private_wakeup"] as? String, wakeup == "1" || wakeup.lowercased() == "true" {
+            return true
+        }
+        if let wakeup = payload["private_wakeup"] as? NSNumber, wakeup.intValue == 1 {
+            return true
+        }
+        if let wakeup = payload["private_wakeup"] as? Bool, wakeup {
+            return true
+        }
+        return false
+    }
+
+    private nonisolated func isPrivateWakeupPayload(_ payload: [String: Any]) -> Bool {
+        isPrivateWakeupPayload(payload as [AnyHashable: Any])
+    }
+
+    private nonisolated func isPurePrivateWakeupPayload(_ payload: [AnyHashable: Any]) -> Bool {
+        NotificationHandling.isPurePrivateWakeupPayload(payload)
+    }
+
+    private nonisolated func isPurePrivateWakeupPayload(_ payload: [String: Any]) -> Bool {
+        isPurePrivateWakeupPayload(payload as [AnyHashable: Any])
+    }
+
+    private func persistNotificationAndSyncEntityIfNeeded(
+        _ notification: UNNotification
+    ) async -> NotificationPersistenceOutcome {
+        let outcome = await AppEnvironment.shared.persistNotificationIfNeeded(notification)
+        let isEntity = isEntityPayload(notification.request.content.userInfo)
+        if isEntity {
+            await AppEnvironment.shared.triggerPrivateWakeupPull()
+        }
+        return outcome
+    }
+
+    private nonisolated func isEntityPayload(_ payload: [AnyHashable: Any]) -> Bool {
+        guard let normalized = NotificationHandling.normalizeRemoteNotification(payload) else {
+            return false
+        }
+        return normalized.entityType == "event" || normalized.entityType == "thing"
+    }
+
+    private func configureStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        guard let button = item.button else {
+            return
+        }
+
+        if let icon = NSImage(named: "menubar") {
+            icon.isTemplate = true
+            button.image = icon
+        } else {
+            button.image = NSImage(
+                systemSymbolName: "bell.badge",
+                accessibilityDescription: "PushGo"
+            )
+        }
+        button.action = #selector(handleStatusItemClick(_:))
+        button.target = self
+        button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        statusItem = item
+    }
+
+    private func activateForAutomationIfNeeded() {
+        guard PushGoAutomationContext.forceForegroundApp else { return }
+        MainWindowController.shared.prepareForShowingMainWindow()
+        NSApp.setActivationPolicy(.regular)
+        NSRunningApplication.current.activate(options: [.activateAllWindows])
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc
+    private func handleStatusItemClick(_ sender: NSStatusBarButton) {
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            guard let statusItem else { return }
+            let menu = makeStatusItemContextMenu()
+            menu.delegate = self
+            statusItem.menu = menu
+            statusItem.button?.performClick(nil)
+            return
+        }
+        MainWindowController.shared.showMainWindow()
+    }
+
+    private func makeStatusItemContextMenu() -> NSMenu {
+        let menu = NSMenu()
+        let openMainItem = NSMenuItem(
+            title: LocalizationManager.shared.localized("open_main_window"),
+            action: #selector(handleOpenMainWindowFromStatusItemMenu),
+            keyEquivalent: ""
+        )
+        openMainItem.target = self
+        menu.addItem(openMainItem)
+
+        let quitItem = NSMenuItem(
+            title: LocalizationManager.shared.localized("quit_application"),
+            action: #selector(handleQuitFromStatusItemMenu),
+            keyEquivalent: ""
+        )
+        quitItem.target = self
+        menu.addItem(quitItem)
+        return menu
+    }
+
+    @objc
+    private func handleOpenMainWindowFromStatusItemMenu() {
+        MainWindowController.shared.showMainWindow()
+    }
+
+    @objc
+    private func handleQuitFromStatusItemMenu() {
+        NSApp.terminate(nil)
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        if statusItem?.menu === menu {
+            statusItem?.menu = nil
+        }
+    }
+
     @MainActor
     private func makeMainWindowKey() {
         MainWindowController.shared.showMainWindow()
@@ -286,6 +433,21 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificati
         )
     }
 
+    private func configurePrivateAckDrainScheduler() {
+        let scheduler = NSBackgroundActivityScheduler(identifier: "io.ethan.pushgo.private-ack-outbox")
+        scheduler.repeats = true
+        scheduler.interval = 5 * 60
+        scheduler.tolerance = 60
+        scheduler.qualityOfService = .utility
+        privateAckDrainScheduler = scheduler
+        scheduler.schedule { completion in
+            Task { @MainActor in
+                let outcome = await AppEnvironment.shared.drainPrivateWakeupAckOutboxForSystemWake()
+                completion(outcome == .failed ? .deferred : .finished)
+            }
+        }
+    }
+
     @objc
     private func handleWindowNotification(_ notification: Notification) {
         switch notification.name {
@@ -311,110 +473,5 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificati
 
     private func isMainWindow(notificationWindow: NSWindow?) -> Bool {
         notificationWindow?.identifier?.rawValue == "PushGoMainWindow"
-    }
-}
-
-private extension PushGoAppDelegate {
-    func configureGlobalScrollAppearance() {
-        NSScrollView.pushgoInstallOverlayStyleHook()
-    }
-}
-
-private extension NSScrollView {
-    private static var pushgoHasInstalledOverlayHook = false
-    private static let pushgoMainWindowIdentifier = "PushGoMainWindow"
-
-    static func pushgoInstallOverlayStyleHook() {
-        guard !pushgoHasInstalledOverlayHook else { return }
-        pushgoHasInstalledOverlayHook = true
-
-        let cls: AnyClass = NSScrollView.self
-        let originalSelector = #selector(NSScrollView.viewDidMoveToWindow)
-        let swizzledSelector = #selector(NSScrollView.pushgo_viewDidMoveToWindow)
-
-        guard
-            let originalMethod = class_getInstanceMethod(cls, originalSelector),
-            let swizzledMethod = class_getInstanceMethod(cls, swizzledSelector)
-        else {
-            return
-        }
-
-        let didAddMethod = class_addMethod(
-            cls,
-            originalSelector,
-            method_getImplementation(swizzledMethod),
-            method_getTypeEncoding(swizzledMethod),
-        )
-
-        if didAddMethod {
-            class_replaceMethod(
-                cls,
-                swizzledSelector,
-                method_getImplementation(originalMethod),
-                method_getTypeEncoding(originalMethod),
-            )
-        } else {
-            method_exchangeImplementations(originalMethod, swizzledMethod)
-        }
-    }
-
-    static func pushgoApplyOverlayStyleInExistingWindows() {
-        for window in NSApp.windows {
-            guard window.identifier?.rawValue == pushgoMainWindowIdentifier else { continue }
-            applyOverlayStyle(in: window.contentView)
-        }
-    }
-
-    @objc
-    func pushgo_viewDidMoveToWindow() {
-        pushgo_viewDidMoveToWindow()
-        Task { @MainActor [weak self] in
-            await Task.yield()
-            self?.applyPushGoOverlayScrollerStyleIfNeeded()
-        }
-    }
-
-    private func applyPushGoOverlayScrollerStyleIfNeeded() {
-        guard shouldApplyPushGoOverlayStyle else { return }
-        var didChange = false
-
-        if scrollerStyle != .overlay {
-            scrollerStyle = .overlay
-            didChange = true
-        }
-        if usesPredominantAxisScrolling != true {
-            usesPredominantAxisScrolling = true
-            didChange = true
-        }
-        if autohidesScrollers != true {
-            autohidesScrollers = true
-            didChange = true
-        }
-        if verticalScroller?.controlSize != .mini {
-            verticalScroller?.controlSize = .mini
-            didChange = true
-        }
-        if horizontalScroller?.controlSize != .mini {
-            horizontalScroller?.controlSize = .mini
-            didChange = true
-        }
-
-        if didChange {
-            needsLayout = true
-        }
-    }
-
-    private var shouldApplyPushGoOverlayStyle: Bool {
-        guard let window else { return false }
-        return window.identifier?.rawValue == Self.pushgoMainWindowIdentifier
-    }
-
-    private static func applyOverlayStyle(in view: NSView?) {
-        guard let view else { return }
-
-        if let scrollView = view as? NSScrollView {
-            scrollView.applyPushGoOverlayScrollerStyleIfNeeded()
-        }
-        view.subviews.forEach { applyOverlayStyle(in: $0) }
     }
 }

@@ -4,7 +4,7 @@ import UIKit
 struct MessageDetailScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
-    @Environment(\.appEnvironment) private var environment: AppEnvironment
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @State private var viewModel: MessageDetailViewModel
     @State private var showDeleteConfirmation = false
     @State private var previewingImage: ImagePreview?
@@ -12,6 +12,13 @@ struct MessageDetailScreen: View {
     private let onDelete: (() -> Void)?
     private let shouldDismissOnDelete: Bool
     private let useNavigationContainer: Bool
+
+    private enum Layout {
+        static let singleImageHeight: CGFloat = 240
+        static let singleImageMaxWidth: CGFloat = 520
+        static let thumbnailSize: CGFloat = 88
+        static let thumbnailCornerRadius: CGFloat = EntityVisualTokens.radiusSmall
+    }
 
     init(
         messageId: UUID,
@@ -41,6 +48,7 @@ struct MessageDetailScreen: View {
                 .toolbar { toolbarContent }
             }
         }
+        .accessibilityIdentifier("screen.message.detail")
         .onAppear {
             guard !didLoad else { return }
             didLoad = true
@@ -58,39 +66,37 @@ struct MessageDetailScreen: View {
                 dismissButton: .default(Text(localizationManager.localized("ok")))
             )
         }
-        .imagePreviewSheet(previewingImage: $previewingImage)
+        .pushgoImagePreviewOverlay(previewItem: $previewingImage, imageURL: \.url)
+#if DEBUG
+        .task(id: automationStateSignature) {
+            PushGoAutomationRuntime.shared.publishState(
+                environment: environment,
+                activeTab: "messages",
+                visibleScreen: "screen.message.detail",
+                openedMessageId: viewModel.message.flatMap { $0.messageId ?? $0.id.uuidString },
+                openedMessageDecryptionState: viewModel.message?.decryptionState?.rawValue
+            )
+        }
+#endif
+    }
+
+    private var automationStateSignature: String {
+        guard let message = viewModel.message else {
+            return "message:none"
+        }
+        let identifier = message.messageId ?? message.id.uuidString
+        let decryption = message.decryptionState?.rawValue ?? "none"
+        return "\(identifier)|\(decryption)|\(message.isRead)"
     }
 
     @ViewBuilder
     private var detailContent: some View {
         if let message = viewModel.message {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: EntityVisualTokens.detailSectionSpacing) {
                     HStack(alignment: .center, spacing: 12) {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack(alignment: .center, spacing: 8) {
-                                if let iconURL = message.iconURL {
-                                    RemoteImageView(url: iconURL) { image in
-                                        image
-                                            .resizable()
-                                            .scaledToFill()
-                                    } placeholder: {
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .fill(Color.primary.opacity(0.05))
-                                            .overlay(
-                                                Image(systemName: "bell.badge.fill")
-                                                    .font(.caption.weight(.semibold))
-                                                    .foregroundColor(.secondary),
-                                            )
-                                    }
-                                    .frame(width: 28, height: 28)
-                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .stroke(Color.primary.opacity(0.08), lineWidth: 0.8),
-                                    )
-                                }
-
                                 Text(message.title)
                                     .font(.title2.weight(.semibold))
                                     .multilineTextAlignment(.leading)
@@ -105,9 +111,20 @@ struct MessageDetailScreen: View {
                                 if let channelName = environment.channelDisplayName(for: message.channel) {
                                     ChannelTagView(text: channelName)
                                 }
+                                messageSeverityBadge(for: message.severity)
                             }
                         }
                     }
+                    if !message.tags.isEmpty {
+                        messageTagChipRow(tags: message.tags)
+                    }
+                    if !message.metadata.isEmpty {
+                        metadataSection(items: message.metadata)
+                    }
+                    if !message.imageURLs.isEmpty {
+                        messageImagesSection(imageURLs: message.imageURLs)
+                    }
+                    criticalSeverityHint(for: message.severity)
                     let resolvedBody = message.resolvedBody
                     MarkdownRenderer(
                         text: resolvedBody.rawText,
@@ -117,61 +134,20 @@ struct MessageDetailScreen: View {
                     )
                     .compatTextSelectionEnabled()
 
-                    if let imageURL = message.imageURL {
-                        GeometryReader { proxy in
-                            let maxWidth = min(proxy.size.width, 520)
-                            Button {
-                                previewingImage = ImagePreview(url: imageURL)
-                            } label: {
-                                RemoteImageView(url: imageURL) { image in
-                                    image
-                                        .resizable()
-                                        .scaledToFill()
-                                } placeholder: {
-                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .fill(Color.primary.opacity(0.05))
-                                }
-                                .frame(width: maxWidth, height: 220)
-                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .stroke(Color.primary.opacity(0.08), lineWidth: 0.8),
-                                )
-                            }
-                            .buttonStyle(.appPlain)
-                            .accessibilityLabel(LocalizedStringKey("image_attachment"))
-                            .frame(maxWidth: .infinity, alignment: .center)
-                        }
-                        .frame(height: 220)
-                    }
-
-                    if let url = message.url, URLSanitizer.isAllowedRemoteURL(url) {
-                        Link(destination: url) {
+                    if let url = message.url,
+                       let safeOpenURL = URLSanitizer.sanitizeExternalOpenURL(url)
+                    {
+                        Link(destination: safeOpenURL) {
                             Label(localizationManager.localized("open_link"), systemImage: "link")
                         }
                         .buttonStyle(.borderedProminent)
                         .appButtonHeight()
                     }
-
-                DisclosureGroup(localizationManager.localized("raw_data")) {
-                    if let rawText = formattedJSON(message.payloadForDisplay) {
-                        RawPayloadView(
-                            text: rawText,
-                            onCopy: {
-                                copyRawPayload(rawText)
-                                environment.showToast(
-                                    message: localizationManager.localized("message_content_copied"),
-                                    style: .success,
-                                    duration: 1.2
-                                )
-                            }
-                        )
-                        .padding(.top, 4)
-                    }
-                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
+            .padding(.horizontal, EntityVisualTokens.detailPaddingHorizontal)
+            .padding(.vertical, EntityVisualTokens.detailPaddingVertical)
+            .background(EntityVisualTokens.pageBackground)
         }
             .alert(isPresented: $showDeleteConfirmation) {
                 Alert(
@@ -199,26 +175,106 @@ struct MessageDetailScreen: View {
         }
     }
 
+    @ViewBuilder
+    private func metadataSection(items: [String: String]) -> some View {
+        let entries = metadataDisplayAttributes(from: items)
+        VStack(alignment: .leading, spacing: EntityVisualTokens.stackSpacing) {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(Array(entries.enumerated()), id: \.element.id) { _, item in
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(item.displayLabel)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundColor(.secondary)
+                        Text(item.value)
+                            .font(.body)
+                            .foregroundColor(.primary)
+                            .textSelection(.enabled)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: EntityVisualTokens.radiusMedium, style: .continuous)
+                    .fill(EntityVisualTokens.subtleFill)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func messageTagChipRow(tags: [String]) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(Array(tags.enumerated()), id: \.offset) { _, tag in
+                    EntityMetaChip(systemImage: "tag", text: tag)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func messageImagesSection(imageURLs: [URL]) -> some View {
+        if imageURLs.count == 1, let imageURL = imageURLs.first {
+            GeometryReader { proxy in
+                let maxWidth = min(proxy.size.width, Layout.singleImageMaxWidth)
+                Button {
+                    previewingImage = ImagePreview(url: imageURL)
+                } label: {
+                    RemoteImageView(url: imageURL) { image in
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    } placeholder: {
+                        RoundedRectangle(cornerRadius: EntityVisualTokens.radiusMedium, style: .continuous)
+                            .fill(EntityVisualTokens.subtleFill)
+                    }
+                    .frame(width: maxWidth, height: Layout.singleImageHeight)
+                    .clipShape(RoundedRectangle(cornerRadius: EntityVisualTokens.radiusMedium, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: EntityVisualTokens.radiusMedium, style: .continuous)
+                            .stroke(EntityVisualTokens.subtleStroke, lineWidth: 0.8),
+                    )
+                }
+                .buttonStyle(.appPlain)
+                .accessibilityLabel(LocalizedStringKey("image_attachment"))
+                .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .frame(height: Layout.singleImageHeight)
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(imageURLs, id: \.absoluteString) { imageURL in
+                        Button {
+                            previewingImage = ImagePreview(url: imageURL)
+                        } label: {
+                            RemoteImageView(url: imageURL, rendition: .listThumbnail) { image in
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                            } placeholder: {
+                                RoundedRectangle(cornerRadius: Layout.thumbnailCornerRadius, style: .continuous)
+                                    .fill(EntityVisualTokens.subtleFill)
+                            }
+                            .frame(width: Layout.thumbnailSize, height: Layout.thumbnailSize)
+                            .clipShape(
+                                RoundedRectangle(cornerRadius: Layout.thumbnailCornerRadius, style: .continuous)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: Layout.thumbnailCornerRadius, style: .continuous)
+                                    .stroke(EntityVisualTokens.subtleStroke, lineWidth: 0.8),
+                            )
+                        }
+                        .buttonStyle(.appPlain)
+                        .accessibilityLabel(LocalizedStringKey("image_attachment"))
+                    }
+                }
+            }
+        }
+    }
+
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .navigationBarTrailing) {
-            if let message = viewModel.message, !message.isRead {
-                Button {
-                    Task { await viewModel.markRead(true) }
-                } label: {
-                    Image(systemName: "envelope.open")
-                }
-                .accessibilityLabel(localizationManager.localized("mark_as_read"))
-            }
-            
-            Button {
-                viewModel.copyBody()
-            } label: {
-                Image(systemName: "doc.on.doc")
-            }
-            .disabled(viewModel.message == nil)
-            .accessibilityLabel(localizationManager.localized("copy_content"))
-
             Button(role: .destructive) {
                 if viewModel.message != nil {
                     showDeleteConfirmation = true
@@ -227,6 +283,7 @@ struct MessageDetailScreen: View {
                 Image(systemName: "trash")
             }
             .disabled(viewModel.message == nil)
+            .accessibilityIdentifier("action.message.delete")
             .accessibilityLabel(localizationManager.localized("delete"))
         }
     }
@@ -284,62 +341,87 @@ struct MessageDetailScreen: View {
         return nil
     }
 
+    @ViewBuilder
+    private func messageSeverityBadge(for severity: PushMessage.Severity?) -> some View {
+        if let style = messageSeverityBadgeStyle(for: severity) {
+            Text(style.label)
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(style.background),
+                )
+                .foregroundStyle(style.foreground)
+        }
+    }
+
+    @ViewBuilder
+    private func criticalSeverityHint(for severity: PushMessage.Severity?) -> some View {
+        if severity == .critical {
+            Text(localizationManager.localized("message_severity_critical_hint"))
+                .font(.caption)
+                .foregroundStyle(Color.red.opacity(0.9))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: EntityVisualTokens.radiusSmall, style: .continuous)
+                        .fill(Color.red.opacity(0.08))
+                )
+        }
+    }
+
+    private func messageSeverityBadgeStyle(for severity: PushMessage.Severity?) -> (
+        label: String,
+        background: Color,
+        foreground: Color
+    )? {
+        switch severity {
+        case .low:
+            return (
+                localizationManager.localized("message_severity_low"),
+                EntityVisualTokens.chipFillUnselected,
+                .secondary
+            )
+        case .medium:
+            return (
+                localizationManager.localized("message_severity_medium"),
+                EntityVisualTokens.chipFillUnselected,
+                .secondary
+            )
+        case .high:
+            return (
+                localizationManager.localized("message_severity_high"),
+                Color.orange.opacity(0.16),
+                .orange
+            )
+        case .critical:
+            return (
+                localizationManager.localized("message_severity_critical"),
+                Color.red.opacity(0.14),
+                .red
+            )
+        case .none:
+            return nil
+        }
+    }
+
     private var missingState: some View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.largeTitle)
             Text(localizationManager.localized("this_message_has_been_deleted_or_does_not_exist"))
                 .font(.headline)
-            Button(localizationManager.localized("close")) {
+            AppActionButton(
+                text: Text(localizationManager.localized("close")),
+                variant: .plain,
+                fullWidth: false
+            ) {
                 dismiss()
             }
         }
         .padding()
-    }
-
-
-    private func formattedJSON(_ payload: [String: AnyCodable]) -> String? {
-        let encoder = JSONEncoder()
-        guard let data = try? encoder.encode(payload) else { return nil }
-
-        guard let object = try? JSONSerialization.jsonObject(with: data) else {
-            return data.utf8StringWithoutEscapedSlash
-        }
-
-        if let dict = object as? [String: Any],
-           dict.count == 1,
-           let value = dict.values.first as? String,
-           let innerData = value.data(using: .utf8),
-           let innerObject = try? JSONSerialization.jsonObject(with: innerData),
-           let prettyInner = prettyJSONString(from: innerObject)
-        {
-            return prettyInner
-        }
-
-        if let pretty = prettyJSONString(from: object) { return pretty }
-
-        return data.utf8StringWithoutEscapedSlash
-    }
-
-    private func prettyJSONString(from object: Any) -> String? {
-        if let data = try? JSONSerialization.data(
-            withJSONObject: object,
-            options: [.prettyPrinted, .withoutEscapingSlashes],
-        ) {
-            return String(data: data, encoding: .utf8)
-        }
-        return nil
-    }
-
-    private func copyRawPayload(_ text: String) {
-        UIPasteboard.general.string = text
-    }
-}
-
-private extension Data {
-    var utf8StringWithoutEscapedSlash: String? {
-        guard let raw = String(data: self, encoding: .utf8) else { return nil }
-        return raw.replacingOccurrences(of: "\\/", with: "/")
     }
 }
 
@@ -358,126 +440,10 @@ private struct ChannelTagView: View {
             .padding(.vertical, 4)
             .background(
                 Capsule(style: .continuous)
-                    .fill(Color.accentColor.opacity(0.14))
+                    .fill(Color.accentColor.opacity(0.12))
             )
             .foregroundColor(.accentColor)
             .lineLimit(1)
-    }
-}
-
-private struct RawPayloadView: View {
-    let text: String
-    let onCopy: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(text)
-                .font(.system(.body, design: .monospaced))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.primary.opacity(0.04))
-        )
-        .contentShape(Rectangle())
-        .contextMenu {
-            Button {
-                onCopy()
-            } label: {
-                Label("copy_content", systemImage: "doc.on.doc")
-            }
-        }
-    }
-}
-
-private struct MessageImageViewer: View {
-    let url: URL
-    @Environment(\.dismiss) private var dismiss
-    @State private var currentScale: CGFloat = 1.0
-    @State private var baseScale: CGFloat = 1.0
-    @State private var offset: CGSize = .zero
-    @State private var lastOffset: CGSize = .zero
-
-    var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                Color.black.opacity(0.95).ignoresSafeArea()
-
-                RemoteImageView(url: url) { image in
-                    image
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: geo.size.width, maxHeight: geo.size.height)
-                        .scaleEffect(currentScale)
-                        .offset(offset)
-                        .animation(.spring(response: 0.2, dampingFraction: 0.85), value: currentScale)
-                        .animation(.spring(response: 0.2, dampingFraction: 0.85), value: offset)
-                        .onTapGesture(count: 2) { toggleZoom() }
-                        .highPriorityGesture(combinedGesture)
-                } placeholder: {
-                    ProgressView().foregroundColor(.white)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                VStack {
-                    HStack {
-                        Spacer()
-                        Button {
-                            dismiss()
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title.weight(.bold))
-                                .foregroundColor(.white.opacity(0.9))
-                        }
-                        .accessibilityLabel(LocalizedStringKey("close"))
-                        .padding()
-                    }
-                    Spacer()
-                }
-            }
-        }
-    }
-
-    private var combinedGesture: some Gesture {
-        SimultaneousGesture(dragGesture, magnificationGesture)
-    }
-
-    private var dragGesture: some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                let translation = value.translation
-                offset = CGSize(
-                    width: lastOffset.width + translation.width,
-                    height: lastOffset.height + translation.height,
-                )
-            }
-            .onEnded { _ in
-                lastOffset = offset
-            }
-    }
-
-    private var magnificationGesture: some Gesture {
-        MagnificationGesture()
-            .onChanged { value in
-                let newScale = baseScale * value
-                currentScale = min(max(1.0, newScale), 4.0)
-            }
-            .onEnded { _ in
-                baseScale = currentScale
-            }
-    }
-
-    private func toggleZoom() {
-        if currentScale < 2.0 {
-            currentScale = 2.5
-        } else {
-            currentScale = 1.0
-            offset = .zero
-            lastOffset = .zero
-        }
-        baseScale = currentScale
     }
 }
 
@@ -491,14 +457,5 @@ private extension View {
 private extension Date {
     func pushgoDetailTimestamp() -> String {
         formatted(date: .complete, time: .standard)
-    }
-}
-
-private extension View {
-    @ViewBuilder
-    func imagePreviewSheet(previewingImage: Binding<ImagePreview?>) -> some View {
-        fullScreenCover(item: previewingImage) { payload in
-            MessageImageViewer(url: payload.url)
-        }
     }
 }

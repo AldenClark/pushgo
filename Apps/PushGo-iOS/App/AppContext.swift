@@ -4,39 +4,42 @@ import SwiftUI
 extension View {
     func withAppContext(
         environment: AppEnvironment,
-        appState: AppState,
         localizationManager: LocalizationManager,
         bootstrap: Bool,
     ) -> some View {
         DynamicLocaleWrapper(
             content: self,
             environment: environment,
-            appState: appState,
             localizationManager: localizationManager,
             bootstrap: bootstrap,
         )
     }
 
-    func toastOverlay() -> some View {
-        modifier(ToastOverlayModifier())
+    func toastOverlay(environment: AppEnvironment) -> some View {
+        modifier(ToastOverlayModifier(environment: environment))
     }
 }
 
 private struct DynamicLocaleWrapper<Content: View>: View {
     let content: Content
     @Bindable var environment: AppEnvironment
-    @Bindable var appState: AppState
     @Bindable var localizationManager: LocalizationManager
     let bootstrap: Bool
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         content
-            .environment(\.appEnvironment, environment)
-            .environment(appState)
+            .environment(environment)
             .environment(localizationManager)
             .environment(\.locale, localizationManager.swiftUILocale)
-            .toastOverlay()
+            .toastOverlay(environment: environment)
+#if DEBUG
+            .task {
+                #if !os(watchOS)
+                PushGoAutomationRuntime.shared.configureFromProcessEnvironment()
+                #endif
+            }
+#endif
             .modifier(BootstrapTaskModifier(perform: bootstrap, environment: environment, scenePhase: scenePhase))
             .onChange(of: scenePhase) { _, newValue in
                 environment.updateScenePhase(newValue)
@@ -55,11 +58,61 @@ private struct DynamicLocaleWrapper<Content: View>: View {
                     )
                 }
             }
+            .alert(
+                environment.localStoreRecoveryState?.title ?? "",
+                isPresented: Binding(
+                    get: { environment.localStoreRecoveryState != nil },
+                    set: { presented in
+                        if !presented {
+                            environment.dismissLocalStoreRecovery()
+                        }
+                    }
+                ),
+                presenting: environment.localStoreRecoveryState
+            ) { state in
+                if state.canRebuild {
+                    Button("重建数据库并退出", role: .destructive) {
+                        environment.rebuildLocalStoreForRecoveryAndTerminate()
+                    }
+                }
+                Button("退出应用", role: .destructive) {
+                    environment.terminateForLocalStoreFailure()
+                }
+            } message: { state in
+                Text(state.message)
+            }
+            .alert(
+                localizationManager.localized("please_enable_notification_permission_in_system_settings_first"),
+                isPresented: Binding(
+                    get: { environment.shouldPresentNotificationPermissionAlert },
+                    set: { presented in
+                        if !presented {
+                            environment.dismissNotificationPermissionAlert()
+                        }
+                    }
+                )
+            ) {
+                Button(localizationManager.localized("cancel"), role: .cancel) {
+                    environment.dismissNotificationPermissionAlert()
+                }
+                Button(localizationManager.localized("settings")) {
+                    environment.dismissNotificationPermissionAlert()
+                    environment.openSystemNotificationSettings()
+                }
+            } message: {
+                Text(localizationManager.localized(
+                    "system_notification_permission_is_not_obtained_please_turn_on_notifications_in_the_system_settings_and_try_again"
+                ))
+            }
     }
 }
 
 private struct ToastOverlayModifier: ViewModifier {
-    @Environment(\.appEnvironment) private var environment
+    @Bindable var environment: AppEnvironment
+
+    init(environment: AppEnvironment) {
+        _environment = Bindable(environment)
+    }
 
     func body(content: Content) -> some View {
         ToastOverlayContent(content: content, environment: environment)
@@ -108,6 +161,12 @@ private struct BootstrapTaskModifier: ViewModifier {
             guard perform else { return }
             await environment.bootstrap()
             environment.updateScenePhase(scenePhase)
+#if DEBUG
+            #if !os(watchOS)
+            await PushGoAutomationRuntime.shared.importStartupFixtureIfNeeded(environment: environment)
+            await PushGoAutomationRuntime.shared.executeStartupRequestIfNeeded(environment: environment)
+            #endif
+#endif
         }
     }
 }

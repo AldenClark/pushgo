@@ -4,13 +4,14 @@
     {
       "layers" : [
         {
-          "image-name" : "0BFBF0BF-D55C-4C4C-BA9D-399588D88E01.png",
-          "name" : "0BFBF0BF-D55C-4C4C-BA9D-399588D88E01",
+          "glass" : false,
+          "image-name" : "6ccf56e120998a22217130365797a9727de3afd9d5b10cea358ad02e50c93886.png",
+          "name" : "6ccf56e120998a22217130365797a9727de3afd9d5b10cea358ad02e50c93886",
           "position" : {
-            "scale" : 1.8,
+            "scale" : 0.85,
             "translation-in-points" : [
-              -2.1312500000001364,
-              99.37899676647976
+              0,
+              -31.1796875
             ]
           }
         }

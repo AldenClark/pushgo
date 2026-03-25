@@ -1,14 +1,108 @@
 import Foundation
 
 struct ChannelSubscriptionService {
-    struct DeviceTokenRegistration: Encodable {
-        let deviceToken: String
+    struct DeviceRegisterRequest: Encodable {
         let platform: String
+        let deviceKey: String?
 
         enum CodingKeys: String, CodingKey {
-            case deviceToken = "device_token"
             case platform
+            case deviceKey = "device_key"
         }
+    }
+
+    struct DeviceRegisterPayload: Decodable {
+        let deviceKey: String
+
+        enum CodingKeys: String, CodingKey {
+            case deviceKey = "device_key"
+        }
+    }
+
+    struct DeviceChannelPayload: Decodable {
+        let deviceKey: String
+        let channelType: String?
+        let providerToken: String?
+
+        enum CodingKeys: String, CodingKey {
+            case deviceKey = "device_key"
+            case channelType = "channel_type"
+            case providerToken = "provider_token"
+        }
+    }
+
+    struct DeviceChannelRequest: Encodable {
+        let deviceKey: String
+        let platform: String
+        let channelType: String
+        let providerToken: String?
+
+        enum CodingKeys: String, CodingKey {
+            case deviceKey = "device_key"
+            case platform
+            case channelType = "channel_type"
+            case providerToken = "provider_token"
+        }
+    }
+
+    struct DeviceChannelDeleteRequest: Encodable {
+        let deviceKey: String
+        let channelType: String
+
+        enum CodingKeys: String, CodingKey {
+            case deviceKey = "device_key"
+            case channelType = "channel_type"
+        }
+    }
+
+    struct PullRequest: Encodable {
+        let deviceKey: String
+        let channelId: String
+        let password: String
+        let limit: Int
+
+        enum CodingKeys: String, CodingKey {
+            case deviceKey = "device_key"
+            case channelId = "channel_id"
+            case password
+            case limit
+        }
+    }
+
+    struct PullResponse: Decodable {
+        let items: [PullItem]
+    }
+
+    struct PullItem: Decodable {
+        let deliveryId: String
+        let payload: [String: String]
+
+        enum CodingKeys: String, CodingKey {
+            case deliveryId = "delivery_id"
+            case payload
+        }
+    }
+
+    struct AckBatchRequest: Encodable {
+        let deviceKey: String
+        let deliveryIds: [String]
+
+        enum CodingKeys: String, CodingKey {
+            case deviceKey = "device_key"
+            case deliveryIds = "delivery_ids"
+        }
+    }
+
+    struct AckBatchResponse: Decodable {
+        let ackedDeliveryIds: [String]
+
+        enum CodingKeys: String, CodingKey {
+            case ackedDeliveryIds = "acked_delivery_ids"
+        }
+    }
+
+    struct EmptyPayload: Decodable {
+        init(from _: Decoder) throws {}
     }
 
     struct StatusResponse<T: Decodable>: Decodable {
@@ -18,20 +112,16 @@ struct ChannelSubscriptionService {
     }
 
     struct SubscribeRequest: Encodable {
+        let deviceKey: String
         let channelId: String?
         let channelName: String?
         let password: String
-        let deviceToken: String?
-        let platform: String?
-        let deviceTokens: [DeviceTokenRegistration]?
 
         enum CodingKeys: String, CodingKey {
+            case deviceKey = "device_key"
             case channelId = "channel_id"
             case channelName = "channel_name"
             case password
-            case deviceToken = "device_token"
-            case platform
-            case deviceTokens = "device_tokens"
         }
     }
 
@@ -50,16 +140,12 @@ struct ChannelSubscriptionService {
     }
 
     struct UnsubscribeRequest: Encodable {
+        let deviceKey: String
         let channelId: String
-        let deviceToken: String?
-        let platform: String?
-        let deviceTokens: [DeviceTokenRegistration]?
 
         enum CodingKeys: String, CodingKey {
+            case deviceKey = "device_key"
             case channelId = "channel_id"
-            case deviceToken = "device_token"
-            case platform
-            case deviceTokens = "device_tokens"
         }
     }
 
@@ -71,15 +157,6 @@ struct ChannelSubscriptionService {
             case channelId = "channel_id"
             case removed
         }
-    }
-
-    struct RetireRequest: Encodable {
-        let device_token: String
-        let platform: String
-    }
-
-    struct RetirePayload: Decodable {
-        let removed_subscriptions: Int
     }
 
     struct ExistsPayload: Decodable {
@@ -117,15 +194,11 @@ struct ChannelSubscriptionService {
     }
 
     struct SyncRequest: Encodable {
-        let deviceToken: String?
-        let platform: String?
-        let deviceTokens: [DeviceTokenRegistration]?
+        let deviceKey: String
         let channels: [SyncItem]
 
         enum CodingKeys: String, CodingKey {
-            case deviceToken = "device_token"
-            case platform
-            case deviceTokens = "device_tokens"
+            case deviceKey = "device_key"
             case channels
         }
     }
@@ -183,34 +256,194 @@ struct ChannelSubscriptionService {
         }
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw AppError.serverUnreachable
-        }
-        if http.statusCode == 401 || http.statusCode == 403 {
-            throw AppError.authFailed
-        }
+        return try decodePayload(ExistsPayload.self, data: data, response: response)
+    }
 
-        let decoded = try JSONDecoder().decode(StatusResponse<ExistsPayload>.self, from: data)
-        if decoded.success, let payload = decoded.data {
-            return payload
+    func registerDevice(
+        baseURL: URL,
+        token: String?,
+        platform: String,
+        existingDeviceKey: String?
+    ) async throws -> DeviceRegisterPayload {
+        let baseURL = try validatedBaseURL(baseURL)
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw AppError.invalidURL
         }
-        if let message = decoded.error?.trimmingCharacters(in: .whitespacesAndNewlines), !message.isEmpty {
-            throw AppError.unknown(message)
+        components.path = components.path.appendingPathComponent("/device/register")
+        guard let url = components.url else {
+            throw AppError.invalidURL
         }
-        throw AppError.serverUnreachable
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = AppConstants.deviceRegistrationTimeout
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let token, !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = try JSONEncoder().encode(
+            DeviceRegisterRequest(platform: platform, deviceKey: existingDeviceKey)
+        )
+        let (data, response) = try await URLSession.shared.data(for: request)
+        return try decodePayload(DeviceRegisterPayload.self, data: data, response: response)
+    }
+
+    func upsertDeviceChannel(
+        baseURL: URL,
+        token: String?,
+        deviceKey: String,
+        platform: String,
+        channelType: String,
+        providerToken: String?
+    ) async throws -> DeviceChannelPayload {
+        let baseURL = try validatedBaseURL(baseURL)
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw AppError.invalidURL
+        }
+        components.path = components.path.appendingPathComponent("/channel/device")
+        guard let url = components.url else {
+            throw AppError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = AppConstants.deviceRegistrationTimeout
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let token, !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = try JSONEncoder().encode(
+            DeviceChannelRequest(
+                deviceKey: deviceKey,
+                platform: platform,
+                channelType: channelType,
+                providerToken: providerToken
+            )
+        )
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let payload = try decodePayload(DeviceChannelPayload.self, data: data, response: response)
+        let resolvedDeviceKey = payload.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if resolvedDeviceKey.isEmpty {
+            return DeviceChannelPayload(
+                deviceKey: deviceKey,
+                channelType: payload.channelType,
+                providerToken: payload.providerToken
+            )
+        }
+        return payload
+    }
+
+    func deleteDeviceChannel(
+        baseURL: URL,
+        token: String?,
+        deviceKey: String,
+        channelType: String
+    ) async throws {
+        let baseURL = try validatedBaseURL(baseURL)
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw AppError.invalidURL
+        }
+        components.path = components.path.appendingPathComponent("/channel/device/delete")
+        guard let url = components.url else {
+            throw AppError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = AppConstants.deviceRegistrationTimeout
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let token, !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = try JSONEncoder().encode(
+            DeviceChannelDeleteRequest(
+                deviceKey: deviceKey,
+                channelType: channelType
+            )
+        )
+        let (data, response) = try await URLSession.shared.data(for: request)
+        _ = try decodePayload(EmptyPayload.self, data: data, response: response)
+    }
+
+    func pullMessages(
+        baseURL: URL,
+        token: String?,
+        deviceKey: String,
+        channelId: String,
+        password: String,
+        limit: Int = 100
+    ) async throws -> [PullItem] {
+        let baseURL = try validatedBaseURL(baseURL)
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw AppError.invalidURL
+        }
+        components.path = components.path.appendingPathComponent("/messages/pull")
+        guard let url = components.url else {
+            throw AppError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = AppConstants.deviceRegistrationTimeout
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let token, !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = try JSONEncoder().encode(
+            PullRequest(
+                deviceKey: deviceKey,
+                channelId: channelId,
+                password: password,
+                limit: max(1, min(limit, 200)),
+            )
+        )
+        let (data, response) = try await URLSession.shared.data(for: request)
+        return try decodePayload(PullResponse.self, data: data, response: response).items
+    }
+
+    func ackMessages(
+        baseURL: URL,
+        token: String?,
+        deviceKey: String,
+        deliveryIds: [String]
+    ) async throws -> Set<String> {
+        let normalized = Array(Set(deliveryIds.map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty }))
+        guard !normalized.isEmpty else { return [] }
+
+        let baseURL = try validatedBaseURL(baseURL)
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw AppError.invalidURL
+        }
+        components.path = components.path.appendingPathComponent("/messages/ack/batch")
+        guard let url = components.url else {
+            throw AppError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = AppConstants.deviceRegistrationTimeout
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let token, !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = try JSONEncoder().encode(
+            AckBatchRequest(deviceKey: deviceKey, deliveryIds: normalized)
+        )
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let payload = try decodePayload(AckBatchResponse.self, data: data, response: response)
+        return Set(payload.ackedDeliveryIds)
     }
 
     func subscribe(
         baseURL: URL,
         token: String?,
+        deviceKey: String,
         channelId: String?,
         channelName: String?,
-        password: String,
-        deviceTokens: [DeviceTokenRegistration]
+        password: String
     ) async throws -> SubscribePayload {
-        guard let primary = deviceTokens.first else {
-            throw AppError.apnsDenied
-        }
         let baseURL = try validatedBaseURL(baseURL)
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw AppError.invalidURL
@@ -230,42 +463,22 @@ struct ChannelSubscriptionService {
         }
 
         let body = SubscribeRequest(
+            deviceKey: deviceKey,
             channelId: channelId,
             channelName: channelName,
-            password: password,
-            deviceToken: primary.deviceToken,
-            platform: primary.platform,
-            deviceTokens: deviceTokens
+            password: password
         )
         request.httpBody = try JSONEncoder().encode(body)
-
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw AppError.serverUnreachable
-        }
-        if http.statusCode == 401 || http.statusCode == 403 {
-            throw AppError.authFailed
-        }
-
-        let decoded = try JSONDecoder().decode(StatusResponse<SubscribePayload>.self, from: data)
-        if decoded.success, let payload = decoded.data {
-            return payload
-        }
-        if let message = decoded.error?.trimmingCharacters(in: .whitespacesAndNewlines), !message.isEmpty {
-            throw AppError.unknown(message)
-        }
-        throw AppError.serverUnreachable
+        return try decodePayload(SubscribePayload.self, data: data, response: response)
     }
 
     func unsubscribe(
         baseURL: URL,
         token: String?,
-        channelId: String,
-        deviceTokens: [DeviceTokenRegistration]
+        deviceKey: String,
+        channelId: String
     ) async throws -> Bool {
-        guard let primary = deviceTokens.first else {
-            throw AppError.apnsDenied
-        }
         let baseURL = try validatedBaseURL(baseURL)
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw AppError.invalidURL
@@ -285,29 +498,13 @@ struct ChannelSubscriptionService {
         }
 
         let body = UnsubscribeRequest(
-            channelId: channelId,
-            deviceToken: primary.deviceToken,
-            platform: primary.platform,
-            deviceTokens: deviceTokens
+            deviceKey: deviceKey,
+            channelId: channelId
         )
         request.httpBody = try JSONEncoder().encode(body)
-
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw AppError.serverUnreachable
-        }
-        if http.statusCode == 401 || http.statusCode == 403 {
-            throw AppError.authFailed
-        }
-
-        let decoded = try JSONDecoder().decode(StatusResponse<UnsubscribePayload>.self, from: data)
-        if decoded.success, let payload = decoded.data {
-            return payload.removed
-        }
-        if let message = decoded.error?.trimmingCharacters(in: .whitespacesAndNewlines), !message.isEmpty {
-            throw AppError.unknown(message)
-        }
-        throw AppError.serverUnreachable
+        let payload = try decodePayload(UnsubscribePayload.self, data: data, response: response)
+        return payload.removed
     }
 
     func renameChannel(
@@ -339,75 +536,15 @@ struct ChannelSubscriptionService {
         request.httpBody = try JSONEncoder().encode(body)
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw AppError.serverUnreachable
-        }
-        if http.statusCode == 401 || http.statusCode == 403 {
-            throw AppError.authFailed
-        }
-
-        let decoded = try JSONDecoder().decode(StatusResponse<RenamePayload>.self, from: data)
-        if decoded.success, let payload = decoded.data {
-            return payload
-        }
-        if let message = decoded.error?.trimmingCharacters(in: .whitespacesAndNewlines), !message.isEmpty {
-            throw AppError.unknown(message)
-        }
-        throw AppError.serverUnreachable
-    }
-
-    func retire(
-        baseURL: URL,
-        token: String?,
-        deviceToken: String,
-        platform: String
-    ) async throws -> Int {
-        let baseURL = try validatedBaseURL(baseURL)
-        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
-            throw AppError.invalidURL
-        }
-        components.path = components.path.appendingPathComponent("/device/retire")
-        guard let url = components.url else { throw AppError.invalidURL }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = AppConstants.deviceRegistrationTimeout
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let token, !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-
-        let body = RetireRequest(device_token: deviceToken, platform: platform)
-        request.httpBody = try JSONEncoder().encode(body)
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw AppError.serverUnreachable
-        }
-        if http.statusCode == 401 || http.statusCode == 403 {
-            throw AppError.authFailed
-        }
-
-        let decoded = try JSONDecoder().decode(StatusResponse<RetirePayload>.self, from: data)
-        if decoded.success, let payload = decoded.data {
-            return payload.removed_subscriptions
-        }
-        if let message = decoded.error?.trimmingCharacters(in: .whitespacesAndNewlines), !message.isEmpty {
-            throw AppError.unknown(message)
-        }
-        throw AppError.serverUnreachable
+        return try decodePayload(RenamePayload.self, data: data, response: response)
     }
 
     func sync(
         baseURL: URL,
         token: String?,
-        deviceTokens: [DeviceTokenRegistration],
+        deviceKey: String,
         channels: [SyncItem]
     ) async throws -> SyncPayload {
-        guard let primary = deviceTokens.first else {
-            throw AppError.apnsDenied
-        }
         let baseURL = try validatedBaseURL(baseURL)
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw AppError.invalidURL
@@ -425,31 +562,11 @@ struct ChannelSubscriptionService {
         if let token, !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
-
-        let body = SyncRequest(
-            deviceToken: primary.deviceToken,
-            platform: primary.platform,
-            deviceTokens: deviceTokens,
-            channels: channels
+        request.httpBody = try JSONEncoder().encode(
+            SyncRequest(deviceKey: deviceKey, channels: channels)
         )
-        request.httpBody = try JSONEncoder().encode(body)
-
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw AppError.serverUnreachable
-        }
-        if http.statusCode == 401 || http.statusCode == 403 {
-            throw AppError.authFailed
-        }
-
-        let decoded = try JSONDecoder().decode(StatusResponse<SyncPayload>.self, from: data)
-        if decoded.success, let payload = decoded.data {
-            return payload
-        }
-        if let message = decoded.error?.trimmingCharacters(in: .whitespacesAndNewlines), !message.isEmpty {
-            throw AppError.unknown(message)
-        }
-        throw AppError.serverUnreachable
+        return try decodePayload(SyncPayload.self, data: data, response: response)
     }
 
     private func validatedBaseURL(_ baseURL: URL) throws -> URL {
@@ -458,6 +575,33 @@ struct ChannelSubscriptionService {
         }
         return resolved
     }
+
+    private func decodePayload<T: Decodable>(
+        _ type: T.Type,
+        data: Data,
+        response: URLResponse
+    ) throws -> T {
+        guard let http = response as? HTTPURLResponse else {
+            throw AppError.serverUnreachable
+        }
+        if http.statusCode == 401 || http.statusCode == 403 {
+            throw AppError.authFailed
+        }
+
+        let decoded = try JSONDecoder().decode(StatusResponse<T>.self, from: data)
+        if decoded.success, let payload = decoded.data {
+            return payload
+        }
+        if let message = decoded.error?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !message.isEmpty {
+            throw AppError.unknown("HTTP \(http.statusCode): \(message)")
+        }
+        if http.statusCode < 200 || http.statusCode >= 300 {
+            throw AppError.unknown("HTTP \(http.statusCode): request failed")
+        }
+        throw AppError.unknown("Request failed")
+    }
+
 }
 
 private extension String {
