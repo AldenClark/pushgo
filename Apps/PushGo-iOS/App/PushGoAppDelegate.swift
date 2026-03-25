@@ -50,8 +50,10 @@ private final class PrivateAckBackgroundTaskController {
     }
 
     private var activeTasks: [ObjectIdentifier: ActiveTask] = [:]
+    private var hasRegistered = false
 
     func register() {
+        guard !hasRegistered else { return }
         BGTaskScheduler.shared.register(
             forTaskWithIdentifier: PrivateAckBackgroundTaskPlan.identifier,
             using: .main
@@ -62,9 +64,11 @@ private final class PrivateAckBackgroundTaskController {
             }
             self.start(refreshTask)
         }
+        hasRegistered = true
     }
 
     func schedule(preferredDate: Date? = nil) {
+        guard hasRegistered else { return }
         let request = BGAppRefreshTaskRequest(identifier: PrivateAckBackgroundTaskPlan.identifier)
         request.earliestBeginDate = preferredDate ?? PrivateAckBackgroundTaskPlan.preferredDate(for: nil)
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: PrivateAckBackgroundTaskPlan.identifier)
@@ -275,6 +279,7 @@ final class PushGoAppDelegate: NSObject, UIApplicationDelegate, @preconcurrency 
             return
         }
         guard let normalized = NotificationHandling.normalizeRemoteNotification(userInfo) else {
+            await postPersistenceFailureNotification()
             return
         }
         let persisted = await AppEnvironment.shared.addLocalMessage(
@@ -288,8 +293,30 @@ final class PushGoAppDelegate: NSObject, UIApplicationDelegate, @preconcurrency 
             operationId: normalized.operationId,
             titleWasExplicit: normalized.hasExplicitTitle
         )
-        guard persisted else { return }
+        guard persisted else {
+            await postPersistenceFailureNotification()
+            return
+        }
         await AppEnvironment.shared.reloadMessagesFromStore()
+    }
+
+    private func postPersistenceFailureNotification() async {
+        let content = UNMutableNotificationContent()
+        content.title = "收到消息"
+        content.body = "消息已收到，但入库失败。"
+        content.sound = .default
+        content.categoryIdentifier = AppConstants.notificationDefaultCategoryIdentifier
+        content.userInfo = [
+            "_skip_persist": "1",
+            "_persist_failed": "1",
+            "_notification_source": "persistence_failure"
+        ]
+        let request = UNNotificationRequest(
+            identifier: "persistence.failure.\(UUID().uuidString)",
+            content: content,
+            trigger: nil
+        )
+        try? await UNUserNotificationCenter.current().add(request)
     }
 
     private func handleDismiss(response: UNNotificationResponse, messageId: String?) async {
@@ -321,10 +348,9 @@ final class PushGoAppDelegate: NSObject, UIApplicationDelegate, @preconcurrency 
         NotificationHandling.isPurePrivateWakeupPayload(payload)
     }
 
-    private nonisolated func registerPrivateAckBackgroundTask() {
-        Task { @MainActor in
-            PrivateAckBackgroundTaskController.shared.register()
-        }
+    @MainActor
+    private func registerPrivateAckBackgroundTask() {
+        PrivateAckBackgroundTaskController.shared.register()
     }
 
 }

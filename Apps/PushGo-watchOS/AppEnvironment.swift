@@ -1336,7 +1336,6 @@ final class AppEnvironment {
         ]
         if let channel = pulled.channel {
             userInfo["channel_id"] = channel
-            content.threadIdentifier = channel
         }
         if let messageId = pulled.messageId, !messageId.isEmpty {
             userInfo["message_id"] = messageId
@@ -1352,6 +1351,9 @@ final class AppEnvironment {
         }
         if let thingId = pulled.thingId {
             userInfo["thing_id"] = thingId
+        }
+        if let threadIdentifier = NotificationPayloadSemantics.notificationThreadIdentifier(from: userInfo) {
+            content.threadIdentifier = threadIdentifier
         }
         content.userInfo = userInfo
 

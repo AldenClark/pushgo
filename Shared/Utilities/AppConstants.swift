@@ -607,16 +607,14 @@ enum MessagePreviewExtractor {
     }
 
     private static func preview(from markdown: String, maxLines: Int, maxCharacters: Int) -> String {
-        let normalized = markdown
-            .replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
+        let normalized = preprocessMarkdownForPreview(markdown)
         let lines = plainLines(from: normalized)
         var rendered: [String] = []
         rendered.reserveCapacity(maxLines)
 
         for line in lines.prefix(maxLines) {
             let plain = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !plain.isEmpty {
+            if !plain.isEmpty, !isPureLinkCollectionLine(plain) {
                 rendered.append(plain)
             }
         }
@@ -654,29 +652,33 @@ enum MessagePreviewExtractor {
     private static func plainLines(from block: MarkdownBlock) -> [String] {
         switch block {
         case let .heading(_, content):
-            return [plainText(from: content)]
+            return plainPreviewLine(from: content)
         case let .paragraph(content):
-            return [plainText(from: content)]
+            return plainPreviewLine(from: content)
         case let .blockquote(content):
-            return [plainText(from: content)]
-        case let .callout(_, content):
-            return [plainText(from: content)]
+            return plainPreviewLine(from: content, prefix: "> ")
+        case let .callout(type, content):
+            return plainPreviewLine(from: content, prefix: "[\(type.rawValue.uppercased())] ")
         case let .bulletList(items):
-            return items.map { plainText(from: $0.content) }
+            return items.compactMap { plainPreviewLine(from: $0.content, prefix: "- ").first }
         case let .orderedList(items):
-            return items.map { plainText(from: $0.content) }
-        case let .table(table):
-            var lines: [String] = []
-            if !table.headers.isEmpty {
-                lines.append(table.headers.map { plainText(from: $0) }.joined(separator: " | "))
+            return items.enumerated().compactMap { index, item in
+                let ordinal = item.ordinal ?? (index + 1)
+                return plainPreviewLine(from: item.content, prefix: "\(ordinal). ").first
             }
-            for row in table.rows {
-                lines.append(row.map { plainText(from: $0) }.joined(separator: " | "))
-            }
-            return lines
+        case .table:
+            return []
         case .horizontalRule:
             return []
         }
+    }
+
+    private static func plainPreviewLine(
+        from inlines: [MarkdownInline],
+        prefix: String = ""
+    ) -> [String] {
+        guard !isSkippableInlineSequence(inlines) else { return [] }
+        return ["\(prefix)\(plainText(from: inlines))"]
     }
 
     private static func plainText(from inlines: [MarkdownInline]) -> String {
@@ -697,8 +699,16 @@ enum MessagePreviewExtractor {
             return plainText(from: content)
         case let .code(code):
             return code
-        case let .link(text, _):
-            return plainText(from: text)
+        case let .link(text, url):
+            let label = plainText(from: text).trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
+            if label.isEmpty {
+                return ""
+            }
+            if label == normalizedURL {
+                return label
+            }
+            return "\(label) (\(normalizedURL))"
         case let .mention(value):
             return "@\(value)"
         case let .tag(value):
@@ -706,6 +716,295 @@ enum MessagePreviewExtractor {
         case let .autolink(autolink):
             return autolink.value
         }
+    }
+
+    private static func stripMarkdownImages(_ markdown: String) -> String {
+        var output = ""
+        var index = markdown.startIndex
+
+        while index < markdown.endIndex {
+            if markdown[index] == "!",
+               let next = markdown.index(index, offsetBy: 1, limitedBy: markdown.endIndex),
+               next < markdown.endIndex,
+               markdown[next] == "[",
+               let end = parseMarkdownImage(in: markdown, bangIndex: index)
+            {
+                index = end
+                continue
+            }
+
+            output.append(markdown[index])
+            index = markdown.index(after: index)
+        }
+
+        return output
+    }
+
+    private static func preprocessMarkdownForPreview(_ markdown: String) -> String {
+        let normalized = markdown
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        let withoutImages = stripMarkdownImages(normalized)
+        let withoutCodeBlocks = stripFencedCodeBlocks(from: withoutImages)
+        let withoutTables = stripMarkdownTables(from: withoutCodeBlocks)
+        return stripRawHTML(from: withoutTables)
+    }
+
+    private static func stripFencedCodeBlocks(from markdown: String) -> String {
+        var output: [String] = []
+        var activeFence: Character?
+
+        for line in markdown.split(separator: "\n", omittingEmptySubsequences: false) {
+            let rawLine = String(line)
+            let trimmed = rawLine.trimmingCharacters(in: .whitespaces)
+            if let fence = activeFence {
+                if trimmed.hasPrefix(String(repeating: String(fence), count: 3)) {
+                    activeFence = nil
+                }
+                continue
+            }
+            if trimmed.hasPrefix("```") {
+                activeFence = "`"
+                continue
+            }
+            if trimmed.hasPrefix("~~~") {
+                activeFence = "~"
+                continue
+            }
+            output.append(rawLine)
+        }
+
+        return output.joined(separator: "\n")
+    }
+
+    private static func stripMarkdownTables(from markdown: String) -> String {
+        let lines = markdown.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        var filtered: [String] = []
+        var index = 0
+
+        while index < lines.count {
+            let line = lines[index]
+            if index + 1 < lines.count,
+               line.contains("|"),
+               isMarkdownTableSeparator(lines[index + 1])
+            {
+                index += 2
+                while index < lines.count {
+                    let row = lines[index]
+                    let trimmed = row.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if trimmed.isEmpty || !row.contains("|") {
+                        break
+                    }
+                    index += 1
+                }
+                continue
+            }
+
+            filtered.append(line)
+            index += 1
+        }
+
+        return filtered.joined(separator: "\n")
+    }
+
+    private static func isMarkdownTableSeparator(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.contains("-") else { return false }
+        return trimmed.allSatisfy { char in
+            char == "|" || char == "-" || char == ":" || char == " " || char == "\t"
+        }
+    }
+
+    private static func stripRawHTML(from markdown: String) -> String {
+        markdown
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .compactMap { rawLine in
+                let line = String(rawLine)
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                if isRawHTMLBlockLine(trimmed) {
+                    return nil
+                }
+                return removingInlineHTMLTags(from: line)
+            }
+            .joined(separator: "\n")
+    }
+
+    private static func isRawHTMLBlockLine(_ line: String) -> Bool {
+        guard line.hasPrefix("<"), line.contains(">") else { return false }
+        if line.hasPrefix("<!--") { return true }
+        return line.contains("</") || line.hasSuffix("/>") || line.hasSuffix(">")
+    }
+
+    private static func removingInlineHTMLTags(from line: String) -> String {
+        var output = ""
+        var insideTag = false
+        for char in line {
+            if char == "<" {
+                insideTag = true
+                continue
+            }
+            if char == ">" {
+                insideTag = false
+                continue
+            }
+            if !insideTag {
+                output.append(char)
+            }
+        }
+        return output
+    }
+
+    private static func isSkippableInlineSequence(_ inlines: [MarkdownInline]) -> Bool {
+        if containsCodeInline(inlines) {
+            return true
+        }
+        return isPureLinkCollection(inlines)
+    }
+
+    private static func containsCodeInline(_ inlines: [MarkdownInline]) -> Bool {
+        inlines.contains { inline in
+            switch inline {
+            case .code:
+                return true
+            case let .bold(content),
+                 let .italic(content),
+                 let .strikethrough(content),
+                 let .highlight(content):
+                return containsCodeInline(content)
+            case let .link(text, _):
+                return containsCodeInline(text)
+            default:
+                return false
+            }
+        }
+    }
+
+    private static func isPureLinkCollection(_ inlines: [MarkdownInline]) -> Bool {
+        var linkCount = 0
+
+        func walk(_ inline: MarkdownInline) -> Bool {
+            switch inline {
+            case .link, .autolink:
+                linkCount += 1
+                return true
+            case let .text(text):
+                return text.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters)).isEmpty
+            case let .bold(content),
+                 let .italic(content),
+                 let .strikethrough(content),
+                 let .highlight(content):
+                return content.allSatisfy(walk)
+            case let .mention(value):
+                return value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            case let .tag(value):
+                return value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            case .code:
+                return false
+            }
+        }
+
+        return inlines.allSatisfy(walk) && linkCount >= 2
+    }
+
+    private static func isPureLinkCollectionLine(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.hasPrefix("- "),
+              !trimmed.hasPrefix("* "),
+              !trimmed.hasPrefix("+ "),
+              !hasOrderedListPrefix(trimmed)
+        else {
+            return false
+        }
+
+        if trimmed.contains(" | "),
+           trimmed.components(separatedBy: " | ").count >= 2,
+           trimmed.components(separatedBy: " (http").count > 2
+        {
+            return true
+        }
+
+        if isSingleLinkToken(trimmed) {
+            return true
+        }
+
+        for separator in ["|", ",", ";"] {
+            let parts = trimmed
+                .split(separator: Character(separator), omittingEmptySubsequences: true)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            if parts.count >= 2 {
+                return parts.allSatisfy(isSingleLinkToken)
+            }
+        }
+        return false
+    }
+
+    private static func hasOrderedListPrefix(_ line: String) -> Bool {
+        guard let separator = line.range(of: ". ") else { return false }
+        return line[..<separator.lowerBound].allSatisfy(\.isNumber)
+    }
+
+    private static func isSingleLinkToken(_ token: String) -> Bool {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") {
+            return !trimmed.contains(where: \.isWhitespace)
+        }
+
+        guard let open = trimmed.range(of: " (") else { return false }
+        let label = trimmed[..<open.lowerBound].trimmingCharacters(in: .whitespaces)
+        guard !label.isEmpty else { return false }
+        let tail = trimmed[open.upperBound...]
+        return (tail.hasPrefix("http://") || tail.hasPrefix("https://")) && trimmed.hasSuffix(")")
+    }
+
+    private static func parseMarkdownImage(in markdown: String, bangIndex: String.Index) -> String.Index? {
+        let labelOpen = markdown.index(after: bangIndex)
+        guard labelOpen < markdown.endIndex, markdown[labelOpen] == "[" else { return nil }
+
+        var index = markdown.index(after: labelOpen)
+        var bracketDepth = 1
+        var escaped = false
+
+        while index < markdown.endIndex {
+            let char = markdown[index]
+            if escaped {
+                escaped = false
+            } else if char == "\\" {
+                escaped = true
+            } else if char == "[" {
+                bracketDepth += 1
+            } else if char == "]" {
+                bracketDepth -= 1
+                if bracketDepth == 0 { break }
+            }
+            index = markdown.index(after: index)
+        }
+
+        guard index < markdown.endIndex else { return nil }
+        let openParen = markdown.index(after: index)
+        guard openParen < markdown.endIndex, markdown[openParen] == "(" else { return nil }
+
+        index = markdown.index(after: openParen)
+        var parenDepth = 1
+        escaped = false
+
+        while index < markdown.endIndex {
+            let char = markdown[index]
+            if escaped {
+                escaped = false
+            } else if char == "\\" {
+                escaped = true
+            } else if char == "(" {
+                parenDepth += 1
+            } else if char == ")" {
+                parenDepth -= 1
+                if parenDepth == 0 {
+                    return markdown.index(after: index)
+                }
+            }
+            index = markdown.index(after: index)
+        }
+
+        return nil
     }
 }
 

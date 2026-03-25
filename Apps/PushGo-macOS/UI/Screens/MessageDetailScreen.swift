@@ -100,9 +100,14 @@ struct MessageDetailScreen: View {
                     HStack(alignment: .center, spacing: 12) {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack(alignment: .center, spacing: 8) {
-                                Text(message.title)
-                                    .font(.title2.weight(.semibold))
+                                MarkdownRenderer(
+                                    text: message.title,
+                                    maxNewlines: nil,
+                                    font: .title2.weight(.semibold),
+                                    foreground: .primary
+                                )
                                     .multilineTextAlignment(.leading)
+                                    .compatTextSelectionEnabled()
 
                                 encryptionBadge(for: message)
                             }
@@ -409,6 +414,7 @@ struct MessageDetailScreen: View {
         }
         .padding()
     }
+
 }
 
 private struct ImagePreview: Identifiable {

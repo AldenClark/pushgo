@@ -203,6 +203,12 @@ struct NotificationPayloadSemantics {
         entityOpenTargetComponents(fromSanitizedPayload: UserInfoSanitizer.sanitize(payload))
     }
 
+    static func notificationThreadIdentifier(
+        from payload: [AnyHashable: Any]
+    ) -> String? {
+        notificationThreadIdentifier(fromSanitizedPayload: UserInfoSanitizer.sanitize(payload))
+    }
+
     static func isGatewayFallbackAlertCandidate(
         entityType: String,
         title: String?,
@@ -349,6 +355,37 @@ struct NotificationPayloadSemantics {
             description: nonEmptyString(object["description"]),
             message: nonEmptyString(object["message"])
         )
+    }
+
+    private static func notificationThreadIdentifier(
+        fromSanitizedPayload payload: [String: Any]
+    ) -> String? {
+        let entityType = normalizedEntityType(payload["entity_type"] as? String)
+        let channel = stringValue(forKeys: ["channel_id"], in: payload)
+        let eventId = stringValue(forKeys: ["event_id"], in: payload)
+        let thingId = stringValue(forKeys: ["thing_id"], in: payload)
+        var parts: [String] = []
+        switch entityType {
+        case "event":
+            parts.append("event")
+        case "thing":
+            parts.append("thing")
+        default:
+            parts.append("message")
+        }
+        if let channel {
+            parts.append("channel=\(channel)")
+        }
+        if entityType == "event" || entityType == "thing", let eventId {
+            parts.append("event=\(eventId)")
+        }
+        if entityType == "thing", let thingId {
+            parts.append("thing=\(thingId)")
+        }
+        guard parts.count > 1 else {
+            return nil
+        }
+        return parts.joined(separator: "|")
     }
 
     private static func parseThingAttributesSnapshot(

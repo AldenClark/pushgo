@@ -791,6 +791,7 @@
 
     },
     "Apple Watch Standalone Mode" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5053,9 +5054,6 @@
         }
       }
     },
-    "Done" : {
-
-    },
     "enable_auto_cleanup" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7237,111 +7235,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "登入時自動啟動 PushGo"
-          }
-        }
-      }
-    },
-    "sidebar_launch_at_login_reminder_action" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Enable launch at login"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ログイン時の起動を有効にする"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "로그인 시 실행 켜기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "开启开机自启"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "開啟開機自啟"
-          }
-        }
-      }
-    },
-    "sidebar_launch_at_login_reminder_detail" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "PushGo cannot receive messages while it is not running. Enable launch at login to keep message delivery available after your Mac starts."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "PushGo が起動していない間はメッセージを受信できません。Mac の起動後も受信できるよう、ログイン時の起動を有効にしてください。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "PushGo가 실행 중이 아니면 메시지를 받을 수 없습니다. Mac 시작 후에도 계속 수신하려면 로그인 시 실행을 켜세요."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "PushGo 未启动时无法接收消息。建议开启开机自启，确保 Mac 启动后仍可持续接收消息。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "PushGo 未啟動時無法接收訊息。建議開啟開機自啟，確保 Mac 啟動後仍可持續接收訊息。"
-          }
-        }
-      }
-    },
-    "sidebar_launch_at_login_reminder_title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Turn on launch at login"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ログイン時の起動を有効にしてください"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "로그인 시 실행을 켜세요"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "建议开启开机自启"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "建議開啟開機自啟"
           }
         }
       }
@@ -11228,6 +11121,111 @@
         }
       }
     },
+    "sidebar_launch_at_login_reminder_action" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enable launch at login"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ログイン時の起動を有効にする"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로그인 시 실행 켜기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开启开机自启"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開啟開機自啟"
+          }
+        }
+      }
+    },
+    "sidebar_launch_at_login_reminder_detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PushGo cannot receive messages while it is not running. Enable launch at login to keep message delivery available after your Mac starts."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PushGo が起動していない間はメッセージを受信できません。Mac の起動後も受信できるよう、ログイン時の起動を有効にしてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PushGo가 실행 중이 아니면 메시지를 받을 수 없습니다. Mac 시작 후에도 계속 수신하려면 로그인 시 실행을 켜세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PushGo 未启动时无法接收消息。建议开启开机自启，确保 Mac 启动后仍可持续接收消息。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PushGo 未啟動時無法接收訊息。建議開啟開機自啟，確保 Mac 啟動後仍可持續接收訊息。"
+          }
+        }
+      }
+    },
+    "sidebar_launch_at_login_reminder_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn on launch at login"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ログイン時の起動を有効にしてください"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "로그인 시 실행을 켜세요"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "建议开启开机自启"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "建議開啟開機自啟"
+          }
+        }
+      }
+    },
     "simplified_chinese" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -13838,6 +13836,7 @@
       }
     },
     "watch_standalone_confirm_disable_action" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -13872,6 +13871,7 @@
       }
     },
     "watch_standalone_confirm_disable_title" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -13906,6 +13906,7 @@
       }
     },
     "watch_standalone_confirm_enable_action" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -13940,6 +13941,7 @@
       }
     },
     "watch_standalone_confirm_enable_title" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -13974,6 +13976,7 @@
       }
     },
     "watch_standalone_confirm_message" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
