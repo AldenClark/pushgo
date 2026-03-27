@@ -14,11 +14,11 @@ struct ChannelManagementScreen: View {
     @State private var createChannelAlias = ""
     @State private var createChannelPassword = ""
     @State private var isCreateSubmitting = false
-    @State private var channelEntryFocusTask: Task<Void, Never>?
-    @FocusState private var channelEntryFocusedField: ChannelEntryField?
     @State private var subscribeChannelId = ""
     @State private var subscribeChannelPassword = ""
     @State private var isSubscribeSubmitting = false
+    private let channelEntrySheetHeight: CGFloat = 348
+    private let channelEntryFieldsMinHeight: CGFloat = 196
 
     var body: some View {
         navigationContainer {
@@ -234,114 +234,117 @@ struct ChannelManagementScreen: View {
 
     @ViewBuilder
     private var channelEntryFields: some View {
-        switch channelEntryMode {
-        case .create:
-            VStack(alignment: .leading, spacing: 14) {
-                AppFormField(
-                    titleText: localizationManager.localized("channel_name")
-                ) {
-                    TextField(
-                        "",
-                        text: $createChannelAlias,
-                        prompt: AppFieldPrompt.text(localizationManager.localized("channel_name_placeholder"))
-                    )
-                    .textFieldStyle(.plain)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled(true)
-                    .focused($channelEntryFocusedField, equals: .createAlias)
-                    .submitLabel(.next)
-                    .onAppear {
-                        if channelEntryMode == .create {
-                            focusChannelEntryFirstField(for: .create)
-                        }
-                    }
-                    .onSubmit {
-                        channelEntryFocusedField = .createPassword
-                    }
-                    .disabled(isCreateSubmitting)
-                }
+        ZStack(alignment: .topLeading) {
+            channelEntryCreateFields
+                .opacity(channelEntryMode == .create ? 1 : 0)
+                .allowsHitTesting(channelEntryMode == .create)
+                .accessibilityHidden(channelEntryMode != .create)
 
-                AppFormField(
-                    titleText: localizationManager.localized("channel_password")
-                ) {
-                    SecureField(
-                        "",
-                        text: $createChannelPassword,
-                        prompt: AppFieldPrompt.text(localizationManager.localized("channel_password_placeholder"))
-                    )
-                    .textFieldStyle(.plain)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled(true)
-                    .focused($channelEntryFocusedField, equals: .createPassword)
-                    .submitLabel(.go)
-                    .onSubmit {
-                        Task { await submitChannelEntryFromSheet() }
-                    }
-                    .disabled(isCreateSubmitting)
-                }
-
-                if !createChannelPassword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                   !isCreateDialogPasswordValid
-                {
-                    Text(localizationManager.localized("channel_password_invalid_length"))
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                }
-            }
-        case .subscribe:
-            VStack(alignment: .leading, spacing: 14) {
-                AppFormField(
-                    titleText: localizationManager.localized("channel_id")
-                ) {
-                    TextField(
-                        "",
-                        text: $subscribeChannelId,
-                        prompt: AppFieldPrompt.text(localizationManager.localized("channel_id_placeholder"))
-                    )
-                    .textFieldStyle(.plain)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled(true)
-                    .focused($channelEntryFocusedField, equals: .subscribeChannelID)
-                    .submitLabel(.next)
-                    .onAppear {
-                        if channelEntryMode == .subscribe {
-                            focusChannelEntryFirstField(for: .subscribe)
-                        }
-                    }
-                    .onSubmit {
-                        channelEntryFocusedField = .subscribePassword
-                    }
-                    .disabled(isSubscribeSubmitting)
-                }
-
-                AppFormField(
-                    titleText: localizationManager.localized("channel_password")
-                ) {
-                    SecureField(
-                        "",
-                        text: $subscribeChannelPassword,
-                        prompt: AppFieldPrompt.text(localizationManager.localized("channel_password_placeholder"))
-                    )
-                    .textFieldStyle(.plain)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled(true)
-                    .focused($channelEntryFocusedField, equals: .subscribePassword)
-                    .submitLabel(.go)
-                    .onSubmit {
-                        Task { await submitChannelEntryFromSheet() }
-                    }
-                    .disabled(isSubscribeSubmitting)
-                }
-
-                if !subscribeChannelPassword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                   !isSubscribeDialogPasswordValid
-                {
-                    Text(localizationManager.localized("channel_password_invalid_length"))
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                }
-            }
+            channelEntrySubscribeFields
+                .opacity(channelEntryMode == .subscribe ? 1 : 0)
+                .allowsHitTesting(channelEntryMode == .subscribe)
+                .accessibilityHidden(channelEntryMode != .subscribe)
         }
+        .frame(maxWidth: .infinity, minHeight: channelEntryFieldsMinHeight, alignment: .topLeading)
+        .transaction { transaction in
+            transaction.animation = nil
+        }
+    }
+
+    private var channelEntryCreateFields: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            AppFormField(
+                titleText: localizationManager.localized("channel_name")
+            ) {
+                TextField(
+                    "",
+                    text: $createChannelAlias,
+                    prompt: AppFieldPrompt.text(localizationManager.localized("channel_name_placeholder"))
+                )
+                .textFieldStyle(.plain)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+                .submitLabel(.next)
+                .disabled(isCreateSubmitting)
+            }
+
+            AppFormField(
+                titleText: localizationManager.localized("channel_password")
+            ) {
+                SecureField(
+                    "",
+                    text: $createChannelPassword,
+                    prompt: AppFieldPrompt.text(localizationManager.localized("channel_password_placeholder"))
+                )
+                .textFieldStyle(.plain)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+                .submitLabel(.go)
+                .onSubmit {
+                    Task { await submitChannelEntryFromSheet() }
+                }
+                .disabled(isCreateSubmitting)
+            }
+
+            channelEntryPasswordHint(
+                isVisible: !createChannelPassword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    && !isCreateDialogPasswordValid
+            )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var channelEntrySubscribeFields: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            AppFormField(
+                titleText: localizationManager.localized("channel_id")
+            ) {
+                TextField(
+                    "",
+                    text: $subscribeChannelId,
+                    prompt: AppFieldPrompt.text(localizationManager.localized("channel_id_placeholder"))
+                )
+                .textFieldStyle(.plain)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+                .submitLabel(.next)
+                .disabled(isSubscribeSubmitting)
+            }
+            AppFormField(
+                titleText: localizationManager.localized("channel_password")
+            ) {
+                SecureField(
+                    "",
+                    text: $subscribeChannelPassword,
+                    prompt: AppFieldPrompt.text(localizationManager.localized("channel_password_placeholder"))
+                )
+                .textFieldStyle(.plain)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+                .submitLabel(.go)
+                .onSubmit {
+                    Task { await submitChannelEntryFromSheet() }
+                }
+                .disabled(isSubscribeSubmitting)
+            }
+
+            channelEntryPasswordHint(
+                isVisible: !subscribeChannelPassword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    && !isSubscribeDialogPasswordValid
+            )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func channelEntryPasswordHint(isVisible: Bool) -> some View {
+        Text(localizationManager.localized("channel_password_invalid_length"))
+            .font(.footnote)
+            .foregroundStyle(.red)
+            .lineLimit(2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minHeight: 34, alignment: .topLeading)
+            .opacity(isVisible ? 1 : 0)
+            .accessibilityHidden(!isVisible)
     }
 
     private var channelEntryActionButtons: some View {
@@ -349,7 +352,6 @@ struct ChannelManagementScreen: View {
             variant: .primary,
             isLoading: isChannelEntrySubmitting
         ) {
-            channelEntryFocusedField = nil
             Task { await submitChannelEntryFromSheet() }
         } label: {
             HStack(spacing: 8) {
@@ -379,20 +381,17 @@ struct ChannelManagementScreen: View {
             channelEntryActionButtons
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.top, 22)
+        .padding(.bottom, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .presentationDetents([.medium])
+        .frame(height: channelEntrySheetHeight, alignment: .topLeading)
+        .transaction { transaction in
+            transaction.animation = nil
+        }
+        .animation(nil, value: channelEntryMode)
+        .ignoresSafeArea(.keyboard, edges: .bottom)
+        .presentationDetents([.height(channelEntrySheetHeight)])
         .presentationDragIndicator(.visible)
-        .onAppear {
-            focusChannelEntryFirstField(for: channelEntryMode)
-        }
-        .onChange(of: channelEntryMode) { _, mode in
-            focusChannelEntryFirstField(for: mode)
-        }
-        .onDisappear {
-            channelEntryFocusTask?.cancel()
-            channelEntryFocusTask = nil
-        }
     }
 
     private func presentChannelEntrySheet() {
@@ -412,37 +411,8 @@ struct ChannelManagementScreen: View {
 
     @MainActor
     private func resetChannelEntrySheetState() {
-        channelEntryFocusTask?.cancel()
-        channelEntryFocusTask = nil
         resetChannelEntrySheetInputs()
         channelEntryMode = .create
-        channelEntryFocusedField = nil
-    }
-
-    @MainActor
-    private func focusChannelEntryFirstField(for mode: ChannelEntryMode) {
-        channelEntryFocusTask?.cancel()
-        channelEntryFocusedField = nil
-
-        let target: ChannelEntryField = switch mode {
-        case .create:
-            .createAlias
-        case .subscribe:
-            .subscribeChannelID
-        }
-
-        channelEntryFocusTask = Task { @MainActor in
-            for delay in [0 as UInt64, 120_000_000, 240_000_000] {
-                if delay > 0 {
-                    try? await Task.sleep(nanoseconds: delay)
-                }
-                guard !Task.isCancelled,
-                      isChannelEntrySheetPresented,
-                      channelEntryMode == mode
-                else { return }
-                channelEntryFocusedField = target
-            }
-        }
     }
 
     @MainActor
@@ -608,11 +578,4 @@ struct ChannelManagementScreen: View {
 private enum ChannelEntryMode: Hashable {
     case create
     case subscribe
-}
-
-private enum ChannelEntryField: Hashable {
-    case createAlias
-    case createPassword
-    case subscribeChannelID
-    case subscribePassword
 }

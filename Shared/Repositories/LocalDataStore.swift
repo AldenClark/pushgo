@@ -148,6 +148,7 @@ enum InboundDeliveryState: Hashable, Sendable {
 
 enum NotificationStoreSaveOutcome: Sendable {
     case persisted(PushMessage)
+    case persistedPending(PushMessage)
     case duplicateRequest(PushMessage)
     case duplicateMessage(PushMessage)
 }
@@ -237,6 +238,11 @@ private func isEntityScopedWrite(_ message: PushMessage) -> Bool {
 private func referencedThingIdRequiringExistingParent(_ message: PushMessage) -> String? {
     guard normalizedEntityType(message) != "thing" else { return nil }
     return normalizeEntityReference(message.thingId)
+}
+
+private func thingParentIdentity(from message: PushMessage) -> String? {
+    guard normalizedEntityType(message) == "thing" else { return nil }
+    return normalizeEntityReference(message.thingId) ?? normalizeEntityReference(message.entityId)
 }
 
 private func stableMessageDedupKey(for message: PushMessage) -> String? {
@@ -456,6 +462,18 @@ actor LocalDataStore {
         gateway.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private func compareChannelSubscriptions(
+        _ lhs: ChannelSubscription,
+        _ rhs: ChannelSubscription
+    ) -> Bool {
+        let lhsChannelId = lhs.channelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rhsChannelId = rhs.channelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if lhsChannelId != rhsChannelId {
+            return lhsChannelId < rhsChannelId
+        }
+        return normalizeGatewayKey(lhs.gateway) < normalizeGatewayKey(rhs.gateway)
+    }
+
     private func mapToDomain(
         _ item: KeychainChannelSubscription,
         gateway: String
@@ -479,7 +497,7 @@ actor LocalDataStore {
             let stored = try await backend.loadChannelSubscriptions(includeDeleted: includeDeleted)
             return stored
                 .filter { normalizeGatewayKey($0.gateway) == trimmedGateway }
-                .sorted { $0.updatedAt > $1.updatedAt }
+                .sorted(by: compareChannelSubscriptions)
         }
         let stored = try channelSubscriptionStore.loadSubscriptions(
             gatewayKey: trimmedGateway
@@ -487,7 +505,7 @@ actor LocalDataStore {
         let filtered = includeDeleted ? stored : stored.filter { !$0.isDeleted }
         return filtered
             .map { mapToDomain($0, gateway: trimmedGateway) }
-            .sorted { $0.updatedAt > $1.updatedAt }
+            .sorted(by: compareChannelSubscriptions)
     }
 
     func loadChannelSubscriptions(includeDeleted: Bool) async throws -> [ChannelSubscription] {
@@ -770,6 +788,37 @@ actor LocalDataStore {
         let normalizedPlatform = platform.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !normalizedPlatform.isEmpty else { return }
         providerDeviceKeyStore.save(deviceKey: deviceKey, platform: normalizedPlatform)
+    }
+
+    func cachedProviderDeviceKey(
+        for platform: String,
+        channelType: String
+    ) async -> String? {
+        let normalizedPlatform = platform.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedChannelType = channelType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalizedPlatform.isEmpty, !normalizedChannelType.isEmpty else { return nil }
+        let scopedKey = providerDeviceKeyStore.load(
+            platform: "\(normalizedPlatform)|\(normalizedChannelType)"
+        )
+        return scopedKey
+    }
+
+    func saveCachedProviderDeviceKey(
+        _ deviceKey: String?,
+        for platform: String,
+        channelType: String
+    ) async {
+        let normalizedPlatform = platform.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedChannelType = channelType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalizedPlatform.isEmpty, !normalizedChannelType.isEmpty else { return }
+        providerDeviceKeyStore.save(
+            deviceKey: deviceKey,
+            platform: "\(normalizedPlatform)|\(normalizedChannelType)"
+        )
+        // Keep writing legacy private scope for backward compatibility.
+        if normalizedChannelType == "private" {
+            providerDeviceKeyStore.save(deviceKey: deviceKey, platform: normalizedPlatform)
+        }
     }
 
     func loadManualKeyPreferences() async -> String? {
@@ -1364,7 +1413,10 @@ actor LocalDataStore {
         }
         let searchable: [PushMessage] = {
             switch outcome {
-            case let .persisted(stored), let .duplicateRequest(stored), let .duplicateMessage(stored):
+            case let .persisted(stored),
+                 let .persistedPending(stored),
+                 let .duplicateRequest(stored),
+                 let .duplicateMessage(stored):
                 return isTopLevelMessage(stored) ? [stored] : []
             }
         }()
@@ -1743,6 +1795,7 @@ private struct GRDBMessageRecord {
     let eventState: String?
     let eventTimeEpoch: Int64?
     let observedTimeEpoch: Int64?
+    let occurredAtEpoch: Int64?
     let topLevelMessage: Bool
 
     init(
@@ -1768,6 +1821,7 @@ private struct GRDBMessageRecord {
         eventState: String?,
         eventTimeEpoch: Int64?,
         observedTimeEpoch: Int64?,
+        occurredAtEpoch: Int64?,
         topLevelMessage: Bool
     ) {
         self.id = id
@@ -1792,6 +1846,7 @@ private struct GRDBMessageRecord {
         self.eventState = eventState
         self.eventTimeEpoch = eventTimeEpoch
         self.observedTimeEpoch = observedTimeEpoch
+        self.occurredAtEpoch = occurredAtEpoch
         self.topLevelMessage = topLevelMessage
     }
 
@@ -1821,6 +1876,7 @@ private struct GRDBMessageRecord {
         eventState = row["event_state"]
         eventTimeEpoch = row["event_time_epoch"]
         observedTimeEpoch = row["observed_time_epoch"]
+        occurredAtEpoch = row["occurred_at_epoch"]
         let topLevelInt: Int64 = row["is_top_level_message"]
         topLevelMessage = topLevelInt != 0
     }
@@ -1881,6 +1937,7 @@ private struct GRDBMessageRecord {
             eventState: normalizeOptional(canonicalMessage.eventState),
             eventTimeEpoch: Self.epochSeconds(from: canonicalMessage.rawPayload["event_time"]?.value),
             observedTimeEpoch: Self.epochSeconds(from: canonicalMessage.rawPayload["observed_at"]?.value),
+            occurredAtEpoch: Self.epochSeconds(from: canonicalMessage.rawPayload["occurred_at"]?.value),
             topLevelMessage: isTopLevelMessage(canonicalMessage)
         )
     }
@@ -1905,6 +1962,84 @@ private struct GRDBMessageRecord {
         default:
             return nil
         }
+    }
+}
+
+private struct GRDBPendingInboundMessageRecord {
+    let pendingId: String
+    let thingId: String
+    let messageId: String
+    let rawPayloadJSON: String
+    let title: String
+    let body: String
+    let channel: String?
+    let url: String?
+    let receivedAt: Date
+    let status: String
+    let decryptionState: String?
+    let notificationRequestId: String?
+    let deliveryId: String?
+    let operationId: String?
+    let entityType: String
+    let entityId: String?
+    let eventId: String?
+    let eventState: String?
+    let eventTimeEpoch: Int64?
+    let observedTimeEpoch: Int64?
+    let occurredAtEpoch: Int64?
+
+    init(row: Row) {
+        pendingId = row["pending_id"]
+        thingId = row["thing_id"]
+        messageId = row["message_id"]
+        rawPayloadJSON = row["raw_payload_json"]
+        title = row["title"]
+        body = row["body"]
+        channel = row["channel"]
+        url = row["url"]
+        let receivedAtEpoch: Double = row["received_at"]
+        receivedAt = Date(timeIntervalSince1970: receivedAtEpoch)
+        status = row["status"]
+        decryptionState = row["decryption_state"]
+        notificationRequestId = row["notification_request_id"]
+        deliveryId = row["delivery_id"]
+        operationId = row["operation_id"]
+        entityType = row["entity_type"]
+        entityId = row["entity_id"]
+        eventId = row["event_id"]
+        eventState = row["event_state"]
+        eventTimeEpoch = row["event_time_epoch"]
+        observedTimeEpoch = row["observed_time_epoch"]
+        occurredAtEpoch = row["occurred_at_epoch"]
+    }
+
+    func toMessageRecord() -> GRDBMessageRecord {
+        GRDBMessageRecord(
+            id: UUID(),
+            messageId: messageId,
+            title: title,
+            body: body,
+            channel: channel,
+            url: url,
+            isRead: false,
+            receivedAt: receivedAt,
+            rawPayloadJSON: rawPayloadJSON,
+            status: status,
+            decryptionState: decryptionState,
+            notificationRequestId: notificationRequestId,
+            deliveryId: deliveryId,
+            operationId: operationId,
+            entityType: entityType,
+            entityId: entityId,
+            eventId: eventId,
+            thingId: thingId,
+            projectionDestination: nil,
+            eventState: eventState,
+            eventTimeEpoch: eventTimeEpoch,
+            observedTimeEpoch: observedTimeEpoch,
+            occurredAtEpoch: occurredAtEpoch,
+            topLevelMessage: false
+        )
     }
 }
 
@@ -2118,6 +2253,7 @@ private actor GRDBStore {
                     event_state TEXT,
                     event_time_epoch INTEGER,
                     observed_time_epoch INTEGER,
+                    occurred_at_epoch INTEGER,
                     is_top_level_message INTEGER NOT NULL,
                     CHECK (length(trim(message_id)) > 0)
                 );
@@ -2129,9 +2265,38 @@ private actor GRDBStore {
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_notification_request_id ON messages(notification_request_id);")
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_channel_received_at ON messages(channel, received_at DESC, id DESC);")
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_read_state_received_at ON messages(is_read, received_at DESC, id DESC);")
-            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_entity_projection ON messages(entity_type, event_time_epoch DESC, received_at DESC, id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_entity_projection ON messages(entity_type, event_time_epoch DESC, occurred_at_epoch DESC, received_at DESC, id DESC);")
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_event_projection ON messages(event_id, event_time_epoch DESC, received_at DESC, id DESC);")
-            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_thing_projection ON messages(thing_id, observed_time_epoch DESC, event_time_epoch DESC, received_at DESC, id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_thing_projection ON messages(thing_id, occurred_at_epoch DESC, observed_time_epoch DESC, event_time_epoch DESC, received_at DESC, id DESC);")
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS pending_inbound_messages (
+                    pending_id TEXT PRIMARY KEY NOT NULL,
+                    thing_id TEXT NOT NULL,
+                    message_id TEXT NOT NULL,
+                    raw_payload_json TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    channel TEXT,
+                    url TEXT,
+                    received_at REAL NOT NULL,
+                    status TEXT NOT NULL,
+                    decryption_state TEXT,
+                    notification_request_id TEXT,
+                    delivery_id TEXT,
+                    operation_id TEXT,
+                    entity_type TEXT NOT NULL,
+                    entity_id TEXT,
+                    event_id TEXT,
+                    event_state TEXT,
+                    event_time_epoch INTEGER,
+                    observed_time_epoch INTEGER,
+                    occurred_at_epoch INTEGER,
+                    created_at REAL NOT NULL,
+                    CHECK (length(trim(thing_id)) > 0),
+                    CHECK (length(trim(message_id)) > 0)
+                );
+                """)
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_pending_inbound_messages_thing_order ON pending_inbound_messages(thing_id, occurred_at_epoch ASC, event_time_epoch ASC, observed_time_epoch ASC, received_at ASC, pending_id ASC);")
 
             try db.execute(sql: """
                 CREATE TABLE IF NOT EXISTS operation_ledger (
@@ -2374,6 +2539,7 @@ private actor GRDBStore {
                     event_state TEXT,
                     event_time_epoch INTEGER,
                     observed_time_epoch INTEGER,
+                    occurred_at_epoch INTEGER,
                     is_top_level_message INTEGER NOT NULL,
                     CHECK (length(trim(message_id)) > 0)
                 );
@@ -2384,10 +2550,39 @@ private actor GRDBStore {
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_notification_request_id ON messages(notification_request_id);")
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_channel_received_at ON messages(channel, received_at DESC, id DESC);")
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_read_state_received_at ON messages(is_read, received_at DESC, id DESC);")
-            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_entity_projection ON messages(entity_type, event_time_epoch DESC, received_at DESC, id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_entity_projection ON messages(entity_type, event_time_epoch DESC, occurred_at_epoch DESC, received_at DESC, id DESC);")
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_event_projection ON messages(event_id, event_time_epoch DESC, received_at DESC, id DESC);")
-            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_thing_projection ON messages(thing_id, observed_time_epoch DESC, event_time_epoch DESC, received_at DESC, id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_thing_projection ON messages(thing_id, occurred_at_epoch DESC, observed_time_epoch DESC, event_time_epoch DESC, received_at DESC, id DESC);")
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_delivery_id ON messages(delivery_id);")
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS pending_inbound_messages (
+                    pending_id TEXT PRIMARY KEY NOT NULL,
+                    thing_id TEXT NOT NULL,
+                    message_id TEXT NOT NULL,
+                    raw_payload_json TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    channel TEXT,
+                    url TEXT,
+                    received_at REAL NOT NULL,
+                    status TEXT NOT NULL,
+                    decryption_state TEXT,
+                    notification_request_id TEXT,
+                    delivery_id TEXT,
+                    operation_id TEXT,
+                    entity_type TEXT NOT NULL,
+                    entity_id TEXT,
+                    event_id TEXT,
+                    event_state TEXT,
+                    event_time_epoch INTEGER,
+                    observed_time_epoch INTEGER,
+                    occurred_at_epoch INTEGER,
+                    created_at REAL NOT NULL,
+                    CHECK (length(trim(thing_id)) > 0),
+                    CHECK (length(trim(message_id)) > 0)
+                );
+                """)
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_pending_inbound_messages_thing_order ON pending_inbound_messages(thing_id, occurred_at_epoch ASC, event_time_epoch ASC, observed_time_epoch ASC, received_at ASC, pending_id ASC);")
 
             try db.execute(sql: """
                 CREATE TABLE IF NOT EXISTS operation_ledger (
@@ -2533,6 +2728,47 @@ private actor GRDBStore {
                 );
                 """)
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_watch_mirror_action_queue_issued_at ON watch_mirror_action_queue(issued_at ASC, action_id ASC);")
+        }
+        migrator.registerMigration("v9_message_occurred_at_epoch") { db in
+            let existingColumns = Set(try Row.fetchAll(db, sql: "PRAGMA table_info(messages);").compactMap {
+                $0["name"] as String?
+            })
+            if !existingColumns.contains("occurred_at_epoch") {
+                try db.execute(sql: "ALTER TABLE messages ADD COLUMN occurred_at_epoch INTEGER;")
+            }
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_entity_projection ON messages(entity_type, event_time_epoch DESC, occurred_at_epoch DESC, received_at DESC, id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_thing_projection ON messages(thing_id, occurred_at_epoch DESC, observed_time_epoch DESC, event_time_epoch DESC, received_at DESC, id DESC);")
+        }
+        migrator.registerMigration("v10_pending_inbound_messages") { db in
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS pending_inbound_messages (
+                    pending_id TEXT PRIMARY KEY NOT NULL,
+                    thing_id TEXT NOT NULL,
+                    message_id TEXT NOT NULL,
+                    raw_payload_json TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    channel TEXT,
+                    url TEXT,
+                    received_at REAL NOT NULL,
+                    status TEXT NOT NULL,
+                    decryption_state TEXT,
+                    notification_request_id TEXT,
+                    delivery_id TEXT,
+                    operation_id TEXT,
+                    entity_type TEXT NOT NULL,
+                    entity_id TEXT,
+                    event_id TEXT,
+                    event_state TEXT,
+                    event_time_epoch INTEGER,
+                    observed_time_epoch INTEGER,
+                    occurred_at_epoch INTEGER,
+                    created_at REAL NOT NULL,
+                    CHECK (length(trim(thing_id)) > 0),
+                    CHECK (length(trim(message_id)) > 0)
+                );
+                """)
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_pending_inbound_messages_thing_order ON pending_inbound_messages(thing_id, occurred_at_epoch ASC, event_time_epoch ASC, observed_time_epoch ASC, received_at ASC, pending_id ASC);")
         }
         return migrator
     }()
@@ -2749,6 +2985,94 @@ private actor GRDBStore {
         return try Row.fetchOne(db, sql: sql) != nil
     }
 
+    private func enqueuePendingInboundMessage(
+        _ record: GRDBMessageRecord,
+        thingId: String,
+        db: Database
+    ) throws {
+        let sql = """
+            INSERT INTO pending_inbound_messages (
+                pending_id, thing_id, message_id, raw_payload_json,
+                title, body, channel, url, received_at, status, decryption_state,
+                notification_request_id, delivery_id, operation_id,
+                entity_type, entity_id, event_id, event_state,
+                event_time_epoch, observed_time_epoch, occurred_at_epoch, created_at
+            ) VALUES (
+                \(Self.sqlQuoted(UUID().uuidString)),
+                \(Self.sqlQuoted(thingId)),
+                \(Self.sqlQuoted(record.messageId)),
+                \(Self.sqlQuoted(record.rawPayloadJSON)),
+                \(Self.sqlQuoted(record.title)),
+                \(Self.sqlQuoted(record.body)),
+                \(Self.sqlOptionalText(record.channel)),
+                \(Self.sqlOptionalText(record.url)),
+                \(record.receivedAt.timeIntervalSince1970),
+                \(Self.sqlQuoted(record.status)),
+                \(Self.sqlOptionalText(record.decryptionState)),
+                \(Self.sqlOptionalText(record.notificationRequestId)),
+                \(Self.sqlOptionalText(record.deliveryId)),
+                \(Self.sqlOptionalText(record.operationId)),
+                \(Self.sqlQuoted(record.entityType)),
+                \(Self.sqlOptionalText(record.entityId)),
+                \(Self.sqlOptionalText(record.eventId)),
+                \(Self.sqlOptionalText(record.eventState)),
+                \(Self.sqlOptionalInt64(record.eventTimeEpoch)),
+                \(Self.sqlOptionalInt64(record.observedTimeEpoch)),
+                \(Self.sqlOptionalInt64(record.occurredAtEpoch)),
+                \(Date().timeIntervalSince1970)
+            );
+            """
+        try db.execute(sql: sql)
+    }
+
+    private func replayPendingInboundMessages(
+        thingId: String,
+        db: Database
+    ) throws {
+        let rows = try Row.fetchAll(
+            db,
+            sql: """
+                SELECT *
+                FROM pending_inbound_messages
+                WHERE thing_id = \(Self.sqlQuoted(thingId))
+                ORDER BY occurred_at_epoch ASC, event_time_epoch ASC, observed_time_epoch ASC, received_at ASC, pending_id ASC;
+                """
+        )
+        guard !rows.isEmpty else { return }
+        for row in rows {
+            let pending = GRDBPendingInboundMessageRecord(row: row)
+            let record = pending.toMessageRecord()
+
+            if try loadMessageRecordByMessageId(record.messageId, db: db) != nil {
+                try db.execute(
+                    sql: "DELETE FROM pending_inbound_messages WHERE pending_id = \(Self.sqlQuoted(pending.pendingId));"
+                )
+                continue
+            }
+            if let identity = resolveOperationScopeIdentity(from: record.toPushMessage(decoder: decoder)),
+               try fetchOperationLedger(scopeKey: identity.scopeKey, db: db) != nil
+            {
+                try db.execute(
+                    sql: "DELETE FROM pending_inbound_messages WHERE pending_id = \(Self.sqlQuoted(pending.pendingId));"
+                )
+                continue
+            }
+
+            try insertOrUpdateMessage(record, db: db, updateOnConflict: false)
+            if let identity = resolveOperationScopeIdentity(from: record.toPushMessage(decoder: decoder)) {
+                try upsertOperationLedger(
+                    identity: identity,
+                    messageId: record.messageId,
+                    appliedAt: Date(),
+                    db: db
+                )
+            }
+            try db.execute(
+                sql: "DELETE FROM pending_inbound_messages WHERE pending_id = \(Self.sqlQuoted(pending.pendingId));"
+            )
+        }
+    }
+
     private func insertOrUpdateMessage(
         _ record: GRDBMessageRecord,
         db: Database,
@@ -2760,6 +3084,7 @@ private actor GRDBStore {
                 raw_payload_json, status, decryption_state, notification_request_id,
                 delivery_id, operation_id, entity_type, entity_id, event_id, thing_id,
                 projection_destination, event_state, event_time_epoch, observed_time_epoch,
+                occurred_at_epoch,
                 is_top_level_message
             ) VALUES (
                 \(Self.sqlQuoted(record.id.uuidString)),
@@ -2784,6 +3109,7 @@ private actor GRDBStore {
                 \(Self.sqlOptionalText(record.eventState)),
                 \(Self.sqlOptionalInt64(record.eventTimeEpoch)),
                 \(Self.sqlOptionalInt64(record.observedTimeEpoch)),
+                \(Self.sqlOptionalInt64(record.occurredAtEpoch)),
                 \(record.topLevelMessage ? 1 : 0)
             )
             """
@@ -2811,6 +3137,7 @@ private actor GRDBStore {
                     event_state = excluded.event_state,
                     event_time_epoch = excluded.event_time_epoch,
                     observed_time_epoch = excluded.observed_time_epoch,
+                    occurred_at_epoch = excluded.occurred_at_epoch,
                     is_top_level_message = excluded.is_top_level_message;
                 """
             try db.execute(sql: sql)
@@ -2970,7 +3297,7 @@ private actor GRDBStore {
             return try fetchMessages(
                 db: db,
                 where: conditions,
-                orderBy: "COALESCE(event_time_epoch, observed_time_epoch, CAST(received_at AS INTEGER)) DESC, received_at DESC, id DESC",
+                orderBy: "COALESCE(occurred_at_epoch, event_time_epoch, observed_time_epoch, CAST(received_at AS INTEGER)) DESC, received_at DESC, id DESC",
                 limit: limit
             )
         }
@@ -3072,7 +3399,7 @@ private actor GRDBStore {
                 SELECT gateway, channel_id, display_name, updated_at, last_synced_at
                 FROM channel_subscriptions
                 WHERE \(whereClause)
-                ORDER BY updated_at DESC;
+                ORDER BY channel_id ASC, gateway ASC;
                 """
             return try Row.fetchAll(db, sql: sql).map { row in
                 let gateway: String = row["gateway"]
@@ -3391,7 +3718,7 @@ private actor GRDBStore {
                 FROM channel_subscriptions
                 WHERE gateway = \(Self.sqlQuoted(normalizedGateway))
                   AND is_deleted = 0
-                ORDER BY updated_at DESC;
+                ORDER BY updated_at DESC, channel_id ASC;
                 """
             return try Row.fetchAll(db, sql: sql).compactMap { row in
                 let channelId: String = row["channel_id"]
@@ -3726,12 +4053,13 @@ private actor GRDBStore {
     ) async throws -> NotificationStoreSaveOutcome {
         try write { db in
             let canonicalMessage = canonicalizedMessageForPersistence(message)
+            let record = try buildMessageRecord(from: canonicalMessage)
             if let thingId = referencedThingIdRequiringExistingParent(canonicalMessage),
                try !hasThingParentRecord(thingId: thingId, db: db)
             {
-                return .duplicateMessage(canonicalMessage)
+                try enqueuePendingInboundMessage(record, thingId: thingId, db: db)
+                return .persistedPending(canonicalMessage)
             }
-            let record = try buildMessageRecord(from: canonicalMessage)
 
             if let notificationRequestId = record.notificationRequestId,
                let existing = try loadMessageRecordByNotificationRequestId(notificationRequestId, db: db)
@@ -3760,6 +4088,7 @@ private actor GRDBStore {
                     eventState: record.eventState,
                     eventTimeEpoch: record.eventTimeEpoch,
                     observedTimeEpoch: record.observedTimeEpoch,
+                    occurredAtEpoch: record.occurredAtEpoch,
                     topLevelMessage: record.topLevelMessage
                 )
                 try insertOrUpdateMessage(updatedRecord, db: db, updateOnConflict: true)
@@ -3786,6 +4115,9 @@ private actor GRDBStore {
                     db: db
                 )
             }
+            if let thingId = thingParentIdentity(from: canonicalMessage) {
+                try replayPendingInboundMessages(thingId: thingId, db: db)
+            }
             return .persisted(record.toPushMessage(decoder: decoder))
         }
     }
@@ -3796,12 +4128,13 @@ private actor GRDBStore {
             for message in messages {
                 let canonical = canonicalizedMessageForPersistence(message)
                 guard isEntityScopedWrite(canonical) else { continue }
+                let record = try buildMessageRecord(from: canonical)
                 if let thingId = referencedThingIdRequiringExistingParent(canonical),
                    try !hasThingParentRecord(thingId: thingId, db: db)
                 {
+                    try enqueuePendingInboundMessage(record, thingId: thingId, db: db)
                     continue
                 }
-                let record = try buildMessageRecord(from: canonical)
 
                 if try loadMessageRecordByMessageId(record.messageId, db: db) != nil {
                     continue
@@ -3822,6 +4155,9 @@ private actor GRDBStore {
                         db: db
                     )
                 }
+                if let thingId = thingParentIdentity(from: canonical) {
+                    try replayPendingInboundMessages(thingId: thingId, db: db)
+                }
             }
         }
     }
@@ -3830,13 +4166,18 @@ private actor GRDBStore {
         guard !messages.isEmpty else { return }
         try write { db in
             for message in messages {
-                if let thingId = referencedThingIdRequiringExistingParent(message),
+                let canonical = canonicalizedMessageForPersistence(message)
+                let record = try buildMessageRecord(from: canonical)
+                if let thingId = referencedThingIdRequiringExistingParent(canonical),
                    try !hasThingParentRecord(thingId: thingId, db: db)
                 {
+                    try enqueuePendingInboundMessage(record, thingId: thingId, db: db)
                     continue
                 }
-                let record = try buildMessageRecord(from: message)
                 try insertOrUpdateMessage(record, db: db, updateOnConflict: true)
+                if let thingId = thingParentIdentity(from: canonical) {
+                    try replayPendingInboundMessages(thingId: thingId, db: db)
+                }
             }
         }
     }

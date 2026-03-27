@@ -2,7 +2,6 @@ import CryptoKit
 import Foundation
 import UserNotifications
 
-@MainActor
 final class NotificationContentPreparer {
     private enum DecryptionError: Error {
         case invalidKeyMaterial

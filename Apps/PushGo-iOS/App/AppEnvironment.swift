@@ -173,7 +173,10 @@ final class AppEnvironment {
 
     func updateServerConfig(_ config: ServerConfig?) async throws {
         let previousConfig = serverConfig
-        let previousDeviceKey = await dataStore.cachedProviderDeviceKey(for: platformIdentifier())?
+        let previousDeviceKey = await dataStore.cachedProviderDeviceKey(
+            for: platformIdentifier(),
+            channelType: "apns"
+        )?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let normalized = config?.normalized()
         try await dataStore.saveServerConfig(normalized)
@@ -354,7 +357,11 @@ final class AppEnvironment {
             )
             let refreshedDeviceKey = registered.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
             if !refreshedDeviceKey.isEmpty {
-                await dataStore.saveCachedProviderDeviceKey(refreshedDeviceKey, for: platform)
+                await dataStore.saveCachedProviderDeviceKey(
+                    refreshedDeviceKey,
+                    for: platform,
+                    channelType: "apns"
+                )
             }
             let ensuredDeviceKey = try await ensureProviderRoute(config: config, providerToken: providerToken)
             return try await channelSubscriptionService.subscribe(
@@ -637,14 +644,14 @@ final class AppEnvironment {
             }
         )
         switch outcome {
-        case .duplicateRequest, .duplicateMessage:
+        case .duplicate:
             scheduleCountsRefresh()
             return true
-        case .persisted:
+        case .persistedMain, .persistedPending:
             scheduleCountsRefresh()
             requestWatchMirrorSnapshotSync()
             return true
-        case .skipped:
+        case .rejected:
             return false
         case .failed:
             showToast(message: localizationManager.localized(
@@ -1934,7 +1941,6 @@ final class AppEnvironment {
         let platform = platformIdentifier()
         await dataStore.saveCachedPushToken(token, for: platform)
         guard let config = serverConfig else { return }
-        _ = await ensureProviderDeviceKey(config: config, platform: platform)
         await syncProviderPullRoute(config: config, providerToken: token)
     }
 
@@ -2021,7 +2027,10 @@ final class AppEnvironment {
         return NotificationHandling.shouldPresentUserAlert(from: payload)
     }
 
-    func triggerPrivateWakeupPull(presentLocalNotifications: Bool = false) async {
+    func triggerPrivateWakeupPull(
+        presentLocalNotifications: Bool = false,
+        deliveryId: String? = nil
+    ) async {
         if isPrivateWakeupPullInFlight {
             privateWakeupPullPending = true
             return
@@ -2032,7 +2041,7 @@ final class AppEnvironment {
         repeat {
             privateWakeupPullPending = false
             let collector = PrivatePulledCollector()
-            await pullViaHttpWakeup(onPulled: { notification in
+            await pullViaHttpWakeup(deliveryId: deliveryId, onPulled: { notification in
                 guard presentLocalNotifications else { return }
                 await collector.append(notification)
             })
@@ -2057,66 +2066,22 @@ final class AppEnvironment {
     }
 
     private func schedulePrivateWakeupAckDrainIfNeeded() {
-        guard let config = serverConfig else { return }
-        let platform = platformIdentifier()
-        Task { [self] in
-            guard let token = await self.dataStore.cachedPushToken(for: platform)?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-                !token.isEmpty
-            else { return }
-            await self.syncProviderPullRoute(config: config, providerToken: token)
-            guard let deviceKey = await self.ensureProviderDeviceKey(config: config, platform: platform) else {
-                return
-            }
-            await PrivateWakeupAckOutboxWorker.scheduleDrain(
-                dataStore: self.dataStore,
-                acknowledge: { [self] deliveryIds in
-                    try await self.channelSubscriptionService.ackMessages(
-                        baseURL: config.baseURL,
-                        token: config.token,
-                        deviceKey: deviceKey,
-                        deliveryIds: deliveryIds
-                    )
-                }
-            )
-        }
+        // Wakeup-pull no longer requires HTTP ACK draining.
     }
 
     func drainPrivateWakeupAckOutboxForSystemWake() async -> PrivateWakeupAckDrainOutcome {
-        guard let config = serverConfig else { return .idle }
-        let platform = platformIdentifier()
-        guard let token = await dataStore.cachedPushToken(for: platform)?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-            !token.isEmpty
-        else {
-            return .idle
-        }
-        await syncProviderPullRoute(config: config, providerToken: token)
-        guard let deviceKey = await ensureProviderDeviceKey(config: config, platform: platform) else {
-            return .failed
-        }
-        return await PrivateWakeupAckOutboxWorker.drainPendingAcks(
-            dataStore: dataStore,
-            acknowledge: { [self] deliveryIds in
-                try await self.channelSubscriptionService.ackMessages(
-                    baseURL: config.baseURL,
-                    token: config.token,
-                    deviceKey: deviceKey,
-                    deliveryIds: deliveryIds
-                )
-            }
-        )
+        .idle
     }
 
     private func pullViaHttpWakeup(
+        deliveryId: String?,
         onPulled: (@Sendable (PrivatePulledNotification) async -> Void)? = nil
     ) async {
         guard let config = serverConfig else {
             return
         }
-        let gatewayKey = config.gatewayKey
-        let channels = (try? await dataStore.activeChannelCredentials(gateway: gatewayKey)) ?? []
-        guard !channels.isEmpty else {
+        let normalizedDeliveryId = deliveryId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !normalizedDeliveryId.isEmpty else {
             return
         }
         let platform = platformIdentifier()
@@ -2126,124 +2091,84 @@ final class AppEnvironment {
             return
         }
         await syncProviderPullRoute(config: config, providerToken: token)
-        guard let deviceKey = await ensureProviderDeviceKey(config: config, platform: platform) else {
+        guard let pulled = try? await channelSubscriptionService.pullMessage(
+            baseURL: config.baseURL,
+            token: config.token,
+            deliveryId: normalizedDeliveryId
+        ) else {
             return
         }
-        _ = await PrivateWakeupAckOutboxWorker.drainPendingAcks(
+        let processedDeliveryIds = await PrivateWakeupPullCoordinator.processPulledItems(
+            [PrivateWakeupPullItem(deliveryId: pulled.deliveryId, payload: pulled.payload)],
             dataStore: dataStore,
-            acknowledge: { [self] deliveryIds in
-                try await self.channelSubscriptionService.ackMessages(
-                    baseURL: config.baseURL,
-                    token: config.token,
-                    deviceKey: deviceKey,
-                    deliveryIds: deliveryIds
-                )
-            }
-        )
-
-        for channel in channels {
-            let pulled = (try? await channelSubscriptionService.pullMessages(
-                baseURL: config.baseURL,
-                token: config.token,
-                deviceKey: deviceKey,
-                channelId: channel.channelId,
-                password: channel.password,
-                limit: 100
-            )) ?? []
-            _ = await PrivateWakeupPullCoordinator.processPulledItems(
-                pulled.map { item in
-                    PrivateWakeupPullItem(deliveryId: item.deliveryId, payload: item.payload)
-                },
-                dataStore: dataStore,
-                acknowledge: { [self] deliveryIds in
-                    try await self.channelSubscriptionService.ackMessages(
-                        baseURL: config.baseURL,
-                        token: config.token,
-                        deviceKey: deviceKey,
-                        deliveryIds: deliveryIds
+            processItem: { normalized, deliveryId, anyPayload, deliveryState in
+                let shouldPresentReminder: Bool
+                switch deliveryState {
+                case .missing:
+                    let isPersisted = await addLocalMessage(
+                        title: normalized.title,
+                        body: normalized.body,
+                        channel: normalized.channel,
+                        url: normalized.url,
+                        rawPayload: normalized.rawPayload,
+                        decryptionState: normalized.decryptionState,
+                        messageId: normalized.messageId,
+                        operationId: normalized.operationId,
+                        titleWasExplicit: normalized.hasExplicitTitle
                     )
-                },
-                processItem: { normalized, deliveryId, anyPayload, deliveryState in
-                    let shouldPresentReminder: Bool
-                    switch deliveryState {
-                    case .missing:
-                        let isPersisted = await addLocalMessage(
+                    guard isPersisted else { return false }
+                    do {
+                        try await dataStore.markInboundDeliveryPersisted(
+                            deliveryId: deliveryId
+                        )
+                    } catch {
+                        return false
+                    }
+                    shouldPresentReminder = NotificationHandling.shouldPresentUserAlert(
+                        from: anyPayload
+                    )
+                case .persisted:
+                    shouldPresentReminder = false
+                case .acked:
+                    return false
+                }
+
+                if shouldPresentReminder, let onPulled {
+                    await onPulled(
+                        PrivatePulledNotification(
                             title: normalized.title,
                             body: normalized.body,
                             channel: normalized.channel,
-                            url: normalized.url,
-                            rawPayload: normalized.rawPayload,
-                            decryptionState: normalized.decryptionState,
                             messageId: normalized.messageId,
-                            operationId: normalized.operationId,
-                            titleWasExplicit: normalized.hasExplicitTitle
+                            deliveryId: deliveryId,
+                            categoryIdentifier: NotificationHandling.notificationCategoryIdentifier(for: anyPayload),
+                            entityType: normalized.entityType == "message" ? nil : normalized.entityType,
+                            entityId: normalized.entityId,
+                            thingId: normalized.thingId
                         )
-                        guard isPersisted else { return false }
-                        do {
-                            try await dataStore.markInboundDeliveryPersisted(
-                                deliveryId: deliveryId
-                            )
-                        } catch {
-                            return false
-                        }
-                        shouldPresentReminder = NotificationHandling.shouldPresentUserAlert(
-                            from: anyPayload
-                        )
-                    case .persisted:
-                        shouldPresentReminder = false
-                    case .acked:
-                        return false
-                    }
-
-                    if shouldPresentReminder, let onPulled {
-                        await onPulled(
-                            PrivatePulledNotification(
-                                title: normalized.title,
-                                body: normalized.body,
-                                channel: normalized.channel,
-                                messageId: normalized.messageId,
-                                deliveryId: deliveryId,
-                                categoryIdentifier: NotificationHandling.notificationCategoryIdentifier(for: anyPayload),
-                                entityType: normalized.entityType == "message" ? nil : normalized.entityType,
-                                entityId: normalized.entityId,
-                                thingId: normalized.thingId
-                            )
-                        )
-                    }
-                    return true
+                    )
                 }
-            )
-        }
-    }
-
-    private func ensureProviderDeviceKey(config: ServerConfig, platform: String) async -> String? {
-        let bootstrap = await dataStore.cachedProviderDeviceKey(for: platform)
-        if let bootstrap, !bootstrap.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return bootstrap
-        }
-        let registered = try? await channelSubscriptionService.registerDevice(
-            baseURL: config.baseURL,
-            token: config.token,
-            platform: platform,
-            existingDeviceKey: bootstrap
+                return true
+            }
         )
-        guard let deviceKey = registered?.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines),
-              !deviceKey.isEmpty
-        else { return bootstrap }
-        await dataStore.saveCachedProviderDeviceKey(deviceKey, for: platform)
-        return deviceKey
+        if !processedDeliveryIds.isEmpty {
+            await refreshMessageCountsAndNotify()
+        }
     }
 
     private func syncProviderPullRoute(config: ServerConfig, providerToken: String) async {
         let normalizedToken = providerToken.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedToken.isEmpty else { return }
         let platform = platformIdentifier()
-        let cachedDeviceKey = await dataStore.cachedProviderDeviceKey(for: platform)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let cachedDeviceKey, !cachedDeviceKey.isEmpty else { return }
-        let fingerprint = "\(platform)|\(cachedDeviceKey)|\(normalizedToken)"
-        guard lastWakeupRouteFingerprint != fingerprint else {
-            return
+        let cachedDeviceKey = await dataStore.cachedProviderDeviceKey(
+            for: platform,
+            channelType: "apns"
+        )?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let routeKey = cachedDeviceKey, !routeKey.isEmpty {
+            let fingerprint = "\(platform)|\(routeKey)|\(normalizedToken)"
+            guard lastWakeupRouteFingerprint != fingerprint else {
+                return
+            }
         }
         if let ensuredDeviceKey = try? await ensureProviderRoute(
             config: config,
@@ -2271,7 +2196,12 @@ final class AppEnvironment {
         let normalized = providerToken.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return }
         let platform = platformIdentifier()
-        guard let bootstrapDeviceKey = await ensureProviderDeviceKey(config: config, platform: platform) else {
+        let cachedApnsKey = await dataStore.cachedProviderDeviceKey(
+            for: platform,
+            channelType: "apns"
+        )?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let bootstrapDeviceKey = cachedApnsKey?.isEmpty == false ? cachedApnsKey : nil
+        guard let bootstrapDeviceKey, !bootstrapDeviceKey.isEmpty else {
             return
         }
         do {
@@ -2285,7 +2215,11 @@ final class AppEnvironment {
             )
             let resolvedDeviceKeyRaw = route.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
             let resolvedDeviceKey = resolvedDeviceKeyRaw.isEmpty ? bootstrapDeviceKey : resolvedDeviceKeyRaw
-            await dataStore.saveCachedProviderDeviceKey(resolvedDeviceKey, for: platform)
+            await dataStore.saveCachedProviderDeviceKey(
+                resolvedDeviceKey,
+                for: platform,
+                channelType: "apns"
+            )
             try await channelSubscriptionService.deleteDeviceChannel(
                 baseURL: config.baseURL,
                 token: config.token,
@@ -2297,8 +2231,30 @@ final class AppEnvironment {
 
     private func ensureProviderRoute(config: ServerConfig, providerToken: String) async throws -> String {
         let platform = platformIdentifier()
-        guard let bootstrapDeviceKey = await ensureProviderDeviceKey(config: config, platform: platform) else {
-            throw AppError.unknown(localizationManager.localized("operation_failed"))
+        let cachedApnsKey = await dataStore.cachedProviderDeviceKey(
+            for: platform,
+            channelType: "apns"
+        )?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let bootstrapDeviceKey: String
+        if let cachedApnsKey, !cachedApnsKey.isEmpty {
+            bootstrapDeviceKey = cachedApnsKey
+        } else {
+            let registered = try await channelSubscriptionService.registerDevice(
+                baseURL: config.baseURL,
+                token: config.token,
+                platform: platform,
+                existingDeviceKey: nil
+            )
+            let registeredDeviceKey = registered.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !registeredDeviceKey.isEmpty else {
+                throw AppError.unknown(localizationManager.localized("operation_failed"))
+            }
+            await dataStore.saveCachedProviderDeviceKey(
+                registeredDeviceKey,
+                for: platform,
+                channelType: "apns"
+            )
+            bootstrapDeviceKey = registeredDeviceKey
         }
         let route = try await channelSubscriptionService.upsertDeviceChannel(
             baseURL: config.baseURL,
@@ -2310,7 +2266,11 @@ final class AppEnvironment {
         )
         let resolvedDeviceKeyRaw = route.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedDeviceKey = resolvedDeviceKeyRaw.isEmpty ? bootstrapDeviceKey : resolvedDeviceKeyRaw
-        await dataStore.saveCachedProviderDeviceKey(resolvedDeviceKey, for: platform)
+        await dataStore.saveCachedProviderDeviceKey(
+            resolvedDeviceKey,
+            for: platform,
+            channelType: "apns"
+        )
         return resolvedDeviceKey
     }
 
@@ -2403,11 +2363,13 @@ final class AppEnvironment {
             }
         )
         switch outcome {
-        case .duplicateRequest, .duplicateMessage:
+        case .duplicate:
             scheduleCountsRefresh()
-        case .persisted:
+        case .persistedMain:
             scheduleCountsRefresh()
-        case .skipped, .failed:
+        case .persistedPending:
+            scheduleCountsRefresh()
+        case .rejected, .failed:
             break
         }
         return outcome

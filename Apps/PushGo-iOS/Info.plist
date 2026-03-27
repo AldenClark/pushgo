@@ -26,10 +26,6 @@
 	<true/>
 	<key>PushGoKeychainAccessGroup</key>
 	<string>$(AppIdentifierPrefix)io.ethan.pushgo.shared</string>
-	<key>BGTaskSchedulerPermittedIdentifiers</key>
-	<array>
-		<string>io.ethan.pushgo.private-ack-outbox</string>
-	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

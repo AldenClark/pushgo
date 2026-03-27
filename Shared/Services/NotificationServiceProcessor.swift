@@ -1,7 +1,6 @@
 import Foundation
 import UserNotifications
 
-@MainActor
 final class NotificationServiceProcessor {
     #if !os(watchOS)
     private struct PrivateWakeupHydrationSnapshot: Sendable {
@@ -10,22 +9,6 @@ final class NotificationServiceProcessor {
         static let empty = PrivateWakeupHydrationSnapshot(persistedItems: [])
     }
 
-    private actor PrivateWakeupGate {
-        private var inFlightHydration: Task<PrivateWakeupHydrationSnapshot, Never>?
-
-        func coalescedHydration(
-            _ operation: @escaping @Sendable () async -> PrivateWakeupHydrationSnapshot
-        ) async -> PrivateWakeupHydrationSnapshot {
-            if let inFlightHydration {
-                return await inFlightHydration.value
-            }
-            let task = Task { await operation() }
-            inFlightHydration = task
-            let value = await task.value
-            inFlightHydration = nil
-            return value
-        }
-    }
     #endif
 
     #if !os(watchOS)
@@ -36,39 +19,15 @@ final class NotificationServiceProcessor {
     }
 
     private struct PullRequest: Encodable {
-        let deviceKey: String
-        let channelId: String
-        let password: String
-        let limit: Int
+        let deliveryId: String
 
         enum CodingKeys: String, CodingKey {
-            case deviceKey = "device_key"
-            case channelId = "channel_id"
-            case password
-            case limit
-        }
-    }
-
-    private struct DeviceRegisterRequest: Encodable {
-        let platform: String
-        let deviceKey: String?
-
-        enum CodingKeys: String, CodingKey {
-            case platform
-            case deviceKey = "device_key"
-        }
-    }
-
-    private struct DeviceRegisterPayload: Decodable {
-        let deviceKey: String
-
-        enum CodingKeys: String, CodingKey {
-            case deviceKey = "device_key"
+            case deliveryId = "delivery_id"
         }
     }
 
     private struct PullResponse: Decodable {
-        let items: [PullItem]
+        let item: PullItem?
     }
 
     private struct PullItem: Decodable {
@@ -81,24 +40,6 @@ final class NotificationServiceProcessor {
         }
     }
 
-    private struct AckBatchRequest: Encodable {
-        let deviceKey: String
-        let deliveryIds: [String]
-
-        enum CodingKeys: String, CodingKey {
-            case deviceKey = "device_key"
-            case deliveryIds = "delivery_ids"
-        }
-    }
-
-    private struct AckBatchResponse: Decodable {
-        let ackedDeliveryIds: [String]
-
-        enum CodingKeys: String, CodingKey {
-            case ackedDeliveryIds = "acked_delivery_ids"
-        }
-    }
-
     private struct EmptyPayload: Decodable {
         init(from _: Decoder) throws {}
     }
@@ -106,9 +47,6 @@ final class NotificationServiceProcessor {
 
     private let localDataStore = LocalDataStore()
     private let contentPreparer = NotificationContentPreparer()
-    #if !os(watchOS)
-    private static let privateWakeupGate = PrivateWakeupGate()
-    #endif
     func process(
         request: UNNotificationRequest,
         content: UNMutableNotificationContent
@@ -145,23 +83,17 @@ final class NotificationServiceProcessor {
         guard let runtime = await loadPrivateRuntimeConfig() else {
             return content
         }
-        guard let deviceKey = await ensureProviderDeviceKey(
-            baseURL: runtime.baseURL,
-            authToken: runtime.authToken,
-            platform: runtime.platform
-        ) else {
+        guard let deliveryId = extractWakeupDeliveryId(from: content.userInfo) else {
             return content
         }
-        let snapshot = await Self.privateWakeupGate.coalescedHydration { [self] in
-            await self.performPrivateWakeupHydration(
-                requestIdentifier: requestIdentifier,
-                runtime: runtime,
-                deviceKey: deviceKey
-            )
-        }
+        let snapshot = await performPrivateWakeupHydration(
+            requestIdentifier: requestIdentifier,
+            runtime: runtime,
+            deliveryId: deliveryId
+        )
         let persistedItems = snapshot.persistedItems
         guard !persistedItems.isEmpty else {
-            return content
+            return makeWakeupFallbackNotificationContent(base: content)
         }
         var hydrated = content
         if let first = persistedItems.first {
@@ -169,6 +101,9 @@ final class NotificationServiceProcessor {
         }
         if persistedItems.count > 1 {
             hydrated = makeSummaryNotificationContent(base: hydrated, count: persistedItems.count)
+        }
+        if let unread = try? await localDataStore.messageCounts().unread {
+            hydrated.badge = NSNumber(value: unread)
         }
         return hydrated
         #endif
@@ -179,43 +114,19 @@ final class NotificationServiceProcessor {
         requestIdentifier: String,
         runtime: (
             baseURL: URL,
-            authToken: String?,
-            platform: String,
-            systemToken: String?,
-            channels: [(id: String, password: String)]
+            authToken: String?
         ),
-        deviceKey: String
+        deliveryId: String
     ) async -> PrivateWakeupHydrationSnapshot {
-        _ = await PrivateWakeupAckOutboxWorker.drainPendingAcks(
-            dataStore: localDataStore,
-            acknowledge: { [self] deliveryIds in
-                try await self.ackMessages(
-                    baseURL: runtime.baseURL,
-                    authToken: runtime.authToken,
-                    deviceKey: deviceKey,
-                    deliveryIds: deliveryIds
-                )
-            }
-        )
         var pulledItems: [PrivateWakeupPullItem] = []
-        for channel in runtime.channels {
-            let pulled: [PullItem]
-            do {
-                pulled = try await pullMessages(
-                    baseURL: runtime.baseURL,
-                    authToken: runtime.authToken,
-                    deviceKey: deviceKey,
-                    channelId: channel.id,
-                    password: channel.password,
-                    limit: 100
-                )
-            } catch {
-                continue
-            }
-            guard !pulled.isEmpty else { continue }
-            pulledItems.append(contentsOf: pulled.map { item in
-                PrivateWakeupPullItem(deliveryId: item.deliveryId, payload: item.payload)
-            })
+        if let pulled = try? await pullMessage(
+            baseURL: runtime.baseURL,
+            authToken: runtime.authToken,
+            deliveryId: deliveryId
+        ) {
+            pulledItems.append(
+                PrivateWakeupPullItem(deliveryId: pulled.deliveryId, payload: pulled.payload)
+            )
         }
         guard !pulledItems.isEmpty else {
             return .empty
@@ -224,11 +135,12 @@ final class NotificationServiceProcessor {
         let persistedDeliveryIds = await persistPulledItems(
             pulledItems,
             requestIdentifier: requestIdentifier,
-            runtime: runtime,
-            deviceKey: deviceKey
+            runtime: runtime
         )
         guard !persistedDeliveryIds.isEmpty else { return .empty }
-        let persistedItems = pulledItems.filter { persistedDeliveryIds.contains($0.deliveryId) }
+        await localDataStore.flushWrites()
+        DarwinNotificationPoster.post(name: AppConstants.messageSyncNotificationName)
+        let persistedItems = pulledItems
         return .init(persistedItems: persistedItems)
     }
     #endif
@@ -239,26 +151,14 @@ final class NotificationServiceProcessor {
         requestIdentifier: String,
         runtime: (
             baseURL: URL,
-            authToken: String?,
-            platform: String,
-            systemToken: String?,
-            channels: [(id: String, password: String)]
-        ),
-        deviceKey: String
+            authToken: String?
+        )
     ) async -> Set<String> {
         let receivedAt = Date()
         var seenMessageIds = Set<String>()
         return await PrivateWakeupPullCoordinator.processPulledItems(
             items,
             dataStore: localDataStore,
-            acknowledge: { [self] deliveryIds in
-                try await self.ackMessages(
-                    baseURL: runtime.baseURL,
-                    authToken: runtime.authToken,
-                    deviceKey: deviceKey,
-                    deliveryIds: deliveryIds
-                )
-            },
             processItem: { normalized, deliveryId, _, deliveryState in
                 guard deliveryState != .acked else { return false }
                 switch deliveryState {
@@ -282,12 +182,12 @@ final class NotificationServiceProcessor {
                         dataStore: localDataStore
                     )
                     switch outcome {
-                    case .persisted, .duplicateMessage, .duplicateRequest:
+                    case .persistedMain, .persistedPending, .duplicate, .rejected:
                         do {
                             try await localDataStore.markInboundDeliveryPersisted(deliveryId: deliveryId)
                         } catch { return false }
                         return true
-                    case .skipped, .failed: return false
+                    case .failed: return false
                     }
                 case .persisted: return true
                 case .acked: return false
@@ -309,12 +209,23 @@ final class NotificationServiceProcessor {
         return updated
     }
 
+    private func makeWakeupFallbackNotificationContent(
+        base: UNMutableNotificationContent
+    ) -> UNMutableNotificationContent {
+        let updated = base
+        updated.title = trimmed(base.title) ?? "收到新通知"
+        updated.body = "消息内容正在同步，请稍后打开 PushGo 查看。"
+        var userInfo = updated.userInfo
+        userInfo["_skip_persist"] = "1"
+        userInfo["private_wakeup_handled"] = "1"
+        userInfo["private_wakeup_pull_failed"] = "1"
+        updated.userInfo = userInfo
+        return updated
+    }
+
     private func loadPrivateRuntimeConfig() async -> (
         baseURL: URL,
-        authToken: String?,
-        platform: String,
-        systemToken: String?,
-        channels: [(id: String, password: String)]
+        authToken: String?
     )? {
         let serverConfig: ServerConfig?
         #if os(watchOS)
@@ -325,98 +236,28 @@ final class NotificationServiceProcessor {
         guard let serverConfig else {
             return nil
         }
-        let channels = ((try? await localDataStore.activeChannelCredentials(gateway: serverConfig.gatewayKey)) ?? [])
-            .map { (id: $0.channelId, password: $0.password) }
-        guard !channels.isEmpty else { return nil }
-        let systemToken = await localDataStore.cachedPushToken(for: privatePlatformIdentifier())
         return (
             baseURL: serverConfig.baseURL,
-            authToken: serverConfig.token,
-            platform: privatePlatformIdentifier(),
-            systemToken: systemToken,
-            channels: channels
+            authToken: serverConfig.token
         )
     }
 
     #if !os(watchOS)
-    private func ensureProviderDeviceKey(
+    private func pullMessage(
         baseURL: URL,
         authToken: String?,
-        platform: String
-    ) async -> String? {
-        let existing = await localDataStore.cachedProviderDeviceKey(for: platform)?
-            .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-        let bootstrap = existing?.isEmpty == false ? existing : nil
-        do {
-            let payload = try await postGateway(
-                path: "/device/register",
-                baseURL: baseURL,
-                authToken: authToken,
-                body: DeviceRegisterRequest(
-                    platform: platform,
-                    deviceKey: bootstrap
-                ),
-                responseType: DeviceRegisterPayload.self
-            )
-            let resolved = payload.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !resolved.isEmpty else { return bootstrap }
-            await localDataStore.saveCachedProviderDeviceKey(resolved, for: platform)
-            return resolved
-        } catch {
-            return bootstrap
-        }
-    }
-
-    private func pullMessages(
-        baseURL: URL,
-        authToken: String?,
-        deviceKey: String,
-        channelId: String,
-        password: String,
-        limit: Int
-    ) async throws -> [PullItem] {
+        deliveryId: String
+    ) async throws -> PullItem? {
         let payload = try await postGateway(
             path: "/messages/pull",
             baseURL: baseURL,
             authToken: authToken,
             body: PullRequest(
-                deviceKey: deviceKey,
-                channelId: channelId,
-                password: password,
-                limit: max(1, min(limit, 200))
+                deliveryId: deliveryId
             ),
             responseType: PullResponse.self
         )
-        return payload.items
-    }
-
-    private func ackMessages(
-        baseURL: URL,
-        authToken: String?,
-        deviceKey: String,
-        deliveryIds: [String]
-    ) async throws -> Set<String> {
-        let normalized = Array(Set(deliveryIds.map {
-            $0.trimmingCharacters(in: .whitespacesAndNewlines)
-        }.filter { !$0.isEmpty }))
-        guard !normalized.isEmpty else { return [] }
-
-        let validated = try validatedBaseURL(baseURL)
-        let url = try buildGatewayURL(baseURL: validated, path: "/messages/ack/batch")
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = AppConstants.deviceRegistrationTimeout
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let authToken, !authToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        }
-        request.httpBody = try JSONEncoder().encode(
-            AckBatchRequest(deviceKey: deviceKey, deliveryIds: normalized)
-        )
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let payload = try decodeGatewayPayload(AckBatchResponse.self, data: data, response: response)
-        return Set(payload.ackedDeliveryIds)
+        return payload.item
     }
 
     private func postGateway<T: Encodable, R: Decodable>(
@@ -522,6 +363,12 @@ final class NotificationServiceProcessor {
         let bridgedUserInfo = merged.reduce(into: [AnyHashable: Any]()) { result, entry in
             result[entry.key] = entry.value
         }
+        if let normalized = NotificationHandling.normalizeRemoteNotification(bridgedUserInfo) {
+            content.title = normalized.title
+            content.body = normalized.body
+            merged["title"] = normalized.title
+            merged["body"] = normalized.body
+        }
         if let threadIdentifier = NotificationPayloadSemantics.notificationThreadIdentifier(from: bridgedUserInfo) {
             content.threadIdentifier = threadIdentifier
         }
@@ -532,18 +379,6 @@ final class NotificationServiceProcessor {
     private func trimmed(_ value: String?) -> String? {
         let text = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return text.isEmpty ? nil : text
-    }
-
-    private func privatePlatformIdentifier() -> String {
-        #if os(iOS)
-        return "ios"
-        #elseif os(macOS)
-        return "macos"
-        #elseif os(watchOS)
-        return "watchos"
-        #else
-        return "unknown"
-        #endif
     }
 
     private func isPrivateWakeupPayload(_ payload: [AnyHashable: Any]) -> Bool {
@@ -562,10 +397,17 @@ final class NotificationServiceProcessor {
         return false
     }
 
+    private func extractWakeupDeliveryId(from payload: [AnyHashable: Any]) -> String? {
+        let deliveryId = (payload["delivery_id"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return deliveryId.isEmpty ? nil : deliveryId
+    }
+
     private func persistMessage(for request: UNNotificationRequest, content: UNMutableNotificationContent) async {
         let store = localDataStore
         var unreadCount = 1
         var persistenceFailed = false
+        var shouldNotifyStoreChanged = false
         do {
             let outcome = await NotificationPersistenceCoordinator.persistIfNeeded(
                 request: request,
@@ -573,21 +415,29 @@ final class NotificationServiceProcessor {
                 dataStore: store
             )
             switch outcome {
-            case .skipped, .duplicateRequest, .duplicateMessage:
+            case .duplicate, .persistedPending:
+                await store.flushWrites()
+                shouldNotifyStoreChanged = true
+                let counts = try await store.messageCounts()
+                unreadCount = counts.unread
+            case .rejected:
                 let counts = try await store.messageCounts()
                 unreadCount = counts.unread
             case .failed:
                 let counts = try await store.messageCounts()
                 unreadCount = counts.unread
                 persistenceFailed = true
-            case .persisted:
+            case .persistedMain:
                 await store.flushWrites()
+                shouldNotifyStoreChanged = true
                 let counts = try await store.messageCounts()
                 unreadCount = counts.unread
-                DarwinNotificationPoster.post(name: AppConstants.messageSyncNotificationName)
             }
         } catch {
             persistenceFailed = true
+        }
+        if shouldNotifyStoreChanged {
+            DarwinNotificationPoster.post(name: AppConstants.messageSyncNotificationName)
         }
         if persistenceFailed {
             applyPersistenceFailureNotice(to: content)

@@ -95,6 +95,13 @@ struct EventListScreen: View {
             publishAutomationState()
 #endif
         }
+        .onChange(of: environment.messageStoreRevision) { _, _ in
+            Task { @MainActor in
+                await viewModel.reload()
+                syncSelectedEventSnapshot()
+                openEventIfNeeded()
+            }
+        }
         .onChange(of: selectedEvent?.id) { _, _ in
 #if DEBUG
             publishAutomationState()

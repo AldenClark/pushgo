@@ -95,6 +95,13 @@ struct ThingListScreen: View {
             publishAutomationState()
 #endif
         }
+        .onChange(of: environment.messageStoreRevision) { _, _ in
+            Task { @MainActor in
+                await viewModel.reload()
+                syncSelectedThingSnapshot()
+                openThingIfNeeded()
+            }
+        }
         .onChange(of: selectedThing?.id) { _, _ in
 #if DEBUG
             publishAutomationState()

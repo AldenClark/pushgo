@@ -27,8 +27,8 @@ struct WatchEventListScreen: View {
             .navigationTitle(localizationManager.localized("push_type_event"))
             .accessibilityIdentifier("screen.events.list")
             .navigationDestination(for: String.self) { eventId in
-                if let event = viewModel.event(eventId: eventId) {
-                    WatchEventDetailScreen(event: event)
+                if viewModel.event(eventId: eventId) != nil {
+                    WatchEventDetailScreen(eventId: eventId, viewModel: viewModel)
                 } else {
                     WatchEntityMissingState()
                 }
@@ -49,6 +49,12 @@ struct WatchEventListScreen: View {
             }
             .onChange(of: environment.pendingEventToOpen) { _, _ in
                 openPendingEventIfNeeded()
+            }
+            .onChange(of: environment.messageStoreRevision) { _, _ in
+                Task { @MainActor in
+                    await viewModel.reload()
+                    openPendingEventIfNeeded()
+                }
             }
 #if DEBUG
             .task(id: automationStateVersion) {

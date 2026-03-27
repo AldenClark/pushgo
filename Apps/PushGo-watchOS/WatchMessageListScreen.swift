@@ -45,6 +45,12 @@ struct WatchMessageListScreen: View {
             .onChange(of: environment.pendingMessageToOpen) { _, _ in
                 openPendingMessageIfNeeded()
             }
+            .onChange(of: environment.messageStoreRevision) { _, _ in
+                Task { @MainActor in
+                    await viewModel.reload()
+                    openPendingMessageIfNeeded()
+                }
+            }
 #if DEBUG
             .task(id: automationStateVersion) {
                 PushGoWatchAutomationRuntime.shared.publishState(
