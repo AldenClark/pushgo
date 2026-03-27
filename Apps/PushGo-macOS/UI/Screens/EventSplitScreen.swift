@@ -33,6 +33,12 @@ struct EventSplitScreen: View {
             .onChange(of: openEventId) { _, _ in
                 syncSelection()
             }
+            .onChange(of: environment.messageStoreRevision) { _, _ in
+                Task { @MainActor in
+                    await viewModel.reload()
+                    syncSelection()
+                }
+            }
             .onChange(of: selection) { _, id in
                 guard let id else { return }
                 Task { await viewModel.ensureEventDetailsLoaded(eventId: id) }

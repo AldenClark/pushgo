@@ -23,7 +23,7 @@ final class NotificationService: UNNotificationServiceExtension {
         let mutableContent = content
 
         processingTask?.cancel()
-        processingTask = Task { @MainActor in
+        processingTask = Task(priority: .userInitiated) {
             let processor = NotificationServiceProcessor()
             let result = await processor.process(request: request, content: mutableContent)
             guard !Task.isCancelled else { return }

@@ -29,8 +29,8 @@ struct WatchThingListScreen: View {
             .navigationTitle(localizationManager.localized("push_type_thing"))
             .accessibilityIdentifier("screen.things.list")
             .navigationDestination(for: String.self) { thingId in
-                if let thing = viewModel.thing(thingId: thingId) {
-                    WatchThingDetailScreen(thing: thing)
+                if viewModel.thing(thingId: thingId) != nil {
+                    WatchThingDetailScreen(thingId: thingId, viewModel: viewModel)
                 } else {
                     WatchEntityMissingState()
                 }
@@ -51,6 +51,12 @@ struct WatchThingListScreen: View {
             }
             .onChange(of: environment.pendingThingToOpen) { _, _ in
                 openPendingThingIfNeeded()
+            }
+            .onChange(of: environment.messageStoreRevision) { _, _ in
+                Task { @MainActor in
+                    await viewModel.reload()
+                    openPendingThingIfNeeded()
+                }
             }
 #if DEBUG
             .task(id: automationStateVersion) {

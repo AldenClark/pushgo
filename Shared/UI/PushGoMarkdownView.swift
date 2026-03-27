@@ -8,6 +8,7 @@ import Textual
 #endif
 
 struct MarkdownRenderer: View {
+    private static let textualScale: CGFloat = 0.92
     let text: String
     var maxNewlines: Int? = nil
     var font: Font = .body
@@ -22,25 +23,132 @@ struct MarkdownRenderer: View {
         prefersStructuredRendering(displayText)
     }
 
+    private var normalizedText: String {
+        normalizeMarkdown(displayText)
+    }
+
     var body: some View {
         Group {
             if prefersStructuredText {
-                StructuredText(markdown: displayText)
+                StructuredText(markdown: normalizedText)
+                    .textual.structuredTextStyle(.gitHub)
+                    .textual.tableCellStyle(PushGoRefinedTableCellStyle())
+                    .textual.tableStyle(PushGoRefinedTableStyle())
             } else {
-                InlineText(markdown: displayText)
+                InlineText(markdown: normalizedText)
             }
         }
-            .environment(\.openURL, OpenURLAction { incoming in
-                guard let safeURL = URLSanitizer.sanitizeExternalOpenURL(incoming) else {
-                    return .discarded
-                }
-                return .systemAction(safeURL)
-            })
-            .font(font)
-            .foregroundColor(foreground)
-            .lineLimit(nil)
-            .fixedSize(horizontal: false, vertical: true)
+        .textual.fontScale(Self.textualScale)
+        .textual.inlineStyle(.gitHub)
+        .environment(\.openURL, OpenURLAction { incoming in
+            guard let safeURL = URLSanitizer.sanitizeExternalOpenURL(incoming) else {
+                return .discarded
+            }
+            return .systemAction(safeURL)
+        })
+        .font(font)
+        .foregroundColor(foreground)
+        .lineLimit(nil)
+        .fixedSize(horizontal: false, vertical: true)
     }
+}
+
+private struct PushGoRefinedTableCellStyle: StructuredText.TableCellStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .fontWeight(configuration.row == 0 ? .semibold : .regular)
+            .padding(.vertical, 7)
+            .padding(.horizontal, 12)
+            .textual.lineSpacing(.fontScaled(0.25))
+    }
+}
+
+private struct PushGoRefinedTableStyle: StructuredText.TableStyle {
+    private static let borderWidth: CGFloat = 1
+    private static let cornerRadius: CGFloat = 10
+    private static let overflowRelativeWidth: CGFloat = 1.8
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var borderColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.18) : Color.black.opacity(0.14)
+    }
+
+    private var dividerColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.16) : Color.black.opacity(0.10)
+    }
+
+    private var containerFillColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.03) : Color.black.opacity(0.02)
+    }
+
+    private var headerFillColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05)
+    }
+
+    private var stripeFillColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.05) : Color.black.opacity(0.025)
+    }
+
+    func makeBody(configuration: Configuration) -> some View {
+        Overflow { state in
+            let maxWidth = state.containerWidth.map { $0 * Self.overflowRelativeWidth }
+
+            configuration.label
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: maxWidth, alignment: .leading)
+                .textual.tableBackground { layout in
+                    Canvas { context, _ in
+                        guard layout.numberOfRows > 0 else { return }
+
+                        let headerBounds = layout.rowBounds(0).integral
+                        if !headerBounds.isNull {
+                            context.fill(Path(headerBounds), with: .color(headerFillColor))
+                        }
+
+                        for row in layout.rowIndices.dropFirst().filter({ $0.isMultiple(of: 2) }) {
+                            let rowBounds = layout.rowBounds(row).integral
+                            if !rowBounds.isNull {
+                                context.fill(Path(rowBounds), with: .color(stripeFillColor))
+                            }
+                        }
+                    }
+                }
+                .textual.tableOverlay { layout in
+                    Canvas { context, _ in
+                        for divider in layout.dividers() {
+                            context.fill(
+                                Path(divider),
+                                with: .color(dividerColor)
+                            )
+                        }
+                    }
+                }
+                .padding(Self.borderWidth)
+                .background(
+                    RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
+                        .fill(containerFillColor)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
+                        .stroke(borderColor, lineWidth: Self.borderWidth)
+                }
+        }
+        .textual.tableCellSpacing(horizontal: Self.borderWidth, vertical: Self.borderWidth)
+        .textual.blockSpacing(.fontScaled(top: 1.4, bottom: 1.6))
+    }
+}
+
+private func normalizeMarkdown(_ markdown: String) -> String {
+    // Foundation's markdown parser does not render [![...]](...) as an image.
+    // Keep this narrowly scoped: unwrap link-wrapped images and delegate all
+    // other markdown semantics to Textual/Foundation.
+    let pattern = #"\[(!\[[^\]]*?\]\((?:\\.|[^\\)])*?\))\]\((?:\\.|[^\\)])*?\)"#
+    guard let regex = try? NSRegularExpression(pattern: pattern) else {
+        return markdown
+    }
+    let range = NSRange(markdown.startIndex ..< markdown.endIndex, in: markdown)
+    return regex.stringByReplacingMatches(in: markdown, range: range, withTemplate: "$1")
 }
 
 private func limitText(_ text: String, toFirstNewlines max: Int) -> String {
@@ -62,6 +170,7 @@ private func prefersStructuredRendering(_ text: String) -> Bool {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return false }
     if trimmed.contains("\n") { return true }
+    if trimmed.contains("![") { return true }
     if trimmed.contains("```") { return true }
     if trimmed.hasPrefix("#") || trimmed.hasPrefix(">") { return true }
     if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") { return true }

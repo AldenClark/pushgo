@@ -34,6 +34,7 @@ let package = Package(
                 "Repositories/MessageSearchIndex.swift",
                 "Repositories/SwiftDataModels.swift",
                 "Services/NotificationHandling.swift",
+                "Services/ChannelSubscriptionService.swift",
                 "Services/PrivateWakeupPullCoordinator.swift",
                 "Services/PushRegistrationService.swift",
                 "Utilities/AnyCodable.swift",

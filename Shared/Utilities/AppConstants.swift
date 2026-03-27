@@ -1189,7 +1189,6 @@ enum NotificationPayloadNormalizer {
 }
 #endif
 
-@MainActor
 enum NotificationMediaResolver {
     static func urlValue(in userInfo: [AnyHashable: Any], keys: [String]) -> URL? {
         urls(in: userInfo, keys: keys).first

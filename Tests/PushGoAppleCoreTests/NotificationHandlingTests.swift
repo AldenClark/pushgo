@@ -190,7 +190,7 @@ struct NotificationHandlingTests {
                 dataStore: store
             )
 
-            guard case .skipped = outcome else {
+            guard case .rejected = outcome else {
                 Issue.record("Expected _skip_persist payload to bypass storage.")
                 return
             }
@@ -222,7 +222,7 @@ struct NotificationHandlingTests {
                 content: firstContent,
                 dataStore: store
             )
-            guard case let .persisted(stored) = firstOutcome else {
+            guard case let .persistedMain(stored) = firstOutcome else {
                 Issue.record("Expected first notification delivery to persist.")
                 return
             }
@@ -257,8 +257,8 @@ struct NotificationHandlingTests {
             let messages = try await store.loadMessages()
             let storedMessage = try await store.loadMessage(notificationRequestId: "req-notification-001")
 
-            guard case .duplicateRequest = duplicateOutcome else {
-                Issue.record("Expected second notification delivery with same request id to surface duplicateRequest.")
+            guard case .duplicate = duplicateOutcome else {
+                Issue.record("Expected second notification delivery with same request id to surface duplicate.")
                 return
             }
             #expect(beforeSaveSnapshot?.title == "Updated title")
@@ -310,7 +310,7 @@ struct NotificationHandlingTests {
                 dataStore: store
             )
 
-            guard case let .persisted(stored) = outcome else {
+            guard case let .persistedMain(stored) = outcome else {
                 Issue.record("Expected event payload to persist with stored title fallback.")
                 return
             }
@@ -338,7 +338,7 @@ struct NotificationHandlingTests {
                 dataStore: store
             )
 
-            guard case .persisted = outcome else {
+            guard case .persistedMain = outcome else {
                 Issue.record("Expected event pull payload without message_id to persist.")
                 return
             }

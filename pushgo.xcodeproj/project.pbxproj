@@ -114,7 +114,7 @@
 		AAC02D3E2F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0039 /* GRDB */; };
 		AAC02D3F2F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0038 /* GRDB */; };
 		AAC02D402F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0035 /* GRDB */; };
-		AACFE1622F28511200701BB4 /* NotificationServiceExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AACFE15B2F28511200701BB4 /* NotificationServiceExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AACFE1622F28511200701BB4 /* PushgoNotificationServiceExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AACFE15B2F28511200701BB4 /* PushgoNotificationServiceExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AAE0B0B12F6A000100C0FFEE /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2A2EF2359D00AD1834 /* AppConstants.swift */; };
 		AAE0B0B22F6A000100C0FFEE /* ServerConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1F2EF2359D00AD1834 /* ServerConfig.swift */; };
 		AAE0B0B32F6A000100C0FFEE /* PushMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1E2EF2359D00AD1834 /* PushMessage.swift */; };
@@ -245,13 +245,6 @@
 			remoteGlobalIDString = AAFB52C02F0CA5F0009E61C5;
 			remoteInfo = "PushGo-watchOS";
 		};
-		AA6606022F1B2B040087E0F0 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = AA49A1822EE3E31500C1EBF2 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = AA49A19B2EE3E46C00C1EBF2;
-			remoteInfo = "PushGoNSE-iOS";
-		};
 		AACFE1602F28511200701BB4 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = AA49A1822EE3E31500C1EBF2 /* Project object */;
@@ -304,7 +297,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				AACFE1622F28511200701BB4 /* NotificationServiceExtension.appex in Embed Foundation Extensions */,
+				AACFE1622F28511200701BB4 /* PushgoNotificationServiceExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -363,7 +356,7 @@
 		AA8E2C332EF2359D00AD1834 /* PushGoNotificationNames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushGoNotificationNames.swift; sourceTree = "<group>"; };
 		AA8E2C352EF2359D00AD1834 /* SharedImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedImageCache.swift; sourceTree = "<group>"; };
 		AA8E2C362EF2359D00AD1834 /* UserInfoSanitizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserInfoSanitizer.swift; sourceTree = "<group>"; };
-		AACFE15B2F28511200701BB4 /* NotificationServiceExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NotificationServiceExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		AACFE15B2F28511200701BB4 /* PushgoNotificationServiceExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PushgoNotificationServiceExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		AAFB52C12F0CA5F0009E61C5 /* PushGoWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PushGoWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B1E7D1124F8A4C3DA9E8F001 /* EntityScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntityScreens.swift; sourceTree = "<group>"; };
 		BE7F5A81433F49309DB30D36 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = text; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
@@ -615,7 +608,7 @@
 				AA240E512EF1BEA400F812DA /* PushGo.app */,
 				AAFB52C12F0CA5F0009E61C5 /* PushGoWatch.app */,
 				DE35C72B5C899D0FCCBAF070 /* NotificationServiceExtensionWatch.appex */,
-				AACFE15B2F28511200701BB4 /* NotificationServiceExtension.appex */,
+				AACFE15B2F28511200701BB4 /* PushgoNotificationServiceExtension.appex */,
 				D90000112F7F000100A10001 /* PushGo-iOSUITests.xctest */,
 				D90000212F7F000100A10001 /* PushGo-macOSUITests.xctest */,
 			);
@@ -736,7 +729,6 @@
 			buildRules = (
 			);
 			dependencies = (
-				AA6606032F1B2B040087E0F0 /* PBXTargetDependency */,
 				AACFE1612F28511200701BB4 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
@@ -824,7 +816,7 @@
 				A0AA00012F70000100AA0038 /* GRDB */,
 			);
 			productName = PushgoNotificationServiceExtension;
-			productReference = AACFE15B2F28511200701BB4 /* NotificationServiceExtension.appex */;
+			productReference = AACFE15B2F28511200701BB4 /* PushgoNotificationServiceExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 		AAFB52C02F0CA5F0009E61C5 /* PushGo-watchOS */ = {
@@ -1317,11 +1309,6 @@
 			target = AAFB52C02F0CA5F0009E61C5 /* PushGo-watchOS */;
 			targetProxy = AA6603832F1A8AA20087E0F0 /* PBXContainerItemProxy */;
 		};
-		AA6606032F1B2B040087E0F0 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = AA49A19B2EE3E46C00C1EBF2 /* PushGoNSE-iOS */;
-			targetProxy = AA6606022F1B2B040087E0F0 /* PBXContainerItemProxy */;
-		};
 		AACFE1612F28511200701BB4 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = AACFE15A2F28511200701BB4 /* PushGoNSE-macOS */;
@@ -1350,7 +1337,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-watchOS/pushgowatch NotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 30;
+				CURRENT_PROJECT_VERSION = 32;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -1362,7 +1349,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.30;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.watchkitapp.NotificationServiceExtension;
 				PRODUCT_NAME = NotificationServiceExtensionWatch;
 				REGISTER_APP_GROUPS = YES;
@@ -1391,7 +1378,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-macOS/pushgomac.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 30;
+				CURRENT_PROJECT_VERSION = 32;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -1420,7 +1407,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.0.30;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo;
 				PRODUCT_NAME = PushGo;
 				REGISTER_APP_GROUPS = YES;
@@ -1451,7 +1438,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-macOS/pushgomac.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 30;
+				CURRENT_PROJECT_VERSION = 32;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -1480,7 +1467,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.0.30;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo;
 				PRODUCT_NAME = PushGo;
 				REGISTER_APP_GROUPS = YES;
@@ -1642,7 +1629,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-iOS/pushgo.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 30;
+				CURRENT_PROJECT_VERSION = 32;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -1673,7 +1660,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.0.30;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo;
 				PRODUCT_NAME = PushGo;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1702,7 +1689,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-iOS/pushgo.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 30;
+				CURRENT_PROJECT_VERSION = 32;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -1733,7 +1720,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.0.30;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo;
 				PRODUCT_NAME = PushGo;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1759,7 +1746,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-iOS/NotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 30;
+				CURRENT_PROJECT_VERSION = 32;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1786,7 +1773,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.0.30;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.NotificationServiceExtension;
 				PRODUCT_NAME = NotificationServiceExtension;
 				REGISTER_APP_GROUPS = YES;
@@ -1812,7 +1799,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-iOS/NotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 30;
+				CURRENT_PROJECT_VERSION = 32;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -1826,7 +1813,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.0.30;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.NotificationServiceExtension;
 				PRODUCT_NAME = NotificationServiceExtension;
 				REGISTER_APP_GROUPS = YES;
@@ -1854,7 +1841,7 @@
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 30;
+				CURRENT_PROJECT_VERSION = 32;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1882,9 +1869,9 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.0.30;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.NotificationServiceExtension;
-				PRODUCT_NAME = NotificationServiceExtension;
+				PRODUCT_NAME = PushgoNotificationServiceExtension;
 				REGISTER_APP_GROUPS = YES;
 				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
 				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
@@ -1910,7 +1897,7 @@
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 30;
+				CURRENT_PROJECT_VERSION = 32;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1938,9 +1925,9 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.0.30;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.NotificationServiceExtension;
-				PRODUCT_NAME = NotificationServiceExtension;
+				PRODUCT_NAME = PushgoNotificationServiceExtension;
 				REGISTER_APP_GROUPS = YES;
 				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
 				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
@@ -1967,7 +1954,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-watchOS/pushgowatch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 30;
+				CURRENT_PROJECT_VERSION = 32;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_PREVIEWS = YES;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -1981,7 +1968,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.30;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.watchkitapp;
 				PRODUCT_NAME = PushGoWatch;
 				SDKROOT = watchos;
@@ -2007,7 +1994,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-watchOS/pushgowatch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 30;
+				CURRENT_PROJECT_VERSION = 32;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_PREVIEWS = YES;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -2021,7 +2008,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.30;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.watchkitapp;
 				PRODUCT_NAME = PushGoWatch;
 				SDKROOT = watchos;
@@ -2136,7 +2123,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-watchOS/pushgowatch NotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 30;
+				CURRENT_PROJECT_VERSION = 32;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -2148,7 +2135,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.30;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.watchkitapp.NotificationServiceExtension;
 				PRODUCT_NAME = NotificationServiceExtensionWatch;
 				REGISTER_APP_GROUPS = YES;

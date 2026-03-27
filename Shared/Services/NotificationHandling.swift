@@ -18,14 +18,13 @@ struct NormalizedRemoteNotification {
 
 #if !os(watchOS)
 enum NotificationPersistenceOutcome {
-    case skipped
-    case duplicateRequest
-    case duplicateMessage
-    case persisted(PushMessage)
+    case persistedMain(PushMessage)
+    case persistedPending(PushMessage)
+    case duplicate
+    case rejected
     case failed
 }
 
-@MainActor
 enum NotificationPersistenceCoordinator {
     static func persistRemotePayloadIfNeeded(
         _ payload: [AnyHashable: Any],
@@ -34,10 +33,10 @@ enum NotificationPersistenceCoordinator {
         beforeSave: (@Sendable (PushMessage) async -> Void)? = nil
     ) async -> NotificationPersistenceOutcome {
         if NotificationHandling.shouldSkipPersistence(for: payload) {
-            return .skipped
+            return .rejected
         }
         guard let normalized = NotificationHandling.normalizeRemoteNotification(payload) else {
-            return .skipped
+            return .rejected
         }
 
         var rawPayload = normalized.rawPayload.reduce(into: [String: AnyCodable]()) { result, element in
@@ -83,7 +82,7 @@ enum NotificationPersistenceCoordinator {
         beforeSave: (@Sendable (PushMessage) async -> Void)? = nil
     ) async -> NotificationPersistenceOutcome {
         if NotificationHandling.shouldSkipPersistence(for: content.userInfo) {
-            return .skipped
+            return .rejected
         }
 
         let normalized = NotificationPayloadNormalizer.normalize(
@@ -145,11 +144,13 @@ enum NotificationPersistenceCoordinator {
         do {
             switch try await dataStore.persistNotificationMessageIfNeeded(message) {
             case let .persisted(stored):
-                return .persisted(stored)
+                return .persistedMain(stored)
+            case let .persistedPending(stored):
+                return .persistedPending(stored)
             case .duplicateRequest(_):
-                return .duplicateRequest
+                return .duplicate
             case .duplicateMessage(_):
-                return .duplicateMessage
+                return .duplicate
             }
         } catch {
             return .failed
@@ -207,6 +208,12 @@ enum NotificationHandling {
 
     static func extractMessageId(from payload: [AnyHashable: Any]) -> String? {
         NotificationPayloadSemantics.extractMessageId(from: payload)
+    }
+
+    static func extractDeliveryId(from payload: [AnyHashable: Any]) -> String? {
+        let deliveryId = (payload["delivery_id"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return deliveryId.isEmpty ? nil : deliveryId
     }
 
     static func shouldPresentUserAlert(from payload: [AnyHashable: Any]) -> Bool {
@@ -312,6 +319,45 @@ enum NotificationHandling {
             return nil
         default:
             return nil
+        }
+    }
+}
+
+@MainActor
+enum AppleNotificationDelegateFlow {
+    static func handleWillPresent(
+        notification: UNNotification,
+        onPureWakeup: @MainActor @escaping () async -> Void,
+        onRegularNotification: @MainActor @escaping () async -> UNNotificationPresentationOptions?,
+        completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        if NotificationHandling.isPurePrivateWakeupPayload(notification.request.content.userInfo) {
+            Task { @MainActor in
+                await onPureWakeup()
+                completionHandler([])
+            }
+            return
+        }
+
+        Task { @MainActor in
+            let options = await onRegularNotification() ?? []
+            completionHandler(options)
+        }
+    }
+
+    static func handleRemoteNotification(
+        userInfo: [AnyHashable: Any],
+        onPureWakeup: @MainActor @escaping () async -> Void,
+        onRegularNotification: @MainActor @escaping ([AnyHashable: Any]) async -> Bool,
+        onRegularNotificationFailed: @MainActor @escaping () async -> Void
+    ) async {
+        if NotificationHandling.isPurePrivateWakeupPayload(userInfo) {
+            await onPureWakeup()
+            return
+        }
+        let persisted = await onRegularNotification(userInfo)
+        if !persisted {
+            await onRegularNotificationFailed()
         }
     }
 }
