@@ -125,26 +125,6 @@ struct NotificationHandlingTests {
     }
 
     @Test
-    func purePrivateWakeupDetectionIgnoresGatewayFallbackAlertText() {
-        let payload: [AnyHashable: Any] = [
-            "private_mode": "wakeup",
-            "private_wakeup": "1",
-            "delivery_id": "delivery-wakeup-001",
-            "channel_id": "ops",
-            "aps": [
-                "alert": [
-                    "title": "PushGo",
-                    "body": "You received a new message.",
-                ],
-            ],
-        ]
-
-        #expect(NotificationHandling.isPrivateWakeupPayload(payload))
-        #expect(NotificationHandling.isPurePrivateWakeupPayload(payload))
-        #expect(NotificationHandling.normalizeRemoteNotification(payload) == nil)
-    }
-
-    @Test
     func normalizeRemoteNotificationBuildsThingFallbackFromProfilePayload() {
         let payload: [AnyHashable: Any] = [
             "entity_type": "thing",

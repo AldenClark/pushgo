@@ -616,10 +616,6 @@ final class PushGoAutomationRuntime {
                 try await updateWatchMode(mode: mode, environment: environment)
             case "gateway.set_server":
                 try await updateGatewayConfig(request: request, environment: environment)
-            case "private.trigger_wakeup":
-                await triggerPrivateWakeup(environment: environment)
-            case "private.drain_acks":
-                _ = await environment.drainPrivateWakeupAckOutboxForSystemWake()
             case "notification.open":
                 try await handleNotificationOpen(request: request, environment: environment)
             case "notification.mark_read":
@@ -1304,7 +1300,7 @@ final class PushGoAutomationRuntime {
         let providerToken = await environment.dataStore.cachedPushToken(for: platform)
             ?? PushGoAutomationContext.providerToken
         let providerDeviceKey = await environment.dataStore.cachedProviderDeviceKey(for: platform)
-        let ackPendingCount = (try? await environment.dataStore.loadPendingInboundDeliveryAckIds(limit: 500).count) ?? 0
+        let ackPendingCount = 0
         let eventCount = (try? await environment.dataStore.loadEventMessagesForProjection().count) ?? 0
         let thingCount = (try? await environment.dataStore.loadThingMessagesForProjection().count) ?? 0
         let notificationKeyEncoding = await environment.dataStore.loadManualKeyPreferences()
@@ -1326,9 +1322,6 @@ final class PushGoAutomationRuntime {
             }
             if !providerDeviceKeyPresent {
                 return "provider route not ready"
-            }
-            if ackPendingCount > 0 {
-                return "pending inbound delivery ACKs"
             }
             return nil
         }()
@@ -1572,14 +1565,6 @@ final class PushGoAutomationRuntime {
             )
             recordNotificationAction("copy", target: message.messageId ?? message.id.uuidString)
         }
-    }
-
-    private func triggerPrivateWakeup(environment: AppEnvironment) async {
-        #if os(iOS)
-        await environment.triggerPrivateWakeupPull(presentLocalNotifications: false)
-        #else
-        await environment.triggerPrivateWakeupPull()
-        #endif
     }
 
     private func resetLocalState(environment: AppEnvironment) async throws {

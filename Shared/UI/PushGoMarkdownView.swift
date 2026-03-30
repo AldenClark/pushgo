@@ -3,8 +3,6 @@ import SwiftUI
 
 #if canImport(Textual)
 import Textual
-#else
-#error("Textual is required for MarkdownRenderer.")
 #endif
 
 struct MarkdownRenderer: View {
@@ -28,6 +26,7 @@ struct MarkdownRenderer: View {
     }
 
     var body: some View {
+        #if canImport(Textual)
         Group {
             if prefersStructuredText {
                 StructuredText(markdown: normalizedText)
@@ -50,9 +49,17 @@ struct MarkdownRenderer: View {
         .foregroundColor(foreground)
         .lineLimit(nil)
         .fixedSize(horizontal: false, vertical: true)
+        #else
+        Text(displayText)
+            .font(font)
+            .foregroundColor(foreground)
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
+        #endif
     }
 }
 
+#if canImport(Textual)
 private struct PushGoRefinedTableCellStyle: StructuredText.TableCellStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -62,7 +69,9 @@ private struct PushGoRefinedTableCellStyle: StructuredText.TableCellStyle {
             .textual.lineSpacing(.fontScaled(0.25))
     }
 }
+#endif
 
+#if canImport(Textual)
 private struct PushGoRefinedTableStyle: StructuredText.TableStyle {
     private static let borderWidth: CGFloat = 1
     private static let cornerRadius: CGFloat = 10
@@ -138,6 +147,7 @@ private struct PushGoRefinedTableStyle: StructuredText.TableStyle {
         .textual.blockSpacing(.fontScaled(top: 1.4, bottom: 1.6))
     }
 }
+#endif
 
 private func normalizeMarkdown(_ markdown: String) -> String {
     // Foundation's markdown parser does not render [![...]](...) as an image.

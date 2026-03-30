@@ -3,8 +3,6 @@ import UserNotifications
 import WatchKit
 
 final class PushGoWatchAppDelegate: NSObject, WKApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate {
-    private let privateAckBackgroundRefreshInterval: TimeInterval = 15 * 60
-
     func applicationDidFinishLaunching() {
         UNUserNotificationCenter.current().delegate = self
 
@@ -17,9 +15,6 @@ final class PushGoWatchAppDelegate: NSObject, WKApplicationDelegate, @preconcurr
             guard AppEnvironment.shared.isStandaloneMode else { return }
             PushRegistrationService.shared.handleDeviceToken(deviceToken)
             await AppEnvironment.shared.syncWatchTokenToPhone()
-        }
-        if AppEnvironment.shared.isStandaloneMode {
-            schedulePrivateAckBackgroundRefresh()
         }
     }
 
@@ -36,13 +31,6 @@ final class PushGoWatchAppDelegate: NSObject, WKApplicationDelegate, @preconcurr
                 continue
             }
             Task { @MainActor in
-                let outcome = await AppEnvironment.shared.drainPrivateWakeupAckOutboxForSystemWake()
-                let nextDate = Date().addingTimeInterval(
-                    outcome == .failed || outcome == .partial ? 5 * 60 : privateAckBackgroundRefreshInterval
-                )
-                if AppEnvironment.shared.isStandaloneMode {
-                    schedulePrivateAckBackgroundRefresh(preferredDate: nextDate)
-                }
                 refreshTask.setTaskCompletedWithSnapshot(false)
             }
         }
@@ -53,13 +41,6 @@ final class PushGoWatchAppDelegate: NSObject, WKApplicationDelegate, @preconcurr
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        if isPurePrivateWakeupPayload(notification.request.content.userInfo) {
-            Task { @MainActor in
-                await AppEnvironment.shared.triggerPrivateWakeupPull()
-                completionHandler([])
-            }
-            return
-        }
         Task { @MainActor in
             if !AppEnvironment.shared.isStandaloneMode {
                 let shouldPresent = AppEnvironment.shared.shouldPresentForegroundNotification(
@@ -89,13 +70,6 @@ final class PushGoWatchAppDelegate: NSObject, WKApplicationDelegate, @preconcurr
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        if isPurePrivateWakeupPayload(response.notification.request.content.userInfo) {
-            Task { @MainActor in
-                await AppEnvironment.shared.triggerPrivateWakeupPull()
-                completionHandler()
-            }
-            return
-        }
         Task {
             let shouldDropDuplicate = if AppEnvironment.shared.isStandaloneMode {
                 await shouldDropDuplicateNotification(response.notification)
@@ -213,18 +187,4 @@ final class PushGoWatchAppDelegate: NSObject, WKApplicationDelegate, @preconcurr
         return MessageIdExtractor.extract(from: mapped)
     }
 
-    private func isPrivateWakeupPayload(_ payload: [AnyHashable: Any]) -> Bool {
-        NotificationHandling.isPrivateWakeupPayload(payload)
-    }
-
-    private func isPurePrivateWakeupPayload(_ payload: [AnyHashable: Any]) -> Bool {
-        NotificationHandling.isPurePrivateWakeupPayload(payload)
-    }
-
-    private func schedulePrivateAckBackgroundRefresh(preferredDate: Date? = nil) {
-        let fireDate = preferredDate ?? Date().addingTimeInterval(privateAckBackgroundRefreshInterval)
-        WKExtension.shared().scheduleBackgroundRefresh(withPreferredDate: fireDate, userInfo: nil) { error in
-            guard error != nil else { return }
-        }
-    }
 }

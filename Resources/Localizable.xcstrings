@@ -7571,6 +7571,41 @@
         }
       }
     },
+    "message_decryption" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Message decryption"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メッセージ復号"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "메시지 복호화"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "消息解密"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "訊息解密"
+          }
+        }
+      }
+    },
     "message_json_exported_successfully" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8493,31 +8528,31 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Only AES-GCM is supported; embed the IV in ciphertext and match key length exactly"
+            "value" : "Only AES-GCM is supported; embed the IV in ciphertext"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "AES-GCM のみ対応。IV は ciphertext に含め、鍵長は選択したビット数に正確に合わせてください"
+            "value" : "AES-GCM のみ対応。IV は ciphertext に含めてください"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "AES-GCM만 지원합니다. IV는 ciphertext에 포함해야 하며 키 길이는 선택한 비트수와 정확히 일치해야 합니다"
+            "value" : "AES-GCM만 지원합니다. IV는 ciphertext에 포함해야 합니다"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "仅支持 AES-GCM，IV 需包含在 ciphertext 中，密钥长度需完全匹配所选位数"
+            "value" : "仅支持 AES-GCM，IV 需包含在 ciphertext 中"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "僅支援 AES-GCM，IV 需包含在 ciphertext 中，密鑰長度需完全匹配所選位數"
+            "value" : "僅支援 AES-GCM，IV 需包含在 ciphertext 中"
           }
         }
       }
@@ -10819,6 +10854,41 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "保存時會立即向網關進行設備註冊；若註冊失敗，將拒絕保存。"
+          }
+        }
+      }
+    },
+    "server_management_gateway_switch_warning" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "After switching gateway, existing channel subscriptions in this app will be cleared. Please recreate channels on the new gateway manually."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "After switching gateway, existing channel subscriptions in this app will be cleared. Please recreate channels on the new gateway manually."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "After switching gateway, existing channel subscriptions in this app will be cleared. Please recreate channels on the new gateway manually."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换网关后，当前 App 内已有频道订阅会被清空。请在新网关中手动重新创建频道。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切換網關後，當前 App 內已有頻道訂閱會被清空。請在新網關中手動重新建立頻道。"
           }
         }
       }

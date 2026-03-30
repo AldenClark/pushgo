@@ -204,7 +204,7 @@ struct SettingsView: View {
                     } label: {
                         SettingsActionRow(
                             iconName: "lock.square.stack",
-                            title: "message_encryption",
+                            title: "message_decryption",
                             detail: manualKeyStatusText,
                         ) {
                             Image(systemName: "chevron.right")
@@ -669,9 +669,9 @@ private struct ServerManagementContentView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Text(localizationManager.localized("server_management_help_register_on_save"))
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
+                Text(localizationManager.localized("server_management"))
+                    .font(.title3.weight(.semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                 AppFormField(titleText: localizationManager.localized("server_address"), isFocused: focusedField == .address) {
                     HStack(spacing: 10) {
@@ -741,6 +741,11 @@ private struct ServerManagementContentView: View {
                         )
                     }
                 }
+                Text(localizationManager.localized("server_management_gateway_switch_warning"))
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                 HStack(spacing: 12) {
                     Spacer(minLength: 0)
@@ -808,6 +813,9 @@ private struct ManualKeySettingsContentView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                Text(localizationManager.localized("message_decryption"))
+                    .font(.title3.weight(.semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 keyEncodingPicker
                 keyField
                 Text(localizationManager
@@ -816,6 +824,8 @@ private struct ManualKeySettingsContentView: View {
                     ))
                     .font(.footnote)
                     .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 HStack(spacing: 12) {
                     Spacer(minLength: 0)
 
@@ -966,7 +976,7 @@ private enum MacOverlay: String, Identifiable, Equatable {
     var title: LocalizedStringKey {
         switch self {
         case .manualKey:
-            "message_encryption"
+            "message_decryption"
         case .serverManagement:
             "server_management"
         }

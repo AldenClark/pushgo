@@ -39,7 +39,6 @@
 		54A6F2A3A28360343812D0B3 /* NotificationServiceProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25CF4B72C6499CEADC594FC9 /* NotificationServiceProcessor.swift */; };
 		54CE786A445773D4DDA7861B /* PushMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1E2EF2359D00AD1834 /* PushMessage.swift */; };
 		56865D3694AF43D2B03888C3 /* MessageSearchIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0775D9BD1040ADA2E6126B /* MessageSearchIndex.swift */; };
-		59C79E641E2F4024A613E768 /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = BE7F5A81433F49309DB30D36 /* libsqlite3.tbd */; };
 		59F7B3A12BEE41D0B3E3AA94 /* ToastView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40915CA9B3604BF1991DC27A /* ToastView.swift */; };
 		5A31804E304B439B8C4792C6 /* PushGoMarkdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4145756AA5A340C3AC329C64 /* PushGoMarkdownView.swift */; };
 		5AFEB62EE16E12C94AB659CE /* MessageSearchIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0775D9BD1040ADA2E6126B /* MessageSearchIndex.swift */; };
@@ -55,7 +54,6 @@
 		6D2F01C44A114051A8C20752 /* ToastView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40915CA9B3604BF1991DC27A /* ToastView.swift */; };
 		719988127D194612AFC29EC2 /* PushMessageSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36B8C43824CA496F9D0EDDC7 /* PushMessageSummary.swift */; };
 		71F38D714BD4191EFC16C7AA /* PushGoMarkdownCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C322EF2359D00AD1834 /* PushGoMarkdownCore.swift */; };
-		7B2AEDB0F55042C6A81CF31E /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = BE7F5A81433F49309DB30D36 /* libsqlite3.tbd */; };
 		7D5B4196457C4AF884C6D0EA /* MessageSearchIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0775D9BD1040ADA2E6126B /* MessageSearchIndex.swift */; };
 		8279868F772401A6C1D34E4F /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2A2EF2359D00AD1834 /* AppConstants.swift */; };
 		82AEEFC39016CDDD6FADF11F /* LocalizationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C312EF2359D00AD1834 /* LocalizationProvider.swift */; };
@@ -72,7 +70,6 @@
 		A1E2D3C4B5A6978877665544 /* NotificationHandling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ADFF5A76CA49E94408B363E /* NotificationHandling.swift */; };
 		A1E2D3C4B5A6978877665545 /* NotificationHandling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ADFF5A76CA49E94408B363E /* NotificationHandling.swift */; };
 		A70D43F35FF502833D675806 /* LocalizationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C312EF2359D00AD1834 /* LocalizationProvider.swift */; };
-		AA0CDF6C2F61C4A500A7FF07 /* PrivateWakeupPullCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E2F3A4B5C6978877665544 /* PrivateWakeupPullCoordinator.swift */; };
 		AA49A1A32EE3E46C00C1EBF2 /* NotificationServiceExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA49A19C2EE3E46C00C1EBF2 /* NotificationServiceExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AA6603852F1A8AA20087E0F0 /* PushGoWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = AAFB52C12F0CA5F0009E61C5 /* PushGoWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AA8E2C502EF2359D00AD1834 /* ServerConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1F2EF2359D00AD1834 /* ServerConfig.swift */; };
@@ -157,45 +154,35 @@
 		C1D2E3F40102030405060803 /* SearchQuerySemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060703 /* SearchQuerySemantics.swift */; };
 		C1D2E3F40102030405060804 /* ProjectionSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060704 /* ProjectionSemantics.swift */; };
 		C1D2E3F40102030405060805 /* PushRegistrationSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060705 /* PushRegistrationSemantics.swift */; };
-		C1D2E3F40102030405060806 /* PrivateWakeupAckSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060706 /* PrivateWakeupAckSemantics.swift */; };
 		C1D2E3F40102030405060811 /* NotificationPayloadSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060701 /* NotificationPayloadSemantics.swift */; };
 		C1D2E3F40102030405060812 /* ManualNotificationKeyValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060702 /* ManualNotificationKeyValidator.swift */; };
 		C1D2E3F40102030405060813 /* SearchQuerySemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060703 /* SearchQuerySemantics.swift */; };
 		C1D2E3F40102030405060814 /* ProjectionSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060704 /* ProjectionSemantics.swift */; };
 		C1D2E3F40102030405060815 /* PushRegistrationSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060705 /* PushRegistrationSemantics.swift */; };
-		C1D2E3F40102030405060816 /* PrivateWakeupAckSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060706 /* PrivateWakeupAckSemantics.swift */; };
 		C1D2E3F40102030405060821 /* NotificationPayloadSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060701 /* NotificationPayloadSemantics.swift */; };
 		C1D2E3F40102030405060822 /* ManualNotificationKeyValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060702 /* ManualNotificationKeyValidator.swift */; };
 		C1D2E3F40102030405060823 /* SearchQuerySemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060703 /* SearchQuerySemantics.swift */; };
 		C1D2E3F40102030405060824 /* ProjectionSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060704 /* ProjectionSemantics.swift */; };
 		C1D2E3F40102030405060825 /* PushRegistrationSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060705 /* PushRegistrationSemantics.swift */; };
-		C1D2E3F40102030405060826 /* PrivateWakeupAckSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060706 /* PrivateWakeupAckSemantics.swift */; };
 		C1D2E3F40102030405060831 /* NotificationPayloadSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060701 /* NotificationPayloadSemantics.swift */; };
 		C1D2E3F40102030405060832 /* ManualNotificationKeyValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060702 /* ManualNotificationKeyValidator.swift */; };
 		C1D2E3F40102030405060833 /* SearchQuerySemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060703 /* SearchQuerySemantics.swift */; };
 		C1D2E3F40102030405060834 /* ProjectionSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060704 /* ProjectionSemantics.swift */; };
 		C1D2E3F40102030405060835 /* PushRegistrationSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060705 /* PushRegistrationSemantics.swift */; };
-		C1D2E3F40102030405060836 /* PrivateWakeupAckSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060706 /* PrivateWakeupAckSemantics.swift */; };
 		C1D2E3F40102030405060841 /* NotificationPayloadSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060701 /* NotificationPayloadSemantics.swift */; };
 		C1D2E3F40102030405060842 /* ManualNotificationKeyValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060702 /* ManualNotificationKeyValidator.swift */; };
 		C1D2E3F40102030405060843 /* SearchQuerySemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060703 /* SearchQuerySemantics.swift */; };
 		C1D2E3F40102030405060844 /* ProjectionSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060704 /* ProjectionSemantics.swift */; };
 		C1D2E3F40102030405060845 /* PushRegistrationSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060705 /* PushRegistrationSemantics.swift */; };
-		C1D2E3F40102030405060846 /* PrivateWakeupAckSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060706 /* PrivateWakeupAckSemantics.swift */; };
 		C1D2E3F40102030405060851 /* NotificationPayloadSemantics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F40102030405060701 /* NotificationPayloadSemantics.swift */; };
 		C2492E8A9B92E26ABD448A9E /* PushGoMarkdownCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C322EF2359D00AD1834 /* PushGoMarkdownCore.swift */; };
 		C2AD0D750D535F07437BA084 /* LocalizationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C312EF2359D00AD1834 /* LocalizationProvider.swift */; };
 		C9F7E726998368ADAA5295EA /* ServerConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1F2EF2359D00AD1834 /* ServerConfig.swift */; };
 		CAE45C474E77474FBD0A94AE /* RemoteImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2955959BFE8246FEB0B03EDA /* RemoteImageView.swift */; };
 		CEAF7737211A4518B56C2730 /* MessageListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5F7201AE9644B8F9A6A4BD8 /* MessageListViewModel.swift */; };
-		D1E2F3A4B5C6978877665545 /* PrivateWakeupPullCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E2F3A4B5C6978877665544 /* PrivateWakeupPullCoordinator.swift */; };
-		D1E2F3A4B5C6978877665546 /* PrivateWakeupPullCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E2F3A4B5C6978877665544 /* PrivateWakeupPullCoordinator.swift */; };
-		D1E2F3A4B5C6978877665547 /* PrivateWakeupPullCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E2F3A4B5C6978877665544 /* PrivateWakeupPullCoordinator.swift */; };
-		D1E2F3A4B5C6978877665548 /* PrivateWakeupPullCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E2F3A4B5C6978877665544 /* PrivateWakeupPullCoordinator.swift */; };
 		D236376962B4225163DB0E47 /* LocalDataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C222EF2359D00AD1834 /* LocalDataStore.swift */; };
 		D80B500FD9AD4C54B7A7F003 /* SharedImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C352EF2359D00AD1834 /* SharedImageCache.swift */; };
 		DCF33C971B121AABEEEE708F /* PushMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1E2EF2359D00AD1834 /* PushMessage.swift */; };
-		E2C4896A4A74480E9AAD78EA /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = BE7F5A81433F49309DB30D36 /* libsqlite3.tbd */; };
 		E75A2C6D9F284EE9ADB39B99 /* MessageDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9015282D012D481CA0B5DEE7 /* MessageDetailViewModel.swift */; };
 		E7BAE8A0353490E88EF117FA /* UserInfoSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C362EF2359D00AD1834 /* UserInfoSanitizer.swift */; };
 		E8B28E450BED486DEF29C10F /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1C2EF2359D00AD1834 /* AppError.swift */; };
@@ -371,8 +358,6 @@
 		C1D2E3F40102030405060703 /* SearchQuerySemantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchQuerySemantics.swift; sourceTree = "<group>"; };
 		C1D2E3F40102030405060704 /* ProjectionSemantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectionSemantics.swift; sourceTree = "<group>"; };
 		C1D2E3F40102030405060705 /* PushRegistrationSemantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushRegistrationSemantics.swift; sourceTree = "<group>"; };
-		C1D2E3F40102030405060706 /* PrivateWakeupAckSemantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateWakeupAckSemantics.swift; sourceTree = "<group>"; };
-		D1E2F3A4B5C6978877665544 /* PrivateWakeupPullCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateWakeupPullCoordinator.swift; sourceTree = "<group>"; };
 		D90000112F7F000100A10001 /* PushGo-iOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "PushGo-iOSUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		D90000212F7F000100A10001 /* PushGo-macOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "PushGo-macOSUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		DE35C72B5C899D0FCCBAF070 /* NotificationServiceExtensionWatch.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NotificationServiceExtensionWatch.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -497,7 +482,6 @@
 			files = (
 				AAC02D402F682C3900A179C3 /* GRDB in Frameworks */,
 				A0AA00012F70000100AA0005 /* Textual in Frameworks */,
-				E2C4896A4A74480E9AAD78EA /* libsqlite3.tbd in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -507,7 +491,6 @@
 			files = (
 				AAC02D3B2F682C3900A179C3 /* GRDB in Frameworks */,
 				A0AA00012F70000100AA0004 /* Textual in Frameworks */,
-				59C79E641E2F4024A613E768 /* libsqlite3.tbd in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -516,7 +499,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				AAC02D3C2F682C3900A179C3 /* GRDB in Frameworks */,
-				7B2AEDB0F55042C6A81CF31E /* libsqlite3.tbd in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -657,7 +639,6 @@
 				C0A1B2C3D4E5F60718293A71 /* ChannelSubscriptionService.swift */,
 				C0A1B2C3D4E5F60718293C21 /* MessageStateCoordinator.swift */,
 				AA8E2C262EF2359D00AD1834 /* PushRegistrationService.swift */,
-				D1E2F3A4B5C6978877665544 /* PrivateWakeupPullCoordinator.swift */,
 				0AC200102F90000100C0FFEE /* NotificationContentPreparer.swift */,
 				25CF4B72C6499CEADC594FC9 /* NotificationServiceProcessor.swift */,
 				6ADFF5A76CA49E94408B363E /* NotificationHandling.swift */,
@@ -677,7 +658,6 @@
 				AA8E2C312EF2359D00AD1834 /* LocalizationProvider.swift */,
 				C1D2E3F40102030405060702 /* ManualNotificationKeyValidator.swift */,
 				C1D2E3F40102030405060701 /* NotificationPayloadSemantics.swift */,
-				C1D2E3F40102030405060706 /* PrivateWakeupAckSemantics.swift */,
 				C1D2E3F40102030405060704 /* ProjectionSemantics.swift */,
 				AA8E2C322EF2359D00AD1834 /* PushGoMarkdownCore.swift */,
 				AA8E2C332EF2359D00AD1834 /* PushGoNotificationNames.swift */,
@@ -1069,13 +1049,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				6A4744330FF5443C3E79BAC6 /* NotificationHandling.swift in Sources */,
-				D1E2F3A4B5C6978877665546 /* PrivateWakeupPullCoordinator.swift in Sources */,
 				C1D2E3F40102030405060811 /* NotificationPayloadSemantics.swift in Sources */,
 				C1D2E3F40102030405060812 /* ManualNotificationKeyValidator.swift in Sources */,
 				C1D2E3F40102030405060813 /* SearchQuerySemantics.swift in Sources */,
 				C1D2E3F40102030405060814 /* ProjectionSemantics.swift in Sources */,
 				C1D2E3F40102030405060815 /* PushRegistrationSemantics.swift in Sources */,
-				C1D2E3F40102030405060816 /* PrivateWakeupAckSemantics.swift in Sources */,
 				C0A1B2C3D4E5F60718293C23 /* MessageStateCoordinator.swift in Sources */,
 				AA8E2C7C2EF2359D00AD1834 /* ServerConfig.swift in Sources */,
 				AA8E2C7E2EF2359D00AD1834 /* KeychainStore.swift in Sources */,
@@ -1124,13 +1102,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				278EDCDB13F0B883D94FC08A /* NotificationHandling.swift in Sources */,
-				D1E2F3A4B5C6978877665545 /* PrivateWakeupPullCoordinator.swift in Sources */,
 				C1D2E3F40102030405060801 /* NotificationPayloadSemantics.swift in Sources */,
 				C1D2E3F40102030405060802 /* ManualNotificationKeyValidator.swift in Sources */,
 				C1D2E3F40102030405060803 /* SearchQuerySemantics.swift in Sources */,
 				C1D2E3F40102030405060804 /* ProjectionSemantics.swift in Sources */,
 				C1D2E3F40102030405060805 /* PushRegistrationSemantics.swift in Sources */,
-				C1D2E3F40102030405060806 /* PrivateWakeupAckSemantics.swift in Sources */,
 				C0A1B2C3D4E5F60718293C22 /* MessageStateCoordinator.swift in Sources */,
 				AA8E2C502EF2359D00AD1834 /* ServerConfig.swift in Sources */,
 				AA8E2C522EF2359D00AD1834 /* KeychainStore.swift in Sources */,
@@ -1180,14 +1156,12 @@
 			files = (
 				0637F07C839C0C2D397AB069 /* NotificationServiceProcessor.swift in Sources */,
 				0AC200042F90000100C0FFEE /* NotificationContentPreparer.swift in Sources */,
-				D1E2F3A4B5C6978877665547 /* PrivateWakeupPullCoordinator.swift in Sources */,
 				A1E2D3C4B5A6978877665544 /* NotificationHandling.swift in Sources */,
 				C1D2E3F40102030405060821 /* NotificationPayloadSemantics.swift in Sources */,
 				C1D2E3F40102030405060822 /* ManualNotificationKeyValidator.swift in Sources */,
 				C1D2E3F40102030405060823 /* SearchQuerySemantics.swift in Sources */,
 				C1D2E3F40102030405060824 /* ProjectionSemantics.swift in Sources */,
 				C1D2E3F40102030405060825 /* PushRegistrationSemantics.swift in Sources */,
-				C1D2E3F40102030405060826 /* PrivateWakeupAckSemantics.swift in Sources */,
 				AAE0B0BB2F6A000100C0FFEE /* PushGoMarkdownCore.swift in Sources */,
 				AAE0B0B12F6A000100C0FFEE /* AppConstants.swift in Sources */,
 				AAE0B0B72F6A000100C0FFEE /* AnyCodable.swift in Sources */,
@@ -1213,14 +1187,12 @@
 			files = (
 				54A6F2A3A28360343812D0B3 /* NotificationServiceProcessor.swift in Sources */,
 				0AC200052F90000100C0FFEE /* NotificationContentPreparer.swift in Sources */,
-				D1E2F3A4B5C6978877665548 /* PrivateWakeupPullCoordinator.swift in Sources */,
 				A1E2D3C4B5A6978877665545 /* NotificationHandling.swift in Sources */,
 				C1D2E3F40102030405060831 /* NotificationPayloadSemantics.swift in Sources */,
 				C1D2E3F40102030405060832 /* ManualNotificationKeyValidator.swift in Sources */,
 				C1D2E3F40102030405060833 /* SearchQuerySemantics.swift in Sources */,
 				C1D2E3F40102030405060834 /* ProjectionSemantics.swift in Sources */,
 				C1D2E3F40102030405060835 /* PushRegistrationSemantics.swift in Sources */,
-				C1D2E3F40102030405060836 /* PrivateWakeupAckSemantics.swift in Sources */,
 				C2492E8A9B92E26ABD448A9E /* PushGoMarkdownCore.swift in Sources */,
 				8279868F772401A6C1D34E4F /* AppConstants.swift in Sources */,
 				65F43DA819F3DB0B9D12AE54 /* AnyCodable.swift in Sources */,
@@ -1245,13 +1217,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				F3B4C5D6E7F80910A1B2C3D4 /* NotificationHandling.swift in Sources */,
-				AA0CDF6C2F61C4A500A7FF07 /* PrivateWakeupPullCoordinator.swift in Sources */,
 				C1D2E3F40102030405060841 /* NotificationPayloadSemantics.swift in Sources */,
 				C1D2E3F40102030405060842 /* ManualNotificationKeyValidator.swift in Sources */,
 				C1D2E3F40102030405060843 /* SearchQuerySemantics.swift in Sources */,
 				C1D2E3F40102030405060844 /* ProjectionSemantics.swift in Sources */,
 				C1D2E3F40102030405060845 /* PushRegistrationSemantics.swift in Sources */,
-				C1D2E3F40102030405060846 /* PrivateWakeupAckSemantics.swift in Sources */,
 				1E08B6C84A13AD8A716A9F21 /* AppError.swift in Sources */,
 				54CE786A445773D4DDA7861B /* PushMessage.swift in Sources */,
 				02C1C7A566ABB8EBB1B08D92 /* PushMessageSummary.swift in Sources */,
@@ -1378,12 +1348,12 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-macOS/pushgomac.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 32;
+				CURRENT_PROJECT_VERSION = 33;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
@@ -1438,12 +1408,12 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-macOS/pushgomac.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 32;
+				CURRENT_PROJECT_VERSION = 33;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
@@ -1629,7 +1599,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-iOS/pushgo.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 32;
+				CURRENT_PROJECT_VERSION = 33;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -1689,7 +1659,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-iOS/pushgo.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 32;
+				CURRENT_PROJECT_VERSION = 33;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -1746,7 +1716,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-iOS/NotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 32;
+				CURRENT_PROJECT_VERSION = 33;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1799,7 +1769,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-iOS/NotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 32;
+				CURRENT_PROJECT_VERSION = 33;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -1841,11 +1811,11 @@
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 32;
+				CURRENT_PROJECT_VERSION = 33;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
 				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
@@ -1897,11 +1867,11 @@
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 32;
+				CURRENT_PROJECT_VERSION = 33;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
 				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;

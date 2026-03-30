@@ -503,7 +503,7 @@ private extension MessageListScreen {
                 let nextFilter: MessageFilter = viewModel.selectedFilter == .unread ? .all : .unread
                 viewModel.setFilter(nextFilter)
             } label: {
-                Image(systemName: viewModel.selectedFilter == .unread ? "envelope.badge.fill" : "envelope.badge")
+                Image(systemName: viewModel.selectedFilter == .unread ? "envelope.fill" : "envelope")
             }
             .accessibilityLabel(localizationManager.localized("unread"))
         }
