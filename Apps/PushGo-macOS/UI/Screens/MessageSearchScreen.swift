@@ -272,7 +272,7 @@ struct MessageSearchResultRow: View {
                         }
 
                         if message.isRead == false {
-                            Label(localizationManager.localized("unread"), systemImage: "envelope.badge")
+                            Label(localizationManager.localized("unread"), systemImage: "envelope")
                                 .font(.caption2)
                                 .foregroundColor(.accentColor)
                         }

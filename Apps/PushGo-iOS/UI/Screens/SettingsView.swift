@@ -240,7 +240,7 @@ struct SettingsView: View {
             } label: {
                 SettingsActionRow(
                     iconName: "lock.square.stack",
-                    title: "message_encryption",
+                    title: "message_decryption",
                     detail: manualKeyStatusText,
                 ) {
                     Image(systemName: "chevron.right")
@@ -965,7 +965,7 @@ private struct ManualKeySettingsSheet: View {
     var body: some View {
         navigationContainer {
             ManualKeySettingsContentView(viewModel: viewModel)
-                .navigationTitle(localizationManager.localized("message_encryption"))
+                .navigationTitle(localizationManager.localized("message_decryption"))
         }
         .accessibilityIdentifier("screen.settings.decryption")
     }
@@ -998,10 +998,6 @@ private struct ServerManagementContentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text(localizationManager.localized("server_management_help_register_on_save"))
-                .font(.footnote)
-                .foregroundColor(.secondary)
-
             AppFormField(titleText: localizationManager.localized("server_address"), isFocused: focusedField == .address) {
                 HStack(spacing: 10) {
                     TextField(
@@ -1075,6 +1071,11 @@ private struct ServerManagementContentView: View {
                     )
                 }
             }
+            Text(localizationManager.localized("server_management_gateway_switch_warning"))
+                .font(.footnote)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             AppActionButton(
                 text: Text(localizationManager.localized("save_configuration"))
@@ -1125,6 +1126,8 @@ private struct ManualKeySettingsContentView: View {
                 ))
                 .font(.footnote)
                 .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
             AppActionButton(
                 text: Text(localizationManager.localized("save_configuration"))
                     .font(.headline),

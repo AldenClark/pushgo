@@ -441,10 +441,6 @@ final class PushGoWatchAutomationRuntime {
                 await environment.handleNotificationOpen(entityType: entityType, entityId: entityId)
             case "gateway.set_server":
                 try await updateGatewayConfig(request: request, environment: environment)
-            case "private.trigger_wakeup":
-                await environment.triggerPrivateWakeupPull()
-            case "private.drain_acks":
-                _ = await environment.drainPrivateWakeupAckOutboxForSystemWake()
             case "fixture.import":
                 try await importFixture(request: request, environment: environment)
             case "fixture.seed_messages":
@@ -523,7 +519,7 @@ final class PushGoWatchAutomationRuntime {
         let providerToken = await environment.dataStore.cachedPushToken(for: platformIdentifier)
             ?? PushGoAutomationContext.providerToken
         let providerDeviceKey = await environment.dataStore.cachedProviderDeviceKey(for: platformIdentifier)
-        let ackPendingCount = (try? await environment.dataStore.loadPendingInboundDeliveryAckIds(limit: 500).count) ?? 0
+        let ackPendingCount = 0
         let eventCount = (try? await environment.dataStore.loadWatchLightEvents().count) ?? 0
         let thingCount = (try? await environment.dataStore.loadWatchLightThings().count) ?? 0
         let openedMessageDecryptionState = await resolvedAutomationMessageDecryptionState(
@@ -543,9 +539,6 @@ final class PushGoWatchAutomationRuntime {
             }
             if !providerDeviceKeyPresent {
                 return "provider route not ready"
-            }
-            if ackPendingCount > 0 {
-                return "pending inbound delivery ACKs"
             }
             return nil
         }()

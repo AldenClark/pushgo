@@ -210,31 +210,8 @@ enum NotificationHandling {
         NotificationPayloadSemantics.extractMessageId(from: payload)
     }
 
-    static func extractDeliveryId(from payload: [AnyHashable: Any]) -> String? {
-        let deliveryId = (payload["delivery_id"] as? String)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return deliveryId.isEmpty ? nil : deliveryId
-    }
-
     static func shouldPresentUserAlert(from payload: [AnyHashable: Any]) -> Bool {
         NotificationPayloadSemantics.shouldPresentUserAlert(from: payload)
-    }
-
-    static func isPrivateWakeupPayload(_ payload: [AnyHashable: Any]) -> Bool {
-        let sanitized = UserInfoSanitizer.sanitize(payload)
-        if let mode = sanitized["private_mode"] as? String, mode == "wakeup" {
-            return true
-        }
-        if let wakeup = normalizedPayloadBoolean(sanitized["private_wakeup"]), wakeup {
-            return true
-        }
-        return false
-    }
-
-    static func isPurePrivateWakeupPayload(_ payload: [AnyHashable: Any]) -> Bool {
-        guard isPrivateWakeupPayload(payload) else { return false }
-        guard !shouldSkipPersistence(for: payload) else { return true }
-        return normalizeRemoteNotification(payload) == nil
     }
 
     static func normalizeRemoteNotification(
@@ -319,45 +296,6 @@ enum NotificationHandling {
             return nil
         default:
             return nil
-        }
-    }
-}
-
-@MainActor
-enum AppleNotificationDelegateFlow {
-    static func handleWillPresent(
-        notification: UNNotification,
-        onPureWakeup: @MainActor @escaping () async -> Void,
-        onRegularNotification: @MainActor @escaping () async -> UNNotificationPresentationOptions?,
-        completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
-    ) {
-        if NotificationHandling.isPurePrivateWakeupPayload(notification.request.content.userInfo) {
-            Task { @MainActor in
-                await onPureWakeup()
-                completionHandler([])
-            }
-            return
-        }
-
-        Task { @MainActor in
-            let options = await onRegularNotification() ?? []
-            completionHandler(options)
-        }
-    }
-
-    static func handleRemoteNotification(
-        userInfo: [AnyHashable: Any],
-        onPureWakeup: @MainActor @escaping () async -> Void,
-        onRegularNotification: @MainActor @escaping ([AnyHashable: Any]) async -> Bool,
-        onRegularNotificationFailed: @MainActor @escaping () async -> Void
-    ) async {
-        if NotificationHandling.isPurePrivateWakeupPayload(userInfo) {
-            await onPureWakeup()
-            return
-        }
-        let persisted = await onRegularNotification(userInfo)
-        if !persisted {
-            await onRegularNotificationFailed()
         }
     }
 }

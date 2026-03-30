@@ -140,12 +140,6 @@ struct EntityOpenTarget: Hashable, Sendable {
     let entityId: String
 }
 
-enum InboundDeliveryState: Hashable, Sendable {
-    case missing
-    case persisted
-    case acked
-}
-
 enum NotificationStoreSaveOutcome: Sendable {
     case persisted(PushMessage)
     case persistedPending(PushMessage)
@@ -1195,49 +1189,6 @@ actor LocalDataStore {
     func loadEntityOpenTarget(messageId: String) async throws -> EntityOpenTarget? {
         let backend = try requireBackend()
         return try await backend.loadEntityOpenTarget(messageId: messageId)
-    }
-
-    func inboundDeliveryState(deliveryId: String) async throws -> InboundDeliveryState {
-        let backend = try requireBackend()
-        return try await backend.inboundDeliveryState(deliveryId: deliveryId)
-    }
-
-    func markInboundDeliveryPersisted(
-        deliveryId: String,
-        source: String = "private_wakeup_pull"
-    ) async throws {
-        let backend = try requireBackend()
-        try await backend.markInboundDeliveryPersisted(
-            deliveryId: deliveryId,
-            source: source
-        )
-    }
-
-    func markInboundDeliveryAcked(
-        deliveryId: String,
-        source: String = "private_wakeup_pull"
-    ) async throws {
-        let backend = try requireBackend()
-        try await backend.markInboundDeliveryAcked(
-            deliveryId: deliveryId,
-            source: source
-        )
-    }
-
-    func enqueueInboundDeliveryAcks(
-        deliveryIds: [String],
-        source: String = "private_wakeup_pull"
-    ) async throws {
-        let backend = try requireBackend()
-        try await backend.enqueueInboundDeliveryAcks(
-            deliveryIds: deliveryIds,
-            source: source
-        )
-    }
-
-    func loadPendingInboundDeliveryAckIds(limit: Int = 200) async throws -> [String] {
-        let backend = try requireBackend()
-        return try await backend.loadPendingInboundDeliveryAckIds(limit: limit)
     }
 
     func loadMessagesPage(
@@ -2346,28 +2297,6 @@ private actor GRDBStore {
                 """)
 
             try db.execute(sql: """
-                CREATE TABLE IF NOT EXISTS inbound_delivery_ledger (
-                    delivery_id TEXT PRIMARY KEY NOT NULL,
-                    persisted_at REAL,
-                    acked_at REAL,
-                    updated_at REAL NOT NULL,
-                    source TEXT,
-                    CHECK (length(trim(delivery_id)) > 0)
-                );
-                """)
-            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_inbound_delivery_acked_at ON inbound_delivery_ledger(acked_at, updated_at DESC);")
-
-            try db.execute(sql: """
-                CREATE TABLE IF NOT EXISTS inbound_ack_outbox (
-                    delivery_id TEXT PRIMARY KEY NOT NULL,
-                    enqueued_at REAL NOT NULL,
-                    source TEXT,
-                    CHECK (length(trim(delivery_id)) > 0)
-                );
-                """)
-            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_inbound_ack_outbox_enqueued_at ON inbound_ack_outbox(enqueued_at ASC);")
-
-            try db.execute(sql: """
                 CREATE TABLE IF NOT EXISTS watch_light_messages (
                     message_id TEXT PRIMARY KEY NOT NULL,
                     title TEXT NOT NULL,
@@ -2508,8 +2437,6 @@ private actor GRDBStore {
             try db.execute(sql: "DROP TABLE IF EXISTS watch_light_things;")
             try db.execute(sql: "DROP TABLE IF EXISTS watch_light_events;")
             try db.execute(sql: "DROP TABLE IF EXISTS watch_light_messages;")
-            try db.execute(sql: "DROP TABLE IF EXISTS inbound_ack_outbox;")
-            try db.execute(sql: "DROP TABLE IF EXISTS inbound_delivery_ledger;")
             try db.execute(sql: "DROP TABLE IF EXISTS app_settings;")
             try db.execute(sql: "DROP TABLE IF EXISTS channel_subscriptions;")
             try db.execute(sql: "DROP TABLE IF EXISTS operation_ledger;")
@@ -2648,28 +2575,6 @@ private actor GRDBStore {
                     updated_at REAL NOT NULL
                 );
                 """)
-
-            try db.execute(sql: """
-                CREATE TABLE IF NOT EXISTS inbound_delivery_ledger (
-                    delivery_id TEXT PRIMARY KEY NOT NULL,
-                    persisted_at REAL,
-                    acked_at REAL,
-                    updated_at REAL NOT NULL,
-                    source TEXT,
-                    CHECK (length(trim(delivery_id)) > 0)
-                );
-                """)
-            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_inbound_delivery_acked_at ON inbound_delivery_ledger(acked_at, updated_at DESC);")
-
-            try db.execute(sql: """
-                CREATE TABLE IF NOT EXISTS inbound_ack_outbox (
-                    delivery_id TEXT PRIMARY KEY NOT NULL,
-                    enqueued_at REAL NOT NULL,
-                    source TEXT,
-                    CHECK (length(trim(delivery_id)) > 0)
-                );
-                """)
-            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_inbound_ack_outbox_enqueued_at ON inbound_ack_outbox(enqueued_at ASC);")
 
             try db.execute(sql: """
                 CREATE TABLE IF NOT EXISTS watch_light_messages (
@@ -4364,143 +4269,6 @@ private actor GRDBStore {
                 entityId: record.entityId,
                 thingId: record.thingId
             )
-        }
-    }
-
-    func inboundDeliveryState(deliveryId: String) async throws -> InboundDeliveryState {
-        let normalized = deliveryId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return .missing }
-
-        return try read { db in
-            let sql = "SELECT persisted_at, acked_at FROM inbound_delivery_ledger WHERE delivery_id = \(Self.sqlQuoted(normalized)) LIMIT 1;"
-            guard let row = try Row.fetchOne(db, sql: sql) else { return .missing }
-            let ackedAt: Double? = row["acked_at"]
-            if ackedAt != nil { return .acked }
-            let persistedAt: Double? = row["persisted_at"]
-            if persistedAt != nil { return .persisted }
-            return .missing
-        }
-    }
-
-    func markInboundDeliveryPersisted(
-        deliveryId: String,
-        source: String
-    ) async throws {
-        let normalized = deliveryId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return }
-        let now = Date().timeIntervalSince1970
-        let normalizedSource = source.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        try write { db in
-            let sql = """
-                INSERT INTO inbound_delivery_ledger (
-                    delivery_id, persisted_at, acked_at, updated_at, source
-                ) VALUES (
-                    \(Self.sqlQuoted(normalized)),
-                    \(now),
-                    NULL,
-                    \(now),
-                    \(Self.sqlOptionalText(normalizedSource.isEmpty ? nil : normalizedSource))
-                )
-                ON CONFLICT(delivery_id) DO UPDATE SET
-                    persisted_at = COALESCE(inbound_delivery_ledger.persisted_at, excluded.persisted_at),
-                    updated_at = excluded.updated_at,
-                    source = excluded.source;
-                """
-            try db.execute(sql: sql)
-        }
-    }
-
-    func markInboundDeliveryAcked(
-        deliveryId: String,
-        source: String
-    ) async throws {
-        let normalized = deliveryId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return }
-        let now = Date().timeIntervalSince1970
-        let normalizedSource = source.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        try write { db in
-            let upsertSQL = """
-                INSERT INTO inbound_delivery_ledger (
-                    delivery_id, persisted_at, acked_at, updated_at, source
-                ) VALUES (
-                    \(Self.sqlQuoted(normalized)),
-                    NULL,
-                    \(now),
-                    \(now),
-                    \(Self.sqlOptionalText(normalizedSource.isEmpty ? nil : normalizedSource))
-                )
-                ON CONFLICT(delivery_id) DO UPDATE SET
-                    acked_at = excluded.acked_at,
-                    updated_at = excluded.updated_at,
-                    source = excluded.source;
-                """
-            try db.execute(sql: upsertSQL)
-            try db.execute(sql: "DELETE FROM inbound_ack_outbox WHERE delivery_id = \(Self.sqlQuoted(normalized));")
-        }
-    }
-
-    func enqueueInboundDeliveryAcks(
-        deliveryIds: [String],
-        source: String
-    ) async throws {
-        guard !deliveryIds.isEmpty else { return }
-        let normalizedSource = source.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        var normalizedIds: [String] = []
-        var seen = Set<String>()
-        for deliveryId in deliveryIds {
-            let trimmed = deliveryId.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
-            if seen.insert(trimmed).inserted {
-                normalizedIds.append(trimmed)
-            }
-        }
-        guard !normalizedIds.isEmpty else { return }
-
-        try write { db in
-            for deliveryId in normalizedIds {
-                let ackedCheckSQL = """
-                    SELECT acked_at
-                    FROM inbound_delivery_ledger
-                    WHERE delivery_id = \(Self.sqlQuoted(deliveryId))
-                    LIMIT 1;
-                    """
-                if let row = try Row.fetchOne(db, sql: ackedCheckSQL) {
-                    let ackedAt: Double? = row["acked_at"]
-                    if ackedAt != nil {
-                        continue
-                    }
-                }
-                let now = Date().timeIntervalSince1970
-                let insertSQL = """
-                    INSERT INTO inbound_ack_outbox (delivery_id, enqueued_at, source)
-                    VALUES (
-                        \(Self.sqlQuoted(deliveryId)),
-                        \(now),
-                        \(Self.sqlOptionalText(normalizedSource.isEmpty ? nil : normalizedSource))
-                    )
-                    ON CONFLICT(delivery_id) DO NOTHING;
-                    """
-                try db.execute(sql: insertSQL)
-            }
-        }
-    }
-
-    func loadPendingInboundDeliveryAckIds(limit: Int) async throws -> [String] {
-        guard limit > 0 else { return [] }
-        return try read { db in
-            let sql = """
-                SELECT delivery_id
-                FROM inbound_ack_outbox
-                ORDER BY enqueued_at ASC
-                LIMIT \(max(0, limit));
-                """
-            return try Row.fetchAll(db, sql: sql).compactMap { row in
-                let id: String? = row["delivery_id"]
-                return Self.normalizeOptional(id)
-            }
         }
     }
 

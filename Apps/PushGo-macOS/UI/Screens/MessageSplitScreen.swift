@@ -324,7 +324,7 @@ struct MessageSplitScreen: View {
             let nextFilter: MessageFilter = messageListViewModel.selectedFilter == .unread ? .all : .unread
             messageListViewModel.setFilter(nextFilter)
         } label: {
-            Image(systemName: messageListViewModel.selectedFilter == .unread ? "envelope.badge.fill" : "envelope.badge")
+            Image(systemName: messageListViewModel.selectedFilter == .unread ? "envelope.fill" : "envelope")
         }
         .help(localizationManager.localized("unread"))
         .accessibilityLabel(localizationManager.localized("unread"))

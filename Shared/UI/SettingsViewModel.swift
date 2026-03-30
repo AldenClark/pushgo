@@ -173,11 +173,22 @@ final class SettingsViewModel {
         let trimmedToken = gatewayInput.token.trimmingCharacters(in: .whitespacesAndNewlines)
         let token: String? = trimmedToken.isEmpty ? nil : trimmedToken
 
-        let base = environment.serverConfig ?? ServerConfig(baseURL: url, token: nil, notificationKeyMaterial: nil)
+        let normalizedURL = normalizedGatewayURL(url)
+        let newIdentity = gatewayIdentity(baseURL: normalizedURL, token: token)
+        let currentIdentity = environment.serverConfig.map { gatewayIdentity(baseURL: normalizedGatewayURL($0.baseURL), token: $0.token) } ?? ""
+        gatewayInput.address = normalizedURL.absoluteString
+        gatewayInput.token = token ?? ""
+        if newIdentity == currentIdentity {
+            successMessage = localizationManager.localized("server_configuration_saved")
+            shouldDismissServerManagement = true
+            return
+        }
+
+        let base = environment.serverConfig ?? ServerConfig(baseURL: normalizedURL, token: nil, notificationKeyMaterial: nil)
         let newConfig = ServerConfig(
             id: base.id,
             name: base.name,
-            baseURL: url,
+            baseURL: normalizedURL,
             token: token,
             notificationKeyMaterial: base.notificationKeyMaterial,
             updatedAt: Date(),
@@ -201,6 +212,15 @@ final class SettingsViewModel {
 
     private func validatedServerURL(from raw: String) -> URL? {
         URLSanitizer.validatedServerURL(from: raw)
+    }
+
+    private func normalizedGatewayURL(_ url: URL) -> URL {
+        ServerConfig(baseURL: url, token: nil, notificationKeyMaterial: nil).normalizedBaseURL
+    }
+
+    private func gatewayIdentity(baseURL: URL, token: String?) -> String {
+        let normalizedToken = token?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return "\(baseURL.absoluteString)|\(normalizedToken)"
     }
 
     func requestNotificationPermission() async {

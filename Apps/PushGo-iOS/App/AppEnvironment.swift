@@ -50,8 +50,6 @@ final class AppEnvironment {
     @ObservationIgnored private let messageListRefreshDelay: TimeInterval = 0.35
     @ObservationIgnored private var pendingMessageListRefresh = false
     @ObservationIgnored private var isMainWindowVisible = true
-    @ObservationIgnored private var isPrivateWakeupPullInFlight = false
-    @ObservationIgnored private var privateWakeupPullPending = false
     @ObservationIgnored private var lastWakeupRouteFingerprint: String?
     @ObservationIgnored private var pendingWatchMirrorSnapshotTask: Task<Void, Never>?
     @ObservationIgnored private var pendingWatchProvisioningTask: Task<Void, Never>?
@@ -138,7 +136,6 @@ final class AppEnvironment {
         Task(priority: .utility) {
             await store.warmCachesIfNeeded()
         }
-        schedulePrivateWakeupAckDrainIfNeeded()
     }
 
     private static func makeDefaultServerConfig() -> ServerConfig? {
@@ -1948,30 +1945,6 @@ final class AppEnvironment {
         "ios"
     }
 
-    private struct PrivatePulledNotification: Sendable {
-        let title: String
-        let body: String
-        let channel: String?
-        let messageId: String?
-        let deliveryId: String
-        let categoryIdentifier: String
-        let entityType: String?
-        let entityId: String?
-        let thingId: String?
-    }
-
-    private actor PrivatePulledCollector {
-        private var items: [PrivatePulledNotification] = []
-
-        func append(_ item: PrivatePulledNotification) {
-            items.append(item)
-        }
-
-        func all() -> [PrivatePulledNotification] {
-            items
-        }
-    }
-
     func updateScenePhase(_ phase: ScenePhase) {
         switch phase {
         case .active:
@@ -1983,7 +1956,6 @@ final class AppEnvironment {
             Task { @MainActor in
                 await refreshChannelSubscriptions()
                 await syncPrivateChannelState()
-                schedulePrivateWakeupAckDrainIfNeeded()
             }
         case .background, .inactive:
             isSceneActive = false
@@ -2027,132 +1999,12 @@ final class AppEnvironment {
         return NotificationHandling.shouldPresentUserAlert(from: payload)
     }
 
-    func triggerPrivateWakeupPull(
-        presentLocalNotifications: Bool = false,
-        deliveryId: String? = nil
-    ) async {
-        if isPrivateWakeupPullInFlight {
-            privateWakeupPullPending = true
-            return
-        }
-        isPrivateWakeupPullInFlight = true
-        defer { isPrivateWakeupPullInFlight = false }
-
-        repeat {
-            privateWakeupPullPending = false
-            let collector = PrivatePulledCollector()
-            await pullViaHttpWakeup(deliveryId: deliveryId, onPulled: { notification in
-                guard presentLocalNotifications else { return }
-                await collector.append(notification)
-            })
-            let pulledForPresentation = await collector.all()
-            guard presentLocalNotifications, !pulledForPresentation.isEmpty else { continue }
-            for pulled in pulledForPresentation {
-                await postLocalNotificationForPrivatePull(pulled)
-            }
-        } while privateWakeupPullPending
-    }
-
-    private func syncPrivateChannelState(
-        onPulled: (@Sendable (PrivatePulledNotification) async -> Void)? = nil
-    ) async {
+    private func syncPrivateChannelState() async {
         guard let config = serverConfig else { return }
         if let token = await dataStore.cachedPushToken(for: platformIdentifier())?.trimmingCharacters(in: .whitespacesAndNewlines),
            !token.isEmpty
         {
             await syncProviderPullRoute(config: config, providerToken: token)
-        }
-        _ = onPulled
-    }
-
-    private func schedulePrivateWakeupAckDrainIfNeeded() {
-        // Wakeup-pull no longer requires HTTP ACK draining.
-    }
-
-    func drainPrivateWakeupAckOutboxForSystemWake() async -> PrivateWakeupAckDrainOutcome {
-        .idle
-    }
-
-    private func pullViaHttpWakeup(
-        deliveryId: String?,
-        onPulled: (@Sendable (PrivatePulledNotification) async -> Void)? = nil
-    ) async {
-        guard let config = serverConfig else {
-            return
-        }
-        let normalizedDeliveryId = deliveryId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !normalizedDeliveryId.isEmpty else {
-            return
-        }
-        let platform = platformIdentifier()
-        guard let token = await dataStore.cachedPushToken(for: platform)?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !token.isEmpty
-        else {
-            return
-        }
-        await syncProviderPullRoute(config: config, providerToken: token)
-        guard let pulled = try? await channelSubscriptionService.pullMessage(
-            baseURL: config.baseURL,
-            token: config.token,
-            deliveryId: normalizedDeliveryId
-        ) else {
-            return
-        }
-        let processedDeliveryIds = await PrivateWakeupPullCoordinator.processPulledItems(
-            [PrivateWakeupPullItem(deliveryId: pulled.deliveryId, payload: pulled.payload)],
-            dataStore: dataStore,
-            processItem: { normalized, deliveryId, anyPayload, deliveryState in
-                let shouldPresentReminder: Bool
-                switch deliveryState {
-                case .missing:
-                    let isPersisted = await addLocalMessage(
-                        title: normalized.title,
-                        body: normalized.body,
-                        channel: normalized.channel,
-                        url: normalized.url,
-                        rawPayload: normalized.rawPayload,
-                        decryptionState: normalized.decryptionState,
-                        messageId: normalized.messageId,
-                        operationId: normalized.operationId,
-                        titleWasExplicit: normalized.hasExplicitTitle
-                    )
-                    guard isPersisted else { return false }
-                    do {
-                        try await dataStore.markInboundDeliveryPersisted(
-                            deliveryId: deliveryId
-                        )
-                    } catch {
-                        return false
-                    }
-                    shouldPresentReminder = NotificationHandling.shouldPresentUserAlert(
-                        from: anyPayload
-                    )
-                case .persisted:
-                    shouldPresentReminder = false
-                case .acked:
-                    return false
-                }
-
-                if shouldPresentReminder, let onPulled {
-                    await onPulled(
-                        PrivatePulledNotification(
-                            title: normalized.title,
-                            body: normalized.body,
-                            channel: normalized.channel,
-                            messageId: normalized.messageId,
-                            deliveryId: deliveryId,
-                            categoryIdentifier: NotificationHandling.notificationCategoryIdentifier(for: anyPayload),
-                            entityType: normalized.entityType == "message" ? nil : normalized.entityType,
-                            entityId: normalized.entityId,
-                            thingId: normalized.thingId
-                        )
-                    )
-                }
-                return true
-            }
-        )
-        if !processedDeliveryIds.isEmpty {
-            await refreshMessageCountsAndNotify()
         }
     }
 
@@ -2300,51 +2152,6 @@ final class AppEnvironment {
         guard let config else { return "" }
         let token = config.token?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return "\(config.baseURL.absoluteString)|\(token)"
-    }
-
-    private func postLocalNotificationForPrivatePull(_ pulled: PrivatePulledNotification) async {
-        let center = UNUserNotificationCenter.current()
-        let content = UNMutableNotificationContent()
-        content.title = pulled.title
-        content.body = pulled.body
-        content.sound = .default
-        content.categoryIdentifier = pulled.categoryIdentifier
-
-        var userInfo: [String: Any] = [
-            "title": pulled.title,
-            "body": pulled.body,
-            "private_wakeup_handled": "1",
-            "_notification_source": "private_pull",
-            "category": pulled.categoryIdentifier
-        ]
-        if let channel = pulled.channel {
-            userInfo["channel_id"] = channel
-        }
-        if let messageId = pulled.messageId, !messageId.isEmpty {
-            userInfo["message_id"] = messageId
-        }
-        userInfo["delivery_id"] = pulled.deliveryId
-        userInfo["_skip_persist"] = "1"
-        if let entityType = pulled.entityType {
-            userInfo["entity_type"] = entityType
-        }
-        if let entityId = pulled.entityId {
-            userInfo["entity_id"] = entityId
-            if pulled.entityType == "event" {
-                userInfo["event_id"] = entityId
-            }
-        }
-        if let thingId = pulled.thingId {
-            userInfo["thing_id"] = thingId
-        }
-        if let threadIdentifier = NotificationPayloadSemantics.notificationThreadIdentifier(from: userInfo) {
-            content.threadIdentifier = threadIdentifier
-        }
-        content.userInfo = userInfo
-
-        let identifier = "private.pull.\(UUID().uuidString)"
-        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
-        try? await center.add(request)
     }
 
     func updateLaunchAtLogin(isEnabled: Bool) {
