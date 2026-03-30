@@ -11,6 +11,8 @@ struct ThingSplitScreen: View {
     @State private var searchQuery: String = ""
     @State private var selectedChannelId: String?
     @State private var hydrationRequestedThingIDs: Set<String> = []
+    @State private var isBatchMode: Bool = false
+    @State private var batchSelection: Set<String> = []
     private let fixedListWidth: CGFloat = 300
 
     var body: some View {
@@ -39,6 +41,7 @@ struct ThingSplitScreen: View {
                 }
             }
             .onChange(of: selection) { _, id in
+                guard !isBatchMode else { return }
                 guard let id else { return }
                 Task { await viewModel.ensureThingDetailsLoaded(thingId: id) }
             }
@@ -52,19 +55,35 @@ struct ThingSplitScreen: View {
 
     private var thingListPane: some View {
         navigationContainer {
-            ThingListScreen(
-                things: filteredThings,
-                selection: $selection,
-                isLoadingMore: viewModel.isLoadingMoreThings,
-                onReachEnd: {
-                    Task { await viewModel.loadMoreThings() }
-                }
-            )
-            .searchable(
-                text: $searchQuery,
-                prompt: Text(localizationManager.localized("search_objects"))
-            )
-            .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
+            if isBatchMode {
+                ThingListScreen(
+                    things: filteredThings,
+                    selection: $selection,
+                    batchSelection: $batchSelection,
+                    isBatchMode: $isBatchMode,
+                    isLoadingMore: viewModel.isLoadingMoreThings,
+                    onReachEnd: {
+                        Task { await viewModel.loadMoreThings() }
+                    }
+                )
+                .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
+            } else {
+                ThingListScreen(
+                    things: filteredThings,
+                    selection: $selection,
+                    batchSelection: $batchSelection,
+                    isBatchMode: $isBatchMode,
+                    isLoadingMore: viewModel.isLoadingMoreThings,
+                    onReachEnd: {
+                        Task { await viewModel.loadMoreThings() }
+                    }
+                )
+                .searchable(
+                    text: $searchQuery,
+                    prompt: Text(localizationManager.localized("search_objects"))
+                )
+                .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
+            }
         }
         .toolbar { listToolbarContent }
     }
@@ -164,6 +183,7 @@ struct ThingSplitScreen: View {
     }
 
     private var selectedThing: ThingProjection? {
+        guard !isBatchMode else { return nil }
         guard let selection else { return nil }
         return filteredThings.first(where: { $0.id == selection })
     }
@@ -171,14 +191,32 @@ struct ThingSplitScreen: View {
     @ToolbarContentBuilder
     private var listToolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
-            Menu {
-                channelFilterMenuContent
+            Button {
+                setBatchMode(!isBatchMode)
             } label: {
-                Image(systemName: selectedChannelId == nil ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
+                Image(systemName: isBatchMode ? "checkmark" : "checklist.unchecked")
             }
-            .menuIndicator(.hidden)
-            .help(localizationManager.localized("channel"))
-            .accessibilityLabel(localizationManager.localized("channel"))
+            .help(isBatchMode ? localizationManager.localized("done") : localizationManager.localized("edit"))
+            .accessibilityLabel(isBatchMode ? localizationManager.localized("done") : localizationManager.localized("edit"))
+            if isBatchMode {
+                Button(role: .destructive) {
+                    deleteSelectedThings()
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .help(localizationManager.localized("delete"))
+                .accessibilityLabel(localizationManager.localized("delete"))
+                .disabled(batchSelection.isEmpty)
+            } else {
+                Menu {
+                    channelFilterMenuContent
+                } label: {
+                    Image(systemName: selectedChannelId == nil ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
+                }
+                .menuIndicator(.hidden)
+                .help(localizationManager.localized("channel"))
+                .accessibilityLabel(localizationManager.localized("channel"))
+            }
         }
     }
 
@@ -191,7 +229,16 @@ struct ThingSplitScreen: View {
                 Image(systemName: "trash")
             }
             .help(localizationManager.localized("delete"))
-            .disabled(selectedThing == nil)
+            .disabled(selectedThing == nil || isBatchMode)
+        }
+    }
+
+    private func setBatchMode(_ enabled: Bool) {
+        isBatchMode = enabled
+        if enabled {
+            selection = nil
+        } else {
+            batchSelection.removeAll()
         }
     }
 
@@ -215,7 +262,35 @@ struct ThingSplitScreen: View {
         }
     }
 
+    private func deleteSelectedThings() {
+        let ids = Array(batchSelection)
+        guard !ids.isEmpty else { return }
+        Task {
+            do {
+                for thingId in ids {
+                    try await viewModel.deleteThing(thingId: thingId)
+                }
+                await MainActor.run {
+                    batchSelection.removeAll()
+                    setBatchMode(false)
+                }
+            } catch {
+                await MainActor.run {
+                    environment.showToast(
+                        message: "\(localizationManager.localized("operation_failed")): \(error.localizedDescription)",
+                        style: .error,
+                        duration: 2
+                    )
+                }
+            }
+        }
+    }
+
     private func syncSelection() {
+        if isBatchMode {
+            selection = nil
+            return
+        }
         if let target = openThingId?.trimmingCharacters(in: .whitespacesAndNewlines),
            !target.isEmpty
         {

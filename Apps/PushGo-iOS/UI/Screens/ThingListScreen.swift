@@ -8,8 +8,11 @@ struct ThingListScreen: View {
     var openThingId: String? = nil
     var onOpenThingHandled: (() -> Void)? = nil
     @State private var selectedThing: ThingProjection?
+    @State private var selectedThingIds: Set<String> = []
+    @State private var showBatchDeleteConfirmation = false
     @State private var searchQuery: String = ""
     @State private var selectedChannelId: String?
+    @State private var isBatchModeActive = false
 
     var body: some View {
         let baseContent = Group {
@@ -28,16 +31,24 @@ struct ThingListScreen: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.horizontal, 24)
             } else {
-                List {
+                List(selection: batchSelectionBinding) {
                     ForEach(Array(filteredThings.enumerated()), id: \.element.id) { index, thing in
-                        Button {
-                            selectThing(thing)
-                        } label: {
-                            ThingListRow(thing: thing)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                        Group {
+                            if isBatchMode {
+                                ThingListRow(thing: thing)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            } else {
+                                Button {
+                                    selectThing(thing)
+                                } label: {
+                                    ThingListRow(thing: thing)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
-                        .buttonStyle(.plain)
                         .accessibilityIdentifier("thing.row.\(thing.id)")
+                        .tag(thing.id)
                         .listRowInsets(EdgeInsets(
                             top: EntityVisualTokens.listRowInsetVertical,
                             leading: EntityVisualTokens.listRowInsetHorizontal,
@@ -64,11 +75,12 @@ struct ThingListScreen: View {
                     }
                 }
                 .listStyle(.plain)
+                .environment(\.editMode, isBatchMode ? .constant(.active) : .constant(.inactive))
                 .scrollContentBackground(.hidden)
                 .background(EntityVisualTokens.pageBackground)
             }
         }
-        applySearchIfNeeded(baseContent)
+        let content = applySearchIfNeeded(baseContent)
         .accessibilityIdentifier("screen.things.list")
         .task(id: searchAutoloadTrigger) {
             await autoloadSearchResultsIfNeeded()
@@ -76,6 +88,18 @@ struct ThingListScreen: View {
         .navigationTitle(localizationManager.localized("push_type_thing"))
         .navigationBarTitleDisplayMode(.large)
         .toolbar { toolbarContent }
+        .toolbar(isBatchMode ? .hidden : .visible, for: .tabBar)
+        .alert(
+            localizationManager.localized("delete"),
+            isPresented: $showBatchDeleteConfirmation,
+        ) {
+            Button(localizationManager.localized("delete"), role: .destructive) {
+                Task { await deleteSelectedThings() }
+            }
+            Button(localizationManager.localized("cancel"), role: .cancel) {}
+        } message: {
+            Text(localizationManager.localized("batch_delete_selected_things_confirm", selectedThingIds.count))
+        }
         .onAppear {
             openThingIfNeeded()
 #if DEBUG
@@ -107,12 +131,21 @@ struct ThingListScreen: View {
             publishAutomationState()
 #endif
         }
+        .onChange(of: isBatchMode) { _, active in
+            if active {
+                selectedThing = nil
+            } else {
+                selectedThingIds.removeAll()
+                openThingIfNeeded()
+            }
+        }
         .sheet(item: $selectedThing) { thing in
             ThingDetailScreen(thing: thing) {
                 Task { await deleteThing(thingId: thing.id) }
             }
             .accessibilityIdentifier("sheet.thing.detail")
         }
+        content
     }
 
 #if DEBUG
@@ -129,7 +162,7 @@ struct ThingListScreen: View {
 
     @ViewBuilder
     private func applySearchIfNeeded<Content: View>(_ content: Content) -> some View {
-        if viewModel.things.isEmpty {
+        if viewModel.things.isEmpty || isBatchMode {
             content
         } else {
             content.searchable(
@@ -211,14 +244,47 @@ struct ThingListScreen: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            Menu {
-                channelFilterMenuContent
+        ToolbarItem(placement: .topBarLeading) {
+            Button {
+                isBatchModeActive.toggle()
             } label: {
-                Image(systemName: selectedChannelId == nil ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
+                Image(systemName: isBatchMode ? "checkmark" : "checklist.unchecked")
             }
-            .accessibilityLabel(localizationManager.localized("channel"))
+            .accessibilityLabel(isBatchMode ? localizationManager.localized("done") : localizationManager.localized("edit"))
         }
+        ToolbarItemGroup(placement: .primaryAction) {
+            if !isBatchMode {
+                Menu {
+                    channelFilterMenuContent
+                } label: {
+                    Image(systemName: selectedChannelId == nil ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
+                }
+                .accessibilityLabel(localizationManager.localized("channel"))
+            }
+        }
+        if isBatchMode {
+            ToolbarItemGroup(placement: .bottomBar) {
+                Spacer()
+                Button(role: .destructive) {
+                    showBatchDeleteConfirmation = true
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .accessibilityLabel(localizationManager.localized("delete"))
+                .disabled(selectedThingIds.isEmpty)
+            }
+        }
+    }
+
+    private var isBatchMode: Bool {
+        isBatchModeActive
+    }
+
+    private var batchSelectionBinding: Binding<Set<String>> {
+        if isBatchMode {
+            return $selectedThingIds
+        }
+        return .constant([])
     }
 
     private func normalizedChannel(_ value: String?) -> String? {
@@ -227,6 +293,7 @@ struct ThingListScreen: View {
     }
 
     private func openThingIfNeeded() {
+        guard !isBatchMode else { return }
         let target = openThingId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !target.isEmpty else { return }
         if let matched = viewModel.things.first(where: { $0.id == target }) {
@@ -256,6 +323,7 @@ struct ThingListScreen: View {
     }
 
     private func selectThing(_ thing: ThingProjection) {
+        guard !isBatchMode else { return }
         selectedThing = thing
         Task { @MainActor in
             await viewModel.ensureThingDetailsLoaded(thingId: thing.id)
@@ -274,6 +342,24 @@ struct ThingListScreen: View {
         do {
             try await viewModel.deleteThing(thingId: thingId)
             selectedThing = nil
+        } catch {
+            environment.showToast(
+                message: "\(localizationManager.localized("operation_failed")): \(error.localizedDescription)",
+                style: .error,
+                duration: 2
+            )
+        }
+    }
+
+    private func deleteSelectedThings() async {
+        let ids = Array(selectedThingIds)
+        guard !ids.isEmpty else { return }
+        do {
+            for thingId in ids {
+                try await viewModel.deleteThing(thingId: thingId)
+            }
+            selectedThingIds.removeAll()
+            isBatchModeActive = false
         } catch {
             environment.showToast(
                 message: "\(localizationManager.localized("operation_failed")): \(error.localizedDescription)",

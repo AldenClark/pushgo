@@ -65,7 +65,6 @@
 		94597579D3464B37971D63B0 /* PushGoMarkdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4145756AA5A340C3AC329C64 /* PushGoMarkdownView.swift */; };
 		A0AA00012F70000100AA0004 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0014 /* Textual */; };
 		A0AA00012F70000100AA0005 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0015 /* Textual */; };
-		A0AA00012F70000100AA0006 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0016 /* Textual */; };
 		A0C860A2E41DB50A4FE52E2B /* BadgeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C242EF2359D00AD1834 /* BadgeManager.swift */; };
 		A1E2D3C4B5A6978877665544 /* NotificationHandling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ADFF5A76CA49E94408B363E /* NotificationHandling.swift */; };
 		A1E2D3C4B5A6978877665545 /* NotificationHandling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ADFF5A76CA49E94408B363E /* NotificationHandling.swift */; };
@@ -107,8 +106,7 @@
 		AAA6F04C8F1BA6004768B932 /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2A2EF2359D00AD1834 /* AppConstants.swift */; };
 		AAC02D3B2F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0034 /* GRDB */; };
 		AAC02D3C2F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0037 /* GRDB */; };
-		AAC02D3D2F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0036 /* GRDB */; };
-		AAC02D3E2F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0039 /* GRDB */; };
+		AAC02D3D2F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0039 /* GRDB */; };
 		AAC02D3F2F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0038 /* GRDB */; };
 		AAC02D402F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0035 /* GRDB */; };
 		AACFE1622F28511200701BB4 /* PushgoNotificationServiceExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AACFE15B2F28511200701BB4 /* PushgoNotificationServiceExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -515,7 +513,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				AAC02D3D2F682C3900A179C3 /* GRDB in Frameworks */,
-				A0AA00012F70000100AA0006 /* Textual in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -537,7 +534,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AAC02D3E2F682C3900A179C3 /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -819,8 +815,7 @@
 			);
 			name = "PushGo-watchOS";
 			packageProductDependencies = (
-				A0AA00012F70000100AA0016 /* Textual */,
-				A0AA00012F70000100AA0036 /* GRDB */,
+				A0AA00012F70000100AA0039 /* GRDB */,
 			);
 			productName = PushGo;
 			productReference = AAFB52C12F0CA5F0009E61C5 /* PushGoWatch.app */;
@@ -840,7 +835,6 @@
 			);
 			name = "PushGoNSE-watchOS";
 			packageProductDependencies = (
-				A0AA00012F70000100AA0039 /* GRDB */,
 			);
 			productName = pushgowatchNotificationServiceExtension;
 			productReference = DE35C72B5C899D0FCCBAF070 /* NotificationServiceExtensionWatch.appex */;

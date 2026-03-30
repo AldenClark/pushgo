@@ -15,6 +15,8 @@ struct MessageSplitScreen: View {
     @State private var ignoreMessageStoreRevisionsUntil: Date?
     @State private var ignoreRevisionResetTask: Task<Void, Never>?
     @State private var didLoad: Bool = false
+    @State private var isBatchMode: Bool = false
+    @State private var batchSelection: Set<UUID> = []
 
     private let fixedListWidth: CGFloat = 300
 
@@ -66,15 +68,26 @@ struct MessageSplitScreen: View {
 
     private var messageListPane: some View {
         navigationContainer {
-            MessageListScreen(viewModel: messageListViewModel, selection: $selection)
-                .searchable(
-                    text: Binding(
-                        get: { searchViewModel.query },
-                        set: { newValue in searchViewModel.updateQuery(newValue) }
-                    ),
-                    prompt: Text(localizationManager.localized("search_messages"))
-                )
-                .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
+            let listView = MessageListScreen(
+                viewModel: messageListViewModel,
+                selection: $selection,
+                batchSelection: $batchSelection,
+                isBatchMode: $isBatchMode
+            )
+            if isBatchMode {
+                listView
+                    .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
+            } else {
+                listView
+                    .searchable(
+                        text: Binding(
+                            get: { searchViewModel.query },
+                            set: { newValue in searchViewModel.updateQuery(newValue) }
+                        ),
+                        prompt: Text(localizationManager.localized("search_messages"))
+                    )
+                    .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
+            }
         }
         .toolbar { messageListToolbarContent }
     }
@@ -268,6 +281,57 @@ struct MessageSplitScreen: View {
         }
     }
 
+    private func deleteSelectedMessages() {
+        let ids = Array(batchSelection)
+        guard !ids.isEmpty else { return }
+        ignoreNextMessageStoreRevisions(for: 1.2)
+        Task {
+            for messageId in ids {
+                try? await environment.messageStateCoordinator.deleteMessage(messageId: messageId)
+            }
+            await MainActor.run {
+                batchSelection.removeAll()
+                setBatchMode(false)
+            }
+            await refreshMessagesForStoreChange()
+        }
+    }
+
+    private var selectedBatchMessageSummaries: [PushMessageSummary] {
+        let source: [PushMessageSummary] = searchViewModel.hasSearched
+            ? searchViewModel.displayedResults
+            : messageListViewModel.filteredMessages
+        return source.filter { batchSelection.contains($0.id) }
+    }
+
+    private var selectedBatchUnreadMessages: [PushMessageSummary] {
+        selectedBatchMessageSummaries.filter { !$0.isRead }
+    }
+
+    private func setBatchMode(_ enabled: Bool) {
+        isBatchMode = enabled
+        if enabled {
+            selection = nil
+            selectedMessageSnapshot = nil
+        } else {
+            batchSelection.removeAll()
+        }
+    }
+
+    private func markSelectedMessagesAsRead() {
+        let unreadMessages = selectedBatchUnreadMessages
+        guard !unreadMessages.isEmpty else { return }
+        ignoreNextMessageStoreRevisions(for: 1.2)
+        Task {
+            for message in unreadMessages {
+                await messageListViewModel.markRead(message, isRead: true)
+            }
+            await MainActor.run {
+                batchSelection.removeAll()
+            }
+        }
+    }
+
     private func ignoreNextMessageStoreRevisions(for interval: TimeInterval = 0.7) {
         ignoreMessageStoreRevisionsUntil = Date().addingTimeInterval(interval)
         ignoreRevisionResetTask?.cancel()
@@ -291,14 +355,8 @@ struct MessageSplitScreen: View {
 
     @ToolbarContentBuilder
     private var messageListToolbarContent: some ToolbarContent {
-        if #available(macOS 26.0, *) {
-            ToolbarItemGroup(placement: .primaryAction) {
-                messageListToolbarButtons
-            }
-        } else {
-            ToolbarItemGroup(placement: .navigation) {
-                messageListToolbarButtons
-            }
+        ToolbarItemGroup(placement: .primaryAction) {
+            messageListToolbarButtons
         }
     }
 
@@ -311,23 +369,42 @@ struct MessageSplitScreen: View {
 
     @ViewBuilder
     private var messageListToolbarButtons: some View {
-        Menu {
-            channelFilterMenuContent
-        } label: {
-            Image(systemName: messageListViewModel.selectedChannel == nil ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
-        }
-        .menuIndicator(.hidden)
-        .help(localizationManager.localized("channel"))
-        .accessibilityLabel(localizationManager.localized("channel"))
-
         Button {
-            let nextFilter: MessageFilter = messageListViewModel.selectedFilter == .unread ? .all : .unread
-            messageListViewModel.setFilter(nextFilter)
+            setBatchMode(!isBatchMode)
         } label: {
-            Image(systemName: messageListViewModel.selectedFilter == .unread ? "envelope.fill" : "envelope")
+            Image(systemName: isBatchMode ? "checkmark" : "checklist.unchecked")
         }
-        .help(localizationManager.localized("unread"))
-        .accessibilityLabel(localizationManager.localized("unread"))
+        .help(isBatchMode ? localizationManager.localized("done") : localizationManager.localized("edit"))
+        .accessibilityLabel(isBatchMode ? localizationManager.localized("done") : localizationManager.localized("edit"))
+
+        if isBatchMode {
+            Button {
+                markSelectedMessagesAsRead()
+            } label: {
+                Image(systemName: "envelope.open")
+            }
+            .help(localizationManager.localized("mark_as_read"))
+            .accessibilityLabel(localizationManager.localized("mark_as_read"))
+            .disabled(selectedBatchUnreadMessages.isEmpty)
+
+            Button(role: .destructive) {
+                deleteSelectedMessages()
+            } label: {
+                Image(systemName: "trash")
+            }
+            .help(localizationManager.localized("delete"))
+            .accessibilityLabel(localizationManager.localized("delete"))
+            .disabled(batchSelection.isEmpty)
+        } else {
+            Menu {
+                channelFilterMenuContent
+            } label: {
+                Image(systemName: isFilterMenuHighlighted ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
+            }
+            .menuIndicator(.hidden)
+            .help(localizationManager.localized("channel"))
+            .accessibilityLabel(localizationManager.localized("channel"))
+        }
     }
 
     @ViewBuilder
@@ -339,36 +416,51 @@ struct MessageSplitScreen: View {
         }
         .help(localizationManager.localized("delete"))
         .accessibilityLabel(localizationManager.localized("delete"))
-        .disabled(selectedMessageSnapshot == nil)
+        .disabled(selectedMessageSnapshot == nil || isBatchMode)
     }
 
     @ViewBuilder
     private var channelFilterMenuContent: some View {
-        Button {
-            messageListViewModel.clearChannelSelection()
-        } label: {
-            channelFilterMenuItemLabel(
-                title: localizationManager.localized("all_groups"),
-                isSelected: messageListViewModel.selectedChannel == nil
-            )
-        }
-
-        ForEach(messageListViewModel.channelSummaries) { summary in
+        Section {
             Button {
-                messageListViewModel.toggleChannelSelection(summary.key)
+                messageListViewModel.setFilter(isUnreadOnlyFilterEnabled ? .all : .unread)
             } label: {
                 channelFilterMenuItemLabel(
-                    title: resolvedChannelDisplayName(for: summary.key) ?? summary.title,
-                    isSelected: messageListViewModel.selectedChannel == summary.key
+                    title: localizationManager.localized("only_show_unread_messages"),
+                    isSelected: isUnreadOnlyFilterEnabled
                 )
             }
         }
+
+        Section {
+            ForEach(messageListViewModel.channelSummaries) { summary in
+                Button {
+                    messageListViewModel.toggleChannelSelection(summary.key)
+                } label: {
+                    channelFilterMenuItemLabel(
+                        title: resolvedChannelDisplayName(for: summary.key) ?? summary.title,
+                        isSelected: messageListViewModel.selectedChannel == summary.key
+                    )
+                }
+            }
+        }
+    }
+
+    private var isUnreadOnlyFilterEnabled: Bool {
+        messageListViewModel.selectedFilter == .unread
+    }
+
+    private var isFilterMenuHighlighted: Bool {
+        isUnreadOnlyFilterEnabled || messageListViewModel.selectedChannel != nil
     }
 
     private func channelFilterMenuItemLabel(title: String, isSelected: Bool) -> some View {
         HStack(spacing: 8) {
             if isSelected {
                 Image(systemName: "checkmark")
+            } else {
+                Image(systemName: "checkmark")
+                    .hidden()
             }
             Text(title)
         }

@@ -8,8 +8,11 @@ struct EventListScreen: View {
     var openEventId: String? = nil
     var onOpenEventHandled: (() -> Void)? = nil
     @State private var selectedEvent: EventProjection?
+    @State private var selectedEventIds: Set<String> = []
+    @State private var showBatchDeleteConfirmation = false
     @State private var searchQuery: String = ""
     @State private var selectedChannelId: String?
+    @State private var isBatchModeActive = false
 
     var body: some View {
         let baseContent = Group {
@@ -28,16 +31,24 @@ struct EventListScreen: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.horizontal, 24)
             } else {
-                List {
+                List(selection: batchSelectionBinding) {
                     ForEach(Array(filteredEvents.enumerated()), id: \.element.id) { index, event in
-                        Button {
-                            selectEvent(event)
-                        } label: {
-                            EventListRow(event: event)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                        Group {
+                            if isBatchMode {
+                                EventListRow(event: event)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            } else {
+                                Button {
+                                    selectEvent(event)
+                                } label: {
+                                    EventListRow(event: event)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
-                        .buttonStyle(.plain)
                         .accessibilityIdentifier("event.row.\(event.id)")
+                        .tag(event.id)
                         .listRowInsets(EdgeInsets(
                             top: EntityVisualTokens.listRowInsetVertical,
                             leading: EntityVisualTokens.listRowInsetHorizontal,
@@ -64,11 +75,12 @@ struct EventListScreen: View {
                     }
                 }
                 .listStyle(.plain)
+                .environment(\.editMode, isBatchMode ? .constant(.active) : .constant(.inactive))
                 .scrollContentBackground(.hidden)
                 .background(EntityVisualTokens.pageBackground)
             }
         }
-        applySearchIfNeeded(baseContent)
+        let content = applySearchIfNeeded(baseContent)
         .accessibilityIdentifier("screen.events.list")
         .task(id: searchAutoloadTrigger) {
             await autoloadSearchResultsIfNeeded()
@@ -76,6 +88,18 @@ struct EventListScreen: View {
         .navigationTitle(localizationManager.localized("push_type_event"))
         .navigationBarTitleDisplayMode(.large)
         .toolbar { toolbarContent }
+        .toolbar(isBatchMode ? .hidden : .visible, for: .tabBar)
+        .alert(
+            localizationManager.localized("delete"),
+            isPresented: $showBatchDeleteConfirmation,
+        ) {
+            Button(localizationManager.localized("delete"), role: .destructive) {
+                Task { await deleteSelectedEvents() }
+            }
+            Button(localizationManager.localized("cancel"), role: .cancel) {}
+        } message: {
+            Text(localizationManager.localized("batch_delete_selected_events_confirm", selectedEventIds.count))
+        }
         .onAppear {
             openEventIfNeeded()
 #if DEBUG
@@ -107,6 +131,14 @@ struct EventListScreen: View {
             publishAutomationState()
 #endif
         }
+        .onChange(of: isBatchMode) { _, active in
+            if active {
+                selectedEvent = nil
+            } else {
+                selectedEventIds.removeAll()
+                openEventIfNeeded()
+            }
+        }
         .sheet(item: $selectedEvent) { event in
             EventDetailScreen(
                 event: event,
@@ -119,6 +151,7 @@ struct EventListScreen: View {
             )
             .accessibilityIdentifier("sheet.event.detail")
         }
+        content
     }
 
 #if DEBUG
@@ -135,7 +168,7 @@ struct EventListScreen: View {
 
     @ViewBuilder
     private func applySearchIfNeeded<Content: View>(_ content: Content) -> some View {
-        if viewModel.events.isEmpty {
+        if viewModel.events.isEmpty || isBatchMode {
             content
         } else {
             content.searchable(
@@ -219,14 +252,47 @@ struct EventListScreen: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            Menu {
-                channelFilterMenuContent
+        ToolbarItem(placement: .topBarLeading) {
+            Button {
+                isBatchModeActive.toggle()
             } label: {
-                Image(systemName: selectedChannelId == nil ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
+                Image(systemName: isBatchMode ? "checkmark" : "checklist.unchecked")
             }
-            .accessibilityLabel(localizationManager.localized("channel"))
+            .accessibilityLabel(isBatchMode ? localizationManager.localized("done") : localizationManager.localized("edit"))
         }
+        ToolbarItemGroup(placement: .primaryAction) {
+            if !isBatchMode {
+                Menu {
+                    channelFilterMenuContent
+                } label: {
+                    Image(systemName: selectedChannelId == nil ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
+                }
+                .accessibilityLabel(localizationManager.localized("channel"))
+            }
+        }
+        if isBatchMode {
+            ToolbarItemGroup(placement: .bottomBar) {
+                Spacer()
+                Button(role: .destructive) {
+                    showBatchDeleteConfirmation = true
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .accessibilityLabel(localizationManager.localized("delete"))
+                .disabled(selectedEventIds.isEmpty)
+            }
+        }
+    }
+
+    private var isBatchMode: Bool {
+        isBatchModeActive
+    }
+
+    private var batchSelectionBinding: Binding<Set<String>> {
+        if isBatchMode {
+            return $selectedEventIds
+        }
+        return .constant([])
     }
 
     private func normalizedChannel(_ value: String?) -> String? {
@@ -235,6 +301,7 @@ struct EventListScreen: View {
     }
 
     private func openEventIfNeeded() {
+        guard !isBatchMode else { return }
         let target = openEventId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !target.isEmpty else { return }
         if let matched = viewModel.events.first(where: { $0.id == target }) {
@@ -264,6 +331,7 @@ struct EventListScreen: View {
     }
 
     private func selectEvent(_ event: EventProjection) {
+        guard !isBatchMode else { return }
         selectedEvent = event
         Task { @MainActor in
             await viewModel.ensureEventDetailsLoaded(eventId: event.id)
@@ -295,6 +363,22 @@ struct EventListScreen: View {
         do {
             try await viewModel.closeEvent(event: event)
             selectedEvent = nil
+        } catch {
+            environment.showToast(
+                message: "\(localizationManager.localized("operation_failed")): \(error.localizedDescription)",
+                style: .error,
+                duration: 2
+            )
+        }
+    }
+
+    private func deleteSelectedEvents() async {
+        let ids = Array(selectedEventIds)
+        guard !ids.isEmpty else { return }
+        do {
+            _ = try await viewModel.deleteEvents(eventIds: ids)
+            selectedEventIds.removeAll()
+            isBatchModeActive = false
         } catch {
             environment.showToast(
                 message: "\(localizationManager.localized("operation_failed")): \(error.localizedDescription)",
