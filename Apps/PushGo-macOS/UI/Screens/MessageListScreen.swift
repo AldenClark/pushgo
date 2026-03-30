@@ -9,6 +9,8 @@ struct MessageListScreen: View {
 
     @Bindable var viewModel: MessageListViewModel
     @Binding var selection: UUID?
+    @Binding var batchSelection: Set<UUID>
+    @Binding var isBatchMode: Bool
     @State private var pendingScrollTarget: UUID?
 
     private enum Layout {
@@ -25,11 +27,19 @@ struct MessageListScreen: View {
             if !viewModel.hasLoadedOnce {
                 Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if isShowingSearchResults {
-                searchResultsList
+                if isBatchMode {
+                    searchResultsBatchList
+                } else {
+                    searchResultsList
+                }
             } else if viewModel.filteredMessages.isEmpty {
                 emptyState
             } else {
-                messagesList
+                if isBatchMode {
+                    messagesBatchList
+                } else {
+                    messagesList
+                }
             }
         }
         .task {
@@ -99,6 +109,39 @@ struct MessageListScreen: View {
         }
     }
 
+    private var messagesBatchList: some View {
+        List {
+            ForEach(viewModel.filteredMessages) { message in
+                Button {
+                    toggleBatchSelection(message.id)
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: batchSelection.contains(message.id) ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(batchSelection.contains(message.id) ? .accent : .secondary)
+                        MessageRowView(message: message)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("message.row.\(message.id.uuidString)")
+                .id(message.id)
+                .listRowInsets(Layout.rowInsets)
+                .alignmentGuide(.listRowSeparatorLeading) { dimensions in
+                    dimensions[.leading]
+                }
+                .alignmentGuide(.listRowSeparatorTrailing) { dimensions in
+                    dimensions[.trailing] - Layout.rowInsets.trailing
+                }
+                .listRowBackground(selectedRowBackground(isSelected: batchSelection.contains(message.id)))
+                .onAppear { Task { await viewModel.loadMoreIfNeeded(currentItem: message) } }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(EntityVisualTokens.pageBackground)
+        .background(ListScrollStyleStabilizer())
+    }
+
     private var searchResultsList: some View {
         ScrollViewReader { proxy in
             List(selection: $selection) {
@@ -146,6 +189,63 @@ struct MessageListScreen: View {
             .onChange(of: searchViewModel.displayedResults.map(\.id)) { _, _ in
                 scrollToSelectionIfNeeded(proxy)
             }
+        }
+    }
+
+    private var searchResultsBatchList: some View {
+        List {
+            if searchViewModel.displayedResults.isEmpty {
+                searchPlaceholderRow
+            } else {
+                Section {
+                    ForEach(searchViewModel.displayedResults) { message in
+                        Button {
+                            toggleBatchSelection(message.id)
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: batchSelection.contains(message.id) ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(batchSelection.contains(message.id) ? .accent : .secondary)
+                                MessageRowView(message: message)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("message.row.\(message.id.uuidString)")
+                        .id(message.id)
+                        .listRowInsets(Layout.rowInsets)
+                        .alignmentGuide(.listRowSeparatorLeading) { dimensions in
+                            dimensions[.leading]
+                        }
+                        .alignmentGuide(.listRowSeparatorTrailing) { dimensions in
+                            dimensions[.trailing] - Layout.rowInsets.trailing
+                        }
+                        .listRowBackground(selectedRowBackground(isSelected: batchSelection.contains(message.id)))
+                        .onAppear { searchViewModel.loadMoreIfNeeded(currentItem: message) }
+                    }
+                    if searchViewModel.hasMore {
+                        HStack {
+                            Spacer()
+                            ProgressView().progressViewStyle(.circular)
+                            Spacer()
+                        }
+                        .listRowInsets(Layout.rowInsets)
+                    }
+                } header: {
+                    Text(localizationManager.localized("found_number_results", searchViewModel.totalResults))
+                }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(EntityVisualTokens.pageBackground)
+        .background(ListScrollStyleStabilizer())
+    }
+
+    private func toggleBatchSelection(_ messageId: UUID) {
+        if batchSelection.contains(messageId) {
+            batchSelection.remove(messageId)
+        } else {
+            batchSelection.insert(messageId)
         }
     }
 

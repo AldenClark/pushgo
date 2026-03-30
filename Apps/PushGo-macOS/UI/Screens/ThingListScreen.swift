@@ -14,6 +14,8 @@ struct ThingListScreen: View {
 
     let things: [ThingProjection]
     @Binding var selection: String?
+    @Binding var batchSelection: Set<String>
+    @Binding var isBatchMode: Bool
     var isLoadingMore: Bool = false
     var onReachEnd: (() -> Void)? = nil
 
@@ -25,6 +27,51 @@ struct ThingListScreen: View {
                     title: localizationManager.localized("things_empty_title"),
                     subtitle: localizationManager.localized("things_empty_hint")
                 )
+            } else if isBatchMode {
+                List {
+                    ForEach(Array(things.enumerated()), id: \.element.id) { index, thing in
+                        Button {
+                            toggleBatchSelection(thing.id)
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: batchSelection.contains(thing.id) ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(batchSelection.contains(thing.id) ? .accent : .secondary)
+                                ThingListRow(thing: thing)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("thing.row.\(thing.id)")
+                        .listRowInsets(Layout.rowInsets)
+                        .alignmentGuide(.listRowSeparatorLeading) { dimensions in
+                            dimensions[.leading]
+                        }
+                        .alignmentGuide(.listRowSeparatorTrailing) { dimensions in
+                            dimensions[.trailing] - Layout.rowInsets.trailing
+                        }
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
+                        .listRowSeparator(index == things.count - 1 ? .hidden : .visible, edges: .bottom)
+                        .onAppear {
+                            guard index == things.count - 1 else { return }
+                            onReachEnd?()
+                        }
+                    }
+                    if isLoadingMore {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                                .controlSize(.small)
+                            Spacer()
+                        }
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                    }
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .background(EntityVisualTokens.pageBackground)
+                .background(ListScrollStyleStabilizer())
             } else {
                 List(selection: $selection) {
                     ForEach(Array(things.enumerated()), id: \.element.id) { index, thing in
@@ -64,6 +111,14 @@ struct ThingListScreen: View {
             }
         }
         .accessibilityIdentifier("screen.things.list")
+    }
+
+    private func toggleBatchSelection(_ thingId: String) {
+        if batchSelection.contains(thingId) {
+            batchSelection.remove(thingId)
+        } else {
+            batchSelection.insert(thingId)
+        }
     }
 }
 

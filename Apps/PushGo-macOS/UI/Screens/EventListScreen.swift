@@ -14,6 +14,8 @@ struct EventListScreen: View {
 
     let events: [EventProjection]
     @Binding var selection: String?
+    @Binding var batchSelection: Set<String>
+    @Binding var isBatchMode: Bool
     var isLoadingMore: Bool = false
     var onReachEnd: (() -> Void)? = nil
 
@@ -25,6 +27,51 @@ struct EventListScreen: View {
                     title: localizationManager.localized("events_empty_title"),
                     subtitle: localizationManager.localized("events_empty_hint")
                 )
+            } else if isBatchMode {
+                List {
+                    ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
+                        Button {
+                            toggleBatchSelection(event.id)
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: batchSelection.contains(event.id) ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(batchSelection.contains(event.id) ? .accent : .secondary)
+                                EventListRow(event: event)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("event.row.\(event.id)")
+                        .listRowInsets(Layout.rowInsets)
+                        .alignmentGuide(.listRowSeparatorLeading) { dimensions in
+                            dimensions[.leading]
+                        }
+                        .alignmentGuide(.listRowSeparatorTrailing) { dimensions in
+                            dimensions[.trailing] - Layout.rowInsets.trailing
+                        }
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
+                        .listRowSeparator(index == events.count - 1 ? .hidden : .visible, edges: .bottom)
+                        .onAppear {
+                            guard index == events.count - 1 else { return }
+                            onReachEnd?()
+                        }
+                    }
+                    if isLoadingMore {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                                .controlSize(.small)
+                            Spacer()
+                        }
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                    }
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .background(EntityVisualTokens.pageBackground)
+                .background(ListScrollStyleStabilizer())
             } else {
                 List(selection: $selection) {
                     ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
@@ -64,6 +111,14 @@ struct EventListScreen: View {
             }
         }
         .accessibilityIdentifier("screen.events.list")
+    }
+
+    private func toggleBatchSelection(_ eventId: String) {
+        if batchSelection.contains(eventId) {
+            batchSelection.remove(eventId)
+        } else {
+            batchSelection.insert(eventId)
+        }
     }
 }
 

@@ -9,6 +9,9 @@ struct MessageListScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Bindable private var viewModel: MessageListViewModel
     @State private var selectedMessage: PushMessageSummary?
+    @State private var selectedMessageIDs: Set<UUID> = []
+    @State private var isBatchModeActive = false
+    @State private var showBatchDeleteConfirmation = false
     @State private var pendingMessageStoreRefresh = false
     private let onSelect: ((PushMessageSummary) -> Void)?
     private let autoSelectFirstMessage: Bool
@@ -77,6 +80,15 @@ struct MessageListScreen: View {
                 )
 #endif
             }
+            .onChange(of: isBatchMode) { _, active in
+                if active {
+                    selectedMessage = nil
+                    pendingMessageStoreRefresh = false
+                } else {
+                    selectedMessageIDs.removeAll()
+                    openPendingMessageIfNeeded()
+                }
+            }
     }
 
     @ViewBuilder
@@ -91,7 +103,7 @@ struct MessageListScreen: View {
     }
 
     private var coreContent: some View {
-        screenContent
+        let content = screenContent
             .navigationTitle(localizationManager.localized("messages"))
             .navigationBarTitleDisplayMode(.large)
             .applyToolbarBackgroundIfNeeded()
@@ -121,6 +133,19 @@ struct MessageListScreen: View {
                 applyDefaultSelectionIfNeeded()
             }
             .toolbar { toolbarContent }
+            .toolbar(isBatchMode ? .hidden : .visible, for: .tabBar)
+            .alert(
+                localizationManager.localized("delete"),
+                isPresented: $showBatchDeleteConfirmation,
+            ) {
+                Button(localizationManager.localized("delete"), role: .destructive) {
+                    Task { await deleteSelectedMessages() }
+                }
+                Button(localizationManager.localized("cancel"), role: .cancel) {}
+            } message: {
+                Text(localizationManager.localized("batch_delete_selected_messages_confirm", selectedMessageIDs.count))
+            }
+        return AnyView(content)
     }
 
 #if DEBUG
@@ -170,7 +195,7 @@ struct MessageListScreen: View {
     @ViewBuilder
     private var messageList: some View {
         ScrollViewReader { proxy in
-            List {
+            List(selection: batchSelectionBinding) {
                 if isShowingSearchResults {
                     if searchViewModel.displayedResults.isEmpty {
                         searchPlaceholderRow
@@ -178,6 +203,7 @@ struct MessageListScreen: View {
                         Section {
                             ForEach(Array(searchViewModel.displayedResults.enumerated()), id: \.element.id) { index, message in
                                 messageRow(for: message, at: index)
+                                .tag(message.id)
                                 .onAppear {
                                     searchViewModel.loadMoreIfNeeded(currentItem: message)
                                 }
@@ -206,6 +232,7 @@ struct MessageListScreen: View {
                 } else {
                     ForEach(Array(viewModel.filteredMessages.enumerated()), id: \.element.id) { index, message in
                         messageRow(for: message, at: index)
+                            .tag(message.id)
                             .id(message.id)
                             .modifier(
                                 TopSeparatorModifier(
@@ -223,13 +250,14 @@ struct MessageListScreen: View {
                     }
                 }
             }
-            .modifier(MessageListSearchableModifier(searchViewModel: searchViewModel, enabled: hasMessages))
+            .modifier(MessageListSearchableModifier(searchViewModel: searchViewModel, enabled: hasMessages && !isBatchMode))
             .modifier(
                 ScrollObserverModifier(enabled: true) { topOffset, pullDistance in
                     _ = pullDistance
                     updateMessageListTopState(topOffset: topOffset)
                 },
             )
+            .environment(\.editMode, isBatchMode ? .constant(.active) : .constant(.inactive))
             .listStyle(.plain)
             .listRowSpacing(0)
             .listClearBackground()
@@ -248,19 +276,33 @@ struct MessageListScreen: View {
 
     @ViewBuilder
     private func messageRow(for message: PushMessageSummary, at index: Int) -> some View {
-        Button {
-            if !message.isRead {
-                Task { await viewModel.markRead(message, isRead: true) }
+        Group {
+            if isBatchMode {
+                MessageRowView(message: message)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 0)
+                    .padding(.horizontal, EntityVisualTokens.listRowInsetHorizontal)
+                    .contentShape(Rectangle())
+            } else {
+                Button {
+                    if !message.isRead {
+                        Task { await viewModel.markRead(message, isRead: true) }
+                    }
+                    handleSelect(message)
+                } label: {
+                    MessageRowView(message: message)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 0)
+                        .padding(.horizontal, EntityVisualTokens.listRowInsetHorizontal)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.appPlain)
+                .swipeActions {
+                    markReadAction(for: message)
+                    deleteAction(for: message)
+                }
             }
-            handleSelect(message)
-        } label: {
-            MessageRowView(message: message)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 0)
-                .padding(.horizontal, EntityVisualTokens.listRowInsetHorizontal)
-                .contentShape(Rectangle())
         }
-        .buttonStyle(.appPlain)
         .accessibilityIdentifier("message.row.\(message.id.uuidString)")
         .listRowInsets(EdgeInsets(
             top: EntityVisualTokens.listRowInsetVertical,
@@ -268,10 +310,6 @@ struct MessageListScreen: View {
             bottom: EntityVisualTokens.listRowInsetVertical + 2,
             trailing: 0,
         ))
-        .swipeActions {
-            markReadAction(for: message)
-            deleteAction(for: message)
-        }
     }
 
     @ViewBuilder
@@ -491,57 +529,114 @@ private extension MessageListScreen {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            Menu {
-                channelFilterMenuContent
-            } label: {
-                Image(systemName: viewModel.selectedChannel == nil ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
-            }
-            .accessibilityLabel(localizationManager.localized("channel"))
-
+        ToolbarItem(placement: .topBarLeading) {
             Button {
-                let nextFilter: MessageFilter = viewModel.selectedFilter == .unread ? .all : .unread
-                viewModel.setFilter(nextFilter)
+                isBatchModeActive.toggle()
             } label: {
-                Image(systemName: viewModel.selectedFilter == .unread ? "envelope.fill" : "envelope")
+                Image(systemName: isBatchMode ? "checkmark" : "checklist.unchecked")
             }
-            .accessibilityLabel(localizationManager.localized("unread"))
+            .accessibilityLabel(isBatchMode ? localizationManager.localized("done") : localizationManager.localized("edit"))
         }
+        ToolbarItemGroup(placement: .primaryAction) {
+            if !isBatchMode {
+                Menu {
+                    channelFilterMenuContent
+                } label: {
+                    Image(systemName: isFilterMenuHighlighted ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
+                }
+                .accessibilityLabel(localizationManager.localized("channel"))
+            }
+        }
+        if isBatchMode {
+            ToolbarItemGroup(placement: .bottomBar) {
+                Button {
+                    Task { await markSelectedMessagesAsRead() }
+                } label: {
+                    Image(systemName: "envelope.open")
+                }
+                .accessibilityLabel(localizationManager.localized("mark_as_read"))
+                .disabled(selectedUnreadMessages.isEmpty)
+
+                Spacer()
+
+                Button(role: .destructive) {
+                    showBatchDeleteConfirmation = true
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .accessibilityLabel(localizationManager.localized("delete"))
+                .disabled(selectedMessageIDs.isEmpty)
+            }
+        }
+    }
+
+    private var isBatchMode: Bool {
+        isBatchModeActive
+    }
+
+    private var batchSelectionBinding: Binding<Set<UUID>> {
+        if isBatchMode {
+            return $selectedMessageIDs
+        }
+        return .constant([])
+    }
+
+    private var selectedUnreadMessages: [PushMessageSummary] {
+        let selectedIds = selectedMessageIDs
+        guard !selectedIds.isEmpty else { return [] }
+        let currentMessages = isShowingSearchResults ? searchViewModel.displayedResults : viewModel.filteredMessages
+        return currentMessages.filter { selectedIds.contains($0.id) && !$0.isRead }
     }
 
     @ViewBuilder
     private var channelFilterMenuContent: some View {
-        Button {
-            viewModel.clearChannelSelection()
-        } label: {
-            channelFilterMenuItemLabel(
-                title: localizationManager.localized("all_groups"),
-                isSelected: viewModel.selectedChannel == nil
-            )
-        }
-
-        ForEach(displayedChannelSummaries) { summary in
+        Section {
             Button {
-                viewModel.toggleChannelSelection(summary.key)
+                viewModel.setFilter(isUnreadOnlyFilterEnabled ? .all : .unread)
             } label: {
                 channelFilterMenuItemLabel(
-                    title: resolvedChannelDisplayName(for: summary.key) ?? summary.title,
-                    isSelected: viewModel.selectedChannel == summary.key
+                    title: localizationManager.localized("only_show_unread_messages"),
+                    isSelected: isUnreadOnlyFilterEnabled
                 )
             }
         }
+
+        Section {
+            ForEach(displayedChannelSummaries) { summary in
+                Button {
+                    viewModel.toggleChannelSelection(summary.key)
+                } label: {
+                    channelFilterMenuItemLabel(
+                        title: resolvedChannelDisplayName(for: summary.key) ?? summary.title,
+                        isSelected: viewModel.selectedChannel == summary.key
+                    )
+                }
+            }
+        }
+    }
+
+    private var isUnreadOnlyFilterEnabled: Bool {
+        viewModel.selectedFilter == .unread
+    }
+
+    private var isFilterMenuHighlighted: Bool {
+        isUnreadOnlyFilterEnabled || viewModel.selectedChannel != nil
     }
 
     private func channelFilterMenuItemLabel(title: String, isSelected: Bool) -> some View {
         HStack(spacing: 8) {
             if isSelected {
                 Image(systemName: "checkmark")
+            } else {
+                Image(systemName: "checkmark")
+                    .hidden()
             }
             Text(title)
         }
     }
 
     private func handleSelect(_ message: PushMessageSummary) {
+        guard !isBatchMode else { return }
         selectedMessage = message
         if let onSelect {
             onSelect(message)
@@ -587,11 +682,35 @@ private extension MessageListScreen {
     }
 
     private func applyDefaultSelectionIfNeeded() {
+        guard !isBatchMode else { return }
         guard autoSelectFirstMessage, let onSelect else { return }
         guard !isShowingSearchResults else { return }
         guard let first = viewModel.filteredMessages.first else { return }
         guard lastAutoSelectedMessageId != first.id else { return }
         lastAutoSelectedMessageId = first.id
         onSelect(first)
+    }
+
+    private func deleteSelectedMessages() async {
+        let ids = selectedMessageIDs
+        guard !ids.isEmpty else { return }
+        for messageId in ids {
+            try? await environment.messageStateCoordinator.deleteMessage(messageId: messageId)
+        }
+        selectedMessageIDs.removeAll()
+        await viewModel.refresh()
+        searchViewModel.refreshMessagesIfNeeded()
+        isBatchModeActive = false
+    }
+
+    private func markSelectedMessagesAsRead() async {
+        let unreadMessages = selectedUnreadMessages
+        guard !unreadMessages.isEmpty else { return }
+        for message in unreadMessages {
+            await viewModel.markRead(message, isRead: true)
+        }
+        await viewModel.refresh()
+        searchViewModel.refreshMessagesIfNeeded()
+        selectedMessageIDs.removeAll()
     }
 }

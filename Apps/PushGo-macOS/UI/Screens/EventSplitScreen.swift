@@ -12,6 +12,8 @@ struct EventSplitScreen: View {
     @State private var selectedChannelId: String?
     @State private var hydrationRequestedEventIDs: Set<String> = []
     @State private var showCloseConfirmation = false
+    @State private var isBatchMode: Bool = false
+    @State private var batchSelection: Set<String> = []
     private let fixedListWidth: CGFloat = 300
 
     var body: some View {
@@ -40,6 +42,7 @@ struct EventSplitScreen: View {
                 }
             }
             .onChange(of: selection) { _, id in
+                guard !isBatchMode else { return }
                 guard let id else { return }
                 Task { await viewModel.ensureEventDetailsLoaded(eventId: id) }
             }
@@ -62,19 +65,35 @@ struct EventSplitScreen: View {
 
     private var eventListPane: some View {
         navigationContainer {
-            EventListScreen(
-                events: filteredEvents,
-                selection: $selection,
-                isLoadingMore: viewModel.isLoadingMoreEvents,
-                onReachEnd: {
-                    Task { await viewModel.loadMoreEvents() }
-                }
-            )
-            .searchable(
-                text: $searchQuery,
-                prompt: Text(localizationManager.localized("search_events"))
-            )
-            .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
+            if isBatchMode {
+                EventListScreen(
+                    events: filteredEvents,
+                    selection: $selection,
+                    batchSelection: $batchSelection,
+                    isBatchMode: $isBatchMode,
+                    isLoadingMore: viewModel.isLoadingMoreEvents,
+                    onReachEnd: {
+                        Task { await viewModel.loadMoreEvents() }
+                    }
+                )
+                .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
+            } else {
+                EventListScreen(
+                    events: filteredEvents,
+                    selection: $selection,
+                    batchSelection: $batchSelection,
+                    isBatchMode: $isBatchMode,
+                    isLoadingMore: viewModel.isLoadingMoreEvents,
+                    onReachEnd: {
+                        Task { await viewModel.loadMoreEvents() }
+                    }
+                )
+                .searchable(
+                    text: $searchQuery,
+                    prompt: Text(localizationManager.localized("search_events"))
+                )
+                .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
+            }
         }
         .toolbar { listToolbarContent }
     }
@@ -133,6 +152,7 @@ struct EventSplitScreen: View {
     }
 
     private var selectedEvent: EventProjection? {
+        guard !isBatchMode else { return nil }
         guard let selection else { return nil }
         return filteredEvents.first(where: { $0.id == selection })
     }
@@ -152,14 +172,32 @@ struct EventSplitScreen: View {
     @ToolbarContentBuilder
     private var listToolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
-            Menu {
-                channelFilterMenuContent
+            Button {
+                setBatchMode(!isBatchMode)
             } label: {
-                Image(systemName: selectedChannelId == nil ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
+                Image(systemName: isBatchMode ? "checkmark" : "checklist.unchecked")
             }
-            .menuIndicator(.hidden)
-            .help(localizationManager.localized("channel"))
-            .accessibilityLabel(localizationManager.localized("channel"))
+            .help(isBatchMode ? localizationManager.localized("done") : localizationManager.localized("edit"))
+            .accessibilityLabel(isBatchMode ? localizationManager.localized("done") : localizationManager.localized("edit"))
+            if isBatchMode {
+                Button(role: .destructive) {
+                    deleteSelectedEvents()
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .help(localizationManager.localized("delete"))
+                .accessibilityLabel(localizationManager.localized("delete"))
+                .disabled(batchSelection.isEmpty)
+            } else {
+                Menu {
+                    channelFilterMenuContent
+                } label: {
+                    Image(systemName: selectedChannelId == nil ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
+                }
+                .menuIndicator(.hidden)
+                .help(localizationManager.localized("channel"))
+                .accessibilityLabel(localizationManager.localized("channel"))
+            }
         }
     }
 
@@ -181,13 +219,22 @@ struct EventSplitScreen: View {
                 Image(systemName: "trash")
             }
             .help(localizationManager.localized("delete"))
-            .disabled(selectedEvent == nil)
+            .disabled(selectedEvent == nil || isBatchMode)
         }
     }
 
     private var canCloseSelectedEvent: Bool {
         guard let selectedEvent else { return false }
         return eventLifecycleState(from: selectedEvent.state) != .closed
+    }
+
+    private func setBatchMode(_ enabled: Bool) {
+        isBatchMode = enabled
+        if enabled {
+            selection = nil
+        } else {
+            batchSelection.removeAll()
+        }
     }
 
     private func closeSelectedEvent() {
@@ -227,7 +274,33 @@ struct EventSplitScreen: View {
         }
     }
 
+    private func deleteSelectedEvents() {
+        let ids = Array(batchSelection)
+        guard !ids.isEmpty else { return }
+        Task {
+            do {
+                _ = try await viewModel.deleteEvents(eventIds: ids)
+                await MainActor.run {
+                    batchSelection.removeAll()
+                    setBatchMode(false)
+                }
+            } catch {
+                await MainActor.run {
+                    environment.showToast(
+                        message: "\(localizationManager.localized("operation_failed")): \(error.localizedDescription)",
+                        style: .error,
+                        duration: 2
+                    )
+                }
+            }
+        }
+    }
+
     private func syncSelection() {
+        if isBatchMode {
+            selection = nil
+            return
+        }
         if let target = openEventId?.trimmingCharacters(in: .whitespacesAndNewlines),
            !target.isEmpty
         {
