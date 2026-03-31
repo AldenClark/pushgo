@@ -156,7 +156,7 @@ enum AppConstants {
     // No backward-compatibility for local persistence artifacts.
     static let databaseVersion = "v9"
     static let databaseStoreFilename = "pushgo-\(databaseVersion).db"
-    private static let productionServerAddress = "https://gateway.pushgo.dev"
+    private static let productionServerAddress = "https://gateway.pushgo.cn"
     static let messageSyncNotificationName = "io.ethan.pushgo.message-sync"
     static let copyToastNotificationName = "io.ethan.pushgo.copy-toast"
     static let notificationDefaultCategoryIdentifier = "PUSHGO_DEFAULT"
