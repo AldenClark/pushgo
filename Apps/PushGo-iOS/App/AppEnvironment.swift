@@ -44,6 +44,8 @@ final class AppEnvironment {
     @ObservationIgnored private var messageSyncObserver: DarwinNotificationObserver?
     @ObservationIgnored private var pendingCountsRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var pendingMessageListRefreshTask: Task<Void, Never>?
+    @ObservationIgnored private var bootstrapTask: Task<Void, Never>?
+    @ObservationIgnored private var didBootstrap = false
 
     private var toastDismissTask: Task<Void, Never>?
     @ObservationIgnored private let countsRefreshDelay: TimeInterval = 0.4
@@ -128,6 +130,24 @@ final class AppEnvironment {
     }
 
     func bootstrap() async {
+        if didBootstrap {
+            return
+        }
+        if let bootstrapTask {
+            await bootstrapTask.value
+            return
+        }
+
+        let task = Task { @MainActor in
+            await self.performBootstrap()
+        }
+        bootstrapTask = task
+        await task.value
+        didBootstrap = true
+        bootstrapTask = nil
+    }
+
+    private func performBootstrap() async {
         await loadPersistedState()
         Task(priority: .utility) { @MainActor in
             await preparePushInfrastructure()

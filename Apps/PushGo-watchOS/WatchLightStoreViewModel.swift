@@ -6,6 +6,7 @@ import Observation
 final class WatchLightStoreViewModel {
     private let environment: AppEnvironment
     private let dataStore: LocalDataStore
+    @ObservationIgnored private var reloadTask: Task<Void, Never>?
 
     private(set) var messages: [WatchLightMessage] = []
     private(set) var events: [WatchLightEvent] = []
@@ -18,6 +19,20 @@ final class WatchLightStoreViewModel {
     }
 
     func reload() async {
+        if let reloadTask {
+            await reloadTask.value
+            return
+        }
+
+        let task = Task { @MainActor in
+            await self.performReload()
+        }
+        reloadTask = task
+        await task.value
+        reloadTask = nil
+    }
+
+    private func performReload() async {
         do {
             async let loadedMessages = dataStore.loadWatchLightMessages()
             async let loadedEvents = dataStore.loadWatchLightEvents()

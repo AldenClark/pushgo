@@ -71,7 +71,6 @@ struct EventListScreen: View {
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .background(EntityVisualTokens.pageBackground)
-                .background(ListScrollStyleStabilizer())
             } else {
                 List(selection: $selection) {
                     ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
@@ -107,7 +106,6 @@ struct EventListScreen: View {
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .background(EntityVisualTokens.pageBackground)
-                .background(ListScrollStyleStabilizer())
             }
         }
         .accessibilityIdentifier("screen.events.list")

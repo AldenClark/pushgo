@@ -226,7 +226,6 @@ struct SettingsView: View {
             .padding(.vertical, 20)
         }
         .scrollDismissesKeyboard(.interactively)
-        .modifyScrollIndicators()
         .background(settingsBackgroundColor.ignoresSafeArea())
     }
 
@@ -1077,12 +1076,5 @@ struct MessageJSONExportStreamWriter {
             throw CocoaError(.fileWriteUnknown)
         }
         try fileHandle.write(contentsOf: data)
-    }
-}
-
-private extension View {
-    @ViewBuilder
-    func modifyScrollIndicators() -> some View {
-        self.scrollIndicators(.automatic)
     }
 }

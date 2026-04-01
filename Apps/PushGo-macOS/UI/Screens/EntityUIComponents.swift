@@ -257,40 +257,6 @@ struct EntityKeyValueRows: View {
     }
 }
 
-struct ListScrollStyleStabilizer: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        Task { @MainActor in
-            configureIfNeeded(from: view)
-        }
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        Task { @MainActor in
-            configureIfNeeded(from: nsView)
-        }
-    }
-
-    private func configureIfNeeded(from view: NSView) {
-        guard let scrollView = enclosingScrollView(from: view) else { return }
-        if scrollView.scrollerStyle != .overlay {
-            scrollView.scrollerStyle = .overlay
-        }
-    }
-
-    private func enclosingScrollView(from view: NSView) -> NSScrollView? {
-        var current = view.superview
-        while let node = current {
-            if let scrollView = node as? NSScrollView {
-                return scrollView
-            }
-            current = node.superview
-        }
-        return nil
-    }
-}
-
 func normalizedEventState(_ state: String?) -> String {
     switch state?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() {
     case "ONGOING":
