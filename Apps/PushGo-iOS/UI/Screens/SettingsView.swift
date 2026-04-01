@@ -1375,11 +1375,6 @@ private extension View {
     func customAdaptiveDetents() -> some View {
         self.pushgoSheetSizing(.form)
     }
-
-    @ViewBuilder
-    func modifyScrollIndicators() -> some View {
-        self.scrollIndicators(.automatic)
-    }
 }
 
 private struct PlatformListStyle: ViewModifier {

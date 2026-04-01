@@ -15,6 +15,8 @@ final class AppEnvironment {
     let localizationManager: LocalizationManager
     @ObservationIgnored private var messageSyncObserver: DarwinNotificationObserver?
     @ObservationIgnored private var pendingMessageListRefreshTask: Task<Void, Never>?
+    @ObservationIgnored private var bootstrapTask: Task<Void, Never>?
+    @ObservationIgnored private var didBootstrap = false
 
     private var toastDismissTask: Task<Void, Never>?
     @ObservationIgnored private let messageListRefreshDelay: TimeInterval = 0.35
@@ -66,6 +68,24 @@ final class AppEnvironment {
     }
 
     func bootstrap() async {
+        if didBootstrap {
+            return
+        }
+        if let bootstrapTask {
+            await bootstrapTask.value
+            return
+        }
+
+        let task = Task { @MainActor in
+            await self.performBootstrap()
+        }
+        bootstrapTask = task
+        await task.value
+        didBootstrap = true
+        bootstrapTask = nil
+    }
+
+    private func performBootstrap() async {
         WatchSessionBridge.shared.activateIfNeeded()
         await loadPersistedState()
         publishCurrentEffectiveModeStatus(noop: false)

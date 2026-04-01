@@ -136,6 +136,7 @@ final class EntityProjectionViewModel {
     private var thingCursor: EntityProjectionPageCursor?
     private var hydratedEventIDs = Set<String>()
     private var hydratedThingIDs = Set<String>()
+    @ObservationIgnored private var reloadTask: Task<Void, Never>?
 
     private(set) var events: [EventProjection] = []
     private(set) var things: [ThingProjection] = []
@@ -161,6 +162,20 @@ final class EntityProjectionViewModel {
     var hasThingData: Bool { !things.isEmpty }
 
     func reload() async {
+        if let reloadTask {
+            await reloadTask.value
+            return
+        }
+
+        let task = Task { @MainActor in
+            await self.performReload()
+        }
+        reloadTask = task
+        await task.value
+        reloadTask = nil
+    }
+
+    private func performReload() async {
         do {
             resetPaginationState()
             async let eventLoad: Void = loadMoreEventsPage(reset: true)

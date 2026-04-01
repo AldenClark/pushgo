@@ -7,6 +7,7 @@ final class MainWindowController {
 
     private(set) weak var mainWindow: NSWindow?
     private var preventAccessoryUntil: Date?
+    private let chromeConfiguredWindows = NSHashTable<NSWindow>.weakObjects()
 
     private let mainWindowIdentifier = NSUserInterfaceItemIdentifier("PushGoMainWindow")
 
@@ -21,7 +22,7 @@ final class MainWindowController {
             window.identifier = mainWindowIdentifier
             window.contentMinSize = NSSize(width: 1100, height: 640)
         }
-        configureWindowChrome(window)
+        configureWindowChromeIfNeeded(window)
     }
     func prepareForShowingMainWindow() {
         preventAccessoryUntil = Date().addingTimeInterval(2.0)
@@ -34,9 +35,6 @@ final class MainWindowController {
         guard let window = resolveMainWindow() else { return false }
         captureMainWindow(window)
         window.makeKeyAndOrderFront(nil)
-        Task { @MainActor in
-            self.configureWindowChrome(window)
-        }
         return true
     }
     func showMainWindow() {
@@ -51,23 +49,36 @@ final class MainWindowController {
         return NSApp.windows.first(where: { $0.identifier == mainWindowIdentifier })
     }
 
-    private func configureWindowChrome(_ window: NSWindow) {
-        window.titleVisibility = .hidden
-        window.toolbarStyle = .unified
-        if #available(macOS 26.0, *) {
+    private func configureWindowChromeIfNeeded(_ window: NSWindow) {
+        guard !chromeConfiguredWindows.contains(window) else { return }
+        chromeConfiguredWindows.add(window)
+
+        if window.titleVisibility != .hidden {
+            window.titleVisibility = .hidden
+        }
+        if window.toolbarStyle != .unified {
+            window.toolbarStyle = .unified
+        }
+        if !window.styleMask.contains(.fullSizeContentView) {
             window.styleMask.insert(.fullSizeContentView)
+        }
+        if !window.titlebarAppearsTransparent {
             window.titlebarAppearsTransparent = true
-            window.backgroundColor = NSColor.windowBackgroundColor
-        } else {
-            window.styleMask.insert(.fullSizeContentView)
-            window.titlebarAppearsTransparent = true
+        }
+        if window.backgroundColor != NSColor.windowBackgroundColor {
             window.backgroundColor = NSColor.windowBackgroundColor
         }
-        window.titlebarSeparatorStyle = .none
+        if window.titlebarSeparatorStyle != .none {
+            window.titlebarSeparatorStyle = .none
+        }
         if #unavailable(macOS 15.0) {
-            window.toolbar?.showsBaselineSeparator = false
+            if window.toolbar?.showsBaselineSeparator != false {
+                window.toolbar?.showsBaselineSeparator = false
+            }
         }
-        window.isOpaque = true
+        if !window.isOpaque {
+            window.isOpaque = true
+        }
     }
 }
 

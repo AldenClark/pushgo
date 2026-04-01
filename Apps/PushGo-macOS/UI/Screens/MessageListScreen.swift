@@ -97,7 +97,6 @@ struct MessageListScreen: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .background(EntityVisualTokens.pageBackground)
-            .background(ListScrollStyleStabilizer())
             .onAppear { scrollToSelectionIfNeeded(proxy) }
             .onChange(of: selection) { _, newValue in
                 pendingScrollTarget = newValue
@@ -139,7 +138,6 @@ struct MessageListScreen: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(EntityVisualTokens.pageBackground)
-        .background(ListScrollStyleStabilizer())
     }
 
     private var searchResultsList: some View {
@@ -180,7 +178,6 @@ struct MessageListScreen: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .background(EntityVisualTokens.pageBackground)
-            .background(ListScrollStyleStabilizer())
             .onAppear { scrollToSelectionIfNeeded(proxy) }
             .onChange(of: selection) { _, newValue in
                 pendingScrollTarget = newValue
@@ -238,7 +235,6 @@ struct MessageListScreen: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(EntityVisualTokens.pageBackground)
-        .background(ListScrollStyleStabilizer())
     }
 
     private func toggleBatchSelection(_ messageId: UUID) {

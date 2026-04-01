@@ -71,7 +71,6 @@ struct ThingListScreen: View {
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .background(EntityVisualTokens.pageBackground)
-                .background(ListScrollStyleStabilizer())
             } else {
                 List(selection: $selection) {
                     ForEach(Array(things.enumerated()), id: \.element.id) { index, thing in
@@ -107,7 +106,6 @@ struct ThingListScreen: View {
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .background(EntityVisualTokens.pageBackground)
-                .background(ListScrollStyleStabilizer())
             }
         }
         .accessibilityIdentifier("screen.things.list")
