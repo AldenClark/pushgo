@@ -5,7 +5,13 @@ import Observation
 @Observable
 final class MessageSearchViewModel {
     var query: String = ""
-    private(set) var displayedResults: [PushMessageSummary] = []
+    private(set) var displayedResultsIdentityRevision: UInt64 = 0
+    private(set) var displayedResults: [PushMessageSummary] = [] {
+        didSet {
+            guard messageIDsChanged(from: oldValue, to: displayedResults) else { return }
+            displayedResultsIdentityRevision &+= 1
+        }
+    }
     private(set) var totalResults: Int = 0
     private(set) var hasSearched: Bool = false
 
@@ -148,5 +154,16 @@ final class MessageSearchViewModel {
         let overflow = displayedResults.count - maxCachedResults
         guard overflow > 0 else { return }
         displayedResults.removeFirst(overflow)
+    }
+
+    private func messageIDsChanged(
+        from previous: [PushMessageSummary],
+        to current: [PushMessageSummary]
+    ) -> Bool {
+        guard previous.count == current.count else { return true }
+        for (lhs, rhs) in zip(previous, current) where lhs.id != rhs.id {
+            return true
+        }
+        return false
     }
 }

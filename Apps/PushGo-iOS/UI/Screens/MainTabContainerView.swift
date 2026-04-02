@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 struct MainTabContainerView: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
@@ -9,10 +12,25 @@ struct MainTabContainerView: View {
     @State private var entityViewModel = EntityProjectionViewModel()
     @State private var selection: MainTab = .messages
     @State private var didRefreshAuthorizationStatus: Bool = false
+    @State private var messageScrollToUnreadToken: Int = 0
+    @State private var messageScrollToTopToken: Int = 0
+    @State private var eventScrollToTopToken: Int = 0
+    @State private var thingScrollToTopToken: Int = 0
+    @State private var pendingMessageReselectTask: Task<Void, Never>?
 
     var body: some View {
         tabLayout
             .pushgoTabBarMinimizeOnScroll()
+            .background(
+                TabBarSelectionObserver(visibleTabs: visibleTabs) { tappedTab, tapKind in
+                    switch tapKind {
+                    case .single:
+                        handleTabBarTap(for: tappedTab)
+                    case .double:
+                        handleTabBarDoubleTap(for: tappedTab)
+                    }
+                }
+            )
             .environment(searchViewModel)
             .task {
                 guard !didRefreshAuthorizationStatus else { return }
@@ -72,6 +90,7 @@ struct MainTabContainerView: View {
             }
             .onChange(of: environment.messageStoreRevision) { _, _ in
                 Task { @MainActor in
+                    await messageListViewModel.refresh()
                     await entityViewModel.reload()
                     ensureSelectionIsVisible()
                 }
@@ -96,11 +115,15 @@ struct MainTabContainerView: View {
 
     @ViewBuilder
     private var tabLayout: some View {
-        let unreadCount = messageListViewModel.unreadMessageCount
+        let unreadCount = environment.unreadMessageCount
         TabView(selection: $selection) {
             if showsMessagesTab {
                 Tab(LocalizationManager.localizedSync("messages"), systemImage: "tray.full", value: MainTab.messages) {
-                    MessageListScreen(viewModel: messageListViewModel)
+                    MessageListScreen(
+                        viewModel: messageListViewModel,
+                        scrollToUnreadToken: messageScrollToUnreadToken,
+                        scrollToTopToken: messageScrollToTopToken
+                    )
                 }
                 .badge(unreadCount > 0 ? Text("\(unreadCount)") : nil)
             }
@@ -111,6 +134,7 @@ struct MainTabContainerView: View {
                         EventListScreen(
                             viewModel: entityViewModel,
                             openEventId: environment.pendingEventToOpen,
+                            scrollToTopToken: eventScrollToTopToken,
                             onOpenEventHandled: {
                                 environment.pendingEventToOpen = nil
                             }
@@ -125,6 +149,7 @@ struct MainTabContainerView: View {
                         ThingListScreen(
                             viewModel: entityViewModel,
                             openThingId: environment.pendingThingToOpen,
+                            scrollToTopToken: thingScrollToTopToken,
                             onOpenThingHandled: {
                                 environment.pendingThingToOpen = nil
                             }
@@ -155,23 +180,158 @@ struct MainTabContainerView: View {
         "\(showsMessagesTab)|\(showsEventsTab)|\(showsThingsTab)"
     }
 
-    private func ensureSelectionIsVisible() {
-        var visibleTabs: [MainTab] = []
+    private var visibleTabs: [MainTab] {
+        var tabs: [MainTab] = []
         if showsMessagesTab {
-            visibleTabs.append(.messages)
+            tabs.append(.messages)
         }
         if showsEventsTab {
-            visibleTabs.append(.events)
+            tabs.append(.events)
         }
         if showsThingsTab {
-            visibleTabs.append(.things)
+            tabs.append(.things)
         }
-        visibleTabs.append(.channels)
+        tabs.append(.channels)
+        return tabs
+    }
+
+    private func ensureSelectionIsVisible() {
         if !visibleTabs.contains(selection) {
             selection = visibleTabs.first ?? .channels
         }
     }
+
+    private func handleTabBarTap(for tappedTab: MainTab) {
+        guard tappedTab == selection else { return }
+        pendingMessageReselectTask?.cancel()
+
+        switch tappedTab {
+        case .messages:
+            let currentToken = messageScrollToUnreadToken
+            pendingMessageReselectTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 280_000_000)
+                guard !Task.isCancelled, messageScrollToUnreadToken == currentToken else { return }
+                messageScrollToUnreadToken += 1
+            }
+        case .events, .things, .channels:
+            break
+        }
+    }
+
+    private func handleTabBarDoubleTap(for tappedTab: MainTab) {
+        guard tappedTab == selection else { return }
+        pendingMessageReselectTask?.cancel()
+        pendingMessageReselectTask = nil
+
+        switch tappedTab {
+        case .messages:
+            messageScrollToTopToken += 1
+        case .events:
+            eventScrollToTopToken += 1
+        case .things:
+            thingScrollToTopToken += 1
+        case .channels:
+            break
+        }
+    }
 }
+
+#if os(iOS)
+private struct TabBarSelectionObserver: UIViewControllerRepresentable {
+    let visibleTabs: [MainTab]
+    let onTap: (MainTab, TabBarTapKind) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(visibleTabs: visibleTabs, onTap: onTap)
+    }
+
+    func makeUIViewController(context: Context) -> ObserverController {
+        let controller = ObserverController()
+        controller.coordinator = context.coordinator
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: ObserverController, context: Context) {
+        context.coordinator.visibleTabs = visibleTabs
+        context.coordinator.onTap = onTap
+        uiViewController.coordinator = context.coordinator
+        uiViewController.bindIfNeeded()
+    }
+
+    final class Coordinator: NSObject, UITabBarControllerDelegate {
+        var visibleTabs: [MainTab]
+        var onTap: (MainTab, TabBarTapKind) -> Void
+        private weak var tabBarController: UITabBarController?
+        private weak var previousDelegate: UITabBarControllerDelegate?
+        private var lastTapTab: MainTab?
+        private var lastTapAt: CFTimeInterval = 0
+        private var selectedIndex: Int?
+
+        init(visibleTabs: [MainTab], onTap: @escaping (MainTab, TabBarTapKind) -> Void) {
+            self.visibleTabs = visibleTabs
+            self.onTap = onTap
+        }
+
+        func bind(to tabBarController: UITabBarController) {
+            guard self.tabBarController !== tabBarController else { return }
+            previousDelegate = tabBarController.delegate
+            self.tabBarController = tabBarController
+            selectedIndex = tabBarController.selectedIndex
+            tabBarController.delegate = self
+        }
+
+        func tabBarController(_ tabBarController: UITabBarController, didSelect viewController: UIViewController) {
+            let index = tabBarController.viewControllers?.firstIndex(of: viewController) ?? tabBarController.selectedIndex
+            guard visibleTabs.indices.contains(index) else {
+                previousDelegate?.tabBarController?(tabBarController, didSelect: viewController)
+                return
+            }
+
+            defer {
+                selectedIndex = index
+                previousDelegate?.tabBarController?(tabBarController, didSelect: viewController)
+            }
+
+            guard selectedIndex == index else {
+                lastTapTab = nil
+                lastTapAt = 0
+                return
+            }
+
+            let tappedTab = visibleTabs[index]
+            let now = CACurrentMediaTime()
+            let isDoubleTap = lastTapTab == tappedTab && (now - lastTapAt) <= 0.30
+            lastTapTab = isDoubleTap ? nil : tappedTab
+            lastTapAt = now
+
+            if isDoubleTap {
+                onTap(tappedTab, .double)
+            } else {
+                onTap(tappedTab, .single)
+            }
+        }
+    }
+
+    final class ObserverController: UIViewController {
+        weak var coordinator: Coordinator?
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            bindIfNeeded()
+        }
+
+        func bindIfNeeded() {
+            guard let tabBarController, let coordinator else { return }
+            coordinator.bind(to: tabBarController)
+        }
+    }
+}
+
+private enum TabBarTapKind {
+    case single
+    case double
+}
+#endif
 
 enum MainTab: Hashable, CaseIterable {
     case messages

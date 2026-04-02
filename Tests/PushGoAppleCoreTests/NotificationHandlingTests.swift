@@ -28,6 +28,35 @@ struct NotificationHandlingTests {
     }
 
     @Test
+    func providerWakeupPullDeliveryIdRequiresWakeupMarkers() {
+        #expect(
+            NotificationHandling.providerWakeupPullDeliveryId(
+                from: [
+                    "provider_wakeup": "1",
+                    "provider_mode": "wakeup",
+                    "delivery_id": "delivery-wakeup-001",
+                ]
+            ) == "delivery-wakeup-001"
+        )
+        #expect(
+            NotificationHandling.providerWakeupPullDeliveryId(
+                from: [
+                    "delivery_id": "delivery-wakeup-001",
+                ]
+            ) == nil
+        )
+        #expect(
+            NotificationHandling.providerWakeupPullDeliveryId(
+                from: [
+                    "provider_wakeup": "1",
+                    "provider_mode": "direct",
+                    "delivery_id": "delivery-wakeup-001",
+                ]
+            ) == nil
+        )
+    }
+
+    @Test
     func categoryIdentifierUsesReminderCategoryForEntityPayloads() {
         let eventPayload: [AnyHashable: Any] = [
             "entity_type": "event",
@@ -390,6 +419,45 @@ struct NotificationHandlingTests {
         #expect(pull?.body == "Path consistency body")
         #expect(NotificationHandling.shouldPresentUserAlert(from: directPayload))
         #expect(NotificationHandling.shouldPresentUserAlert(from: pullPayload))
+    }
+
+    @Test
+    func foregroundPresentationDecisionReloadsCountsForDuplicateAlert() {
+        let payload: [AnyHashable: Any] = [
+            "entity_type": "message",
+            "message_id": "msg-foreground-duplicate-001",
+            "entity_id": "msg-foreground-duplicate-001",
+            "title": "Foreground message",
+            "body": "Duplicate payload should still refresh badge and present",
+        ]
+
+        let decision = NotificationHandling.foregroundPresentationDecision(
+            persistenceOutcome: .duplicate,
+            payload: payload
+        )
+
+        #expect(decision.shouldReloadCounts)
+        #expect(decision.shouldPresentAlert)
+    }
+
+    @Test
+    func foregroundPresentationDecisionSuppressesRejectedPayloads() {
+        let payload: [AnyHashable: Any] = [
+            "_skip_persist": "1",
+            "entity_type": "message",
+            "message_id": "msg-foreground-rejected-001",
+            "entity_id": "msg-foreground-rejected-001",
+            "title": "Bypassed",
+            "body": "Should not present",
+        ]
+
+        let decision = NotificationHandling.foregroundPresentationDecision(
+            persistenceOutcome: .rejected,
+            payload: payload
+        )
+
+        #expect(!decision.shouldReloadCounts)
+        #expect(!decision.shouldPresentAlert)
     }
 
     private func makeEntityRecord(

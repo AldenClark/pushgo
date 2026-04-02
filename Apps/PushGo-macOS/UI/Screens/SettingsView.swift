@@ -11,19 +11,24 @@ struct SettingsView: View {
 
     var body: some View {
         navigationContainer {
-            settingsScaffold
+            coreLayout
+                .navigationTitle(localizationManager.localized("settings"))
         }
         .accessibilityIdentifier("screen.settings")
         .sheet(item: $macOverlay) { overlay in
             macOverlaySheet(for: overlay)
         }
         .task {
+            await environment.refreshLaunchAtLoginStatus()
             viewModel.refresh()
         }
         .onChange(of: environment.pushRegistrationService.authorizationState) { _, _ in
             viewModel.refresh()
         }
         .onChange(of: environment.serverConfig) { _, _ in
+            viewModel.refresh()
+        }
+        .onChange(of: environment.launchAtLoginEnabled) { _, _ in
             viewModel.refresh()
         }
         .onChange(of: viewModel.successMessage) { _, message in
@@ -60,27 +65,6 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private var settingsScaffold: some View {
-        let baseView = coreLayout
-            .navigationTitle(localizationManager.localized("settings"))
-        applyTitleToolbarIfNeeded(baseView)
-    }
-
-    @ViewBuilder
-    private func applyTitleToolbarIfNeeded<Content: View>(_ content: Content) -> some View {
-        if #available(macOS 26.0, *) {
-            content
-        } else {
-            content.toolbar {
-                ToolbarItem(placement: .navigation) {
-                    Text(localizationManager.localized("settings"))
-                        .font(.headline.weight(.semibold))
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
     private func macOverlaySheet(for overlay: MacOverlay) -> some View {
         switch overlay {
         case .manualKey:
@@ -105,11 +89,7 @@ struct SettingsView: View {
     }
 
     private var settingsBackgroundColor: Color {
-        if #available(macOS 26.0, *) {
-            Color.appWindowBackground
-        } else {
-            Color.messageListBackground
-        }
+        Color.appWindowBackground
     }
 
     private var appVersionDetail: LocalizedStringKey {

@@ -104,6 +104,7 @@
 		AA8E2C972EF2359D00AD1834 /* UserInfoSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C362EF2359D00AD1834 /* UserInfoSanitizer.swift */; };
 		AA8E2C9B2EF2359D00AD1834 /* PushGoNotificationNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C332EF2359D00AD1834 /* PushGoNotificationNames.swift */; };
 		AA8E2C9F2EF2359D00AD1834 /* BadgeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C242EF2359D00AD1834 /* BadgeManager.swift */; };
+		AA9BCB4F2F7DA00700F6BE70 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = AA9BCB4E2F7DA00700F6BE70 /* GRDB */; };
 		AAA6F04C8F1BA6004768B932 /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2A2EF2359D00AD1834 /* AppConstants.swift */; };
 		AAC02D3B2F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0034 /* GRDB */; };
 		AAC02D3C2F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0037 /* GRDB */; };
@@ -206,6 +207,8 @@
 		FEE100092F80000100C0FFEE /* WatchLightQuantizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEE100112F80000100C0FFEE /* WatchLightQuantizer.swift */; };
 		FEE1000A2F80000100C0FFEE /* WatchLightModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEE100102F80000100C0FFEE /* WatchLightModels.swift */; };
 		FEE1000B2F80000100C0FFEE /* WatchLightQuantizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEE100112F80000100C0FFEE /* WatchLightQuantizer.swift */; };
+		FEE1000C2F80000100C0FFEE /* ChannelSubscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1B2C3D4E5F60718293A71 /* ChannelSubscriptionService.swift */; };
+		FEE1000D2F80000100C0FFEE /* ChannelSubscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A1B2C3D4E5F60718293A71 /* ChannelSubscriptionService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -517,6 +520,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA9BCB4F2F7DA00700F6BE70 /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -817,6 +821,7 @@
 			);
 			name = "PushGoNSE-watchOS";
 			packageProductDependencies = (
+				AA9BCB4E2F7DA00700F6BE70 /* GRDB */,
 			);
 			productName = pushgowatchNotificationServiceExtension;
 			productReference = DE35C72B5C899D0FCCBAF070 /* NotificationServiceExtensionWatch.appex */;
@@ -1148,6 +1153,7 @@
 				EFD9BB707D214FEC819105B4 /* PushMessageSummary.swift in Sources */,
 				AAE0B0B42F6A000100C0FFEE /* UserInfoSanitizer.swift in Sources */,
 				AAE0B0B52F6A000100C0FFEE /* LocalDataStore.swift in Sources */,
+				FEE1000C2F80000100C0FFEE /* ChannelSubscriptionService.swift in Sources */,
 				C0A1B2C3D4E5F60718293A5E /* SwiftDataModels.swift in Sources */,
 				0AB64B4D52C546C3964A4A7C /* MessageSearchIndex.swift in Sources */,
 				AAE0B0B62F6A000100C0FFEE /* SharedImageCache.swift in Sources */,
@@ -1179,6 +1185,7 @@
 				F4A576A17767CA76088BD0AF /* PushMessageSummary.swift in Sources */,
 				ACD50E96683A0EBE5AF671D6 /* UserInfoSanitizer.swift in Sources */,
 				D236376962B4225163DB0E47 /* LocalDataStore.swift in Sources */,
+				FEE1000D2F80000100C0FFEE /* ChannelSubscriptionService.swift in Sources */,
 				5C17E6647F8876BCE0F0F47B /* SwiftDataModels.swift in Sources */,
 				396B5824604CF29524F1D361 /* MessageSearchIndex.swift in Sources */,
 				622F64CE0545F54BBF5C9995 /* SharedImageCache.swift in Sources */,
@@ -1278,7 +1285,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-watchOS/pushgowatch NotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 38;
+				CURRENT_PROJECT_VERSION = 40;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -1319,7 +1326,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-macOS/pushgomac.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 38;
+				CURRENT_PROJECT_VERSION = 40;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -1379,7 +1386,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-macOS/pushgomac.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 38;
+				CURRENT_PROJECT_VERSION = 40;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -1570,7 +1577,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-iOS/pushgo.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 38;
+				CURRENT_PROJECT_VERSION = 40;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -1630,7 +1637,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-iOS/pushgo.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 38;
+				CURRENT_PROJECT_VERSION = 40;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -1687,7 +1694,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-iOS/NotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 38;
+				CURRENT_PROJECT_VERSION = 40;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1740,7 +1747,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-iOS/NotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 38;
+				CURRENT_PROJECT_VERSION = 40;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -1782,7 +1789,7 @@
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 38;
+				CURRENT_PROJECT_VERSION = 40;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1838,7 +1845,7 @@
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 38;
+				CURRENT_PROJECT_VERSION = 40;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1895,7 +1902,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-watchOS/pushgowatch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 38;
+				CURRENT_PROJECT_VERSION = 40;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_PREVIEWS = YES;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -1935,7 +1942,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-watchOS/pushgowatch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 38;
+				CURRENT_PROJECT_VERSION = 40;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_PREVIEWS = YES;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -2064,7 +2071,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-watchOS/pushgowatch NotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 38;
+				CURRENT_PROJECT_VERSION = 40;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -2237,6 +2244,11 @@
 			productName = GRDB;
 		};
 		A0AA00012F70000100AA0039 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A0AA00012F70000100AA0033 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
+			productName = GRDB;
+		};
+		AA9BCB4E2F7DA00700F6BE70 /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A0AA00012F70000100AA0033 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
 			productName = GRDB;

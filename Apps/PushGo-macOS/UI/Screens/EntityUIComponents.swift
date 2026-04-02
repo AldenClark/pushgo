@@ -208,13 +208,17 @@ enum EntityDateFormatter {
         formatter.timeStyle = .medium
         return formatter
     }()
-
     static func text(_ date: Date) -> String {
         formatter.string(from: date)
     }
 
     static func relativeText(_ date: Date) -> String {
-        RelativeDateTimeFormatter().localizedString(for: date, relativeTo: Date())
+        date.formatted(
+            .relative(
+                presentation: .named,
+                unitsStyle: .abbreviated
+            )
+        )
     }
 }
 

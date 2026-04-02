@@ -3,9 +3,11 @@ import SwiftUI
 struct ThingListScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @Bindable var viewModel: EntityProjectionViewModel
     var openThingId: String? = nil
+    var scrollToTopToken: Int = 0
     var onOpenThingHandled: (() -> Void)? = nil
     @State private var selectedThing: ThingProjection?
     @State private var selectedThingIds: Set<String> = []
@@ -15,6 +17,7 @@ struct ThingListScreen: View {
     @State private var isBatchModeActive = false
 
     var body: some View {
+        let filteredThingsSnapshot = filteredThings
         let baseContent = Group {
             if viewModel.things.isEmpty {
                 EntityEmptyView(
@@ -22,7 +25,7 @@ struct ThingListScreen: View {
                     title: localizationManager.localized("things_empty_title"),
                     subtitle: localizationManager.localized("things_empty_hint")
                 )
-            } else if filteredThings.isEmpty {
+            } else if filteredThingsSnapshot.isEmpty {
                 MessageSearchPlaceholderView(
                     imageName: "questionmark.circle",
                     title: "no_matching_results",
@@ -31,59 +34,73 @@ struct ThingListScreen: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.horizontal, 24)
             } else {
-                List(selection: batchSelectionBinding) {
-                    ForEach(Array(filteredThings.enumerated()), id: \.element.id) { index, thing in
-                        Group {
-                            if isBatchMode {
-                                ThingListRow(thing: thing)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            } else {
-                                Button {
-                                    selectThing(thing)
-                                } label: {
+                ScrollViewReader { proxy in
+                    List(selection: batchSelectionBinding) {
+                        ForEach(Array(filteredThingsSnapshot.enumerated()), id: \.element.id) { index, thing in
+                            Group {
+                                if isBatchMode {
                                     ThingListRow(thing: thing)
                                         .frame(maxWidth: .infinity, alignment: .leading)
+                                } else {
+                                    Button {
+                                        selectThing(thing)
+                                    } label: {
+                                        ThingListRow(thing: thing)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
-                                .buttonStyle(.plain)
+                            }
+                            .id(thing.id)
+                            .accessibilityIdentifier("thing.row.\(thing.id)")
+                            .tag(thing.id)
+                            .listRowInsets(EdgeInsets(
+                                top: EntityVisualTokens.listRowInsetVertical,
+                                leading: EntityVisualTokens.listRowInsetHorizontal,
+                                bottom: EntityVisualTokens.listRowInsetVertical,
+                                trailing: EntityVisualTokens.listRowInsetHorizontal
+                            ))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
+                            .listRowSeparator(index == filteredThingsSnapshot.count - 1 ? .hidden : .visible, edges: .bottom)
+                            .onAppear {
+                                guard index == filteredThingsSnapshot.count - 1 else { return }
+                                Task { await viewModel.loadMoreThings() }
                             }
                         }
-                        .accessibilityIdentifier("thing.row.\(thing.id)")
-                        .tag(thing.id)
-                        .listRowInsets(EdgeInsets(
-                            top: EntityVisualTokens.listRowInsetVertical,
-                            leading: EntityVisualTokens.listRowInsetHorizontal,
-                            bottom: EntityVisualTokens.listRowInsetVertical,
-                            trailing: EntityVisualTokens.listRowInsetHorizontal
-                        ))
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
-                        .listRowSeparator(index == filteredThings.count - 1 ? .hidden : .visible, edges: .bottom)
-                        .onAppear {
-                            guard index == filteredThings.count - 1 else { return }
-                            Task { await viewModel.loadMoreThings() }
+                        if viewModel.isLoadingMoreThings {
+                            HStack {
+                                Spacer()
+                                ProgressView()
+                                    .controlSize(.small)
+                                Spacer()
+                            }
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
                         }
                     }
-                    if viewModel.isLoadingMoreThings {
-                        HStack {
-                            Spacer()
-                            ProgressView()
-                                .controlSize(.small)
-                            Spacer()
+                    .listStyle(.plain)
+                    .modifier(
+                        ThingListTopObserverModifier(enabled: true) { topOffset in
+                            updateThingListTopState(
+                                topOffset: topOffset,
+                                filteredThingsCount: filteredThingsSnapshot.count
+                            )
                         }
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
+                    )
+                    .environment(\.editMode, isBatchMode ? .constant(.active) : .constant(.inactive))
+                    .scrollContentBackground(.hidden)
+                    .background(EntityVisualTokens.pageBackground)
+                    .onChange(of: scrollToTopToken) { _, _ in
+                        scrollToTopIfNeeded(proxy, filteredThings: filteredThingsSnapshot)
                     }
                 }
-                .listStyle(.plain)
-                .environment(\.editMode, isBatchMode ? .constant(.active) : .constant(.inactive))
-                .scrollContentBackground(.hidden)
-                .background(EntityVisualTokens.pageBackground)
             }
         }
         let content = applySearchIfNeeded(baseContent)
         .accessibilityIdentifier("screen.things.list")
-        .task(id: searchAutoloadTrigger) {
-            await autoloadSearchResultsIfNeeded()
+        .task(id: searchAutoloadTrigger(filteredThingsCount: filteredThingsSnapshot.count)) {
+            await autoloadSearchResultsIfNeeded(filteredThingsCount: filteredThingsSnapshot.count)
         }
         .navigationTitle(localizationManager.localized("push_type_thing"))
         .navigationBarTitleDisplayMode(.large)
@@ -101,6 +118,7 @@ struct ThingListScreen: View {
             Text(localizationManager.localized("batch_delete_selected_things_confirm", selectedThingIds.count))
         }
         .onAppear {
+            environment.updateThingListPosition(isAtTop: true)
             openThingIfNeeded()
 #if DEBUG
             publishAutomationState()
@@ -167,7 +185,7 @@ struct ThingListScreen: View {
         } else {
             content.searchable(
                 text: $searchQuery,
-                placement: .navigationBarDrawer(displayMode: .always),
+                placement: .navigationBarDrawer(displayMode: .automatic),
                 prompt: Text(localizationManager.localized("search_objects"))
             )
         }
@@ -197,26 +215,31 @@ struct ThingListScreen: View {
         }
     }
 
-    private var searchAutoloadTrigger: String {
-        "\(normalizedSearchQuery)|\(selectedChannelId ?? "_")|\(viewModel.things.count)|\(viewModel.hasMoreThings)|\(viewModel.isLoadingMoreThings)"
+    private func searchAutoloadTrigger(filteredThingsCount: Int) -> String {
+        "\(normalizedSearchQuery)|\(selectedChannelId ?? "_")|\(viewModel.things.count)|\(filteredThingsCount)|\(viewModel.hasMoreThings)|\(viewModel.isLoadingMoreThings)"
     }
 
     private var normalizedSearchQuery: String {
         searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
-    private var shouldAutoloadSearchResults: Bool {
+    private func shouldAutoloadSearchResults(filteredThingsCount: Int) -> Bool {
         let hasActiveFilter = !normalizedSearchQuery.isEmpty
             || selectedChannelId != nil
         return hasActiveFilter
-            && filteredThings.isEmpty
+            && filteredThingsCount == 0
             && viewModel.hasMoreThings
             && !viewModel.isLoadingMoreThings
     }
 
-    private func autoloadSearchResultsIfNeeded() async {
-        guard shouldAutoloadSearchResults else { return }
+    private func autoloadSearchResultsIfNeeded(filteredThingsCount: Int) async {
+        guard shouldAutoloadSearchResults(filteredThingsCount: filteredThingsCount) else { return }
         await viewModel.loadMoreThings()
+    }
+
+    private func updateThingListTopState(topOffset: CGFloat, filteredThingsCount: Int) {
+        let isAtTop = filteredThingsCount == 0 || topOffset <= ThingListTopMetrics.topTolerance
+        environment.updateThingListPosition(isAtTop: isAtTop)
     }
 
     private func searchableText(for thing: ThingProjection) -> String {
@@ -240,6 +263,17 @@ struct ThingListScreen: View {
         ]
         .joined(separator: " ")
         .lowercased()
+    }
+
+    private func scrollToTopIfNeeded(_ proxy: ScrollViewProxy, filteredThings: [ThingProjection]) {
+        guard let firstId = filteredThings.first?.id else { return }
+        if reduceMotion {
+            proxy.scrollTo(firstId, anchor: .top)
+        } else {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                proxy.scrollTo(firstId, anchor: .top)
+            }
+        }
     }
 
     @ToolbarContentBuilder
@@ -400,6 +434,32 @@ struct ThingListScreen: View {
             Text(title)
         }
     }
+}
+
+private struct ThingListTopObserverModifier: ViewModifier {
+    let enabled: Bool
+    let onChange: (CGFloat) -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if enabled {
+            content.onScrollGeometryChange(
+                for: CGFloat.self,
+                of: { geometry in
+                    geometry.contentOffset.y
+                },
+                action: { _, newValue in
+                    onChange(newValue)
+                }
+            )
+        } else {
+            content
+        }
+    }
+}
+
+private enum ThingListTopMetrics {
+    static let topTolerance: CGFloat = 2
 }
 
 private func thingSortPriority(_ thing: ThingProjection) -> Int {

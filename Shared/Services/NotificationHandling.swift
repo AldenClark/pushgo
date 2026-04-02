@@ -201,6 +201,13 @@ enum NotificationPersistenceCoordinator {
 #endif
 
 enum NotificationHandling {
+#if !os(watchOS)
+    struct ForegroundPresentationDecision: Equatable {
+        let shouldReloadCounts: Bool
+        let shouldPresentAlert: Bool
+    }
+#endif
+
     struct EntityOpenTargetComponents: Equatable {
         let entityType: String
         let entityId: String
@@ -213,6 +220,32 @@ enum NotificationHandling {
     static func shouldPresentUserAlert(from payload: [AnyHashable: Any]) -> Bool {
         NotificationPayloadSemantics.shouldPresentUserAlert(from: payload)
     }
+
+#if !os(watchOS)
+    static func foregroundPresentationDecision(
+        persistenceOutcome: NotificationPersistenceOutcome,
+        payload: [AnyHashable: Any]
+    ) -> ForegroundPresentationDecision {
+        let shouldReloadCounts: Bool
+        switch persistenceOutcome {
+        case .persistedMain, .persistedPending, .duplicate:
+            shouldReloadCounts = true
+        case .rejected, .failed:
+            shouldReloadCounts = false
+        }
+        let shouldPresentAlert: Bool
+        switch persistenceOutcome {
+        case .rejected:
+            shouldPresentAlert = false
+        case .persistedMain, .persistedPending, .duplicate, .failed:
+            shouldPresentAlert = shouldPresentUserAlert(from: payload)
+        }
+        return ForegroundPresentationDecision(
+            shouldReloadCounts: shouldReloadCounts,
+            shouldPresentAlert: shouldPresentAlert
+        )
+    }
+#endif
 
     static func normalizeRemoteNotification(
         _ userInfo: [AnyHashable: Any]
@@ -260,6 +293,48 @@ enum NotificationHandling {
     static func shouldSkipPersistence(for payload: [AnyHashable: Any]) -> Bool {
         let sanitized = UserInfoSanitizer.sanitize(payload)
         return normalizedPayloadBoolean(sanitized["_skip_persist"]) == true
+    }
+
+    static func providerWakeupPullDeliveryId(from payload: [AnyHashable: Any]) -> String? {
+        let sanitized = UserInfoSanitizer.sanitize(payload)
+        guard normalizedPayloadBoolean(sanitized["provider_wakeup"]) == true else {
+            return nil
+        }
+        let mode = (sanitized["provider_mode"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard mode == nil || mode == "wakeup" else {
+            return nil
+        }
+        let deliveryId = (sanitized["delivery_id"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let deliveryId, !deliveryId.isEmpty else {
+            return nil
+        }
+        return deliveryId
+    }
+
+    static func applyPulledPayload(
+        _ payload: [String: String],
+        to content: UNMutableNotificationContent
+    ) {
+        let userInfo = payload.reduce(into: [AnyHashable: Any]()) { result, element in
+            result[element.key] = element.value
+        }
+        content.userInfo = userInfo
+        if let normalized = normalizeRemoteNotification(userInfo) {
+            content.title = normalized.title
+            content.body = normalized.body
+        } else {
+            content.title = payload["title"]?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            content.body = payload["body"]?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        }
+        content.threadIdentifier = NotificationPayloadSemantics.notificationThreadIdentifier(
+            from: userInfo
+        ) ?? ""
+        content.categoryIdentifier = notificationCategoryIdentifier(for: userInfo)
     }
 
     static func isEntityReminderPayload(_ payload: [AnyHashable: Any]) -> Bool {

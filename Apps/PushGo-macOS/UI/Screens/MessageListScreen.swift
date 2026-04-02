@@ -1,4 +1,3 @@
-import AppKit
 import Observation
 import SwiftUI
 
@@ -47,28 +46,7 @@ struct MessageListScreen: View {
             viewModel.enableChannelSummaries()
         }
         .accessibilityIdentifier("screen.messages.list")
-        .navigationTitle(localizationManager.localized("messages"))
-        let titledView = applyTitleToolbarIfNeeded(baseView)
-        return applySearchIfNeeded(titledView)
-    }
-
-    @ViewBuilder
-    private func applyTitleToolbarIfNeeded<Content: View>(_ content: Content) -> some View {
-        if #available(macOS 26.0, *) {
-            content
-        } else {
-            content.toolbar {
-                ToolbarItem(placement: .navigation) {
-                    Text(localizationManager.localized("messages"))
-                        .font(.headline.weight(.semibold))
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func applySearchIfNeeded<Content: View>(_ content: Content) -> some View {
-        content
+        return baseView
     }
 
     private var isShowingSearchResults: Bool {
@@ -102,7 +80,7 @@ struct MessageListScreen: View {
                 pendingScrollTarget = newValue
                 scrollToSelectionIfNeeded(proxy)
             }
-            .onChange(of: viewModel.filteredMessages.map(\.id)) { _, _ in
+            .onChange(of: viewModel.filteredMessagesIdentityRevision) { _, _ in
                 scrollToSelectionIfNeeded(proxy)
             }
         }
@@ -183,7 +161,7 @@ struct MessageListScreen: View {
                 pendingScrollTarget = newValue
                 scrollToSelectionIfNeeded(proxy)
             }
-            .onChange(of: searchViewModel.displayedResults.map(\.id)) { _, _ in
+            .onChange(of: searchViewModel.displayedResultsIdentityRevision) { _, _ in
                 scrollToSelectionIfNeeded(proxy)
             }
         }

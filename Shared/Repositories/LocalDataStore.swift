@@ -2711,6 +2711,60 @@ private actor GRDBStore {
         value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private static func normalizeChannelIdentifierForMatch(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+        var output = String()
+        output.reserveCapacity(26)
+        for ch in trimmed {
+            if ch == "-" || ch.isWhitespace {
+                continue
+            }
+            let upper = String(ch).uppercased()
+            let mapped: String
+            switch upper {
+            case "O":
+                mapped = "0"
+            case "I", "L":
+                mapped = "1"
+            default:
+                mapped = upper
+            }
+            guard mapped.count == 1,
+                  let scalar = mapped.unicodeScalars.first,
+                  scalar.isASCII,
+                  alphabet.contains(mapped)
+            else {
+                return nil
+            }
+            output.append(Character(mapped))
+        }
+        return output.count == 26 ? output : nil
+    }
+
+    private static func canonicalChannelExpression(column: String) -> String {
+        let trimmed = "trim(coalesce(\(column), ''))"
+        let withoutDelimiters = "replace(replace(replace(replace(replace(\(trimmed), '-', ''), ' ', ''), char(9), ''), char(10), ''), char(13), '')"
+        let uppercased = "upper(\(withoutDelimiters))"
+        let mappedO = "replace(\(uppercased), 'O', '0')"
+        let mappedI = "replace(\(mappedO), 'I', '1')"
+        let mappedL = "replace(\(mappedI), 'L', '1')"
+        return mappedL
+    }
+
+    private static func channelMatchCondition(column: String = "channel", value: String?) -> String {
+        guard let value else { return "1" }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return "(\(canonicalChannelExpression(column: column)) = '')"
+        }
+        if let normalized = normalizeChannelIdentifierForMatch(trimmed) {
+            return "(\(canonicalChannelExpression(column: column)) = \(sqlQuoted(normalized)))"
+        }
+        return "(\(column) = \(sqlQuoted(trimmed)))"
+    }
+
     private func read<T>(_ action: (Database) throws -> T) throws -> T {
         try dbQueue.read(action)
     }
@@ -3121,12 +3175,7 @@ private actor GRDBStore {
         }
 
         if let channel {
-            let normalized = channel.trimmingCharacters(in: .whitespacesAndNewlines)
-            if normalized.isEmpty {
-                conditions.append("(channel IS NULL OR trim(channel) = '')")
-            } else {
-                conditions.append("channel = \(Self.sqlQuoted(normalized))")
-            }
+            conditions.append(Self.channelMatchCondition(value: channel))
         }
 
         if let cursor {
@@ -3233,14 +3282,7 @@ private actor GRDBStore {
         filter: MessageQueryFilter,
         channel: String?
     ) -> String {
-        let channelCondition: String = {
-            guard let channel else { return "1" }
-            let trimmed = channel.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty {
-                return "(channel IS NULL OR trim(channel) = '')"
-            }
-            return "channel = \(Self.sqlQuoted(trimmed))"
-        }()
+        let channelCondition = Self.channelMatchCondition(value: channel)
 
         switch filter {
         case .all, .unreadOnly:
@@ -4463,12 +4505,7 @@ private actor GRDBStore {
     func deleteEventRecords(channel: String?) async throws -> Int {
         let normalized = channel?.trimmingCharacters(in: .whitespacesAndNewlines)
         return try write { db in
-            let channelCondition: String
-            if let normalized, !normalized.isEmpty {
-                channelCondition = "channel = \(Self.sqlQuoted(normalized))"
-            } else {
-                channelCondition = "1"
-            }
+            let channelCondition = Self.channelMatchCondition(value: normalized)
             let idsSQL = """
                 SELECT id
                 FROM messages
@@ -4510,12 +4547,7 @@ private actor GRDBStore {
     func deleteThingRecords(channel: String?) async throws -> Int {
         let normalized = channel?.trimmingCharacters(in: .whitespacesAndNewlines)
         return try write { db in
-            let channelCondition: String
-            if let normalized, !normalized.isEmpty {
-                channelCondition = "channel = \(Self.sqlQuoted(normalized))"
-            } else {
-                channelCondition = "1"
-            }
+            let channelCondition = Self.channelMatchCondition(value: normalized)
             let idsSQL = """
                 SELECT id
                 FROM messages
@@ -4570,12 +4602,7 @@ private actor GRDBStore {
                 conditions.append("is_read = \(readState ? 1 : 0)")
             }
             if let channel {
-                let normalized = channel.trimmingCharacters(in: .whitespacesAndNewlines)
-                if normalized.isEmpty {
-                    conditions.append("(channel IS NULL OR trim(channel) = '')")
-                } else {
-                    conditions.append("channel = \(Self.sqlQuoted(normalized))")
-                }
+                conditions.append(Self.channelMatchCondition(value: channel))
             }
             let whereClause = conditions.joined(separator: " AND ")
             let idsSQL = "SELECT id FROM messages WHERE \(whereClause);"

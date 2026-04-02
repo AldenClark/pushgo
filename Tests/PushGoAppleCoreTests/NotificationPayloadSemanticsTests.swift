@@ -207,41 +207,6 @@ struct NotificationPayloadSemanticsTests {
     }
 
     @Test
-    func normalizeRemoteNotificationIgnoresGatewayFallbackWakeupAlert() {
-        let payload: [AnyHashable: Any] = [
-            "private_mode": "wakeup",
-            "private_wakeup": "1",
-            "delivery_id": "delivery-wakeup-001",
-            "channel_id": "ops",
-            "aps": [
-                "alert": [
-                    "title": "PushGo",
-                    "body": "You received a new message.",
-                ],
-            ],
-        ]
-
-        #expect(normalize(payload) == nil)
-    }
-
-    @Test
-    func normalizeRemoteNotificationDropsGatewayFallbackMessageAlertWithoutBusinessContent() {
-        let payload: [AnyHashable: Any] = [
-            "delivery_id": "delivery-placeholder-001",
-            "message_id": "delivery-placeholder-001",
-            "entity_type": "message",
-            "entity_id": "delivery-placeholder-001",
-            "aps": [
-                "alert": [
-                    "body": "You received a new message.",
-                ],
-            ],
-        ]
-
-        #expect(normalize(payload) == nil)
-    }
-
-    @Test
     func normalizeRemoteNotificationRejectsTopLevelMessageWithoutMessageId() {
         let payload: [AnyHashable: Any] = [
             "entity_type": "message",

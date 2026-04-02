@@ -25,23 +25,23 @@ final class PushGoAppDelegate: NSObject, UIApplicationDelegate, @preconcurrency 
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         Task { @MainActor in
+                let userInfo = notification.request.content.userInfo
                 let persistenceOutcome = await AppEnvironment.shared.persistNotificationIfNeeded(
                     notification
                 )
-                let persisted: Bool
-                switch persistenceOutcome {
-                case .persistedMain:
-                    persisted = true
-                case .persistedPending, .duplicate, .rejected, .failed:
-                    persisted = false
+                let decision = NotificationHandling.foregroundPresentationDecision(
+                    persistenceOutcome: persistenceOutcome,
+                    payload: userInfo
+                )
+                if decision.shouldReloadCounts {
+                    await AppEnvironment.shared.reloadMessagesFromStore()
                 }
-                guard persisted else {
+                guard decision.shouldPresentAlert else {
                     completionHandler([])
                     return
                 }
-                await AppEnvironment.shared.reloadMessagesFromStore()
                 let shouldPresent = AppEnvironment.shared.shouldPresentForegroundNotification(
-                    payload: notification.request.content.userInfo
+                    payload: userInfo
                 )
                 let options: UNNotificationPresentationOptions = shouldPresent ? [.banner, .list, .sound, .badge] : []
                 completionHandler(options)

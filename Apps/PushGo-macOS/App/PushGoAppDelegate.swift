@@ -5,6 +5,7 @@ import AppKit
 @MainActor
 final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
+    private let channelSubscriptionService = ChannelSubscriptionService()
 
     func applicationWillFinishLaunching(_: Notification) {
         activateForAutomationIfNeeded()
@@ -14,13 +15,16 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency 
         NSApp.setActivationPolicy(.regular)
         activateForAutomationIfNeeded()
         UNUserNotificationCenter.current().delegate = self
-        _ = AppEnvironment.shared
+        let environment = AppEnvironment.shared
         bootstrapAutomationRuntimeIfNeeded()
         configureStatusItem()
 
         NSApp.registerForRemoteNotifications(matching: [.alert, .badge, .sound])
         Task {
             await PushRegistrationService.shared.refreshAuthorizationStatus()
+        }
+        Task { @MainActor in
+            await environment.bootstrap()
         }
 
         Task { @MainActor in
@@ -90,29 +94,38 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency 
         }
     }
 
+    func application(
+        _: NSApplication,
+        didReceiveRemoteNotification userInfo: [String: Any]
+    ) {
+        Task { @MainActor in
+            await handleRemoteNotification(userInfo)
+        }
+    }
+
     func userNotificationCenter(
         _: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         Task { @MainActor in
+            let userInfo = notification.request.content.userInfo
             let persistenceOutcome = await AppEnvironment.shared.persistNotificationIfNeeded(
                 notification
             )
-            let persisted: Bool
-            switch persistenceOutcome {
-            case .persistedMain:
-                persisted = true
-            case .persistedPending, .duplicate, .rejected, .failed:
-                persisted = false
+            let decision = NotificationHandling.foregroundPresentationDecision(
+                persistenceOutcome: persistenceOutcome,
+                payload: userInfo
+            )
+            if decision.shouldReloadCounts {
+                await AppEnvironment.shared.reloadMessagesFromStore()
             }
-            guard persisted else {
+            guard decision.shouldPresentAlert else {
                 completionHandler([])
                 return
             }
-            await AppEnvironment.shared.reloadMessagesFromStore()
             let shouldPresent = AppEnvironment.shared.shouldPresentForegroundNotification(
-                payload: notification.request.content.userInfo
+                payload: userInfo
             )
             let options: UNNotificationPresentationOptions = shouldPresent ? [.banner, .list, .sound, .badge] : []
             completionHandler(options)
@@ -182,6 +195,60 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency 
 
     private nonisolated func extractMessageId(from payload: [String: Any]) -> String? {
         MessageIdExtractor.extract(from: payload)
+    }
+
+    private func handleRemoteNotification(_ payload: [String: Any]) async {
+        guard let resolved = await resolveRemoteNotificationPayload(from: payload) else {
+            return
+        }
+        _ = await AppEnvironment.shared.persistRemotePayloadIfNeeded(
+            resolved.payload,
+            requestIdentifier: resolved.requestIdentifier
+        )
+    }
+
+    private func resolveRemoteNotificationPayload(
+        from payload: [String: Any]
+    ) async -> (payload: [AnyHashable: Any], requestIdentifier: String?)? {
+        let bridgedPayload: [AnyHashable: Any] = payload.reduce(into: [:]) { result, element in
+            result[element.key] = element.value
+        }
+        let sanitizedPayload = UserInfoSanitizer.sanitize(bridgedPayload)
+        guard let deliveryId = NotificationHandling.providerWakeupPullDeliveryId(from: sanitizedPayload) else {
+            return (
+                payload: sanitizedPayload,
+                requestIdentifier: normalizedIdentifier(sanitizedPayload["delivery_id"] as? String)
+            )
+        }
+        guard let config = await activeServerConfigForRemoteIngress() else {
+            return nil
+        }
+        guard let item = try? await channelSubscriptionService.pullMessage(
+            baseURL: config.baseURL,
+            token: config.token,
+            deliveryId: deliveryId
+        ) else {
+            return nil
+        }
+        let pulledPayload: [AnyHashable: Any] = item.payload.reduce(into: [:]) { result, element in
+            result[element.key] = element.value
+        }
+        return (
+            payload: UserInfoSanitizer.sanitize(pulledPayload),
+            requestIdentifier: deliveryId
+        )
+    }
+
+    private func activeServerConfigForRemoteIngress() async -> ServerConfig? {
+        if let storedConfig = try? await AppEnvironment.shared.dataStore.loadServerConfig()?.normalized() {
+            return storedConfig
+        }
+        return AppEnvironment.shared.serverConfig?.normalized()
+    }
+
+    private nonisolated func normalizedIdentifier(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func configureStatusItem() {

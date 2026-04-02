@@ -41,6 +41,7 @@ struct EventListScreen: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .id(event.id)
                         .accessibilityIdentifier("event.row.\(event.id)")
                         .listRowInsets(Layout.rowInsets)
                         .alignmentGuide(.listRowSeparatorLeading) { dimensions in
@@ -75,6 +76,7 @@ struct EventListScreen: View {
                 List(selection: $selection) {
                     ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
                         EventListRow(event: event)
+                            .id(event.id)
                             .accessibilityIdentifier("event.row.\(event.id)")
                             .tag(event.id)
                             .listRowInsets(Layout.rowInsets)
@@ -144,7 +146,15 @@ struct EventListRow: View {
     }
 
     private var previewImageAttachments: [URL] {
-        event.imageURLs.filter(isLikelyImageAttachmentURL).prefix(3).map { $0 }
+        Array(imageAttachments.prefix(3))
+    }
+
+    private var imageAttachments: [URL] {
+        event.imageURLs.filter(isLikelyImageAttachmentURL)
+    }
+
+    private var remainingImageAttachmentCount: Int {
+        max(0, imageAttachments.count - previewImageAttachments.count)
     }
 
     var body: some View {
@@ -204,8 +214,8 @@ struct EventListRow: View {
                         .frame(width: 48, height: 48)
                         .clipShape(RoundedRectangle(cornerRadius: EntityVisualTokens.radiusSmall, style: .continuous))
                     }
-                    if event.imageURLs.filter(isLikelyImageAttachmentURL).count > 3 {
-                        Text("+\(event.imageURLs.filter(isLikelyImageAttachmentURL).count - 3)")
+                    if remainingImageAttachmentCount > 0 {
+                        Text("+\(remainingImageAttachmentCount)")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .padding(.leading, 4)
