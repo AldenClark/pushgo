@@ -48,8 +48,6 @@ final class AppEnvironment {
     @ObservationIgnored private var didBootstrap = false
 
     private var toastDismissTask: Task<Void, Never>?
-    @ObservationIgnored private let countsRefreshDelay: TimeInterval = 0.4
-    @ObservationIgnored private let messageListRefreshDelay: TimeInterval = 0.35
     @ObservationIgnored private var pendingMessageListRefresh = false
     @ObservationIgnored private var isMainWindowVisible = true
     @ObservationIgnored private var lastWakeupRouteFingerprint: String?
@@ -95,7 +93,9 @@ final class AppEnvironment {
     private(set) var isEventPageEnabled: Bool = true
     private(set) var isThingPageEnabled: Bool = true
     private(set) var activeMainTab: MainTab = .messages
-    private(set) var isMessageListAtTop: Bool = true
+    private(set) var isMessageListAtTop: Bool = false
+    private(set) var isEventListAtTop: Bool = false
+    private(set) var isThingListAtTop: Bool = false
     private(set) var watchMode: WatchMode = .mirror
     private(set) var effectiveWatchMode: WatchMode = .mirror
     private(set) var standaloneReady = false
@@ -442,7 +442,23 @@ final class AppEnvironment {
         await refreshChannelSubscriptions()
 
         guard deleteLocalMessages else { return 0 }
-        return try await messageStateCoordinator.deleteMessages(channel: normalized, readState: nil)
+        let removedMessages = try await messageStateCoordinator.deleteMessages(channel: normalized, readState: nil)
+        let removedEvents = try await dataStore.deleteEventRecords(channel: normalized)
+        let removedThings = try await dataStore.deleteThingRecords(channel: normalized)
+        let remainingMessages = try await dataStore.loadMessages(filter: .all, channel: normalized)
+        let remainingEvents = try await dataStore
+            .loadEventMessagesForProjection()
+            .filter { channelMatches($0.channel, normalizedChannel: normalized) }
+        let remainingThings = try await dataStore
+            .loadThingMessagesForProjection()
+            .filter { channelMatches($0.channel, normalizedChannel: normalized) }
+        if !remainingMessages.isEmpty || !remainingEvents.isEmpty || !remainingThings.isEmpty {
+            throw AppError.localStore(
+                "channel cleanup incomplete messages=\(remainingMessages.count) events=\(remainingEvents.count) things=\(remainingThings.count)"
+            )
+        }
+        await refreshMessageCountsAndNotify()
+        return removedMessages + removedEvents + removedThings
     }
 
     func closeEvent(
@@ -570,9 +586,7 @@ final class AppEnvironment {
 
     private func scheduleCountsRefresh() {
         pendingCountsRefreshTask?.cancel()
-        let delay = countsRefreshDelay
         pendingCountsRefreshTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             await self?.refreshMessageCountsAndNotify()
         }
     }
@@ -583,9 +597,7 @@ final class AppEnvironment {
             return
         }
         pendingMessageListRefreshTask?.cancel()
-        let delay = messageListRefreshDelay
         pendingMessageListRefreshTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             guard let self else { return }
             messageStoreRevision = UUID()
             pendingMessageListRefresh = false
@@ -2009,12 +2021,24 @@ final class AppEnvironment {
         clearDeliveredSystemNotifications()
     }
 
+    func updateEventListPosition(isAtTop: Bool) {
+        guard isEventListAtTop != isAtTop else { return }
+        isEventListAtTop = isAtTop
+        clearDeliveredSystemNotifications()
+    }
+
+    func updateThingListPosition(isAtTop: Bool) {
+        guard isThingListAtTop != isAtTop else { return }
+        isThingListAtTop = isAtTop
+        clearDeliveredSystemNotifications()
+    }
+
     func shouldPresentForegroundNotification(payload: [AnyHashable: Any]? = nil) -> Bool {
-        guard !shouldSuppressForegroundNotifications else {
-            return false
-        }
         guard let payload else {
             return true
+        }
+        guard !shouldSuppressForegroundNotifications(for: payload) else {
+            return false
         }
         return NotificationHandling.shouldPresentUserAlert(from: payload)
     }
@@ -2315,8 +2339,43 @@ final class AppEnvironment {
     private func clearDeliveredSystemNotifications() {
     }
 
-    private var shouldSuppressForegroundNotifications: Bool {
-        isSceneActive && activeMainTab == .messages && isMessageListAtTop
+    private func shouldSuppressForegroundNotifications(for payload: [AnyHashable: Any]) -> Bool {
+        guard isSceneActive else { return false }
+        guard let entityType = foregroundNotificationEntityType(from: payload) else {
+            return false
+        }
+        switch (activeMainTab, entityType) {
+        case (.messages, "message"):
+            return isMessageListAtTop
+        case (.events, "event"):
+            return isEventListAtTop
+        case (.things, "thing"):
+            return isThingListAtTop
+        default:
+            return false
+        }
+    }
+
+    private func foregroundNotificationEntityType(
+        from payload: [AnyHashable: Any]
+    ) -> String? {
+        let raw = (payload["entity_type"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        switch raw {
+        case "message", "event", "thing":
+            return raw
+        default:
+            return nil
+        }
+    }
+
+    private func channelMatches(_ candidate: String?, normalizedChannel: String) -> Bool {
+        guard let candidate else { return false }
+        if let normalizedCandidate = try? ChannelIdValidator.normalize(candidate) {
+            return normalizedCandidate == normalizedChannel
+        }
+        return candidate.trimmingCharacters(in: .whitespacesAndNewlines) == normalizedChannel
     }
 
     private var canRefreshMessageList: Bool {

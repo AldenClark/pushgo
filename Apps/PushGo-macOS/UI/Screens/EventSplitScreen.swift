@@ -17,35 +17,9 @@ struct EventSplitScreen: View {
     private let fixedListWidth: CGFloat = 300
 
     var body: some View {
-        navigationContainer {
-            HSplitView {
-                eventListPane
-                eventDetailPane
-            }
-            .navigationTitle(localizationManager.localized("push_type_event"))
-            .onAppear {
-                syncSelection()
-            }
-            .onChange(of: viewModel.events) { _, _ in
-                syncSelection()
-            }
-            .onChange(of: searchQuery) { _, _ in
-                syncSelection()
-            }
-            .onChange(of: openEventId) { _, _ in
-                syncSelection()
-            }
-            .onChange(of: environment.messageStoreRevision) { _, _ in
-                Task { @MainActor in
-                    await viewModel.reload()
-                    syncSelection()
-                }
-            }
-            .onChange(of: selection) { _, id in
-                guard !isBatchMode else { return }
-                guard let id else { return }
-                Task { await viewModel.ensureEventDetailsLoaded(eventId: id) }
-            }
+        HSplitView {
+            eventListPane
+            eventDetailPane
         }
         .alert(
             "\(localizationManager.localized("close")) \(localizationManager.localized("push_type_event"))?",
@@ -61,39 +35,57 @@ struct EventSplitScreen: View {
             publishAutomationState()
         }
 #endif
+        .onAppear {
+            syncSelection()
+        }
+        .onChange(of: viewModel.events) { _, _ in
+            syncSelection()
+        }
+        .onChange(of: searchQuery) { _, _ in
+            syncSelection()
+        }
+        .onChange(of: openEventId) { _, _ in
+            syncSelection()
+        }
+        .onChange(of: environment.messageStoreRevision) { _, _ in
+            Task { @MainActor in
+                await viewModel.reload()
+                syncSelection()
+            }
+        }
+        .onChange(of: selection) { _, id in
+            guard !isBatchMode else { return }
+            guard let id else { return }
+            Task { await viewModel.ensureEventDetailsLoaded(eventId: id) }
+        }
     }
 
+    @ViewBuilder
     private var eventListPane: some View {
         navigationContainer {
-            if isBatchMode {
-                EventListScreen(
-                    events: filteredEvents,
-                    selection: $selection,
-                    batchSelection: $batchSelection,
-                    isBatchMode: $isBatchMode,
-                    isLoadingMore: viewModel.isLoadingMoreEvents,
-                    onReachEnd: {
-                        Task { await viewModel.loadMoreEvents() }
+            EventListScreen(
+                events: filteredEvents,
+                selection: $selection,
+                batchSelection: $batchSelection,
+                isBatchMode: $isBatchMode,
+                isLoadingMore: viewModel.isLoadingMoreEvents,
+                onReachEnd: {
+                    Task { await viewModel.loadMoreEvents() }
+                }
+            )
+            .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
+            .searchable(
+                text: Binding(
+                    get: { isBatchMode ? "" : searchQuery },
+                    set: { newValue in
+                        guard !isBatchMode else { return }
+                        searchQuery = newValue
                     }
-                )
-                .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
-            } else {
-                EventListScreen(
-                    events: filteredEvents,
-                    selection: $selection,
-                    batchSelection: $batchSelection,
-                    isBatchMode: $isBatchMode,
-                    isLoadingMore: viewModel.isLoadingMoreEvents,
-                    onReachEnd: {
-                        Task { await viewModel.loadMoreEvents() }
-                    }
-                )
-                .searchable(
-                    text: $searchQuery,
-                    prompt: Text(localizationManager.localized("search_events"))
-                )
-                .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
-            }
+                ),
+                placement: .toolbar,
+                prompt: Text(localizationManager.localized("search_events"))
+            )
+            .navigationTitle(localizationManager.localized("push_type_event"))
         }
         .toolbar { listToolbarContent }
     }

@@ -797,6 +797,184 @@ struct LocalDataStoreTests {
         }
     }
 
+    @Test
+    func channelScopedCleanupRemovesMessagesEventsAndThings() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let targetChannel = "channel-cleanup-target"
+            let keepChannel = "channel-cleanup-keep"
+
+            let targetMessage = makeMessage(
+                messageId: "msg-cleanup-target-001",
+                notificationRequestId: "req-cleanup-target-001",
+                title: "Target message",
+                body: "Target message body",
+                rawPayload: [
+                    "channel_id": targetChannel,
+                    "entity_type": "message",
+                    "entity_id": "msg-cleanup-target-001",
+                ]
+            )
+            let keepMessage = makeMessage(
+                messageId: "msg-cleanup-keep-001",
+                notificationRequestId: "req-cleanup-keep-001",
+                title: "Keep message",
+                body: "Keep message body",
+                rawPayload: [
+                    "channel_id": keepChannel,
+                    "entity_type": "message",
+                    "entity_id": "msg-cleanup-keep-001",
+                ]
+            )
+            try await store.saveMessages([targetMessage, keepMessage])
+
+            let targetEvent = makeMessage(
+                messageId: "evt-cleanup-target-001",
+                notificationRequestId: "req-evt-cleanup-target-001",
+                title: "Target event",
+                body: "Target event body",
+                rawPayload: [
+                    "entity_type": "event",
+                    "entity_id": "evt-cleanup-target-001",
+                    "event_id": "evt-cleanup-target-001",
+                    "projection_destination": "event_head",
+                    "channel_id": targetChannel,
+                ]
+            )
+            let targetThing = makeMessage(
+                messageId: "thing-cleanup-target-001",
+                notificationRequestId: "req-thing-cleanup-target-001",
+                title: "Target thing",
+                body: "Target thing body",
+                rawPayload: [
+                    "entity_type": "thing",
+                    "entity_id": "thing-cleanup-target-001",
+                    "thing_id": "thing-cleanup-target-001",
+                    "projection_destination": "thing_head",
+                    "channel_id": targetChannel,
+                ]
+            )
+            let keepEvent = makeMessage(
+                messageId: "evt-cleanup-keep-001",
+                notificationRequestId: "req-evt-cleanup-keep-001",
+                title: "Keep event",
+                body: "Keep event body",
+                rawPayload: [
+                    "entity_type": "event",
+                    "entity_id": "evt-cleanup-keep-001",
+                    "event_id": "evt-cleanup-keep-001",
+                    "projection_destination": "event_head",
+                    "channel_id": keepChannel,
+                ]
+            )
+            let keepThing = makeMessage(
+                messageId: "thing-cleanup-keep-001",
+                notificationRequestId: "req-thing-cleanup-keep-001",
+                title: "Keep thing",
+                body: "Keep thing body",
+                rawPayload: [
+                    "entity_type": "thing",
+                    "entity_id": "thing-cleanup-keep-001",
+                    "thing_id": "thing-cleanup-keep-001",
+                    "projection_destination": "thing_head",
+                    "channel_id": keepChannel,
+                ]
+            )
+            try await store.saveEntityRecords([targetEvent, targetThing, keepEvent, keepThing])
+
+            let removedMessages = try await store.deleteMessages(channel: targetChannel, readState: nil)
+            let removedEvents = try await store.deleteEventRecords(channel: targetChannel)
+            let removedThings = try await store.deleteThingRecords(channel: targetChannel)
+
+            #expect(removedMessages > 0)
+            #expect(removedEvents > 0)
+            #expect(removedThings > 0)
+
+            let remainingTargetMessages = try await store.loadMessages(filter: .all, channel: targetChannel)
+            let remainingTargetEvents = try await store
+                .loadEventMessagesForProjection()
+                .filter { $0.channel == targetChannel }
+            let remainingTargetThings = try await store
+                .loadThingMessagesForProjection()
+                .filter { $0.channel == targetChannel }
+
+            #expect(remainingTargetMessages.isEmpty)
+            #expect(remainingTargetEvents.isEmpty)
+            #expect(remainingTargetThings.isEmpty)
+
+            let remainingKeepMessages = try await store.loadMessages(filter: .all, channel: keepChannel)
+            let remainingKeepEvents = try await store
+                .loadEventMessagesForProjection()
+                .filter { $0.channel == keepChannel }
+            let remainingKeepThings = try await store
+                .loadThingMessagesForProjection()
+                .filter { $0.channel == keepChannel }
+
+            #expect(remainingKeepMessages.count == 1)
+            #expect(remainingKeepEvents.count == 1)
+            #expect(remainingKeepThings.count == 1)
+        }
+    }
+
+    @Test
+    func channelScopedCleanupMatchesCanonicalChannelIdSemantics() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let canonicalChannel = "01ABCDEF23456789GHJKMNPQRS"
+            let variantChannel = "01ab-cdef-2345-6789-ghjk-mnpqrs"
+
+            let message = makeMessage(
+                messageId: "msg-cleanup-canonical-001",
+                notificationRequestId: "req-cleanup-canonical-001",
+                title: "Canonical target message",
+                body: "Canonical target message body",
+                rawPayload: [
+                    "channel_id": variantChannel,
+                    "entity_type": "message",
+                    "entity_id": "msg-cleanup-canonical-001",
+                ]
+            )
+            try await store.saveMessages([message])
+
+            let event = makeMessage(
+                messageId: "evt-cleanup-canonical-001",
+                notificationRequestId: "req-evt-cleanup-canonical-001",
+                title: "Canonical target event",
+                body: "Canonical target event body",
+                rawPayload: [
+                    "entity_type": "event",
+                    "entity_id": "evt-cleanup-canonical-001",
+                    "event_id": "evt-cleanup-canonical-001",
+                    "projection_destination": "event_head",
+                    "channel_id": variantChannel,
+                ]
+            )
+            let thing = makeMessage(
+                messageId: "thing-cleanup-canonical-001",
+                notificationRequestId: "req-thing-cleanup-canonical-001",
+                title: "Canonical target thing",
+                body: "Canonical target thing body",
+                rawPayload: [
+                    "entity_type": "thing",
+                    "entity_id": "thing-cleanup-canonical-001",
+                    "thing_id": "thing-cleanup-canonical-001",
+                    "projection_destination": "thing_head",
+                    "channel_id": variantChannel,
+                ]
+            )
+            try await store.saveEntityRecords([event, thing])
+
+            let removedMessages = try await store.deleteMessages(channel: canonicalChannel, readState: nil)
+            let removedEvents = try await store.deleteEventRecords(channel: canonicalChannel)
+            let removedThings = try await store.deleteThingRecords(channel: canonicalChannel)
+
+            #expect(removedMessages == 1)
+            #expect(removedEvents == 1)
+            #expect(removedThings == 1)
+            #expect(try await store.loadMessages(filter: .all, channel: canonicalChannel).isEmpty)
+            #expect(try await store.loadEventMessagesForProjection().isEmpty)
+            #expect(try await store.loadThingMessagesForProjection().isEmpty)
+        }
+    }
+
     private func makeMessage(
         messageId: String,
         notificationRequestId: String,

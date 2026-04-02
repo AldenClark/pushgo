@@ -33,6 +33,24 @@
             "state" : "translated",
             "value" : "全部"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todo"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tout"
+          }
         }
       }
     },
@@ -67,6 +85,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已清空所有訊息"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Nachrichten gelöscht"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todos los mensajes eliminados"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tous les messages ont été supprimés"
           }
         }
       }
@@ -103,6 +139,24 @@
             "state" : "translated",
             "value" : "確定刪除這則訊息？操作不可復原。"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Nachricht löschen? Das kann nicht rückgängig gemacht werden."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Eliminar este mensaje? Esta acción no se puede deshacer."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Supprimer ce message ? Cette action est irréversible."
+          }
         }
       }
     },
@@ -137,6 +191,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "按網關"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Über Gateway"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Por gateway"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Via la passerelle"
           }
         }
       }
@@ -173,6 +245,24 @@
             "state" : "translated",
             "value" : "取消"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abbrechen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancelar"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Annuler"
+          }
         }
       }
     },
@@ -207,6 +297,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "頻道"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kanal"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Canal"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Canal"
           }
         }
       }
@@ -243,6 +351,24 @@
             "state" : "translated",
             "value" : "無效的頻道 ID"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ungültige Kanal-ID"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ID de canal no válida"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ID de canal invalide"
+          }
         }
       }
     },
@@ -277,6 +403,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "頻道 ID 為必填。"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kanal-ID ist erforderlich."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se requiere ID del canal."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L’ID du canal est requise."
           }
         }
       }
@@ -313,6 +457,24 @@
             "state" : "translated",
             "value" : "頻道名稱包含無效字元：%@"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kanalname enthält ungültiges Zeichen: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El nombre del canal contiene un carácter no válido: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le nom du canal contient un caractère invalide : %@"
+          }
         }
       }
     },
@@ -347,6 +509,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "頻道名稱為必填。"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kanalname ist erforderlich."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se requiere nombre del canal."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le nom du canal est requis."
           }
         }
       }
@@ -383,6 +563,24 @@
             "state" : "translated",
             "value" : "頻道名稱過長（最多 %d）。"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kanalname ist zu lang (max. %d)."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El nombre del canal es demasiado largo (máx. %d)."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le nom du canal est trop long (max. %d)."
+          }
         }
       }
     },
@@ -417,6 +615,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "頻道密碼需為 8-128 個字元。"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kanalpasswort muss 8–128 Zeichen lang sein."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La contraseña del canal debe tener entre 8 y 128 caracteres."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le mot de passe du canal doit contenir entre 8 et 128 caractères."
           }
         }
       }
@@ -453,6 +669,24 @@
             "state" : "translated",
             "value" : "頻道密碼不一致，已移除本地訂閱：%@"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kanalpasswort stimmt nicht überein. Lokale Abos entfernt: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La contraseña del canal no coincide. Suscripciones locales eliminadas: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le mot de passe du canal ne correspond pas. Abonnements locaux supprimés : %@"
+          }
         }
       }
     },
@@ -487,6 +721,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "包含連結"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enthält Links"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contiene enlaces"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contient des liens"
           }
         }
       }
@@ -523,6 +775,24 @@
             "state" : "translated",
             "value" : "解密設定已儲存"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entschlüsselungskonfiguration gespeichert"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Configuración de descifrado guardada"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Configuration de déchiffrement enregistrée"
+          }
         }
       }
     },
@@ -558,11 +828,78 @@
             "state" : "translated",
             "value" : "刪除"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Löschen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eliminar"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Supprimer"
+          }
         }
       }
     },
     "Entry not found" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entry not found"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "項目が見つかりません"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "항목을 찾을 수 없습니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未找到条目"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "找不到項目"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eintrag nicht gefunden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entrada no encontrada"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entrée introuvable"
+          }
+        }
+      }
     },
     "events_empty_title" : {
       "extractionState" : "stale",
@@ -595,6 +932,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "暫無事件"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch keine Ereignisse"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aún no hay eventos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucun événement pour le moment"
           }
         }
       }
@@ -631,6 +986,24 @@
             "state" : "translated",
             "value" : "匯出失敗：%@"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export fehlgeschlagen: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Error de exportación: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Échec de l’export : %@"
+          }
         }
       }
     },
@@ -665,6 +1038,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "讀取歷史訊息失敗"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verlauf konnte nicht gelesen werden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo leer el historial"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Échec de lecture de l’historique"
           }
         }
       }
@@ -701,6 +1092,24 @@
             "state" : "translated",
             "value" : "保存訊息失敗：%@"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nachricht konnte nicht gespeichert werden: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo guardar el mensaje: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Échec d’enregistrement du message : %@"
+          }
         }
       }
     },
@@ -735,6 +1144,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "保存網關設定失敗：%@"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gateway-Konfiguration konnte nicht gespeichert werden: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo guardar la configuración del gateway: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Échec d’enregistrement de la configuration de la passerelle : %@"
           }
         }
       }
@@ -771,11 +1198,78 @@
             "state" : "translated",
             "value" : "篩選"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filter"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filtro"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filtre"
+          }
         }
       }
     },
     "Image" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Image"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画像"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이미지"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "图片"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "圖片"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bild"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Imagen"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Image"
+          }
+        }
+      }
     },
     "initialization_failed_placeholder" : {
       "extractionState" : "manual",
@@ -808,6 +1302,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "初始化失敗：%@"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Initialisierung fehlgeschlagen: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Error de inicialización: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Échec de l’initialisation : %@"
           }
         }
       }
@@ -844,6 +1356,24 @@
             "state" : "translated",
             "value" : "密鑰格式驗證失敗，請重試"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prüfung des Schlüsselformats fehlgeschlagen, bitte erneut versuchen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La verificación del formato de clave falló; inténtalo de nuevo"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La vérification du format de clé a échoué, veuillez réessayer"
+          }
         }
       }
     },
@@ -878,6 +1408,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "鑰匙串操作失敗：%d"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schlüsselbund-Operation fehlgeschlagen: %d"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Falló la operación de Keychain: %d"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Échec de l’opération du trousseau : %d"
           }
         }
       }
@@ -914,11 +1462,78 @@
             "state" : "translated",
             "value" : "鑰匙串資料異常"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schlüsselbunddaten sind ungültig"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los datos de Keychain no son válidos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les données du trousseau sont invalides"
+          }
         }
       }
     },
     "Last updated: %@" : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Last updated: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最終更新: %@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "마지막 업데이트: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最后更新：%@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最後更新：%@"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zuletzt aktualisiert: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Última actualización: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dernière mise à jour : %@"
+          }
+        }
+      }
     },
     "link_copied" : {
       "extractionState" : "manual",
@@ -951,6 +1566,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "連結已複製"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link kopiert"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enlace copiado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lien copié"
           }
         }
       }
@@ -987,6 +1620,24 @@
             "state" : "translated",
             "value" : "本地儲存不可用，可能無法載入或儲存訊息。"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lokaler Speicher ist nicht verfügbar. Die App kann Nachrichten ggf. nicht laden oder speichern."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El almacenamiento local no está disponible. Es posible que la app no pueda cargar o guardar mensajes."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le stockage local est indisponible. L’app peut ne pas pouvoir charger ou enregistrer les messages."
+          }
         }
       }
     },
@@ -1021,6 +1672,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "標記已讀"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als gelesen markieren"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marcar como leído"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marquer comme lu"
           }
         }
       }
@@ -1057,6 +1726,24 @@
             "state" : "translated",
             "value" : "內容已複製"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inhalt kopiert"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contenido copiado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contenu copié"
+          }
         }
       }
     },
@@ -1091,6 +1778,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "訊息已收到但目前設定無法解密，顯示原文"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Empfangen, aber mit aktuellen Einstellungen nicht entschlüsselbar; Original wird angezeigt"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recibido, pero no se puede descifrar con la configuración actual; se muestra el original"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reçu mais impossible à déchiffrer avec les réglages actuels ; affichage de l’original"
           }
         }
       }
@@ -1127,6 +1832,24 @@
             "state" : "translated",
             "value" : "緊急"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kritisch"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crítico"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Critique"
+          }
         }
       }
     },
@@ -1161,6 +1884,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "緊急"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KRITISCH"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CRÍTICO"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CRITIQUE"
           }
         }
       }
@@ -1197,6 +1938,24 @@
             "state" : "translated",
             "value" : "這是緊急訊息，請盡快處理。"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kritische Nachricht, bitte so schnell wie möglich bearbeiten."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mensaje crítico, por favor atiéndelo lo antes posible."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Message critique, merci de le traiter dès que possible."
+          }
         }
       }
     },
@@ -1231,6 +1990,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "高"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hoch"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alto"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Élevé"
           }
         }
       }
@@ -1267,6 +2044,24 @@
             "state" : "translated",
             "value" : "高"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HOCH"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ALTO"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ÉLEVÉ"
+          }
         }
       }
     },
@@ -1301,6 +2096,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "低"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Niedrig"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bajo"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Faible"
           }
         }
       }
@@ -1337,6 +2150,24 @@
             "state" : "translated",
             "value" : "中"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mittel"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Medio"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moyen"
+          }
         }
       }
     },
@@ -1371,6 +2202,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "訊息"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nachrichten"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mensajes"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Messages"
           }
         }
       }
@@ -1407,6 +2256,24 @@
             "state" : "translated",
             "value" : "已清理：%@"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bereinigt: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Limpiado: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nettoyé : %@"
+          }
         }
       }
     },
@@ -1441,6 +2308,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "沒有可清空的訊息"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Nachrichten zum Löschen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay mensajes para limpiar"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucun message à supprimer"
           }
         }
       }
@@ -1477,6 +2362,24 @@
             "state" : "translated",
             "value" : "無頻道"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Kanal"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sin canal"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucun canal"
+          }
         }
       }
     },
@@ -1511,6 +2414,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "通知權限已更新"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Benachrichtigungsberechtigung aktualisiert"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Permiso de notificaciones actualizado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autorisation de notification mise à jour"
           }
         }
       }
@@ -1547,6 +2468,24 @@
             "state" : "translated",
             "value" : "好的"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aceptar"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
         }
       }
     },
@@ -1581,6 +2520,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "打開連結"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link öffnen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abrir enlace"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvrir le lien"
           }
         }
       }
@@ -1617,6 +2574,24 @@
             "state" : "translated",
             "value" : "尚無訊息。請先建立或訂閱頻道以接收推送。"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch keine Nachrichten. Erstelle oder abonniere einen Kanal, um Pushes zu empfangen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aún no hay mensajes. Crea o suscríbete a un canal para recibir notificaciones push."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucun message pour le moment. Créez ou abonnez-vous à un canal pour recevoir les notifications push."
+          }
         }
       }
     },
@@ -1651,6 +2626,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "請先輸入密鑰"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bitte zuerst den Schlüssel eingeben"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Introduce primero la clave"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Veuillez d’abord saisir la clé"
           }
         }
       }
@@ -1687,6 +2680,24 @@
             "state" : "translated",
             "value" : "事件"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ereignisse"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eventos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Événements"
+          }
         }
       }
     },
@@ -1721,6 +2732,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "對象"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Objekte"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Objetos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Objets"
           }
         }
       }
@@ -1757,6 +2786,24 @@
             "state" : "translated",
             "value" : "已讀"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gelesen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leído"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lu"
+          }
         }
       }
     },
@@ -1791,6 +2838,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "通知授權失敗：%@"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Benachrichtigungsfreigabe fehlgeschlagen: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Error de permiso de notificaciones: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Échec de l’autorisation de notification : %@"
           }
         }
       }
@@ -1827,6 +2892,24 @@
             "state" : "translated",
             "value" : "網關地址為必填項"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gateway-Adresse ist erforderlich"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La dirección del gateway es obligatoria"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L’adresse de la passerelle est requise"
+          }
         }
       }
     },
@@ -1861,6 +2944,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "網關驗證失敗，請檢查認證令牌"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gateway-Authentifizierung fehlgeschlagen; Token prüfen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Falló la autenticación del gateway; revisa el token"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Échec de l’authentification de la passerelle ; vérifiez le token"
           }
         }
       }
@@ -1897,6 +2998,24 @@
             "state" : "translated",
             "value" : "讀取網關配置失敗"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gateway-Konfiguration konnte nicht gelesen werden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo leer la configuración del gateway"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Échec de lecture de la configuration de la passerelle"
+          }
         }
       }
     },
@@ -1931,6 +3050,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "網關配置已保存"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gateway-Konfiguration gespeichert"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Configuración del gateway guardada"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Configuration de la passerelle enregistrée"
           }
         }
       }
@@ -1967,6 +3104,24 @@
             "state" : "translated",
             "value" : "同步失敗：%@"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Synchronisierung fehlgeschlagen: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Error de sincronización: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Échec de synchronisation : %@"
+          }
         }
       }
     },
@@ -2001,6 +3156,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "我們發現你已關閉 PushGo 通知，可能會錯過新的訊息、事件和物件更新。到系統設定開啟通知後，回來就能第一時間收到提醒。"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du hast die Benachrichtigungsberechtigung deaktiviert, daher kann PushGo nicht über neue Nachrichten, Ereignisse oder Objektaktualisierungen informieren. Öffne die Einstellungen, aktiviere Benachrichtigungen und kehre dann zurück."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Has desactivado el permiso de notificaciones, por lo que PushGo no puede avisarte de mensajes nuevos, eventos o actualizaciones de objetos. Abre Ajustes, habilita las notificaciones y vuelve para continuar."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vous avez désactivé l’autorisation de notification ; PushGo ne peut donc pas vous alerter sur les nouveaux messages, événements ou mises à jour d’objets. Ouvrez Réglages, activez les notifications, puis revenez."
           }
         }
       }
@@ -2037,6 +3210,24 @@
             "state" : "translated",
             "value" : "找不到 App Group %@，請確認已在目標中配置"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App Group %@ nicht gefunden; bitte korrekt konfigurieren"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se encontró el App Group %@; asegúrate de que esté configurado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App Group %@ introuvable ; vérifiez sa configuration"
+          }
         }
       }
     },
@@ -2071,6 +3262,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "解密設定格式不正確，請檢查輸入"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Format der Entschlüsselungskonfiguration ist ungültig; Eingabe prüfen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El formato de la configuración de descifrado no es válido; revisa los datos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le format de configuration du déchiffrement est invalide ; vérifiez la saisie"
           }
         }
       }
@@ -2107,6 +3316,24 @@
             "state" : "translated",
             "value" : "密鑰已保存，輸入新值覆蓋"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schlüssel gespeichert; gib einen neuen Wert ein, um ihn zu überschreiben"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clave guardada; introduce un valor nuevo para sobrescribirla"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clé enregistrée ; saisissez une nouvelle valeur pour l’écraser"
+          }
         }
       }
     },
@@ -2141,6 +3368,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "網關地址無效，請輸入完整 URL（如 https://example.com）"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gateway-Adresse ist ungültig; vollständige URL wie https://example.com verwenden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La dirección del gateway no es válida; usa una URL completa como https://example.com"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Adresse de passerelle invalide ; utilisez une URL complète comme https://example.com"
           }
         }
       }
@@ -2177,6 +3422,24 @@
             "state" : "translated",
             "value" : "尚未綁定網關，請在主畫面設定"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gateway ist nicht konfiguriert; bitte auf dem Hauptbildschirm einrichten"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El gateway no está configurado; configúralo en la pantalla principal"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La passerelle n’est pas configurée ; configurez-la sur l’écran principal"
+          }
         }
       }
     },
@@ -2212,6 +3475,24 @@
             "state" : "translated",
             "value" : "屬性更新 || %@"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Attributaktualisierung || %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Actualización de atributo || %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mise à jour d’attribut || %@"
+          }
         }
       }
     },
@@ -2243,6 +3524,24 @@
           }
         },
         "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@: %@"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@: %@"
+          }
+        },
+        "fr" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@: %@"
@@ -2282,6 +3581,24 @@
             "state" : "translated",
             "value" : "暫無物件"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch keine Objekte"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aún no hay objetos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucun objet pour le moment"
+          }
         }
       }
     },
@@ -2316,6 +3633,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "無法連線網關，請檢查地址或網路"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbindung zum Gateway fehlgeschlagen; Adresse oder Netzwerk prüfen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se puede conectar al gateway; revisa la dirección o la red"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de se connecter à la passerelle ; vérifiez l’adresse ou le réseau"
           }
         }
       }
@@ -2352,6 +3687,24 @@
             "state" : "translated",
             "value" : "無法取得 APNs 權杖"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "APNs-Token konnte nicht abgerufen werden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo obtener el token APNs"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible d’obtenir le token APNs"
+          }
         }
       }
     },
@@ -2386,6 +3739,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "無法取得 APNs 權杖：%@"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "APNs-Token konnte nicht abgerufen werden: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo obtener el token APNs: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible d’obtenir le token APNs : %@"
           }
         }
       }
@@ -2422,6 +3793,24 @@
             "state" : "translated",
             "value" : "無法讀取本地資料：%@"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lokale Daten konnten nicht gelesen werden: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudieron leer los datos locales: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de lire les données locales : %@"
+          }
         }
       }
     },
@@ -2456,6 +3845,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "無法同步頻道：%@"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kanäle konnten nicht synchronisiert werden: %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudieron sincronizar los canales: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de synchroniser les canaux : %@"
           }
         }
       }
@@ -2492,6 +3899,24 @@
             "state" : "translated",
             "value" : "未讀"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ungelesen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No leído"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Non lu"
+          }
         }
       }
     },
@@ -2526,6 +3951,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "關閉事件"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ereignis schließen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cerrar evento"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clore l’événement"
           }
         }
       }
@@ -2562,6 +4005,24 @@
             "state" : "translated",
             "value" : "關閉中..."
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird geschlossen..."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cerrando..."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fermeture..."
+          }
         }
       }
     },
@@ -2596,6 +4057,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已關閉"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Geschlossen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cerrado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clôturé"
           }
         }
       }
@@ -2632,6 +4111,24 @@
             "state" : "translated",
             "value" : "已建立"
           }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erstellt"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Creado"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Créé"
+          }
         }
       }
     },
@@ -2666,6 +4163,24 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "建立或訂閱頻道以接收推送。"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erstelle oder abonniere einen Kanal, um Pushes zu empfangen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crea o suscríbete a un canal para recibir notificaciones push."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Créez ou abonnez-vous à un canal pour recevoir les notifications push."
           }
         }
       }

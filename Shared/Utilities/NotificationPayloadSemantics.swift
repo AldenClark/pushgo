@@ -2,7 +2,6 @@ import Foundation
 
 struct NotificationPayloadSemantics {
     static let gatewayFallbackAlertTitle = "PushGo"
-    static let gatewayFallbackMessageBody = "You received a new message."
     static let gatewayFallbackEventBody = "Event updated."
     static let gatewayFallbackThingBody = "Object updated."
 
@@ -216,15 +215,16 @@ struct NotificationPayloadSemantics {
     ) -> Bool {
         let normalizedTitle = title?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedBody = body?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let fallbackBody = switch entityType {
+        let fallbackBody: String? = switch entityType {
         case "event":
             gatewayFallbackEventBody
         case "thing":
             gatewayFallbackThingBody
         default:
-            gatewayFallbackMessageBody
+            nil
         }
 
+        guard let fallbackBody else { return false }
         guard normalizedBody == fallbackBody else { return false }
         guard let normalizedTitle else { return true }
         return normalizedTitle.isEmpty || normalizedTitle == gatewayFallbackAlertTitle

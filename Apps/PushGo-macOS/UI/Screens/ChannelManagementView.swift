@@ -105,18 +105,8 @@ struct ChannelManagementView: View {
 
     @ToolbarContentBuilder
     private var channelToolbarContent: some ToolbarContent {
-        if #available(macOS 26.0, *) {
-            ToolbarItem(placement: .primaryAction) {
-                channelAddButton
-            }
-        } else {
-            ToolbarItem(placement: .navigation) {
-                Text(localizationManager.localized("channels"))
-                    .font(.headline.weight(.semibold))
-            }
-            ToolbarItem(placement: .primaryAction) {
-                channelAddButton
-            }
+        ToolbarItem(placement: .primaryAction) {
+            channelAddButton
         }
     }
 
@@ -131,11 +121,7 @@ struct ChannelManagementView: View {
     }
 
     private var channelBackgroundColor: Color {
-        if #available(macOS 26.0, *) {
-            Color.platformGroupedBackground
-        } else {
-            Color.messageListBackground
-        }
+        Color.platformGroupedBackground
     }
 
     private var channelList: some View {

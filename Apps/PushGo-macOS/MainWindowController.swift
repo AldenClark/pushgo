@@ -10,6 +10,7 @@ final class MainWindowController {
     private let chromeConfiguredWindows = NSHashTable<NSWindow>.weakObjects()
 
     private let mainWindowIdentifier = NSUserInterfaceItemIdentifier("PushGoMainWindow")
+    private let fixedSidebarWidth: CGFloat = 220
 
     var shouldPreventAccessory: Bool {
         guard let preventAccessoryUntil else { return false }
@@ -23,6 +24,7 @@ final class MainWindowController {
             window.contentMinSize = NSSize(width: 1100, height: 640)
         }
         configureWindowChromeIfNeeded(window)
+        lockSidebarSplitItemsIfNeeded(in: window)
     }
     func prepareForShowingMainWindow() {
         preventAccessoryUntil = Date().addingTimeInterval(2.0)
@@ -79,6 +81,31 @@ final class MainWindowController {
         if !window.isOpaque {
             window.isOpaque = true
         }
+    }
+
+    private func lockSidebarSplitItemsIfNeeded(in window: NSWindow) {
+        guard let rootViewController = window.contentViewController else { return }
+        let splitViewControllers = collectSplitViewControllers(from: rootViewController)
+        guard let rootSplitViewController = splitViewControllers.first else { return }
+        guard !rootSplitViewController.splitViewItems.isEmpty else { return }
+
+        let targetItem = rootSplitViewController.splitViewItems.first(where: { $0.behavior == .sidebar })
+            ?? rootSplitViewController.splitViewItems[0]
+
+        targetItem.minimumThickness = fixedSidebarWidth
+        targetItem.maximumThickness = fixedSidebarWidth
+        targetItem.automaticMaximumThickness = fixedSidebarWidth
+    }
+
+    private func collectSplitViewControllers(from root: NSViewController) -> [NSSplitViewController] {
+        var results: [NSSplitViewController] = []
+        if let splitViewController = root as? NSSplitViewController {
+            results.append(splitViewController)
+        }
+        for child in root.children {
+            results.append(contentsOf: collectSplitViewControllers(from: child))
+        }
+        return results
     }
 }
 

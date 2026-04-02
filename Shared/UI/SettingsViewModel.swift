@@ -46,9 +46,10 @@ final class SettingsViewModel {
     private let localizationManager: LocalizationManager
     private let dataStore: LocalDataStore
     @ObservationIgnored private var isInitializing = true
+    @ObservationIgnored private var isRefreshingLaunchAtLogin = false
     var launchAtLoginEnabled: Bool = false {
         didSet {
-            guard !isInitializing, oldValue != launchAtLoginEnabled else { return }
+            guard !isInitializing, !isRefreshingLaunchAtLogin, oldValue != launchAtLoginEnabled else { return }
             persistLaunchAtLoginPreference()
         }
     }
@@ -79,6 +80,11 @@ final class SettingsViewModel {
         isWatchCompanionAvailable = environment.isWatchCompanionAvailable
 #else
         isWatchCompanionAvailable = false
+#endif
+#if os(macOS)
+        setLaunchAtLoginEnabled(environment.launchAtLoginEnabled)
+#else
+        setLaunchAtLoginEnabled(false)
 #endif
         if let material = notificationKeyMaterial {
             manualKeyInput.key = ""
@@ -138,14 +144,26 @@ final class SettingsViewModel {
             }
             manualKeyInput = input
 
+#if os(macOS)
             let storedLaunch = await dataStore.loadLaunchAtLoginPreference()
             launchAtLoginEnabled = storedLaunch ?? false
+#else
+            launchAtLoginEnabled = false
+#endif
             isInitializing = false
         }
     }
 
+    private func setLaunchAtLoginEnabled(_ isEnabled: Bool) {
+        isRefreshingLaunchAtLogin = true
+        launchAtLoginEnabled = isEnabled
+        isRefreshingLaunchAtLogin = false
+    }
+
     private func persistLaunchAtLoginPreference() {
+#if os(macOS)
         environment.updateLaunchAtLogin(isEnabled: launchAtLoginEnabled)
+#endif
     }
 
     func prepareServerEditor() {

@@ -21,73 +21,71 @@ struct MessageSplitScreen: View {
     private let fixedListWidth: CGFloat = 300
 
     var body: some View {
-        navigationContainer {
-            HSplitView {
-                messageListPane
-                messageDetailPane
-            }
-            .environment(searchViewModel)
-            .onAppear {
-                guard !didLoad else { return }
-                didLoad = true
-                Task {
-                    await refreshMessagesIfNeeded()
-                    openPendingMessageIfNeeded()
-                }
-            }
-            .onChange(of: messageListViewModel.filteredMessages) { _, _ in
-                ensureMessagesSelectionIfNeeded()
-                Task { await syncSelectedMessageSnapshot(for: selection, markRead: false) }
-            }
-            .onChange(of: searchViewModel.displayedResults) { _, _ in
-                ensureMessagesSelectionIfNeeded()
-                Task { await syncSelectedMessageSnapshot(for: selection, markRead: false) }
-            }
-            .onChange(of: selection) { _, newValue in
-                if newValue != pendingNotificationSelectionId {
-                    pendingNotificationSelectionId = nil
-                }
-                if let newValue, selectedMessageSnapshot?.id != newValue {
-                    selectedMessageSnapshot = nil
-                }
-                ensureMessagesSelectionIfNeeded()
-                Task { await syncSelectedMessageSnapshot(for: newValue, markRead: true) }
-                if let newValue {
-                    Task { await prefetchNeighborMessages(around: newValue) }
-                }
-            }
-            .onChange(of: openMessageId) { _, _ in
+        HSplitView {
+            messageListPane
+            messageDetailPane
+        }
+        .environment(searchViewModel)
+        .onAppear {
+            guard !didLoad else { return }
+            didLoad = true
+            Task {
+                await refreshMessagesIfNeeded()
                 openPendingMessageIfNeeded()
             }
-            .onChange(of: environment.messageStoreRevision) { _, _ in
-                guard !shouldIgnoreMessageStoreRevision() else { return }
-                Task { await refreshMessagesForStoreChange() }
+        }
+        .onChange(of: messageListViewModel.filteredMessages) { _, _ in
+            ensureMessagesSelectionIfNeeded()
+            Task { await syncSelectedMessageSnapshot(for: selection, markRead: false) }
+        }
+        .onChange(of: searchViewModel.displayedResults) { _, _ in
+            ensureMessagesSelectionIfNeeded()
+            Task { await syncSelectedMessageSnapshot(for: selection, markRead: false) }
+        }
+        .onChange(of: selection) { _, newValue in
+            if newValue != pendingNotificationSelectionId {
+                pendingNotificationSelectionId = nil
             }
+            if let newValue, selectedMessageSnapshot?.id != newValue {
+                selectedMessageSnapshot = nil
+            }
+            ensureMessagesSelectionIfNeeded()
+            Task { await syncSelectedMessageSnapshot(for: newValue, markRead: true) }
+            if let newValue {
+                Task { await prefetchNeighborMessages(around: newValue) }
+            }
+        }
+        .onChange(of: openMessageId) { _, _ in
+            openPendingMessageIfNeeded()
+        }
+        .onChange(of: environment.messageStoreRevision) { _, _ in
+            guard !shouldIgnoreMessageStoreRevision() else { return }
+            Task { await refreshMessagesForStoreChange() }
         }
     }
 
+    @ViewBuilder
     private var messageListPane: some View {
         navigationContainer {
-            let listView = MessageListScreen(
+            MessageListScreen(
                 viewModel: messageListViewModel,
                 selection: $selection,
                 batchSelection: $batchSelection,
                 isBatchMode: $isBatchMode
             )
-            if isBatchMode {
-                listView
-                    .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
-            } else {
-                listView
-                    .searchable(
-                        text: Binding(
-                            get: { searchViewModel.query },
-                            set: { newValue in searchViewModel.updateQuery(newValue) }
-                        ),
-                        prompt: Text(localizationManager.localized("search_messages"))
-                    )
-                    .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
-            }
+            .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
+            .searchable(
+                text: Binding(
+                    get: { isBatchMode ? "" : searchViewModel.query },
+                    set: { newValue in
+                        guard !isBatchMode else { return }
+                        searchViewModel.updateQuery(newValue)
+                    }
+                ),
+                placement: .toolbar,
+                prompt: Text(localizationManager.localized("search_messages"))
+            )
+            .navigationTitle(localizationManager.localized("messages"))
         }
         .toolbar { messageListToolbarContent }
     }
@@ -126,11 +124,7 @@ struct MessageSplitScreen: View {
     }
 
     private var messageDetailEmptyBackground: Color {
-        if #available(macOS 26.0, *) {
-            Color.appWindowBackground
-        } else {
-            Color.messageListBackground
-        }
+        Color.appWindowBackground
     }
 
     @MainActor
@@ -356,67 +350,57 @@ struct MessageSplitScreen: View {
     @ToolbarContentBuilder
     private var messageListToolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
-            messageListToolbarButtons
+            Button {
+                setBatchMode(!isBatchMode)
+            } label: {
+                Image(systemName: isBatchMode ? "checkmark" : "checklist.unchecked")
+            }
+            .help(isBatchMode ? localizationManager.localized("done") : localizationManager.localized("edit"))
+            .accessibilityLabel(isBatchMode ? localizationManager.localized("done") : localizationManager.localized("edit"))
+
+            if isBatchMode {
+                Button {
+                    markSelectedMessagesAsRead()
+                } label: {
+                    Image(systemName: "envelope.open")
+                }
+                .help(localizationManager.localized("mark_as_read"))
+                .accessibilityLabel(localizationManager.localized("mark_as_read"))
+                .disabled(selectedBatchUnreadMessages.isEmpty)
+
+                Button(role: .destructive) {
+                    deleteSelectedMessages()
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .help(localizationManager.localized("delete"))
+                .accessibilityLabel(localizationManager.localized("delete"))
+                .disabled(batchSelection.isEmpty)
+            } else {
+                Menu {
+                    channelFilterMenuContent
+                } label: {
+                    Image(systemName: isFilterMenuHighlighted ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
+                }
+                .menuIndicator(.hidden)
+                .help(localizationManager.localized("channel"))
+                .accessibilityLabel(localizationManager.localized("channel"))
+            }
         }
     }
 
     @ToolbarContentBuilder
     private var messageDetailToolbarContent: some ToolbarContent {
-        ToolbarItemGroup(placement: .secondaryAction) {
-            messageDetailToolbarButtons
-        }
-    }
-
-    @ViewBuilder
-    private var messageListToolbarButtons: some View {
-        Button {
-            setBatchMode(!isBatchMode)
-        } label: {
-            Image(systemName: isBatchMode ? "checkmark" : "checklist.unchecked")
-        }
-        .help(isBatchMode ? localizationManager.localized("done") : localizationManager.localized("edit"))
-        .accessibilityLabel(isBatchMode ? localizationManager.localized("done") : localizationManager.localized("edit"))
-
-        if isBatchMode {
-            Button {
-                markSelectedMessagesAsRead()
-            } label: {
-                Image(systemName: "envelope.open")
-            }
-            .help(localizationManager.localized("mark_as_read"))
-            .accessibilityLabel(localizationManager.localized("mark_as_read"))
-            .disabled(selectedBatchUnreadMessages.isEmpty)
-
+        ToolbarItem(placement: .secondaryAction) {
             Button(role: .destructive) {
-                deleteSelectedMessages()
+                deleteSelectedMessage()
             } label: {
                 Image(systemName: "trash")
             }
             .help(localizationManager.localized("delete"))
             .accessibilityLabel(localizationManager.localized("delete"))
-            .disabled(batchSelection.isEmpty)
-        } else {
-            Menu {
-                channelFilterMenuContent
-            } label: {
-                Image(systemName: isFilterMenuHighlighted ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
-            }
-            .menuIndicator(.hidden)
-            .help(localizationManager.localized("channel"))
-            .accessibilityLabel(localizationManager.localized("channel"))
+            .disabled(selectedMessageSnapshot == nil || isBatchMode)
         }
-    }
-
-    @ViewBuilder
-    private var messageDetailToolbarButtons: some View {
-        Button(role: .destructive) {
-            deleteSelectedMessage()
-        } label: {
-            Image(systemName: "trash")
-        }
-        .help(localizationManager.localized("delete"))
-        .accessibilityLabel(localizationManager.localized("delete"))
-        .disabled(selectedMessageSnapshot == nil || isBatchMode)
     }
 
     @ViewBuilder

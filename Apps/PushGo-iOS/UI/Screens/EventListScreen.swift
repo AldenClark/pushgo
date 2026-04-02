@@ -3,9 +3,11 @@ import SwiftUI
 struct EventListScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @Bindable var viewModel: EntityProjectionViewModel
     var openEventId: String? = nil
+    var scrollToTopToken: Int = 0
     var onOpenEventHandled: (() -> Void)? = nil
     @State private var selectedEvent: EventProjection?
     @State private var selectedEventIds: Set<String> = []
@@ -15,6 +17,7 @@ struct EventListScreen: View {
     @State private var isBatchModeActive = false
 
     var body: some View {
+        let filteredEventsSnapshot = filteredEvents
         let baseContent = Group {
             if viewModel.events.isEmpty {
                 EntityEmptyView(
@@ -22,7 +25,7 @@ struct EventListScreen: View {
                     title: localizationManager.localized("events_empty_title"),
                     subtitle: localizationManager.localized("events_empty_hint")
                 )
-            } else if filteredEvents.isEmpty {
+            } else if filteredEventsSnapshot.isEmpty {
                 MessageSearchPlaceholderView(
                     imageName: "questionmark.circle",
                     title: "no_matching_results",
@@ -31,59 +34,73 @@ struct EventListScreen: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.horizontal, 24)
             } else {
-                List(selection: batchSelectionBinding) {
-                    ForEach(Array(filteredEvents.enumerated()), id: \.element.id) { index, event in
-                        Group {
-                            if isBatchMode {
-                                EventListRow(event: event)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            } else {
-                                Button {
-                                    selectEvent(event)
-                                } label: {
+                ScrollViewReader { proxy in
+                    List(selection: batchSelectionBinding) {
+                        ForEach(Array(filteredEventsSnapshot.enumerated()), id: \.element.id) { index, event in
+                            Group {
+                                if isBatchMode {
                                     EventListRow(event: event)
                                         .frame(maxWidth: .infinity, alignment: .leading)
+                                } else {
+                                    Button {
+                                        selectEvent(event)
+                                    } label: {
+                                        EventListRow(event: event)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
-                                .buttonStyle(.plain)
+                            }
+                            .id(event.id)
+                            .accessibilityIdentifier("event.row.\(event.id)")
+                            .tag(event.id)
+                            .listRowInsets(EdgeInsets(
+                                top: EntityVisualTokens.listRowInsetVertical,
+                                leading: EntityVisualTokens.listRowInsetHorizontal,
+                                bottom: EntityVisualTokens.listRowInsetVertical,
+                                trailing: EntityVisualTokens.listRowInsetHorizontal
+                            ))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
+                            .listRowSeparator(index == filteredEventsSnapshot.count - 1 ? .hidden : .visible, edges: .bottom)
+                            .onAppear {
+                                guard index == filteredEventsSnapshot.count - 1 else { return }
+                                Task { await viewModel.loadMoreEvents() }
                             }
                         }
-                        .accessibilityIdentifier("event.row.\(event.id)")
-                        .tag(event.id)
-                        .listRowInsets(EdgeInsets(
-                            top: EntityVisualTokens.listRowInsetVertical,
-                            leading: EntityVisualTokens.listRowInsetHorizontal,
-                            bottom: EntityVisualTokens.listRowInsetVertical,
-                            trailing: EntityVisualTokens.listRowInsetHorizontal
-                        ))
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
-                        .listRowSeparator(index == filteredEvents.count - 1 ? .hidden : .visible, edges: .bottom)
-                        .onAppear {
-                            guard index == filteredEvents.count - 1 else { return }
-                            Task { await viewModel.loadMoreEvents() }
+                        if viewModel.isLoadingMoreEvents {
+                            HStack {
+                                Spacer()
+                                ProgressView()
+                                    .controlSize(.small)
+                                Spacer()
+                            }
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
                         }
                     }
-                    if viewModel.isLoadingMoreEvents {
-                        HStack {
-                            Spacer()
-                            ProgressView()
-                                .controlSize(.small)
-                            Spacer()
+                    .listStyle(.plain)
+                    .modifier(
+                        EventListTopObserverModifier(enabled: true) { topOffset in
+                            updateEventListTopState(
+                                topOffset: topOffset,
+                                filteredEventsCount: filteredEventsSnapshot.count
+                            )
                         }
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
+                    )
+                    .environment(\.editMode, isBatchMode ? .constant(.active) : .constant(.inactive))
+                    .scrollContentBackground(.hidden)
+                    .background(EntityVisualTokens.pageBackground)
+                    .onChange(of: scrollToTopToken) { _, _ in
+                        scrollToTopIfNeeded(proxy, filteredEvents: filteredEventsSnapshot)
                     }
                 }
-                .listStyle(.plain)
-                .environment(\.editMode, isBatchMode ? .constant(.active) : .constant(.inactive))
-                .scrollContentBackground(.hidden)
-                .background(EntityVisualTokens.pageBackground)
             }
         }
         let content = applySearchIfNeeded(baseContent)
         .accessibilityIdentifier("screen.events.list")
-        .task(id: searchAutoloadTrigger) {
-            await autoloadSearchResultsIfNeeded()
+        .task(id: searchAutoloadTrigger(filteredEventsCount: filteredEventsSnapshot.count)) {
+            await autoloadSearchResultsIfNeeded(filteredEventsCount: filteredEventsSnapshot.count)
         }
         .navigationTitle(localizationManager.localized("push_type_event"))
         .navigationBarTitleDisplayMode(.large)
@@ -101,6 +118,7 @@ struct EventListScreen: View {
             Text(localizationManager.localized("batch_delete_selected_events_confirm", selectedEventIds.count))
         }
         .onAppear {
+            environment.updateEventListPosition(isAtTop: true)
             openEventIfNeeded()
 #if DEBUG
             publishAutomationState()
@@ -173,7 +191,7 @@ struct EventListScreen: View {
         } else {
             content.searchable(
                 text: $searchQuery,
-                placement: .navigationBarDrawer(displayMode: .always),
+                placement: .navigationBarDrawer(displayMode: .automatic),
                 prompt: Text(localizationManager.localized("search_events"))
             )
         }
@@ -203,25 +221,30 @@ struct EventListScreen: View {
         }
     }
 
-    private var searchAutoloadTrigger: String {
-        "\(normalizedSearchQuery)|\(selectedChannelId ?? "_")|\(viewModel.events.count)|\(viewModel.hasMoreEvents)|\(viewModel.isLoadingMoreEvents)"
+    private func searchAutoloadTrigger(filteredEventsCount: Int) -> String {
+        "\(normalizedSearchQuery)|\(selectedChannelId ?? "_")|\(viewModel.events.count)|\(filteredEventsCount)|\(viewModel.hasMoreEvents)|\(viewModel.isLoadingMoreEvents)"
     }
 
     private var normalizedSearchQuery: String {
         searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
-    private var shouldAutoloadSearchResults: Bool {
+    private func shouldAutoloadSearchResults(filteredEventsCount: Int) -> Bool {
         let hasActiveFilter = !normalizedSearchQuery.isEmpty || selectedChannelId != nil
         return hasActiveFilter
-            && filteredEvents.isEmpty
+            && filteredEventsCount == 0
             && viewModel.hasMoreEvents
             && !viewModel.isLoadingMoreEvents
     }
 
-    private func autoloadSearchResultsIfNeeded() async {
-        guard shouldAutoloadSearchResults else { return }
+    private func autoloadSearchResultsIfNeeded(filteredEventsCount: Int) async {
+        guard shouldAutoloadSearchResults(filteredEventsCount: filteredEventsCount) else { return }
         await viewModel.loadMoreEvents()
+    }
+
+    private func updateEventListTopState(topOffset: CGFloat, filteredEventsCount: Int) {
+        let isAtTop = filteredEventsCount == 0 || topOffset <= EventListTopMetrics.topTolerance
+        environment.updateEventListPosition(isAtTop: isAtTop)
     }
 
     private func searchableText(for event: EventProjection) -> String {
@@ -247,6 +270,17 @@ struct EventListScreen: View {
             return 1
         case .unknown:
             return 2
+        }
+    }
+
+    private func scrollToTopIfNeeded(_ proxy: ScrollViewProxy, filteredEvents: [EventProjection]) {
+        guard let firstId = filteredEvents.first?.id else { return }
+        if reduceMotion {
+            proxy.scrollTo(firstId, anchor: .top)
+        } else {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                proxy.scrollTo(firstId, anchor: .top)
+            }
         }
     }
 
@@ -421,6 +455,32 @@ struct EventListScreen: View {
     }
 }
 
+private struct EventListTopObserverModifier: ViewModifier {
+    let enabled: Bool
+    let onChange: (CGFloat) -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if enabled {
+            content.onScrollGeometryChange(
+                for: CGFloat.self,
+                of: { geometry in
+                    geometry.contentOffset.y
+                },
+                action: { _, newValue in
+                    onChange(newValue)
+                }
+            )
+        } else {
+            content
+        }
+    }
+}
+
+private enum EventListTopMetrics {
+    static let topTolerance: CGFloat = 2
+}
+
 struct EventListRow: View {
     let event: EventProjection
 
@@ -445,7 +505,15 @@ struct EventListRow: View {
     }
 
     private var previewImageAttachments: [URL] {
-        event.imageURLs.filter(isLikelyImageAttachmentURL).prefix(3).map { $0 }
+        Array(imageAttachments.prefix(3))
+    }
+
+    private var imageAttachments: [URL] {
+        event.imageURLs.filter(isLikelyImageAttachmentURL)
+    }
+
+    private var remainingImageAttachmentCount: Int {
+        max(0, imageAttachments.count - previewImageAttachments.count)
     }
 
     var body: some View {
@@ -507,8 +575,8 @@ struct EventListRow: View {
                         .frame(width: 48, height: 48)
                         .clipShape(RoundedRectangle(cornerRadius: EntityVisualTokens.radiusSmall, style: .continuous))
                     }
-                    if event.imageURLs.filter(isLikelyImageAttachmentURL).count > 3 {
-                        Text("+\(event.imageURLs.filter(isLikelyImageAttachmentURL).count - 3)")
+                    if remainingImageAttachmentCount > 0 {
+                        Text("+\(remainingImageAttachmentCount)")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .padding(.leading, 4)

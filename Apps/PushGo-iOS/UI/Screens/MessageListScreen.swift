@@ -16,6 +16,8 @@ struct MessageListScreen: View {
     private let onSelect: ((PushMessageSummary) -> Void)?
     private let autoSelectFirstMessage: Bool
     private let useNavigationContainer: Bool
+    private let scrollToUnreadToken: Int
+    private let scrollToTopToken: Int
     @State private var lastAutoSelectedMessageId: UUID?
     @State private var pendingScrollTarget: UUID?
 
@@ -24,11 +26,15 @@ struct MessageListScreen: View {
         onSelect: ((PushMessageSummary) -> Void)? = nil,
         autoSelectFirstMessage: Bool = false,
         useNavigationContainer: Bool = true,
+        scrollToUnreadToken: Int = 0,
+        scrollToTopToken: Int = 0,
     ) {
         _viewModel = Bindable(viewModel)
         self.onSelect = onSelect
         self.autoSelectFirstMessage = autoSelectFirstMessage
         self.useNavigationContainer = useNavigationContainer
+        self.scrollToUnreadToken = scrollToUnreadToken
+        self.scrollToTopToken = scrollToTopToken
     }
 
     var body: some View {
@@ -103,7 +109,7 @@ struct MessageListScreen: View {
     }
 
     private var coreContent: some View {
-        let content = screenContent
+        screenContent
             .navigationTitle(localizationManager.localized("messages"))
             .navigationBarTitleDisplayMode(.large)
             .applyToolbarBackgroundIfNeeded()
@@ -145,7 +151,6 @@ struct MessageListScreen: View {
             } message: {
                 Text(localizationManager.localized("batch_delete_selected_messages_confirm", selectedMessageIDs.count))
             }
-        return AnyView(content)
     }
 
 #if DEBUG
@@ -268,8 +273,14 @@ struct MessageListScreen: View {
             .onChange(of: pendingScrollTarget) { _, _ in
                 scrollToPendingMessageIfNeeded(proxy)
             }
-            .onChange(of: viewModel.filteredMessages.map(\.id)) { _, _ in
+            .onChange(of: viewModel.filteredMessagesIdentityRevision) { _, _ in
                 scrollToPendingMessageIfNeeded(proxy)
+            }
+            .onChange(of: scrollToUnreadToken) { _, _ in
+                scrollToNearestUnreadIfNeeded(proxy)
+            }
+            .onChange(of: scrollToTopToken) { _, _ in
+                scrollToTopIfNeeded(proxy)
             }
         }
     }
@@ -451,21 +462,25 @@ private struct MessageListSearchableModifier: ViewModifier {
     let enabled: Bool
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
+    @ViewBuilder
     func body(content: Content) -> some View {
-        guard enabled else { return AnyView(content) }
-        let queryBinding = Binding(
-            get: { searchViewModel.query },
-            set: { searchViewModel.updateQuery($0) },
-        )
-        return AnyView(content
-            .searchable(
-                text: queryBinding,
-                placement: .navigationBarDrawer(displayMode: .automatic),
-                prompt: localizationManager.localized("search_messages")
+        if !enabled {
+            content
+        } else {
+            let queryBinding = Binding(
+                get: { searchViewModel.query },
+                set: { searchViewModel.updateQuery($0) },
             )
-            .onSubmit(of: .search) {
-                searchViewModel.applySearchTextImmediately(searchViewModel.query)
-            })
+            content
+                .searchable(
+                    text: queryBinding,
+                    placement: .navigationBarDrawer(displayMode: .automatic),
+                    prompt: localizationManager.localized("search_messages")
+                )
+                .onSubmit(of: .search) {
+                    searchViewModel.applySearchTextImmediately(searchViewModel.query)
+                }
+        }
     }
 }
 
@@ -671,14 +686,35 @@ private extension MessageListScreen {
     private func scrollToPendingMessageIfNeeded(_ proxy: ScrollViewProxy) {
         guard let targetId = pendingScrollTarget else { return }
         guard viewModel.filteredMessages.contains(where: { $0.id == targetId }) else { return }
+        scroll(proxy, to: targetId, anchor: .center)
+        pendingScrollTarget = nil
+    }
+
+    private func scrollToNearestUnreadIfNeeded(_ proxy: ScrollViewProxy) {
+        guard let targetId = displayedMessages.first(where: { !$0.isRead })?.id else { return }
+        scroll(proxy, to: targetId, anchor: .center)
+    }
+
+    private func scrollToTopIfNeeded(_ proxy: ScrollViewProxy) {
+        guard let targetId = displayedMessages.first?.id else { return }
+        scroll(proxy, to: targetId, anchor: .top)
+    }
+
+    private var displayedMessages: [PushMessageSummary] {
+        if isShowingSearchResults {
+            return searchViewModel.displayedResults
+        }
+        return viewModel.filteredMessages
+    }
+
+    private func scroll(_ proxy: ScrollViewProxy, to targetId: UUID, anchor: UnitPoint) {
         if reduceMotion {
-            proxy.scrollTo(targetId, anchor: .center)
+            proxy.scrollTo(targetId, anchor: anchor)
         } else {
             withAnimation(.easeInOut(duration: 0.2)) {
-                proxy.scrollTo(targetId, anchor: .center)
+                proxy.scrollTo(targetId, anchor: anchor)
             }
         }
-        pendingScrollTarget = nil
     }
 
     private func applyDefaultSelectionIfNeeded() {

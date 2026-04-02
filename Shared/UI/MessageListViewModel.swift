@@ -46,7 +46,13 @@ struct MessageChannelSummary: Identifiable, Hashable {
 @MainActor
 @Observable
 final class MessageListViewModel {
-    private(set) var filteredMessages: [PushMessageSummary] = []
+    private(set) var filteredMessagesIdentityRevision: UInt64 = 0
+    private(set) var filteredMessages: [PushMessageSummary] = [] {
+        didSet {
+            guard messageIDsChanged(from: oldValue, to: filteredMessages) else { return }
+            filteredMessagesIdentityRevision &+= 1
+        }
+    }
     private(set) var selectedFilter: MessageFilter = .all
     private(set) var selectedChannel: MessageChannelKey?
     private(set) var channelSummaries: [MessageChannelSummary] = []
@@ -392,12 +398,17 @@ final class MessageListViewModel {
     private func trimCachedMessagesIfNeeded() {
         let overflow = filteredMessages.count - maxCachedMessages
         guard overflow > 0 else { return }
+#if os(macOS)
+        filteredMessages.removeLast(overflow)
+        nextCursor = filteredMessages.last.map { MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id) }
+#else
         if environment.isMessageListAtTop {
             filteredMessages.removeLast(overflow)
             nextCursor = filteredMessages.last.map { MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id) }
         } else {
             filteredMessages.removeFirst(overflow)
         }
+#endif
         hasMorePages = true
     }
 
@@ -515,6 +526,17 @@ final class MessageListViewModel {
     }
     private func resetStaleSelectionIfNeeded() -> Bool {
         false
+    }
+
+    private func messageIDsChanged(
+        from previous: [PushMessageSummary],
+        to current: [PushMessageSummary]
+    ) -> Bool {
+        guard previous.count == current.count else { return true }
+        for (lhs, rhs) in zip(previous, current) where lhs.id != rhs.id {
+            return true
+        }
+        return false
     }
 }
 

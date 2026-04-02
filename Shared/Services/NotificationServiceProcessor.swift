@@ -4,6 +4,7 @@ import UserNotifications
 final class NotificationServiceProcessor {
     private let localDataStore = LocalDataStore()
     private let contentPreparer = NotificationContentPreparer()
+    private let channelSubscriptionService = ChannelSubscriptionService()
 
     func process(
         request: UNNotificationRequest,
@@ -18,10 +19,30 @@ final class NotificationServiceProcessor {
     }
 
     func prepareContent(
-        request _: UNNotificationRequest,
+        request: UNNotificationRequest,
         content: UNMutableNotificationContent
     ) async -> UNMutableNotificationContent {
-        await contentPreparer.prepare(content)
+        await pullProviderWakeupIfNeeded(content: content)
+        return await contentPreparer.prepare(content)
+    }
+
+    private func pullProviderWakeupIfNeeded(content: UNMutableNotificationContent) async {
+        guard let deliveryId = NotificationHandling.providerWakeupPullDeliveryId(
+            from: content.userInfo
+        ) else {
+            return
+        }
+        guard let config = try? await localDataStore.loadServerConfig() else {
+            return
+        }
+        guard let item = try? await channelSubscriptionService.pullMessage(
+            baseURL: config.baseURL,
+            token: config.token,
+            deliveryId: deliveryId
+        ) else {
+            return
+        }
+        NotificationHandling.applyPulledPayload(item.payload, to: content)
     }
 
     private func persistMessage(for request: UNNotificationRequest, content: UNMutableNotificationContent) async {

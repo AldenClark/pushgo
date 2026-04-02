@@ -3,7 +3,7 @@ import Darwin
 import Observation
 import ServiceManagement
 import SwiftUI
-import UserNotifications
+@preconcurrency import UserNotifications
 import AppKit
 
 @MainActor
@@ -29,8 +29,6 @@ final class AppEnvironment {
     @ObservationIgnored private var didBootstrap = false
 
     private var toastDismissTask: Task<Void, Never>?
-    @ObservationIgnored private let countsRefreshDelay: TimeInterval = 0.4
-    @ObservationIgnored private let messageListRefreshDelay: TimeInterval = 0.35
     @ObservationIgnored private var pendingMessageListRefresh = false
     @ObservationIgnored private var isMainWindowVisible = true
     @ObservationIgnored private var lastWakeupRouteFingerprint: String?
@@ -50,7 +48,6 @@ final class AppEnvironment {
     private(set) var isThingPageEnabled: Bool = true
     private(set) var launchAtLoginEnabled: Bool = false
     private(set) var activeMainTab: MainTab = .messages
-    private(set) var isMessageListAtTop: Bool = true
     private(set) var channelSubscriptions: [ChannelSubscription] = []
     private var channelSubscriptionLookup: [String: ChannelSubscription] = [:]
     private var isSceneActive = false
@@ -134,9 +131,20 @@ final class AppEnvironment {
 
     private func syncLaunchAtLoginPreferenceIfNeeded() async {
         let stored = await dataStore.loadLaunchAtLoginPreference()
-        let shouldEnable = stored ?? false
-        launchAtLoginEnabled = shouldEnable
-        applyLaunchAtLoginPreference(shouldEnable)
+        let actual = currentLaunchAtLoginState()
+        let resolved = stored ?? actual
+        if stored != resolved {
+            await dataStore.saveLaunchAtLoginPreference(resolved)
+        }
+        launchAtLoginEnabled = resolved
+        if actual != resolved {
+            applyLaunchAtLoginPreference(resolved)
+            await synchronizeLaunchAtLoginStateWithSystem()
+        }
+    }
+
+    func refreshLaunchAtLoginStatus() async {
+        await synchronizeLaunchAtLoginStateWithSystem()
     }
 
     func updateLaunchAtLogin(isEnabled: Bool) {
@@ -145,6 +153,9 @@ final class AppEnvironment {
             await dataStore.saveLaunchAtLoginPreference(isEnabled)
         }
         applyLaunchAtLoginPreference(isEnabled)
+        Task { @MainActor in
+            await synchronizeLaunchAtLoginStateWithSystem()
+        }
     }
 
     private func applyLaunchAtLoginPreference(_ isEnabled: Bool) {
@@ -155,6 +166,25 @@ final class AppEnvironment {
                 try SMAppService.mainApp.unregister()
             }
         } catch {
+        }
+    }
+
+    private func synchronizeLaunchAtLoginStateWithSystem() async {
+        let actual = currentLaunchAtLoginState()
+        if launchAtLoginEnabled != actual {
+            launchAtLoginEnabled = actual
+        }
+        await dataStore.saveLaunchAtLoginPreference(actual)
+    }
+
+    private func currentLaunchAtLoginState() -> Bool {
+        switch SMAppService.mainApp.status {
+        case .enabled, .requiresApproval:
+            return true
+        case .notRegistered, .notFound:
+            return false
+        @unknown default:
+            return false
         }
     }
 
@@ -212,9 +242,7 @@ final class AppEnvironment {
 
     private func scheduleCountsRefresh() {
         pendingCountsRefreshTask?.cancel()
-        let delay = countsRefreshDelay
         pendingCountsRefreshTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             await self?.refreshMessageCountsAndNotify()
         }
     }
@@ -225,9 +253,7 @@ final class AppEnvironment {
             return
         }
         pendingMessageListRefreshTask?.cancel()
-        let delay = messageListRefreshDelay
         pendingMessageListRefreshTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             guard let self else { return }
             messageStoreRevision = UUID()
             pendingMessageListRefresh = false
@@ -1086,7 +1112,23 @@ final class AppEnvironment {
         await syncPrivateChannelState()
 
         guard deleteLocalMessages else { return 0 }
-        return try await messageStateCoordinator.deleteMessages(channel: normalized, readState: nil)
+        let removedMessages = try await messageStateCoordinator.deleteMessages(channel: normalized, readState: nil)
+        let removedEvents = try await dataStore.deleteEventRecords(channel: normalized)
+        let removedThings = try await dataStore.deleteThingRecords(channel: normalized)
+        let remainingMessages = try await dataStore.loadMessages(filter: .all, channel: normalized)
+        let remainingEvents = try await dataStore
+            .loadEventMessagesForProjection()
+            .filter { channelMatches($0.channel, normalizedChannel: normalized) }
+        let remainingThings = try await dataStore
+            .loadThingMessagesForProjection()
+            .filter { channelMatches($0.channel, normalizedChannel: normalized) }
+        if !remainingMessages.isEmpty || !remainingEvents.isEmpty || !remainingThings.isEmpty {
+            throw AppError.localStore(
+                "channel cleanup incomplete messages=\(remainingMessages.count) events=\(remainingEvents.count) things=\(remainingThings.count)"
+            )
+        }
+        await refreshMessageCountsAndNotify()
+        return removedMessages + removedEvents + removedThings
     }
 
     func closeEvent(
@@ -1210,6 +1252,7 @@ final class AppEnvironment {
             scheduleMessageListRefresh()
             flushPendingMessageListRefreshIfNeeded()
             Task { @MainActor in
+                await refreshLaunchAtLoginStatus()
                 await refreshChannelSubscriptions()
                 await syncPrivateChannelState()
             }
@@ -1248,16 +1291,7 @@ final class AppEnvironment {
         clearDeliveredSystemNotifications()
     }
 
-    func updateMessageListPosition(isAtTop: Bool) {
-        guard isMessageListAtTop != isAtTop else { return }
-        isMessageListAtTop = isAtTop
-        clearDeliveredSystemNotifications()
-    }
-
     func shouldPresentForegroundNotification(payload: [AnyHashable: Any]? = nil) -> Bool {
-        guard !shouldSuppressForegroundNotifications else {
-            return false
-        }
         guard let payload else {
             return true
         }
@@ -1411,6 +1445,24 @@ final class AppEnvironment {
     }
 
     @discardableResult
+    func persistRemotePayloadIfNeeded(
+        _ payload: [AnyHashable: Any],
+        requestIdentifier: String? = nil
+    ) async -> NotificationPersistenceOutcome {
+        let outcome = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
+            payload,
+            requestIdentifier: requestIdentifier,
+            dataStore: dataStore,
+            beforeSave: { [weak self] message in
+                guard let self else { return }
+                await self.autoEnableDataPageIfNeeded(for: message)
+            }
+        )
+        applyNotificationPersistenceOutcome(outcome)
+        return outcome
+    }
+
+    @discardableResult
     func persistNotificationIfNeeded(_ notification: UNNotification) async -> NotificationPersistenceOutcome {
         let outcome = await NotificationPersistenceCoordinator.persistIfNeeded(
             notification,
@@ -1420,6 +1472,13 @@ final class AppEnvironment {
                 await self.autoEnableDataPageIfNeeded(for: message)
             }
         )
+        applyNotificationPersistenceOutcome(outcome)
+        return outcome
+    }
+
+    private func applyNotificationPersistenceOutcome(
+        _ outcome: NotificationPersistenceOutcome
+    ) {
         switch outcome {
         case .duplicate:
             scheduleCountsRefresh()
@@ -1430,7 +1489,6 @@ final class AppEnvironment {
         case .rejected, .failed:
             break
         }
-        return outcome
     }
     func handleNotificationOpen(notificationRequestId: String) async {
         await handleNotificationOpenInternal(
@@ -1546,8 +1604,12 @@ final class AppEnvironment {
     private func clearDeliveredSystemNotifications() {
     }
 
-    private var shouldSuppressForegroundNotifications: Bool {
-        isSceneActive && activeMainTab == .messages && isMessageListAtTop
+    private func channelMatches(_ candidate: String?, normalizedChannel: String) -> Bool {
+        guard let candidate else { return false }
+        if let normalizedCandidate = try? ChannelIdValidator.normalize(candidate) {
+            return normalizedCandidate == normalizedChannel
+        }
+        return candidate.trimmingCharacters(in: .whitespacesAndNewlines) == normalizedChannel
     }
 
     private var canRefreshMessageList: Bool {

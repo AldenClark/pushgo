@@ -31,53 +31,49 @@ struct MainTabContainerView: View {
 
     @ViewBuilder
     private func configuredRootView<Content: View>(_ content: Content) -> some View {
-        let taskView = AnyView(
-            content
-                .task {
-                    guard !didRefreshAuthorizationStatus else { return }
-                    didRefreshAuthorizationStatus = true
-                    await environment.pushRegistrationService.refreshAuthorizationStatus()
-                    await entityViewModel.reload()
-                    environment.updateActiveTab(activeTab)
-                    if environment.pendingEventToOpen != nil || environment.pendingThingToOpen != nil {
-                        openPendingEntityIfNeeded()
-                    }
-                    ensureSidebarSelectionIsVisible()
+        content
+            .task {
+                guard !didRefreshAuthorizationStatus else { return }
+                didRefreshAuthorizationStatus = true
+                await environment.pushRegistrationService.refreshAuthorizationStatus()
+                await entityViewModel.reload()
+                environment.updateActiveTab(activeTab)
+                if environment.pendingEventToOpen != nil || environment.pendingThingToOpen != nil {
+                    openPendingEntityIfNeeded()
                 }
-                .task {
-                    for await _ in NotificationCenter.default.notifications(named: .pushgoOpenSettingsFromMenuBar) {
-                        sidebarSelection = .settings
-                    }
+                ensureSidebarSelectionIsVisible()
+            }
+            .task {
+                for await _ in NotificationCenter.default.notifications(named: .pushgoOpenSettingsFromMenuBar) {
+                    sidebarSelection = .settings
                 }
+            }
 #if DEBUG
-                .task {
-                    for await notification in NotificationCenter.default.notifications(
-                        named: .pushgoAutomationSelectTab
-                    ) {
-                        guard let requestedTab = notification.object as? String else { continue }
-                        switch requestedTab {
-                        case "messages":
-                            sidebarSelection = .messagesAll
-                        case "events":
-                            sidebarSelection = .events
-                        case "things":
-                            sidebarSelection = .things
-                        case "channels":
-                            sidebarSelection = .channels
-                        case "settings":
-                            sidebarSelection = .settings
-                        default:
-                            continue
-                        }
+            .task {
+                for await notification in NotificationCenter.default.notifications(
+                    named: .pushgoAutomationSelectTab
+                ) {
+                    guard let requestedTab = notification.object as? String else { continue }
+                    switch requestedTab {
+                    case "messages":
+                        sidebarSelection = .messagesAll
+                    case "events":
+                        sidebarSelection = .events
+                    case "things":
+                        sidebarSelection = .things
+                    case "channels":
+                        sidebarSelection = .channels
+                    case "settings":
+                        sidebarSelection = .settings
+                    default:
+                        continue
                     }
                 }
-                .task(id: automationStateVersion) {
-                    publishAutomationState()
-                }
+            }
+            .task(id: automationStateVersion) {
+                publishAutomationState()
+            }
 #endif
-        )
-
-        taskView
         .onChange(of: environment.pendingMessageToOpen) { _, id in
             if id != nil {
                 sidebarSelection = .messagesAll
@@ -153,64 +149,47 @@ struct MainTabContainerView: View {
 
     @ViewBuilder
     private var sidebarMenu: some View {
-        List(selection: $sidebarSelection) {
-            if showsMessagesEntry {
-                sidebarPrimaryRow(.messages)
-                    .tag(SidebarSelection.messagesAll)
+        VStack(spacing: 0) {
+            List(selection: $sidebarSelection) {
+                if showsMessagesEntry {
+                    sidebarPrimaryRow(.messages)
+                        .tag(SidebarSelection.messagesAll)
+                }
+                if showsEventsEntry {
+                    sidebarPrimaryRow(.events)
+                        .tag(SidebarSelection.events)
+                }
+                if showsThingsEntry {
+                    sidebarPrimaryRow(.things)
+                        .tag(SidebarSelection.things)
+                }
+                sidebarPrimaryRow(.channels)
+                    .tag(SidebarSelection.channels)
+                sidebarPrimaryRow(.settings)
+                    .tag(SidebarSelection.settings)
             }
-            if showsEventsEntry {
-                sidebarPrimaryRow(.events)
-                    .tag(SidebarSelection.events)
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+
+            if showsLaunchAtLoginReminder {
+                launchAtLoginReminder
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+                    .padding(.bottom, 12)
             }
-            if showsThingsEntry {
-                sidebarPrimaryRow(.things)
-                    .tag(SidebarSelection.things)
-            }
-            sidebarPrimaryRow(.channels)
-                .tag(SidebarSelection.channels)
-            sidebarPrimaryRow(.settings)
-                .tag(SidebarSelection.settings)
-        }
-        .listStyle(.sidebar)
-        .scrollContentBackground(.hidden)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            sidebarFooter
         }
     }
 
-    @ViewBuilder
-    private var sidebarFooter: some View {
-        if !environment.launchAtLoginEnabled {
-            launchAtLoginReminder
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
-                .padding(.bottom, 12)
-        }
+    private var showsLaunchAtLoginReminder: Bool {
+        !environment.launchAtLoginEnabled
     }
 
     private var launchAtLoginReminder: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "power.dotted")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.orange)
-                    .frame(width: 30, height: 30)
-                    .background(
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .fill(Color.orange.opacity(0.14))
-                    )
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("sidebar_launch_at_login_reminder_title")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                    Text("sidebar_launch_at_login_reminder_detail")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
+            Text("sidebar_launch_at_login_reminder_detail")
+                .font(.body)
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(2)
 
             Button {
                 environment.updateLaunchAtLogin(isEnabled: true)
@@ -223,6 +202,7 @@ struct MainTabContainerView: View {
             .buttonStyle(.borderedProminent)
             .accessibilityIdentifier("sidebar-enable-launch-at-login")
         }
+        .help(localizationManager.localized("sidebar_launch_at_login_reminder_detail"))
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -245,14 +225,13 @@ struct MainTabContainerView: View {
     }
 
     private func sidebarPrimaryRow(_ tab: MainTab) -> some View {
-        HStack(spacing: 10) {
-            sidebarIcon(systemImageName: tab.systemImageName)
+        Label {
             Text(tab.localizedTitle(using: localizationManager))
                 .font(.headline.weight(.semibold))
-            Spacer(minLength: 6)
+        } icon: {
+            sidebarIcon(systemImageName: tab.systemImageName)
         }
         .padding(.vertical, SidebarLayout.primaryRowVerticalPadding)
-        .contentShape(Rectangle())
         .accessibilityIdentifier("sidebar-\(tab.accessibilityIdentifier)")
         .listRowSeparator(.hidden)
     }

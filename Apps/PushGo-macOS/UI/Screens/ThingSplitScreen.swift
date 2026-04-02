@@ -16,74 +16,77 @@ struct ThingSplitScreen: View {
     private let fixedListWidth: CGFloat = 300
 
     var body: some View {
-        navigationContainer {
-            HSplitView {
-                thingListPane
-                thingDetailPane
-            }
-            .navigationTitle(localizationManager.localized("push_type_thing"))
-            .onAppear {
-                syncSelection()
-            }
-            .onChange(of: viewModel.things) { _, _ in
-                syncSelection()
-            }
-            .onChange(of: searchQuery) { _, _ in
-                syncSelection()
-            }
-            .onChange(of: openThingId) { _, _ in
-                syncSelection()
-            }
-            .onChange(of: environment.messageStoreRevision) { _, _ in
-                Task { @MainActor in
-                    await viewModel.reload()
-                    syncSelection()
-                }
-            }
-            .onChange(of: selection) { _, id in
-                guard !isBatchMode else { return }
-                guard let id else { return }
-                Task { await viewModel.ensureThingDetailsLoaded(thingId: id) }
-            }
-        }
+        configuredSplitView
+    }
+
+    @ViewBuilder
+    private var configuredSplitView: some View {
 #if DEBUG
-        .task(id: automationStateSignature) {
-            publishAutomationState()
-        }
+        splitView
+            .task(id: automationStateSignature) {
+                publishAutomationState()
+            }
+#else
+        splitView
 #endif
     }
 
+    private var splitView: some View {
+        HSplitView {
+            thingListPane
+            thingDetailPane
+        }
+        .onAppear {
+            syncSelection()
+        }
+        .onChange(of: viewModel.things) { _, _ in
+            syncSelection()
+        }
+        .onChange(of: searchQuery) { _, _ in
+            syncSelection()
+        }
+        .onChange(of: openThingId) { _, _ in
+            syncSelection()
+        }
+        .onChange(of: environment.messageStoreRevision) { _, _ in
+            Task { @MainActor in
+                await viewModel.reload()
+                syncSelection()
+            }
+        }
+        .onChange(of: selection) { _, id in
+            guard !isBatchMode else { return }
+            guard let id else { return }
+            Task { await viewModel.ensureThingDetailsLoaded(thingId: id) }
+        }
+    }
+
+    @ViewBuilder
     private var thingListPane: some View {
         navigationContainer {
-            if isBatchMode {
-                ThingListScreen(
-                    things: filteredThings,
-                    selection: $selection,
-                    batchSelection: $batchSelection,
-                    isBatchMode: $isBatchMode,
-                    isLoadingMore: viewModel.isLoadingMoreThings,
-                    onReachEnd: {
-                        Task { await viewModel.loadMoreThings() }
+            ThingListScreen(
+                things: filteredThings,
+                selection: $selection,
+                batchSelection: $batchSelection,
+                isBatchMode: $isBatchMode,
+                isLoadingMore: viewModel.isLoadingMoreThings,
+                onReachEnd: {
+                    Task { await viewModel.loadMoreThings() }
+                }
+            )
+            .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
+            .searchable(
+                text: Binding(
+                    get: { isBatchMode ? "" : searchQuery },
+                    set: { newValue in
+                        guard !isBatchMode else { return }
+                        searchQuery = newValue
                     }
-                )
-                .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
-            } else {
-                ThingListScreen(
-                    things: filteredThings,
-                    selection: $selection,
-                    batchSelection: $batchSelection,
-                    isBatchMode: $isBatchMode,
-                    isLoadingMore: viewModel.isLoadingMoreThings,
-                    onReachEnd: {
-                        Task { await viewModel.loadMoreThings() }
-                    }
-                )
-                .searchable(
-                    text: $searchQuery,
-                    prompt: Text(localizationManager.localized("search_objects"))
-                )
-                .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
-            }
+                ),
+                placement: .toolbar,
+                prompt: Text(localizationManager.localized("search_objects"))
+            )
+            .navigationTitle(localizationManager.localized("push_type_thing"))
         }
         .toolbar { listToolbarContent }
     }

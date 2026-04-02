@@ -41,6 +41,7 @@ struct ThingListScreen: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .id(thing.id)
                         .accessibilityIdentifier("thing.row.\(thing.id)")
                         .listRowInsets(Layout.rowInsets)
                         .alignmentGuide(.listRowSeparatorLeading) { dimensions in
@@ -75,6 +76,7 @@ struct ThingListScreen: View {
                 List(selection: $selection) {
                     ForEach(Array(things.enumerated()), id: \.element.id) { index, thing in
                         ThingListRow(thing: thing)
+                            .id(thing.id)
                             .accessibilityIdentifier("thing.row.\(thing.id)")
                             .tag(thing.id)
                             .listRowInsets(Layout.rowInsets)
