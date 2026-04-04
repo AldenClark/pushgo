@@ -51,7 +51,7 @@ jobs:
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: "3.3"
+          ruby-version: "3.2"
           bundler-cache: true
 
       - name: Prepare App Store Connect key file for xcodebuild auth
