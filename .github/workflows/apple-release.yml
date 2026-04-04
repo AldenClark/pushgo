@@ -52,7 +52,15 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.2"
-          bundler-cache: true
+          bundler-cache: false
+
+      - name: Setup Bundler
+        shell: bash
+        run: |
+          set -euo pipefail
+          gem install bundler -v 2.5.23 --no-document
+          bundle _2.5.23_ config set path vendor/bundle
+          bundle _2.5.23_ install --jobs 4 --retry 3
 
       - name: Prepare App Store Connect key file for xcodebuild auth
         shell: bash
@@ -163,11 +171,11 @@ jobs:
 
       - name: Run fastlane beta
         if: startsWith(github.ref, 'refs/tags/Beta-') || (github.event_name == 'workflow_dispatch' && inputs.lane == 'beta')
-        run: bundle exec fastlane ios beta
+        run: bundle _2.5.23_ exec fastlane ios beta
 
       - name: Run fastlane release
         if: startsWith(github.ref, 'refs/tags/Release-') || (github.event_name == 'workflow_dispatch' && inputs.lane == 'release')
-        run: bundle exec fastlane ios release
+        run: bundle _2.5.23_ exec fastlane ios release
 
       - name: Upload signed DMG artifact
         if: startsWith(github.ref, 'refs/tags/Release-') || (github.event_name == 'workflow_dispatch' && inputs.lane == 'release')
