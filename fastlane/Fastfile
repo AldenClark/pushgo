@@ -1,0 +1,234 @@
+default_platform(:ios)
+
+require "fileutils"
+require "shellwords"
+
+platform :ios do
+  def app_store_api_key!
+    key_id = ENV["ASC_KEY_ID"]
+    issuer_id = ENV["ASC_ISSUER_ID"]
+    key_content = ENV["ASC_KEY_P8"]
+
+    UI.user_error!("Missing ASC_KEY_ID") if key_id.to_s.empty?
+    UI.user_error!("Missing ASC_ISSUER_ID") if issuer_id.to_s.empty?
+    UI.user_error!("Missing ASC_KEY_P8") if key_content.to_s.empty?
+
+    app_store_connect_api_key(
+      key_id: key_id,
+      issuer_id: issuer_id,
+      key_content: key_content,
+      is_key_content_base64: ENV.fetch("ASC_KEY_IS_BASE64", "false") == "true"
+    )
+  end
+
+  def signing_xcargs
+    parts = ["-allowProvisioningUpdates"]
+    key_path = ENV["ASC_KEY_PATH"]
+    key_id = ENV["ASC_KEY_ID"]
+    issuer_id = ENV["ASC_ISSUER_ID"]
+
+    if !key_path.to_s.empty? && !key_id.to_s.empty? && !issuer_id.to_s.empty?
+      parts << "-authenticationKeyPath #{Shellwords.escape(key_path)}"
+      parts << "-authenticationKeyID #{Shellwords.escape(key_id)}"
+      parts << "-authenticationKeyIssuerID #{Shellwords.escape(issuer_id)}"
+    end
+
+    parts.join(" ")
+  end
+
+  def archive_ios_app!
+    scheme = ENV.fetch("APP_SCHEME", "PushGo-iOS")
+    project = ENV.fetch("APP_PROJECT", "pushgo.xcodeproj")
+    output_directory = ENV.fetch("BUILD_OUTPUT_DIR", "artifacts/release")
+    output_name = ENV.fetch("IPA_OUTPUT_NAME", "PushGo-iOS")
+    export_method = ENV.fetch("EXPORT_METHOD", "app-store")
+
+    xcargs = signing_xcargs
+    sh("mkdir -p #{Shellwords.escape(output_directory)}")
+
+    build_ios_app(
+      project: project,
+      scheme: scheme,
+      clean: true,
+      export_method: export_method,
+      output_directory: output_directory,
+      output_name: output_name,
+      include_bitcode: false,
+      include_symbols: true,
+      xcargs: xcargs,
+      export_xcargs: xcargs
+    )
+
+    ipa_path = File.join(output_directory, "#{output_name}.ipa")
+    UI.user_error!("iOS ipa not found at #{ipa_path}") unless File.exist?(ipa_path)
+    ipa_path
+  end
+
+  def archive_macos_app_store_pkg!
+    project = ENV.fetch("APP_PROJECT", "pushgo.xcodeproj")
+    scheme = ENV.fetch("APP_MACOS_SCHEME", "PushGo-macOS")
+    output_directory = ENV.fetch("BUILD_OUTPUT_DIR", "artifacts/release")
+    pkg_name = ENV.fetch("MACOS_PKG_OUTPUT_NAME", "PushGo-macOS")
+    xcargs = signing_xcargs
+
+    sh("mkdir -p #{Shellwords.escape(output_directory)}")
+
+    build_mac_app(
+      project: project,
+      scheme: scheme,
+      clean: true,
+      export_method: "app-store",
+      output_directory: output_directory,
+      output_name: pkg_name,
+      skip_package_pkg: false,
+      xcargs: xcargs,
+      export_xcargs: xcargs
+    )
+
+    pkg_path = File.join(output_directory, "#{pkg_name}.pkg")
+    UI.user_error!("macOS pkg not found at #{pkg_path}") unless File.exist?(pkg_path)
+    pkg_path
+  end
+
+  def release_notes_payload
+    notes = ENV["APP_STORE_RELEASE_NOTES"].to_s.strip
+    return nil if notes.empty?
+
+    {
+      "en-US" => notes,
+      "zh-Hans" => notes
+    }
+  end
+
+  def build_release_dmg!
+    project = ENV.fetch("APP_PROJECT", "pushgo.xcodeproj")
+    scheme = ENV.fetch("APP_MACOS_SCHEME", "PushGo-macOS")
+    output_directory = ENV.fetch("BUILD_OUTPUT_DIR", "artifacts/release")
+    dmg_name = ENV.fetch("DMG_OUTPUT_NAME", "PushGo-macOS")
+    export_method = ENV.fetch("MACOS_EXPORT_METHOD", "developer-id")
+
+    archive_path = File.join(output_directory, "#{dmg_name}.xcarchive")
+    export_path = File.join(output_directory, "#{dmg_name}-export")
+    staging_dir = File.join(output_directory, "#{dmg_name}-staging")
+    export_options_path = File.join(output_directory, "#{dmg_name}-ExportOptions.plist")
+    dmg_path = File.join(output_directory, "#{dmg_name}.dmg")
+    xcargs = signing_xcargs
+
+    FileUtils.mkdir_p(output_directory)
+    FileUtils.rm_rf([archive_path, export_path, staging_dir, dmg_path])
+
+    sh(
+      "xcodebuild -project #{Shellwords.escape(project)} " \
+      "-scheme #{Shellwords.escape(scheme)} " \
+      "-configuration Release " \
+      "-destination 'generic/platform=macOS' " \
+      "-archivePath #{Shellwords.escape(archive_path)} " \
+      "archive #{xcargs}"
+    )
+
+    File.write(
+      export_options_path,
+      <<~PLIST
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>method</key>
+          <string>#{export_method}</string>
+          <key>signingStyle</key>
+          <string>automatic</string>
+          <key>stripSwiftSymbols</key>
+          <true/>
+        </dict>
+        </plist>
+      PLIST
+    )
+
+    sh(
+      "xcodebuild -exportArchive " \
+      "-archivePath #{Shellwords.escape(archive_path)} " \
+      "-exportPath #{Shellwords.escape(export_path)} " \
+      "-exportOptionsPlist #{Shellwords.escape(export_options_path)} " \
+      "#{xcargs}"
+    )
+
+    app_path = Dir.glob(File.join(export_path, "*.app")).first
+    UI.user_error!("No .app found under #{export_path}") if app_path.to_s.empty?
+
+    FileUtils.mkdir_p(staging_dir)
+    sh("cp -R #{Shellwords.escape(app_path)} #{Shellwords.escape(staging_dir)}")
+    sh(
+      "hdiutil create " \
+      "-volname #{Shellwords.escape(dmg_name)} " \
+      "-srcfolder #{Shellwords.escape(staging_dir)} " \
+      "-ov -format UDZO #{Shellwords.escape(dmg_path)}"
+    )
+
+    key_path = ENV["ASC_KEY_PATH"]
+    key_id = ENV["ASC_KEY_ID"]
+    issuer_id = ENV["ASC_ISSUER_ID"]
+    UI.user_error!("Missing ASC_KEY_PATH for notarization") if key_path.to_s.empty?
+    UI.user_error!("Missing ASC_KEY_ID for notarization") if key_id.to_s.empty?
+    UI.user_error!("Missing ASC_ISSUER_ID for notarization") if issuer_id.to_s.empty?
+
+    sh(
+      "xcrun notarytool submit #{Shellwords.escape(dmg_path)} " \
+      "--key #{Shellwords.escape(key_path)} " \
+      "--key-id #{Shellwords.escape(key_id)} " \
+      "--issuer #{Shellwords.escape(issuer_id)} --wait"
+    )
+    sh("xcrun stapler staple #{Shellwords.escape(dmg_path)}")
+    dmg_path
+  end
+
+  desc "Archive and upload build to TestFlight"
+  lane :beta do
+    api_key = app_store_api_key!
+    ios_ipa_path = archive_ios_app!
+    macos_pkg_path = archive_macos_app_store_pkg!
+    changelog = ENV["TESTFLIGHT_CHANGELOG"].to_s.strip
+
+    upload_to_testflight(
+      api_key: api_key,
+      ipa: ios_ipa_path,
+      changelog: changelog.empty? ? nil : changelog,
+      skip_waiting_for_build_processing: true
+    )
+    upload_to_testflight(
+      api_key: api_key,
+      pkg: macos_pkg_path,
+      changelog: changelog.empty? ? nil : changelog,
+      skip_waiting_for_build_processing: true
+    )
+  end
+
+  desc "Archive and upload build to App Store"
+  lane :release do
+    api_key = app_store_api_key!
+    ios_ipa_path = archive_ios_app!
+    macos_pkg_path = archive_macos_app_store_pkg!
+    release_notes = release_notes_payload
+
+    upload_to_app_store(
+      api_key: api_key,
+      ipa: ios_ipa_path,
+      skip_metadata: false,
+      skip_screenshots: true,
+      release_notes: release_notes,
+      submit_for_review: ENV.fetch("APP_STORE_SUBMIT_FOR_REVIEW", "false") == "true",
+      automatic_release: ENV.fetch("APP_STORE_AUTOMATIC_RELEASE", "false") == "true",
+      force: true
+    )
+    upload_to_app_store(
+      api_key: api_key,
+      pkg: macos_pkg_path,
+      skip_metadata: false,
+      skip_screenshots: true,
+      release_notes: release_notes,
+      submit_for_review: ENV.fetch("APP_STORE_SUBMIT_FOR_REVIEW", "false") == "true",
+      automatic_release: ENV.fetch("APP_STORE_AUTOMATIC_RELEASE", "false") == "true",
+      force: true
+    )
+    build_release_dmg!
+  end
+end

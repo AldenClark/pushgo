@@ -1,0 +1,185 @@
+name: Apple Release
+
+on:
+  push:
+    tags:
+      - "Beta-*"
+      - "Release-*"
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: "Fastlane lane to run"
+        required: true
+        default: "beta"
+        type: choice
+        options:
+          - beta
+          - release
+
+jobs:
+  release:
+    runs-on: macos-26
+    timeout-minutes: 120
+    permissions:
+      contents: write
+    env:
+      APP_PROJECT: pushgo.xcodeproj
+      APP_SCHEME: PushGo-iOS
+      APP_MACOS_SCHEME: PushGo-macOS
+      APP_BUNDLE_ID: io.ethan.pushgo
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      ASC_KEY_IS_BASE64: ${{ vars.ASC_KEY_IS_BASE64 || 'false' }}
+      APP_STORE_SUBMIT_FOR_REVIEW: ${{ vars.APP_STORE_SUBMIT_FOR_REVIEW || 'false' }}
+      APP_STORE_AUTOMATIC_RELEASE: ${{ vars.APP_STORE_AUTOMATIC_RELEASE || 'false' }}
+      FASTLANE_DISABLE_COLORS: "1"
+      FASTLANE_SKIP_UPDATE_CHECK: "1"
+      LC_ALL: en_US.UTF-8
+      LANG: en_US.UTF-8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26.4'
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+
+      - name: Prepare App Store Connect key file for xcodebuild auth
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${ASC_KEY_P8:-}" ]]; then
+            echo "ASC_KEY_P8 is required"
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/asc"
+          ASC_KEY_PATH="$RUNNER_TEMP/asc/AuthKey_${ASC_KEY_ID}.p8"
+          if [[ "${ASC_KEY_IS_BASE64}" == "true" ]]; then
+            printf "%s" "$ASC_KEY_P8" | base64 --decode > "$ASC_KEY_PATH"
+          else
+            printf "%s" "$ASC_KEY_P8" > "$ASC_KEY_PATH"
+          fi
+          echo "ASC_KEY_PATH=$ASC_KEY_PATH" >> "$GITHUB_ENV"
+
+      - name: Resolve Swift packages
+        run: swift package resolve
+
+      - name: Generate changelog from previous same-kind tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/release
+
+          lane="${{ github.event_name == 'workflow_dispatch' && inputs.lane || '' }}"
+          ref_name="${GITHUB_REF_NAME:-}"
+
+          if [[ "$ref_name" == Beta-* ]]; then
+            kind="beta"
+            pattern="Beta-*"
+            current_tag="$ref_name"
+            kind_title="Beta"
+          elif [[ "$ref_name" == Release-* ]]; then
+            kind="release"
+            pattern="Release-*"
+            current_tag="$ref_name"
+            kind_title="Release"
+          elif [[ "$lane" == "beta" ]]; then
+            kind="beta"
+            pattern="Beta-*"
+            current_tag=""
+            kind_title="Beta"
+          else
+            kind="release"
+            pattern="Release-*"
+            current_tag=""
+            kind_title="Release"
+          fi
+
+          prev_tag=""
+          while IFS= read -r tag; do
+            [[ -z "$tag" ]] && continue
+            if [[ -n "$current_tag" && "$tag" == "$current_tag" ]]; then
+              continue
+            fi
+            prev_tag="$tag"
+            break
+          done < <(git tag --list "$pattern" --sort=-version:refname)
+
+          if [[ -n "$prev_tag" ]]; then
+            range="${prev_tag}..HEAD"
+          else
+            range="HEAD"
+          fi
+
+          if [[ "$range" == "HEAD" ]]; then
+            changes="$(git log --no-merges --pretty=format:'- %s (%h, %ad, %an)' --date=short)"
+          else
+            changes="$(git log --no-merges --pretty=format:'- %s (%h, %ad, %an)' --date=short "$range")"
+          fi
+
+          if [[ -z "$changes" ]]; then
+            changes="- No changes found in selected range."
+          fi
+
+          markdown_body="# ${kind_title} Changelog"
+          if [[ -n "$current_tag" ]]; then
+            markdown_body+=$'\n\n'"- Current tag: \`$current_tag\`"
+          fi
+          if [[ -n "$prev_tag" ]]; then
+            markdown_body+=$'\n'"- Previous same-kind tag: \`$prev_tag\`"
+            markdown_body+=$'\n'"- Range: \`$range\`"
+          else
+            markdown_body+=$'\n'"- Previous same-kind tag: _none_"
+            markdown_body+=$'\n'"- Range: \`HEAD\`"
+          fi
+          markdown_body+=$'\n\n'"$changes"
+
+          asc_notes="$changes"
+          if (( ${#asc_notes} > 3800 )); then
+            asc_notes="${asc_notes:0:3800}"$'\n'"... (truncated for App Store/TestFlight limit; full changelog is in GitHub Release body and artifact)"
+          fi
+
+          {
+            echo "TESTFLIGHT_CHANGELOG<<__PUSHGO_CHANGELOG_EOF__"
+            printf "%s\n" "$asc_notes"
+            echo "__PUSHGO_CHANGELOG_EOF__"
+            echo "APP_STORE_RELEASE_NOTES<<__PUSHGO_RELEASE_NOTES_EOF__"
+            printf "%s\n" "$asc_notes"
+            echo "__PUSHGO_RELEASE_NOTES_EOF__"
+            echo "RELEASE_CHANGELOG_BODY<<__PUSHGO_RELEASE_BODY_EOF__"
+            printf "%s\n" "$markdown_body"
+            echo "__PUSHGO_RELEASE_BODY_EOF__"
+          } >> "$GITHUB_ENV"
+
+      - name: Run fastlane beta
+        if: startsWith(github.ref, 'refs/tags/Beta-') || (github.event_name == 'workflow_dispatch' && inputs.lane == 'beta')
+        run: bundle exec fastlane ios beta
+
+      - name: Run fastlane release
+        if: startsWith(github.ref, 'refs/tags/Release-') || (github.event_name == 'workflow_dispatch' && inputs.lane == 'release')
+        run: bundle exec fastlane ios release
+
+      - name: Upload signed DMG artifact
+        if: startsWith(github.ref, 'refs/tags/Release-') || (github.event_name == 'workflow_dispatch' && inputs.lane == 'release')
+        uses: actions/upload-artifact@v7
+        with:
+          name: pushgo-macos-dmg-${{ github.run_id }}
+          path: artifacts/release/*.dmg
+          if-no-files-found: error
+
+      - name: Publish DMG to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/Release-')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/release/*.dmg
+          body: ${{ env.RELEASE_CHANGELOG_BODY }}
