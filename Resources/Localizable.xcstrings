@@ -15569,7 +15569,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Object"
+            "value" : "Objects"
           }
         },
         "zh-Hans" : {
@@ -20545,7 +20545,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Event"
+            "value" : "Events"
           }
         },
         "ja" : {

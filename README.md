@@ -13,13 +13,18 @@ PushGo for Apple platforms (iOS/macOS/watchOS) is the official client app for Pu
 
 https://testflight.apple.com/join/xhYmNZH8
 
-The public App Store release is expected before February 28, 2026.
 
 ## Requirements
 
 - iOS 17+
 - macOS 14+
 - watchOS 10+
+
+## CI Release
+
+- Tag `Beta-*` uploads to TestFlight
+- Tag `Release-*` uploads via App Store lane
+- Setup guide: `docs/apple-release-ci.md`
 
 # PushGo Apple 平台（中文）
 
@@ -38,10 +43,15 @@ PushGo Apple 平台（iOS/macOS/watchOS）是 PushGo 的官方客户端应用，
 测试入口：
 https://testflight.apple.com/join/xhYmNZH8
 
-正式版本预计在 2026 年 2 月 28 日之前发布。
 
 ## 环境要求
 
 - iOS 17+
 - macOS 14+
 - watchOS 10+
+
+## CI 发布
+
+- `Beta-*` tag 触发 TestFlight 上传
+- `Release-*` tag 触发 App Store 发布通道上传
+- 配置说明见：`docs/apple-release-ci.md`
