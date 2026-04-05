@@ -42,25 +42,55 @@ platform :ios do
     output_directory = ENV.fetch("BUILD_OUTPUT_DIR", "artifacts/release")
     output_name = ENV.fetch("IPA_OUTPUT_NAME", "PushGo-iOS")
     export_method = ENV.fetch("EXPORT_METHOD", "app-store")
-
+    archive_path = File.join(output_directory, "#{output_name}.xcarchive")
+    export_path = File.join(output_directory, "#{output_name}-export")
+    export_options_path = File.join(output_directory, "#{output_name}-ExportOptions.plist")
+    ipa_path = File.join(output_directory, "#{output_name}.ipa")
     xcargs = signing_xcargs
-    sh("mkdir -p #{Shellwords.escape(output_directory)}")
 
-    build_ios_app(
-      project: project,
-      scheme: scheme,
-      clean: true,
-      export_method: export_method,
-      output_directory: output_directory,
-      output_name: output_name,
-      include_bitcode: false,
-      include_symbols: true,
-      xcargs: xcargs,
-      export_xcargs: xcargs
+    FileUtils.mkdir_p(output_directory)
+    FileUtils.rm_rf([archive_path, export_path, ipa_path])
+
+    sh(
+      "xcodebuild -project #{Shellwords.escape(project)} " \
+      "-scheme #{Shellwords.escape(scheme)} " \
+      "-configuration Release " \
+      "-destination 'generic/platform=iOS' " \
+      "-archivePath #{Shellwords.escape(archive_path)} " \
+      "archive #{xcargs}"
     )
 
-    ipa_path = File.join(output_directory, "#{output_name}.ipa")
-    UI.user_error!("iOS ipa not found at #{ipa_path}") unless File.exist?(ipa_path)
+    File.write(
+      export_options_path,
+      <<~PLIST
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>method</key>
+          <string>#{export_method}</string>
+          <key>signingStyle</key>
+          <string>automatic</string>
+          <key>stripSwiftSymbols</key>
+          <true/>
+          <key>manageAppVersionAndBuildNumber</key>
+          <false/>
+        </dict>
+        </plist>
+      PLIST
+    )
+
+    sh(
+      "xcodebuild -exportArchive " \
+      "-archivePath #{Shellwords.escape(archive_path)} " \
+      "-exportPath #{Shellwords.escape(export_path)} " \
+      "-exportOptionsPlist #{Shellwords.escape(export_options_path)} " \
+      "#{xcargs}"
+    )
+
+    generated_ipa = Dir.glob(File.join(export_path, "*.ipa")).first
+    UI.user_error!("No .ipa found under #{export_path}") if generated_ipa.to_s.empty?
+    FileUtils.cp(generated_ipa, ipa_path)
     ipa_path
   end
 
@@ -69,24 +99,55 @@ platform :ios do
     scheme = ENV.fetch("APP_MACOS_SCHEME", "PushGo-macOS")
     output_directory = ENV.fetch("BUILD_OUTPUT_DIR", "artifacts/release")
     pkg_name = ENV.fetch("MACOS_PKG_OUTPUT_NAME", "PushGo-macOS")
+    archive_path = File.join(output_directory, "#{pkg_name}.xcarchive")
+    export_path = File.join(output_directory, "#{pkg_name}-export")
+    export_options_path = File.join(output_directory, "#{pkg_name}-ExportOptions.plist")
+    pkg_path = File.join(output_directory, "#{pkg_name}.pkg")
     xcargs = signing_xcargs
 
-    sh("mkdir -p #{Shellwords.escape(output_directory)}")
+    FileUtils.mkdir_p(output_directory)
+    FileUtils.rm_rf([archive_path, export_path, pkg_path])
 
-    build_mac_app(
-      project: project,
-      scheme: scheme,
-      clean: true,
-      export_method: "app-store",
-      output_directory: output_directory,
-      output_name: pkg_name,
-      skip_package_pkg: false,
-      xcargs: xcargs,
-      export_xcargs: xcargs
+    sh(
+      "xcodebuild -project #{Shellwords.escape(project)} " \
+      "-scheme #{Shellwords.escape(scheme)} " \
+      "-configuration Release " \
+      "-destination 'generic/platform=macOS' " \
+      "-archivePath #{Shellwords.escape(archive_path)} " \
+      "archive #{xcargs}"
     )
 
-    pkg_path = File.join(output_directory, "#{pkg_name}.pkg")
-    UI.user_error!("macOS pkg not found at #{pkg_path}") unless File.exist?(pkg_path)
+    File.write(
+      export_options_path,
+      <<~PLIST
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>method</key>
+          <string>app-store</string>
+          <key>signingStyle</key>
+          <string>automatic</string>
+          <key>stripSwiftSymbols</key>
+          <true/>
+          <key>manageAppVersionAndBuildNumber</key>
+          <false/>
+        </dict>
+        </plist>
+      PLIST
+    )
+
+    sh(
+      "xcodebuild -exportArchive " \
+      "-archivePath #{Shellwords.escape(archive_path)} " \
+      "-exportPath #{Shellwords.escape(export_path)} " \
+      "-exportOptionsPlist #{Shellwords.escape(export_options_path)} " \
+      "#{xcargs}"
+    )
+
+    generated_pkg = Dir.glob(File.join(export_path, "*.pkg")).first
+    UI.user_error!("No .pkg found under #{export_path}") if generated_pkg.to_s.empty?
+    FileUtils.cp(generated_pkg, pkg_path)
     pkg_path
   end
 
