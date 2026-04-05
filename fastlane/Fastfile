@@ -1,9 +1,21 @@
 default_platform(:ios)
 
 require "fileutils"
+require "pathname"
 require "shellwords"
 
 platform :ios do
+  def repo_root
+    File.expand_path("..", __dir__)
+  end
+
+  def resolve_from_repo(path)
+    return path if path.to_s.empty?
+    return path if Pathname.new(path).absolute?
+
+    File.expand_path(path, repo_root)
+  end
+
   def app_store_api_key!
     key_id = ENV["ASC_KEY_ID"]
     issuer_id = ENV["ASC_ISSUER_ID"]
@@ -38,8 +50,8 @@ platform :ios do
 
   def archive_ios_app!
     scheme = ENV.fetch("APP_SCHEME", "PushGo-iOS")
-    project = ENV.fetch("APP_PROJECT", "pushgo.xcodeproj")
-    output_directory = ENV.fetch("BUILD_OUTPUT_DIR", "artifacts/release")
+    project = resolve_from_repo(ENV.fetch("APP_PROJECT", "pushgo.xcodeproj"))
+    output_directory = resolve_from_repo(ENV.fetch("BUILD_OUTPUT_DIR", "artifacts/release"))
     output_name = ENV.fetch("IPA_OUTPUT_NAME", "PushGo-iOS")
     export_method = ENV.fetch("EXPORT_METHOD", "app-store")
     archive_path = File.join(output_directory, "#{output_name}.xcarchive")
@@ -95,9 +107,9 @@ platform :ios do
   end
 
   def archive_macos_app_store_pkg!
-    project = ENV.fetch("APP_PROJECT", "pushgo.xcodeproj")
+    project = resolve_from_repo(ENV.fetch("APP_PROJECT", "pushgo.xcodeproj"))
     scheme = ENV.fetch("APP_MACOS_SCHEME", "PushGo-macOS")
-    output_directory = ENV.fetch("BUILD_OUTPUT_DIR", "artifacts/release")
+    output_directory = resolve_from_repo(ENV.fetch("BUILD_OUTPUT_DIR", "artifacts/release"))
     pkg_name = ENV.fetch("MACOS_PKG_OUTPUT_NAME", "PushGo-macOS")
     archive_path = File.join(output_directory, "#{pkg_name}.xcarchive")
     export_path = File.join(output_directory, "#{pkg_name}-export")
@@ -162,9 +174,9 @@ platform :ios do
   end
 
   def build_release_dmg!
-    project = ENV.fetch("APP_PROJECT", "pushgo.xcodeproj")
+    project = resolve_from_repo(ENV.fetch("APP_PROJECT", "pushgo.xcodeproj"))
     scheme = ENV.fetch("APP_MACOS_SCHEME", "PushGo-macOS")
-    output_directory = ENV.fetch("BUILD_OUTPUT_DIR", "artifacts/release")
+    output_directory = resolve_from_repo(ENV.fetch("BUILD_OUTPUT_DIR", "artifacts/release"))
     dmg_name = ENV.fetch("DMG_OUTPUT_NAME", "PushGo-macOS")
     export_method = ENV.fetch("MACOS_EXPORT_METHOD", "developer-id")
 
