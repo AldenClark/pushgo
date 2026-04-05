@@ -53,7 +53,7 @@ platform :ios do
     project = resolve_from_repo(ENV.fetch("APP_PROJECT", "pushgo.xcodeproj"))
     output_directory = resolve_from_repo(ENV.fetch("BUILD_OUTPUT_DIR", "artifacts/release"))
     output_name = ENV.fetch("IPA_OUTPUT_NAME", "PushGo-iOS")
-    export_method = ENV.fetch("EXPORT_METHOD", "app-store")
+    export_method = ENV.fetch("EXPORT_METHOD", "app-store-connect")
     archive_path = File.join(output_directory, "#{output_name}.xcarchive")
     export_path = File.join(output_directory, "#{output_name}-export")
     export_options_path = File.join(output_directory, "#{output_name}-ExportOptions.plist")
@@ -137,7 +137,7 @@ platform :ios do
         <plist version="1.0">
         <dict>
           <key>method</key>
-          <string>app-store</string>
+          <string>app-store-connect</string>
           <key>signingStyle</key>
           <string>automatic</string>
           <key>stripSwiftSymbols</key>
