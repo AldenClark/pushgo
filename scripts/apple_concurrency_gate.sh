@@ -8,6 +8,19 @@ run_build() {
   local scheme="$1"
   local destination="$2"
   local derived="$DERIVED_BASE/$scheme"
+  local -a signing_args=()
+
+  # CI runners do not have local provisioning profiles; build without signing.
+  if [[ "${CI:-}" == "true" ]]; then
+    signing_args=(
+      "CODE_SIGNING_ALLOWED=NO"
+      "CODE_SIGNING_REQUIRED=NO"
+      "CODE_SIGN_IDENTITY="
+      "PROVISIONING_PROFILE_SPECIFIER="
+      "DEVELOPMENT_TEAM="
+    )
+  fi
+
   echo "==> build $scheme ($destination)"
   xcodebuild \
     -project "$ROOT/pushgo.xcodeproj" \
@@ -15,6 +28,7 @@ run_build() {
     -configuration Debug \
     -destination "$destination" \
     -derivedDataPath "$derived" \
+    "${signing_args[@]}" \
     build
 }
 

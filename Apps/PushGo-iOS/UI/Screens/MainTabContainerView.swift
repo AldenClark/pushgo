@@ -129,7 +129,7 @@ struct MainTabContainerView: View {
             }
 
             if showsEventsTab {
-                Tab(LocalizationManager.localizedSync("push_type_event"), systemImage: "waveform.path.ecg", value: MainTab.events) {
+                Tab(LocalizationManager.localizedSync("thing_detail_tab_events"), systemImage: "waveform.path.ecg", value: MainTab.events) {
                     navigationContainer {
                         EventListScreen(
                             viewModel: entityViewModel,
@@ -344,7 +344,7 @@ enum MainTab: Hashable, CaseIterable {
         case .messages:
             "messages"
         case .events:
-            "push_type_event"
+            "thing_detail_tab_events"
         case .things:
             "push_type_thing"
         case .channels:

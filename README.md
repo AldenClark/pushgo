@@ -8,20 +8,19 @@ PushGo for Apple platforms (iOS/macOS/watchOS) is the official client app for Pu
 - Gateway: https://github.com/AldenClark/pushgo-gateway
 - Android app: https://github.com/AldenClark/pushgo-android
 
-## TestFlight (IMPORTANT)
+## Download
 
-
-https://testflight.apple.com/join/xhYmNZH8
-
-The public App Store release is expected before February 28, 2026.
+**App Store** - https://apps.apple.com/cn/app/pushgo/id6757907675
+**Testflight** -  https://testflight.apple.com/join/xhYmNZH8
 
 ## Requirements
 
-- iOS 17+
-- macOS 14+
-- watchOS 10+
+- iOS 18+
+- macOS 15+
+- watchOS 11+
 
-# PushGo Apple 平台（中文）
+
+# PushGo Apple 平台
 
 PushGo Apple 平台（iOS/macOS/watchOS）是 PushGo 的官方客户端应用，可配合 PushGo Gateway 在 Apple 设备上接收通知。
 
@@ -31,17 +30,13 @@ PushGo Apple 平台（iOS/macOS/watchOS）是 PushGo 的官方客户端应用，
 - 网关：https://github.com/AldenClark/pushgo-gateway
 - Android App：https://github.com/AldenClark/pushgo-android
 
-## TestFlight（重要）
+## 下载地址
 
-当前 iOS/macOS/watchOS App 处于 TestFlight 测试阶段。
-
-测试入口：
-https://testflight.apple.com/join/xhYmNZH8
-
-正式版本预计在 2026 年 2 月 28 日之前发布。
+- **App Store** - https://apps.apple.com/cn/app/pushgo/id6757907675
+- **Testflight** -  https://testflight.apple.com/join/xhYmNZH8
 
 ## 环境要求
 
-- iOS 17+
-- macOS 14+
-- watchOS 10+
+- iOS 18+
+- macOS 15+
+- watchOS 11+

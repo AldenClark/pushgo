@@ -102,7 +102,7 @@ struct EventListScreen: View {
         .task(id: searchAutoloadTrigger(filteredEventsCount: filteredEventsSnapshot.count)) {
             await autoloadSearchResultsIfNeeded(filteredEventsCount: filteredEventsSnapshot.count)
         }
-        .navigationTitle(localizationManager.localized("push_type_event"))
+        .navigationTitle(localizationManager.localized("thing_detail_tab_events"))
         .navigationBarTitleDisplayMode(.large)
         .toolbar { toolbarContent }
         .toolbar(isBatchMode ? .hidden : .visible, for: .tabBar)

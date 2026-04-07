@@ -225,7 +225,7 @@ struct SettingsView: View {
                 iconName: "square.3.layers.3d.top.filled",
                 title: "enable_data_pages",
                 messageTitle: LocalizedStringKey(localizationManager.localized("messages")),
-                eventTitle: LocalizedStringKey(localizationManager.localized("push_type_event")),
+                eventTitle: LocalizedStringKey(localizationManager.localized("thing_detail_tab_events")),
                 thingTitle: LocalizedStringKey(localizationManager.localized("push_type_thing")),
                 messageIsOn: messagePageVisibilityBinding,
                 eventIsOn: eventPageVisibilityBinding,
@@ -666,12 +666,12 @@ private struct DataPageChipGroupRow: View {
                         .fill(Color.accentColor.opacity(0.12))
                 )
 
-            Text(title)
-                .font(.headline)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 4)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 4)
 
-            ViewThatFits(in: .horizontal) {
                 HStack(spacing: 8) {
                     DataPageChip(
                         title: messageTitle,
@@ -689,30 +689,8 @@ private struct DataPageChipGroupRow: View {
                         accessibilityID: "toggle.settings.page.things"
                     )
                 }
-
-                VStack(alignment: .trailing, spacing: 8) {
-                    HStack(spacing: 8) {
-                        DataPageChip(
-                            title: messageTitle,
-                            isOn: $messageIsOn,
-                            accessibilityID: "toggle.settings.page.messages"
-                        )
-                        DataPageChip(
-                            title: eventTitle,
-                            isOn: $eventIsOn,
-                            accessibilityID: "toggle.settings.page.events"
-                        )
-                    }
-                    HStack(spacing: 8) {
-                        DataPageChip(
-                            title: thingTitle,
-                            isOn: $thingIsOn,
-                            accessibilityID: "toggle.settings.page.things"
-                        )
-                    }
-                }
             }
-            .fixedSize(horizontal: true, vertical: false)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 12)
     }

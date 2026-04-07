@@ -1,0 +1,577 @@
+default_platform(:ios)
+
+require "fileutils"
+require "find"
+require "json"
+require "pathname"
+require "shellwords"
+require "tmpdir"
+
+platform :ios do
+  def repo_root
+    File.expand_path("..", __dir__)
+  end
+
+  def resolve_from_repo(path)
+    return path if path.to_s.empty?
+    return path if Pathname.new(path).absolute?
+
+    File.expand_path(path, repo_root)
+  end
+
+  def app_store_api_key!
+    key_id = ENV["ASC_KEY_ID"]
+    issuer_id = ENV["ASC_ISSUER_ID"]
+    key_content = ENV["ASC_KEY_P8"]
+
+    UI.user_error!("Missing ASC_KEY_ID") if key_id.to_s.empty?
+    UI.user_error!("Missing ASC_ISSUER_ID") if issuer_id.to_s.empty?
+    UI.user_error!("Missing ASC_KEY_P8") if key_content.to_s.empty?
+
+    app_store_connect_api_key(
+      key_id: key_id,
+      issuer_id: issuer_id,
+      key_content: key_content,
+      is_key_content_base64: ENV.fetch("ASC_KEY_IS_BASE64", "false") == "true"
+    )
+  end
+
+  def signing_xcargs
+    parts = ["-allowProvisioningUpdates"]
+    key_path = ENV["ASC_KEY_PATH"]
+    key_id = ENV["ASC_KEY_ID"]
+    issuer_id = ENV["ASC_ISSUER_ID"]
+    team_id = ENV["APPLE_TEAM_ID"].to_s.strip
+
+    if !key_path.to_s.empty? && !key_id.to_s.empty? && !issuer_id.to_s.empty?
+      parts << "-authenticationKeyPath #{Shellwords.escape(key_path)}"
+      parts << "-authenticationKeyID #{Shellwords.escape(key_id)}"
+      parts << "-authenticationKeyIssuerID #{Shellwords.escape(issuer_id)}"
+    end
+    parts << "DEVELOPMENT_TEAM=#{team_id}" unless team_id.empty?
+
+    parts.join(" ")
+  end
+
+  def ensure_team_id!
+    team_id = ENV["APPLE_TEAM_ID"].to_s.strip
+    UI.user_error!("Missing APPLE_TEAM_ID") if team_id.empty?
+    team_id
+  end
+
+  def verify_ios_distribution_signature!(ipa_path)
+    scratch_dir = Dir.mktmpdir("pushgo-ios-signature-")
+    begin
+      sh("ditto -x -k #{Shellwords.escape(ipa_path)} #{Shellwords.escape(scratch_dir)}")
+      app_path = Dir.glob(File.join(scratch_dir, "Payload", "*.app")).first
+      UI.user_error!("No .app found inside IPA payload at #{ipa_path}") if app_path.to_s.empty?
+      output = sh("codesign -d --verbose=4 #{Shellwords.escape(app_path)} 2>&1", log: false)
+      return if output.include?("Authority=Apple Distribution")
+
+      UI.user_error!("iOS IPA is not signed with Apple Distribution.\n#{output}")
+    ensure
+      FileUtils.rm_rf(scratch_dir)
+    end
+  end
+
+  def verify_macos_pkg_distribution_signature!(pkg_path)
+    output = sh("pkgutil --check-signature #{Shellwords.escape(pkg_path)} 2>&1", log: false)
+    return if output.include?("Mac Installer Distribution")
+    return if output.include?("3rd Party Mac Developer Installer")
+
+    UI.user_error!("macOS pkg is not signed with a Mac Installer Distribution certificate.\n#{output}")
+  end
+
+  def verify_developer_id_app_signature!(app_path)
+    output = sh("codesign -d --verbose=4 #{Shellwords.escape(app_path)} 2>&1", log: false)
+    return if output.include?("Authority=Developer ID Application")
+
+    UI.user_error!("DMG app is not signed with Developer ID Application.\n#{output}")
+  end
+
+  def developer_id_keychain_path!
+    keychain_path = ENV["DEVELOPER_ID_KEYCHAIN_PATH"].to_s.strip
+    UI.user_error!("Missing DEVELOPER_ID_KEYCHAIN_PATH") if keychain_path.empty?
+    keychain_path
+  end
+
+  def developer_id_identity!
+    keychain_path = developer_id_keychain_path!
+    configured_identity = ENV["DEVELOPER_ID_APPLICATION_IDENTITY"].to_s.strip
+    output = sh(
+      "security find-identity -v -p codesigning #{Shellwords.escape(keychain_path)}",
+      log: false
+    )
+
+    identities = output.lines.filter_map do |line|
+      next unless line.include?("Developer ID Application")
+      next unless line =~ /\s*\d+\)\s+([0-9A-F]{40})\s+"([^"]+)"/
+
+      {
+        sha: Regexp.last_match(1),
+        name: Regexp.last_match(2)
+      }
+    end
+
+    UI.user_error!("No Developer ID Application identity found in #{keychain_path}") if identities.empty?
+    return identities.first[:sha] if configured_identity.empty?
+
+    matched_identity = identities.find do |identity|
+      identity[:sha] == configured_identity || identity[:name] == configured_identity
+    end
+    UI.user_error!("Configured DEVELOPER_ID_APPLICATION_IDENTITY not found: #{configured_identity}") if matched_identity.nil?
+
+    matched_identity[:sha]
+  end
+
+  def developer_id_entitlements_sources
+    {
+      "io.ethan.pushgo" => resolve_from_repo("Apps/PushGo-macOS/pushgomac.entitlements"),
+      "io.ethan.pushgo.NotificationServiceExtension" => resolve_from_repo("Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements")
+    }
+  end
+
+  def plist_hash(path)
+    JSON.parse(sh("plutil -convert json -o - #{Shellwords.escape(path)}", log: false))
+  end
+
+  def write_plist_hash(path, payload)
+    json_path = "#{path}.json"
+    File.write(json_path, JSON.pretty_generate(payload))
+    sh("plutil -convert xml1 -o #{Shellwords.escape(path)} #{Shellwords.escape(json_path)}")
+  ensure
+    FileUtils.rm_f(json_path) if defined?(json_path)
+  end
+
+  def bundle_identifier_for(path)
+    info_plist_path = File.join(path, "Contents", "Info.plist")
+    return nil unless File.exist?(info_plist_path)
+
+    sh(
+      "/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' #{Shellwords.escape(info_plist_path)}",
+      log: false
+    ).strip
+  rescue
+    nil
+  end
+
+  def bundle_executable_path(path)
+    info_plist_path = File.join(path, "Contents", "Info.plist")
+    return nil unless File.exist?(info_plist_path)
+
+    executable_name = sh(
+      "/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' #{Shellwords.escape(info_plist_path)}",
+      log: false
+    ).strip
+    return nil if executable_name.empty?
+
+    File.join(path, "Contents", "MacOS", executable_name)
+  rescue
+    nil
+  end
+
+  def resolved_entitlements_path_for(bundle_id, output_directory)
+    source_path = developer_id_entitlements_sources[bundle_id]
+    return nil if source_path.to_s.empty?
+
+    team_id = ensure_team_id!
+    entitlements = plist_hash(source_path)
+    entitlements["com.apple.application-identifier"] = "#{team_id}.#{bundle_id}"
+    entitlements["com.apple.developer.team-identifier"] = team_id
+
+    if entitlements.key?("com.apple.developer.aps-environment")
+      entitlements["com.apple.developer.aps-environment"] = "production"
+    end
+
+    if entitlements["keychain-access-groups"].is_a?(Array)
+      entitlements["keychain-access-groups"] =
+        entitlements["keychain-access-groups"].map { |group| group.gsub("$(AppIdentifierPrefix)", "#{team_id}.") }
+    end
+
+    FileUtils.mkdir_p(output_directory)
+    entitlements_path = File.join(output_directory, "#{bundle_id}.entitlements")
+    write_plist_hash(entitlements_path, entitlements)
+    entitlements_path
+  end
+
+  def nested_code_bundles(path)
+    bundles = []
+
+    Find.find(path) do |candidate|
+      next if candidate == path
+      next unless File.directory?(candidate)
+      next unless %w[.app .appex .framework .xpc].include?(File.extname(candidate))
+
+      bundles << candidate
+      Find.prune
+    end
+
+    bundles.sort_by { |bundle_path| bundle_path.count(File::SEPARATOR) }.reverse
+  end
+
+  def loose_signable_files(path)
+    files = []
+    main_executable = bundle_executable_path(path)
+
+    Find.find(path) do |candidate|
+      if File.directory?(candidate)
+        next if candidate == path
+
+        if %w[.app .appex .framework .xpc].include?(File.extname(candidate))
+          Find.prune
+        end
+        next
+      end
+
+      next unless File.file?(candidate)
+      next if candidate == main_executable
+      next unless File.extname(candidate) == ".dylib" || File.executable?(candidate)
+      next unless candidate.include?("/Contents/Frameworks/") || candidate.include?("/Contents/Helpers/") || candidate.include?("/Contents/MacOS/")
+
+      files << candidate
+    end
+
+    files.sort_by { |file_path| file_path.count(File::SEPARATOR) }.reverse
+  end
+
+  def sign_path!(path, identity:, keychain_path:, entitlements_path: nil, runtime: false)
+    command = +"codesign --force --sign #{Shellwords.escape(identity)} " \
+               "--keychain #{Shellwords.escape(keychain_path)} " \
+               "--timestamp --generate-entitlement-der"
+    command << " --options runtime" if runtime
+    command << " --entitlements #{Shellwords.escape(entitlements_path)}" if entitlements_path
+    command << " #{Shellwords.escape(path)}"
+    sh(command)
+  end
+
+  def sign_bundle_recursively!(bundle_path, identity:, keychain_path:, entitlements_output_directory:)
+    nested_code_bundles(bundle_path).each do |nested_bundle_path|
+      sign_bundle_recursively!(
+        nested_bundle_path,
+        identity: identity,
+        keychain_path: keychain_path,
+        entitlements_output_directory: entitlements_output_directory
+      )
+    end
+
+    loose_signable_files(bundle_path).each do |file_path|
+      runtime = file_path.include?("/Contents/Helpers/")
+      sign_path!(
+        file_path,
+        identity: identity,
+        keychain_path: keychain_path,
+        runtime: runtime
+      )
+    end
+
+    bundle_id = bundle_identifier_for(bundle_path)
+    entitlements_path = bundle_id.nil? ? nil : resolved_entitlements_path_for(bundle_id, entitlements_output_directory)
+    runtime = %w[.app .appex .xpc].include?(File.extname(bundle_path))
+
+    sign_path!(
+      bundle_path,
+      identity: identity,
+      keychain_path: keychain_path,
+      entitlements_path: entitlements_path,
+      runtime: runtime
+    )
+  end
+
+  def archive_ios_app!
+    scheme = ENV.fetch("APP_SCHEME", "PushGo-iOS")
+    project = resolve_from_repo(ENV.fetch("APP_PROJECT", "pushgo.xcodeproj"))
+    output_directory = resolve_from_repo(ENV.fetch("BUILD_OUTPUT_DIR", "artifacts/release"))
+    output_name = ENV.fetch("IPA_OUTPUT_NAME", "PushGo-iOS")
+    export_method = "app-store-connect"
+    team_id = ensure_team_id!
+    archive_path = File.join(output_directory, "#{output_name}.xcarchive")
+    export_path = File.join(output_directory, "#{output_name}-export")
+    export_options_path = File.join(output_directory, "#{output_name}-ExportOptions.plist")
+    ipa_path = File.join(output_directory, "#{output_name}.ipa")
+    xcargs = signing_xcargs
+
+    FileUtils.mkdir_p(output_directory)
+    FileUtils.rm_rf([archive_path, export_path, ipa_path])
+
+    sh(
+      "xcodebuild -project #{Shellwords.escape(project)} " \
+      "-scheme #{Shellwords.escape(scheme)} " \
+      "-configuration Release " \
+      "-destination 'generic/platform=iOS' " \
+      "-archivePath #{Shellwords.escape(archive_path)} " \
+      "archive #{xcargs}"
+    )
+
+    File.write(
+      export_options_path,
+      <<~PLIST
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>method</key>
+          <string>#{export_method}</string>
+          <key>teamID</key>
+          <string>#{team_id}</string>
+          <key>signingStyle</key>
+          <string>automatic</string>
+          <key>stripSwiftSymbols</key>
+          <true/>
+          <key>manageAppVersionAndBuildNumber</key>
+          <false/>
+        </dict>
+        </plist>
+      PLIST
+    )
+
+    sh(
+      "xcodebuild -exportArchive " \
+      "-archivePath #{Shellwords.escape(archive_path)} " \
+      "-exportPath #{Shellwords.escape(export_path)} " \
+      "-exportOptionsPlist #{Shellwords.escape(export_options_path)} " \
+      "#{xcargs}"
+    )
+
+    generated_ipa = Dir.glob(File.join(export_path, "*.ipa")).first
+    UI.user_error!("No .ipa found under #{export_path}") if generated_ipa.to_s.empty?
+    verify_ios_distribution_signature!(generated_ipa)
+    FileUtils.cp(generated_ipa, ipa_path)
+    ipa_path
+  end
+
+  def archive_macos_app_store_pkg!
+    project = resolve_from_repo(ENV.fetch("APP_PROJECT", "pushgo.xcodeproj"))
+    scheme = ENV.fetch("APP_MACOS_SCHEME", "PushGo-macOS")
+    team_id = ensure_team_id!
+    output_directory = resolve_from_repo(ENV.fetch("BUILD_OUTPUT_DIR", "artifacts/release"))
+    pkg_name = ENV.fetch("MACOS_PKG_OUTPUT_NAME", "PushGo-macOS")
+    archive_path = File.join(output_directory, "#{pkg_name}.xcarchive")
+    export_path = File.join(output_directory, "#{pkg_name}-export")
+    export_options_path = File.join(output_directory, "#{pkg_name}-ExportOptions.plist")
+    pkg_path = File.join(output_directory, "#{pkg_name}.pkg")
+    xcargs = signing_xcargs
+
+    FileUtils.mkdir_p(output_directory)
+    FileUtils.rm_rf([archive_path, export_path, pkg_path])
+
+    sh(
+      "xcodebuild -project #{Shellwords.escape(project)} " \
+      "-scheme #{Shellwords.escape(scheme)} " \
+      "-configuration Release " \
+      "-destination 'generic/platform=macOS' " \
+      "-archivePath #{Shellwords.escape(archive_path)} " \
+      "archive #{xcargs}"
+    )
+
+    File.write(
+      export_options_path,
+      <<~PLIST
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>method</key>
+          <string>app-store-connect</string>
+          <key>teamID</key>
+          <string>#{team_id}</string>
+          <key>signingStyle</key>
+          <string>automatic</string>
+          <key>stripSwiftSymbols</key>
+          <true/>
+          <key>manageAppVersionAndBuildNumber</key>
+          <false/>
+        </dict>
+        </plist>
+      PLIST
+    )
+
+    sh(
+      "xcodebuild -exportArchive " \
+      "-archivePath #{Shellwords.escape(archive_path)} " \
+      "-exportPath #{Shellwords.escape(export_path)} " \
+      "-exportOptionsPlist #{Shellwords.escape(export_options_path)} " \
+      "#{xcargs}"
+    )
+
+    generated_pkg = Dir.glob(File.join(export_path, "*.pkg")).first
+    UI.user_error!("No .pkg found under #{export_path}") if generated_pkg.to_s.empty?
+    verify_macos_pkg_distribution_signature!(generated_pkg)
+    FileUtils.cp(generated_pkg, pkg_path)
+    pkg_path
+  end
+
+  def release_notes_payload
+    notes = ENV["APP_STORE_RELEASE_NOTES"].to_s.strip
+    return nil if notes.empty?
+
+    {
+      "en-US" => notes,
+      "zh-Hans" => notes
+    }
+  end
+
+  def build_release_dmg!
+    project = resolve_from_repo(ENV.fetch("APP_PROJECT", "pushgo.xcodeproj"))
+    scheme = ENV.fetch("APP_MACOS_SCHEME", "PushGo-macOS")
+    output_directory = resolve_from_repo(ENV.fetch("BUILD_OUTPUT_DIR", "artifacts/release"))
+    dmg_name = ENV.fetch("DMG_OUTPUT_NAME", "PushGo-macOS")
+    archive_path = File.join(output_directory, "#{dmg_name}.xcarchive")
+    export_path = File.join(output_directory, "#{dmg_name}-export")
+    staging_dir = File.join(output_directory, "#{dmg_name}-staging")
+    entitlements_dir = File.join(output_directory, "#{dmg_name}-entitlements")
+    dmg_path = File.join(output_directory, "#{dmg_name}.dmg")
+    keychain_path = developer_id_keychain_path!
+    identity = developer_id_identity!
+
+    FileUtils.mkdir_p(output_directory)
+    FileUtils.rm_rf([archive_path, export_path, staging_dir, entitlements_dir, dmg_path])
+
+    sh(
+      "xcodebuild -project #{Shellwords.escape(project)} " \
+      "-scheme #{Shellwords.escape(scheme)} " \
+      "-configuration Release " \
+      "-destination 'generic/platform=macOS' " \
+      "-archivePath #{Shellwords.escape(archive_path)} " \
+      "archive " \
+      "CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' DEVELOPMENT_TEAM=''"
+    )
+
+    archived_app_path = Dir.glob(File.join(archive_path, "Products", "Applications", "*.app")).first
+    UI.user_error!("No archived .app found under #{archive_path}") if archived_app_path.to_s.empty?
+
+    FileUtils.mkdir_p(export_path)
+    app_path = File.join(export_path, File.basename(archived_app_path))
+    sh("cp -R #{Shellwords.escape(archived_app_path)} #{Shellwords.escape(app_path)}")
+
+    sign_bundle_recursively!(
+      app_path,
+      identity: identity,
+      keychain_path: keychain_path,
+      entitlements_output_directory: entitlements_dir
+    )
+    sh("codesign --verify --deep --strict --verbose=2 #{Shellwords.escape(app_path)}")
+    verify_developer_id_app_signature!(app_path)
+
+    FileUtils.mkdir_p(staging_dir)
+    sh("cp -R #{Shellwords.escape(app_path)} #{Shellwords.escape(staging_dir)}")
+    sh(
+      "hdiutil create " \
+      "-volname #{Shellwords.escape(dmg_name)} " \
+      "-srcfolder #{Shellwords.escape(staging_dir)} " \
+      "-ov -format UDZO #{Shellwords.escape(dmg_path)}"
+    )
+    sign_path!(
+      dmg_path,
+      identity: identity,
+      keychain_path: keychain_path
+    )
+    sh("codesign --verify --verbose=2 #{Shellwords.escape(dmg_path)}")
+
+    key_path = ENV["ASC_KEY_PATH"]
+    key_id = ENV["ASC_KEY_ID"]
+    issuer_id = ENV["ASC_ISSUER_ID"]
+    UI.user_error!("Missing ASC_KEY_PATH for notarization") if key_path.to_s.empty?
+    UI.user_error!("Missing ASC_KEY_ID for notarization") if key_id.to_s.empty?
+    UI.user_error!("Missing ASC_ISSUER_ID for notarization") if issuer_id.to_s.empty?
+
+    sh(
+      "xcrun notarytool submit #{Shellwords.escape(dmg_path)} " \
+      "--key #{Shellwords.escape(key_path)} " \
+      "--key-id #{Shellwords.escape(key_id)} " \
+      "--issuer #{Shellwords.escape(issuer_id)} --wait"
+    )
+    sh("xcrun stapler staple #{Shellwords.escape(dmg_path)}")
+    sh("xcrun stapler validate #{Shellwords.escape(dmg_path)}")
+    sh("spctl --assess --type open --context context:primary-signature -vv #{Shellwords.escape(dmg_path)}")
+
+    dmg_path
+  end
+
+  def upload_beta_builds!
+    api_key = app_store_api_key!
+    ios_ipa_path = archive_ios_app!
+    macos_pkg_path = archive_macos_app_store_pkg!
+    changelog = ENV["TESTFLIGHT_CHANGELOG"].to_s.strip
+    groups = ENV.fetch("TESTFLIGHT_EXTERNAL_GROUPS", "").split(",").map(&:strip).reject(&:empty?)
+    UI.user_error!("Missing TESTFLIGHT_EXTERNAL_GROUPS for beta auto-submit") if groups.empty?
+
+    upload_to_testflight(
+      api_key: api_key,
+      ipa: ios_ipa_path,
+      changelog: changelog.empty? ? nil : changelog,
+      groups: groups,
+      distribute_external: true,
+      submit_beta_review: true,
+      skip_waiting_for_build_processing: false
+    )
+    upload_to_testflight(
+      api_key: api_key,
+      pkg: macos_pkg_path,
+      changelog: changelog.empty? ? nil : changelog,
+      groups: groups,
+      distribute_external: true,
+      submit_beta_review: true,
+      skip_waiting_for_build_processing: false
+    )
+  end
+
+  def upload_release_builds!
+    api_key = app_store_api_key!
+    ios_ipa_path = archive_ios_app!
+    macos_pkg_path = archive_macos_app_store_pkg!
+    release_notes = release_notes_payload
+
+    upload_to_app_store(
+      api_key: api_key,
+      ipa: ios_ipa_path,
+      skip_metadata: false,
+      skip_screenshots: true,
+      release_notes: release_notes,
+      submit_for_review: ENV.fetch("APP_STORE_SUBMIT_FOR_REVIEW", "false") == "true",
+      automatic_release: ENV.fetch("APP_STORE_AUTOMATIC_RELEASE", "false") == "true",
+      force: true
+    )
+    upload_to_app_store(
+      api_key: api_key,
+      pkg: macos_pkg_path,
+      skip_metadata: false,
+      skip_screenshots: true,
+      release_notes: release_notes,
+      submit_for_review: ENV.fetch("APP_STORE_SUBMIT_FOR_REVIEW", "false") == "true",
+      automatic_release: ENV.fetch("APP_STORE_AUTOMATIC_RELEASE", "false") == "true",
+      force: true
+    )
+  end
+
+  desc "Archive and upload build to TestFlight"
+  lane :beta_upload do
+    upload_beta_builds!
+  end
+
+  desc "Archive and upload build to App Store"
+  lane :release_upload do
+    upload_release_builds!
+  end
+
+  desc "Build and notarize DMG for beta tags"
+  lane :beta_dmg do
+    build_release_dmg!
+  end
+
+  desc "Build and notarize DMG for release tags"
+  lane :release_dmg do
+    build_release_dmg!
+  end
+
+  desc "Archive, upload, and notarize beta artifacts"
+  lane :beta do
+    upload_beta_builds!
+    build_release_dmg!
+  end
+
+  desc "Archive, upload, and notarize release artifacts"
+  lane :release do
+    upload_release_builds!
+    build_release_dmg!
+  end
+end

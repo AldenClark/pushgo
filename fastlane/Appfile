@@ -1,0 +1,5 @@
+app_identifier(ENV.fetch("APP_BUNDLE_ID", "io.ethan.pushgo"))
+apple_id(ENV["APPLE_ID"]) if ENV["APPLE_ID"]
+
+itc_team_id(ENV["APPSTORE_TEAM_ID"]) if ENV["APPSTORE_TEAM_ID"]
+team_id(ENV["DEVELOPER_TEAM_ID"]) if ENV["DEVELOPER_TEAM_ID"]

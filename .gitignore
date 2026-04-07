@@ -6,6 +6,7 @@ xcuserdata/
 .swiftpm/
 .deriveddata-*/
 artifacts/
+docs/
 
 *.xcuserstate
 *.xccheckout
@@ -19,3 +20,4 @@ artifacts/
 *.xcarchive
 *.dSYM
 *.xcresult
+
