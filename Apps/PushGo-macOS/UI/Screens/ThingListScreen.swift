@@ -29,7 +29,8 @@ struct ThingListScreen: View {
                 )
             } else if isBatchMode {
                 List {
-                    ForEach(Array(things.enumerated()), id: \.element.id) { index, thing in
+                    ForEach(things.indices, id: \.self) { index in
+                        let thing = things[index]
                         Button {
                             toggleBatchSelection(thing.id)
                         } label: {
@@ -74,7 +75,8 @@ struct ThingListScreen: View {
                 .background(EntityVisualTokens.pageBackground)
             } else {
                 List(selection: $selection) {
-                    ForEach(Array(things.enumerated()), id: \.element.id) { index, thing in
+                    ForEach(things.indices, id: \.self) { index in
+                        let thing = things[index]
                         ThingListRow(thing: thing)
                             .id(thing.id)
                             .accessibilityIdentifier("thing.row.\(thing.id)")

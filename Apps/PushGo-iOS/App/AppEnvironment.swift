@@ -737,7 +737,7 @@ final class AppEnvironment {
         toastMessage = toast
         announceAccessibility(message)
         toastDismissTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+            try? await Task.sleep(for: .seconds(duration))
             await MainActor.run {
                 self?.dismissToast(id: toast.id)
             }
@@ -823,8 +823,26 @@ final class AppEnvironment {
         localStoreRecoveryState = nil
     }
 
+    var isLocalStoreRecoveryAlertPresented: Bool {
+        get { localStoreRecoveryState != nil }
+        set {
+            if !newValue {
+                dismissLocalStoreRecovery()
+            }
+        }
+    }
+
     func dismissNotificationPermissionAlert() {
         shouldPresentNotificationPermissionAlert = false
+    }
+
+    var isNotificationPermissionAlertPresented: Bool {
+        get { shouldPresentNotificationPermissionAlert }
+        set {
+            if !newValue {
+                dismissNotificationPermissionAlert()
+            }
+        }
     }
 
     func openSystemNotificationSettings() {
@@ -1083,6 +1101,21 @@ final class AppEnvironment {
 
     var currentNotificationMaterial: ServerConfig.NotificationKeyMaterial? {
         serverConfig?.notificationKeyMaterial
+    }
+
+    var messagePageEnabled: Bool {
+        get { isMessagePageEnabled }
+        set { setMessagePageEnabled(newValue) }
+    }
+
+    var eventPageEnabled: Bool {
+        get { isEventPageEnabled }
+        set { setEventPageEnabled(newValue) }
+    }
+
+    var thingPageEnabled: Bool {
+        get { isThingPageEnabled }
+        set { setThingPageEnabled(newValue) }
     }
 
     func setMessagePageEnabled(_ isEnabled: Bool) {
@@ -1551,7 +1584,7 @@ final class AppEnvironment {
             for attempt in 0..<attempts {
                 if !immediate || attempt > 0 {
                     do {
-                        try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                        try await Task.sleep(for: .seconds(delay))
                     } catch {
                         return
                     }
@@ -1602,7 +1635,7 @@ final class AppEnvironment {
             {
                 throw AppError.saveConfig(reason: "Apple Watch mode switch failed.")
             }
-            try? await Task.sleep(nanoseconds: 200_000_000)
+            try? await Task.sleep(for: .milliseconds(200))
         }
         watchModeSwitchStatus = .timedOut
         await persistWatchModeControlState()
@@ -1678,7 +1711,7 @@ final class AppEnvironment {
         }
         let delay = watchSyncDebounceDelay
         pendingWatchMirrorSnapshotTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            try? await Task.sleep(for: .seconds(delay))
             await self?.publishWatchMirrorSnapshot()
         }
     }
@@ -1694,7 +1727,7 @@ final class AppEnvironment {
         }
         let delay = watchSyncDebounceDelay
         pendingWatchProvisioningTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            try? await Task.sleep(for: .seconds(delay))
             await self?.publishWatchStandaloneProvisioning()
         }
     }
@@ -1729,7 +1762,7 @@ final class AppEnvironment {
         pendingWatchMirrorSnapshotAckRetryTask = Task { @MainActor [weak self] in
             for _ in 0..<attempts {
                 do {
-                    try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                    try await Task.sleep(for: .seconds(delay))
                 } catch {
                     return
                 }
@@ -1852,7 +1885,7 @@ final class AppEnvironment {
         pendingWatchStandaloneProvisioningAckRetryTask = Task { @MainActor [weak self] in
             for _ in 0..<attempts {
                 do {
-                    try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                    try await Task.sleep(for: .seconds(delay))
                 } catch {
                     return
                 }

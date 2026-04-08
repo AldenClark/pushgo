@@ -81,14 +81,14 @@ struct MacMenuBarContentView: View {
         VStack(spacing: 8) {
             Image(systemName: "tray")
                 .font(.title2)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
             Text(
                 localizationManager.localized(
                     "placeholder_no_unread_messages"
                 )
             )
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 32)
@@ -97,7 +97,8 @@ struct MacMenuBarContentView: View {
     private var messageList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(viewModel.unreadMessages.enumerated()), id: \.element.id) { index, message in
+                ForEach(viewModel.unreadMessages.indices, id: \.self) { index in
+                    let message = viewModel.unreadMessages[index]
                     if index > 0 {
                         Divider().padding(.horizontal, 12)
                     }
@@ -130,7 +131,7 @@ struct MacMenuBarContentView: View {
                                 .padding(.trailing, 4)
                             Text(localizationManager.localized("unread"))
                                 .font(.caption2)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                         }
                         Text(message.title)
                             .fixedSize(horizontal: false, vertical: true)
@@ -139,11 +140,11 @@ struct MacMenuBarContentView: View {
                     Text(menuGroupName(for: message))
                         .font(.subheadline)
                         .lineLimit(1)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
 
                     Text(MessageTimestampFormatter.listTimestamp(for: message.receivedAt))
                         .font(.caption)
-                        .foregroundColor(.secondary.opacity(0.7))
+                        .foregroundStyle(.secondary.opacity(0.7))
                 }
                 Spacer()
             }
@@ -174,7 +175,7 @@ struct MacMenuBarContentView: View {
             .accessibilityLabel(localizationManager.localized("open_main_window"))
         }
         .buttonStyle(.appPlain)
-        .foregroundColor(.secondary)
+        .foregroundStyle(.secondary)
         .imageScale(.medium)
     }
 

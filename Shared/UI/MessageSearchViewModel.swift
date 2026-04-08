@@ -84,7 +84,7 @@ final class MessageSearchViewModel {
         debounceTask?.cancel()
         let pendingQuery = trimmedQuery
         debounceTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 180_000_000)
+            try? await Task.sleep(for: .milliseconds(180))
             guard !Task.isCancelled, let self else { return }
             await MainActor.run { self.performSearch(with: pendingQuery) }
         }

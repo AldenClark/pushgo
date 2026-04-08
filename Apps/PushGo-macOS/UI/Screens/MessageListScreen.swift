@@ -42,7 +42,7 @@ struct MessageListScreen: View {
             }
         }
         .task {
-            try? await Task.sleep(nanoseconds: 180_000_000)
+            try? await Task.sleep(for: .milliseconds(180))
             viewModel.enableChannelSummaries()
         }
         .accessibilityIdentifier("screen.messages.list")
@@ -228,7 +228,7 @@ struct MessageListScreen: View {
             VStack(spacing: 12) {
                 Image(systemName: "tray")
                     .font(.largeTitle)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
                 Text(localizationManager.localized("no_messages_yet"))
                     .font(.headline)
@@ -236,7 +236,7 @@ struct MessageListScreen: View {
                     "you_can_use_the_pushgo_cli_or_other_integration_tools_to_send_a_test_push_to_the_current_device"
                 ))
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
             }

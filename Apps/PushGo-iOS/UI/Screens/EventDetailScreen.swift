@@ -51,7 +51,7 @@ struct EventDetailScreen: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItemGroup(placement: .navigationBarTrailing) {
+        ToolbarItemGroup(placement: .topBarTrailing) {
             if canShowCloseAction {
                 Button {
                     activeConfirmation = .close
@@ -82,7 +82,7 @@ private struct EventDetailPanel: View {
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     let event: EventProjection
-    @State private var previewImageURL: URL?
+    @State private var previewImageItem: EventImagePreviewItem?
 
     private var severity: EventSeverity? {
         normalizedEventSeverity(event.severity)
@@ -181,7 +181,7 @@ private struct EventDetailPanel: View {
                         VStack(alignment: .leading, spacing: 8) {
                             EventAttachmentImageStrip(
                                 urls: imageAttachments,
-                                onTap: { previewImageURL = $0 }
+                                onTap: { previewImageItem = EventImagePreviewItem(url: $0) }
                             )
                         }
                     }
@@ -197,7 +197,8 @@ private struct EventDetailPanel: View {
                     )
                 } else {
                     VStack(spacing: 0) {
-                        ForEach(Array(orderedTimeline.enumerated()), id: \.element.id) { index, point in
+                        ForEach(orderedTimeline.indices, id: \.self) { index in
+                            let point = orderedTimeline[index]
                             EventTimelineRow(
                                 point: point,
                                 isFirst: index == 0,
@@ -212,10 +213,7 @@ private struct EventDetailPanel: View {
             .padding(.vertical, 18)
         }
         .background(EntityVisualTokens.pageBackground)
-        .pushgoImagePreviewOverlay(previewItem: Binding(
-            get: { previewImageURL.map(EventImagePreviewItem.init) },
-            set: { previewImageURL = $0?.url }
-        ), imageURL: \.url)
+        .pushgoImagePreviewOverlay(previewItem: $previewImageItem, imageURL: \.url)
     }
 }
 
@@ -382,7 +380,8 @@ private struct EventTimelineMetadataRows: View {
                 .lineLimit(1)
 
             VStack(spacing: 0) {
-                ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                ForEach(entries.indices, id: \.self) { index in
+                    let entry = entries[index]
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(entry.displayLabel)
                             .font(.caption.weight(.semibold))

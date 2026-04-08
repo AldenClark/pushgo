@@ -95,8 +95,7 @@ import UserNotifications
                 }
 
                 group.addTask {
-                    let nanoseconds = UInt64(timeout * 1_000_000_000)
-                    try await Task.sleep(nanoseconds: nanoseconds)
+                    try await Task.sleep(for: .seconds(timeout))
                     throw AppError.apnsDenied
                 }
 

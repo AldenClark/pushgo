@@ -244,7 +244,7 @@ struct MainTabContainerView: View {
         let foreground = Color.secondary
         return Image(systemName: systemImageName)
             .font(.caption.weight(.semibold))
-            .foregroundColor(foreground)
+            .foregroundStyle(foreground)
     }
 
     @ViewBuilder

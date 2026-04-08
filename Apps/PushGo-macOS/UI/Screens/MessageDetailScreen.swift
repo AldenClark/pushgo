@@ -7,6 +7,7 @@ struct MessageDetailScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @State private var viewModel: MessageDetailViewModel
     @State private var showDeleteConfirmation = false
+    @State private var isShowingRuntimeAlert = false
     @State private var previewingImage: ImagePreview?
     @State private var didLoad: Bool = false
     private let onDelete: (() -> Void)?
@@ -55,10 +56,15 @@ struct MessageDetailScreen: View {
                 await viewModel.markAsReadIfNeeded()
             }
         }
-        .alert(isPresented: Binding(
-            get: { viewModel.alertMessage != nil },
-            set: { if !$0 { viewModel.alertMessage = nil } },
-        )) {
+        .onChange(of: viewModel.alertMessage) { _, newValue in
+            isShowingRuntimeAlert = newValue != nil
+        }
+        .onChange(of: isShowingRuntimeAlert) { _, isPresented in
+            if !isPresented {
+                viewModel.alertMessage = nil
+            }
+        }
+        .alert(isPresented: $isShowingRuntimeAlert) {
             Alert(
                 title: Text(viewModel.alertMessage ?? ""),
                 dismissButton: .default(Text(localizationManager.localized("ok")))
@@ -115,7 +121,7 @@ struct MessageDetailScreen: View {
                             HStack(spacing: 8) {
                                 Text(message.receivedAt.pushgoDetailTimestamp())
                                     .font(.subheadline)
-                                    .foregroundColor(.secondary)
+                                    .foregroundStyle(.secondary)
                                 if let channelName = environment.channelDisplayName(for: message.channel) {
                                     ChannelTagView(text: channelName)
                                 }
@@ -187,14 +193,15 @@ struct MessageDetailScreen: View {
         let entries = metadataDisplayAttributes(from: items)
         VStack(alignment: .leading, spacing: EntityVisualTokens.stackSpacing) {
             VStack(alignment: .leading, spacing: 6) {
-                ForEach(Array(entries.enumerated()), id: \.element.id) { _, item in
+                ForEach(entries.indices, id: \.self) { index in
+                    let item = entries[index]
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(item.displayLabel)
                             .font(.subheadline.weight(.semibold))
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                         Text(item.value)
                             .font(.body)
-                            .foregroundColor(.primary)
+                            .foregroundStyle(.primary)
                             .textSelection(.enabled)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -210,13 +217,15 @@ struct MessageDetailScreen: View {
 
     @ViewBuilder
     private func messageTagChipRow(tags: [String]) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        ScrollView(.horizontal) {
             HStack(spacing: 6) {
-                ForEach(Array(tags.enumerated()), id: \.offset) { _, tag in
+                ForEach(tags.indices, id: \.self) { index in
+                    let tag = tags[index]
                     EntityMetaChip(systemImage: "tag", text: tag)
                 }
             }
         }
+        .scrollIndicators(.hidden)
     }
 
     @ViewBuilder
@@ -248,7 +257,7 @@ struct MessageDetailScreen: View {
             }
             .frame(height: Layout.singleImageHeight)
         } else {
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal) {
                 HStack(spacing: 10) {
                     ForEach(imageURLs, id: \.absoluteString) { imageURL in
                         Button {
@@ -276,6 +285,7 @@ struct MessageDetailScreen: View {
                     }
                 }
             }
+            .scrollIndicators(.hidden)
         }
     }
 
@@ -290,7 +300,7 @@ struct MessageDetailScreen: View {
                     Capsule(style: .continuous)
                         .fill(badgeContent.color.opacity(0.12)),
                 )
-                .foregroundColor(badgeContent.color)
+                .foregroundStyle(badgeContent.color)
                 .labelStyle(.titleAndIcon)
         } else {
             EmptyView()
@@ -434,7 +444,7 @@ private struct ChannelTagView: View {
                 Capsule(style: .continuous)
                     .fill(Color.accentColor.opacity(0.12))
             )
-            .foregroundColor(.accentColor)
+            .foregroundStyle(Color.accentColor)
             .lineLimit(1)
     }
 }

@@ -362,7 +362,7 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency 
         guard retries > 0 else { return }
         Task { @MainActor [weak self] in
             let nanoseconds = UInt64(delay * 1_000_000_000)
-            try? await Task.sleep(nanoseconds: nanoseconds)
+            try? await Task.sleep(for: .nanoseconds(Int64(nanoseconds)))
             self?.ensureMainWindowKey(retries: retries - 1, delay: delay)
         }
     }

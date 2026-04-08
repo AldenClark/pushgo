@@ -125,6 +125,8 @@
 		ACD50E96683A0EBE5AF671D6 /* UserInfoSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C362EF2359D00AD1834 /* UserInfoSanitizer.swift */; };
 		B1E7D1124F8A4C3DA9E8F101 /* EntityScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1E7D1124F8A4C3DA9E8F001 /* EntityScreens.swift */; };
 		B1E7D1124F8A4C3DA9E8F102 /* EntityScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1E7D1124F8A4C3DA9E8F001 /* EntityScreens.swift */; };
+		B1E7D1134F8A4C3DA9E8F101 /* EntityProjectionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1E7D1134F8A4C3DA9E8F001 /* EntityProjectionModels.swift */; };
+		B1E7D1134F8A4C3DA9E8F102 /* EntityProjectionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1E7D1134F8A4C3DA9E8F001 /* EntityProjectionModels.swift */; };
 		B2324A7F4E3B490A99C149D4 /* KeyboardDismiss.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85E1D5231456472CB97116B9 /* KeyboardDismiss.swift */; };
 		B49E95D553179EBD36CAE0AD /* PushGoMarkdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4145756AA5A340C3AC329C64 /* PushGoMarkdownView.swift */; };
 		B53BB245539441F3AF39A52F /* KeyboardDismiss.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85E1D5231456472CB97116B9 /* KeyboardDismiss.swift */; };
@@ -329,6 +331,7 @@
 		AACFE15B2F28511200701BB4 /* PushgoNotificationServiceExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PushgoNotificationServiceExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		AAFB52C12F0CA5F0009E61C5 /* PushGoWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PushGoWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B1E7D1124F8A4C3DA9E8F001 /* EntityScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntityScreens.swift; sourceTree = "<group>"; };
+		B1E7D1134F8A4C3DA9E8F001 /* EntityProjectionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntityProjectionModels.swift; sourceTree = "<group>"; };
 		BE7F5A81433F49309DB30D36 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = text; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
 		C0A1B2C3D4E5F60718293A4C /* SwiftDataModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftDataModels.swift; sourceTree = "<group>"; };
 		C0A1B2C3D4E5F60718293A70 /* ChannelSubscriptionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelSubscriptionStore.swift; sourceTree = "<group>"; };
@@ -532,6 +535,7 @@
 			children = (
 				86F995116FFE4856B0C30372 /* AppFormControls.swift */,
 				B1E7D1124F8A4C3DA9E8F001 /* EntityScreens.swift */,
+				B1E7D1134F8A4C3DA9E8F001 /* EntityProjectionModels.swift */,
 				85E1D5231456472CB97116B9 /* KeyboardDismiss.swift */,
 				3B3E6B01F1EF4D8FA6446875 /* LiquidGlassEffect.swift */,
 				4D54A0FAE6A44ADDB88F3B98 /* PlatformColor.swift */,
@@ -1073,6 +1077,7 @@
 				CAE45C474E77474FBD0A94AE /* RemoteImageView.swift in Sources */,
 				E75A2C6D9F284EE9ADB39B99 /* MessageDetailViewModel.swift in Sources */,
 				B1E7D1124F8A4C3DA9E8F102 /* EntityScreens.swift in Sources */,
+				B1E7D1134F8A4C3DA9E8F102 /* EntityProjectionModels.swift in Sources */,
 				FEE100022F80000100C0FFEE /* WatchLightModels.swift in Sources */,
 				FEE100032F80000100C0FFEE /* WatchLightQuantizer.swift in Sources */,
 			);
@@ -1126,6 +1131,7 @@
 				4A211E68CCB14F5896840D76 /* RemoteImageView.swift in Sources */,
 				07C9B74592F74D57BA86DC45 /* MessageDetailViewModel.swift in Sources */,
 				B1E7D1124F8A4C3DA9E8F101 /* EntityScreens.swift in Sources */,
+				B1E7D1134F8A4C3DA9E8F101 /* EntityProjectionModels.swift in Sources */,
 				FEE100042F80000100C0FFEE /* WatchLightModels.swift in Sources */,
 				FEE100052F80000100C0FFEE /* WatchLightQuantizer.swift in Sources */,
 			);

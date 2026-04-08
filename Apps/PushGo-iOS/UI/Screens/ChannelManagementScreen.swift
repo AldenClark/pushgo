@@ -8,6 +8,8 @@ struct ChannelManagementScreen: View {
     @State private var pendingRename: ChannelSubscription?
     @State private var renameAlias: String = ""
     @State private var isRenaming = false
+    @State private var isShowingRemovalConfirmation = false
+    @State private var isShowingRenameAlert = false
 
     @State private var isChannelEntrySheetPresented = false
     @State private var channelEntryMode: ChannelEntryMode = .create
@@ -27,10 +29,7 @@ struct ChannelManagementScreen: View {
         .confirmationDialog(
             pendingRemoval.map { localizationManager.localized("unsubscribe_channel_title", $0.displayName) }
                 ?? "",
-            isPresented: Binding(
-                get: { pendingRemoval != nil },
-                set: { if !$0 { pendingRemoval = nil } }
-            ),
+            isPresented: $isShowingRemovalConfirmation,
             titleVisibility: .visible
         ) {
             Button(role: .destructive) {
@@ -54,10 +53,7 @@ struct ChannelManagementScreen: View {
         }
         .alert(
             localizationManager.localized("rename_channel"),
-            isPresented: Binding(
-                get: { pendingRename != nil },
-                set: { if !$0 { pendingRename = nil } }
-            )
+            isPresented: $isShowingRenameAlert
         ) {
             TextField(
                 localizationManager.localized("channel_name_placeholder"),
@@ -78,6 +74,16 @@ struct ChannelManagementScreen: View {
             onDismiss: resetChannelEntrySheetState
         ) {
             channelEntrySheet
+        }
+        .onChange(of: isShowingRemovalConfirmation) { _, isPresented in
+            if !isPresented {
+                pendingRemoval = nil
+            }
+        }
+        .onChange(of: isShowingRenameAlert) { _, isPresented in
+            if !isPresented {
+                pendingRename = nil
+            }
         }
         .onAppear {
             Task { @MainActor in
@@ -142,30 +148,32 @@ struct ChannelManagementScreen: View {
         let name = subscription.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let channelId = subscription.channelId.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        return HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(name.isEmpty ? channelId : name)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-
-                if !name.isEmpty {
-                    Text(channelId)
-                        .font(.caption2.monospaced())
-                        .foregroundStyle(.secondary)
+        return Button {
+            copyChannelId(channelId)
+        } label: {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(name.isEmpty ? channelId : name)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
-                        .truncationMode(.middle)
+                        .truncationMode(.tail)
+
+                    if !name.isEmpty {
+                        Text(channelId)
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
                 }
             }
-
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .buttonStyle(.plain)
         .padding(.vertical, 8)
         .contentShape(Rectangle())
         .accessibilityIdentifier("channel.row.\(channelId)")
-        .onTapGesture {
-            copyChannelId(channelId)
-        }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button {
                 beginRename(subscription)
@@ -176,6 +184,7 @@ struct ChannelManagementScreen: View {
 
             Button(role: .destructive) {
                 pendingRemoval = subscription
+                isShowingRemovalConfirmation = true
             } label: {
                 Label(localizationManager.localized("unsubscribe_channel"), systemImage: "trash")
             }
@@ -572,6 +581,7 @@ struct ChannelManagementScreen: View {
         guard !isRenaming else { return }
         renameAlias = subscription.displayName
         pendingRename = subscription
+        isShowingRenameAlert = true
     }
 }
 

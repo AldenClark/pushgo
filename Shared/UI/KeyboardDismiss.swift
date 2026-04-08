@@ -126,7 +126,7 @@ private struct PushgoImagePreviewOverlay: View {
                         .onTapGesture(count: 2) { toggleZoom() }
                         .highPriorityGesture(combinedGesture)
                 } placeholder: {
-                    ProgressView().foregroundColor(.white)
+                    ProgressView().foregroundStyle(.white)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -138,7 +138,7 @@ private struct PushgoImagePreviewOverlay: View {
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.title.weight(.bold))
-                                .foregroundColor(.white.opacity(0.9))
+                                .foregroundStyle(.white.opacity(0.9))
                         }
                         .accessibilityLabel(LocalizedStringKey("close"))
                         .padding()

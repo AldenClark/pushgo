@@ -68,7 +68,7 @@ struct PushRegistrationServiceTests {
             if service.testingTokenWaiterCount == 2 {
                 break
             }
-            try await Task.sleep(nanoseconds: 50_000_000)
+            try await Task.sleep(for: .milliseconds(50))
         }
         #expect(service.testingTokenWaiterCount == 2)
         service.handleDeviceToken(Data([0xde, 0xad, 0xbe, 0xef]))

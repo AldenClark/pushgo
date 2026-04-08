@@ -5,16 +5,12 @@ struct RootView: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
 
     var body: some View {
+#if os(iOS)
+        @Bindable var bindableEnvironment = environment
+#endif
         mainContent
 #if os(iOS)
-            .sheet(
-                item: Binding(
-                    get: { environment.pendingSettingsPresentation },
-                    set: { presentation in
-                        environment.pendingSettingsPresentation = presentation
-                    }
-                )
-            ) { presentation in
+            .sheet(item: $bindableEnvironment.pendingSettingsPresentation) { presentation in
                 SettingsView(
                     embedInNavigationContainer: true,
                     openDecryptionOnAppear: presentation == .decryption
@@ -541,7 +537,7 @@ final class PushGoAutomationRuntime {
                 guard let tab = normalizedIdentifier(request.args?.tab) else {
                     throw PushGoAutomationError.missingArgument("tab")
                 }
-                try? await Task.sleep(nanoseconds: 300_000_000)
+                try? await Task.sleep(for: .milliseconds(300))
                 NotificationCenter.default.post(name: .pushgoAutomationSelectTab, object: tab)
             case "message.open":
                 guard let messageId = normalizedIdentifier(request.args?.messageId) else {
@@ -563,7 +559,7 @@ final class PushGoAutomationRuntime {
                 guard let enabled = parseBoolean(request.args?.enabled) else {
                     throw PushGoAutomationError.invalidArgument("enabled")
                 }
-                try? await Task.sleep(nanoseconds: 600_000_000)
+                try? await Task.sleep(for: .milliseconds(600))
                 try applyPageVisibility(page: page, enabled: enabled, environment: environment)
                 let pageVisibilityApplied = await waitForAutomationState(environment: environment, timeout: 2.0) { state in
                     switch page {
@@ -593,7 +589,7 @@ final class PushGoAutomationRuntime {
                     }
                 }
             case "settings.open_decryption":
-                try? await Task.sleep(nanoseconds: 600_000_000)
+                try? await Task.sleep(for: .milliseconds(600))
                 #if os(iOS)
                 environment.pendingSettingsPresentation = .decryption
                 #else
@@ -601,7 +597,7 @@ final class PushGoAutomationRuntime {
                 _ = await waitForAutomationState(environment: environment, timeout: 2.5) { state in
                     state.activeTab == "settings" || state.visibleScreen == "screen.settings"
                 }
-                try? await Task.sleep(nanoseconds: 300_000_000)
+                try? await Task.sleep(for: .milliseconds(300))
                 NotificationCenter.default.post(name: .pushgoAutomationOpenSettingsDecryption, object: nil)
                 #endif
                 _ = await waitForAutomationState(environment: environment, timeout: 2.5) { state in
@@ -772,7 +768,7 @@ final class PushGoAutomationRuntime {
         await Task.yield()
         switch commandName {
         case "nav.switch_tab", "message.open", "entity.open", "settings.open_decryption", "settings.set_page_visibility", "settings.set_decryption_key", "watch.set_mode":
-            try? await Task.sleep(nanoseconds: 200_000_000)
+            try? await Task.sleep(for: .milliseconds(200))
             await Task.yield()
         default:
             break
@@ -790,7 +786,7 @@ final class PushGoAutomationRuntime {
             if predicate(state) {
                 return true
             }
-            try? await Task.sleep(nanoseconds: 100_000_000)
+            try? await Task.sleep(for: .milliseconds(100))
         }
         return false
     }

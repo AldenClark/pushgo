@@ -22,6 +22,7 @@ private struct MessageSearchScreenModern: View {
 
     @State private var selectedMessage: PushMessageSummary?
     @FocusState private var focusedField: SearchFieldFocus?
+    @State private var searchFieldText: String = ""
 
     init(embedInNavigationContainer: Bool) {
         embedsInNavigationContainer = embedInNavigationContainer
@@ -37,10 +38,22 @@ private struct MessageSearchScreenModern: View {
                 searchScaffold
             }
         }
+        .onAppear {
+            if searchFieldText != viewModel.query {
+                searchFieldText = viewModel.query
+            }
+        }
+        .onChange(of: searchFieldText) { _, newValue in
+            guard viewModel.query != newValue else { return }
+            viewModel.updateQuery(newValue)
+        }
         .onChange(of: environment.messageStoreRevision) { _, _ in
             viewModel.refreshMessagesIfNeeded()
         }
         .onChange(of: viewModel.query) { _, newValue in
+            if searchFieldText != newValue {
+                searchFieldText = newValue
+            }
 #if DEBUG
             PushGoAutomationRuntime.shared.recordSearchResultsUpdated(
                 query: newValue,
@@ -60,7 +73,7 @@ private struct MessageSearchScreenModern: View {
             MessageDetailScreen(messageId: message.id, message: nil)
                 .pushgoSheetSizing(.detail)
         }
-        .searchableOnSupportedPlatforms(binding: searchFieldBinding)
+        .searchableOnSupportedPlatforms(binding: $searchFieldText)
     }
 
     private var searchScaffold: some View {
@@ -89,25 +102,25 @@ private struct MessageSearchScreenModern: View {
             HStack(spacing: 12) {
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .accessibilityHidden(true)
 
-                    TextField("search_messages", text: searchFieldBinding)
+                    TextField("search_messages", text: $searchFieldText)
                         .textFieldStyle(.plain)
                         .focused($focusedField, equals: .query)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
                         .submitLabel(.search)
 
-                    if !viewModel.query.isEmpty {
+                    if !searchFieldText.isEmpty {
                         Button {
-                            viewModel.updateQuery("")
+                            searchFieldText = ""
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                         }
                         .buttonStyle(.appPlain)
-                        .accessibilityLabel("clear_search")
+                        .accessibilityLabel(Text(localizationManager.localized("clear_search")))
                     }
                 }
 
@@ -115,7 +128,7 @@ private struct MessageSearchScreenModern: View {
                     Button("cancel") {
                         cancelSearch()
                     }
-                    .foregroundColor(.accentColor)
+                    .foregroundStyle(Color.accentColor)
                     .transition(.opacity.combined(with: .move(edge: .trailing)))
                 }
             }
@@ -149,7 +162,8 @@ private struct MessageSearchScreenModern: View {
                 .font(.headline)
 
             LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(viewModel.displayedResults.enumerated()), id: \.element.id) { index, message in
+                ForEach(viewModel.displayedResults.indices, id: \.self) { index in
+                    let message = viewModel.displayedResults[index]
                     Button {
                         selectMessage(message)
                     } label: {
@@ -191,20 +205,13 @@ private struct MessageSearchScreenModern: View {
     }
 
     private func cancelSearch() {
-        guard !viewModel.query.isEmpty || focusedField != nil else { return }
-        viewModel.updateQuery("")
+        guard !searchFieldText.isEmpty || focusedField != nil else { return }
+        searchFieldText = ""
         dismissSearchFocusIfNeeded()
     }
 
-    private var searchFieldBinding: Binding<String> {
-        Binding(
-            get: { viewModel.query },
-            set: { newValue in viewModel.updateQuery(newValue) },
-        )
-    }
-
     private var isCancelButtonVisible: Bool {
-        focusedField != nil || !viewModel.query.isEmpty
+        focusedField != nil || !searchFieldText.isEmpty
     }
 
     private var dismissTapGesture: some Gesture {
@@ -248,7 +255,7 @@ struct MessageSearchPlaceholderView: View {
         VStack(spacing: 16) {
             Image(systemName: imageName)
                 .font(.largeTitle.weight(.semibold))
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
 
             Text(localizationManager.localized(title))
@@ -256,7 +263,7 @@ struct MessageSearchPlaceholderView: View {
 
             Text(localizationManager.localized(detailKey))
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 320)
         }
@@ -278,20 +285,20 @@ struct MessageSearchResultRow: View {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         HighlightedText(text: message.title, query: query)
                             .font(.headline)
-                            .foregroundColor(.primary)
+                            .foregroundStyle(.primary)
                             .lineLimit(2)
 
                         if message.isEncrypted {
                             Image(systemName: "lock.fill")
                                 .font(.caption.bold())
-                                .foregroundColor(.accentColor)
+                                .foregroundStyle(Color.accentColor)
                                 .accessibilityLabel(localizationManager.localized("encrypted_message"))
                         }
                     }
 
                     HighlightedText(text: message.bodyPreview, query: query)
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                         .lineLimit(4)
 
                     HStack(spacing: 12) {
@@ -300,18 +307,18 @@ struct MessageSearchResultRow: View {
                             systemImage: "clock",
                         )
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
 
                         if let channelName = environment.channelDisplayName(for: message.channel) {
                             Label(channelName, systemImage: "square.stack.3d.up")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                         }
 
                         if message.isRead == false {
                             Label(localizationManager.localized("unread"), systemImage: "envelope")
                                 .font(.caption2)
-                                .foregroundColor(.accentColor)
+                                .foregroundStyle(Color.accentColor)
                         }
                     }
                 }
@@ -394,7 +401,7 @@ private struct HighlightedText: View {
 
             let highlight = nsText.substring(with: match.range)
             result = Text("\(result)\(highlight)")
-                .foregroundColor(Color.accentColor)
+                .foregroundStyle(Color.accentColor)
                 .fontWeight(.semibold)
 
             currentLocation = match.range.location + match.range.length

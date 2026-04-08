@@ -36,7 +36,8 @@ struct EventListScreen: View {
             } else {
                 ScrollViewReader { proxy in
                     List(selection: batchSelectionBinding) {
-                        ForEach(Array(filteredEventsSnapshot.enumerated()), id: \.element.id) { index, event in
+                        ForEach(filteredEventsSnapshot.indices, id: \.self) { index in
+                            let event = filteredEventsSnapshot[index]
                             Group {
                                 if isBatchMode {
                                     EventListRow(event: event)

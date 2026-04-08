@@ -13,6 +13,7 @@ struct ThingSplitScreen: View {
     @State private var hydrationRequestedThingIDs: Set<String> = []
     @State private var isBatchMode: Bool = false
     @State private var batchSelection: Set<String> = []
+    @State private var searchFieldText: String = ""
     private let fixedListWidth: CGFloat = 300
 
     var body: some View {
@@ -37,10 +38,21 @@ struct ThingSplitScreen: View {
             thingDetailPane
         }
         .onAppear {
+            if searchFieldText != searchQuery {
+                searchFieldText = searchQuery
+            }
             syncSelection()
+        }
+        .onChange(of: searchFieldText) { _, newValue in
+            guard !isBatchMode else { return }
+            guard searchQuery != newValue else { return }
+            searchQuery = newValue
         }
         .onChange(of: viewModel.things) { _, _ in
             syncSelection()
+        }
+        .onChange(of: isBatchMode) { _, isActive in
+            searchFieldText = isActive ? "" : searchQuery
         }
         .onChange(of: searchQuery) { _, _ in
             syncSelection()
@@ -76,13 +88,7 @@ struct ThingSplitScreen: View {
             )
             .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
             .searchable(
-                text: Binding(
-                    get: { isBatchMode ? "" : searchQuery },
-                    set: { newValue in
-                        guard !isBatchMode else { return }
-                        searchQuery = newValue
-                    }
-                ),
+                text: $searchFieldText,
                 placement: .toolbar,
                 prompt: Text(localizationManager.localized("search_objects"))
             )

@@ -392,7 +392,7 @@ final class AppEnvironment {
         toastMessage = toast
         announceAccessibility(message)
         toastDismissTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+            try? await Task.sleep(for: .seconds(duration))
             await MainActor.run {
                 self?.dismissToast(id: toast.id)
             }
@@ -482,8 +482,26 @@ final class AppEnvironment {
         localStoreRecoveryState = nil
     }
 
+    var isLocalStoreRecoveryAlertPresented: Bool {
+        get { localStoreRecoveryState != nil }
+        set {
+            if !newValue {
+                dismissLocalStoreRecovery()
+            }
+        }
+    }
+
     func dismissNotificationPermissionAlert() {
         shouldPresentNotificationPermissionAlert = false
+    }
+
+    var isNotificationPermissionAlertPresented: Bool {
+        get { shouldPresentNotificationPermissionAlert }
+        set {
+            if !newValue {
+                dismissNotificationPermissionAlert()
+            }
+        }
     }
 
     func openSystemNotificationSettings() {
@@ -740,6 +758,21 @@ final class AppEnvironment {
 
     var currentNotificationMaterial: ServerConfig.NotificationKeyMaterial? {
         serverConfig?.notificationKeyMaterial
+    }
+
+    var messagePageEnabled: Bool {
+        get { isMessagePageEnabled }
+        set { setMessagePageEnabled(newValue) }
+    }
+
+    var eventPageEnabled: Bool {
+        get { isEventPageEnabled }
+        set { setEventPageEnabled(newValue) }
+    }
+
+    var thingPageEnabled: Bool {
+        get { isThingPageEnabled }
+        set { setThingPageEnabled(newValue) }
     }
 
     func setMessagePageEnabled(_ isEnabled: Bool) {

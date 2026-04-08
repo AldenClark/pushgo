@@ -34,12 +34,12 @@ struct MessageRowView: View {
                         if let channelLabel = environment.channelDisplayName(for: message.channel) {
                             Text(channelLabel)
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                                 .lineLimit(2)
                         } else if !message.secondaryText.isEmpty {
                             Text(message.secondaryText)
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                                 .lineLimit(2)
                         }
                     }
@@ -51,7 +51,7 @@ struct MessageRowView: View {
                     HStack(alignment: .center, spacing: 8) {
                     Text(MessageTimestampFormatter.listTimestamp(for: message.receivedAt))
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -63,7 +63,7 @@ struct MessageRowView: View {
             if !message.tags.isEmpty {
                 Text(message.tags.joined(separator: " · "))
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
 
@@ -78,7 +78,7 @@ struct MessageRowView: View {
     private var messageImageRow: some View {
         GeometryReader { proxy in
             HStack(spacing: Layout.imageSpacing) {
-                ForEach(Array(message.imageURLs.prefix(visibleImageCount(for: proxy.size.width))), id: \.absoluteString) { imageURL in
+                ForEach(message.imageURLs.prefix(visibleImageCount(for: proxy.size.width)), id: \.absoluteString) { imageURL in
                     RemoteImageView(url: imageURL, rendition: .listThumbnail) { image in
                         image
                             .resizable()
@@ -118,7 +118,7 @@ struct MessageRowView: View {
     private var bodyPreviewView: some View {
         Text(message.bodyPreview)
             .font(.subheadline)
-            .foregroundColor(.secondary)
+            .foregroundStyle(.secondary)
             .lineLimit(Layout.bodyMaxLines)
             .frame(maxWidth: .infinity, alignment: .leading)
             .layoutPriority(1)
@@ -142,7 +142,7 @@ struct MessageRowView: View {
             let color: Color = isDecryptFailed ? .red : .accentColor
             Image(systemName: icon)
                 .font(.caption.bold())
-                .foregroundColor(color)
+                .foregroundStyle(color)
                 .accessibilityLabel(
                     LocalizedStringKey(
                         isDecryptFailed

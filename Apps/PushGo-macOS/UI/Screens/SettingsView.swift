@@ -112,6 +112,7 @@ struct SettingsView: View {
     }
 
     private var settingsList: some View {
+        @Bindable var bindableEnvironment = environment
         return ScrollView {
             VStack(spacing: 16) {
                 if viewModel.notificationStatus != .authorized {
@@ -173,9 +174,9 @@ struct SettingsView: View {
                         messageTitle: LocalizedStringKey(localizationManager.localized("messages")),
                         eventTitle: LocalizedStringKey(localizationManager.localized("push_type_event")),
                         thingTitle: LocalizedStringKey(localizationManager.localized("push_type_thing")),
-                        messageIsOn: messagePageVisibilityBinding,
-                        eventIsOn: eventPageVisibilityBinding,
-                        thingIsOn: thingPageVisibilityBinding
+                        messageIsOn: $bindableEnvironment.messagePageEnabled,
+                        eventIsOn: $bindableEnvironment.eventPageEnabled,
+                        thingIsOn: $bindableEnvironment.thingPageEnabled
                     )
                     .accessibilityIdentifier("group.settings.page_visibility")
                     SettingsRowDivider()
@@ -244,27 +245,6 @@ struct SettingsView: View {
     private var serverConfigSubtitle: LocalizedStringKey {
         let value = environment.serverConfig?.baseURL.absoluteString ?? AppConstants.defaultServerAddress
         return LocalizedStringKey(value)
-    }
-
-    private var messagePageVisibilityBinding: Binding<Bool> {
-        Binding(
-            get: { environment.isMessagePageEnabled },
-            set: { environment.setMessagePageEnabled($0) }
-        )
-    }
-
-    private var eventPageVisibilityBinding: Binding<Bool> {
-        Binding(
-            get: { environment.isEventPageEnabled },
-            set: { environment.setEventPageEnabled($0) }
-        )
-    }
-
-    private var thingPageVisibilityBinding: Binding<Bool> {
-        Binding(
-            get: { environment.isThingPageEnabled },
-            set: { environment.setThingPageEnabled($0) }
-        )
     }
 
     @ViewBuilder
@@ -722,7 +702,7 @@ private struct ServerManagementContentView: View {
                 }
                 Text(localizationManager.localized("server_management_gateway_switch_warning"))
                     .font(.footnote)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -802,7 +782,7 @@ private struct ManualKeySettingsContentView: View {
                         "only_aes_gcm_is_supported_iv_needs_to_be_included_by_the_sender_and_the_key_length_must_exactly_match_the_selected_number_of_bits",
                     ))
                     .font(.footnote)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 HStack(spacing: 12) {

@@ -16,8 +16,7 @@
         "severity": "high",
         "event_title": "P2 Event Active",
         "event_message": "Event fixture for automation detail open.",
-        "thing_id": "thing_p2_rich_001",
-        "projection_destination": "events"
+        "projection_destination": "event_head"
       },
       "status": "normal"
     }

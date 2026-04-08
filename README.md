@@ -10,14 +10,21 @@ PushGo for Apple platforms (iOS/macOS/watchOS) is the official client app for Pu
 
 ## Download
 
-**App Store** - https://apps.apple.com/cn/app/pushgo/id6757907675
-**Testflight** -  https://testflight.apple.com/join/xhYmNZH8
+- **App Store** - https://apps.apple.com/cn/app/pushgo/id6757907675
+- **Testflight** -  https://testflight.apple.com/join/xhYmNZH8
 
 ## Requirements
 
 - iOS 18+
 - macOS 15+
 - watchOS 11+
+
+## Testing
+
+- Concurrency + build gate: `./scripts/apple_concurrency_gate.sh`
+- iOS UI tests (stable runner flow with simulator preboot + retry):
+  - Full suite: `./scripts/run_ios_ui_tests.sh`
+  - Single test: `TEST_SCOPE='PushGo-iOSUITests/PushGo_iOSUITests/testLaunchesIntoMessageList' ./scripts/run_ios_ui_tests.sh`
 
 
 # PushGo Apple 平台
@@ -40,3 +47,10 @@ PushGo Apple 平台（iOS/macOS/watchOS）是 PushGo 的官方客户端应用，
 - iOS 18+
 - macOS 15+
 - watchOS 11+
+
+## 测试
+
+- 并发/构建闸门：`./scripts/apple_concurrency_gate.sh`
+- iOS UI 测试（稳定执行：模拟器预热 + runner 启动重试）：
+  - 全量：`./scripts/run_ios_ui_tests.sh`
+  - 单测：`TEST_SCOPE='PushGo-iOSUITests/PushGo_iOSUITests/testLaunchesIntoMessageList' ./scripts/run_ios_ui_tests.sh`

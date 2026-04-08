@@ -424,7 +424,7 @@ final class PushGoWatchAutomationRuntime {
                 guard let tab = normalizedIdentifier(request.args?.tab) else {
                     throw PushGoWatchAutomationError.missingArgument("tab")
                 }
-                try? await Task.sleep(nanoseconds: 300_000_000)
+                try? await Task.sleep(for: .milliseconds(300))
                 NotificationCenter.default.post(name: .pushgoWatchAutomationSelectTab, object: tab)
             case "message.open":
                 guard let messageId = normalizedIdentifier(request.args?.messageId) else {
@@ -480,7 +480,7 @@ final class PushGoWatchAutomationRuntime {
         await Task.yield()
         switch commandName {
         case "nav.switch_tab", "message.open", "entity.open":
-            try? await Task.sleep(nanoseconds: 200_000_000)
+            try? await Task.sleep(for: .milliseconds(200))
             await Task.yield()
         default:
             break
@@ -499,7 +499,7 @@ final class PushGoWatchAutomationRuntime {
                 latestState = state
                 return true
             }
-            try? await Task.sleep(nanoseconds: 100_000_000)
+            try? await Task.sleep(for: .milliseconds(100))
         }
         return false
     }

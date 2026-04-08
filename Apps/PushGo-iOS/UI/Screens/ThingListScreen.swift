@@ -36,7 +36,8 @@ struct ThingListScreen: View {
             } else {
                 ScrollViewReader { proxy in
                     List(selection: batchSelectionBinding) {
-                        ForEach(Array(filteredThingsSnapshot.enumerated()), id: \.element.id) { index, thing in
+                        ForEach(filteredThingsSnapshot.indices, id: \.self) { index in
+                            let thing = filteredThingsSnapshot[index]
                             Group {
                                 if isBatchMode {
                                     ThingListRow(thing: thing)

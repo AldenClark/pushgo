@@ -17,6 +17,7 @@ struct MessageSplitScreen: View {
     @State private var didLoad: Bool = false
     @State private var isBatchMode: Bool = false
     @State private var batchSelection: Set<UUID> = []
+    @State private var searchFieldText: String = ""
 
     private let fixedListWidth: CGFloat = 300
 
@@ -27,6 +28,9 @@ struct MessageSplitScreen: View {
         }
         .environment(searchViewModel)
         .onAppear {
+            if searchFieldText != searchViewModel.query {
+                searchFieldText = searchViewModel.query
+            }
             guard !didLoad else { return }
             didLoad = true
             Task {
@@ -41,6 +45,20 @@ struct MessageSplitScreen: View {
         .onChange(of: searchViewModel.displayedResults) { _, _ in
             ensureMessagesSelectionIfNeeded()
             Task { await syncSelectedMessageSnapshot(for: selection, markRead: false) }
+        }
+        .onChange(of: searchFieldText) { _, newValue in
+            guard !isBatchMode else { return }
+            guard searchViewModel.query != newValue else { return }
+            searchViewModel.updateQuery(newValue)
+        }
+        .onChange(of: searchViewModel.query) { _, newValue in
+            guard !isBatchMode else { return }
+            if searchFieldText != newValue {
+                searchFieldText = newValue
+            }
+        }
+        .onChange(of: isBatchMode) { _, isActive in
+            searchFieldText = isActive ? "" : searchViewModel.query
         }
         .onChange(of: selection) { _, newValue in
             if newValue != pendingNotificationSelectionId {
@@ -75,13 +93,7 @@ struct MessageSplitScreen: View {
             )
             .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
             .searchable(
-                text: Binding(
-                    get: { isBatchMode ? "" : searchViewModel.query },
-                    set: { newValue in
-                        guard !isBatchMode else { return }
-                        searchViewModel.updateQuery(newValue)
-                    }
-                ),
+                text: $searchFieldText,
                 placement: .toolbar,
                 prompt: Text(localizationManager.localized("search_messages"))
             )
@@ -330,7 +342,7 @@ struct MessageSplitScreen: View {
         ignoreMessageStoreRevisionsUntil = Date().addingTimeInterval(interval)
         ignoreRevisionResetTask?.cancel()
         ignoreRevisionResetTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: UInt64((interval + 0.2) * 1_000_000_000))
+            try? await Task.sleep(for: .seconds(interval + 0.2))
             guard let until = ignoreMessageStoreRevisionsUntil else { return }
             if until <= Date() {
                 ignoreMessageStoreRevisionsUntil = nil

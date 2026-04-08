@@ -29,3 +29,5 @@ PushGo policy:
 ### Fixed
 - Fixed release lane path handling for project/output resolution under CI.
 - Fixed stale App Store export method usage by migrating to modern `app-store-connect` export method naming.
+- Fixed Apple UI automation stability issues by aligning fixture projection semantics and replacing brittle iOS UI test assertions with state/event-based checks.
+- Fixed `PushGo-iOSUITests` runner retry behavior to avoid false transient retries triggered by non-fatal `IDELaunchParametersSnapshot` logs.

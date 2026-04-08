@@ -209,7 +209,7 @@ struct MainTabContainerView: View {
         case .messages:
             let currentToken = messageScrollToUnreadToken
             pendingMessageReselectTask = Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 280_000_000)
+                try? await Task.sleep(for: .milliseconds(280))
                 guard !Task.isCancelled, messageScrollToUnreadToken == currentToken else { return }
                 messageScrollToUnreadToken += 1
             }

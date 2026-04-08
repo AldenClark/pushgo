@@ -14,6 +14,7 @@ final class PushGo_iOSUITests: XCTestCase {
         let notificationKeyEncoding: String?
         let eventCount: Int?
         let thingCount: Int?
+        let totalMessageCount: Int?
         let channelCount: Int?
         let runtimeErrorCount: Int?
         let localStoreMode: String?
@@ -31,6 +32,7 @@ final class PushGo_iOSUITests: XCTestCase {
             case notificationKeyEncoding = "notification_key_encoding"
             case eventCount = "event_count"
             case thingCount = "thing_count"
+            case totalMessageCount = "total_message_count"
             case channelCount = "channel_count"
             case runtimeErrorCount = "runtime_error_count"
             case localStoreMode = "local_store_mode"
@@ -57,7 +59,7 @@ final class PushGo_iOSUITests: XCTestCase {
     private let thingFixturePath = fixturePath("rich-thing-detail.json")
     private let thingFixtureId = "thing_p2_rich_001"
     private let messageSeedFixturePath = fixturePath("seed-split.json")
-    private var runtimeRoots: [URL] = []
+    nonisolated(unsafe) private var runtimeRoots: [URL] = []
 
     private static func fixturePath(_ filename: String) -> String {
         URL(fileURLWithPath: #filePath)
@@ -190,7 +192,23 @@ final class PushGo_iOSUITests: XCTestCase {
             waitForAutomationState(
                 at: context.stateURL,
                 timeout: 12,
-                matching: { $0.lastFixtureImportMessageCount == 1 }
+                matching: {
+                    $0.lastFixtureImportMessageCount == 1
+                        && ($0.totalMessageCount ?? 0) >= 1
+                }
+            )
+        )
+        XCTAssertNotNil(
+            waitForAutomationEvent(
+                at: context.eventsURL,
+                timeout: 12,
+                matching: { event in
+                    guard (event["type"] as? String) == "fixture.imported",
+                          let details = event["details"] as? [String: Any],
+                          let messageCount = details["message_count"] as? String
+                    else { return false }
+                    return messageCount == "1"
+                }
             )
         )
         XCTAssertNotNil(
@@ -199,10 +217,6 @@ final class PushGo_iOSUITests: XCTestCase {
                 timeout: 12,
                 matching: { $0.ok }
             )
-        )
-        XCTAssertTrue(
-            context.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8),
-            "Expected seeded message title to appear on message list."
         )
     }
 

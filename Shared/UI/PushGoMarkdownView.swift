@@ -46,13 +46,13 @@ struct MarkdownRenderer: View {
             return .systemAction(safeURL)
         })
         .font(font)
-        .foregroundColor(foreground)
+        .foregroundStyle(foreground)
         .lineLimit(nil)
         .fixedSize(horizontal: false, vertical: true)
         #else
         Text(displayText)
             .font(font)
-            .foregroundColor(foreground)
+            .foregroundStyle(foreground)
             .lineLimit(nil)
             .fixedSize(horizontal: false, vertical: true)
         #endif

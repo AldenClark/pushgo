@@ -52,7 +52,7 @@ struct MessageListScreen: View {
                 publishAutomationState()
 #endif
                 Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 180_000_000)
+                    try? await Task.sleep(for: .milliseconds(180))
                     viewModel.enableChannelSummaries()
                 }
             }
@@ -108,18 +108,14 @@ struct MessageListScreen: View {
         }
     }
 
+    @ViewBuilder
     private var coreContent: some View {
-        screenContent
+        let baseContent = screenContent
             .navigationTitle(localizationManager.localized("messages"))
             .navigationBarTitleDisplayMode(.large)
             .applyToolbarBackgroundIfNeeded()
             .onChange(of: environment.messageStoreRevision) { _, _ in
                 handleMessageStoreRevisionChange()
-            }
-            .sheet(item: selectedMessageBinding) { message in
-                MessageDetailScreen(messageId: message.id, message: nil)
-                    .pushgoSheetSizing(.detail)
-                    .accessibilityIdentifier("sheet.message.detail")
             }
             .onChange(of: selectedMessage) { _, newValue in
 #if DEBUG
@@ -151,6 +147,17 @@ struct MessageListScreen: View {
             } message: {
                 Text(localizationManager.localized("batch_delete_selected_messages_confirm", selectedMessageIDs.count))
             }
+
+        if onSelect == nil {
+            baseContent
+                .sheet(item: $selectedMessage) { message in
+                    MessageDetailScreen(messageId: message.id, message: nil)
+                        .pushgoSheetSizing(.detail)
+                        .accessibilityIdentifier("sheet.message.detail")
+                }
+        } else {
+            baseContent
+        }
     }
 
 #if DEBUG
@@ -206,7 +213,8 @@ struct MessageListScreen: View {
                         searchPlaceholderRow
                     } else {
                         Section {
-                            ForEach(Array(searchViewModel.displayedResults.enumerated()), id: \.element.id) { index, message in
+                            ForEach(searchViewModel.displayedResults.indices, id: \.self) { index in
+                                let message = searchViewModel.displayedResults[index]
                                 messageRow(for: message, at: index)
                                 .tag(message.id)
                                 .onAppear {
@@ -235,7 +243,8 @@ struct MessageListScreen: View {
                         }
                     }
                 } else {
-                    ForEach(Array(viewModel.filteredMessages.enumerated()), id: \.element.id) { index, message in
+                    ForEach(viewModel.filteredMessages.indices, id: \.self) { index in
+                        let message = viewModel.filteredMessages[index]
                         messageRow(for: message, at: index)
                             .tag(message.id)
                             .id(message.id)
@@ -356,7 +365,7 @@ struct MessageListScreen: View {
             VStack(spacing: 12) {
                 Image(systemName: "tray")
                     .font(.largeTitle)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
                 Text(localizationManager.localized("no_messages_yet"))
                     .font(.headline)
@@ -365,7 +374,7 @@ struct MessageListScreen: View {
                         "you_can_use_the_pushgo_cli_or_other_integration_tools_to_send_a_test_push_to_the_current_device",
                     ))
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity)
             Spacer(minLength: 0)
@@ -461,19 +470,30 @@ private struct MessageListSearchableModifier: ViewModifier {
     @Bindable var searchViewModel: MessageSearchViewModel
     let enabled: Bool
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
+    @State private var searchFieldText: String = ""
 
     @ViewBuilder
     func body(content: Content) -> some View {
         if !enabled {
             content
         } else {
-            let queryBinding = Binding(
-                get: { searchViewModel.query },
-                set: { searchViewModel.updateQuery($0) },
-            )
             content
+                .onAppear {
+                    if searchFieldText != searchViewModel.query {
+                        searchFieldText = searchViewModel.query
+                    }
+                }
+                .onChange(of: searchFieldText) { _, newValue in
+                    guard searchViewModel.query != newValue else { return }
+                    searchViewModel.updateQuery(newValue)
+                }
+                .onChange(of: searchViewModel.query) { _, newValue in
+                    if searchFieldText != newValue {
+                        searchFieldText = newValue
+                    }
+                }
                 .searchable(
-                    text: queryBinding,
+                    text: $searchFieldText,
                     placement: .navigationBarDrawer(displayMode: .automatic),
                     prompt: localizationManager.localized("search_messages")
                 )
@@ -533,13 +553,6 @@ private extension MessageListScreen {
             return localizationManager.localized("not_grouped")
         }
         return environment.channelDisplayName(for: channel.rawChannelValue) ?? channel.displayName
-    }
-
-    private var selectedMessageBinding: Binding<PushMessageSummary?> {
-        Binding(
-            get: { onSelect == nil ? selectedMessage : nil },
-            set: { selectedMessage = $0 },
-        )
     }
 
     @ToolbarContentBuilder
@@ -677,7 +690,7 @@ private extension MessageListScreen {
                 }
                 guard environment.pendingMessageToOpen == targetId else { return }
                 if attempt + 1 < maxAttempts {
-                    try? await Task.sleep(nanoseconds: 100_000_000)
+                    try? await Task.sleep(for: .milliseconds(100))
                 }
             }
         }

@@ -4,7 +4,7 @@ struct WatchEventDetailScreen: View {
     let eventId: String
     let viewModel: WatchLightStoreViewModel
 
-    @State private var previewImageURL: URL?
+    @State private var previewImageItem: WatchEventImagePreviewItem?
 
     private var event: WatchLightEvent? {
         viewModel.event(eventId: eventId)
@@ -44,7 +44,7 @@ struct WatchEventDetailScreen: View {
                 if let imageURL = event.imageURL {
                     Section("Image") {
                         Button {
-                            previewImageURL = imageURL
+                            previewImageItem = WatchEventImagePreviewItem(url: imageURL)
                         } label: {
                             AsyncImage(url: imageURL) { phase in
                                 switch phase {
@@ -69,10 +69,7 @@ struct WatchEventDetailScreen: View {
             }
         }
         .navigationTitle(event?.title ?? "")
-        .sheet(item: Binding(
-            get: { previewImageURL.map(WatchEventImagePreviewItem.init) },
-            set: { previewImageURL = $0?.url }
-        )) { item in
+        .sheet(item: $previewImageItem) { item in
             NavigationStack {
                 ZStack {
                     Color.black.ignoresSafeArea()

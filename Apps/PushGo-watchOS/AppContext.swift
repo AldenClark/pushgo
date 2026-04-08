@@ -60,14 +60,7 @@ private struct DynamicLocaleWrapper<Content: View>: View {
                 localizationManager.localized(
                     "system_notification_permission_is_not_obtained_please_turn_on_notifications_in_the_system_settings_and_try_again"
                 ),
-                isPresented: Binding(
-                    get: { environment.shouldPresentNotificationPermissionAlert },
-                    set: { presented in
-                        if !presented {
-                            environment.dismissNotificationPermissionAlert()
-                        }
-                    }
-                )
+                isPresented: $environment.isNotificationPermissionAlertPresented
             ) {
                 Button(localizationManager.localized("cancel"), role: .cancel) {
                     environment.dismissNotificationPermissionAlert()
@@ -110,15 +103,18 @@ private struct ToastOverlayModifier: ViewModifier {
                 content
 
                 if let toast = environment.toastMessage {
-                    ToastView(toast: toast)
-                        .padding(.horizontal, 24)
-                        .frame(maxWidth: .infinity)
-                        .padding(.bottom, toastBottomPadding)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                        .onTapGesture {
-                            environment.dismissToast(id: toast.id)
-                        }
-                        .zIndex(999)
+                    Button {
+                        environment.dismissToast(id: toast.id)
+                    } label: {
+                        ToastView(toast: toast)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(LocalizedStringKey("close"))
+                    .padding(.horizontal, 24)
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, toastBottomPadding)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(999)
                 }
             }
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: environment.toastMessage)

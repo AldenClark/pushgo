@@ -45,7 +45,7 @@ private struct ThingDetailPanel: View {
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     let thing: ThingProjection
-    @State private var previewImageURL: URL?
+    @State private var previewImageItem: ThingImagePreviewItem?
     @State private var selectedTab: Tab = .events
     @State private var selectedEvent: EventProjection?
     @State private var selectedMessage: ThingRelatedMessage?
@@ -170,12 +170,12 @@ private struct ThingDetailPanel: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                if !secondaryImageURLs.isEmpty {
-                    ThingAttachmentImageStrip(
-                        urls: secondaryImageURLs,
-                        onTap: { previewImageURL = $0 }
-                    )
-                }
+                    if !secondaryImageURLs.isEmpty {
+                        ThingAttachmentImageStrip(
+                            urls: secondaryImageURLs,
+                            onTap: { previewImageItem = ThingImagePreviewItem(url: $0) }
+                        )
+                    }
 
                 Divider()
 
@@ -193,10 +193,7 @@ private struct ThingDetailPanel: View {
             .padding(.vertical, EntityVisualTokens.detailPaddingVertical)
         }
         .background(EntityVisualTokens.pageBackground)
-        .pushgoImagePreviewOverlay(previewItem: Binding(
-            get: { previewImageURL.map(ThingImagePreviewItem.init) },
-            set: { previewImageURL = $0?.url }
-        ), imageURL: \.url)
+        .pushgoImagePreviewOverlay(previewItem: $previewImageItem, imageURL: \.url)
         .sheet(item: $selectedEvent) { event in
             ThingSecondaryDetailSheet {
                 EventDetailScreen(event: event)
@@ -229,7 +226,7 @@ private struct ThingDetailPanel: View {
             HStack(alignment: .center, spacing: EntityVisualTokens.stackSpacing) {
                 Button {
                     if let primaryImageURL {
-                        previewImageURL = primaryImageURL
+                        previewImageItem = ThingImagePreviewItem(url: primaryImageURL)
                     }
                 } label: {
                     EntityThumbnail(
@@ -409,7 +406,7 @@ private struct ThingAttachmentImageStrip: View {
     let onTap: (URL) -> Void
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        ScrollView(.horizontal) {
             HStack(spacing: 8) {
                 ForEach(urls, id: \.absoluteString) { url in
                     Button {
@@ -430,6 +427,7 @@ private struct ThingAttachmentImageStrip: View {
                 }
             }
         }
+        .scrollIndicators(.hidden)
     }
 }
 
@@ -437,13 +435,15 @@ private struct ThingTagChipRow: View {
     let tags: [String]
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        ScrollView(.horizontal) {
             HStack(spacing: 8) {
-                ForEach(Array(tags.enumerated()), id: \.offset) { _, tag in
+                ForEach(tags.indices, id: \.self) { index in
+                    let tag = tags[index]
                     EntityMetaChip(systemImage: "tag", text: tag)
                 }
             }
         }
+        .scrollIndicators(.hidden)
     }
 }
 
@@ -523,7 +523,8 @@ private struct ThingDetailList<Item: Identifiable, RowContent: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+            ForEach(items.indices, id: \.self) { index in
+                let item = items[index]
                 row(item)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, EntityVisualTokens.listRowInsetVertical)

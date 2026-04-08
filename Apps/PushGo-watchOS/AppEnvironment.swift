@@ -187,7 +187,7 @@ final class AppEnvironment {
         toastMessage = toast
         announceAccessibility(message)
         toastDismissTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+            try? await Task.sleep(for: .seconds(duration))
             await MainActor.run {
                 self?.dismissToast(id: toast.id)
             }
@@ -244,6 +244,15 @@ final class AppEnvironment {
 
     func dismissNotificationPermissionAlert() {
         shouldPresentNotificationPermissionAlert = false
+    }
+
+    var isNotificationPermissionAlertPresented: Bool {
+        get { shouldPresentNotificationPermissionAlert }
+        set {
+            if !newValue {
+                dismissNotificationPermissionAlert()
+            }
+        }
     }
 
     func openSystemNotificationSettings() {
@@ -1322,7 +1331,7 @@ final class AppEnvironment {
         pendingMessageListRefreshTask?.cancel()
         let delay = messageListRefreshDelay
         pendingMessageListRefreshTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            try? await Task.sleep(for: .seconds(delay))
             guard let self else { return }
             messageStoreRevision = UUID()
             pendingMessageListRefresh = false
