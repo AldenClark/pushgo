@@ -13,21 +13,17 @@ PushGo policy:
 ## [Unreleased]
 
 ### Added
-- Apple release automation now supports SemVer tag strategy (`vX.Y.Z` and `vX.Y.Z-beta.N`) and derives release kind directly from tags.
-- Root-level changelog governance is introduced, and release notes extraction is wired to `CHANGELOG.md`.
+- Added Sparkle 2 based self-update flow for self-distributed macOS DMG builds, isolated behind dedicated `PushGo-macOS-DMG` target/scheme.
+- Added `AppUpdateManager` integration for manual checks, automatic background probes, and beta channel routing (`sparkle:channel=beta`).
+- Added a beta-channel toggle in macOS Settings next to "Check for Updates"; enabling beta immediately triggers a background update probe.
+- Added `scripts/release_appcast.sh` for stable/beta appcast generation with signature and channel validation.
 
 ### Changed
-- Apple release workflow now reads release notes from `CHANGELOG.md`:
-  - beta uses `[Unreleased]`
-  - release uses `[vX.Y.Z]`
-- GitHub Release body generation for Apple artifacts now uses changelog sections from `CHANGELOG.md` instead of ad-hoc commit log text.
-- DMG packaging/signing pipeline remains cloud-signing + notarization and is aligned with explicit team/signing parameters.
-- Apple concurrency gate and related scripts were updated for CI robustness and signing/provisioning behavior.
-- iOS UI screens and localization assets were updated across event list, main tab, settings, and string resources.
-- Xcode project settings and workspace metadata were updated for current build/signing workflow behavior.
+- Apple release workflow now supports SemVer-driven DMG naming and emits versioned artifacts like `PushGo-macOS-v1.2.0-beta.2.dmg`.
+- Sparkle scheduled check interval is now explicitly configured (default 21600 seconds / 6 hours) for DMG distribution builds.
+- DMG Sparkle runtime config is now injected through dedicated xcconfig inputs for feed URL and check interval while keeping public EdDSA key in project build settings.
+- Release notes extraction remains aligned to release tags (`vX.Y.Z`) and beta tags (`vX.Y.Z-beta.N`) via the `[Unreleased]` section.
 
 ### Fixed
-- Fixed release lane path handling for project/output resolution under CI.
-- Fixed stale App Store export method usage by migrating to modern `app-store-connect` export method naming.
-- Fixed Apple UI automation stability issues by aligning fixture projection semantics and replacing brittle iOS UI test assertions with state/event-based checks.
-- Fixed `PushGo-iOSUITests` runner retry behavior to avoid false transient retries triggered by non-fatal `IDELaunchParametersSnapshot` logs.
+- Fixed automatic background update checks to run in probe mode so transient update-fetch failures are silently skipped without surfacing user-facing errors.
+- Fixed appcast generation output handling to consistently produce `appcast.xml` at the expected destination path.

@@ -15,23 +15,9 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "AA49A1892EE3E31500C1EBF2"
+               BlueprintIdentifier = "135A23D0A0668F4A0D2918DB"
                BuildableName = "PushGo.app"
-               BlueprintName = "PushGo-iOS"
-               ReferencedContainer = "container:pushgo.xcodeproj">
-            </BuildableReference>
-         </BuildActionEntry>
-         <BuildActionEntry
-            buildForTesting = "YES"
-            buildForRunning = "NO"
-            buildForProfiling = "NO"
-            buildForArchiving = "NO"
-            buildForAnalyzing = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "D90000112F7F000100A10006"
-               BuildableName = "PushGo-iOSUITests.xctest"
-               BlueprintName = "PushGo-iOSUITests"
+               BlueprintName = "PushGo-macOS-DMG"
                ReferencedContainer = "container:pushgo.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -46,25 +32,12 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "AA49A1892EE3E31500C1EBF2"
+            BlueprintIdentifier = "135A23D0A0668F4A0D2918DB"
             BuildableName = "PushGo.app"
-            BlueprintName = "PushGo-iOS"
+            BlueprintName = "PushGo-macOS-DMG"
             ReferencedContainer = "container:pushgo.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
-      <Testables>
-         <TestableReference
-            skipped = "NO"
-            parallelizable = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "D90000112F7F000100A10006"
-               BuildableName = "PushGo-iOSUITests.xctest"
-               BlueprintName = "PushGo-iOSUITests"
-               ReferencedContainer = "container:pushgo.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-      </Testables>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Release"
@@ -80,9 +53,9 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "AA49A1892EE3E31500C1EBF2"
+            BlueprintIdentifier = "135A23D0A0668F4A0D2918DB"
             BuildableName = "PushGo.app"
-            BlueprintName = "PushGo-iOS"
+            BlueprintName = "PushGo-macOS-DMG"
             ReferencedContainer = "container:pushgo.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -97,9 +70,9 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "AA49A1892EE3E31500C1EBF2"
+            BlueprintIdentifier = "135A23D0A0668F4A0D2918DB"
             BuildableName = "PushGo.app"
-            BlueprintName = "PushGo-iOS"
+            BlueprintName = "PushGo-macOS-DMG"
             ReferencedContainer = "container:pushgo.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

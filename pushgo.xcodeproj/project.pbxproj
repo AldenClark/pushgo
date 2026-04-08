@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		02C1C7A566ABB8EBB1B08D92 /* PushMessageSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36B8C43824CA496F9D0EDDC7 /* PushMessageSummary.swift */; };
+		03DC253E48CA6B70EEF1B336 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 3949F99E0D1C96080BD96181 /* Sparkle */; };
 		0637F07C839C0C2D397AB069 /* NotificationServiceProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25CF4B72C6499CEADC594FC9 /* NotificationServiceProcessor.swift */; };
 		07C9B74592F74D57BA86DC45 /* MessageDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9015282D012D481CA0B5DEE7 /* MessageDetailViewModel.swift */; };
 		0AB64B4D52C546C3964A4A7C /* MessageSearchIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0775D9BD1040ADA2E6126B /* MessageSearchIndex.swift */; };
@@ -121,6 +122,8 @@
 		AAE0B0B82F6A000100C0FFEE /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1C2EF2359D00AD1834 /* AppError.swift */; };
 		AAE0B0B92F6A000100C0FFEE /* LocalizationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C312EF2359D00AD1834 /* LocalizationProvider.swift */; };
 		AAE0B0BB2F6A000100C0FFEE /* PushGoMarkdownCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C322EF2359D00AD1834 /* PushGoMarkdownCore.swift */; };
+		AAFD8FA12F85E635003CF9B4 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0015 /* Textual */; };
+		AAFD8FA22F85E635003CF9B4 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0035 /* GRDB */; };
 		ABB5C85DDC69BE814D6B8875 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2E2EF2359D00AD1834 /* KeychainStore.swift */; };
 		ACD50E96683A0EBE5AF671D6 /* UserInfoSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C362EF2359D00AD1834 /* UserInfoSanitizer.swift */; };
 		B1E7D1124F8A4C3DA9E8F101 /* EntityScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1E7D1124F8A4C3DA9E8F001 /* EntityScreens.swift */; };
@@ -293,6 +296,7 @@
 		0AC200122F90000100C0FFEE /* WatchLightNotificationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchLightNotificationStore.swift; sourceTree = "<group>"; };
 		0AC200132F90000100C0FFEE /* WatchStandaloneLightQuantizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchStandaloneLightQuantizer.swift; sourceTree = "<group>"; };
 		25CF4B72C6499CEADC594FC9 /* NotificationServiceProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationServiceProcessor.swift; sourceTree = "<group>"; };
+		262C4B05D5336C65618DA0A4 /* PushGo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PushGo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2955959BFE8246FEB0B03EDA /* RemoteImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteImageView.swift; sourceTree = "<group>"; };
 		36B8C43824CA496F9D0EDDC7 /* PushMessageSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushMessageSummary.swift; sourceTree = "<group>"; };
 		3B3E6B01F1EF4D8FA6446875 /* LiquidGlassEffect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlassEffect.swift; sourceTree = "<group>"; };
@@ -402,11 +406,44 @@
 			);
 			target = AA49A1892EE3E31500C1EBF2 /* PushGo-iOS */;
 		};
+		AAFD99612F8649EB003CF9B4 /* Exceptions for "Apps/PushGo-macOS" folder in "PushGo-macOS-DMG" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				App/AppContext.swift,
+				App/AppEnvironment.swift,
+				App/AppUpdateManager.swift,
+				App/PushGoAppDelegate.swift,
+				ContentView.swift,
+				MacMenuBarContentView.swift,
+				MainWindowController.swift,
+				pushgomacApp.swift,
+				UI/Components/MessageRowView.swift,
+				UI/Screens/ChannelManagementView.swift,
+				UI/Screens/EntityUIComponents.swift,
+				UI/Screens/EventDetailScreen.swift,
+				UI/Screens/EventListScreen.swift,
+				UI/Screens/EventSplitScreen.swift,
+				UI/Screens/MainTabContainerView.swift,
+				UI/Screens/MessageDetailScreen.swift,
+				UI/Screens/MessageListScreen.swift,
+				UI/Screens/MessageSearchScreen.swift,
+				UI/Screens/MessageSplitScreen.swift,
+				UI/Screens/SettingsView.swift,
+				UI/Screens/ThingDetailScreen.swift,
+				UI/Screens/ThingListScreen.swift,
+				UI/Screens/ThingSplitScreen.swift,
+				UI/ViewModels/MenuBarViewModel.swift,
+			);
+			target = 135A23D0A0668F4A0D2918DB /* PushGo-macOS-DMG */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		AA240E522EF1BEA400F812DA /* Apps/PushGo-macOS */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				AAFD99612F8649EB003CF9B4 /* Exceptions for "Apps/PushGo-macOS" folder in "PushGo-macOS-DMG" target */,
+			);
 			path = "Apps/PushGo-macOS";
 			sourceTree = "<group>";
 		};
@@ -462,6 +499,16 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		7B1D4648823687E444F7317F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAFD8FA22F85E635003CF9B4 /* GRDB in Frameworks */,
+				AAFD8FA12F85E635003CF9B4 /* Textual in Frameworks */,
+				03DC253E48CA6B70EEF1B336 /* Sparkle in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AA240E4E2EF1BEA400F812DA /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -575,6 +622,7 @@
 				AA49A18A2EE3E31500C1EBF2 /* PushGo.app */,
 				AA49A19C2EE3E46C00C1EBF2 /* NotificationServiceExtension.appex */,
 				AA240E512EF1BEA400F812DA /* PushGo.app */,
+				262C4B05D5336C65618DA0A4 /* PushGo.app */,
 				AAFB52C12F0CA5F0009E61C5 /* PushGoWatch.app */,
 				DE35C72B5C899D0FCCBAF070 /* NotificationServiceExtensionWatch.appex */,
 				AACFE15B2F28511200701BB4 /* PushgoNotificationServiceExtension.appex */,
@@ -684,6 +732,31 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		135A23D0A0668F4A0D2918DB /* PushGo-macOS-DMG */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 70C385DDAF62ACCEA4626E09 /* Build configuration list for PBXNativeTarget "PushGo-macOS-DMG" */;
+			buildPhases = (
+				AA240E4D2EF1BEA400F812DA /* Sources */,
+				7B1D4648823687E444F7317F /* Frameworks */,
+				5356A712BA498C90ABA9B2FD /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AA8E2B3C2EF2292800AD1834 /* Resources */,
+			);
+			name = "PushGo-macOS-DMG";
+			packageProductDependencies = (
+				A0AA00012F70000100AA0015 /* Textual */,
+				A0AA00012F70000100AA0035 /* GRDB */,
+				3949F99E0D1C96080BD96181 /* Sparkle */,
+			);
+			productName = PushGo;
+			productReference = 262C4B05D5336C65618DA0A4 /* PushGo.app */;
+			productType = "com.apple.product-type.application";
+		};
 		AA240E502EF1BEA400F812DA /* PushGo-macOS */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = AA240E592EF1BEA500F812DA /* Build configuration list for PBXNativeTarget "PushGo-macOS" */;
@@ -885,8 +958,11 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2620;
-				LastUpgradeCheck = 2620;
+				LastUpgradeCheck = 2640;
 				TargetAttributes = {
+					135A23D0A0668F4A0D2918DB = {
+						CreatedOnToolsVersion = 26.2;
+					};
 					AA240E502EF1BEA400F812DA = {
 						CreatedOnToolsVersion = 26.2;
 					};
@@ -928,6 +1004,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				A0AA00012F70000100AA0033 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
+				01F218A60EC0A2A33862880B /* XCRemoteSwiftPackageReference "Sparkle" */,
 				A0AA00012F70000100AA0022 /* XCRemoteSwiftPackageReference "textual" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -939,6 +1016,7 @@
 				AA49A19B2EE3E46C00C1EBF2 /* PushGoNSE-iOS */,
 				CF8A576C8ED05746DC334102 /* PushGoNSE-watchOS */,
 				AA240E502EF1BEA400F812DA /* PushGo-macOS */,
+				135A23D0A0668F4A0D2918DB /* PushGo-macOS-DMG */,
 				AAFB52C02F0CA5F0009E61C5 /* PushGo-watchOS */,
 				AACFE15A2F28511200701BB4 /* PushGoNSE-macOS */,
 				D90000112F7F000100A10006 /* PushGo-iOSUITests */,
@@ -949,6 +1027,13 @@
 
 /* Begin PBXResourcesBuildPhase section */
 		27E87709AD637E7559BA3370 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5356A712BA498C90ABA9B2FD /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -1291,7 +1376,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-watchOS/pushgowatch NotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 56;
+				CURRENT_PROJECT_VERSION = 57;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -1332,7 +1417,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-macOS/pushgomac.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 56;
+				CURRENT_PROJECT_VERSION = 57;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -1392,7 +1477,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-macOS/pushgomac.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 56;
+				CURRENT_PROJECT_VERSION = 57;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -1583,7 +1668,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-iOS/pushgo.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 56;
+				CURRENT_PROJECT_VERSION = 57;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -1643,7 +1728,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-iOS/pushgo.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 56;
+				CURRENT_PROJECT_VERSION = 57;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -1700,7 +1785,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-iOS/NotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 56;
+				CURRENT_PROJECT_VERSION = 57;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1753,7 +1838,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-iOS/NotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 56;
+				CURRENT_PROJECT_VERSION = 57;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -1795,7 +1880,7 @@
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 56;
+				CURRENT_PROJECT_VERSION = 57;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1851,7 +1936,7 @@
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 56;
+				CURRENT_PROJECT_VERSION = 57;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1908,7 +1993,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-watchOS/pushgowatch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 56;
+				CURRENT_PROJECT_VERSION = 57;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_PREVIEWS = YES;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -1948,7 +2033,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-watchOS/pushgowatch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 56;
+				CURRENT_PROJECT_VERSION = 57;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_PREVIEWS = YES;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -1979,6 +2064,68 @@
 				TARGETED_DEVICE_FAMILY = 4;
 				VALIDATE_PRODUCT = YES;
 				WATCHOS_DEPLOYMENT_TARGET = 11.0;
+			};
+			name = Release;
+		};
+		C78601D9A44E026E95904281 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				AUTOMATION_APPLE_EVENTS = NO;
+				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-macOS/pushgomac.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 57;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = W6H9P5MVUB;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SELECTED_FILES = readwrite;
+				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Apps/PushGo-macOS/PushGo-macOS-DMG-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo;
+				PRODUCT_NAME = PushGo;
+				PUSHGO_SPARKLE_FEED_URL = "https://update.pushgo.cn/macos/appcast.xml";
+				PUSHGO_SPARKLE_PUBLIC_ED_KEY = "h7VVJ2MFqdj5SafrF6g3P8VU6VkzHEQYlvwZH9ywLys=";
+				PUSHGO_SPARKLE_SCHEDULED_CHECK_INTERVAL = 21600;
+				REGISTER_APP_GROUPS = YES;
+				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
+				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
+				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
+				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
+				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) PUSHGO_DMG_BUILD";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
 		};
@@ -2072,12 +2219,74 @@
 			};
 			name = Release;
 		};
+		EC3E7C27B066BBA96D6164D2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				AUTOMATION_APPLE_EVENTS = NO;
+				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-macOS/pushgomac.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 57;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = W6H9P5MVUB;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
+				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_RESOURCE_ACCESS_AUDIO_INPUT = NO;
+				ENABLE_RESOURCE_ACCESS_BLUETOOTH = NO;
+				ENABLE_RESOURCE_ACCESS_CALENDARS = NO;
+				ENABLE_RESOURCE_ACCESS_CAMERA = NO;
+				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
+				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
+				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
+				ENABLE_RESOURCE_ACCESS_PRINTING = NO;
+				ENABLE_RESOURCE_ACCESS_USB = NO;
+				ENABLE_USER_SELECTED_FILES = readwrite;
+				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Apps/PushGo-macOS/PushGo-macOS-DMG-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo;
+				PRODUCT_NAME = PushGo;
+				PUSHGO_SPARKLE_FEED_URL = "https://update.pushgo.cn/macos/appcast.xml";
+				PUSHGO_SPARKLE_PUBLIC_ED_KEY = "h7VVJ2MFqdj5SafrF6g3P8VU6VkzHEQYlvwZH9ywLys=";
+				PUSHGO_SPARKLE_SCHEDULED_CHECK_INTERVAL = 21600;
+				REGISTER_APP_GROUPS = YES;
+				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
+				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
+				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = NO;
+				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
+				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) PUSHGO_DMG_BUILD";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
 		F90C050E505296794B85C03F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-watchOS/pushgowatch NotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 56;
+				CURRENT_PROJECT_VERSION = 57;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -2111,6 +2320,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		70C385DDAF62ACCEA4626E09 /* Build configuration list for PBXNativeTarget "PushGo-macOS-DMG" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EC3E7C27B066BBA96D6164D2 /* Debug */,
+				C78601D9A44E026E95904281 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		AA240E592EF1BEA500F812DA /* Build configuration list for PBXNativeTarget "PushGo-macOS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -2195,6 +2413,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		01F218A60EC0A2A33862880B /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.7.0;
+			};
+		};
 		A0AA00012F70000100AA0022 /* XCRemoteSwiftPackageReference "textual" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/gonzalezreal/textual";
@@ -2214,6 +2440,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		3949F99E0D1C96080BD96181 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 01F218A60EC0A2A33862880B /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
 		A0AA00012F70000100AA0014 /* Textual */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A0AA00012F70000100AA0022 /* XCRemoteSwiftPackageReference "textual" */;

@@ -8,6 +8,7 @@ struct SettingsView: View {
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @State private var viewModel = SettingsViewModel()
     @State private var macOverlay: MacOverlay?
+    @State private var betaChannelEnabled: Bool = false
 
     var body: some View {
         navigationContainer {
@@ -21,6 +22,7 @@ struct SettingsView: View {
         .task {
             await environment.refreshLaunchAtLoginStatus()
             viewModel.refresh()
+            betaChannelEnabled = environment.betaChannelEnabled
         }
         .onChange(of: environment.pushRegistrationService.authorizationState) { _, _ in
             viewModel.refresh()
@@ -30,6 +32,12 @@ struct SettingsView: View {
         }
         .onChange(of: environment.launchAtLoginEnabled) { _, _ in
             viewModel.refresh()
+        }
+        .onChange(of: environment.betaChannelEnabled) { _, value in
+            betaChannelEnabled = value
+        }
+        .onChange(of: betaChannelEnabled) { _, value in
+            environment.setBetaChannelEnabled(value)
         }
         .onChange(of: viewModel.successMessage) { _, message in
             guard let message else { return }
@@ -195,6 +203,36 @@ struct SettingsView: View {
                     }
                     .buttonStyle(.appPlain)
                     .accessibilityIdentifier("action.settings.open_decryption")
+                    if environment.supportsInAppUpdates {
+                        SettingsRowDivider()
+                        Button {
+                            environment.checkForUpdatesFromSettings()
+                        } label: {
+                            SettingsActionRow(
+                                iconName: "arrow.triangle.2.circlepath.circle",
+                                title: "检查更新",
+                                detail: "检查并安装可用的新版本",
+                            ) {
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .buttonStyle(.appPlain)
+                        .accessibilityIdentifier("action.settings.check_for_updates")
+                        SettingsRowDivider()
+                        SettingsControlRow(
+                            iconName: "flask",
+                            title: "启用 beta 版本",
+                            detail: "启用后将接收 sparkle:channel=beta 的更新；开启时会立即后台检查一次。",
+                            useFormField: false
+                        ) {
+                            Toggle("", isOn: $betaChannelEnabled)
+                                .toggleStyle(.switch)
+                                .labelsHidden()
+                        }
+                        .accessibilityIdentifier("toggle.settings.beta_channel")
+                    }
                     SettingsRowDivider()
                     SettingsActionRow(
                         iconName: "info.circle",

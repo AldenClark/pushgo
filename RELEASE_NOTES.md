@@ -11,8 +11,10 @@ Policy:
 ## [Unreleased]
 
 ### Improved
-- Improved consistency across event, message, and object pages, including list/detail navigation and settings-related flows.
-- Updated UI copy and localization resources to make key information clearer.
+- Added built-in updater support for self-distributed macOS DMG builds using Sparkle 2.
+- Added a "Enable beta updates" toggle next to "Check for Updates" in macOS Settings, with immediate background check when enabled.
+- Automatic update checks now run silently in the background on a recurring schedule (every 6 hours by default) and notify when a new version is available.
+- DMG release artifacts now use SemVer versioned filenames (for example, `PushGo-macOS-v1.2.0-beta.2.dmg`) for clearer distribution and rollback tracking.
 
 ### Fixed
-- Improved release delivery reliability for beta and release packages.
+- Reduced noisy update-check error prompts during automatic background checks when the network or update source is temporarily unavailable.

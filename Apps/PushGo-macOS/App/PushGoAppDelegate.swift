@@ -25,6 +25,7 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency 
         }
         Task { @MainActor in
             await environment.bootstrap()
+            environment.checkForUpdatesInBackgroundOnLaunchIfNeeded()
         }
 
         Task { @MainActor in

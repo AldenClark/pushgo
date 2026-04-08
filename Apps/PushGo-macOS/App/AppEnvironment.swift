@@ -47,10 +47,14 @@ final class AppEnvironment {
     private(set) var isEventPageEnabled: Bool = true
     private(set) var isThingPageEnabled: Bool = true
     private(set) var launchAtLoginEnabled: Bool = false
+    private(set) var betaChannelEnabled: Bool = false
     private(set) var activeMainTab: MainTab = .messages
     private(set) var channelSubscriptions: [ChannelSubscription] = []
     private var channelSubscriptionLookup: [String: ChannelSubscription] = [:]
     private var isSceneActive = false
+    @ObservationIgnored private let appUpdateManager: any AppUpdateManaging
+    @ObservationIgnored private var didRunStartupUpdateCheck = false
+    @ObservationIgnored private var startupUpdateCheckTask: Task<Void, Never>?
 
     private let channelSubscriptionService = ChannelSubscriptionService()
     @ObservationIgnored private let localStoreFailureStreakThreshold = 3
@@ -65,6 +69,8 @@ final class AppEnvironment {
         self.dataStore = dataStore
         self.pushRegistrationService = pushRegistrationService ?? PushRegistrationService.shared
         self.localizationManager = localizationManager ?? LocalizationManager.shared
+        self.appUpdateManager = AppUpdateManagerFactory.make()
+        self.betaChannelEnabled = appUpdateManager.isBetaChannelEnabled
         messageSyncObserver = DarwinNotificationObserver(name: AppConstants.messageSyncNotificationName) { [weak self] in
             guard let self else { return }
             Task { @MainActor in
@@ -72,6 +78,10 @@ final class AppEnvironment {
             }
         }
         registerDefaultNotificationCategories()
+    }
+
+    deinit {
+        startupUpdateCheckTask?.cancel()
     }
 
     func bootstrap() async {
@@ -185,6 +195,39 @@ final class AppEnvironment {
             return false
         @unknown default:
             return false
+        }
+    }
+
+    var supportsInAppUpdates: Bool {
+        appUpdateManager.isEnabled
+    }
+
+    func checkForUpdatesFromSettings() {
+        guard appUpdateManager.isEnabled else { return }
+        guard appUpdateManager.checkForUpdates() else {
+            showToast(message: "当前版本未配置更新源，暂时无法检查更新。", style: .info, duration: 2.5)
+            return
+        }
+    }
+
+    func setBetaChannelEnabled(_ isEnabled: Bool) {
+        guard appUpdateManager.isEnabled else { return }
+        guard betaChannelEnabled != isEnabled else { return }
+        betaChannelEnabled = isEnabled
+        appUpdateManager.setBetaChannelEnabled(isEnabled)
+        if isEnabled {
+            _ = appUpdateManager.checkForUpdatesInBackground()
+        }
+    }
+
+    func checkForUpdatesInBackgroundOnLaunchIfNeeded() {
+        guard appUpdateManager.isEnabled, !didRunStartupUpdateCheck else { return }
+        didRunStartupUpdateCheck = true
+        startupUpdateCheckTask?.cancel()
+        startupUpdateCheckTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 15_000_000_000)
+            guard let self, !Task.isCancelled else { return }
+            _ = self.appUpdateManager.checkForUpdatesInBackground()
         }
     }
 

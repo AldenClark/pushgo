@@ -412,7 +412,10 @@ platform :ios do
 
   def build_release_dmg!
     project = resolve_from_repo(ENV.fetch("APP_PROJECT", "pushgo.xcodeproj"))
-    scheme = ENV.fetch("APP_MACOS_SCHEME", "PushGo-macOS")
+    scheme = ENV.fetch("APP_MACOS_DMG_SCHEME", ENV.fetch("APP_MACOS_SCHEME", "PushGo-macOS-DMG"))
+    sparkle_xcconfig = resolve_from_repo(
+      ENV.fetch("APP_MACOS_DMG_XCCONFIG", "config/PushGo-macOS-DMG-Sparkle.xcconfig")
+    )
     output_directory = resolve_from_repo(ENV.fetch("BUILD_OUTPUT_DIR", "artifacts/release"))
     dmg_name = ENV.fetch("DMG_OUTPUT_NAME", "PushGo-macOS")
     archive_path = File.join(output_directory, "#{dmg_name}.xcarchive")
@@ -425,10 +428,12 @@ platform :ios do
 
     FileUtils.mkdir_p(output_directory)
     FileUtils.rm_rf([archive_path, export_path, staging_dir, entitlements_dir, dmg_path])
+    UI.user_error!("Sparkle xcconfig not found: #{sparkle_xcconfig}") unless File.exist?(sparkle_xcconfig)
 
     sh(
       "xcodebuild -project #{Shellwords.escape(project)} " \
       "-scheme #{Shellwords.escape(scheme)} " \
+      "-xcconfig #{Shellwords.escape(sparkle_xcconfig)} " \
       "-configuration Release " \
       "-destination 'generic/platform=macOS' " \
       "-archivePath #{Shellwords.escape(archive_path)} " \

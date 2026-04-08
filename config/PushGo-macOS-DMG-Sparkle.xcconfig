@@ -1,0 +1,8 @@
+// Sparkle defaults for self-distributed DMG builds.
+// CI can override these values through APP_MACOS_DMG_XCCONFIG.
+// In xcconfig files, `//` starts a comment.
+// When setting URL values, use `https:/$()/host/path` so Xcode expands it back to `https://host/path`.
+
+PUSHGO_SPARKLE_FEED_URL = https:/$()/update.pushgo.cn/macos
+PUSHGO_SPARKLE_PUBLIC_ED_KEY =
+PUSHGO_SPARKLE_SCHEDULED_CHECK_INTERVAL = 21600
