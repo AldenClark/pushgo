@@ -199,57 +199,35 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency 
     }
 
     private func handleRemoteNotification(_ payload: [String: Any]) async {
-        guard let resolved = await resolveRemoteNotificationPayload(from: payload) else {
-            return
-        }
-        _ = await AppEnvironment.shared.persistRemotePayloadIfNeeded(
-            resolved.payload,
-            requestIdentifier: resolved.requestIdentifier
-        )
-    }
-
-    private func resolveRemoteNotificationPayload(
-        from payload: [String: Any]
-    ) async -> (payload: [AnyHashable: Any], requestIdentifier: String?)? {
         let bridgedPayload: [AnyHashable: Any] = payload.reduce(into: [:]) { result, element in
             result[element.key] = element.value
         }
         let sanitizedPayload = UserInfoSanitizer.sanitize(bridgedPayload)
-        guard let deliveryId = NotificationHandling.providerWakeupPullDeliveryId(from: sanitizedPayload) else {
-            return (
-                payload: sanitizedPayload,
-                requestIdentifier: normalizedIdentifier(sanitizedPayload["delivery_id"] as? String)
+        let wakeupResolution = await NotificationHandling.resolveProviderWakeup(
+            from: sanitizedPayload,
+            dataStore: AppEnvironment.shared.dataStore,
+            fallbackServerConfig: AppEnvironment.shared.serverConfig,
+            channelSubscriptionService: channelSubscriptionService
+        )
+        switch wakeupResolution {
+        case .unresolvedWakeup:
+            return
+        case let .pulled(resolvedPayload, requestIdentifier):
+            _ = await AppEnvironment.shared.persistRemotePayloadIfNeeded(
+                resolvedPayload,
+                requestIdentifier: requestIdentifier
+            )
+        case .notWakeup:
+            let requestIdentifier: String? = {
+                let trimmed = (sanitizedPayload["delivery_id"] as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return trimmed.isEmpty ? nil : trimmed
+            }()
+            _ = await AppEnvironment.shared.persistRemotePayloadIfNeeded(
+                sanitizedPayload,
+                requestIdentifier: requestIdentifier
             )
         }
-        guard let config = await activeServerConfigForRemoteIngress() else {
-            return nil
-        }
-        guard let item = try? await channelSubscriptionService.pullMessage(
-            baseURL: config.baseURL,
-            token: config.token,
-            deliveryId: deliveryId
-        ) else {
-            return nil
-        }
-        let pulledPayload: [AnyHashable: Any] = item.payload.reduce(into: [:]) { result, element in
-            result[element.key] = element.value
-        }
-        return (
-            payload: UserInfoSanitizer.sanitize(pulledPayload),
-            requestIdentifier: deliveryId
-        )
-    }
-
-    private func activeServerConfigForRemoteIngress() async -> ServerConfig? {
-        if let storedConfig = try? await AppEnvironment.shared.dataStore.loadServerConfig()?.normalized() {
-            return storedConfig
-        }
-        return AppEnvironment.shared.serverConfig?.normalized()
-    }
-
-    private nonisolated func normalizedIdentifier(_ value: String?) -> String? {
-        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func configureStatusItem() {

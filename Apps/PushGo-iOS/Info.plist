@@ -26,6 +26,8 @@
 	<true/>
 	<key>PushGoKeychainAccessGroup</key>
 	<string>$(AppIdentifierPrefix)io.ethan.pushgo.shared</string>
+	<key>PushGoDisplayVersion</key>
+	<string>$(PUSHGO_DISPLAY_VERSION)</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

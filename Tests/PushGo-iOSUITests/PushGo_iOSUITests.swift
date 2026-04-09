@@ -59,7 +59,7 @@ final class PushGo_iOSUITests: XCTestCase {
     private let thingFixturePath = fixturePath("rich-thing-detail.json")
     private let thingFixtureId = "thing_p2_rich_001"
     private let messageSeedFixturePath = fixturePath("seed-split.json")
-    nonisolated(unsafe) private var runtimeRoots: [URL] = []
+    private var runtimeRoots: [URL] = []
 
     private static func fixturePath(_ filename: String) -> String {
         URL(fileURLWithPath: #filePath)

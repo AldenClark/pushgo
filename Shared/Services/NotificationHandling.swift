@@ -25,6 +25,12 @@ enum NotificationPersistenceOutcome {
     case failed
 }
 
+enum ProviderWakeupResolution {
+    case notWakeup
+    case pulled(payload: [AnyHashable: Any], requestIdentifier: String)
+    case unresolvedWakeup
+}
+
 enum NotificationPersistenceCoordinator {
     static func persistRemotePayloadIfNeeded(
         _ payload: [AnyHashable: Any],
@@ -314,28 +320,58 @@ enum NotificationHandling {
         return deliveryId
     }
 
-    static func applyPulledPayload(
-        _ payload: [String: String],
-        to content: UNMutableNotificationContent
-    ) {
-        let userInfo = payload.reduce(into: [AnyHashable: Any]()) { result, element in
+#if !os(watchOS)
+    static func resolveProviderWakeup(
+        from payload: [AnyHashable: Any],
+        dataStore: LocalDataStore,
+        fallbackServerConfig: ServerConfig? = nil,
+        channelSubscriptionService: ChannelSubscriptionService
+    ) async -> ProviderWakeupResolution {
+        let sanitized = UserInfoSanitizer.sanitize(payload)
+        guard let deliveryId = providerWakeupPullDeliveryId(from: sanitized) else {
+            return .notWakeup
+        }
+        guard let config = await activeServerConfigForWakeupIngress(
+            dataStore: dataStore,
+            fallbackServerConfig: fallbackServerConfig
+        ) else {
+            return .unresolvedWakeup
+        }
+        guard let item = try? await channelSubscriptionService.pullMessage(
+            baseURL: config.baseURL,
+            token: config.token,
+            deliveryId: deliveryId
+        ) else {
+            return .unresolvedWakeup
+        }
+        let pulledPayload: [AnyHashable: Any] = item.payload.reduce(into: [:]) { result, element in
             result[element.key] = element.value
         }
+        return .pulled(
+            payload: UserInfoSanitizer.sanitize(pulledPayload),
+            requestIdentifier: normalizedPayloadString(item.deliveryId) ?? deliveryId
+        )
+    }
+
+    static func applyResolvedPayload(
+        _ payload: [AnyHashable: Any],
+        to content: UNMutableNotificationContent
+    ) {
+        let userInfo = UserInfoSanitizer.sanitize(payload)
         content.userInfo = userInfo
         if let normalized = normalizeRemoteNotification(userInfo) {
             content.title = normalized.title
             content.body = normalized.body
         } else {
-            content.title = payload["title"]?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            content.body = payload["body"]?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            content.title = normalizedPayloadString(userInfo["title"]) ?? ""
+            content.body = normalizedPayloadString(userInfo["body"]) ?? ""
         }
         content.threadIdentifier = NotificationPayloadSemantics.notificationThreadIdentifier(
             from: userInfo
         ) ?? ""
         content.categoryIdentifier = notificationCategoryIdentifier(for: userInfo)
     }
+#endif
 
     static func isEntityReminderPayload(_ payload: [AnyHashable: Any]) -> Bool {
         entityOpenTargetComponents(from: payload) != nil
@@ -373,4 +409,21 @@ enum NotificationHandling {
             return nil
         }
     }
+
+#if !os(watchOS)
+    private static func activeServerConfigForWakeupIngress(
+        dataStore: LocalDataStore,
+        fallbackServerConfig: ServerConfig?
+    ) async -> ServerConfig? {
+        if let storedConfig = try? await dataStore.loadServerConfig()?.normalized() {
+            return storedConfig
+        }
+        return fallbackServerConfig?.normalized()
+    }
+
+    private static func normalizedPayloadString(_ value: Any?) -> String? {
+        let trimmed = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+#endif
 }

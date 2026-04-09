@@ -1540,14 +1540,32 @@ final class AppEnvironment {
 
     @discardableResult
     func persistNotificationIfNeeded(_ notification: UNNotification) async -> NotificationPersistenceOutcome {
-        let outcome = await NotificationPersistenceCoordinator.persistIfNeeded(
-            notification,
+        let wakeupResolution = await NotificationHandling.resolveProviderWakeup(
+            from: notification.request.content.userInfo,
             dataStore: dataStore,
-            beforeSave: { [weak self] message in
-                guard let self else { return }
-                await self.autoEnableDataPageIfNeeded(for: message)
-            }
+            fallbackServerConfig: serverConfig,
+            channelSubscriptionService: channelSubscriptionService
         )
+        let outcome: NotificationPersistenceOutcome
+        switch wakeupResolution {
+        case let .pulled(payload, requestIdentifier):
+            outcome = await persistRemotePayloadIfNeeded(
+                payload,
+                requestIdentifier: requestIdentifier
+            )
+            return outcome
+        case .unresolvedWakeup:
+            outcome = .rejected
+        case .notWakeup:
+            outcome = await NotificationPersistenceCoordinator.persistIfNeeded(
+                notification,
+                dataStore: dataStore,
+                beforeSave: { [weak self] message in
+                    guard let self else { return }
+                    await self.autoEnableDataPageIfNeeded(for: message)
+                }
+            )
+        }
         applyNotificationPersistenceOutcome(outcome)
         return outcome
     }

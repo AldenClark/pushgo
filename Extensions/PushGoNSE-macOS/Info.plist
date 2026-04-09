@@ -26,6 +26,10 @@
 		<string>com.apple.usernotifications.service</string>
 		<key>NSExtensionPrincipalClass</key>
 		<string>$(PRODUCT_MODULE_NAME).NotificationService</string>
+		<key>Subsystems</key>
+		<array>
+			<string>NSExtensionService_Subsystem</string>
+		</array>
 	</dict>
 </dict>
 </plist>

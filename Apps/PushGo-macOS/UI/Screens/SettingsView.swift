@@ -101,22 +101,7 @@ struct SettingsView: View {
     }
 
     private var appVersionDetail: LocalizedStringKey {
-        let info = Bundle.main.infoDictionary
-        let shortVersion = info?["CFBundleShortVersionString"] as? String
-        let buildVersion = info?["CFBundleVersion"] as? String
-
-        if let shortVersion, !shortVersion.isEmpty,
-           let buildVersion, !buildVersion.isEmpty
-        {
-            return LocalizedStringKey("\(shortVersion) build \(buildVersion)")
-        }
-        if let shortVersion, !shortVersion.isEmpty {
-            return LocalizedStringKey(shortVersion)
-        }
-        if let buildVersion, !buildVersion.isEmpty {
-            return LocalizedStringKey(buildVersion)
-        }
-        return LocalizedStringKey("N/A")
+        LocalizedStringKey(AppVersionDisplay.current())
     }
 
     private var settingsList: some View {

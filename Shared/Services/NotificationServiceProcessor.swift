@@ -22,27 +22,19 @@ final class NotificationServiceProcessor {
         request: UNNotificationRequest,
         content: UNMutableNotificationContent
     ) async -> UNMutableNotificationContent {
-        await pullProviderWakeupIfNeeded(content: content)
+        await resolveProviderWakeupIfNeeded(content: content)
         return await contentPreparer.prepare(content)
     }
 
-    private func pullProviderWakeupIfNeeded(content: UNMutableNotificationContent) async {
-        guard let deliveryId = NotificationHandling.providerWakeupPullDeliveryId(
-            from: content.userInfo
-        ) else {
-            return
+    private func resolveProviderWakeupIfNeeded(content: UNMutableNotificationContent) async {
+        let resolution = await NotificationHandling.resolveProviderWakeup(
+            from: content.userInfo,
+            dataStore: localDataStore,
+            channelSubscriptionService: channelSubscriptionService
+        )
+        if case let .pulled(payload, _) = resolution {
+            NotificationHandling.applyResolvedPayload(payload, to: content)
         }
-        guard let config = try? await localDataStore.loadServerConfig() else {
-            return
-        }
-        guard let item = try? await channelSubscriptionService.pullMessage(
-            baseURL: config.baseURL,
-            token: config.token,
-            deliveryId: deliveryId
-        ) else {
-            return
-        }
-        NotificationHandling.applyPulledPayload(item.payload, to: content)
     }
 
     private func persistMessage(for request: UNNotificationRequest, content: UNMutableNotificationContent) async {

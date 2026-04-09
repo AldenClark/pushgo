@@ -48,9 +48,23 @@ platform :ios do
       parts << "-authenticationKeyID #{Shellwords.escape(key_id)}"
       parts << "-authenticationKeyIssuerID #{Shellwords.escape(issuer_id)}"
     end
+    display_version = resolved_display_version
+    unless display_version.empty?
+      parts << "PUSHGO_DISPLAY_VERSION=#{Shellwords.escape(display_version)}"
+    end
     parts << "DEVELOPMENT_TEAM=#{team_id}" unless team_id.empty?
 
     parts.join(" ")
+  end
+
+  def resolved_display_version
+    display_version = ENV["PUSHGO_DISPLAY_VERSION"].to_s.strip
+    return display_version unless display_version.empty?
+
+    semver_full_version = ENV["SEMVER_FULL_VERSION"].to_s.strip
+    return "" if semver_full_version.empty?
+
+    semver_full_version.start_with?("v", "V") ? semver_full_version : "v#{semver_full_version}"
   end
 
   def ensure_team_id!
@@ -425,6 +439,8 @@ platform :ios do
     dmg_path = File.join(output_directory, "#{dmg_name}.dmg")
     keychain_path = developer_id_keychain_path!
     identity = developer_id_identity!
+    display_version = resolved_display_version
+    archive_xcargs = display_version.empty? ? "" : "PUSHGO_DISPLAY_VERSION=#{Shellwords.escape(display_version)} "
 
     FileUtils.mkdir_p(output_directory)
     FileUtils.rm_rf([archive_path, export_path, staging_dir, entitlements_dir, dmg_path])
@@ -438,6 +454,7 @@ platform :ios do
       "-destination 'generic/platform=macOS' " \
       "-archivePath #{Shellwords.escape(archive_path)} " \
       "archive " \
+      "#{archive_xcargs}" \
       "CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' DEVELOPMENT_TEAM=''"
     )
 

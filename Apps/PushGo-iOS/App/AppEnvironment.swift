@@ -2238,14 +2238,36 @@ final class AppEnvironment {
     }
     @discardableResult
     func persistNotificationIfNeeded(_ notification: UNNotification) async -> NotificationPersistenceOutcome {
-        let outcome = await NotificationPersistenceCoordinator.persistIfNeeded(
-            notification,
+        let wakeupResolution = await NotificationHandling.resolveProviderWakeup(
+            from: notification.request.content.userInfo,
             dataStore: dataStore,
-            beforeSave: { [weak self] message in
-                guard let self else { return }
-                await self.autoEnableDataPageIfNeeded(for: message)
-            }
+            fallbackServerConfig: serverConfig,
+            channelSubscriptionService: channelSubscriptionService
         )
+        let outcome: NotificationPersistenceOutcome
+        switch wakeupResolution {
+        case let .pulled(payload, requestIdentifier):
+            outcome = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
+                payload,
+                requestIdentifier: requestIdentifier,
+                dataStore: dataStore,
+                beforeSave: { [weak self] message in
+                    guard let self else { return }
+                    await self.autoEnableDataPageIfNeeded(for: message)
+                }
+            )
+        case .unresolvedWakeup:
+            outcome = .rejected
+        case .notWakeup:
+            outcome = await NotificationPersistenceCoordinator.persistIfNeeded(
+                notification,
+                dataStore: dataStore,
+                beforeSave: { [weak self] message in
+                    guard let self else { return }
+                    await self.autoEnableDataPageIfNeeded(for: message)
+                }
+            )
+        }
         switch outcome {
         case .duplicate:
             scheduleCountsRefresh()
@@ -2258,6 +2280,7 @@ final class AppEnvironment {
         }
         return outcome
     }
+
     func handleNotificationOpen(notificationRequestId: String) async {
         await handleNotificationOpenInternal(
             notificationRequestId: notificationRequestId,

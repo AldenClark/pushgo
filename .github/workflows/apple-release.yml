@@ -28,7 +28,7 @@ jobs:
       DEVELOPER_ID_APPLICATION_P12_BASE64: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_BASE64 }}
       DEVELOPER_ID_APPLICATION_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_PASSWORD }}
       DEVELOPER_ID_APPLICATION_IDENTITY: ${{ vars.DEVELOPER_ID_APPLICATION_IDENTITY || '' }}
-      PUSHGO_SPARKLE_FEED_URL: ${{ vars.PUSHGO_SPARKLE_FEED_URL || 'https://update.pushgo.cn/macos' }}
+      PUSHGO_SPARKLE_FEED_URL: ${{ vars.PUSHGO_SPARKLE_FEED_URL || 'https://update.pushgo.cn/macos/appcast.xml' }}
       PUSHGO_SPARKLE_SCHEDULED_CHECK_INTERVAL: ${{ vars.PUSHGO_SPARKLE_SCHEDULED_CHECK_INTERVAL || '21600' }}
       FASTLANE_DISABLE_COLORS: "1"
       FASTLANE_SKIP_UPDATE_CHECK: "1"
@@ -99,6 +99,7 @@ jobs:
             echo "SEMVER_VERSION=$semver_version"
             echo "SEMVER_FULL_VERSION=$semver_full_version"
             echo "DMG_OUTPUT_NAME=$dmg_output_name"
+            echo "PUSHGO_DISPLAY_VERSION=v$semver_full_version"
           } >> "$GITHUB_ENV"
 
       - name: Prepare App Store Connect key file for notarization
@@ -135,11 +136,11 @@ jobs:
       - name: Resolve Swift packages
         run: swift package resolve
 
-      - name: Extract release notes from RELEASE_NOTES
+      - name: Extract release notes from release/RELEASE_NOTES
         shell: bash
         run: |
           set -euo pipefail
-          release_notes_file="RELEASE_NOTES.md"
+          release_notes_file="release/RELEASE_NOTES.md"
           if [[ ! -f "$release_notes_file" ]]; then
             echo "Missing $release_notes_file"
             exit 1
@@ -175,7 +176,8 @@ jobs:
 
           release_title="${GITHUB_REF_NAME}"
 
-          release_body="# ${release_title}"$'\n\n'"Source: RELEASE_NOTES [$section]"$'\n\n'"$section_body"
+          release_notes_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_SHA}/release/RELEASE_NOTES.md"
+          release_body="# ${release_title}"$'\n\n'"Source: [release/RELEASE_NOTES.md](${release_notes_url}) [$section]"$'\n\n'"$section_body"
 
           {
             echo "TESTFLIGHT_CHANGELOG<<__PUSHGO_CHANGELOG_EOF__"
@@ -274,6 +276,63 @@ jobs:
       - name: Run fastlane release dmg
         if: steps.resolve.outputs.release_kind == 'release'
         run: bundle _2.5.23_ exec fastlane ios release_dmg
+
+      - name: Generate Sparkle appcast
+        shell: bash
+        run: |
+          set -euo pipefail
+          feed_url="${PUSHGO_SPARKLE_FEED_URL}"
+          feed_base_url="${feed_url%/*}/"
+          track="stable"
+          if [[ "${RELEASE_KIND}" == "beta" ]]; then
+            track="beta"
+          fi
+
+          ./scripts/release_appcast.sh "$track" artifacts/release \
+            --download-url-prefix "$feed_base_url" \
+            --release-notes-url-prefix "$feed_base_url"
+
+          ls -lh release/appcast.xml artifacts/release/*.txt
+
+      - name: Upload Sparkle feed artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: pushgo-macos-sparkle-${{ github.run_id }}
+          path: |
+            release/appcast.xml
+            artifacts/release/*.txt
+          if-no-files-found: error
+
+      - name: Commit Sparkle appcast state
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          target_branch="${DEFAULT_BRANCH:-main}"
+          appcast_snapshot="$RUNNER_TEMP/release-appcast.xml"
+
+          cp release/appcast.xml "$appcast_snapshot"
+          rm -f release/appcast.xml
+
+          git fetch origin "$target_branch"
+          git checkout -B "$target_branch" "origin/$target_branch"
+
+          mkdir -p release
+          cp "$appcast_snapshot" release/appcast.xml
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add release/appcast.xml
+
+          if git diff --cached --quiet -- release/appcast.xml; then
+            echo "release/appcast.xml unchanged; skipping commit"
+            exit 0
+          fi
+
+          git commit -m "Update Sparkle appcast for ${GITHUB_REF_NAME}"
+          git push origin "HEAD:${target_branch}"
 
       - name: Upload signed DMG artifact
         uses: actions/upload-artifact@v7

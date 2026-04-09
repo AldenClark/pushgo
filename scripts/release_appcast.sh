@@ -14,13 +14,16 @@ Options:
   --account <name>                    Sparkle keychain account (default: pushgo)
   --download-url-prefix <url>         Update file base URL (default: https://update.pushgo.cn/macos/)
   --release-notes-url-prefix <url>    Release notes base URL (default: same as download prefix)
-  --output <path>                     Output appcast path (passed to generate_appcast -o)
+  --output <path>                     Additional output copy path after updating release/appcast.xml
   --tool <path>                       Explicit generate_appcast path
   -h, --help                          Show this help
 
 Notes:
   - stable: generates default channel items (no sparkle:channel tag)
   - beta:   generates sparkle:channel=beta items
+  - per-version notes are sourced from release/update-notes/vX.Y.Z(.beta.N).json
+  - persistent appcast state lives at release/appcast.xml
+  - each branch in the feed keeps only its latest version
 EOF
 }
 
@@ -93,7 +96,7 @@ if [[ -z "$release_notes_url_prefix" ]]; then
 fi
 
 if [[ -z "$output_path" ]]; then
-  output_path="${archives_dir%/}/appcast.xml"
+  output_path=""
 fi
 
 if [[ -z "$tool_path" ]]; then
@@ -125,25 +128,174 @@ if [[ ! "$release_notes_url_prefix" =~ ^https?://[^[:space:]]+$ ]]; then
   exit 1
 fi
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "${script_dir}/.." && pwd)"
+update_notes_dir="${repo_root}/release/update-notes"
+state_appcast_path="${repo_root}/release/appcast.xml"
+
+emit_release_notes_from_json() {
+  local source_json_path="$1"
+  local archive_output_base="$2"
+
+  /usr/bin/python3 - "$source_json_path" "$archive_output_base" <<'PY'
+import json
+import pathlib
+import sys
+
+source_json = pathlib.Path(sys.argv[1])
+output_base = pathlib.Path(sys.argv[2])
+required_locales = ["en", "de", "es", "fr", "ja", "ko", "zh-CN", "zh-TW"]
+direct_locale_map = {
+    "en": "en",
+    "de": "de",
+    "es": "es",
+    "fr": "fr",
+    "ja": "ja",
+    "ko": "ko",
+}
+managed_suffixes = [
+    "txt",
+    "en.txt",
+    "de.txt",
+    "es.txt",
+    "fr.txt",
+    "ja.txt",
+    "ko.txt",
+    "zh.txt",
+]
+
+try:
+    payload = json.loads(source_json.read_text(encoding="utf-8"))
+except json.JSONDecodeError as exc:
+    print(f"Error: invalid JSON in {source_json}: {exc}", file=sys.stderr)
+    sys.exit(1)
+
+if not isinstance(payload, dict):
+    print(f"Error: update notes JSON must be an object: {source_json}", file=sys.stderr)
+    sys.exit(1)
+
+missing = []
+for locale in required_locales:
+    value = payload.get(locale)
+    if not isinstance(value, str) or not value.strip():
+      missing.append(locale)
+
+if missing:
+    print(
+        f"Error: missing required locale text in {source_json}: {', '.join(missing)}",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+def write_note(suffix: str, content: str) -> None:
+    output_path = pathlib.Path(f"{output_base}.{suffix}")
+    output_path.write_text(content.rstrip() + "\n", encoding="utf-8")
+
+for suffix in managed_suffixes:
+    output_path = pathlib.Path(f"{output_base}.{suffix}")
+    if output_path.exists():
+        output_path.unlink()
+
+write_note("txt", payload["en"])
+
+for source_locale, target_locale in direct_locale_map.items():
+    write_note(f"{target_locale}.txt", payload[source_locale])
+
+zh_cn = payload["zh-CN"]
+zh_tw = payload["zh-TW"]
+write_note("zh.txt", zh_cn)
+
+if zh_cn.rstrip() != zh_tw.rstrip():
+    print(
+        f"Warning: Sparkle localized release notes currently support only generic 'zh'; "
+        f"using zh-CN for {output_base.name}.zh.txt while retaining zh-TW in {source_json.name}",
+        file=sys.stderr,
+    )
+PY
+}
+
+prepare_release_notes_for_archives() {
+  local archive_path archive_name archive_stem version source_notes_json_path
+  local matched_release_notes
+
+  if [[ ! -d "$update_notes_dir" ]]; then
+    echo "Error: update notes directory does not exist: $update_notes_dir" >&2
+    exit 1
+  fi
+
+  while IFS= read -r archive_path; do
+    archive_name="$(basename "$archive_path")"
+    archive_stem="${archive_name%.*}"
+    matched_release_notes=""
+
+    if [[ "$archive_name" =~ (v[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?) ]]; then
+      version="${BASH_REMATCH[1]}"
+      source_notes_json_path="${update_notes_dir}/${version}.json"
+      if [[ -f "$source_notes_json_path" ]]; then
+        emit_release_notes_from_json "$source_notes_json_path" "${archives_dir%/}/${archive_stem}"
+        continue
+      fi
+    else
+      version=""
+      source_notes_json_path=""
+    fi
+
+    for candidate_ext in html md txt; do
+      if [[ -f "${archives_dir%/}/${archive_stem}.${candidate_ext}" ]]; then
+        matched_release_notes="${archives_dir%/}/${archive_stem}.${candidate_ext}"
+        break
+      fi
+    done
+
+    if [[ -n "$matched_release_notes" ]]; then
+      continue
+    fi
+
+    if [[ -z "$version" ]]; then
+      echo "Error: could not infer version from archive filename: $archive_name" >&2
+      echo "Hint: use names like PushGo-macOS-v1.2.0.dmg or provide a same-basename .txt/.md/.html file." >&2
+      exit 1
+    fi
+
+    if [[ ! -f "$source_notes_json_path" ]]; then
+      echo "Error: missing update notes source for ${version}: $source_notes_json_path" >&2
+      exit 1
+    fi
+  done < <(
+    find "$archives_dir" -maxdepth 1 -type f \
+      ! -name 'appcast.xml' \
+      ! -name '*.txt' \
+      ! -name '*.md' \
+      ! -name '*.html' \
+      ! -name '*.xml' \
+      -print | sort
+  )
+}
+
+prepare_release_notes_for_archives
+
+mkdir -p "$(dirname "$state_appcast_path")"
+
 cmd=(
   "$tool_path"
   --account "$account"
   --download-url-prefix "$download_url_prefix"
   --release-notes-url-prefix "$release_notes_url_prefix"
+  --maximum-versions 1
 )
 
 if [[ "$track" == "beta" ]]; then
   cmd+=(--channel beta)
 fi
 
-cmd+=(-o "$output_path")
+cmd+=(-o "$state_appcast_path")
 
 cmd+=("$archives_dir")
 
 echo "Running: ${cmd[*]}"
 "${cmd[@]}"
 
-appcast_path="${output_path}"
+appcast_path="${state_appcast_path}"
 if [[ ! -f "$appcast_path" ]]; then
   echo "Error: appcast file was not generated: $appcast_path" >&2
   exit 1
@@ -172,6 +324,11 @@ if [[ "$track" == "beta" ]]; then
     echo "Error: beta track was requested but no sparkle:channel=beta item was found in appcast: $appcast_path" >&2
     exit 1
   fi
+fi
+
+if [[ -n "$output_path" ]]; then
+  mkdir -p "$(dirname "$output_path")"
+  cp "$appcast_path" "$output_path"
 fi
 
 echo "Done: appcast generated for track=${track}, archives_dir=${archives_dir}, appcast=${appcast_path}"

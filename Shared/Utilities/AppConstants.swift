@@ -251,6 +251,68 @@ enum AppConstants {
 #endif
 }
 
+enum AppVersionDisplay {
+    private static let displayVersionInfoKey = "PushGoDisplayVersion"
+
+    static func current(bundle: Bundle = .main) -> String {
+        let info = bundle.infoDictionary ?? [:]
+        return resolve(
+            displayVersion: infoValue(for: displayVersionInfoKey, in: info),
+            shortVersion: infoValue(for: "CFBundleShortVersionString", in: info),
+            buildVersion: infoValue(for: "CFBundleVersion", in: info)
+        )
+    }
+
+    static func resolve(
+        displayVersion: String?,
+        shortVersion: String?,
+        buildVersion: String?
+    ) -> String {
+        if let displayVersion = normalized(displayVersion) {
+            return prefixedVersion(displayVersion)
+        }
+        if let shortVersion = normalized(shortVersion) {
+            return prefixedVersion(shortVersion)
+        }
+        if let buildVersion = normalized(buildVersion) {
+            return buildVersion
+        }
+        return "N/A"
+    }
+
+    private static func infoValue(for key: String, in info: [String: Any]) -> String? {
+        if let raw = info[key] as? String {
+            return raw
+        }
+        if let number = info[key] as? NSNumber {
+            return number.stringValue
+        }
+        return nil
+    }
+
+    private static func normalized(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !isBuildSettingPlaceholder(trimmed) else {
+            return nil
+        }
+        return trimmed
+    }
+
+    private static func prefixedVersion(_ value: String) -> String {
+        guard let firstCharacter = value.first else { return value }
+        if firstCharacter == "v" || firstCharacter == "V" {
+            return value
+        }
+        return "v\(value)"
+    }
+
+    private static func isBuildSettingPlaceholder(_ value: String) -> Bool {
+        (value.hasPrefix("$(") && value.hasSuffix(")"))
+            || (value.hasPrefix("${") && value.hasSuffix("}"))
+    }
+}
+
 enum MessageTimestampFormatter {
     static func listTimestamp(
         for date: Date,
