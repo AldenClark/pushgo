@@ -100,14 +100,14 @@ private struct WatchLightEventRow: View {
                 Spacer(minLength: 6)
                 WatchEntityStateBadge(
                     text: normalizedWatchEventStatus(event.state) ?? localizedDefaultWatchCreatedEventStatus(),
-                    color: watchEventStateColor(event.state)
+                    tone: watchEventStateTone(event.state)
                 )
             }
 
             if let summary = event.summary, !summary.isEmpty {
                 Text(summary)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appTextSecondary)
                     .lineLimit(3)
             }
 
@@ -118,7 +118,7 @@ private struct WatchLightEventRow: View {
                 Text(watchDateText(event.updatedAt))
             }
             .font(.caption2)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.appTextSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, WatchEntityVisualTokens.rowVerticalPadding)

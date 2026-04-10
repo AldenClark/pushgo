@@ -105,13 +105,13 @@ private struct WatchLightThingRow: View {
                 if let summary = thing.summary, !summary.isEmpty {
                     Text(summary)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.appTextSecondary)
                         .lineLimit(2)
                 }
 
                 Text(watchDateText(thing.updatedAt))
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appTextSecondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -159,7 +159,7 @@ struct SettingsView: View {
     }
 
     private var settingsBackgroundColor: Color {
-        Color(UIColor.systemBackground)
+        Color.appWindowBackground
     }
 
     private var appVersionDetail: LocalizedStringKey {
@@ -189,7 +189,7 @@ struct SettingsView: View {
                 ) {
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.appTextSecondary)
                 }
             }
             .buttonStyle(.appPlain)
@@ -204,7 +204,7 @@ struct SettingsView: View {
                     .listRowBackground(Color.clear)
             }
 
-            DataPageChipGroupRow(
+            DataPageToggleGroupRow(
                 iconName: "square.3.layers.3d.top.filled",
                 title: "enable_data_pages",
                 messageTitle: LocalizedStringKey(localizationManager.localized("messages")),
@@ -228,7 +228,7 @@ struct SettingsView: View {
                 ) {
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.appTextSecondary)
                 }
             }
             .buttonStyle(.appPlain)
@@ -247,7 +247,7 @@ struct SettingsView: View {
         }
         .listSectionSeparator(.hidden, edges: [.top, .bottom])
         .listStyle(.plain)
-        .listRowSeparatorTint(Color.primary.opacity(0.12))
+        .listRowSeparatorTint(Color.appDividerSubtle)
         .scrollContentBackground(.hidden)
         .background(Color.clear)
     }
@@ -273,14 +273,12 @@ struct SettingsView: View {
                     Task { await viewModel.requestNotificationPermission() }
                 } label: {
                     HStack(spacing: 12) {
-                        Image(systemName: "bell.badge")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(Color.accentColor)
-                            .frame(width: 28, height: 28)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color.accentColor.opacity(0.16))
-                            )
+                        AppIconTile(
+                            systemName: "bell.badge",
+                            size: 28,
+                            cornerRadius: 8,
+                            font: .subheadline.weight(.semibold)
+                        )
                             .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(localizationManager.localized("request_notification_permission"))
@@ -288,12 +286,12 @@ struct SettingsView: View {
                                 .foregroundStyle(.primary)
                             Text(localizationManager.localized("the_system_will_pop_up_an_authorization_prompt"))
                                 .font(.footnote)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.appTextSecondary)
                         }
                         Spacer()
                         Image(systemName: "chevron.right")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.appTextSecondary)
                             .accessibilityHidden(true)
                     }
                 }
@@ -305,14 +303,14 @@ struct SettingsView: View {
                     openNotificationSettings()
                 } label: {
                     HStack(spacing: 12) {
-                        Image(systemName: "bell.slash")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.red)
-                            .frame(width: 28, height: 28)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color.red.opacity(0.16))
-                            )
+                        AppIconTile(
+                            systemName: "bell.slash",
+                            foreground: AppSemanticTone.danger.foreground,
+                            background: .appDangerIconBackground,
+                            size: 28,
+                            cornerRadius: 8,
+                            font: .subheadline.weight(.semibold)
+                        )
                             .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(localizationManager.localized("please_enable_notification_permission_in_system_settings_first"))
@@ -320,13 +318,13 @@ struct SettingsView: View {
                                 .foregroundStyle(.primary)
                             Text(localizationManager.localized("system_notification_permission_is_not_obtained_please_turn_on_notifications_in_the_system_settings_and_try_again"))
                                 .font(.footnote)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.appTextSecondary)
                                 .lineLimit(2)
                         }
                         Spacer()
                         Image(systemName: "arrow.up.right.square")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.appTextSecondary)
                             .accessibilityHidden(true)
                     }
                 }
@@ -377,7 +375,7 @@ struct SettingsView: View {
     @ViewBuilder
     private var watchModeSwitchingOverlay: some View {
         ZStack {
-            Color.black.opacity(0.18)
+            Color.appOverlayScrim
                 .ignoresSafeArea()
             VStack(spacing: 14) {
                 ProgressView()
@@ -396,21 +394,21 @@ struct SettingsView: View {
                         : "Waiting for Apple Watch to switch back to mirror mode. This request will time out automatically if the watch does not respond."
                 )
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appTextSecondary)
                 .multilineTextAlignment(.center)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 18)
             .frame(maxWidth: 300)
-            .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(Color(UIColor.secondarySystemBackground))
-            )
+                .background(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(Color.appSurfaceRaised)
+                )
             .overlay(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+                    .stroke(Color.appCardBorder, lineWidth: 1)
             )
-            .shadow(color: Color.black.opacity(0.12), radius: 16, x: 0, y: 10)
+            .shadow(color: Color.appOverlayShadow, radius: 16, x: 0, y: 10)
         }
         .transition(.opacity)
         .allowsHitTesting(true)
@@ -425,11 +423,11 @@ struct SettingsView: View {
         HStack(alignment: .center, spacing: 12) {
             Image(systemName: iconName)
                 .font(.callout.weight(.semibold))
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(Color.appAccentPrimary)
                 .frame(width: 34, height: 34)
                 .background(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.accentColor.opacity(0.15))
+                        .fill(Color.appInfoIconBackground)
                 )
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -438,7 +436,7 @@ struct SettingsView: View {
                 if let subtitle {
                     Text(subtitle)
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.appTextSecondary)
                 }
             }
             Spacer()
@@ -446,11 +444,9 @@ struct SettingsView: View {
         }
     }
 
-    private func statusPill(text: LocalizedStringKey, color: Color) -> some View {
+    private func statusPill(text: LocalizedStringKey, tone: AppSemanticTone) -> some View {
         HStack(spacing: 6) {
-            Circle()
-                .fill(color)
-                .frame(width: 8, height: 8)
+            AppStatusDot(color: tone.foreground)
             Text(text)
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.primary)
@@ -459,7 +455,7 @@ struct SettingsView: View {
         .padding(.vertical, 6)
         .background(
             Capsule()
-                .fill(color.opacity(0.12))
+                .fill(tone.background)
         )
     }
 
@@ -470,22 +466,13 @@ struct SettingsView: View {
         .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color(UIColor.secondarySystemBackground),
-                            Color(UIColor.secondarySystemBackground).opacity(0.9),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .fill(Color.appSurfaceRaised)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+                .stroke(Color.appCardBorder, lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 6)
+        .shadow(color: Color.appSoftShadow, radius: 10, x: 0, y: 6)
     }
 
     private var manualKeyStatusText: LocalizedStringKey {
@@ -542,11 +529,11 @@ struct SettingsView: View {
     private func statusColor(for status: PushRegistrationService.AuthorizationState) -> Color {
         switch status {
         case .authorized:
-            Color.accentColor
+            AppSemanticTone.info.foreground
         case .denied:
-            .red
+            AppSemanticTone.danger.foreground
         case .notDetermined:
-            Color.accentColor.opacity(0.7)
+            AppSemanticTone.neutral.foreground
         }
     }
 

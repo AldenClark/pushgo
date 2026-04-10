@@ -277,6 +277,14 @@ jobs:
         if: steps.resolve.outputs.release_kind == 'release'
         run: bundle _2.5.23_ exec fastlane ios release_dmg
 
+      - name: Upload release diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pushgo-release-diagnostics-${{ github.run_id }}
+          path: artifacts/release/**
+          if-no-files-found: warn
+
       - name: Generate Sparkle appcast
         shell: bash
         run: |

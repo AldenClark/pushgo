@@ -19,7 +19,7 @@ PushGo policy:
 - Added `scripts/release_appcast.sh` for stable/beta appcast generation with signature and channel validation.
 
 ### Changed
-- Apple release workflow now supports SemVer-driven DMG naming and emits versioned artifacts like `PushGo-macOS-v1.2.0-beta.2.dmg`.
+- Apple release workflow now supports SemVer-driven DMG naming and emits versioned artifacts like `PushGo-macOS-v1.2.0-beta.3.dmg`.
 - Sparkle scheduled check interval is now explicitly configured (default 21600 seconds / 6 hours) for DMG distribution builds.
 - DMG Sparkle runtime config is now injected through dedicated xcconfig inputs for feed URL and check interval while keeping public EdDSA key in project build settings.
 - Release notes extraction remains aligned to release tags (`vX.Y.Z`) and beta tags (`vX.Y.Z-beta.N`) via the `[Unreleased]` section.

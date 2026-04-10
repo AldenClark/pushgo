@@ -7,44 +7,109 @@ import UIKit
 import AppKit
 #endif
 
+enum AppSemanticTone {
+    case info
+    case neutral
+    case success
+    case warning
+    case danger
+
+    var foreground: Color {
+        switch self {
+        case .info:
+            return .appStateInfoForeground
+        case .neutral:
+            return .appStateNeutralForeground
+        case .success:
+            return .appStateSuccessForeground
+        case .warning:
+            return .appStateWarningForeground
+        case .danger:
+            return .appStateDangerForeground
+        }
+    }
+
+    var background: Color {
+        switch self {
+        case .info:
+            return .appStateInfoBackground
+        case .neutral:
+            return .appStateNeutralBackground
+        case .success:
+            return .appStateSuccessBackground
+        case .warning:
+            return .appStateWarningBackground
+        case .danger:
+            return .appStateDangerBackground
+        }
+    }
+
+    var border: Color {
+        switch self {
+        case .info:
+            return .appStateInfoBorder
+        case .neutral:
+            return .appStateNeutralBorder
+        case .success:
+            return .appStateSuccessBorder
+        case .warning:
+            return .appStateWarningBorder
+        case .danger:
+            return .appStateDangerBorder
+        }
+    }
+
+    var mutedForeground: Color {
+        switch self {
+        case .info:
+            return .appTextSecondary
+        case .neutral:
+            return .appTextSecondary
+        case .success:
+            return .appStateSuccessForeground
+        case .warning:
+            return .appStateWarningForeground
+        case .danger:
+            return .appStateDangerForeground
+        }
+    }
+}
+
 extension Color {
     static var appWindowBackground: Color {
-#if os(iOS)
-        Color(UIColor.systemBackground)
-#elseif os(watchOS)
-        Color.black
-#else
-        Color(nsColor: NSColor.windowBackgroundColor)
-#endif
+        appSurfaceBase
     }
 
     static var platformGroupedBackground: Color {
-#if os(iOS)
         appWindowBackground
-#elseif os(watchOS)
-        Color.black
-#else
-        appWindowBackground
-#endif
     }
 
     static var platformCardBackground: Color {
-#if os(iOS)
-        Color(UIColor.secondarySystemBackground)
-#elseif os(watchOS)
-        Color.white.opacity(0.08)
-#else
-        Color(nsColor: NSColor.controlBackgroundColor)
-#endif
+        appSurfaceRaised
     }
 
     static var messageListBackground: Color {
-#if os(iOS)
-        Color(UIColor.systemBackground)
-#elseif os(watchOS)
-        Color.black
-#else
         appWindowBackground
-#endif
     }
+
+    static var appInfoIconBackground: Color {
+        appStateInfoBackground
+    }
+
+    static var appDangerIconBackground: Color {
+        appStateDangerBackground
+    }
+
+    static var appCardBorder: Color {
+        appBorderSubtle
+    }
+
+    static var appDividerSubtle: Color {
+        appBorderSubtle
+    }
+
+    static var appDividerStrong: Color {
+        appBorderStrong
+    }
+
 }

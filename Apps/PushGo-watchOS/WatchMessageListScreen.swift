@@ -69,12 +69,12 @@ struct WatchMessageListScreen: View {
         VStack(spacing: WatchEntityVisualTokens.sectionSpacing) {
             Image(systemName: "tray")
                 .font(.title3)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appTextSecondary)
             Text(localizationManager.localized(
                 "you_can_use_the_pushgo_cli_or_other_integration_tools_to_send_a_test_push_to_the_current_device"
             ))
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.appTextSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .center)
         .listRowInsets(EdgeInsets(top: 12, leading: 0, bottom: 12, trailing: 0))
@@ -112,13 +112,13 @@ private struct WatchLightMessageRowView: View {
                 if let severity = message.severity, !severity.isEmpty {
                     Text(severity.capitalized)
                         .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.appTextSecondary)
                 }
             }
             if !message.body.isEmpty {
                 Text(message.body)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appTextSecondary)
                     .lineLimit(3)
             }
             HStack(spacing: 8) {
@@ -128,7 +128,7 @@ private struct WatchLightMessageRowView: View {
                 }
                 Text(watchDateText(message.receivedAt))
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appTextSecondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

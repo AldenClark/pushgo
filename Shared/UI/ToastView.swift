@@ -2,14 +2,13 @@ import SwiftUI
 
 struct ToastView: View {
     let toast: AppEnvironment.ToastMessage
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
         HStack {
             Text(toast.text)
                 .font(.subheadline)
                 .multilineTextAlignment(.leading)
-                .foregroundStyle(Color.white)
+                .foregroundStyle(Color.appToastForeground)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -21,11 +20,11 @@ struct ToastView: View {
     private var backgroundColor: Color {
         switch toast.style {
         case .info:
-            reduceTransparency ? Color.accentColor : Color.accentColor.opacity(0.92)
+            Color.appToastInfoBackground
         case .success:
-            reduceTransparency ? Color.accentColor : Color.accentColor.opacity(0.92)
+            Color.appToastSuccessBackground
         case .error:
-            reduceTransparency ? Color.red : Color.red.opacity(0.9)
+            Color.appToastErrorBackground
         }
     }
 }

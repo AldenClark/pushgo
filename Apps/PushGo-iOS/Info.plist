@@ -24,10 +24,12 @@
 	<string>public.app-category.developer-tools</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>PushGoKeychainAccessGroup</key>
-	<string>$(AppIdentifierPrefix)io.ethan.pushgo.shared</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Save images</string>
 	<key>PushGoDisplayVersion</key>
 	<string>$(PUSHGO_DISPLAY_VERSION)</string>
+	<key>PushGoKeychainAccessGroup</key>
+	<string>$(AppIdentifierPrefix)io.ethan.pushgo.shared</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

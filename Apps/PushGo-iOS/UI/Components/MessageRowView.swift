@@ -33,12 +33,12 @@ struct MessageRowView: View {
                         if let channelLabel = environment.channelDisplayName(for: message.channel) {
                             Text(channelLabel)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.appTextSecondary)
                                 .lineLimit(2)
                         } else if !message.secondaryText.isEmpty {
                             Text(message.secondaryText)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.appTextSecondary)
                                 .lineLimit(2)
                         }
                     }
@@ -50,7 +50,7 @@ struct MessageRowView: View {
                     HStack(alignment: .center, spacing: 8) {
                         Text(MessageTimestampFormatter.listTimestamp(for: message.receivedAt))
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.appTextSecondary)
                     }
                 }
             }
@@ -62,7 +62,7 @@ struct MessageRowView: View {
             if !message.tags.isEmpty {
                 Text(message.tags.joined(separator: " · "))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appTextSecondary)
                     .lineLimit(1)
             }
 
@@ -111,7 +111,7 @@ struct MessageRowView: View {
     private var bodyPreviewView: some View {
         Text(message.bodyPreview)
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.appTextSecondary)
             .lineLimit(Layout.bodyMaxLines)
             .frame(maxWidth: .infinity, alignment: .leading)
             .layoutPriority(1)
@@ -130,7 +130,7 @@ struct MessageRowView: View {
         if message.isEncrypted {
             let isDecryptFailed = message.decryptionState == .decryptFailed
             let icon = isDecryptFailed ? "lock.slash" : "lock.fill"
-            let color: Color = isDecryptFailed ? .red : .accentColor
+            let color: Color = isDecryptFailed ? AppSemanticTone.danger.foreground : .appAccentPrimary
             Image(systemName: icon)
                 .font(.caption.bold())
                 .foregroundStyle(color)
@@ -149,10 +149,7 @@ struct MessageRowView: View {
 
 private struct UnreadDotView: View {
     var body: some View {
-        Circle()
-            .fill(Color.accentColor)
-            .frame(width: 8, height: 8)
-            .accessibilityLabel(LocalizedStringKey("unread"))
+        AppStatusDot(accessibilityLabel: "unread")
     }
 }
 
@@ -164,14 +161,14 @@ private struct MessageSeverityListBadge: View {
         case .high:
             return (
                 LocalizedStringKey("message_severity_high_compact"),
-                Color.orange.opacity(0.16),
-                Color.orange
+                AppSemanticTone.warning.background,
+                AppSemanticTone.warning.foreground
             )
         case .critical:
             return (
                 LocalizedStringKey("message_severity_critical_compact"),
-                Color.red.opacity(0.14),
-                Color.red
+                AppSemanticTone.danger.background,
+                AppSemanticTone.danger.foreground
             )
         default:
             return nil
@@ -180,15 +177,15 @@ private struct MessageSeverityListBadge: View {
 
     var body: some View {
         if let style {
-            Text(style.label)
-                .font(.caption2.weight(.semibold))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(style.background)
-                )
-                .foregroundStyle(style.foreground)
+            AppCapsuleBadge(
+                foreground: style.foreground,
+                background: style.background,
+                horizontalPadding: 6,
+                verticalPadding: 2,
+            ) {
+                Text(style.label)
+                    .font(.caption2.weight(.semibold))
+            }
                 .accessibilityLabel(style.label)
         }
     }

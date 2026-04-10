@@ -52,8 +52,8 @@ private struct EventDetailPanel: View {
         normalizedEventStatus(event.status) ?? localizedDefaultCreatedEventStatus()
     }
 
-    private var statusColor: Color {
-        eventSeverityColor(severity) ?? eventStateColor(event.state)
+    private var statusTone: AppSemanticTone {
+        eventSeverityTone(severity) ?? eventStateTone(event.state)
     }
 
     private var attrsEntries: [EntityDisplayAttribute] {
@@ -73,18 +73,18 @@ private struct EventDetailPanel: View {
                             .font(.title3.weight(.semibold))
                             .lineLimit(2)
                         Spacer(minLength: 8)
-                        EntityStateBadge(text: statusLabel, color: statusColor)
+                        EntityStateBadge(text: statusLabel, tone: statusTone)
                     }
                     if let summary = event.summary, !summary.isEmpty {
                         Text(summary)
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.appTextSecondary)
                     }
                     if let statusMessage = event.message, !statusMessage.isEmpty {
                         EntityInlineAlert(
                             text: statusMessage,
                             systemImage: eventSeveritySymbol(severity) ?? "info.circle.fill",
-                            tint: eventSeverityColor(severity) ?? .orange
+                            tone: eventSeverityTone(severity) ?? .warning
                         )
                     }
 
@@ -100,7 +100,7 @@ private struct EventDetailPanel: View {
                         .lineLimit(1)
                     }
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appTextSecondary)
 
                     HStack(spacing: 8) {
                         if let thingId = event.thingId, !thingId.isEmpty {
@@ -109,12 +109,12 @@ private struct EventDetailPanel: View {
                         }
                     }
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appTextSecondary)
 
                     if !event.tags.isEmpty {
                         Text(event.tags.joined(separator: " · "))
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.appTextSecondary)
                     }
 
                     if !attrsEntries.isEmpty {
@@ -125,7 +125,7 @@ private struct EventDetailPanel: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Images")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.appTextSecondary)
                             EventAttachmentImageGrid(
                                 urls: imageAttachments,
                                 onTap: { previewImageItem = EventImagePreviewItem(url: $0) }
@@ -208,8 +208,8 @@ private struct EventTimelineRow: View {
         normalizedEventSeverity(point.severity)
     }
 
-    private var statusColor: Color {
-        eventSeverityColor(severity) ?? eventStateColor(point.state)
+    private var statusTone: AppSemanticTone {
+        eventSeverityTone(severity) ?? eventStateTone(point.state)
     }
 
     private var attrsEntries: [EntityDisplayAttribute] {
@@ -222,17 +222,17 @@ private struct EventTimelineRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            EntityTimelineMarker(color: .secondary, isFirst: isFirst, isLast: isLast)
+            EntityTimelineMarker(tone: .neutral, isFirst: isFirst, isLast: isLast)
                 .padding(.vertical, 6)
 
             VStack(alignment: .leading, spacing: EntityVisualTokens.stackSpacing) {
                 HStack(alignment: .center) {
                     Text(EntityDateFormatter.text(point.happenedAt))
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.appTextSecondary)
                     Spacer(minLength: 8)
                     if let status = normalizedEventStatus(point.status) {
-                        EntityStateBadge(text: status, color: statusColor)
+                        EntityStateBadge(text: status, tone: statusTone)
                     }
                 }
 
@@ -244,13 +244,13 @@ private struct EventTimelineRow: View {
                 if let summary = point.displaySummary, !summary.isEmpty {
                     Text(summary)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.appTextSecondary)
                 }
                 if let statusMessage = point.message, !statusMessage.isEmpty {
                     EntityInlineAlert(
                         text: statusMessage,
                         systemImage: eventSeveritySymbol(severity) ?? "info.circle.fill",
-                        tint: eventSeverityColor(severity) ?? .orange
+                        tone: eventSeverityTone(severity) ?? .warning
                     )
                 }
 
@@ -265,7 +265,7 @@ private struct EventTimelineRow: View {
                     }
                 }
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appTextSecondary)
 
                 if !attrsEntries.isEmpty {
                     EventTimelineAttributeRows(
@@ -304,7 +304,7 @@ private struct EventTimelineAttributeRows: View {
         VStack(alignment: .leading, spacing: 6) {
             Label(title, systemImage: "slider.horizontal.3")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appTextSecondary)
                 .lineLimit(1)
             EntityKeyValueRows(entries: entries)
         }
@@ -319,7 +319,7 @@ private struct EventTimelineMetadataRows: View {
         VStack(alignment: .leading, spacing: 6) {
             Label(title, systemImage: "square.stack.3d.up")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appTextSecondary)
                 .lineLimit(1)
 
             VStack(spacing: 0) {
@@ -328,7 +328,7 @@ private struct EventTimelineMetadataRows: View {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(entry.displayLabel)
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.appTextSecondary)
                         Text(entry.value)
                             .font(.caption)
                             .foregroundStyle(.primary)
@@ -337,7 +337,7 @@ private struct EventTimelineMetadataRows: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 4)
                     if index < entries.count - 1 {
-                        Divider().opacity(0.4)
+                        AppInsetDivider()
                     }
                 }
             }
@@ -345,7 +345,7 @@ private struct EventTimelineMetadataRows: View {
             .padding(.vertical, 6)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.primary.opacity(0.04))
+                    .fill(EntityVisualTokens.subtleFillSoft)
             )
         }
     }

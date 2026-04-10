@@ -27,11 +27,11 @@ struct MacMenuBarContentView: View {
                 }
             }
             .frame(width: 360)
-            .background(Color.white.opacity(0.05))
+            .background(Color.appMenuBarChromeFill)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(Color.white.opacity(0.08), lineWidth: 1),
+                    .stroke(Color.appMenuBarChromeStroke, lineWidth: 1),
             )
         }
         .onAppear { refresh() }
@@ -81,14 +81,14 @@ struct MacMenuBarContentView: View {
         VStack(spacing: 8) {
             Image(systemName: "tray")
                 .font(.title2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appTextSecondary)
             Text(
                 localizationManager.localized(
                     "placeholder_no_unread_messages"
                 )
             )
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appTextSecondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 32)
@@ -126,12 +126,12 @@ struct MacMenuBarContentView: View {
                     HStack {
                         if !message.isRead {
                             Circle()
-                                .fill(Color.accentColor)
+                                .fill(Color.appAccentPrimary)
                                 .frame(width: 8, height: 8)
                                 .padding(.trailing, 4)
                             Text(localizationManager.localized("unread"))
                                 .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.appTextSecondary)
                         }
                         Text(message.title)
                             .fixedSize(horizontal: false, vertical: true)
@@ -140,11 +140,11 @@ struct MacMenuBarContentView: View {
                     Text(menuGroupName(for: message))
                         .font(.subheadline)
                         .lineLimit(1)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.appTextSecondary)
 
                     Text(MessageTimestampFormatter.listTimestamp(for: message.receivedAt))
                         .font(.caption)
-                        .foregroundStyle(.secondary.opacity(0.7))
+                        .foregroundStyle(Color.appTextSecondary)
                 }
                 Spacer()
             }
@@ -175,7 +175,7 @@ struct MacMenuBarContentView: View {
             .accessibilityLabel(localizationManager.localized("open_main_window"))
         }
         .buttonStyle(.appPlain)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(Color.appTextSecondary)
         .imageScale(.medium)
     }
 

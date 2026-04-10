@@ -5,11 +5,51 @@ import UserNotifications
 struct MessagePageCursor: Hashable, Sendable {
     let receivedAt: Date
     let id: UUID
+    let isRead: Bool
+
+    init(receivedAt: Date, id: UUID, isRead: Bool = false) {
+        self.receivedAt = receivedAt
+        self.id = id
+        self.isRead = isRead
+    }
 }
 
 struct EntityProjectionPageCursor: Hashable, Sendable {
     let receivedAt: Date
     let id: UUID
+}
+
+enum MessageListSortMode: String, CaseIterable, Equatable, Hashable, Sendable {
+    case timeDescending = "time_desc"
+    case unreadFirst = "unread_first"
+
+    static let preferenceKey = "message_list_sort_mode"
+
+    var titleKey: String {
+        switch self {
+        case .timeDescending:
+            return "message_sort_time_desc"
+        case .unreadFirst:
+            return "message_sort_unread_first"
+        }
+    }
+
+    static func loadPreference(
+        defaults: UserDefaults = AppConstants.sharedUserDefaults()
+    ) -> MessageListSortMode {
+        guard let rawValue = defaults.string(forKey: preferenceKey),
+              let mode = MessageListSortMode(rawValue: rawValue)
+        else {
+            return .timeDescending
+        }
+        return mode
+    }
+
+    func persist(
+        defaults: UserDefaults = AppConstants.sharedUserDefaults()
+    ) {
+        defaults.set(rawValue, forKey: Self.preferenceKey)
+    }
 }
 
 enum MessageQueryFilter: Hashable, Sendable {
@@ -278,6 +318,7 @@ actor LocalDataStore {
     private let localConfigStore = LocalKeychainConfigStore()
     private let pushTokenStore = PushTokenStore()
     private let providerDeviceKeyStore = ProviderDeviceKeyStore()
+    private static let wakeupIngressConfigDefaultsKey = "io.ethan.pushgo.wakeup_ingress.server_config.v1"
 
     init(
         fileManager: FileManager = .default,
@@ -445,11 +486,28 @@ actor LocalDataStore {
     }
 
     func loadServerConfig() async throws -> ServerConfig? {
-        try localConfigStore.loadServerConfig()
+        if let config = try? localConfigStore.loadServerConfig()?.normalized() {
+            return config
+        }
+        guard let data = AppConstants.sharedUserDefaults(suiteName: appGroupIdentifier)
+            .data(forKey: Self.wakeupIngressConfigDefaultsKey)
+        else {
+            return nil
+        }
+        return try? JSONDecoder().decode(ServerConfig.self, from: data).normalized()
     }
 
     func saveServerConfig(_ config: ServerConfig?) async throws {
-        try localConfigStore.saveServerConfig(config)
+        let normalized = config?.normalized()
+        try localConfigStore.saveServerConfig(normalized)
+        let defaults = AppConstants.sharedUserDefaults(suiteName: appGroupIdentifier)
+        guard let normalized else {
+            defaults.removeObject(forKey: Self.wakeupIngressConfigDefaultsKey)
+            return
+        }
+        if let data = try? JSONEncoder().encode(normalized) {
+            defaults.set(data, forKey: Self.wakeupIngressConfigDefaultsKey)
+        }
     }
 
     private func normalizeGatewayKey(_ gateway: String) -> String {
@@ -507,6 +565,42 @@ actor LocalDataStore {
             throw storeUnavailableError
         }
         return try await backend.loadChannelSubscriptions(includeDeleted: includeDeleted)
+    }
+
+    func loadGatewayURLForChannel(
+        channelId: String
+    ) async -> URL? {
+        await loadGatewayURLsForChannel(channelId: channelId, includeDeleted: false).first
+    }
+
+    func loadGatewayURLsForChannel(
+        channelId: String,
+        includeDeleted: Bool = true
+    ) async -> [URL] {
+        let normalizedChannelId = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedChannelId.isEmpty else { return [] }
+        guard let backend else { return [] }
+        let subscriptions = (try? await backend.loadChannelSubscriptions(includeDeleted: includeDeleted)) ?? []
+        let matched = subscriptions
+            .filter { $0.channelId.trimmingCharacters(in: .whitespacesAndNewlines) == normalizedChannelId }
+            .sorted {
+                if $0.updatedAt != $1.updatedAt {
+                    return $0.updatedAt > $1.updatedAt
+                }
+                return normalizeGatewayKey($0.gateway) < normalizeGatewayKey($1.gateway)
+            }
+        var resolved: [URL] = []
+        var seen = Set<String>()
+        for subscription in matched {
+            guard let url = URLSanitizer.validatedServerURL(from: subscription.gateway) else {
+                continue
+            }
+            let dedupeKey = url.absoluteString.lowercased()
+            if seen.insert(dedupeKey).inserted {
+                resolved.append(url)
+            }
+        }
+        return resolved
     }
 
     func upsertChannelSubscription(
@@ -1196,13 +1290,15 @@ actor LocalDataStore {
         limit: Int,
         filter: MessageQueryFilter = .all,
         channel: String? = nil,
+        sortMode: MessageListSortMode = .timeDescending
     ) async throws -> [PushMessage] {
         let backend = try requireBackend()
         let messages = try await backend.loadMessagesPage(
             before: cursor,
             limit: limit,
             filter: filter,
-            channel: channel
+            channel: channel,
+            sortMode: sortMode
         )
         return applyPendingInserts(
             to: messages,
@@ -1216,13 +1312,15 @@ actor LocalDataStore {
         limit: Int,
         filter: MessageQueryFilter = .all,
         channel: String? = nil,
+        sortMode: MessageListSortMode = .timeDescending
     ) async throws -> [PushMessageSummary] {
         let backend = try requireBackend()
         let summaries = try await backend.loadMessageSummariesPage(
             before: cursor,
             limit: limit,
             filter: filter,
-            channel: channel
+            channel: channel,
+            sortMode: sortMode
         )
         return applyPendingInsertsToSummaries(
             base: summaries,
@@ -1262,20 +1360,27 @@ actor LocalDataStore {
         query: String,
         before cursor: MessagePageCursor?,
         limit: Int,
+        sortMode: MessageListSortMode = .timeDescending
     ) async throws -> [PushMessage] {
         let backend = try requireBackend()
-        return try await backend.searchMessagesPage(query: query, before: cursor, limit: limit)
+        return try await backend.searchMessagesPage(
+            query: query,
+            before: cursor,
+            limit: limit,
+            sortMode: sortMode
+        )
     }
 
     func searchMessageSummariesPage(
         query: String,
         before cursor: MessagePageCursor?,
         limit: Int,
+        sortMode: MessageListSortMode = .timeDescending
     ) async throws -> [PushMessageSummary] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
         let backend = try requireBackend()
-        if let searchIndex {
+        if sortMode == .timeDescending, let searchIndex {
             await ensureSearchIndexReady()
             let ftsQuery = Self.searchIndexQuery(from: trimmed)
             if let ids = try? await searchIndex.searchIDs(
@@ -1289,7 +1394,12 @@ actor LocalDataStore {
                 return try await backend.loadMessageSummaries(ids: ids)
             }
         }
-        return try await backend.searchMessageSummariesFallback(query: trimmed, before: cursor, limit: limit)
+        return try await backend.searchMessageSummariesFallback(
+            query: trimmed,
+            before: cursor,
+            limit: limit,
+            sortMode: sortMode
+        )
     }
 
     private func performBackendWrite<T>(
@@ -1699,7 +1809,8 @@ actor LocalDataStore {
                 before: cursor,
                 limit: batchSize,
                 filter: .all,
-                channel: nil
+                channel: nil,
+                sortMode: .timeDescending
             )
             guard let messages, !messages.isEmpty else { break }
             let entries = messages.map { message in
@@ -1710,7 +1821,9 @@ actor LocalDataStore {
                 )
             }
             try? await metadataIndex.bulkReplace(entries: entries)
-            cursor = messages.last.map { MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id) }
+            cursor = messages.last.map {
+                MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
+            }
             if messages.count < batchSize { break }
             if yieldBetweenBatches {
                 await Task.yield()
@@ -3149,7 +3262,8 @@ private actor GRDBStore {
         includeTopLevelOnly: Bool,
         filter: MessageQueryFilter,
         channel: String?,
-        cursor: MessagePageCursor?
+        cursor: MessagePageCursor?,
+        sortMode: MessageListSortMode
     ) -> [String] {
         var conditions: [String] = []
         if includeTopLevelOnly {
@@ -3179,12 +3293,56 @@ private actor GRDBStore {
         }
 
         if let cursor {
-            conditions.append(
-                "(received_at < \(cursor.receivedAt.timeIntervalSince1970) OR (received_at = \(cursor.receivedAt.timeIntervalSince1970) AND id < \(Self.sqlQuoted(cursor.id.uuidString))))"
-            )
+            conditions.append(messageCursorCondition(cursor, sortMode: sortMode))
         }
 
         return conditions
+    }
+
+    private func messageCursorCondition(
+        _ cursor: MessagePageCursor,
+        sortMode: MessageListSortMode
+    ) -> String {
+        switch sortMode {
+        case .timeDescending:
+            return "(received_at < \(cursor.receivedAt.timeIntervalSince1970) OR (received_at = \(cursor.receivedAt.timeIntervalSince1970) AND id < \(Self.sqlQuoted(cursor.id.uuidString))))"
+        case .unreadFirst:
+            let readFlag = cursor.isRead ? 1 : 0
+            return "(is_read > \(readFlag) OR (is_read = \(readFlag) AND (received_at < \(cursor.receivedAt.timeIntervalSince1970) OR (received_at = \(cursor.receivedAt.timeIntervalSince1970) AND id < \(Self.sqlQuoted(cursor.id.uuidString)))))"
+        }
+    }
+
+    private func messageOrderBy(sortMode: MessageListSortMode) -> String {
+        switch sortMode {
+        case .timeDescending:
+            return "received_at DESC, id DESC"
+        case .unreadFirst:
+            return "is_read ASC, received_at DESC, id DESC"
+        }
+    }
+
+    private func messageAppearsAfterCursor(
+        _ message: PushMessage,
+        cursor: MessagePageCursor,
+        sortMode: MessageListSortMode
+    ) -> Bool {
+        switch sortMode {
+        case .timeDescending:
+            if message.receivedAt != cursor.receivedAt {
+                return message.receivedAt < cursor.receivedAt
+            }
+            return message.id.uuidString < cursor.id.uuidString
+        case .unreadFirst:
+            let messageReadFlag = message.isRead ? 1 : 0
+            let cursorReadFlag = cursor.isRead ? 1 : 0
+            if messageReadFlag != cursorReadFlag {
+                return messageReadFlag > cursorReadFlag
+            }
+            if message.receivedAt != cursor.receivedAt {
+                return message.receivedAt < cursor.receivedAt
+            }
+            return message.id.uuidString < cursor.id.uuidString
+        }
     }
 
     private func fetchMessageRecords(
@@ -3218,19 +3376,21 @@ private actor GRDBStore {
         filter: MessageQueryFilter,
         channel: String?,
         before cursor: MessagePageCursor?,
-        limit: Int?
+        limit: Int?,
+        sortMode: MessageListSortMode
     ) throws -> [PushMessage] {
         try read { db in
             let conditions = baseMessageConditions(
                 includeTopLevelOnly: true,
                 filter: filter,
                 channel: channel,
-                cursor: cursor
+                cursor: cursor,
+                sortMode: sortMode
             )
             return try fetchMessages(
                 db: db,
                 where: conditions,
-                orderBy: "received_at DESC, id DESC",
+                orderBy: messageOrderBy(sortMode: sortMode),
                 limit: limit
             )
         }
@@ -4130,33 +4290,59 @@ private actor GRDBStore {
     }
 
     func loadMessages() async throws -> [PushMessage] {
-        try loadMessages(filter: .all, channel: nil, before: nil, limit: nil)
+        try loadMessages(
+            filter: .all,
+            channel: nil,
+            before: nil,
+            limit: nil,
+            sortMode: .timeDescending
+        )
     }
 
     func loadMessages(
         filter: MessageQueryFilter,
         channel: String?
     ) async throws -> [PushMessage] {
-        try loadMessages(filter: filter, channel: channel, before: nil, limit: nil)
+        try loadMessages(
+            filter: filter,
+            channel: channel,
+            before: nil,
+            limit: nil,
+            sortMode: .timeDescending
+        )
     }
 
     func loadMessagesPage(
         before cursor: MessagePageCursor?,
         limit: Int,
         filter: MessageQueryFilter,
-        channel: String?
+        channel: String?,
+        sortMode: MessageListSortMode
     ) async throws -> [PushMessage] {
         guard limit > 0 else { return [] }
-        return try loadMessages(filter: filter, channel: channel, before: cursor, limit: limit)
+        return try loadMessages(
+            filter: filter,
+            channel: channel,
+            before: cursor,
+            limit: limit,
+            sortMode: sortMode
+        )
     }
 
     func loadMessageSummariesPage(
         before cursor: MessagePageCursor?,
         limit: Int,
         filter: MessageQueryFilter,
-        channel: String?
+        channel: String?,
+        sortMode: MessageListSortMode
     ) async throws -> [PushMessageSummary] {
-        try await loadMessagesPage(before: cursor, limit: limit, filter: filter, channel: channel)
+        try await loadMessagesPage(
+            before: cursor,
+            limit: limit,
+            filter: filter,
+            channel: channel,
+            sortMode: sortMode
+        )
             .map(PushMessageSummary.init(message:))
     }
 
@@ -4323,7 +4509,8 @@ private actor GRDBStore {
             before: cursor,
             limit: limit,
             filter: .all,
-            channel: nil
+            channel: nil,
+            sortMode: .timeDescending
         )
         return messages.map { message in
             MessageSearchIndex.Entry(
@@ -4394,19 +4581,23 @@ private actor GRDBStore {
     func searchMessagesPage(
         query: String,
         before cursor: MessagePageCursor?,
-        limit: Int
+        limit: Int,
+        sortMode: MessageListSortMode
     ) async throws -> [PushMessage] {
         guard limit > 0 else { return [] }
         let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return [] }
-        let allMessages = try await loadMessages()
+        let allMessages = try loadMessages(
+            filter: .all,
+            channel: nil,
+            before: nil,
+            limit: nil,
+            sortMode: sortMode
+        )
         let filtered = allMessages.filter { matchesSearchQuery($0, query: normalized) }
         let paged: [PushMessage]
         if let cursor {
-            paged = filtered.filter {
-                $0.receivedAt < cursor.receivedAt
-                    || ($0.receivedAt == cursor.receivedAt && $0.id.uuidString < cursor.id.uuidString)
-            }
+            paged = filtered.filter { messageAppearsAfterCursor($0, cursor: cursor, sortMode: sortMode) }
         } else {
             paged = filtered
         }
@@ -4416,9 +4607,10 @@ private actor GRDBStore {
     func searchMessageSummariesFallback(
         query: String,
         before cursor: MessagePageCursor?,
-        limit: Int
+        limit: Int,
+        sortMode: MessageListSortMode
     ) async throws -> [PushMessageSummary] {
-        try await searchMessagesPage(query: query, before: cursor, limit: limit)
+        try await searchMessagesPage(query: query, before: cursor, limit: limit, sortMode: sortMode)
             .map(PushMessageSummary.init(message:))
     }
 

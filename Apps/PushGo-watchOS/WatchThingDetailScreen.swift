@@ -23,11 +23,11 @@ struct WatchThingDetailScreen: View {
                             if let summary = thing.summary, !summary.isEmpty {
                                 Text(summary)
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.appTextSecondary)
                             }
                             Text(watchDateText(thing.updatedAt))
                                 .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.appTextSecondary)
                         }
                     }
                     .padding(.vertical, WatchEntityVisualTokens.rowVerticalPadding)
@@ -40,7 +40,7 @@ struct WatchThingDetailScreen: View {
                     } else {
                         Text(localizationManager.localized("No attributes"))
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.appTextSecondary)
                     }
                 }
             } else {

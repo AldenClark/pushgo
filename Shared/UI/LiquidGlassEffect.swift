@@ -28,7 +28,7 @@ struct LiquidGlassSurfaceModifier: ViewModifier {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(Color.primary.opacity(0.08), lineWidth: 0.7),
+                    .stroke(Color.appGlassStrokeSubtle, lineWidth: 0.7),
             )
     }
 

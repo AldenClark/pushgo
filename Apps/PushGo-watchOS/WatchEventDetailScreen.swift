@@ -21,22 +21,22 @@ struct WatchEventDetailScreen: View {
                         if let summary = event.summary, !summary.isEmpty {
                             Text(summary)
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.appTextSecondary)
                         }
                         HStack(spacing: 8) {
                             WatchEntityStateBadge(
                                 text: normalizedWatchEventStatus(event.state) ?? localizedDefaultWatchCreatedEventStatus(),
-                                color: watchEventStateColor(event.state)
+                                tone: watchEventStateTone(event.state)
                             )
                             if let severity = event.severity, !severity.isEmpty {
                                 Text(severity)
                                     .font(.caption2)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.appTextSecondary)
                             }
                         }
                         Text("Last updated: \(watchDateText(event.updatedAt))")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.appTextSecondary)
                     }
                     .padding(.vertical, 4)
                 }
@@ -54,7 +54,7 @@ struct WatchEventDetailScreen: View {
                                         .scaledToFit()
                                 default:
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .fill(Color.secondary.opacity(0.2))
+                                        .fill(Color.appSurfaceSunken)
                                         .frame(height: 90)
                                 }
                             }
@@ -72,7 +72,7 @@ struct WatchEventDetailScreen: View {
         .sheet(item: $previewImageItem) { item in
             NavigationStack {
                 ZStack {
-                    Color.black.ignoresSafeArea()
+                    Color.appImagePreviewScrim.ignoresSafeArea()
                     AsyncImage(url: item.url) { phase in
                         switch phase {
                         case let .success(image):
@@ -81,9 +81,9 @@ struct WatchEventDetailScreen: View {
                                 .scaledToFit()
                         case .failure:
                             Image(systemName: "photo")
-                                .foregroundStyle(.white)
+                                .foregroundStyle(Color.appOverlayForeground)
                         default:
-                            ProgressView().tint(.white)
+                            ProgressView().tint(Color.appOverlayForeground)
                         }
                     }
                     .padding(8)

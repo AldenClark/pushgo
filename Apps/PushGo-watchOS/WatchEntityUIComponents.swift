@@ -1,11 +1,46 @@
 import SwiftUI
 
+enum WatchSemanticTone {
+    case info
+    case neutral
+    case warning
+
+    var foreground: Color {
+        switch self {
+        case .info:
+            return .appStateInfoForeground
+        case .neutral:
+            return .appStateNeutralForeground
+        case .warning:
+            return .appStateWarningForeground
+        }
+    }
+
+    var background: Color {
+        switch self {
+        case .info:
+            return .appStateInfoBackground
+        case .neutral:
+            return .appStateNeutralBackground
+        case .warning:
+            return .appStateWarningBackground
+        }
+    }
+
+    var mutedForeground: Color {
+        switch self {
+        case .info, .neutral, .warning:
+            return .appTextSecondary
+        }
+    }
+}
+
 enum WatchEntityVisualTokens {
-    static let subtleFill = Color.secondary.opacity(0.14)
-    static let subtleFillSoft = Color.secondary.opacity(0.1)
-    static let subtleStroke = Color.white.opacity(0.12)
-    static let chipFillSelected = Color.white.opacity(0.2)
-    static let chipFillUnselected = Color.white.opacity(0.12)
+    static let subtleFill = Color.appSurfaceRaised
+    static let subtleFillSoft = Color.appSurfaceSunken
+    static let subtleStroke = Color.appBorderSubtle
+    static let chipFillSelected = Color.appSelectionFill
+    static let chipFillUnselected = Color.appSurfaceSunken
 
     static let rowVerticalPadding: CGFloat = 4
     static let stackSpacing: CGFloat = 8
@@ -30,13 +65,13 @@ struct WatchEntityAvatar: View {
                     default:
                         Image(systemName: "cube")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.appTextSecondary)
                     }
                 }
             } else {
                 Image(systemName: "cube")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appTextSecondary)
             }
         }
         .frame(width: size, height: size)
@@ -47,31 +82,32 @@ struct WatchEntityAvatar: View {
 
 struct WatchEntityStateBadge: View {
     let text: String
-    let color: Color
+    let tone: WatchSemanticTone
 
     var body: some View {
         Text(text)
             .font(.caption2.weight(.semibold))
-            .foregroundStyle(color)
+            .foregroundStyle(tone.foreground)
             .lineLimit(1)
             .padding(.horizontal, 7)
             .padding(.vertical, 2)
-            .background(color.opacity(0.12), in: Capsule())
+            .background(tone.background, in: Capsule())
     }
 }
 
 struct WatchEntityInlineAlert: View {
     let text: String
+    var tone: WatchSemanticTone = .warning
 
     var body: some View {
         HStack(alignment: .top, spacing: 6) {
             Image(systemName: "exclamationmark.circle.fill")
                 .font(.caption2)
-                .foregroundStyle(.orange.opacity(0.72))
+                .foregroundStyle(tone.mutedForeground)
                 .padding(.top, 1)
             Text(text)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appTextSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.vertical, 1)
@@ -86,10 +122,10 @@ struct WatchEntityEmptyState: View {
         VStack(spacing: WatchEntityVisualTokens.sectionSpacing) {
             Image(systemName: icon)
                 .font(.title3)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appTextSecondary)
             Text(text)
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appTextSecondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, alignment: .center)
@@ -101,10 +137,10 @@ struct WatchEntityMissingState: View {
     var body: some View {
         VStack(spacing: 6) {
             Image(systemName: "exclamationmark.triangle")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appTextSecondary)
             Text("Entry not found")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appTextSecondary)
         }
     }
 }
@@ -113,16 +149,20 @@ func watchDateText(_ date: Date) -> String {
     date.formatted(date: .abbreviated, time: .shortened)
 }
 
-func watchEventStateColor(_ state: String?) -> Color {
+func watchEventStateTone(_ state: String?) -> WatchSemanticTone {
     let normalized = state?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() ?? ""
     switch normalized {
     case "ONGOING":
-        return .blue
+        return .info
     case "CLOSED":
-        return .secondary
+        return .neutral
     default:
-        return .secondary
+        return .neutral
     }
+}
+
+func watchEventStateColor(_ state: String?) -> Color {
+    watchEventStateTone(state).foreground
 }
 
 func normalizedWatchEventStatus(_ status: String?) -> String? {

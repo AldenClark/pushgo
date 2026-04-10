@@ -330,6 +330,9 @@ struct MessageListScreen: View {
             bottom: EntityVisualTokens.listRowInsetVertical + 2,
             trailing: 0,
         ))
+        .listRowBackground(
+            EntitySelectionBackground(isSelected: isBatchMode ? selectedMessageIDs.contains(message.id) : selectedMessage?.id == message.id)
+        )
     }
 
     @ViewBuilder
@@ -343,7 +346,7 @@ struct MessageListScreen: View {
                     systemImage: "envelope.open",
                 )
             }
-            .tint(.accentColor)
+            .tint(Color.appAccentPrimary)
         }
     }
 
@@ -365,7 +368,7 @@ struct MessageListScreen: View {
             VStack(spacing: 12) {
                 Image(systemName: "tray")
                     .font(.largeTitle)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appTextSecondary)
                     .accessibilityHidden(true)
                 Text(localizationManager.localized("no_messages_yet"))
                     .font(.headline)
@@ -374,7 +377,7 @@ struct MessageListScreen: View {
                         "you_can_use_the_pushgo_cli_or_other_integration_tools_to_send_a_test_push_to_the_current_device",
                     ))
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appTextSecondary)
             }
             .frame(maxWidth: .infinity)
             Spacer(minLength: 0)
@@ -567,6 +570,13 @@ private extension MessageListScreen {
         }
         ToolbarItemGroup(placement: .primaryAction) {
             if !isBatchMode {
+                Button {
+                    toggleSortMode()
+                } label: {
+                    Image(systemName: isUnreadFirstSortEnabled ? "arrow.up.arrow.down.circle.fill" : "arrow.up.arrow.down.circle")
+                }
+                .accessibilityLabel(localizationManager.localized("message_sort"))
+
                 Menu {
                     channelFilterMenuContent
                 } label: {
@@ -619,17 +629,6 @@ private extension MessageListScreen {
     @ViewBuilder
     private var channelFilterMenuContent: some View {
         Section {
-            Button {
-                viewModel.setFilter(isUnreadOnlyFilterEnabled ? .all : .unread)
-            } label: {
-                channelFilterMenuItemLabel(
-                    title: localizationManager.localized("only_show_unread_messages"),
-                    isSelected: isUnreadOnlyFilterEnabled
-                )
-            }
-        }
-
-        Section {
             ForEach(displayedChannelSummaries) { summary in
                 Button {
                     viewModel.toggleChannelSelection(summary.key)
@@ -643,12 +642,12 @@ private extension MessageListScreen {
         }
     }
 
-    private var isUnreadOnlyFilterEnabled: Bool {
-        viewModel.selectedFilter == .unread
+    private var isUnreadFirstSortEnabled: Bool {
+        viewModel.sortMode == .unreadFirst
     }
 
     private var isFilterMenuHighlighted: Bool {
-        isUnreadOnlyFilterEnabled || viewModel.selectedChannel != nil
+        viewModel.selectedChannel != nil
     }
 
     private func channelFilterMenuItemLabel(title: String, isSelected: Bool) -> some View {
@@ -661,6 +660,12 @@ private extension MessageListScreen {
             }
             Text(title)
         }
+    }
+
+    private func toggleSortMode() {
+        let nextMode: MessageListSortMode = isUnreadFirstSortEnabled ? .timeDescending : .unreadFirst
+        viewModel.setSortMode(nextMode)
+        searchViewModel.setSortMode(nextMode)
     }
 
     private func handleSelect(_ message: PushMessageSummary) {

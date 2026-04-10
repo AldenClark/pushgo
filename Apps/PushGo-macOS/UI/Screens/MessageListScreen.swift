@@ -55,21 +55,25 @@ struct MessageListScreen: View {
 
     private var messagesList: some View {
         ScrollViewReader { proxy in
-            List(selection: $selection) {
+            List {
                 ForEach(viewModel.filteredMessages) { message in
-                    MessageRowView(message: message)
-                        .accessibilityIdentifier("message.row.\(message.id.uuidString)")
-                        .tag(message.id)
-                        .id(message.id)
-                        .listRowInsets(Layout.rowInsets)
-                        .alignmentGuide(.listRowSeparatorLeading) { dimensions in
-                            dimensions[.leading]
-                        }
-                        .alignmentGuide(.listRowSeparatorTrailing) { dimensions in
-                            dimensions[.trailing] - Layout.rowInsets.trailing
-                        }
-                        .listRowBackground(selectedRowBackground(isSelected: selection == message.id))
-                        .onAppear { Task { await viewModel.loadMoreIfNeeded(currentItem: message) } }
+                    Button {
+                        selection = message.id
+                    } label: {
+                        MessageRowView(message: message)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("message.row.\(message.id.uuidString)")
+                    .id(message.id)
+                    .listRowInsets(Layout.rowInsets)
+                    .alignmentGuide(.listRowSeparatorLeading) { dimensions in
+                        dimensions[.leading]
+                    }
+                    .alignmentGuide(.listRowSeparatorTrailing) { dimensions in
+                        dimensions[.trailing] - Layout.rowInsets.trailing
+                    }
+                    .listRowBackground(EntitySelectionBackground(isSelected: selection == message.id))
+                    .onAppear { Task { await viewModel.loadMoreIfNeeded(currentItem: message) } }
                 }
             }
             .listStyle(.plain)
@@ -109,7 +113,7 @@ struct MessageListScreen: View {
                 .alignmentGuide(.listRowSeparatorTrailing) { dimensions in
                     dimensions[.trailing] - Layout.rowInsets.trailing
                 }
-                .listRowBackground(selectedRowBackground(isSelected: batchSelection.contains(message.id)))
+                .listRowBackground(EntitySelectionBackground(isSelected: batchSelection.contains(message.id)))
                 .onAppear { Task { await viewModel.loadMoreIfNeeded(currentItem: message) } }
             }
         }
@@ -120,25 +124,29 @@ struct MessageListScreen: View {
 
     private var searchResultsList: some View {
         ScrollViewReader { proxy in
-            List(selection: $selection) {
+            List {
                 if searchViewModel.displayedResults.isEmpty {
                     searchPlaceholderRow
                 } else {
                     Section {
                         ForEach(searchViewModel.displayedResults) { message in
-                            MessageRowView(message: message)
-                                .accessibilityIdentifier("message.row.\(message.id.uuidString)")
-                                .tag(message.id)
-                                .id(message.id)
-                                .listRowInsets(Layout.rowInsets)
-                                .alignmentGuide(.listRowSeparatorLeading) { dimensions in
-                                    dimensions[.leading]
-                                }
-                                .alignmentGuide(.listRowSeparatorTrailing) { dimensions in
-                                    dimensions[.trailing] - Layout.rowInsets.trailing
-                                }
-                                .listRowBackground(selectedRowBackground(isSelected: selection == message.id))
-                                .onAppear { searchViewModel.loadMoreIfNeeded(currentItem: message) }
+                            Button {
+                                selection = message.id
+                            } label: {
+                                MessageRowView(message: message)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("message.row.\(message.id.uuidString)")
+                            .id(message.id)
+                            .listRowInsets(Layout.rowInsets)
+                            .alignmentGuide(.listRowSeparatorLeading) { dimensions in
+                                dimensions[.leading]
+                            }
+                            .alignmentGuide(.listRowSeparatorTrailing) { dimensions in
+                                dimensions[.trailing] - Layout.rowInsets.trailing
+                            }
+                            .listRowBackground(EntitySelectionBackground(isSelected: selection == message.id))
+                            .onAppear { searchViewModel.loadMoreIfNeeded(currentItem: message) }
                         }
                         if searchViewModel.hasMore {
                             HStack {
@@ -194,7 +202,7 @@ struct MessageListScreen: View {
                         .alignmentGuide(.listRowSeparatorTrailing) { dimensions in
                             dimensions[.trailing] - Layout.rowInsets.trailing
                         }
-                        .listRowBackground(selectedRowBackground(isSelected: batchSelection.contains(message.id)))
+                        .listRowBackground(EntitySelectionBackground(isSelected: batchSelection.contains(message.id)))
                         .onAppear { searchViewModel.loadMoreIfNeeded(currentItem: message) }
                     }
                     if searchViewModel.hasMore {
@@ -228,7 +236,7 @@ struct MessageListScreen: View {
             VStack(spacing: 12) {
                 Image(systemName: "tray")
                     .font(.largeTitle)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appTextSecondary)
                     .accessibilityHidden(true)
                 Text(localizationManager.localized("no_messages_yet"))
                     .font(.headline)
@@ -236,7 +244,7 @@ struct MessageListScreen: View {
                     "you_can_use_the_pushgo_cli_or_other_integration_tools_to_send_a_test_push_to_the_current_device"
                 ))
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appTextSecondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
             }
@@ -272,14 +280,5 @@ struct MessageListScreen: View {
             }
         }
         pendingScrollTarget = nil
-    }
-
-    @ViewBuilder
-    private func selectedRowBackground(isSelected: Bool) -> some View {
-        if isSelected {
-            Color.accentColor.opacity(0.06)
-        } else {
-            Color.clear
-        }
     }
 }

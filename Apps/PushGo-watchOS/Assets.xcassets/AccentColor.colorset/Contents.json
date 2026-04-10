@@ -5,12 +5,30 @@
         "color-space" : "srgb",
         "components" : {
           "alpha" : "1.000",
-          "blue" : "0xEB",
-          "green" : "0x63",
-          "red" : "0x25"
+          "blue" : "0xD0",
+          "green" : "0x57",
+          "red" : "0x0B"
         }
       },
-      "idiom" : "watch"
+      "idiom" : "universal"
+    },
+    {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "dark"
+        }
+      ],
+      "color" : {
+        "color-space" : "srgb",
+        "components" : {
+          "alpha" : "1.000",
+          "blue" : "0xFA",
+          "green" : "0xC7",
+          "red" : "0xA8"
+        }
+      },
+      "idiom" : "universal"
     }
   ],
   "info" : {

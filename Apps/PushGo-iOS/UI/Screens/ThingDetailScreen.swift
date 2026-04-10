@@ -84,8 +84,8 @@ private struct ThingDetailPanel: View {
         normalizedThingState(thing.state)
     }
 
-    private var stateColor: Color {
-        thingStateColor(thing.state)
+    private var stateTone: AppSemanticTone {
+        thingStateTone(thing.state)
     }
 
     private var imageAttachments: [URL] {
@@ -185,7 +185,7 @@ private struct ThingDetailPanel: View {
                 if let summary = thing.summary, !summary.isEmpty {
                     Text(summary)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.appTextSecondary)
                         .lineLimit(4)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -197,7 +197,7 @@ private struct ThingDetailPanel: View {
                     )
                 }
 
-                Divider()
+                AppInsetDivider(verticalPadding: 4)
 
                 Picker("", selection: $selectedTab) {
                     ForEach(Tab.allCases) { tab in
@@ -256,7 +256,7 @@ private struct ThingDetailPanel: View {
                             .font(.title3.weight(.semibold))
                             .lineLimit(2)
                         if lifecycleState == .archived {
-                            EntityStateBadge(text: stateLabel, color: stateColor)
+                            EntityStateBadge(text: stateLabel, tone: stateTone)
                                 .fixedSize(horizontal: true, vertical: true)
                         }
                     }
@@ -270,11 +270,11 @@ private struct ThingDetailPanel: View {
                                 .padding(.vertical, 6)
                                 .background(
                                     Capsule(style: .continuous)
-                                        .fill(Color(uiColor: .secondarySystemFill))
+                                        .fill(EntityVisualTokens.chipFillUnselected)
                                 )
                                 .overlay(
                                     Capsule(style: .continuous)
-                                        .stroke(Color(uiColor: .separator).opacity(0.28), lineWidth: 0.8)
+                                        .stroke(Color.appDividerSubtle, lineWidth: 0.8)
                                 )
                         }
                         .buttonStyle(.plain)
@@ -306,12 +306,12 @@ private struct ThingDetailPanel: View {
                     .lineLimit(1)
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.appTextSecondary)
 
             if let locationSummary {
                 Label(locationSummary, systemImage: "mappin.and.ellipse")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appTextSecondary)
             }
 
             if !externalIDEntries.isEmpty {
@@ -419,7 +419,7 @@ private struct ThingAttachmentImageStrip: View {
                                 .scaledToFill()
                         } placeholder: {
                             Rectangle()
-                                .fill(Color(uiColor: .secondarySystemBackground))
+                                .fill(EntityVisualTokens.secondarySurface)
                         }
                         .frame(width: 88, height: 88)
                         .clipShape(RoundedRectangle(cornerRadius: EntityVisualTokens.radiusSmall, style: .continuous))
@@ -472,7 +472,7 @@ private struct ThingAttributeStateCard: View {
         VStack(alignment: .leading, spacing: 3) {
             Text(entry.displayLabel)
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appTextSecondary)
                 .lineLimit(1)
             Text(entry.value)
                 .font(.caption.weight(.semibold))
@@ -506,7 +506,7 @@ private struct ThingMetadataSheet: View {
                     if entries.isEmpty {
                         Text(localizationManager.localized("thing_detail_no_metadata"))
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.appTextSecondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         EntityKeyValueRows(entries: entries)
@@ -538,7 +538,7 @@ private struct ThingDetailList<Item: Identifiable, RowContent: View>: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, EntityVisualTokens.listRowInsetVertical)
                 if index != items.count - 1 {
-                    Divider()
+                    AppInsetDivider()
                 }
             }
         }
@@ -562,13 +562,13 @@ private struct ThingRelatedMessageRow: View {
                 Spacer(minLength: 8)
                 Text(EntityDateFormatter.relativeText(message.happenedAt))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appTextSecondary)
             }
 
             if let summary = message.summary, !summary.isEmpty {
                 Text(summary)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appTextSecondary)
                     .lineLimit(3)
             }
         }
@@ -578,14 +578,14 @@ private struct ThingRelatedMessageRow: View {
 private struct ThingRelatedUpdateRow: View {
     let update: ThingRelatedUpdate
 
-    private var operationColor: Color {
+    private var operationTone: AppSemanticTone {
         switch update.operation.uppercased() {
         case "ARCHIVE":
-            return thingStateColor("archived")
+            return thingStateTone("archived")
         case "DELETE":
-            return thingStateColor("deleted")
+            return thingStateTone("deleted")
         default:
-            return thingStateColor("active")
+            return thingStateTone("active")
         }
     }
 
@@ -598,21 +598,21 @@ private struct ThingRelatedUpdateRow: View {
                 Spacer(minLength: 8)
                 Text(EntityDateFormatter.relativeText(update.happenedAt))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appTextSecondary)
             }
 
             HStack(spacing: 8) {
-                EntityStateBadge(text: update.operation.uppercased(), color: operationColor)
+                EntityStateBadge(text: update.operation.uppercased(), tone: operationTone)
                 Text(EntityDateFormatter.text(update.happenedAt))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appTextSecondary)
                     .lineLimit(1)
             }
 
             if let summary = update.summary, !summary.isEmpty {
                 Text(summary)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appTextSecondary)
                     .lineLimit(3)
             }
         }
@@ -624,14 +624,14 @@ private struct ThingRelatedUpdateDetailScreen: View {
 
     let update: ThingRelatedUpdate
 
-    private var operationColor: Color {
+    private var operationTone: AppSemanticTone {
         switch update.operation.uppercased() {
         case "ARCHIVE":
-            return thingStateColor("archived")
+            return thingStateTone("archived")
         case "DELETE":
-            return thingStateColor("deleted")
+            return thingStateTone("deleted")
         default:
-            return thingStateColor("active")
+            return thingStateTone("active")
         }
     }
 
@@ -644,12 +644,12 @@ private struct ThingRelatedUpdateDetailScreen: View {
                             .font(.title3.weight(.semibold))
                             .lineLimit(2)
                         Spacer(minLength: 8)
-                        EntityStateBadge(text: update.operation.uppercased(), color: operationColor)
+                        EntityStateBadge(text: update.operation.uppercased(), tone: operationTone)
                     }
 
                     Label(EntityDateFormatter.text(update.happenedAt), systemImage: "clock")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.appTextSecondary)
 
                     if let state = update.state, !state.isEmpty {
                         Text(
@@ -659,7 +659,7 @@ private struct ThingRelatedUpdateDetailScreen: View {
                             )
                         )
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.appTextSecondary)
                     }
 
                     if let summary = update.summary, !summary.isEmpty {

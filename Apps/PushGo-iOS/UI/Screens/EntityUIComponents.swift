@@ -2,15 +2,16 @@ import Foundation
 import SwiftUI
 
 enum EntityVisualTokens {
-    static let pageBackground = Color(uiColor: .systemBackground)
-    static let secondarySurface = Color(uiColor: .secondarySystemBackground)
-    static let tertiarySurface = Color(uiColor: .tertiarySystemBackground)
-    static let subtleFill = Color.primary.opacity(0.04)
-    static let subtleFillSoft = Color.primary.opacity(0.02)
-    static let subtleStroke = Color.primary.opacity(0.08)
-    static let subtleStrokeStrong = Color.primary.opacity(0.1)
-    static let chipFillSelected = Color.primary.opacity(0.12)
-    static let chipFillUnselected = Color.primary.opacity(0.06)
+    static let pageBackground = Color.appWindowBackground
+    static let secondarySurface = Color.appSurfaceRaised
+    static let tertiarySurface = Color.appSurfaceSunken
+    static let subtleFill = Color.appSurfaceSunken
+    static let subtleFillSoft = Color.appSurfaceRaised
+    static let subtleStroke = Color.appBorderSubtle
+    static let subtleStrokeStrong = Color.appBorderStrong
+    static let chipFillSelected = Color.appSelectionFill
+    static let chipFillUnselected = Color.appSurfaceSunken
+    static let selectionFill = Color.appSelectionFill
 
     static let listRowInsetHorizontal: CGFloat = 12
     static let listRowInsetVertical: CGFloat = 10
@@ -24,6 +25,18 @@ enum EntityVisualTokens {
     static let radiusSmall: CGFloat = 10
     static let radiusMedium: CGFloat = 12
     static let radiusLarge: CGFloat = 16
+}
+
+struct EntitySelectionBackground: View {
+    let isSelected: Bool
+
+    var body: some View {
+        if isSelected {
+            Rectangle().fill(EntityVisualTokens.selectionFill)
+        } else {
+            Color.clear
+        }
+    }
 }
 
 struct EntityThumbnail: View {
@@ -43,7 +56,7 @@ struct EntityThumbnail: View {
                     .fill(EntityVisualTokens.secondarySurface)
                 Image(systemName: placeholderSystemImage)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appTextSecondary)
             }
         }
         .frame(width: size, height: size)
@@ -59,35 +72,30 @@ struct EntityThumbnail: View {
 
 struct EntityStateBadge: View {
     let text: String
-    var color: Color = .accentColor
+    var tone: AppSemanticTone = .info
 
     var body: some View {
-        Text(text)
-            .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(color.opacity(0.14))
-            )
-            .foregroundStyle(color)
+        AppCapsuleBadge(foreground: tone.foreground, background: tone.background) {
+            Text(text)
+                .font(.caption2.weight(.semibold))
+        }
     }
 }
 
 struct EntityInlineAlert: View {
     let text: String
     var systemImage: String = "exclamationmark.circle.fill"
-    var tint: Color = .orange
+    var tone: AppSemanticTone = .warning
 
     var body: some View {
         HStack(alignment: .top, spacing: 7) {
             Image(systemName: systemImage)
                 .font(.caption)
-                .foregroundStyle(tint.opacity(0.7))
+                .foregroundStyle(tone.mutedForeground)
                 .padding(.top, 1)
             Text(text)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appTextSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.vertical, 1)
@@ -97,7 +105,7 @@ struct EntityInlineAlert: View {
 struct EntityMetaChip: View {
     let systemImage: String
     let text: String
-    var color: Color = .secondary
+    var color: Color = .appTextSecondary
 
     var body: some View {
         Label {
@@ -107,7 +115,7 @@ struct EntityMetaChip: View {
             Image(systemName: systemImage)
         }
         .font(.caption.weight(.medium))
-        .foregroundStyle(.secondary)
+        .foregroundStyle(color)
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
         .background(
@@ -143,24 +151,24 @@ struct EntityCard<Content: View>: View {
 }
 
 struct EntityTimelineMarker: View {
-    let color: Color
+    let tone: AppSemanticTone
     let isFirst: Bool
     let isLast: Bool
 
     var body: some View {
         VStack(spacing: 0) {
             Rectangle()
-                .fill(isFirst ? Color.clear : Color.secondary.opacity(0.32))
+                .fill(isFirst ? Color.clear : Color.appBorderSubtle)
                 .frame(width: 2)
             Circle()
-                .fill(Color.primary.opacity(0.72))
+                .fill(tone.background)
                 .frame(width: 10, height: 10)
                 .overlay(
                     Circle()
-                        .stroke(Color(uiColor: .systemBackground), lineWidth: 2)
+                        .stroke(tone.foreground, lineWidth: 1)
                 )
             Rectangle()
-                .fill(isLast ? Color.clear : Color.secondary.opacity(0.32))
+                .fill(isLast ? Color.clear : Color.appBorderSubtle)
                 .frame(width: 2)
         }
         .frame(width: 14)
@@ -188,13 +196,12 @@ struct EntityKeyValueRows: View {
                 let entry = entries[index]
                 Text("\(entry.displayLabel) - \(entry.value)")
                     .font(.caption.monospaced())
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.appTextPrimary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
                     .padding(.vertical, EntityVisualTokens.rowVerticalPadding)
                 if index < entries.count - 1 {
-                    Divider()
-                        .opacity(0.55)
+                    AppInsetDivider()
                 }
             }
         }
@@ -213,7 +220,7 @@ struct EntityCodeBlock: View {
     var body: some View {
         Text(text)
             .font(.system(.footnote, design: .monospaced))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.appTextSecondary)
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
@@ -255,13 +262,13 @@ struct EntityEmptyView: View {
         let textBlock = VStack(spacing: 12) {
             Image(systemName: iconName)
                 .font(.largeTitle)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appTextSecondary)
                 .accessibilityHidden(true)
             Text(title)
                 .font(.headline)
             Text(subtitle)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appTextSecondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: subtitleMaxWidth)
         }
@@ -364,51 +371,67 @@ func normalizedThingState(_ state: String?) -> String {
     thingLifecycleState(from: state).rawValue
 }
 
-func thingStateColor(_ state: String?) -> Color {
+func thingStateTone(_ state: String?) -> AppSemanticTone {
     switch thingLifecycleState(from: state) {
     case .active:
-        return .green
+        return .success
     case .archived:
-        return .orange
+        return .warning
     case .deleted:
-        return .red
+        return .danger
     case .unknown:
-        return .secondary
+        return .neutral
+    }
+}
+
+func thingStateColor(_ state: String?) -> Color {
+    thingStateTone(state).foreground
+}
+
+func eventStateTone(_ state: String?) -> AppSemanticTone {
+    switch eventLifecycleState(from: state) {
+    case .ongoing:
+        return .info
+    case .closed:
+        return .neutral
+    case .unknown:
+        return .neutral
     }
 }
 
 func eventStateColor(_ state: String?) -> Color {
-    switch eventLifecycleState(from: state) {
-    case .ongoing:
-        return .blue
-    case .closed:
-        return .secondary
-    case .unknown:
-        return .secondary
-    }
+    eventStateTone(state).foreground
 }
 
 func normalizedEventSeverity(_ severity: String?) -> EventSeverity? {
     EventSeverity(rawValueNormalized: severity)
 }
 
-func eventSeverityColor(_ severity: EventSeverity?) -> Color? {
+func eventSeverityTone(_ severity: EventSeverity?) -> AppSemanticTone? {
     switch severity {
     case .critical:
-        return .red
+        return .danger
     case .high:
-        return .orange
+        return .warning
     case .normal:
-        return .blue
+        return .info
     case .low:
-        return .indigo
+        return .info
     case nil:
         return nil
     }
 }
 
+func eventSeverityColor(_ severity: EventSeverity?) -> Color? {
+    eventSeverityTone(severity)?.foreground
+}
+
 func eventSeverityColor(_ severity: String?) -> Color? {
     eventSeverityColor(normalizedEventSeverity(severity))
+}
+
+func eventSeverityTone(_ severity: String?) -> AppSemanticTone? {
+    eventSeverityTone(normalizedEventSeverity(severity))
 }
 
 func eventSeveritySymbol(_ severity: EventSeverity?) -> String? {

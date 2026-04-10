@@ -127,7 +127,6 @@ struct MainTabContainerView: View {
             environment.pendingMessageToOpen?.uuidString ?? "",
             environment.pendingEventToOpen ?? "",
             environment.pendingThingToOpen ?? "",
-            "\(environment.unreadMessageCount)",
             "\(environment.totalMessageCount)",
         ].joined(separator: "|")
     }
@@ -170,83 +169,40 @@ struct MainTabContainerView: View {
             }
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
-
-            if showsLaunchAtLoginReminder {
-                launchAtLoginReminder
-                    .padding(.horizontal, 12)
-                    .padding(.top, 8)
-                    .padding(.bottom, 12)
-            }
+            .tint(Color.appSelectionFill)
         }
-    }
-
-    private var showsLaunchAtLoginReminder: Bool {
-        !environment.launchAtLoginEnabled
-    }
-
-    private var launchAtLoginReminder: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("sidebar_launch_at_login_reminder_detail")
-                .font(.body)
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(2)
-
-            Button {
-                environment.updateLaunchAtLogin(isEnabled: true)
-            } label: {
-                Text("sidebar_launch_at_login_reminder_action")
-                    .font(.callout.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-            }
-            .buttonStyle(.borderedProminent)
-            .accessibilityIdentifier("sidebar-enable-launch-at-login")
-        }
-        .help(localizationManager.localized("sidebar_launch_at_login_reminder_detail"))
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color(nsColor: .controlBackgroundColor),
-                            Color.orange.opacity(0.08),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.orange.opacity(0.18), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 4)
     }
 
     private func sidebarPrimaryRow(_ tab: MainTab) -> some View {
-        Label {
-            Text(tab.localizedTitle(using: localizationManager))
+        return HStack(spacing: SidebarLayout.rowSpacing) {
+            Label(tab.localizedTitle(using: localizationManager), systemImage: tab.systemImageName)
                 .font(.headline.weight(.semibold))
-        } icon: {
-            sidebarIcon(systemImageName: tab.systemImageName)
+            Spacer(minLength: 8)
+            if tab == .messages {
+                SidebarUnreadBadge()
+            }
         }
+        .padding(.horizontal, SidebarLayout.rowHorizontalPadding)
         .padding(.vertical, SidebarLayout.primaryRowVerticalPadding)
         .accessibilityIdentifier("sidebar-\(tab.accessibilityIdentifier)")
+        .listRowInsets(
+            EdgeInsets(
+                top: SidebarLayout.rowInsetVertical,
+                leading: SidebarLayout.rowInsetHorizontal,
+                bottom: SidebarLayout.rowInsetVertical,
+                trailing: SidebarLayout.rowInsetHorizontal
+            )
+        )
         .listRowSeparator(.hidden)
     }
 
     private enum SidebarLayout {
-        static let primaryRowVerticalPadding: CGFloat = 6
+        static let rowInsetHorizontal: CGFloat = 8
+        static let rowInsetVertical: CGFloat = 2
+        static let rowHorizontalPadding: CGFloat = 10
+        static let primaryRowVerticalPadding: CGFloat = 7
+        static let rowSpacing: CGFloat = 10
     }
-
-    private func sidebarIcon(systemImageName: String) -> some View {
-        let foreground = Color.secondary
-        return Image(systemName: systemImageName)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(foreground)
-    }
-
     @ViewBuilder
     private var detailContent: some View {
         detailView(for: activeTab)
@@ -371,6 +327,41 @@ struct MainTabContainerView: View {
             sidebarSelection = .things
         } else {
             sidebarSelection = .channels
+        }
+    }
+}
+
+private struct SidebarUnreadBadge: View {
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
+
+    private var displayText: String? {
+        let unreadCount = environment.unreadMessageCount
+        guard unreadCount > 0 else { return nil }
+        if unreadCount > 99 {
+            return "99+"
+        }
+        return "\(unreadCount)"
+    }
+
+    var body: some View {
+        if let displayText {
+            Text(displayText)
+                .font(.caption2.weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(Color.appAccentPrimary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .frame(minWidth: 22)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.appOverlayForeground)
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(Color.appBorderSubtle, lineWidth: 0.8)
+                        )
+                )
+                .accessibilityLabel(LocalizedStringKey("unread"))
+                .accessibilityValue(Text(displayText))
         }
     }
 }

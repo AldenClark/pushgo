@@ -61,7 +61,9 @@ struct EventListScreen: View {
                                 bottom: EntityVisualTokens.listRowInsetVertical,
                                 trailing: EntityVisualTokens.listRowInsetHorizontal
                             ))
-                            .listRowBackground(Color.clear)
+                            .listRowBackground(
+                                EntitySelectionBackground(isSelected: isBatchMode ? selectedEventIds.contains(event.id) : selectedEvent?.id == event.id)
+                            )
                             .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
                             .listRowSeparator(index == filteredEventsSnapshot.count - 1 ? .hidden : .visible, edges: .bottom)
                             .onAppear {
@@ -501,8 +503,8 @@ struct EventListRow: View {
         normalizedEventStatus(event.status) ?? localizedDefaultCreatedEventStatus()
     }
 
-    private var statusColor: Color {
-        eventSeverityColor(severity) ?? eventStateColor(event.state)
+    private var statusTone: AppSemanticTone {
+        eventSeverityTone(severity) ?? eventStateTone(event.state)
     }
 
     private var previewImageAttachments: [URL] {
@@ -527,14 +529,14 @@ struct EventListRow: View {
                     .foregroundStyle(isClosed ? .secondary : .primary)
                     .layoutPriority(0)
 
-                EntityStateBadge(text: statusLabel, color: statusColor)
+                EntityStateBadge(text: statusLabel, tone: statusTone)
                     .fixedSize(horizontal: true, vertical: true)
                     .layoutPriority(2)
 
                 Spacer(minLength: 8)
                 Text(EntityDateFormatter.relativeText(event.updatedAt))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appTextSecondary)
                     .lineLimit(1)
                     .layoutPriority(-1)
             }
@@ -550,7 +552,7 @@ struct EventListRow: View {
                 EntityInlineAlert(
                     text: statusMessage,
                     systemImage: eventSeveritySymbol(severity) ?? "info.circle.fill",
-                    tint: isClosed ? .gray : (eventSeverityColor(severity) ?? .orange)
+                    tone: isClosed ? .neutral : (eventSeverityTone(severity) ?? .warning)
                 )
             }
 
@@ -558,7 +560,7 @@ struct EventListRow: View {
                 if let thingId = event.thingId, !thingId.isEmpty {
                     Label(String(thingId.prefix(20)), systemImage: "cube")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.appTextSecondary)
                 }
             }
 
@@ -579,7 +581,7 @@ struct EventListRow: View {
                     if remainingImageAttachmentCount > 0 {
                         Text("+\(remainingImageAttachmentCount)")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.appTextSecondary)
                             .padding(.leading, 4)
                     }
                 }

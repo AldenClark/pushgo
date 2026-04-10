@@ -76,26 +76,25 @@ private struct PushGoRefinedTableStyle: StructuredText.TableStyle {
     private static let borderWidth: CGFloat = 1
     private static let cornerRadius: CGFloat = 10
     private static let overflowRelativeWidth: CGFloat = 1.8
-    @Environment(\.colorScheme) private var colorScheme
 
     private var borderColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.18) : Color.black.opacity(0.14)
+        Color.appBorderStrong
     }
 
     private var dividerColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.16) : Color.black.opacity(0.10)
+        Color.appBorderSubtle
     }
 
     private var containerFillColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.03) : Color.black.opacity(0.02)
+        Color.appSurfaceSunken
     }
 
     private var headerFillColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05)
+        Color.appSurfaceRaised
     }
 
     private var stripeFillColor: Color {
-        colorScheme == .dark ? Color.white.opacity(0.05) : Color.black.opacity(0.025)
+        Color.appSelectionFillMuted
     }
 
     func makeBody(configuration: Configuration) -> some View {

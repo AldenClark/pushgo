@@ -1,5 +1,8 @@
 import SwiftUI
 import AppKit
+#if canImport(Textual)
+import Textual
+#endif
 
 struct MessageDetailScreen: View {
     @Environment(\.dismiss) private var dismiss
@@ -105,23 +108,21 @@ struct MessageDetailScreen: View {
                 VStack(alignment: .leading, spacing: EntityVisualTokens.detailSectionSpacing) {
                     HStack(alignment: .center, spacing: 12) {
                         VStack(alignment: .leading, spacing: 8) {
-                            HStack(alignment: .center, spacing: 8) {
+                            HStack(alignment: .top, spacing: 8) {
                                 MarkdownRenderer(
                                     text: message.title,
-                                    maxNewlines: nil,
                                     font: .title2.weight(.semibold),
                                     foreground: .primary
                                 )
-                                    .multilineTextAlignment(.leading)
-                                    .compatTextSelectionEnabled()
-
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .compatTextSelectionEnabled()
                                 encryptionBadge(for: message)
                             }
 
                             HStack(spacing: 8) {
                                 Text(message.receivedAt.pushgoDetailTimestamp())
                                     .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.appTextSecondary)
                                 if let channelName = environment.channelDisplayName(for: message.channel) {
                                     ChannelTagView(text: channelName)
                                 }
@@ -142,20 +143,33 @@ struct MessageDetailScreen: View {
                     let resolvedBody = message.resolvedBody
                     MarkdownRenderer(
                         text: resolvedBody.rawText,
-                        maxNewlines: nil,
                         font: .body,
                         foreground: .primary
                     )
-                    .compatTextSelectionEnabled()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .compatTextSelectionEnabled()
 
                     if let url = message.url,
                        let safeOpenURL = URLSanitizer.sanitizeExternalOpenURL(url)
                     {
-                        Link(destination: safeOpenURL) {
-                            Label(localizationManager.localized("open_link"), systemImage: "link")
+                        HStack(spacing: 10) {
+                            Link(destination: safeOpenURL) {
+                                Label(localizationManager.localized("open_link"), systemImage: "link")
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .appButtonHeight()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                            Button {
+                                copyText(safeOpenURL.absoluteString, toastKey: "link_copied")
+                            } label: {
+                                Image(systemName: "doc.on.doc")
+                            }
+                            .buttonStyle(.bordered)
+                            .appButtonHeight()
+                            .accessibilityIdentifier("action.message.copy_link")
+                            .accessibilityLabel(localizationManager.localized("copy_content"))
                         }
-                        .buttonStyle(.borderedProminent)
-                        .appButtonHeight()
                     }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -198,11 +212,20 @@ struct MessageDetailScreen: View {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(item.displayLabel)
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.appTextSecondary)
                         Text(item.value)
                             .font(.body)
                             .foregroundStyle(.primary)
                             .textSelection(.enabled)
+                        Button {
+                            copyText(item.value)
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("action.message.copy_metadata_value.\(index)")
+                        .accessibilityLabel(localizationManager.localized("copy_content"))
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -298,34 +321,34 @@ struct MessageDetailScreen: View {
                 .padding(.vertical, 4)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(badgeContent.color.opacity(0.12)),
+                        .fill(badgeContent.tone.background),
                 )
-                .foregroundStyle(badgeContent.color)
+                .foregroundStyle(badgeContent.tone.foreground)
                 .labelStyle(.titleAndIcon)
         } else {
             EmptyView()
         }
     }
 
-    private func badgeContent(for message: PushMessage) -> (icon: String, color: Color, text: String)? {
+    private func badgeContent(for message: PushMessage) -> (icon: String, tone: AppSemanticTone, text: String)? {
         if let state = message.decryptionState {
             switch state {
             case .decryptFailed:
                 return (
                     "lock.slash",
-                    .red,
+                    .danger,
                     localizationManager.localized("decryption_failed_the_original_text_has_been_displayed")
                 )
             case .decryptOk:
                 return (
                     "lock.open.fill",
-                    .accentColor,
+                    .info,
                     localizationManager.localized("decrypted")
                 )
             case .notConfigured, .algMismatch:
                 return (
                     "lock.fill",
-                    .accentColor,
+                    .info,
                     localizationManager.localized("encrypted")
                 )
             }
@@ -334,7 +357,7 @@ struct MessageDetailScreen: View {
         if message.isEncrypted {
             return (
                 "lock.fill",
-                .accentColor,
+                .info,
                 localizationManager.localized("encrypted")
             )
         }
@@ -362,13 +385,13 @@ struct MessageDetailScreen: View {
         if severity == .critical {
             Text(localizationManager.localized("message_severity_critical_hint"))
                 .font(.caption)
-                .foregroundStyle(Color.red.opacity(0.9))
+                .foregroundStyle(AppSemanticTone.danger.foreground)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
                     RoundedRectangle(cornerRadius: EntityVisualTokens.radiusSmall, style: .continuous)
-                        .fill(Color.red.opacity(0.08))
+                        .fill(AppSemanticTone.danger.background)
                 )
         }
     }
@@ -382,26 +405,26 @@ struct MessageDetailScreen: View {
         case .low:
             return (
                 localizationManager.localized("message_severity_low"),
-                EntityVisualTokens.chipFillUnselected,
-                .secondary
+                AppSemanticTone.info.background,
+                AppSemanticTone.info.foreground
             )
         case .medium:
             return (
                 localizationManager.localized("message_severity_medium"),
-                EntityVisualTokens.chipFillUnselected,
-                .secondary
+                AppSemanticTone.info.background,
+                AppSemanticTone.info.foreground
             )
         case .high:
             return (
                 localizationManager.localized("message_severity_high"),
-                Color.orange.opacity(0.16),
-                .orange
+                AppSemanticTone.warning.background,
+                AppSemanticTone.warning.foreground
             )
         case .critical:
             return (
                 localizationManager.localized("message_severity_critical"),
-                Color.red.opacity(0.14),
-                .red
+                AppSemanticTone.danger.background,
+                AppSemanticTone.danger.foreground
             )
         case .none:
             return nil
@@ -425,6 +448,16 @@ struct MessageDetailScreen: View {
         .padding()
     }
 
+    private func copyText(_ text: String, toastKey: String = "message_content_copied") {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        PushGoSystemInteraction.copyTextToPasteboard(trimmed)
+        environment.showToast(
+            message: localizationManager.localized(toastKey),
+            style: .success,
+            duration: 1.2
+        )
+    }
 }
 
 private struct ImagePreview: Identifiable {
@@ -442,9 +475,9 @@ private struct ChannelTagView: View {
             .padding(.vertical, 4)
             .background(
                 Capsule(style: .continuous)
-                    .fill(Color.accentColor.opacity(0.12))
+                    .fill(AppSemanticTone.info.background)
             )
-            .foregroundStyle(Color.accentColor)
+            .foregroundStyle(AppSemanticTone.info.foreground)
             .lineLimit(1)
     }
 }
@@ -453,7 +486,12 @@ private struct ChannelTagView: View {
 private extension View {
     @ViewBuilder
     func compatTextSelectionEnabled() -> some View {
+#if canImport(Textual)
+        self
+            .textual.textSelection(.enabled)
+#else
         textSelection(.enabled)
+#endif
     }
 }
 

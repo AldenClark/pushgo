@@ -41,9 +41,9 @@ enum NotificationPersistenceCoordinator {
         if NotificationHandling.shouldSkipPersistence(for: payload) {
             return .rejected
         }
-        guard let normalized = NotificationHandling.normalizeRemoteNotification(payload) else {
-            return .rejected
-        }
+        let normalized = NotificationHandling.normalizeRemoteNotification(payload)
+            ?? NotificationHandling.fallbackNormalizedRemoteNotification(payload)
+        guard let normalized else { return .rejected }
 
         var rawPayload = normalized.rawPayload.reduce(into: [String: AnyCodable]()) { result, element in
             result[element.key] = AnyCodable(element.value)
@@ -212,6 +212,11 @@ enum NotificationHandling {
         let shouldReloadCounts: Bool
         let shouldPresentAlert: Bool
     }
+
+    private struct WakeupServerCandidate {
+        let config: ServerConfig
+        let source: String
+    }
 #endif
 
     struct EntityOpenTargetComponents: Equatable {
@@ -296,6 +301,68 @@ enum NotificationHandling {
         )
     }
 
+    #if !os(watchOS)
+    static func fallbackNormalizedRemoteNotification(
+        _ userInfo: [AnyHashable: Any]
+    ) -> NormalizedRemoteNotification? {
+        let sanitized = UserInfoSanitizer.sanitize(userInfo)
+        if providerWakeupPullDeliveryId(from: sanitized) != nil {
+            return nil
+        }
+        let hasCiphertext = (sanitized["ciphertext"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty == false
+        guard hasCiphertext else {
+            return nil
+        }
+        let rawPayload = sanitized
+        let deliveryId = (sanitized["delivery_id"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let messageId = (sanitized["message_id"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = (sanitized["title"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedTitle: String
+        if let title, !title.isEmpty {
+            normalizedTitle = title
+        } else {
+            normalizedTitle = "收到消息"
+        }
+        let body = (sanitized["body"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedBody: String
+        if let body, !body.isEmpty {
+            normalizedBody = body
+        } else {
+            normalizedBody = "消息已收到，等待解密。"
+        }
+        let channel = normalizedPayloadString(sanitized["channel"])
+        let entityType = ((sanitized["entity_type"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased())
+        let normalizedEntityType = (entityType?.isEmpty == false ? entityType : nil) ?? "message"
+        let entityId = normalizedPayloadString(sanitized["entity_id"]) ?? messageId ?? deliveryId
+        let thingId = normalizedPayloadString(sanitized["thing_id"])
+        let decryptionState = ((sanitized["decryption_state"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines))
+            .flatMap(PushMessage.DecryptionState.init(rawValue:))
+        return NormalizedRemoteNotification(
+            title: normalizedTitle,
+            body: normalizedBody,
+            hasExplicitTitle: true,
+            channel: channel,
+            url: nil,
+            rawPayload: rawPayload,
+            decryptionState: decryptionState,
+            messageId: messageId,
+            operationId: nil,
+            entityType: normalizedEntityType,
+            entityId: entityId,
+            thingId: thingId
+        )
+    }
+    #endif
+
     static func shouldSkipPersistence(for payload: [AnyHashable: Any]) -> Bool {
         let sanitized = UserInfoSanitizer.sanitize(payload)
         return normalizedPayloadBoolean(sanitized["_skip_persist"]) == true
@@ -324,33 +391,43 @@ enum NotificationHandling {
     static func resolveProviderWakeup(
         from payload: [AnyHashable: Any],
         dataStore: LocalDataStore,
-        fallbackServerConfig: ServerConfig? = nil,
+        fallbackServerConfig _: ServerConfig? = nil,
         channelSubscriptionService: ChannelSubscriptionService
     ) async -> ProviderWakeupResolution {
         let sanitized = UserInfoSanitizer.sanitize(payload)
         guard let deliveryId = providerWakeupPullDeliveryId(from: sanitized) else {
             return .notWakeup
         }
-        guard let config = await activeServerConfigForWakeupIngress(
+        let candidates = await activeServerConfigsForWakeupIngress(
             dataStore: dataStore,
-            fallbackServerConfig: fallbackServerConfig
-        ) else {
-            return .unresolvedWakeup
-        }
-        guard let item = try? await channelSubscriptionService.pullMessage(
-            baseURL: config.baseURL,
-            token: config.token,
-            deliveryId: deliveryId
-        ) else {
-            return .unresolvedWakeup
-        }
-        let pulledPayload: [AnyHashable: Any] = item.payload.reduce(into: [:]) { result, element in
-            result[element.key] = element.value
-        }
-        return .pulled(
-            payload: UserInfoSanitizer.sanitize(pulledPayload),
-            requestIdentifier: normalizedPayloadString(item.deliveryId) ?? deliveryId
+            payload: sanitized
         )
+        guard !candidates.isEmpty else {
+            return .unresolvedWakeup
+        }
+
+        for candidate in candidates {
+            do {
+                guard let item = try await channelSubscriptionService.pullMessage(
+                    baseURL: candidate.config.baseURL,
+                    token: candidate.config.token,
+                    deliveryId: deliveryId
+                ) else {
+                    continue
+                }
+                let pulledPayload: [AnyHashable: Any] = item.payload.reduce(into: [:]) { result, element in
+                    result[element.key] = element.value
+                }
+                return .pulled(
+                    payload: UserInfoSanitizer.sanitize(pulledPayload),
+                    requestIdentifier: normalizedPayloadString(item.deliveryId) ?? deliveryId
+                )
+            } catch {
+                continue
+            }
+        }
+
+        return .unresolvedWakeup
     }
 
     static func applyResolvedPayload(
@@ -411,19 +488,70 @@ enum NotificationHandling {
     }
 
 #if !os(watchOS)
-    private static func activeServerConfigForWakeupIngress(
+    private static func activeServerConfigsForWakeupIngress(
         dataStore: LocalDataStore,
-        fallbackServerConfig: ServerConfig?
-    ) async -> ServerConfig? {
-        if let storedConfig = try? await dataStore.loadServerConfig()?.normalized() {
-            return storedConfig
+        payload: [String: Any]
+    ) async -> [WakeupServerCandidate] {
+        var candidates: [WakeupServerCandidate] = []
+        var dedupe = Set<String>()
+        func appendCandidate(baseURL: URL, token: String?, source: String) {
+            let normalizedConfig = ServerConfig(
+                baseURL: baseURL,
+                token: token,
+                notificationKeyMaterial: nil
+            ).normalized()
+            let dedupeKey = "\(normalizedConfig.baseURL.absoluteString.lowercased())|\(normalizedConfig.token ?? "")"
+            guard dedupe.insert(dedupeKey).inserted else {
+                return
+            }
+            candidates.append(WakeupServerCandidate(config: normalizedConfig, source: source))
         }
-        return fallbackServerConfig?.normalized()
+
+        if let channelId = normalizedPayloadString(payload["channel_id"]) {
+            let urls = await dataStore.loadGatewayURLsForChannel(
+                channelId: channelId,
+                includeDeleted: true
+            )
+            for url in urls {
+                appendCandidate(
+                    baseURL: url,
+                    token: nil,
+                    source: "channel_subscriptions.channel_id"
+                )
+            }
+        }
+
+        if let gatewayURL = wakeupGatewayURL(from: payload) {
+            appendCandidate(
+                baseURL: gatewayURL,
+                token: nil,
+                source: "payload.base_url"
+            )
+        }
+
+        return candidates
     }
 
     private static func normalizedPayloadString(_ value: Any?) -> String? {
         let trimmed = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func wakeupGatewayURL(from payload: [String: Any]) -> URL? {
+        let candidates = [
+            normalizedPayloadString(payload["gateway"]),
+            normalizedPayloadString(payload["gateway_url"]),
+            normalizedPayloadString(payload["base_url"]),
+            normalizedPayloadString(payload["server"]),
+            normalizedPayloadString(payload["server_url"]),
+        ]
+        for candidate in candidates {
+            guard let candidate else { continue }
+            if let url = URLSanitizer.validatedServerURL(from: candidate) {
+                return url
+            }
+        }
+        return nil
     }
 #endif
 }

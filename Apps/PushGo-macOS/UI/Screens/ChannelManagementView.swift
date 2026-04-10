@@ -32,11 +32,13 @@ struct ChannelManagementView: View {
                     )
                     .accessibilityIdentifier("state.channels.empty")
                 } else {
-                    List {
-                        channelList
+                    ScrollView {
+                        VStack(spacing: 12) {
+                            channelList
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 20)
                     }
-                    .listStyle(.inset)
-                    .scrollContentBackground(.hidden)
                 }
             }
             .background(channelBackgroundColor)
@@ -131,10 +133,8 @@ struct ChannelManagementView: View {
     }
 
     private var channelList: some View {
-        Section {
-            ForEach(environment.channelSubscriptions) { subscription in
-                channelRow(subscription)
-            }
+        ForEach(environment.channelSubscriptions) { subscription in
+            channelRow(subscription)
         }
     }
 
@@ -148,14 +148,12 @@ struct ChannelManagementView: View {
                 copyChannelId(channelId)
             } label: {
                 HStack(alignment: .center, spacing: 16) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.accentColor.opacity(0.14))
-                        Image(systemName: "dot.radiowaves.left.and.right")
-                            .font(.title3.weight(.semibold))
-                            .foregroundStyle(Color.accentColor)
-                    }
-                    .frame(width: 38, height: 38)
+                    AppIconTile(
+                        systemName: "dot.radiowaves.left.and.right",
+                        size: 38,
+                        cornerRadius: 19,
+                        font: .title3.weight(.semibold)
+                    )
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(displayName)
@@ -167,7 +165,7 @@ struct ChannelManagementView: View {
                         if !name.isEmpty {
                             Text(channelId)
                                 .font(.caption2.monospaced())
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.appTextSecondary)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                         }
@@ -197,28 +195,25 @@ struct ChannelManagementView: View {
             } label: {
                 Image(systemName: "ellipsis.circle.fill")
                     .font(.title3.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appTextSecondary)
                     .frame(width: 32, height: 32)
                     .background(
                         Circle()
-                            .fill(Color.primary.opacity(0.06))
+                            .fill(Color.appSurfaceSunken)
                     )
             }
             .buttonStyle(.plain)
         }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 12)
+        .padding(.vertical, 14)
+        .padding(.horizontal, 14)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color.platformCardBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                .stroke(Color.appCardBorder, lineWidth: 1)
         )
-        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-        .listRowSeparator(.hidden)
-        .listRowBackground(Color.clear)
         .disabled(isRemoving || isRenaming)
     }
 
@@ -300,7 +295,7 @@ struct ChannelManagementView: View {
             {
                 Text(localizationManager.localized("channel_password_invalid_length"))
                     .font(.footnote)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(AppSemanticTone.danger.foreground)
             }
         case .subscribe:
             AppFormField(titleText: localizationManager.localized("channel_id")) {
@@ -328,7 +323,7 @@ struct ChannelManagementView: View {
             {
                 Text(localizationManager.localized("channel_password_invalid_length"))
                     .font(.footnote)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(AppSemanticTone.danger.foreground)
             }
         }
     }

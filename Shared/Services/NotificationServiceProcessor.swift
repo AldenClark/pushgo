@@ -10,20 +10,23 @@ final class NotificationServiceProcessor {
         request: UNNotificationRequest,
         content: UNMutableNotificationContent
     ) async -> UNNotificationContent {
-        let content = await prepareContent(request: request, content: content)
+        let content = await prepareContentForPersistence(request: request, content: content)
         let shouldSkipPersist = (content.userInfo["_skip_persist"] as? String) == "1"
         if !shouldSkipPersist {
             await persistMessage(for: request, content: content)
         }
-        return content
+        guard !Task.isCancelled else { return content }
+        let persistenceFailed = (content.userInfo["_persist_failed"] as? String) == "1"
+        guard !persistenceFailed else { return content }
+        return await contentPreparer.enrichMediaIfNeeded(content)
     }
 
-    func prepareContent(
+    func prepareContentForPersistence(
         request: UNNotificationRequest,
         content: UNMutableNotificationContent
     ) async -> UNMutableNotificationContent {
         await resolveProviderWakeupIfNeeded(content: content)
-        return await contentPreparer.prepare(content)
+        return await contentPreparer.prepare(content, includeMediaAttachments: false)
     }
 
     private func resolveProviderWakeupIfNeeded(content: UNMutableNotificationContent) async {
@@ -34,6 +37,14 @@ final class NotificationServiceProcessor {
         )
         if case let .pulled(payload, _) = resolution {
             NotificationHandling.applyResolvedPayload(payload, to: content)
+        }
+        switch resolution {
+        case .notWakeup:
+            break
+        case .unresolvedWakeup:
+            applyUnresolvedWakeupNotice(to: content)
+        case .pulled:
+            break
         }
     }
 
@@ -85,6 +96,15 @@ final class NotificationServiceProcessor {
         var userInfo = content.userInfo
         userInfo["_skip_persist"] = "1"
         userInfo["_persist_failed"] = "1"
+        content.userInfo = userInfo
+    }
+
+    private func applyUnresolvedWakeupNotice(to content: UNMutableNotificationContent) {
+        content.title = "收到消息"
+        content.body = "收到无法解析的消息。"
+        var userInfo = content.userInfo
+        userInfo["_skip_persist"] = "1"
+        userInfo["_wakeup_unresolved"] = "1"
         content.userInfo = userInfo
     }
 }

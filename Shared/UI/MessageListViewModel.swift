@@ -53,6 +53,7 @@ final class MessageListViewModel {
             filteredMessagesIdentityRevision &+= 1
         }
     }
+    private(set) var sortMode: MessageListSortMode = MessageListSortMode.loadPreference()
     private(set) var selectedFilter: MessageFilter = .all
     private(set) var selectedChannel: MessageChannelKey?
     private(set) var channelSummaries: [MessageChannelSummary] = []
@@ -115,6 +116,15 @@ final class MessageListViewModel {
 
     func setFilter(_ filter: MessageFilter) {
         selectedFilter = filter
+        Task { @MainActor in
+            await reloadFromStore(resetPaging: true, clearBeforeLoading: false)
+        }
+    }
+
+    func setSortMode(_ sortMode: MessageListSortMode) {
+        guard self.sortMode != sortMode else { return }
+        self.sortMode = sortMode
+        sortMode.persist()
         Task { @MainActor in
             await reloadFromStore(resetPaging: true, clearBeforeLoading: false)
         }
@@ -302,6 +312,7 @@ final class MessageListViewModel {
                 limit: pageSize,
                 filter: mapFilter(selectedFilter),
                 channel: selectedChannel?.rawChannelValue,
+                sortMode: sortMode
             )
             lastPageCount = page.count
 
@@ -311,19 +322,25 @@ final class MessageListViewModel {
 
             if results.count + page.count <= targetCount {
                 results.append(contentsOf: page)
-                cursor = page.last.map { MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id) }
+                cursor = page.last.map {
+                    MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
+                }
                 if page.count < pageSize {
                     return RefreshSnapshot(messages: results, nextCursor: cursor, hasMorePages: false)
                 }
             } else {
                 let needed = targetCount - results.count
                 results.append(contentsOf: page.prefix(needed))
-                cursor = results.last.map { MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id) }
+                cursor = results.last.map {
+                    MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
+                }
                 return RefreshSnapshot(messages: results, nextCursor: cursor, hasMorePages: true)
             }
         }
 
-        let next = results.last.map { MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id) }
+        let next = results.last.map {
+            MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
+        }
         let mayHaveMore = results.count >= targetCount && lastPageCount == pageSize
         return RefreshSnapshot(messages: results, nextCursor: next, hasMorePages: mayHaveMore)
     }
@@ -339,12 +356,15 @@ final class MessageListViewModel {
                 limit: pageSize,
                 filter: mapFilter(selectedFilter),
                 channel: selectedChannel?.rawChannelValue,
+                sortMode: sortMode
             )
             if resetStaleSelectionIfNeeded() {
                 return
             }
             filteredMessages.append(contentsOf: page)
-            nextCursor = page.last.map { MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id) }
+            nextCursor = page.last.map {
+                MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
+            }
             hasMorePages = page.count == pageSize
             trimCachedMessagesIfNeeded()
         } catch let appError as AppError {
@@ -400,11 +420,15 @@ final class MessageListViewModel {
         guard overflow > 0 else { return }
 #if os(macOS)
         filteredMessages.removeLast(overflow)
-        nextCursor = filteredMessages.last.map { MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id) }
+        nextCursor = filteredMessages.last.map {
+            MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
+        }
 #else
         if environment.isMessageListAtTop {
             filteredMessages.removeLast(overflow)
-            nextCursor = filteredMessages.last.map { MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id) }
+            nextCursor = filteredMessages.last.map {
+                MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
+            }
         } else {
             filteredMessages.removeFirst(overflow)
         }

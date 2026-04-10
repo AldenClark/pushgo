@@ -11,9 +11,6 @@ enum AppControlMetrics {
     static let labelAccessorySize: CGFloat = 14
     static let focusedStrokeWidth: CGFloat = 1
     static let unfocusedStrokeWidth: CGFloat = 0.8
-    static let focusedStrokeOpacity: Double = 0.3
-    static let unfocusedStrokeOpacity: Double = 0.08
-    static let fieldFillOpacity: Double = 0.02
     static let buttonHeight: CGFloat = 36
 }
 
@@ -166,7 +163,7 @@ struct AppFieldHint: View {
     var body: some View {
         text
             .font(.footnote)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.appTextSecondary)
     }
 }
 
@@ -184,7 +181,7 @@ struct AppFieldTag: View {
     var body: some View {
         text
             .font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.appTextSecondary)
     }
 }
 
@@ -198,7 +195,7 @@ struct AppFieldValue: View {
     var body: some View {
         text
             .font(.body)
-            .foregroundStyle(.primary)
+            .foregroundStyle(Color.appTextPrimary)
             .lineLimit(1)
             .truncationMode(.tail)
     }
@@ -214,7 +211,7 @@ struct AppFieldSecondaryText: View {
     var body: some View {
         text
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.appTextSecondary)
     }
 }
 
@@ -222,7 +219,7 @@ struct AppFieldChevron: View {
     var body: some View {
         Image(systemName: "chevron.up.chevron.down")
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.appTextSecondary)
     }
 }
 
@@ -235,7 +232,7 @@ struct AppFormAccessoryButton: View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.callout.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appTextSecondary)
                 .frame(
                     width: AppControlMetrics.labelAccessorySize,
                     height: AppControlMetrics.labelAccessorySize,
@@ -377,15 +374,14 @@ struct AppInputBackground: View {
 
     var body: some View {
         let radius = isMultiline ? AppControlMetrics.multilineCornerRadius : AppControlMetrics.fieldCornerRadius
-        let strokeOpacity = isFocused ? AppControlMetrics.focusedStrokeOpacity : AppControlMetrics.unfocusedStrokeOpacity
         let strokeWidth = isFocused ? AppControlMetrics.focusedStrokeWidth : AppControlMetrics.unfocusedStrokeWidth
-        let base = Color.accentColor.opacity(AppControlMetrics.fieldFillOpacity)
+        let strokeColor = isFocused ? Color.appInputStrokeFocused : Color.appInputStrokeUnfocused
 
         return RoundedRectangle(cornerRadius: radius, style: .continuous)
-            .fill(base)
+            .fill(Color.appInputFieldFill)
             .overlay(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(Color.primary.opacity(strokeOpacity), lineWidth: strokeWidth)
+                    .stroke(strokeColor, lineWidth: strokeWidth)
             )
     }
 }
@@ -447,5 +443,388 @@ extension View {
 
     func appButtonHeight() -> some View {
         frame(minHeight: AppButtonMetrics.baseHeight)
+    }
+}
+
+struct AppInsetDivider: View {
+    var color: Color = .appDividerSubtle
+    var leadingInset: CGFloat = 0
+    var trailingInset: CGFloat = 0
+    var verticalPadding: CGFloat = 0
+    var thickness: CGFloat = 1
+
+    var body: some View {
+        Rectangle()
+            .fill(color)
+            .frame(height: thickness)
+            .padding(.leading, leadingInset)
+            .padding(.trailing, trailingInset)
+            .padding(.vertical, verticalPadding)
+            .accessibilityHidden(true)
+    }
+}
+
+struct AppStatusDot: View {
+    var color: Color = .appAccentPrimary
+    var size: CGFloat = 8
+    var accessibilityLabel: LocalizedStringKey? = nil
+
+    var body: some View {
+        Group {
+            if let accessibilityLabel {
+                Circle()
+                    .fill(color)
+                    .frame(width: size, height: size)
+                    .accessibilityLabel(Text(accessibilityLabel))
+            } else {
+                Circle()
+                    .fill(color)
+                    .frame(width: size, height: size)
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+}
+
+struct AppCapsuleBadge<Content: View>: View {
+    let foreground: Color
+    let background: Color
+    var border: Color? = nil
+    var horizontalPadding: CGFloat = 8
+    var verticalPadding: CGFloat = 4
+    let content: Content
+
+    init(
+        foreground: Color,
+        background: Color,
+        border: Color? = nil,
+        horizontalPadding: CGFloat = 8,
+        verticalPadding: CGFloat = 4,
+        @ViewBuilder content: () -> Content,
+    ) {
+        self.foreground = foreground
+        self.background = background
+        self.border = border
+        self.horizontalPadding = horizontalPadding
+        self.verticalPadding = verticalPadding
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .padding(.horizontal, horizontalPadding)
+            .padding(.vertical, verticalPadding)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(background)
+            )
+            .overlay {
+                if let border {
+                    Capsule(style: .continuous)
+                        .stroke(border, lineWidth: 1)
+                }
+            }
+            .foregroundStyle(foreground)
+    }
+}
+
+struct AppIconTile: View {
+    let systemName: String
+    var foreground: Color = .appAccentPrimary
+    var background: Color = .appInfoIconBackground
+    var size: CGFloat = 32
+    var cornerRadius: CGFloat = 10
+    var font: Font = .callout.weight(.semibold)
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(font)
+            .frame(width: size, height: size)
+            .foregroundStyle(foreground)
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(background)
+            )
+    }
+}
+
+struct SettingsRowDivider: View {
+    private let leadingInset: CGFloat = 48
+
+    var body: some View {
+        AppInsetDivider(leadingInset: leadingInset, verticalPadding: 18)
+    }
+}
+
+struct DataPageToggleGroupRow: View {
+    let iconName: String
+    let title: LocalizedStringKey
+    let messageTitle: LocalizedStringKey
+    let eventTitle: LocalizedStringKey
+    let thingTitle: LocalizedStringKey
+    @Binding var messageIsOn: Bool
+    @Binding var eventIsOn: Bool
+    @Binding var thingIsOn: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            AppIconTile(systemName: iconName)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 4)
+
+                HStack(spacing: 8) {
+                    DataPageToggleChip(
+                        title: messageTitle,
+                        isOn: $messageIsOn,
+                        accessibilityID: "toggle.settings.page.messages"
+                    )
+                    DataPageToggleChip(
+                        title: eventTitle,
+                        isOn: $eventIsOn,
+                        accessibilityID: "toggle.settings.page.events"
+                    )
+                    DataPageToggleChip(
+                        title: thingTitle,
+                        isOn: $thingIsOn,
+                        accessibilityID: "toggle.settings.page.things"
+                    )
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 12)
+    }
+}
+
+private struct DataPageToggleChip: View {
+    let title: LocalizedStringKey
+    @Binding var isOn: Bool
+    let accessibilityID: String
+
+    var body: some View {
+        Button {
+            isOn.toggle()
+        } label: {
+            HStack(spacing: 4) {
+                if isOn {
+                    Image(systemName: "checkmark")
+                        .font(.footnote.weight(.bold))
+                }
+                Text(title)
+                    .lineLimit(1)
+            }
+            .font(.footnote.weight(.semibold))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .foregroundStyle(isOn ? Color.appAccentPrimary : Color.appTextSecondary)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(isOn ? Color.appStateInfoBackground : Color.clear)
+            )
+            .overlay {
+                Capsule(style: .continuous)
+                    .stroke(
+                        isOn ? AppSemanticTone.info.border : Color.appBorderSubtle,
+                        lineWidth: 1
+                    )
+            }
+        }
+        .buttonStyle(.appPlain)
+        .accessibilityIdentifier(accessibilityID)
+        .accessibilityValue(isOn ? Text("On") : Text("Off"))
+    }
+}
+
+struct SettingsActionRow<Trailing: View>: View {
+    enum Style {
+        case plain
+        case destructive
+    }
+
+    let iconName: String
+    let title: LocalizedStringKey
+    let detail: LocalizedStringKey?
+    let style: Style
+    private let trailing: () -> Trailing
+    @Environment(\.isEnabled) private var isEnabled
+
+    init(
+        iconName: String,
+        title: LocalizedStringKey,
+        detail: LocalizedStringKey? = nil,
+        style: Style = .plain,
+        @ViewBuilder trailing: @escaping () -> Trailing,
+    ) {
+        self.iconName = iconName
+        self.title = title
+        self.detail = detail
+        self.style = style
+        self.trailing = trailing
+    }
+
+    private var iconTint: Color {
+        switch style {
+        case .plain:
+            return .appAccentPrimary
+        case .destructive:
+            return AppSemanticTone.danger.foreground
+        }
+    }
+
+    private var iconBackground: Color {
+        switch style {
+        case .plain:
+            return .appInfoIconBackground
+        case .destructive:
+            return .appDangerIconBackground
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            AppIconTile(systemName: iconName, foreground: iconTint, background: iconBackground)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+
+                if let detail {
+                    Text(detail)
+                        .font(.footnote)
+                        .foregroundStyle(Color.appTextSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Spacer(minLength: 12)
+
+            trailing()
+                .fixedSize()
+        }
+        .contentShape(Rectangle())
+        .padding(.vertical, 14)
+        .opacity(isEnabled ? 1 : 0.45)
+    }
+}
+
+extension SettingsActionRow where Trailing == EmptyView {
+    init(
+        iconName: String,
+        title: LocalizedStringKey,
+        detail: LocalizedStringKey? = nil,
+        style: Style = .plain,
+    ) {
+        self.init(iconName: iconName, title: title, detail: detail, style: style) {
+            EmptyView()
+        }
+    }
+}
+
+struct SettingsControlRow<Control: View>: View {
+    let iconName: String
+    let title: LocalizedStringKey
+    let detail: LocalizedStringKey?
+    let control: Control
+    let useFormField: Bool
+
+    init(
+        iconName: String,
+        title: LocalizedStringKey,
+        detail: LocalizedStringKey? = nil,
+        useFormField: Bool = true,
+        @ViewBuilder control: () -> Control,
+    ) {
+        self.iconName = iconName
+        self.title = title
+        self.detail = detail
+        self.control = control()
+        self.useFormField = useFormField
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            AppIconTile(systemName: iconName)
+
+            if useFormField {
+                AppFormField(title) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if let detail {
+                            AppFieldHint(detail)
+                        }
+                        control
+                    }
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.headline)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.85)
+
+                    if let detail {
+                        Text(detail)
+                            .font(.footnote)
+                            .foregroundStyle(Color.appTextSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                Spacer(minLength: 12)
+
+                control
+                    .fixedSize()
+            }
+        }
+        .contentShape(Rectangle())
+        .padding(.vertical, 10)
+    }
+}
+
+struct ManualKeyStatusBadge: View {
+    let text: LocalizedStringKey
+    let isConfigured: Bool
+
+    var body: some View {
+        AppCapsuleBadge(
+            foreground: isConfigured ? AppSemanticTone.info.foreground : AppSemanticTone.neutral.foreground,
+            background: isConfigured ? AppSemanticTone.info.background : AppSemanticTone.neutral.background,
+            horizontalPadding: 10,
+            verticalPadding: 4,
+        ) {
+            Text(text)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+    }
+}
+
+struct NotificationStatusBadge: View {
+    let text: LocalizedStringKey
+    let tone: AppSemanticTone
+
+    var body: some View {
+        AppCapsuleBadge(
+            foreground: tone.foreground,
+            background: tone.background,
+            horizontalPadding: 10,
+            verticalPadding: 4,
+        ) {
+            Text(text)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
     }
 }

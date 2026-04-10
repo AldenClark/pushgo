@@ -61,7 +61,9 @@ struct ThingListScreen: View {
                                 bottom: EntityVisualTokens.listRowInsetVertical,
                                 trailing: EntityVisualTokens.listRowInsetHorizontal
                             ))
-                            .listRowBackground(Color.clear)
+                            .listRowBackground(
+                                EntitySelectionBackground(isSelected: isBatchMode ? selectedThingIds.contains(thing.id) : selectedThing?.id == thing.id)
+                            )
                             .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
                             .listRowSeparator(index == filteredThingsSnapshot.count - 1 ? .hidden : .visible, edges: .bottom)
                             .onAppear {
@@ -547,7 +549,7 @@ private struct ThingListRow: View {
                         Spacer(minLength: 8)
                         Text(EntityDateFormatter.relativeText(thing.updatedAt))
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.appTextSecondary)
                     }
 
                     ThingMetadataSummary(entries: metadataEntries, fallbackText: metadataFallbackText)
@@ -557,7 +559,7 @@ private struct ThingListRow: View {
             if !thing.tags.isEmpty {
                 Text(thing.tags.joined(separator: " · "))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appTextSecondary)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -584,7 +586,7 @@ private struct ThingListRow: View {
                         if previewImageAttachments.count > visibleCount {
                             Text("+\(previewImageAttachments.count - visibleCount)")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.appTextSecondary)
                                 .padding(.leading, 4)
                         }
                     }
@@ -618,13 +620,13 @@ private struct ThingMetadataSummary: View {
                     : segments.joined(separator: " · ")
             )
             .font(.caption2)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.appTextSecondary)
             .lineLimit(2)
             .frame(maxWidth: .infinity, alignment: .leading)
         } else if let fallbackText, !fallbackText.isEmpty {
             Text(fallbackText)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appTextSecondary)
                 .lineLimit(1)
         }
     }

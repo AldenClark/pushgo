@@ -122,11 +122,17 @@ final class NotificationContentPreparer {
     private static let minimumAttachmentWindow: TimeInterval = 0.5
 
     private let keychainConfigStore = LocalKeychainConfigStore()
+    private let isNotificationServiceExtensionProcess = (
+        Bundle.main.bundleIdentifier?.hasSuffix(".NotificationServiceExtension") == true
+    )
 #if os(watchOS)
     private let watchProvisioningStore = try? WatchLightNotificationStore()
 #endif
 
-    func prepare(_ content: UNMutableNotificationContent) async -> UNMutableNotificationContent {
+    func prepare(
+        _ content: UNMutableNotificationContent,
+        includeMediaAttachments: Bool = true
+    ) async -> UNMutableNotificationContent {
         let content = content
         let isExpired = isPayloadExpired(content.userInfo)
         let hasCiphertext = content.userInfo["ciphertext"] != nil
@@ -136,17 +142,19 @@ final class NotificationContentPreparer {
             content.userInfo["decryption_state"] = NotificationDecryptionState.notConfigured.rawValue
         }
 
-        do {
-            if let result = try await handleDecryptionIfNeeded(for: content, likelyEncrypted: likelyEncrypted) {
-                if result.inline == .failure || result.cipher.status == .failure {
-                    content.userInfo["decryption_state"] = NotificationDecryptionState.decryptFailed.rawValue
-                } else if result.inline == .success || result.cipher.status == .success {
-                    content.userInfo["decryption_state"] = NotificationDecryptionState.decryptOk.rawValue
+        if !isNotificationServiceExtensionProcess {
+            do {
+                if let result = try await handleDecryptionIfNeeded(for: content, likelyEncrypted: likelyEncrypted) {
+                    if result.inline == .failure || result.cipher.status == .failure {
+                        content.userInfo["decryption_state"] = NotificationDecryptionState.decryptFailed.rawValue
+                    } else if result.inline == .success || result.cipher.status == .success {
+                        content.userInfo["decryption_state"] = NotificationDecryptionState.decryptOk.rawValue
+                    }
                 }
-            }
-        } catch {
-            if likelyEncrypted {
-                content.userInfo["decryption_state"] = NotificationDecryptionState.decryptFailed.rawValue
+            } catch {
+                if likelyEncrypted {
+                    content.userInfo["decryption_state"] = NotificationDecryptionState.decryptFailed.rawValue
+                }
             }
         }
 
@@ -167,9 +175,11 @@ final class NotificationContentPreparer {
             content.threadIdentifier = threadIdentifier
         }
 
-        guard !Task.isCancelled else { return content }
-        let mediaDeadline = Date().addingTimeInterval(Self.bestEffortAttachmentTimeout)
-        await attachMediaIfNeeded(to: content, deadline: mediaDeadline)
+        if includeMediaAttachments {
+            guard !Task.isCancelled else { return content }
+            let mediaDeadline = Date().addingTimeInterval(Self.bestEffortAttachmentTimeout)
+            await attachMediaIfNeeded(to: content, deadline: mediaDeadline)
+        }
 
         let normalizedLevel = resolveNormalizedLevel(from: content)
         let profile = NotificationLevelProfile.from(level: normalizedLevel)
@@ -206,6 +216,13 @@ final class NotificationContentPreparer {
         aps.removeValue(forKey: "sound")
         content.userInfo["aps"] = aps
         content.sound = nil
+        return content
+    }
+
+    func enrichMediaIfNeeded(_ content: UNMutableNotificationContent) async -> UNMutableNotificationContent {
+        guard !Task.isCancelled else { return content }
+        let mediaDeadline = Date().addingTimeInterval(Self.bestEffortAttachmentTimeout)
+        await attachMediaIfNeeded(to: content, deadline: mediaDeadline)
         return content
     }
 

@@ -107,10 +107,10 @@ struct ChannelManagementScreen: View {
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
-                .background(Color(uiColor: .systemBackground))
+                .background(Color.appWindowBackground)
             }
         }
-        .background(Color(uiColor: .systemBackground))
+        .background(Color.appWindowBackground)
         .navigationTitle(localizationManager.localized("channels"))
         .accessibilityIdentifier("screen.channels")
         .toolbar {
@@ -162,7 +162,7 @@ struct ChannelManagementScreen: View {
                     if !name.isEmpty {
                         Text(channelId)
                             .font(.caption2.monospaced())
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.appTextSecondary)
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
@@ -180,7 +180,7 @@ struct ChannelManagementScreen: View {
             } label: {
                 Label(localizationManager.localized("rename_channel"), systemImage: "pencil")
             }
-            .tint(.blue)
+            .tint(.appAccentPrimary)
 
             Button(role: .destructive) {
                 pendingRemoval = subscription
@@ -348,7 +348,7 @@ struct ChannelManagementScreen: View {
     private func channelEntryPasswordHint(isVisible: Bool) -> some View {
         Text(localizationManager.localized("channel_password_invalid_length"))
             .font(.footnote)
-            .foregroundStyle(.red)
+            .foregroundStyle(AppSemanticTone.danger.foreground)
             .lineLimit(2)
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(minHeight: 34, alignment: .topLeading)

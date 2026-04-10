@@ -5,6 +5,7 @@ require "find"
 require "json"
 require "pathname"
 require "shellwords"
+require "tempfile"
 require "tmpdir"
 
 platform :ios do
@@ -145,6 +146,13 @@ platform :ios do
     }
   end
 
+  def developer_id_signing_targets
+    {
+      "io.ethan.pushgo" => ENV.fetch("APP_MACOS_DMG_SCHEME", ENV.fetch("APP_MACOS_SCHEME", "PushGo-macOS-DMG")),
+      "io.ethan.pushgo.NotificationServiceExtension" => "PushGoNSE-macOS"
+    }
+  end
+
   def plist_hash(path)
     JSON.parse(sh("plutil -convert json -o - #{Shellwords.escape(path)}", log: false))
   end
@@ -155,6 +163,61 @@ platform :ios do
     sh("plutil -convert xml1 -o #{Shellwords.escape(path)} #{Shellwords.escape(json_path)}")
   ensure
     FileUtils.rm_f(json_path) if defined?(json_path)
+  end
+
+  def deep_copy_hash(payload)
+    JSON.parse(JSON.generate(payload))
+  end
+
+  def extracted_entitlements_hash(path)
+    raw_plist = sh("codesign -d --entitlements :- #{Shellwords.escape(path)} 2>/dev/null", log: false)
+    return nil if raw_plist.to_s.strip.empty?
+
+    Tempfile.create(["pushgo-entitlements", ".plist"]) do |tempfile|
+      tempfile.write(raw_plist)
+      tempfile.flush
+      return plist_hash(tempfile.path)
+    end
+  rescue StandardError
+    nil
+  end
+
+  def extracted_entitlements_by_bundle_id(root_bundle_path)
+    entitlements_by_bundle_id = {}
+
+    ([root_bundle_path] + nested_code_bundles(root_bundle_path)).each do |bundle_path|
+      bundle_id = bundle_identifier_for(bundle_path)
+      next if bundle_id.to_s.empty?
+
+      entitlements = extracted_entitlements_hash(bundle_path)
+      next if entitlements.nil?
+
+      entitlements_by_bundle_id[bundle_id] = entitlements
+    end
+
+    entitlements_by_bundle_id
+  end
+
+  def build_settings_for_target(target_name)
+    @build_settings_for_target ||= {}
+    return @build_settings_for_target[target_name] if @build_settings_for_target.key?(target_name)
+
+    project = resolve_from_repo(ENV.fetch("APP_PROJECT", "pushgo.xcodeproj"))
+    output = sh(
+      "xcodebuild -project #{Shellwords.escape(project)} " \
+      "-target #{Shellwords.escape(target_name)} " \
+      "-showBuildSettings",
+      log: false
+    )
+
+    settings = {}
+    output.each_line do |line|
+      next unless line =~ /^\s*([A-Z0-9_]+)\s=\s(.*)$/
+
+      settings[Regexp.last_match(1)] = Regexp.last_match(2).strip
+    end
+
+    @build_settings_for_target[target_name] = settings
   end
 
   def bundle_identifier_for(path)
@@ -184,12 +247,39 @@ platform :ios do
     nil
   end
 
-  def resolved_entitlements_path_for(bundle_id, output_directory)
-    source_path = developer_id_entitlements_sources[bundle_id]
-    return nil if source_path.to_s.empty?
+  def apply_xcode_managed_entitlements!(bundle_id, entitlements)
+    target_name = developer_id_signing_targets[bundle_id]
+    return if target_name.to_s.empty?
+
+    build_settings = build_settings_for_target(target_name)
+    user_selected_files = build_settings["ENABLE_USER_SELECTED_FILES"].to_s
+    entitlements.delete("com.apple.security.files.user-selected.read-only")
+    entitlements.delete("com.apple.security.files.user-selected.read-write")
+
+    case user_selected_files
+    when "readonly"
+      entitlements["com.apple.security.files.user-selected.read-only"] = true
+    when "readwrite"
+      entitlements["com.apple.security.files.user-selected.read-write"] = true
+    end
+  end
+
+  def sanitized_developer_id_entitlements_for(bundle_id, reference_entitlements_by_bundle_id: {})
+    entitlements =
+      if reference_entitlements_by_bundle_id.key?(bundle_id)
+        deep_copy_hash(reference_entitlements_by_bundle_id.fetch(bundle_id))
+      else
+        source_path = developer_id_entitlements_sources[bundle_id]
+        return nil if source_path.to_s.empty?
+
+        fallback_entitlements = plist_hash(source_path)
+        apply_xcode_managed_entitlements!(bundle_id, fallback_entitlements)
+        fallback_entitlements
+      end
 
     team_id = ensure_team_id!
-    entitlements = plist_hash(source_path)
+    entitlements.delete("com.apple.security.get-task-allow")
+    entitlements.delete("get-task-allow")
     entitlements["com.apple.application-identifier"] = "#{team_id}.#{bundle_id}"
     entitlements["com.apple.developer.team-identifier"] = team_id
 
@@ -199,8 +289,20 @@ platform :ios do
 
     if entitlements["keychain-access-groups"].is_a?(Array)
       entitlements["keychain-access-groups"] =
-        entitlements["keychain-access-groups"].map { |group| group.gsub("$(AppIdentifierPrefix)", "#{team_id}.") }
+        entitlements["keychain-access-groups"].map do |group|
+          group.gsub(/\A[A-Z0-9]+\./, "#{team_id}.").gsub("$(AppIdentifierPrefix)", "#{team_id}.")
+        end
     end
+
+    entitlements
+  end
+
+  def resolved_entitlements_path_for(bundle_id, output_directory, reference_entitlements_by_bundle_id: {})
+    entitlements = sanitized_developer_id_entitlements_for(
+      bundle_id,
+      reference_entitlements_by_bundle_id: reference_entitlements_by_bundle_id
+    )
+    return nil if entitlements.nil?
 
     FileUtils.mkdir_p(output_directory)
     entitlements_path = File.join(output_directory, "#{bundle_id}.entitlements")
@@ -258,13 +360,49 @@ platform :ios do
     sh(command)
   end
 
-  def sign_bundle_recursively!(bundle_path, identity:, keychain_path:, entitlements_output_directory:)
+  def notarytool_auth_args(key_path:, key_id:, issuer_id:)
+    [
+      "--key #{Shellwords.escape(key_path)}",
+      "--key-id #{Shellwords.escape(key_id)}",
+      "--issuer #{Shellwords.escape(issuer_id)}"
+    ].join(" ")
+  end
+
+  def summarize_notary_log(log_output)
+    return nil if log_output.to_s.strip.empty?
+
+    payload = JSON.parse(log_output)
+    issues = payload["issues"]
+    return nil unless issues.is_a?(Array) && !issues.empty?
+
+    issues.first(5).map do |issue|
+      path = issue["path"].to_s
+      message = issue["message"].to_s
+      severity = issue["severity"].to_s
+      components = []
+      components << severity unless severity.empty?
+      components << path unless path.empty?
+      components << message unless message.empty?
+      components.join(": ")
+    end.join("\n")
+  rescue JSON::ParserError
+    nil
+  end
+
+  def sign_bundle_recursively!(
+    bundle_path,
+    identity:,
+    keychain_path:,
+    entitlements_output_directory:,
+    reference_entitlements_by_bundle_id: {}
+  )
     nested_code_bundles(bundle_path).each do |nested_bundle_path|
       sign_bundle_recursively!(
         nested_bundle_path,
         identity: identity,
         keychain_path: keychain_path,
-        entitlements_output_directory: entitlements_output_directory
+        entitlements_output_directory: entitlements_output_directory,
+        reference_entitlements_by_bundle_id: reference_entitlements_by_bundle_id
       )
     end
 
@@ -279,7 +417,16 @@ platform :ios do
     end
 
     bundle_id = bundle_identifier_for(bundle_path)
-    entitlements_path = bundle_id.nil? ? nil : resolved_entitlements_path_for(bundle_id, entitlements_output_directory)
+    entitlements_path =
+      if bundle_id.nil?
+        nil
+      else
+        resolved_entitlements_path_for(
+          bundle_id,
+          entitlements_output_directory,
+          reference_entitlements_by_bundle_id: reference_entitlements_by_bundle_id
+        )
+      end
     runtime = %w[.app .appex .xpc].include?(File.extname(bundle_path))
 
     sign_path!(
@@ -440,73 +587,128 @@ platform :ios do
     keychain_path = developer_id_keychain_path!
     identity = developer_id_identity!
     display_version = resolved_display_version
-    archive_xcargs = display_version.empty? ? "" : "PUSHGO_DISPLAY_VERSION=#{Shellwords.escape(display_version)} "
+    reference_derived_data_path = nil
+    reference_entitlements_by_bundle_id = {}
+    xcargs = signing_xcargs
 
     FileUtils.mkdir_p(output_directory)
     FileUtils.rm_rf([archive_path, export_path, staging_dir, entitlements_dir, dmg_path])
     UI.user_error!("Sparkle xcconfig not found: #{sparkle_xcconfig}") unless File.exist?(sparkle_xcconfig)
 
-    sh(
-      "xcodebuild -project #{Shellwords.escape(project)} " \
-      "-scheme #{Shellwords.escape(scheme)} " \
-      "-xcconfig #{Shellwords.escape(sparkle_xcconfig)} " \
-      "-configuration Release " \
-      "-destination 'generic/platform=macOS' " \
-      "-archivePath #{Shellwords.escape(archive_path)} " \
-      "archive " \
-      "#{archive_xcargs}" \
-      "CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' DEVELOPMENT_TEAM=''"
-    )
+    begin
+      reference_derived_data_path = Dir.mktmpdir("pushgo-macos-dmg-reference-")
+      sh(
+        "xcodebuild -project #{Shellwords.escape(project)} " \
+        "-scheme #{Shellwords.escape(scheme)} " \
+        "-xcconfig #{Shellwords.escape(sparkle_xcconfig)} " \
+        "-configuration Release " \
+        "-destination 'generic/platform=macOS' " \
+        "-derivedDataPath #{Shellwords.escape(reference_derived_data_path)} " \
+        "build #{xcargs}"
+      )
+      reference_app_path = Dir.glob(File.join(reference_derived_data_path, "Build", "Products", "Release", "*.app")).first
+      UI.user_error!("No signed reference .app found under #{reference_derived_data_path}") if reference_app_path.to_s.empty?
+      reference_entitlements_by_bundle_id = extracted_entitlements_by_bundle_id(reference_app_path)
 
-    archived_app_path = Dir.glob(File.join(archive_path, "Products", "Applications", "*.app")).first
-    UI.user_error!("No archived .app found under #{archive_path}") if archived_app_path.to_s.empty?
+      sh(
+        "xcodebuild -project #{Shellwords.escape(project)} " \
+        "-scheme #{Shellwords.escape(scheme)} " \
+        "-xcconfig #{Shellwords.escape(sparkle_xcconfig)} " \
+        "-configuration Release " \
+        "-destination 'generic/platform=macOS' " \
+        "-archivePath #{Shellwords.escape(archive_path)} " \
+        "archive " \
+        "PUSHGO_DISPLAY_VERSION=#{Shellwords.escape(display_version)} " \
+        "CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' DEVELOPMENT_TEAM=''"
+      )
 
-    FileUtils.mkdir_p(export_path)
-    app_path = File.join(export_path, File.basename(archived_app_path))
-    sh("cp -R #{Shellwords.escape(archived_app_path)} #{Shellwords.escape(app_path)}")
+      archived_app_path = Dir.glob(File.join(archive_path, "Products", "Applications", "*.app")).first
+      UI.user_error!("No archived .app found under #{archive_path}") if archived_app_path.to_s.empty?
 
-    sign_bundle_recursively!(
-      app_path,
-      identity: identity,
-      keychain_path: keychain_path,
-      entitlements_output_directory: entitlements_dir
-    )
-    sh("codesign --verify --deep --strict --verbose=2 #{Shellwords.escape(app_path)}")
-    verify_developer_id_app_signature!(app_path)
+      FileUtils.mkdir_p(export_path)
+      app_path = File.join(export_path, File.basename(archived_app_path))
+      sh("cp -R #{Shellwords.escape(archived_app_path)} #{Shellwords.escape(app_path)}")
 
-    FileUtils.mkdir_p(staging_dir)
-    sh("cp -R #{Shellwords.escape(app_path)} #{Shellwords.escape(staging_dir)}")
-    sh(
-      "hdiutil create " \
-      "-volname #{Shellwords.escape(dmg_name)} " \
-      "-srcfolder #{Shellwords.escape(staging_dir)} " \
-      "-ov -format UDZO #{Shellwords.escape(dmg_path)}"
-    )
-    sign_path!(
-      dmg_path,
-      identity: identity,
-      keychain_path: keychain_path
-    )
-    sh("codesign --verify --verbose=2 #{Shellwords.escape(dmg_path)}")
+      sign_bundle_recursively!(
+        app_path,
+        identity: identity,
+        keychain_path: keychain_path,
+        entitlements_output_directory: entitlements_dir,
+        reference_entitlements_by_bundle_id: reference_entitlements_by_bundle_id
+      )
+      sh("codesign --verify --deep --strict --verbose=2 #{Shellwords.escape(app_path)}")
+      verify_developer_id_app_signature!(app_path)
 
-    key_path = ENV["ASC_KEY_PATH"]
-    key_id = ENV["ASC_KEY_ID"]
-    issuer_id = ENV["ASC_ISSUER_ID"]
-    UI.user_error!("Missing ASC_KEY_PATH for notarization") if key_path.to_s.empty?
-    UI.user_error!("Missing ASC_KEY_ID for notarization") if key_id.to_s.empty?
-    UI.user_error!("Missing ASC_ISSUER_ID for notarization") if issuer_id.to_s.empty?
+      FileUtils.mkdir_p(staging_dir)
+      sh("cp -R #{Shellwords.escape(app_path)} #{Shellwords.escape(staging_dir)}")
+      sh(
+        "hdiutil create " \
+        "-volname #{Shellwords.escape(dmg_name)} " \
+        "-srcfolder #{Shellwords.escape(staging_dir)} " \
+        "-ov -format UDZO #{Shellwords.escape(dmg_path)}"
+      )
+      sign_path!(
+        dmg_path,
+        identity: identity,
+        keychain_path: keychain_path
+      )
+      sh("codesign --verify --verbose=2 #{Shellwords.escape(dmg_path)}")
 
-    sh(
-      "xcrun notarytool submit #{Shellwords.escape(dmg_path)} " \
-      "--key #{Shellwords.escape(key_path)} " \
-      "--key-id #{Shellwords.escape(key_id)} " \
-      "--issuer #{Shellwords.escape(issuer_id)} --wait"
-    )
-    sh("xcrun stapler staple #{Shellwords.escape(dmg_path)}")
-    sh("xcrun stapler validate #{Shellwords.escape(dmg_path)}")
-    sh("spctl --assess --type open --context context:primary-signature -vv #{Shellwords.escape(dmg_path)}")
+      key_path = ENV["ASC_KEY_PATH"]
+      key_id = ENV["ASC_KEY_ID"]
+      issuer_id = ENV["ASC_ISSUER_ID"]
+      UI.user_error!("Missing ASC_KEY_PATH for notarization") if key_path.to_s.empty?
+      UI.user_error!("Missing ASC_KEY_ID for notarization") if key_id.to_s.empty?
+      UI.user_error!("Missing ASC_ISSUER_ID for notarization") if issuer_id.to_s.empty?
 
-    dmg_path
+      auth_args = notarytool_auth_args(key_path: key_path, key_id: key_id, issuer_id: issuer_id)
+      notary_submit_path = File.join(output_directory, "#{dmg_name}-notarytool-submit.json")
+      notary_log_path = File.join(output_directory, "#{dmg_name}-notarytool-log.json")
+      notary_submit_output = sh(
+        "xcrun notarytool submit #{Shellwords.escape(dmg_path)} " \
+        "#{auth_args} --wait --output-format json",
+        log: false
+      )
+      File.write(notary_submit_path, notary_submit_output)
+
+      notary_submit_result = JSON.parse(notary_submit_output)
+      notarization_status = notary_submit_result["status"].to_s
+      notarization_id = notary_submit_result["id"].to_s
+
+      unless notarization_status == "Accepted"
+        notary_log_output = ""
+        unless notarization_id.empty?
+          begin
+            notary_log_output = sh(
+              "xcrun notarytool log #{Shellwords.escape(notarization_id)} #{auth_args} --output-format json",
+              log: false
+            )
+            File.write(notary_log_path, notary_log_output)
+          rescue StandardError => e
+            File.write(notary_log_path, "Failed to fetch notary log: #{e.message}\n")
+          end
+        end
+
+        notary_summary = summarize_notary_log(notary_log_output)
+        details = []
+        details << "submission_id=#{notarization_id}" unless notarization_id.empty?
+        details << "submit_json=#{notary_submit_path}"
+        details << "log_json=#{notary_log_path}" if File.exist?(notary_log_path)
+        detail_suffix = details.empty? ? "" : " (#{details.join(', ')})"
+
+        message = "DMG notarization failed with status #{notarization_status}#{detail_suffix}."
+        message = "#{message}\n#{notary_summary}" unless notary_summary.to_s.empty?
+        UI.user_error!(message)
+      end
+
+      sh("xcrun stapler staple #{Shellwords.escape(dmg_path)}")
+      sh("xcrun stapler validate #{Shellwords.escape(dmg_path)}")
+      sh("spctl --assess --type open --context context:primary-signature -vv #{Shellwords.escape(dmg_path)}")
+
+      dmg_path
+    ensure
+      FileUtils.rm_rf(reference_derived_data_path) unless reference_derived_data_path.to_s.empty?
+    end
   end
 
   def upload_beta_builds!

@@ -79,7 +79,7 @@ private struct MessageSearchScreenModern: View {
             HStack(spacing: 12) {
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.appTextSecondary)
                         .accessibilityHidden(true)
 
                     TextField("search_messages", text: $searchFieldText)
@@ -91,7 +91,7 @@ private struct MessageSearchScreenModern: View {
                             searchFieldText = ""
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.appTextSecondary)
                         }
                         .buttonStyle(.appPlain)
                         .accessibilityLabel(Text(localizationManager.localized("clear_search")))
@@ -102,7 +102,7 @@ private struct MessageSearchScreenModern: View {
                     Button("cancel") {
                         cancelSearch()
                     }
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(Color.appAccentPrimary)
                     .transition(.opacity.combined(with: .move(edge: .trailing)))
                 }
             }
@@ -151,8 +151,7 @@ private struct MessageSearchScreenModern: View {
                     }
 
                     if index < viewModel.displayedResults.count - 1 {
-                        Divider()
-                            .padding(.vertical, 6)
+                        AppInsetDivider(verticalPadding: 6)
                     }
                 }
 
@@ -220,7 +219,7 @@ struct MessageSearchPlaceholderView: View {
         VStack(spacing: 16) {
             Image(systemName: imageName)
                 .font(.largeTitle.weight(.semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appTextSecondary)
                 .accessibilityHidden(true)
 
             Text(localizationManager.localized(title))
@@ -228,7 +227,7 @@ struct MessageSearchPlaceholderView: View {
 
             Text(localizationManager.localized(detailKey))
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appTextSecondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 320)
         }
@@ -256,14 +255,14 @@ struct MessageSearchResultRow: View {
                         if message.isEncrypted {
                             Image(systemName: "lock.fill")
                                 .font(.caption.bold())
-                                .foregroundStyle(Color.accentColor)
+                                .foregroundStyle(Color.appAccentPrimary)
                                 .accessibilityLabel(localizationManager.localized("encrypted_message"))
                         }
                     }
 
                     HighlightedText(text: message.bodyPreview, query: query)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.appTextSecondary)
                         .lineLimit(4)
 
                     HStack(spacing: 12) {
@@ -272,18 +271,18 @@ struct MessageSearchResultRow: View {
                             systemImage: "clock",
                         )
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.appTextSecondary)
 
                         if let channelName = environment.channelDisplayName(for: message.channel) {
                             Label(channelName, systemImage: "square.stack.3d.up")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.appTextSecondary)
                         }
 
                         if message.isRead == false {
                             Label(localizationManager.localized("unread"), systemImage: "envelope")
                                 .font(.caption2)
-                                .foregroundStyle(Color.accentColor)
+                                .foregroundStyle(Color.appAccentPrimary)
                         }
                     }
                 }
@@ -296,14 +295,14 @@ struct MessageSearchResultRow: View {
                             .scaledToFill()
                     } placeholder: {
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color.primary.opacity(0.05))
+                            .fill(EntityVisualTokens.subtleFill)
                     }
                     .accessibilityLabel(LocalizedStringKey("image_attachment"))
                     .frame(width: 56, height: 56)
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .stroke(Color.primary.opacity(0.08), lineWidth: 0.6),
+                            .stroke(EntityVisualTokens.subtleStroke, lineWidth: 0.6),
                     )
                 }
             }
@@ -366,7 +365,7 @@ private struct HighlightedText: View {
 
             let highlight = nsText.substring(with: match.range)
             result = Text("\(result)\(highlight)")
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(Color.appAccentPrimary)
                 .fontWeight(.semibold)
 
             currentLocation = match.range.location + match.range.length

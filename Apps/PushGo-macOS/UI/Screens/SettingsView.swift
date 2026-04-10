@@ -117,14 +117,7 @@ struct SettingsView: View {
                 VStack(spacing: 0) {
                     Toggle(isOn: $viewModel.launchAtLoginEnabled) {
                         HStack(alignment: .top, spacing: 12) {
-                            Image(systemName: "power")
-                                .font(.callout.weight(.semibold))
-                                .frame(width: 32, height: 32)
-                                .foregroundStyle(Color.accentColor)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .fill(Color.accentColor.opacity(0.12)),
-                                )
+                            AppIconTile(systemName: "power")
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("launch_at_login")
@@ -136,7 +129,7 @@ struct SettingsView: View {
 
                                 Text("launch_at_login_detail")
                                     .font(.footnote)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.appTextSecondary)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -156,13 +149,14 @@ struct SettingsView: View {
                         ) {
                             Image(systemName: "chevron.right")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.appTextSecondary)
                         }
                     }
                     .buttonStyle(.appPlain)
                     .accessibilityIdentifier("action.settings.server_management")
                     SettingsRowDivider()
-                    DataPageSwitchGroupRow(
+                    DataPageToggleGroupRow(
+                        iconName: "square.3.layers.3d.top.filled",
                         title: "enable_data_pages",
                         messageTitle: LocalizedStringKey(localizationManager.localized("messages")),
                         eventTitle: LocalizedStringKey(localizationManager.localized("push_type_event")),
@@ -183,7 +177,7 @@ struct SettingsView: View {
                         ) {
                             Image(systemName: "chevron.right")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.appTextSecondary)
                         }
                     }
                     .buttonStyle(.appPlain)
@@ -200,7 +194,7 @@ struct SettingsView: View {
                             ) {
                                 Image(systemName: "chevron.right")
                                     .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.appTextSecondary)
                             }
                         }
                         .buttonStyle(.appPlain)
@@ -240,22 +234,13 @@ struct SettingsView: View {
         .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color(nsColor: .controlBackgroundColor),
-                            Color(nsColor: .controlBackgroundColor).opacity(0.9),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .fill(Color.appSurfaceRaised)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                .stroke(Color.appCardBorder, lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 6)
+        .shadow(color: Color.appSoftShadow, radius: 10, x: 0, y: 6)
     }
 
     private var manualKeyStatusText: LocalizedStringKey {
@@ -276,18 +261,16 @@ struct SettingsView: View {
         case .authorized:
             EmptyView()
         case .notDetermined:
-            Button {
-                Task { await viewModel.requestNotificationPermission() }
-            } label: {
+                Button {
+                    Task { await viewModel.requestNotificationPermission() }
+                } label: {
                 HStack(spacing: 12) {
-                        Image(systemName: "bell.badge")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(Color.accentColor)
-                            .frame(width: 28, height: 28)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color.accentColor.opacity(0.16))
-                            )
+                        AppIconTile(
+                            systemName: "bell.badge",
+                            size: 28,
+                            cornerRadius: 8,
+                            font: .subheadline.weight(.semibold)
+                        )
                             .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(localizationManager.localized("request_notification_permission"))
@@ -295,29 +278,29 @@ struct SettingsView: View {
                             .foregroundStyle(.primary)
                         Text(localizationManager.localized("the_system_will_pop_up_an_authorization_prompt"))
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.appTextSecondary)
                     }
                     Spacer()
                         Image(systemName: "chevron.right")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.appTextSecondary)
                             .accessibilityHidden(true)
                 }
             }
             .buttonStyle(.appPlain)
         case .denied:
-            Button {
-                openNotificationSettings()
-            } label: {
+                Button {
+                    openNotificationSettings()
+                } label: {
                 HStack(spacing: 12) {
-                        Image(systemName: "bell.slash")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.red)
-                            .frame(width: 28, height: 28)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color.red.opacity(0.16))
-                            )
+                        AppIconTile(
+                            systemName: "bell.slash",
+                            foreground: AppSemanticTone.danger.foreground,
+                            background: .appDangerIconBackground,
+                            size: 28,
+                            cornerRadius: 8,
+                            font: .subheadline.weight(.semibold)
+                        )
                             .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(localizationManager.localized("please_enable_notification_permission_in_system_settings_first"))
@@ -325,13 +308,13 @@ struct SettingsView: View {
                             .foregroundStyle(.primary)
                         Text(localizationManager.localized("system_notification_permission_is_not_obtained_please_turn_on_notifications_in_the_system_settings_and_try_again"))
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.appTextSecondary)
                             .lineLimit(2)
                     }
                     Spacer()
                         Image(systemName: "arrow.up.right.square")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.appTextSecondary)
                             .accessibilityHidden(true)
                 }
             }
@@ -352,286 +335,6 @@ struct SettingsView: View {
     private func openNotificationSettings() {
         guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") else { return }
         _ = PushGoSystemInteraction.openExternalURL(url)
-    }
-}
-
-private struct SettingsRowDivider: View {
-    private let leadingInset: CGFloat = 48
-
-    var body: some View {
-        Divider()
-            .padding(.leading, leadingInset)
-            .padding(.vertical, 18)
-    }
-}
-
-private struct DataPageSwitchGroupRow: View {
-    let title: LocalizedStringKey
-    let messageTitle: LocalizedStringKey
-    let eventTitle: LocalizedStringKey
-    let thingTitle: LocalizedStringKey
-    @Binding var messageIsOn: Bool
-    @Binding var eventIsOn: Bool
-    @Binding var thingIsOn: Bool
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "square.3.layers.3d.top.filled")
-                .font(.callout.weight(.semibold))
-                .frame(width: 32, height: 32)
-                .foregroundStyle(Color.accentColor)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.accentColor.opacity(0.12))
-                )
-
-            Text(title)
-                .font(.headline)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 4)
-
-            HStack(spacing: 8) {
-                DataPageSwitchChip(
-                    title: messageTitle,
-                    isOn: $messageIsOn,
-                    accessibilityID: "toggle.settings.page.messages"
-                )
-                DataPageSwitchChip(
-                    title: eventTitle,
-                    isOn: $eventIsOn,
-                    accessibilityID: "toggle.settings.page.events"
-                )
-                DataPageSwitchChip(
-                    title: thingTitle,
-                    isOn: $thingIsOn,
-                    accessibilityID: "toggle.settings.page.things"
-                )
-            }
-        }
-        .padding(.vertical, 14)
-    }
-}
-
-private struct DataPageSwitchChip: View {
-    let title: LocalizedStringKey
-    @Binding var isOn: Bool
-    let accessibilityID: String
-
-    var body: some View {
-        Button {
-            isOn.toggle()
-        } label: {
-            HStack(spacing: 4) {
-                if isOn {
-                    Image(systemName: "checkmark")
-                        .font(.footnote.weight(.bold))
-                }
-                Text(title)
-                    .lineLimit(1)
-            }
-            .font(.footnote.weight(.semibold))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .foregroundStyle(isOn ? Color.accentColor : Color.secondary)
-            .background(
-                Capsule()
-                    .fill(isOn ? Color.accentColor.opacity(0.18) : Color.clear)
-            )
-            .overlay(
-                Capsule()
-                    .stroke(
-                        isOn ? Color.accentColor.opacity(0.4) : Color.primary.opacity(0.16),
-                        lineWidth: 1
-                    )
-            )
-        }
-        .buttonStyle(.appPlain)
-        .accessibilityIdentifier(accessibilityID)
-    }
-}
-
-private struct SettingsActionRow<Trailing: View>: View {
-    enum Style {
-        case plain
-        case destructive
-    }
-
-    let iconName: String
-    let title: LocalizedStringKey
-    let detail: LocalizedStringKey?
-    let style: Style
-    private let trailing: () -> Trailing
-
-    init(
-        iconName: String,
-        title: LocalizedStringKey,
-        detail: LocalizedStringKey? = nil,
-        style: Style = .plain,
-        @ViewBuilder trailing: @escaping () -> Trailing
-    ) {
-        self.iconName = iconName
-        self.title = title
-        self.detail = detail
-        self.style = style
-        self.trailing = trailing
-    }
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: iconName)
-                .font(.callout.weight(.semibold))
-                .frame(width: 32, height: 32)
-                .foregroundStyle(Color.accentColor)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.accentColor.opacity(0.12)),
-                )
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.leading)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.85)
-
-                if let detail {
-                    Text(detail)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Spacer(minLength: 12)
-
-            trailing()
-                .fixedSize()
-        }
-        .contentShape(Rectangle())
-        .padding(.vertical, 14)
-    }
-}
-
-private extension SettingsActionRow where Trailing == EmptyView {
-    init(
-        iconName: String,
-        title: LocalizedStringKey,
-        detail: LocalizedStringKey? = nil,
-        style: Style = .plain
-    ) {
-        self.init(
-            iconName: iconName,
-            title: title,
-            detail: detail,
-            style: style
-        ) {
-            EmptyView()
-        }
-    }
-}
-
-private struct ManualKeyStatusBadge: View {
-    let text: LocalizedStringKey
-    let isConfigured: Bool
-
-    var body: some View {
-        Text(text)
-            .font(.caption.weight(.semibold))
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background((isConfigured ? Color.accentColor : Color.secondary).opacity(0.16))
-            .foregroundStyle(isConfigured ? Color.accentColor : Color.secondary)
-            .clipShape(Capsule())
-    }
-}
-
-private struct NotificationStatusBadge: View {
-    let text: LocalizedStringKey
-    let color: Color
-
-    var body: some View {
-        Text(text)
-            .font(.caption.weight(.semibold))
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(color.opacity(0.16))
-            .foregroundStyle(color)
-            .clipShape(Capsule())
-    }
-}
-
-private struct SettingsControlRow<Control: View>: View {
-    let iconName: String
-    let title: LocalizedStringKey
-    let detail: LocalizedStringKey?
-    let control: Control
-    let useFormField: Bool
-
-    init(
-        iconName: String,
-        title: LocalizedStringKey,
-        detail: LocalizedStringKey? = nil,
-        useFormField: Bool = true,
-        @ViewBuilder control: () -> Control,
-    ) {
-        self.iconName = iconName
-        self.title = title
-        self.detail = detail
-        self.control = control()
-        self.useFormField = useFormField
-    }
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: iconName)
-                .font(.callout.weight(.semibold))
-                .frame(width: 32, height: 32)
-                .foregroundStyle(Color.accentColor)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.accentColor.opacity(0.12)),
-                )
-
-            if useFormField {
-                AppFormField(title) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        if let detail {
-                            AppFieldHint(detail)
-                        }
-                        control
-                    }
-                }
-            } else {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.headline)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.85)
-
-                    if let detail {
-                        Text(detail)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                Spacer(minLength: 12)
-
-                control
-                    .fixedSize()
-            }
-        }
-        .contentShape(Rectangle())
-        .padding(.vertical, 10)
     }
 }
 
@@ -676,7 +379,7 @@ private struct ServerManagementContentView: View {
                         } label: {
                             Image(systemName: "arrow.counterclockwise")
                                 .font(.callout.weight(.medium))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.appTextSecondary)
                         }
                         .buttonStyle(.appPlain)
                         .disabled(isUsingDefaultServerAddress)
@@ -715,7 +418,7 @@ private struct ServerManagementContentView: View {
                         } label: {
                             Image(systemName: viewModel.gatewayInput.isTokenVisible ? "eye.slash" : "eye")
                                 .font(.callout.weight(.medium))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.appTextSecondary)
                         }
                         .buttonStyle(.appPlain)
                         .accessibilityLabel(
@@ -725,7 +428,7 @@ private struct ServerManagementContentView: View {
                 }
                 Text(localizationManager.localized("server_management_gateway_switch_warning"))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appTextSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -805,7 +508,7 @@ private struct ManualKeySettingsContentView: View {
                         "only_aes_gcm_is_supported_iv_needs_to_be_included_by_the_sender_and_the_key_length_must_exactly_match_the_selected_number_of_bits",
                     ))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appTextSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 HStack(spacing: 12) {

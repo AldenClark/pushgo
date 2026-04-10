@@ -280,6 +280,47 @@ struct LocalDataStoreTests {
     }
 
     @Test
+    func loadGatewayURLsForChannelUsesHistoryAndActiveFilter() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let channelId = "ops-history-001"
+            try await store.upsertChannelSubscription(
+                gateway: "https://old.pushgo.dev",
+                channelId: channelId,
+                displayName: "Ops old",
+                password: nil,
+                lastSyncedAt: nil,
+                updatedAt: Date(timeIntervalSince1970: 1_742_000_000),
+                isDeleted: true,
+                deletedAt: Date(timeIntervalSince1970: 1_742_000_010)
+            )
+            try await store.upsertChannelSubscription(
+                gateway: "https://sandbox.pushgo.dev",
+                channelId: channelId,
+                displayName: "Ops",
+                password: nil,
+                lastSyncedAt: nil,
+                updatedAt: Date(timeIntervalSince1970: 1_742_000_100),
+                isDeleted: false,
+                deletedAt: nil
+            )
+
+            let withDeleted = await store.loadGatewayURLsForChannel(
+                channelId: channelId,
+                includeDeleted: true
+            )
+            .map(\.absoluteString)
+            let activeOnly = await store.loadGatewayURLsForChannel(
+                channelId: channelId,
+                includeDeleted: false
+            )
+            .map(\.absoluteString)
+
+            #expect(withDeleted == ["https://sandbox.pushgo.dev", "https://old.pushgo.dev"])
+            #expect(activeOnly == ["https://sandbox.pushgo.dev"])
+        }
+    }
+
+    @Test
     func watchProvisioningStatePersistsServerConfigAndMetadataInDatabase() async throws {
         try await withIsolatedAutomationStorage { _, appGroupIdentifier in
             let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)

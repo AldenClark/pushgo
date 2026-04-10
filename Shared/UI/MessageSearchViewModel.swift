@@ -5,6 +5,7 @@ import Observation
 @Observable
 final class MessageSearchViewModel {
     var query: String = ""
+    private(set) var sortMode: MessageListSortMode = MessageListSortMode.loadPreference()
     private(set) var displayedResultsIdentityRevision: UInt64 = 0
     private(set) var displayedResults: [PushMessageSummary] = [] {
         didSet {
@@ -69,6 +70,15 @@ final class MessageSearchViewModel {
         }
     }
 
+    func setSortMode(_ sortMode: MessageListSortMode, persist: Bool = false) {
+        guard self.sortMode != sortMode else { return }
+        self.sortMode = sortMode
+        if persist {
+            sortMode.persist()
+        }
+        refreshMessagesIfNeeded()
+    }
+
     var hasMore: Bool {
         hasMoreResults
     }
@@ -113,11 +123,14 @@ final class MessageSearchViewModel {
                 query: trimmedQuery,
                 before: nil,
                 limit: pageSize,
+                sortMode: sortMode
             )
             guard !Task.isCancelled else { return }
             totalResults = count
             displayedResults = page
-            nextCursor = page.last.map { MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id) }
+            nextCursor = page.last.map {
+                MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
+            }
             hasMoreResults = displayedResults.count < totalResults
         } catch {
             totalResults = 0
@@ -135,13 +148,16 @@ final class MessageSearchViewModel {
                 query: trimmedQuery,
                 before: nextCursor,
                 limit: pageSize,
+                sortMode: sortMode
             )
             guard !page.isEmpty else {
                 hasMoreResults = false
                 return
             }
             displayedResults.append(contentsOf: page)
-            nextCursor = page.last.map { MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id) }
+            nextCursor = page.last.map {
+                MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
+            }
             hasMoreResults = displayedResults.count < totalResults
             trimCachedResultsIfNeeded()
             hasMoreResults = displayedResults.count < totalResults

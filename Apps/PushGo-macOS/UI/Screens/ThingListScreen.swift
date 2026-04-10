@@ -51,7 +51,7 @@ struct ThingListScreen: View {
                         .alignmentGuide(.listRowSeparatorTrailing) { dimensions in
                             dimensions[.trailing] - Layout.rowInsets.trailing
                         }
-                        .listRowBackground(Color.clear)
+                        .listRowBackground(EntitySelectionBackground(isSelected: batchSelection.contains(thing.id)))
                         .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
                         .listRowSeparator(index == things.count - 1 ? .hidden : .visible, edges: .bottom)
                         .onAppear {
@@ -74,27 +74,31 @@ struct ThingListScreen: View {
                 .scrollContentBackground(.hidden)
                 .background(EntityVisualTokens.pageBackground)
             } else {
-                List(selection: $selection) {
+                List {
                     ForEach(things.indices, id: \.self) { index in
                         let thing = things[index]
-                        ThingListRow(thing: thing)
-                            .id(thing.id)
-                            .accessibilityIdentifier("thing.row.\(thing.id)")
-                            .tag(thing.id)
-                            .listRowInsets(Layout.rowInsets)
-                            .alignmentGuide(.listRowSeparatorLeading) { dimensions in
-                                dimensions[.leading]
-                            }
-                            .alignmentGuide(.listRowSeparatorTrailing) { dimensions in
-                                dimensions[.trailing] - Layout.rowInsets.trailing
-                            }
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
-                            .listRowSeparator(index == things.count - 1 ? .hidden : .visible, edges: .bottom)
-                            .onAppear {
-                                guard index == things.count - 1 else { return }
-                                onReachEnd?()
-                            }
+                        Button {
+                            selection = thing.id
+                        } label: {
+                            ThingListRow(thing: thing)
+                        }
+                        .buttonStyle(.plain)
+                        .id(thing.id)
+                        .accessibilityIdentifier("thing.row.\(thing.id)")
+                        .listRowInsets(Layout.rowInsets)
+                        .alignmentGuide(.listRowSeparatorLeading) { dimensions in
+                            dimensions[.leading]
+                        }
+                        .alignmentGuide(.listRowSeparatorTrailing) { dimensions in
+                            dimensions[.trailing] - Layout.rowInsets.trailing
+                        }
+                        .listRowBackground(EntitySelectionBackground(isSelected: selection == thing.id))
+                        .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
+                        .listRowSeparator(index == things.count - 1 ? .hidden : .visible, edges: .bottom)
+                        .onAppear {
+                            guard index == things.count - 1 else { return }
+                            onReachEnd?()
+                        }
                     }
                     if isLoadingMore {
                         HStack {
@@ -195,7 +199,7 @@ private struct ThingListRow: View {
                         Spacer(minLength: 8)
                         Text(EntityDateFormatter.relativeText(thing.updatedAt))
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.appTextSecondary)
                     }
 
                     ThingMetadataSummary(entries: metadataEntries, fallbackText: metadataFallbackText)
@@ -206,7 +210,7 @@ private struct ThingListRow: View {
             if !thing.tags.isEmpty {
                 Text(thing.tags.joined(separator: " · "))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appTextSecondary)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -233,7 +237,7 @@ private struct ThingListRow: View {
                         if previewImageAttachments.count > visibleCount {
                             Text("+\(previewImageAttachments.count - visibleCount)")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.appTextSecondary)
                                 .padding(.leading, 4)
                         }
                     }
@@ -267,13 +271,13 @@ private struct ThingMetadataSummary: View {
                     : segments.joined(separator: " · ")
             )
             .font(.caption2)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.appTextSecondary)
             .lineLimit(2)
             .frame(maxWidth: .infinity, alignment: .leading)
         } else if let fallbackText, !fallbackText.isEmpty {
             Text(fallbackText)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appTextSecondary)
                 .lineLimit(1)
         }
     }

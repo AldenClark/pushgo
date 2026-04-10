@@ -389,6 +389,14 @@ struct MessageSplitScreen: View {
                 .accessibilityLabel(localizationManager.localized("delete"))
                 .disabled(batchSelection.isEmpty)
             } else {
+                Button {
+                    toggleSortMode()
+                } label: {
+                    Image(systemName: isUnreadFirstSortEnabled ? "arrow.up.arrow.down.circle.fill" : "arrow.up.arrow.down.circle")
+                }
+                .help(localizationManager.localized("message_sort"))
+                .accessibilityLabel(localizationManager.localized("message_sort"))
+
                 Menu {
                     channelFilterMenuContent
                 } label: {
@@ -418,17 +426,6 @@ struct MessageSplitScreen: View {
     @ViewBuilder
     private var channelFilterMenuContent: some View {
         Section {
-            Button {
-                messageListViewModel.setFilter(isUnreadOnlyFilterEnabled ? .all : .unread)
-            } label: {
-                channelFilterMenuItemLabel(
-                    title: localizationManager.localized("only_show_unread_messages"),
-                    isSelected: isUnreadOnlyFilterEnabled
-                )
-            }
-        }
-
-        Section {
             ForEach(messageListViewModel.channelSummaries) { summary in
                 Button {
                     messageListViewModel.toggleChannelSelection(summary.key)
@@ -442,12 +439,12 @@ struct MessageSplitScreen: View {
         }
     }
 
-    private var isUnreadOnlyFilterEnabled: Bool {
-        messageListViewModel.selectedFilter == .unread
+    private var isUnreadFirstSortEnabled: Bool {
+        messageListViewModel.sortMode == .unreadFirst
     }
 
     private var isFilterMenuHighlighted: Bool {
-        isUnreadOnlyFilterEnabled || messageListViewModel.selectedChannel != nil
+        messageListViewModel.selectedChannel != nil
     }
 
     private func channelFilterMenuItemLabel(title: String, isSelected: Bool) -> some View {
@@ -460,6 +457,12 @@ struct MessageSplitScreen: View {
             }
             Text(title)
         }
+    }
+
+    private func toggleSortMode() {
+        let nextMode: MessageListSortMode = isUnreadFirstSortEnabled ? .timeDescending : .unreadFirst
+        messageListViewModel.setSortMode(nextMode)
+        searchViewModel.setSortMode(nextMode)
     }
 
     private func resolvedChannelDisplayName(for channel: MessageChannelKey?) -> String? {

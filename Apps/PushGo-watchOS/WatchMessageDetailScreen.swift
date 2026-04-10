@@ -22,7 +22,7 @@ struct WatchMessageDetailScreen: View {
                             .font(.headline)
                         Text(message.receivedAt.formatted(date: .complete, time: .standard))
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.appTextSecondary)
                         watchMessageSeverityBadge(for: message.severity)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -44,7 +44,7 @@ struct WatchMessageDetailScreen: View {
                                     .scaledToFit()
                             default:
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color.secondary.opacity(0.2))
+                                    .fill(Color.appSurfaceSunken)
                                     .frame(height: 90)
                             }
                         }
@@ -81,7 +81,7 @@ struct WatchMessageDetailScreen: View {
                 Section {
                     Text(localizationManager.localized("placeholder_no_unread_messages"))
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.appTextSecondary)
                 }
             }
         }
@@ -120,9 +120,9 @@ struct WatchMessageDetailScreen: View {
                 .padding(.vertical, 2)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(Color.primary.opacity(0.12))
+                        .fill(Color.appStateInfoBackground)
                 )
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appStateInfoForeground)
         }
     }
 }
