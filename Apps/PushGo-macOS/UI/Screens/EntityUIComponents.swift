@@ -39,6 +39,13 @@ struct EntitySelectionBackground: View {
     }
 }
 
+extension View {
+    func entityListRowTapTarget() -> some View {
+        frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+    }
+}
+
 struct EntityThumbnail: View {
     let url: URL?
     var size: CGFloat = 44

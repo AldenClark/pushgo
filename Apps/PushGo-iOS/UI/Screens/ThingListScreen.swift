@@ -102,6 +102,9 @@ struct ThingListScreen: View {
         }
         let content = applySearchIfNeeded(baseContent)
         .accessibilityIdentifier("screen.things.list")
+        .refreshable {
+            await handlePullToRefresh()
+        }
         .task(id: searchAutoloadTrigger(filteredThingsCount: filteredThingsSnapshot.count)) {
             await autoloadSearchResultsIfNeeded(filteredThingsCount: filteredThingsSnapshot.count)
         }
@@ -266,6 +269,13 @@ struct ThingListScreen: View {
         ]
         .joined(separator: " ")
         .lowercased()
+    }
+
+    private func handlePullToRefresh() async {
+        _ = await environment.syncProviderIngress(reason: "things_pull_to_refresh")
+        await viewModel.reload()
+        syncSelectedThingSnapshot()
+        openThingIfNeeded()
     }
 
     private func scrollToTopIfNeeded(_ proxy: ScrollViewProxy, filteredThings: [ThingProjection]) {

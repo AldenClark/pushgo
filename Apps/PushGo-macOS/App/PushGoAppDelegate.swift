@@ -25,7 +25,6 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency 
         }
         Task { @MainActor in
             await environment.bootstrap()
-            environment.checkForUpdatesInBackgroundOnLaunchIfNeeded()
         }
 
         Task { @MainActor in
@@ -225,7 +224,8 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency 
             }()
             _ = await AppEnvironment.shared.persistRemotePayloadIfNeeded(
                 sanitizedPayload,
-                requestIdentifier: requestIdentifier
+                requestIdentifier: requestIdentifier,
+                shouldAckDirect: true
             )
         }
     }

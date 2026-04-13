@@ -86,6 +86,9 @@ struct EventSplitScreen: View {
                 }
             )
             .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
+            .refreshable {
+                await handleProviderIngressPullRefresh()
+            }
             .searchable(
                 text: $searchFieldText,
                 placement: .toolbar,
@@ -224,6 +227,13 @@ struct EventSplitScreen: View {
     private var canCloseSelectedEvent: Bool {
         guard let selectedEvent else { return false }
         return eventLifecycleState(from: selectedEvent.state) != .closed
+    }
+
+    @MainActor
+    private func handleProviderIngressPullRefresh() async {
+        _ = await environment.syncProviderIngress(reason: "events_pull_to_refresh")
+        await viewModel.reload()
+        syncSelection()
     }
 
     private func setBatchMode(_ enabled: Bool) {

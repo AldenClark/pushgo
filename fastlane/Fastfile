@@ -604,10 +604,12 @@ platform :ios do
         "-configuration Release " \
         "-destination 'generic/platform=macOS' " \
         "-derivedDataPath #{Shellwords.escape(reference_derived_data_path)} " \
-        "build #{xcargs}"
+        "build " \
+        "PUSHGO_DISPLAY_VERSION=#{Shellwords.escape(display_version)} " \
+        "CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' DEVELOPMENT_TEAM=''"
       )
       reference_app_path = Dir.glob(File.join(reference_derived_data_path, "Build", "Products", "Release", "*.app")).first
-      UI.user_error!("No signed reference .app found under #{reference_derived_data_path}") if reference_app_path.to_s.empty?
+      UI.user_error!("No reference .app found under #{reference_derived_data_path}") if reference_app_path.to_s.empty?
       reference_entitlements_by_bundle_id = extracted_entitlements_by_bundle_id(reference_app_path)
 
       sh(

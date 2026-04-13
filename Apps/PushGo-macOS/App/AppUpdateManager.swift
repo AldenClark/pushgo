@@ -6,7 +6,6 @@ protocol AppUpdateManaging: AnyObject {
     var isBetaChannelEnabled: Bool { get }
     func setBetaChannelEnabled(_ isEnabled: Bool)
     func checkForUpdates() -> Bool
-    func checkForUpdatesInBackground() -> Bool
 }
 
 @MainActor
@@ -28,10 +27,6 @@ final class NoopAppUpdateManager: AppUpdateManaging {
     func setBetaChannelEnabled(_: Bool) {}
 
     func checkForUpdates() -> Bool {
-        false
-    }
-
-    func checkForUpdatesInBackground() -> Bool {
         false
     }
 }
@@ -87,16 +82,6 @@ final class SparkleAppUpdateManager: NSObject, AppUpdateManaging {
     func checkForUpdates() -> Bool {
         guard isSparkleConfigured else { return false }
         updaterController.checkForUpdates(nil)
-        return true
-    }
-
-    func checkForUpdatesInBackground() -> Bool {
-        guard isSparkleConfigured else { return false }
-        guard updaterController.updater.automaticallyChecksForUpdates else { return false }
-        // Use probe mode for app-triggered automatic checks:
-        // - no "up to date" UI
-        // - failures are silently skipped
-        updaterController.updater.checkForUpdateInformation()
         return true
     }
 

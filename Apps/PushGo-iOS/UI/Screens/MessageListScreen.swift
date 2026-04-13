@@ -114,6 +114,9 @@ struct MessageListScreen: View {
             .navigationTitle(localizationManager.localized("messages"))
             .navigationBarTitleDisplayMode(.large)
             .applyToolbarBackgroundIfNeeded()
+            .refreshable {
+                await handlePullToRefresh()
+            }
             .onChange(of: environment.messageStoreRevision) { _, _ in
                 handleMessageStoreRevisionChange()
             }
@@ -204,6 +207,13 @@ struct MessageListScreen: View {
         }
         return hasNamedChannel ? summaries : []
     }
+
+    private func handlePullToRefresh() async {
+        _ = await environment.syncProviderIngress(reason: "messages_pull_to_refresh")
+        await viewModel.refresh()
+        searchViewModel.refreshMessagesIfNeeded()
+    }
+
     @ViewBuilder
     private var messageList: some View {
         ScrollViewReader { proxy in

@@ -61,6 +61,7 @@ struct MessageListScreen: View {
                         selection = message.id
                     } label: {
                         MessageRowView(message: message)
+                            .entityListRowTapTarget()
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("message.row.\(message.id.uuidString)")
@@ -101,7 +102,7 @@ struct MessageListScreen: View {
                             .foregroundStyle(batchSelection.contains(message.id) ? .accent : .secondary)
                         MessageRowView(message: message)
                     }
-                    .contentShape(Rectangle())
+                    .entityListRowTapTarget()
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("message.row.\(message.id.uuidString)")
@@ -134,6 +135,7 @@ struct MessageListScreen: View {
                                 selection = message.id
                             } label: {
                                 MessageRowView(message: message)
+                                    .entityListRowTapTarget()
                             }
                             .buttonStyle(.plain)
                             .accessibilityIdentifier("message.row.\(message.id.uuidString)")
@@ -190,7 +192,7 @@ struct MessageListScreen: View {
                                     .foregroundStyle(batchSelection.contains(message.id) ? .accent : .secondary)
                                 MessageRowView(message: message)
                             }
-                            .contentShape(Rectangle())
+                            .entityListRowTapTarget()
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("message.row.\(message.id.uuidString)")

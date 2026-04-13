@@ -102,6 +102,9 @@ struct EventListScreen: View {
         }
         let content = applySearchIfNeeded(baseContent)
         .accessibilityIdentifier("screen.events.list")
+        .refreshable {
+            await handlePullToRefresh()
+        }
         .task(id: searchAutoloadTrigger(filteredEventsCount: filteredEventsSnapshot.count)) {
             await autoloadSearchResultsIfNeeded(filteredEventsCount: filteredEventsSnapshot.count)
         }
@@ -274,6 +277,13 @@ struct EventListScreen: View {
         case .unknown:
             return 2
         }
+    }
+
+    private func handlePullToRefresh() async {
+        _ = await environment.syncProviderIngress(reason: "events_pull_to_refresh")
+        await viewModel.reload()
+        syncSelectedEventSnapshot()
+        openEventIfNeeded()
     }
 
     private func scrollToTopIfNeeded(_ proxy: ScrollViewProxy, filteredEvents: [EventProjection]) {

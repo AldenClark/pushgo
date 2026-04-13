@@ -39,7 +39,7 @@ struct EventListScreen: View {
                                     .foregroundStyle(batchSelection.contains(event.id) ? .accent : .secondary)
                                 EventListRow(event: event)
                             }
-                            .contentShape(Rectangle())
+                            .entityListRowTapTarget()
                         }
                         .buttonStyle(.plain)
                         .id(event.id)
@@ -81,6 +81,7 @@ struct EventListScreen: View {
                             selection = event.id
                         } label: {
                             EventListRow(event: event)
+                                .entityListRowTapTarget()
                         }
                         .buttonStyle(.plain)
                         .id(event.id)

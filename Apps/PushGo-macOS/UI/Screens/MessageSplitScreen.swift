@@ -92,6 +92,9 @@ struct MessageSplitScreen: View {
                 isBatchMode: $isBatchMode
             )
             .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
+            .refreshable {
+                await handleProviderIngressPullRefresh()
+            }
             .searchable(
                 text: $searchFieldText,
                 placement: .toolbar,
@@ -149,6 +152,12 @@ struct MessageSplitScreen: View {
 
     @MainActor
     private func refreshMessagesForStoreChange() async {
+        await refreshMessagesIfNeeded()
+    }
+
+    @MainActor
+    private func handleProviderIngressPullRefresh() async {
+        _ = await environment.syncProviderIngress(reason: "messages_pull_to_refresh")
         await refreshMessagesIfNeeded()
     }
 

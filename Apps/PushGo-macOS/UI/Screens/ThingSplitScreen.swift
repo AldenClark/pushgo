@@ -87,6 +87,9 @@ struct ThingSplitScreen: View {
                 }
             )
             .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
+            .refreshable {
+                await handleProviderIngressPullRefresh()
+            }
             .searchable(
                 text: $searchFieldText,
                 placement: .toolbar,
@@ -195,6 +198,13 @@ struct ThingSplitScreen: View {
         guard !isBatchMode else { return nil }
         guard let selection else { return nil }
         return filteredThings.first(where: { $0.id == selection })
+    }
+
+    @MainActor
+    private func handleProviderIngressPullRefresh() async {
+        _ = await environment.syncProviderIngress(reason: "things_pull_to_refresh")
+        await viewModel.reload()
+        syncSelection()
     }
 
     @ToolbarContentBuilder

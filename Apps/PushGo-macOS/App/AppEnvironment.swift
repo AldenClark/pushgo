@@ -53,8 +53,6 @@ final class AppEnvironment {
     private var channelSubscriptionLookup: [String: ChannelSubscription] = [:]
     private var isSceneActive = false
     @ObservationIgnored private let appUpdateManager: any AppUpdateManaging
-    @ObservationIgnored private var didRunStartupUpdateCheck = false
-    @ObservationIgnored private var startupUpdateCheckTask: Task<Void, Never>?
 
     private let channelSubscriptionService = ChannelSubscriptionService()
     @ObservationIgnored private let localStoreFailureStreakThreshold = 3
@@ -78,10 +76,6 @@ final class AppEnvironment {
             }
         }
         registerDefaultNotificationCategories()
-    }
-
-    deinit {
-        startupUpdateCheckTask?.cancel()
     }
 
     func bootstrap() async {
@@ -215,20 +209,6 @@ final class AppEnvironment {
         guard betaChannelEnabled != isEnabled else { return }
         betaChannelEnabled = isEnabled
         appUpdateManager.setBetaChannelEnabled(isEnabled)
-        if isEnabled {
-            _ = appUpdateManager.checkForUpdatesInBackground()
-        }
-    }
-
-    func checkForUpdatesInBackgroundOnLaunchIfNeeded() {
-        guard appUpdateManager.isEnabled, !didRunStartupUpdateCheck else { return }
-        didRunStartupUpdateCheck = true
-        startupUpdateCheckTask?.cancel()
-        startupUpdateCheckTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 15_000_000_000)
-            guard let self, !Task.isCancelled else { return }
-            _ = self.appUpdateManager.checkForUpdatesInBackground()
-        }
     }
 
     func updateServerConfig(_ config: ServerConfig?) async throws {
@@ -480,6 +460,28 @@ final class AppEnvironment {
             message: message
         )
         #endif
+    }
+
+    private func showAutomationErrorToastIfNeeded(
+        _ error: Error,
+        source: String,
+        category: String = "runtime"
+    ) {
+        recordAutomationRuntimeError(error, source: source, category: category)
+        guard !PushGoAutomationContext.isActive else { return }
+        if let appError = error as? AppError {
+            showToast(
+                message: appError.errorDescription
+                    ?? localizationManager.localized("failed_to_save_message_status_placeholder", String(describing: appError))
+            )
+            return
+        }
+        showToast(
+            message: localizationManager.localized(
+                "failed_to_save_message_status_placeholder",
+                error.localizedDescription
+            )
+        )
     }
 
     func dismissToast(id: UUID) {
@@ -1328,6 +1330,7 @@ final class AppEnvironment {
             scheduleMessageListRefresh()
             flushPendingMessageListRefreshIfNeeded()
             Task { @MainActor in
+                _ = await syncProviderIngress(reason: "scene_active")
                 await refreshLaunchAtLoginStatus()
                 await refreshChannelSubscriptions()
                 await syncPrivateChannelState()
@@ -1520,10 +1523,138 @@ final class AppEnvironment {
         return "\(config.baseURL.absoluteString)|\(token)"
     }
 
+    private func cachedProviderPullDeviceKey() async -> String? {
+        let platform = platformIdentifier()
+        if let scoped = await dataStore.cachedProviderDeviceKey(
+            for: platform,
+            channelType: "apns"
+        )?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !scoped.isEmpty
+        {
+            return scoped
+        }
+        if let legacy = await dataStore.cachedProviderDeviceKey(
+            for: platform
+        )?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !legacy.isEmpty
+        {
+            return legacy
+        }
+        return nil
+    }
+
+    private func providerIngressDeliveryId(from payload: [AnyHashable: Any]) -> String? {
+        let sanitized = UserInfoSanitizer.sanitize(payload)
+        let trimmed = (sanitized["delivery_id"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
+
+    private func shouldAckProviderDelivery(for outcome: NotificationPersistenceOutcome) -> Bool {
+        switch outcome {
+        case .duplicate, .persistedMain, .persistedPending:
+            return true
+        case .rejected, .failed:
+            return false
+        }
+    }
+
+    private func applyNotificationPersistenceOutcome(
+        _ outcome: NotificationPersistenceOutcome
+    ) {
+        switch outcome {
+        case .duplicate:
+            scheduleCountsRefresh()
+        case .persistedMain:
+            scheduleCountsRefresh()
+        case .persistedPending:
+            scheduleCountsRefresh()
+        case .rejected, .failed:
+            break
+        }
+    }
+
+    private func ackProviderDeliveryIfNeeded(
+        from payload: [AnyHashable: Any],
+        outcome: NotificationPersistenceOutcome,
+        source: String
+    ) async {
+        guard shouldAckProviderDelivery(for: outcome) else { return }
+        guard NotificationHandling.providerWakeupPullDeliveryId(from: payload) == nil else { return }
+        guard let deliveryId = providerIngressDeliveryId(from: payload) else { return }
+        guard let config = serverConfig else { return }
+        guard let deviceKey = await cachedProviderPullDeviceKey() else { return }
+        do {
+            _ = try await channelSubscriptionService.ackMessage(
+                baseURL: config.baseURL,
+                token: config.token,
+                deviceKey: deviceKey,
+                deliveryId: deliveryId
+            )
+        } catch {
+            showAutomationErrorToastIfNeeded(error, source: source)
+        }
+    }
+
+    @discardableResult
+    func syncProviderIngress(
+        deliveryId: String? = nil,
+        reason: String
+    ) async -> Int {
+        guard let config = serverConfig else { return 0 }
+        var deviceKey = await cachedProviderPullDeviceKey()
+        if deviceKey == nil,
+           let token = await dataStore.cachedPushToken(for: platformIdentifier())?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !token.isEmpty
+        {
+            await syncProviderPullRoute(config: config, providerToken: token)
+            deviceKey = await cachedProviderPullDeviceKey()
+        }
+        guard let deviceKey else { return 0 }
+        do {
+            let items = try await channelSubscriptionService.pullMessages(
+                baseURL: config.baseURL,
+                token: config.token,
+                deviceKey: deviceKey,
+                deliveryId: deliveryId
+            )
+            guard !items.isEmpty else { return 0 }
+            var applied = 0
+            for item in items {
+                let payload: [AnyHashable: Any] = item.payload.reduce(into: [:]) { result, element in
+                    result[element.key] = element.value
+                }
+                let outcome = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
+                    payload,
+                    requestIdentifier: item.deliveryId,
+                    dataStore: dataStore,
+                    beforeSave: { [weak self] message in
+                        guard let self else { return }
+                        await self.autoEnableDataPageIfNeeded(for: message)
+                    }
+                )
+                applyNotificationPersistenceOutcome(outcome)
+                if shouldAckProviderDelivery(for: outcome) {
+                    applied += 1
+                }
+            }
+            return applied
+        } catch {
+            showAutomationErrorToastIfNeeded(
+                error,
+                source: "provider.ingress.\(reason)"
+            )
+            return 0
+        }
+    }
+
     @discardableResult
     func persistRemotePayloadIfNeeded(
         _ payload: [AnyHashable: Any],
-        requestIdentifier: String? = nil
+        requestIdentifier: String? = nil,
+        shouldAckDirect: Bool = false
     ) async -> NotificationPersistenceOutcome {
         let outcome = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
             payload,
@@ -1534,6 +1665,13 @@ final class AppEnvironment {
                 await self.autoEnableDataPageIfNeeded(for: message)
             }
         )
+        if shouldAckDirect {
+            await ackProviderDeliveryIfNeeded(
+                from: payload,
+                outcome: outcome,
+                source: "provider.direct.ack.macos"
+            )
+        }
         applyNotificationPersistenceOutcome(outcome)
         return outcome
     }
@@ -1557,6 +1695,7 @@ final class AppEnvironment {
         case .unresolvedWakeup:
             outcome = .rejected
         case .notWakeup:
+            let directPayload = notification.request.content.userInfo
             outcome = await NotificationPersistenceCoordinator.persistIfNeeded(
                 notification,
                 dataStore: dataStore,
@@ -1565,24 +1704,14 @@ final class AppEnvironment {
                     await self.autoEnableDataPageIfNeeded(for: message)
                 }
             )
+            await ackProviderDeliveryIfNeeded(
+                from: directPayload,
+                outcome: outcome,
+                source: "provider.direct.ack.macos"
+            )
         }
         applyNotificationPersistenceOutcome(outcome)
         return outcome
-    }
-
-    private func applyNotificationPersistenceOutcome(
-        _ outcome: NotificationPersistenceOutcome
-    ) {
-        switch outcome {
-        case .duplicate:
-            scheduleCountsRefresh()
-        case .persistedMain:
-            scheduleCountsRefresh()
-        case .persistedPending:
-            scheduleCountsRefresh()
-        case .rejected, .failed:
-            break
-        }
     }
     func handleNotificationOpen(notificationRequestId: String) async {
         await handleNotificationOpenInternal(

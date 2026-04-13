@@ -49,15 +49,17 @@ struct ChannelSubscriptionService {
     }
 
     struct PullRequest: Encodable {
-        let deliveryId: String
+        let deviceKey: String
+        let deliveryId: String?
 
         enum CodingKeys: String, CodingKey {
+            case deviceKey = "device_key"
             case deliveryId = "delivery_id"
         }
     }
 
     struct PullResponse: Decodable {
-        let item: PullItem?
+        let items: [PullItem]
     }
 
     struct PullItem: Decodable {
@@ -68,6 +70,20 @@ struct ChannelSubscriptionService {
             case deliveryId = "delivery_id"
             case payload
         }
+    }
+
+    struct AckRequest: Encodable {
+        let deviceKey: String
+        let deliveryId: String
+
+        enum CodingKeys: String, CodingKey {
+            case deviceKey = "device_key"
+            case deliveryId = "delivery_id"
+        }
+    }
+
+    struct AckResponse: Decodable {
+        let removed: Bool
     }
 
     struct EmptyPayload: Decodable {
@@ -326,11 +342,12 @@ struct ChannelSubscriptionService {
         _ = try decodePayload(EmptyPayload.self, data: data, response: response)
     }
 
-    func pullMessage(
+    func pullMessages(
         baseURL: URL,
         token: String?,
-        deliveryId: String
-    ) async throws -> PullItem? {
+        deviceKey: String,
+        deliveryId: String? = nil
+    ) async throws -> [PullItem] {
         let baseURL = try validatedBaseURL(baseURL)
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw AppError.invalidURL
@@ -347,11 +364,63 @@ struct ChannelSubscriptionService {
         if let token, !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
+        let normalizedDeviceKey = deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedDeviceKey.isEmpty else {
+            throw AppError.unknown("missing device_key")
+        }
+        let normalizedDeliveryIdRaw = deliveryId?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDeliveryId = (normalizedDeliveryIdRaw?.isEmpty == false)
+            ? normalizedDeliveryIdRaw
+            : nil
         request.httpBody = try JSONEncoder().encode(
-            PullRequest(deliveryId: deliveryId)
+            PullRequest(
+                deviceKey: normalizedDeviceKey,
+                deliveryId: normalizedDeliveryId
+            )
         )
         let (data, response) = try await URLSession.shared.data(for: request)
-        return try decodePayload(PullResponse.self, data: data, response: response).item
+        return try decodePayload(PullResponse.self, data: data, response: response).items
+    }
+
+    func ackMessage(
+        baseURL: URL,
+        token: String?,
+        deviceKey: String,
+        deliveryId: String
+    ) async throws -> Bool {
+        let baseURL = try validatedBaseURL(baseURL)
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw AppError.invalidURL
+        }
+        components.path = components.path.appendingPathComponent("/messages/ack")
+        guard let url = components.url else {
+            throw AppError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = AppConstants.deviceRegistrationTimeout
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let token, !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        let normalizedDeviceKey = deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedDeliveryId = deliveryId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedDeviceKey.isEmpty else {
+            throw AppError.unknown("missing device_key")
+        }
+        guard !normalizedDeliveryId.isEmpty else {
+            throw AppError.unknown("missing delivery_id")
+        }
+        request.httpBody = try JSONEncoder().encode(
+            AckRequest(
+                deviceKey: normalizedDeviceKey,
+                deliveryId: normalizedDeliveryId
+            )
+        )
+        let (data, response) = try await URLSession.shared.data(for: request)
+        return try decodePayload(AckResponse.self, data: data, response: response).removed
     }
 
     func subscribe(

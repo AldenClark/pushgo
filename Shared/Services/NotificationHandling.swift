@@ -391,7 +391,7 @@ enum NotificationHandling {
     static func resolveProviderWakeup(
         from payload: [AnyHashable: Any],
         dataStore: LocalDataStore,
-        fallbackServerConfig _: ServerConfig? = nil,
+        fallbackServerConfig: ServerConfig? = nil,
         channelSubscriptionService: ChannelSubscriptionService
     ) async -> ProviderWakeupResolution {
         let sanitized = UserInfoSanitizer.sanitize(payload)
@@ -400,19 +400,25 @@ enum NotificationHandling {
         }
         let candidates = await activeServerConfigsForWakeupIngress(
             dataStore: dataStore,
-            payload: sanitized
+            payload: sanitized,
+            fallbackServerConfig: fallbackServerConfig
         )
         guard !candidates.isEmpty else {
+            return .unresolvedWakeup
+        }
+        guard let deviceKey = await activeProviderDeviceKeyForWakeupIngress(dataStore: dataStore) else {
             return .unresolvedWakeup
         }
 
         for candidate in candidates {
             do {
-                guard let item = try await channelSubscriptionService.pullMessage(
+                let items = try await channelSubscriptionService.pullMessages(
                     baseURL: candidate.config.baseURL,
                     token: candidate.config.token,
+                    deviceKey: deviceKey,
                     deliveryId: deliveryId
-                ) else {
+                )
+                guard let item = items.first else {
                     continue
                 }
                 let pulledPayload: [AnyHashable: Any] = item.payload.reduce(into: [:]) { result, element in
@@ -490,7 +496,8 @@ enum NotificationHandling {
 #if !os(watchOS)
     private static func activeServerConfigsForWakeupIngress(
         dataStore: LocalDataStore,
-        payload: [String: Any]
+        payload: [String: Any],
+        fallbackServerConfig: ServerConfig?
     ) async -> [WakeupServerCandidate] {
         var candidates: [WakeupServerCandidate] = []
         var dedupe = Set<String>()
@@ -529,7 +536,50 @@ enum NotificationHandling {
             )
         }
 
+        if let fallbackServerConfig {
+            let normalized = fallbackServerConfig.normalized()
+            appendCandidate(
+                baseURL: normalized.baseURL,
+                token: normalized.token,
+                source: "fallback_server_config"
+            )
+        }
+
         return candidates
+    }
+
+    private static func activeProviderDeviceKeyForWakeupIngress(
+        dataStore: LocalDataStore
+    ) async -> String? {
+        let platform = providerPullPlatformIdentifier()
+        if let scoped = await dataStore.cachedProviderDeviceKey(
+            for: platform,
+            channelType: "apns"
+        )?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !scoped.isEmpty
+        {
+            return scoped
+        }
+        if let legacy = await dataStore.cachedProviderDeviceKey(
+            for: platform
+        )?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !legacy.isEmpty
+        {
+            return legacy
+        }
+        return nil
+    }
+
+    private static func providerPullPlatformIdentifier() -> String {
+        #if os(iOS)
+        return "ios"
+        #elseif os(macOS)
+        return "macos"
+        #elseif os(watchOS)
+        return "watchos"
+        #else
+        return "apple"
+        #endif
     }
 
     private static func normalizedPayloadString(_ value: Any?) -> String? {
