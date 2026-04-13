@@ -2288,21 +2288,24 @@ final class AppEnvironment {
         from payload: [AnyHashable: Any],
         outcome: NotificationPersistenceOutcome,
         source: String
-    ) async {
+    ) {
         guard shouldAckProviderDelivery(for: outcome) else { return }
         guard NotificationHandling.providerWakeupPullDeliveryId(from: payload) == nil else { return }
         guard let deliveryId = providerIngressDeliveryId(from: payload) else { return }
         guard let config = serverConfig else { return }
-        guard let deviceKey = await cachedProviderPullDeviceKey() else { return }
-        do {
-            _ = try await channelSubscriptionService.ackMessage(
-                baseURL: config.baseURL,
-                token: config.token,
-                deviceKey: deviceKey,
-                deliveryId: deliveryId
-            )
-        } catch {
-            recordAutomationRuntimeError(error, source: source, category: "provider")
+        Task { [weak self] in
+            guard let self else { return }
+            guard let deviceKey = await self.cachedProviderPullDeviceKey() else { return }
+            do {
+                _ = try await self.channelSubscriptionService.ackMessage(
+                    baseURL: config.baseURL,
+                    token: config.token,
+                    deviceKey: deviceKey,
+                    deliveryId: deliveryId
+                )
+            } catch {
+                self.recordAutomationRuntimeError(error, source: source, category: "provider")
+            }
         }
     }
 
@@ -2397,7 +2400,7 @@ final class AppEnvironment {
                     await self.autoEnableDataPageIfNeeded(for: message)
                 }
             )
-            await ackProviderDeliveryIfNeeded(
+            ackProviderDeliveryIfNeeded(
                 from: directPayload,
                 outcome: outcome,
                 source: "provider.direct.ack.ios"
