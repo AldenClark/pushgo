@@ -721,24 +721,28 @@ platform :ios do
     groups = ENV.fetch("TESTFLIGHT_EXTERNAL_GROUPS", "").split(",").map(&:strip).reject(&:empty?)
     UI.user_error!("Missing TESTFLIGHT_EXTERNAL_GROUPS for beta auto-submit") if groups.empty?
 
-    upload_to_testflight(
-      api_key: api_key,
-      ipa: ios_ipa_path,
-      changelog: changelog.empty? ? nil : changelog,
-      groups: groups,
-      distribute_external: true,
-      submit_beta_review: true,
-      skip_waiting_for_build_processing: false
-    )
-    upload_to_testflight(
-      api_key: api_key,
-      pkg: macos_pkg_path,
-      changelog: changelog.empty? ? nil : changelog,
-      groups: groups,
-      distribute_external: true,
-      submit_beta_review: true,
-      skip_waiting_for_build_processing: false
-    )
+    with_transient_asc_retry!("upload iOS build to TestFlight") do
+      upload_to_testflight(
+        api_key: api_key,
+        ipa: ios_ipa_path,
+        changelog: changelog.empty? ? nil : changelog,
+        groups: groups,
+        distribute_external: true,
+        submit_beta_review: true,
+        skip_waiting_for_build_processing: false
+      )
+    end
+    with_transient_asc_retry!("upload macOS build to TestFlight") do
+      upload_to_testflight(
+        api_key: api_key,
+        pkg: macos_pkg_path,
+        changelog: changelog.empty? ? nil : changelog,
+        groups: groups,
+        distribute_external: true,
+        submit_beta_review: true,
+        skip_waiting_for_build_processing: false
+      )
+    end
   end
 
   def upload_release_builds!
@@ -747,26 +751,85 @@ platform :ios do
     macos_pkg_path = archive_macos_app_store_pkg!
     release_notes = release_notes_payload
 
-    upload_to_app_store(
-      api_key: api_key,
-      ipa: ios_ipa_path,
-      skip_metadata: false,
-      skip_screenshots: true,
-      release_notes: release_notes,
-      submit_for_review: ENV.fetch("APP_STORE_SUBMIT_FOR_REVIEW", "false") == "true",
-      automatic_release: ENV.fetch("APP_STORE_AUTOMATIC_RELEASE", "false") == "true",
-      force: true
-    )
-    upload_to_app_store(
-      api_key: api_key,
-      pkg: macos_pkg_path,
-      skip_metadata: false,
-      skip_screenshots: true,
-      release_notes: release_notes,
-      submit_for_review: ENV.fetch("APP_STORE_SUBMIT_FOR_REVIEW", "false") == "true",
-      automatic_release: ENV.fetch("APP_STORE_AUTOMATIC_RELEASE", "false") == "true",
-      force: true
-    )
+    with_transient_asc_retry!("upload iOS build to App Store Connect") do
+      upload_to_app_store(
+        api_key: api_key,
+        ipa: ios_ipa_path,
+        skip_metadata: false,
+        skip_screenshots: true,
+        release_notes: release_notes,
+        submit_for_review: ENV.fetch("APP_STORE_SUBMIT_FOR_REVIEW", "false") == "true",
+        automatic_release: ENV.fetch("APP_STORE_AUTOMATIC_RELEASE", "false") == "true",
+        force: true
+      )
+    end
+    with_transient_asc_retry!("upload macOS build to App Store Connect") do
+      upload_to_app_store(
+        api_key: api_key,
+        pkg: macos_pkg_path,
+        skip_metadata: false,
+        skip_screenshots: true,
+        release_notes: release_notes,
+        submit_for_review: ENV.fetch("APP_STORE_SUBMIT_FOR_REVIEW", "false") == "true",
+        automatic_release: ENV.fetch("APP_STORE_AUTOMATIC_RELEASE", "false") == "true",
+        force: true
+      )
+    end
+  end
+
+  def asc_upload_retry_attempts
+    raw = ENV.fetch("ASC_UPLOAD_MAX_ATTEMPTS", "3").to_i
+    raw > 0 ? raw : 1
+  end
+
+  def asc_upload_retry_base_seconds
+    raw = ENV.fetch("ASC_UPLOAD_RETRY_BASE_SECONDS", "20").to_i
+    raw > 0 ? raw : 20
+  end
+
+  def transient_asc_upload_error?(error)
+    message = error.to_s
+    return false if message.empty?
+
+    patterns = [
+      /NSURLErrorDomain\s+Code=-1009/i,
+      /NSURLErrorDomain\s+Code=-1001/i,
+      /timed?\s*out/i,
+      /could not connect/i,
+      /connection (?:was )?lost/i,
+      /connection reset/i,
+      /network route/i,
+      /GET UPLOAD STATE .* did not receive a response/i,
+      /server returned an invalid response/i,
+      /temporar(?:y|ily) unavailable/i,
+      /HTTP(?:\/\d\.\d)?\s+50[0-9]\b/i,
+      /\b502\b|\b503\b|\b504\b/
+    ]
+
+    patterns.any? { |pattern| message.match?(pattern) }
+  end
+
+  def with_transient_asc_retry!(operation_name)
+    attempts = asc_upload_retry_attempts
+    base_sleep = asc_upload_retry_base_seconds
+    current = 0
+
+    begin
+      current += 1
+      return yield
+    rescue StandardError => e
+      unless transient_asc_upload_error?(e) && current < attempts
+        raise
+      end
+
+      sleep_seconds = base_sleep * (2**(current - 1))
+      UI.important(
+        "#{operation_name} failed with transient ASC/network error " \
+        "(attempt #{current}/#{attempts}): #{e.message}\nRetrying in #{sleep_seconds}s..."
+      )
+      sleep(sleep_seconds)
+      retry
+    end
   end
 
   desc "Archive and upload build to TestFlight"
