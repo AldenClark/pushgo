@@ -13,7 +13,7 @@ Policy:
 ### Improved
 - Improved ACK + pull reliability after provider token refresh by triggering ingress sync immediately.
 - Improved delivery continuity on iOS and macOS when the app refreshes provider route bindings.
-- Updated this beta line to `v1.2.0-beta.4` with build number incremented.
+- Updated this beta line to `v1.2.0-beta.5` with build number incremented.
 
 ### Fixed
 - Fixed a timing gap where provider pull could lag behind token updates.

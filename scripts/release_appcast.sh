@@ -12,7 +12,7 @@ Examples:
 
 Options:
   --account <name>                    Sparkle keychain account (default: pushgo)
-  --ed-key-file <path>                Sparkle Ed25519 private key file (preferred in CI)
+  --ed-key-file <path>                Sparkle Ed25519 private key file (supports base64 text, PEM, or DER)
   --expected-version <version>        Only process DMG files matching this version token (for example: v1.2.0-beta.3)
   --download-url-prefix <url>         Update file base URL (default: https://update.pushgo.cn/macos/)
   --release-notes-url-prefix <url>    Release notes base URL (default: same as download prefix)
@@ -159,6 +159,54 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
 update_notes_dir="${repo_root}/release/update-notes"
 state_appcast_path="${repo_root}/release/appcast.xml"
+temp_files=()
+
+cleanup_temp_files() {
+  local file
+  for file in "${temp_files[@]-}"; do
+    [[ -n "$file" && -f "$file" ]] && rm -f "$file"
+  done
+}
+trap cleanup_temp_files EXIT
+
+normalize_ed_key_file() {
+  local source_path="$1"
+  local normalized_path
+  local compact_content
+  local der_b64
+
+  normalized_path="$(mktemp "${TMPDIR:-/tmp}/pushgo-sparkle-ed-key.XXXXXX")"
+  temp_files+=("$normalized_path")
+
+  if grep -q "BEGIN PRIVATE KEY" "$source_path"; then
+    der_b64="$(openssl pkey -in "$source_path" -outform DER 2>/dev/null | base64 | tr -d '\r\n' || true)"
+    if [[ -z "$der_b64" ]]; then
+      echo "Error: failed to parse PEM private key from --ed-key-file: $source_path" >&2
+      exit 1
+    fi
+    printf '%s\n' "$der_b64" > "$normalized_path"
+    echo "$normalized_path"
+    return
+  fi
+
+  compact_content="$(tr -d '[:space:]' < "$source_path")"
+  if [[ -n "$compact_content" ]] && printf '%s' "$compact_content" | openssl base64 -d -A >/dev/null 2>&1; then
+    printf '%s\n' "$compact_content" > "$normalized_path"
+    echo "$normalized_path"
+    return
+  fi
+
+  der_b64="$(openssl pkey -inform DER -in "$source_path" -outform DER 2>/dev/null | base64 | tr -d '\r\n' || true)"
+  if [[ -n "$der_b64" ]]; then
+    printf '%s\n' "$der_b64" > "$normalized_path"
+    echo "$normalized_path"
+    return
+  fi
+
+  echo "Error: unsupported Ed25519 key format for --ed-key-file: $source_path" >&2
+  echo "Hint: provide base64-encoded private key text, PKCS#8 PEM, or DER private key." >&2
+  exit 1
+}
 
 emit_release_notes_from_json() {
   local source_json_path="$1"
@@ -307,6 +355,10 @@ prepare_release_notes_for_archives() {
     exit 1
   fi
 }
+
+if [[ -n "$ed_key_file" ]]; then
+  ed_key_file="$(normalize_ed_key_file "$ed_key_file")"
+fi
 
 prepare_release_notes_for_archives
 
