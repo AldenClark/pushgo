@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  scripts/publish_update_artifacts.sh <artifacts_dir> <appcast_path> <remote_user_host> <remote_base_path> [stable|beta]
+
+Example:
+  scripts/publish_update_artifacts.sh artifacts/release release/appcast.xml deploy@update.pushgo.cn /var/www/update.pushgo.cn/macos beta
+
+Requirements:
+  - rsync
+  - ssh access configured (optionally via PUSHGO_UPDATE_DEPLOY_SSH_KEY_FILE)
+USAGE
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+if [[ $# -lt 4 ]]; then
+  usage
+  exit 1
+fi
+
+artifacts_dir="$1"
+appcast_path="$2"
+remote_user_host="$3"
+remote_base_path="$4"
+track="${5:-stable}"
+
+if [[ "$track" != "stable" && "$track" != "beta" ]]; then
+  echo "Error: track must be stable or beta, got: $track" >&2
+  exit 1
+fi
+
+if [[ ! -d "$artifacts_dir" ]]; then
+  echo "Error: artifacts directory not found: $artifacts_dir" >&2
+  exit 1
+fi
+
+if [[ ! -f "$appcast_path" ]]; then
+  echo "Error: appcast file not found: $appcast_path" >&2
+  exit 1
+fi
+
+if ! command -v rsync >/dev/null 2>&1; then
+  echo "Error: rsync is required" >&2
+  exit 1
+fi
+
+ssh_opts=()
+if [[ -n "${PUSHGO_UPDATE_DEPLOY_SSH_KEY_FILE:-}" ]]; then
+  if [[ ! -f "${PUSHGO_UPDATE_DEPLOY_SSH_KEY_FILE}" ]]; then
+    echo "Error: PUSHGO_UPDATE_DEPLOY_SSH_KEY_FILE not found: ${PUSHGO_UPDATE_DEPLOY_SSH_KEY_FILE}" >&2
+    exit 1
+  fi
+  ssh_opts=(-i "${PUSHGO_UPDATE_DEPLOY_SSH_KEY_FILE}" -o IdentitiesOnly=yes)
+fi
+
+shopt -s nullglob
+all_dmg_files=("${artifacts_dir%/}"/*.dmg)
+shopt -u nullglob
+if (( ${#all_dmg_files[@]} == 0 )); then
+  echo "Error: no DMG artifact found under ${artifacts_dir}" >&2
+  exit 1
+fi
+
+dmg_path="${all_dmg_files[0]}"
+version=""
+for candidate in "${all_dmg_files[@]}"; do
+  name="$(basename "$candidate")"
+  if [[ "$name" =~ (v[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?) ]]; then
+    dmg_path="$candidate"
+    version="${BASH_REMATCH[1]}"
+    break
+  fi
+done
+
+if [[ -z "$version" ]]; then
+  echo "Error: unable to infer version from DMG filename: $(basename "$dmg_path")" >&2
+  echo "Hint: expected name like PushGo-macOS-vX.Y.Z(.beta.N).dmg" >&2
+  exit 1
+fi
+
+release_dir="${remote_base_path%/}/${track}/${version}"
+active_appcast_file="${remote_base_path%/}/appcast.xml"
+dmg_name="$(basename "$dmg_path")"
+staging_dir="$(mktemp -d -t pushgo-macos-deploy-XXXXXX)"
+cleanup() {
+  rm -rf "$staging_dir"
+}
+trap cleanup EXIT
+
+cp "$dmg_path" "$staging_dir/$dmg_name"
+
+dmg_stem="${dmg_name%.dmg}"
+shopt -s nullglob
+note_files=("${artifacts_dir%/}/${dmg_stem}."*.txt)
+shopt -u nullglob
+for note_file in "${note_files[@]}"; do
+  cp "$note_file" "$staging_dir/$(basename "$note_file")"
+done
+
+(
+  cd "$staging_dir"
+  shasum -a 256 "$dmg_name" > SHA256SUMS.txt
+)
+
+ssh "${ssh_opts[@]}" "$remote_user_host" "mkdir -p '$release_dir' '${remote_base_path%/}'"
+
+rsync -avz --delete -e "ssh ${ssh_opts[*]}" \
+  "$staging_dir/" \
+  "${remote_user_host}:${release_dir}/"
+
+rsync -avz -e "ssh ${ssh_opts[*]}" \
+  "$appcast_path" \
+  "${remote_user_host}:${active_appcast_file}"
+
+echo "Published macOS update artifacts to ${remote_user_host}:${release_dir} and refreshed ${active_appcast_file}"

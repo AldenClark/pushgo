@@ -407,7 +407,7 @@ platform :ios do
     end
 
     loose_signable_files(bundle_path).each do |file_path|
-      runtime = file_path.include?("/Contents/Helpers/")
+      runtime = File.executable?(file_path) && File.extname(file_path) != ".dylib"
       sign_path!(
         file_path,
         identity: identity,

@@ -29,6 +29,7 @@ jobs:
       DEVELOPER_ID_APPLICATION_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_PASSWORD }}
       DEVELOPER_ID_APPLICATION_IDENTITY: ${{ vars.DEVELOPER_ID_APPLICATION_IDENTITY || '' }}
       PUSHGO_SPARKLE_FEED_URL: ${{ vars.PUSHGO_SPARKLE_FEED_URL || 'https://update.pushgo.cn/macos/appcast.xml' }}
+      PUSHGO_SPARKLE_BASE_URL: ${{ vars.PUSHGO_SPARKLE_BASE_URL != '' && vars.PUSHGO_SPARKLE_BASE_URL || secrets.PUSHGO_SPARKLE_BASE_URL }}
       PUSHGO_SPARKLE_SCHEDULED_CHECK_INTERVAL: ${{ vars.PUSHGO_SPARKLE_SCHEDULED_CHECK_INTERVAL || '21600' }}
       FASTLANE_DISABLE_COLORS: "1"
       FASTLANE_SKIP_UPDATE_CHECK: "1"
@@ -221,6 +222,11 @@ jobs:
             exit 1
           fi
 
+          if ! [[ "${PUSHGO_SPARKLE_BASE_URL:-}" =~ ^https?://[^[:space:]]+$ ]]; then
+            echo "PUSHGO_SPARKLE_BASE_URL must be a valid http(s) URL"
+            exit 1
+          fi
+
       - name: Prepare Sparkle xcconfig for DMG
         shell: bash
         run: |
@@ -285,22 +291,94 @@ jobs:
           path: artifacts/release/**
           if-no-files-found: warn
 
+      - name: Prepare Sparkle Ed25519 signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${PUSHGO_SPARKLE_PRIVATE_ED_KEY_B64:-}" ]; then
+            echo "Missing required secret: PUSHGO_SPARKLE_PRIVATE_ED_KEY_B64" >&2
+            exit 1
+          fi
+          mkdir -p "$GITHUB_WORKSPACE/.ci"
+          key_path="$GITHUB_WORKSPACE/.ci/sparkle-ed25519-private-key.pem"
+          echo "$PUSHGO_SPARKLE_PRIVATE_ED_KEY_B64" | base64 --decode > "$key_path"
+          chmod 600 "$key_path"
+          echo "PUSHGO_SPARKLE_PRIVATE_ED_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+        env:
+          PUSHGO_SPARKLE_PRIVATE_ED_KEY_B64: ${{ secrets.PUSHGO_SPARKLE_PRIVATE_ED_KEY_B64 }}
+
       - name: Generate Sparkle appcast
         shell: bash
         run: |
           set -euo pipefail
-          feed_url="${PUSHGO_SPARKLE_FEED_URL}"
-          feed_base_url="${feed_url%/*}/"
           track="stable"
           if [[ "${RELEASE_KIND}" == "beta" ]]; then
             track="beta"
           fi
+          release_base_url="${PUSHGO_SPARKLE_BASE_URL%/}/${track}/v${SEMVER_FULL_VERSION}/"
 
           ./scripts/release_appcast.sh "$track" artifacts/release \
-            --download-url-prefix "$feed_base_url" \
-            --release-notes-url-prefix "$feed_base_url"
+            --download-url-prefix "$release_base_url" \
+            --release-notes-url-prefix "$release_base_url" \
+            --ed-key-file "${PUSHGO_SPARKLE_PRIVATE_ED_KEY_PATH}" \
+            --account ""
 
           ls -lh release/appcast.xml artifacts/release/*.txt
+
+      - name: Prepare update deploy SSH key
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${PUSHGO_UPDATE_DEPLOY_SSH_KEY_B64:-}" ]; then
+            echo "Missing required secret: PUSHGO_UPDATE_DEPLOY_SSH_KEY_B64" >&2
+            exit 1
+          fi
+          mkdir -p "$GITHUB_WORKSPACE/.ci"
+          echo "$PUSHGO_UPDATE_DEPLOY_SSH_KEY_B64" | base64 --decode > "$GITHUB_WORKSPACE/.ci/update-deploy-key"
+          chmod 600 "$GITHUB_WORKSPACE/.ci/update-deploy-key"
+          echo "PUSHGO_UPDATE_DEPLOY_SSH_KEY_FILE=$GITHUB_WORKSPACE/.ci/update-deploy-key" >> "$GITHUB_ENV"
+        env:
+          PUSHGO_UPDATE_DEPLOY_SSH_KEY_B64: ${{ secrets.PUSHGO_UPDATE_DEPLOY_SSH_KEY_B64 }}
+
+      - name: Install update deploy known_hosts
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${PUSHGO_UPDATE_DEPLOY_KNOWN_HOSTS:-}" ]]; then
+            echo "Missing required secret: PUSHGO_UPDATE_DEPLOY_KNOWN_HOSTS" >&2
+            exit 1
+          fi
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+
+          printf '%s\n' "$PUSHGO_UPDATE_DEPLOY_KNOWN_HOSTS" | sed 's/\r$//' > "$HOME/.ssh/known_hosts"
+
+          chmod 600 "$HOME/.ssh/known_hosts"
+        env:
+          PUSHGO_UPDATE_DEPLOY_KNOWN_HOSTS: ${{ secrets.PUSHGO_UPDATE_DEPLOY_KNOWN_HOSTS }}
+
+      - name: Publish DMG update artifacts to update host
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${PUSHGO_UPDATE_DEPLOY_HOST:-}" || -z "${PUSHGO_UPDATE_DEPLOY_USER:-}" || -z "${PUSHGO_UPDATE_DEPLOY_PATH:-}" ]]; then
+            echo "Missing required deploy configuration. Please set PUSHGO_UPDATE_DEPLOY_HOST, PUSHGO_UPDATE_DEPLOY_USER, and PUSHGO_UPDATE_DEPLOY_PATH." >&2
+            exit 1
+          fi
+          track="stable"
+          if [[ "${RELEASE_KIND}" == "beta" ]]; then
+            track="beta"
+          fi
+          ./scripts/publish_update_artifacts.sh \
+            artifacts/release \
+            release/appcast.xml \
+            "${PUSHGO_UPDATE_DEPLOY_USER}@${PUSHGO_UPDATE_DEPLOY_HOST}" \
+            "${PUSHGO_UPDATE_DEPLOY_PATH}" \
+            "${track}"
+        env:
+          PUSHGO_UPDATE_DEPLOY_HOST: ${{ secrets.PUSHGO_UPDATE_DEPLOY_HOST }}
+          PUSHGO_UPDATE_DEPLOY_USER: ${{ secrets.PUSHGO_UPDATE_DEPLOY_USER }}
+          PUSHGO_UPDATE_DEPLOY_PATH: ${{ secrets.PUSHGO_UPDATE_DEPLOY_PATH }}
 
       - name: Upload Sparkle feed artifacts
         uses: actions/upload-artifact@v7
@@ -350,28 +428,119 @@ jobs:
           if-no-files-found: error
 
       - name: Publish DMG to GitHub Release
+        id: github_release
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          tag="${GITHUB_REF_NAME}"
-          title="PushGo ${tag}"
-          prerelease_flag=""
-          notes_file="$RUNNER_TEMP/release-notes.md"
-
-          printf "%s\n" "${RELEASE_CHANGELOG_BODY}" > "$notes_file"
+          api_root="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+          prerelease="false"
           if [[ "${RELEASE_KIND}" == "beta" ]]; then
-            prerelease_flag="--prerelease"
+            prerelease="true"
           fi
 
-          ls -lh artifacts/release/*.dmg
+          release_payload="$(jq -cn \
+            --arg tag_name "${GITHUB_REF_NAME}" \
+            --arg target_commitish "${GITHUB_SHA}" \
+            --arg name "${GITHUB_REF_NAME}" \
+            --arg body "${RELEASE_CHANGELOG_BODY}" \
+            --argjson prerelease "${prerelease}" \
+            '{
+              tag_name: $tag_name,
+              target_commitish: $target_commitish,
+              name: $name,
+              body: $body,
+              draft: false,
+              prerelease: $prerelease,
+              generate_release_notes: false
+            }')"
 
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release edit "$tag" --title "$title" --notes-file "$notes_file" $prerelease_flag
+          release_lookup_file="$(mktemp)"
+          release_status="$(
+            curl -sSL -o "${release_lookup_file}" -w "%{http_code}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${api_root}/releases/tags/${GITHUB_REF_NAME}" || true
+          )"
+
+          if [[ "${release_status}" == "200" ]]; then
+            release_id="$(jq -r '.id' "${release_lookup_file}")"
+            release_response_file="$(mktemp)"
+            curl -fsSL -X PATCH \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${api_root}/releases/${release_id}" \
+              -d "${release_payload}" >"${release_response_file}"
+          elif [[ "${release_status}" == "404" ]]; then
+            release_response_file="$(mktemp)"
+            curl -fsSL -X POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${api_root}/releases" \
+              -d "${release_payload}" >"${release_response_file}"
           else
-            gh release create "$tag" --title "$title" --notes-file "$notes_file" --verify-tag $prerelease_flag
+            echo "Failed to look up release for tag ${GITHUB_REF_NAME}, status=${release_status}" >&2
+            cat "${release_lookup_file}" >&2
+            exit 1
           fi
 
-          gh release upload "$tag" artifacts/release/*.dmg --clobber
+          release_id="$(jq -r '.id' "${release_response_file}")"
+          upload_url="$(jq -r '.upload_url' "${release_response_file}" | sed 's/{?name,label}//')"
+
+          {
+            echo "release_id=${release_id}"
+            echo "upload_url=${upload_url}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Upload DMG assets to GitHub Release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          api_root="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+          release_id="${{ steps.github_release.outputs.release_id }}"
+          upload_url="${{ steps.github_release.outputs.upload_url }}"
+
+          shopt -s nullglob
+          asset_files=(artifacts/release/*.dmg)
+          shopt -u nullglob
+          if [[ ${#asset_files[@]} -eq 0 ]]; then
+            echo "No DMG assets found under artifacts/release/" >&2
+            exit 1
+          fi
+
+          assets_json="$(curl -fsSL \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${api_root}/releases/${release_id}/assets?per_page=100")"
+
+          for file in "${asset_files[@]}"; do
+            asset_name="$(basename "${file}")"
+            while IFS= read -r asset_id; do
+              [[ -z "${asset_id}" ]] && continue
+              curl -fsSL -X DELETE \
+                -H "Accept: application/vnd.github+json" \
+                -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "${api_root}/releases/assets/${asset_id}" >/dev/null
+            done < <(printf '%s' "${assets_json}" | jq -r --arg name "${asset_name}" '.[] | select(.name == $name) | .id')
+
+            encoded_asset_name="$(jq -rn --arg value "${asset_name}" '$value|@uri')"
+            curl -fsSL -X POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "Content-Type: application/x-apple-diskimage" \
+              --data-binary @"${file}" \
+              "${upload_url}?name=${encoded_asset_name}" >/dev/null
+          done

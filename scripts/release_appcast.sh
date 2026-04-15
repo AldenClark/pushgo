@@ -12,6 +12,7 @@ Examples:
 
 Options:
   --account <name>                    Sparkle keychain account (default: pushgo)
+  --ed-key-file <path>                Sparkle Ed25519 private key file (preferred in CI)
   --download-url-prefix <url>         Update file base URL (default: https://update.pushgo.cn/macos/)
   --release-notes-url-prefix <url>    Release notes base URL (default: same as download prefix)
   --output <path>                     Additional output copy path after updating release/appcast.xml
@@ -52,6 +53,7 @@ if [[ ! -d "$archives_dir" ]]; then
 fi
 
 account="pushgo"
+ed_key_file=""
 download_url_prefix="https://update.pushgo.cn/macos/"
 release_notes_url_prefix=""
 output_path=""
@@ -61,6 +63,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --account)
       account="${2:-}"
+      shift 2
+      ;;
+    --ed-key-file)
+      ed_key_file="${2:-}"
       shift 2
       ;;
     --download-url-prefix)
@@ -125,6 +131,16 @@ fi
 
 if [[ ! "$release_notes_url_prefix" =~ ^https?://[^[:space:]]+$ ]]; then
   echo "Error: --release-notes-url-prefix must be http(s) URL: $release_notes_url_prefix" >&2
+  exit 1
+fi
+
+if [[ -n "$ed_key_file" && ! -f "$ed_key_file" ]]; then
+  echo "Error: --ed-key-file not found: $ed_key_file" >&2
+  exit 1
+fi
+
+if [[ -z "$account" && -z "$ed_key_file" ]]; then
+  echo "Error: either --account or --ed-key-file must be provided for Sparkle signing" >&2
   exit 1
 fi
 
@@ -278,11 +294,18 @@ mkdir -p "$(dirname "$state_appcast_path")"
 
 cmd=(
   "$tool_path"
-  --account "$account"
   --download-url-prefix "$download_url_prefix"
   --release-notes-url-prefix "$release_notes_url_prefix"
   --maximum-versions 1
 )
+
+if [[ -n "$ed_key_file" ]]; then
+  cmd+=(--ed-key-file "$ed_key_file")
+fi
+
+if [[ -n "$account" ]]; then
+  cmd+=(--account "$account")
+fi
 
 if [[ "$track" == "beta" ]]; then
   cmd+=(--channel beta)
@@ -324,6 +347,12 @@ if [[ "$track" == "beta" ]]; then
     echo "Error: beta track was requested but no sparkle:channel=beta item was found in appcast: $appcast_path" >&2
     exit 1
   fi
+fi
+
+invalid_url_count="$(xmllint --xpath "count(//*[local-name()='enclosure'][not(starts-with(@url, '${download_url_prefix}'))])" "$appcast_path" 2>/dev/null || echo 1)"
+if [[ "$invalid_url_count" != "0" ]]; then
+  echo "Error: generated appcast contains enclosure URL(s) outside --download-url-prefix=${download_url_prefix}" >&2
+  exit 1
 fi
 
 if [[ -n "$output_path" ]]; then

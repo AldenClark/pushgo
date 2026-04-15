@@ -4,5 +4,5 @@
 // When setting URL values, use `https:/$()/host/path` so Xcode expands it back to `https://host/path`.
 
 PUSHGO_SPARKLE_FEED_URL = https:/$()/update.pushgo.cn/macos/appcast.xml
-PUSHGO_SPARKLE_PUBLIC_ED_KEY = "h7VVJ2MFqdj5SafrF6g3P8VU6VkzHEQYlvwZH9ywLys="
+PUSHGO_SPARKLE_PUBLIC_ED_KEY = "ut67b8ASsqDF2alt6TVH01piYBQTnytxuHxSPje5ODc="
 PUSHGO_SPARKLE_SCHEDULED_CHECK_INTERVAL = 21600

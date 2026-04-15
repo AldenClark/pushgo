@@ -6,6 +6,7 @@ Apps/PushGo-macOS/App/PushGoAppDelegate.swift|preconcurrency|UserNotifications p
 Apps/PushGo-macOS/App/PushGoAppDelegate.swift|preconcurrency_delegate|ObjC delegate isolation bridge
 Apps/PushGo-watchOS/PushGoWatchAppDelegate.swift|preconcurrency_delegate|ObjC delegate isolation bridge
 Extensions/PushGoNSE-iOS/NotificationService.swift|preconcurrency|UserNotifications preconcurrency bridge
+Extensions/PushGoNSE-macOS/NotificationService.swift|preconcurrency|UserNotifications preconcurrency bridge
 Extensions/PushGoNSE-watchOS/NotificationService.swift|preconcurrency|UserNotifications preconcurrency bridge
 Extensions/PushGoNSE-watchOS/WatchLightNotificationStore.swift|unsafe_raw_pointer|SQLite C API error message pointer boundary; owned and freed via sqlite3_free
 Shared/Utilities/AppConstants.swift|unsafe_raw_pointer|C notify FFI signature boundary only; no manual pointer ownership/casting in runtime logic

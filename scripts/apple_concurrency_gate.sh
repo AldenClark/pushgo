@@ -22,14 +22,24 @@ run_build() {
   fi
 
   echo "==> build $scheme ($destination)"
-  xcodebuild \
-    -project "$ROOT/pushgo.xcodeproj" \
-    -scheme "$scheme" \
-    -configuration Debug \
-    -destination "$destination" \
-    -derivedDataPath "$derived" \
-    "${signing_args[@]}" \
-    build
+  if [[ ${#signing_args[@]} -gt 0 ]]; then
+    xcodebuild \
+      -project "$ROOT/pushgo.xcodeproj" \
+      -scheme "$scheme" \
+      -configuration Debug \
+      -destination "$destination" \
+      -derivedDataPath "$derived" \
+      "${signing_args[@]}" \
+      build
+  else
+    xcodebuild \
+      -project "$ROOT/pushgo.xcodeproj" \
+      -scheme "$scheme" \
+      -configuration Debug \
+      -destination "$destination" \
+      -derivedDataPath "$derived" \
+      build
+  fi
 }
 
 "$ROOT/scripts/concurrency_audit.sh"

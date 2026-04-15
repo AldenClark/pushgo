@@ -137,7 +137,7 @@ final class NotificationServiceProcessor {
     private func fireAndForgetProviderDirectAck(deliveryId: String) {
         let normalizedDeliveryId = deliveryId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedDeliveryId.isEmpty else { return }
-        Task.detached(priority: .utility) {
+        Task(priority: .utility) {
             let dataStore = LocalDataStore()
             guard let config = try? await dataStore.loadServerConfig() else {
                 return
