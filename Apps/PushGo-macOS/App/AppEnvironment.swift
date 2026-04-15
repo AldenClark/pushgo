@@ -1305,6 +1305,7 @@ final class AppEnvironment {
                    !token.isEmpty
                 {
                     await syncProviderPullRoute(config: config, providerToken: token)
+                    _ = await syncProviderIngress(reason: "token_update")
                 }
             } catch {
                 let message = (error as? AppError)?.errorDescription ?? error.localizedDescription

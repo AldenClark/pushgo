@@ -11,10 +11,9 @@ Policy:
 ## [Unreleased]
 
 ### Improved
-- Added built-in updater support for self-distributed macOS DMG builds using Sparkle 2.
-- Added a "Enable beta updates" toggle next to "Check for Updates" in macOS Settings, with immediate background check when enabled.
-- Automatic update checks now run silently in the background on a recurring schedule (every 6 hours by default) and notify when a new version is available.
-- DMG release artifacts now use SemVer versioned filenames (for example, `PushGo-macOS-v1.2.0-beta.3.dmg`) for clearer distribution and rollback tracking.
+- Improved ACK + pull reliability after provider token refresh by triggering ingress sync immediately.
+- Improved delivery continuity on iOS and macOS when the app refreshes provider route bindings.
+- Updated this beta line to `v1.2.3-beta.2` with build number incremented.
 
 ### Fixed
-- Reduced noisy update-check error prompts during automatic background checks when the network or update source is temporarily unavailable.
+- Fixed a timing gap where provider pull could lag behind token updates.

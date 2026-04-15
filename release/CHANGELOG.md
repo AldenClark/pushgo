@@ -12,18 +12,13 @@ PushGo policy:
 
 ## [Unreleased]
 
-### Added
-- Added Sparkle 2 based self-update flow for self-distributed macOS DMG builds, isolated behind dedicated `PushGo-macOS-DMG` target/scheme.
-- Added `AppUpdateManager` integration for manual checks, automatic background probes, and beta channel routing (`sparkle:channel=beta`).
-- Added a beta-channel toggle in macOS Settings next to "Check for Updates"; enabling beta immediately triggers a background update probe.
-- Added `scripts/release_appcast.sh` for stable/beta appcast generation with signature and channel validation.
-
 ### Changed
-- Apple release workflow now supports SemVer-driven DMG naming and emits versioned artifacts like `PushGo-macOS-v1.2.0-beta.3.dmg`.
-- Sparkle scheduled check interval is now explicitly configured (default 21600 seconds / 6 hours) for DMG distribution builds.
-- DMG Sparkle runtime config is now injected through dedicated xcconfig inputs for feed URL and check interval while keeping public EdDSA key in project build settings.
-- Release notes extraction remains aligned to release tags (`vX.Y.Z`) and beta tags (`vX.Y.Z-beta.N`) via the `[Unreleased]` section.
+- Bumped Apple release line to `v1.2.3-beta.2`.
+- Bumped Apple build number by `+1` (`CURRENT_PROJECT_VERSION: 60 -> 61`) across release targets.
+- Updated project marketing/display version wiring:
+  - `MARKETING_VERSION = 1.2.3`
+  - `PUSHGO_DISPLAY_VERSION = v1.2.3-beta.2`
+- iOS/macOS token update flow now triggers provider ingress sync immediately after provider route sync.
 
 ### Fixed
-- Fixed automatic background update checks to run in probe mode so transient update-fetch failures are silently skipped without surfacing user-facing errors.
-- Fixed appcast generation output handling to consistently produce `appcast.xml` at the expected destination path.
+- Reduced missed provider pull windows after token refresh by actively pulling ingress on `token_update`.
