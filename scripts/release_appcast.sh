@@ -13,6 +13,7 @@ Examples:
 Options:
   --account <name>                    Sparkle keychain account (default: pushgo)
   --ed-key-file <path>                Sparkle Ed25519 private key file (preferred in CI)
+  --expected-version <version>        Only process DMG files matching this version token (for example: v1.2.0-beta.3)
   --download-url-prefix <url>         Update file base URL (default: https://update.pushgo.cn/macos/)
   --release-notes-url-prefix <url>    Release notes base URL (default: same as download prefix)
   --output <path>                     Additional output copy path after updating release/appcast.xml
@@ -54,6 +55,7 @@ fi
 
 account="pushgo"
 ed_key_file=""
+expected_version=""
 download_url_prefix="https://update.pushgo.cn/macos/"
 release_notes_url_prefix=""
 output_path=""
@@ -67,6 +69,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --ed-key-file)
       ed_key_file="${2:-}"
+      shift 2
+      ;;
+    --expected-version)
+      expected_version="${2:-}"
       shift 2
       ;;
     --download-url-prefix)
@@ -141,6 +147,11 @@ fi
 
 if [[ -z "$account" && -z "$ed_key_file" ]]; then
   echo "Error: either --account or --ed-key-file must be provided for Sparkle signing" >&2
+  exit 1
+fi
+
+if [[ -n "$expected_version" && ! "$expected_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$ ]]; then
+  echo "Error: --expected-version must look like vX.Y.Z or vX.Y.Z-beta.N, got: $expected_version" >&2
   exit 1
 fi
 
@@ -233,6 +244,7 @@ PY
 prepare_release_notes_for_archives() {
   local archive_path archive_name archive_stem version source_notes_json_path
   local matched_release_notes
+  local dmg_count=0
 
   if [[ ! -d "$update_notes_dir" ]]; then
     echo "Error: update notes directory does not exist: $update_notes_dir" >&2
@@ -240,6 +252,7 @@ prepare_release_notes_for_archives() {
   fi
 
   while IFS= read -r archive_path; do
+    dmg_count=$((dmg_count + 1))
     archive_name="$(basename "$archive_path")"
     archive_stem="${archive_name%.*}"
     matched_release_notes=""
@@ -278,14 +291,21 @@ prepare_release_notes_for_archives() {
       exit 1
     fi
   done < <(
-    find "$archives_dir" -maxdepth 1 -type f \
-      ! -name 'appcast.xml' \
-      ! -name '*.txt' \
-      ! -name '*.md' \
-      ! -name '*.html' \
-      ! -name '*.xml' \
-      -print | sort
+    if [[ -n "$expected_version" ]]; then
+      find "$archives_dir" -maxdepth 1 -type f -name "*${expected_version}*.dmg" -print | sort
+    else
+      find "$archives_dir" -maxdepth 1 -type f -name '*.dmg' -print | sort
+    fi
   )
+
+  if (( dmg_count == 0 )); then
+    if [[ -n "$expected_version" ]]; then
+      echo "Error: no DMG archives found in ${archives_dir} matching expected version ${expected_version}" >&2
+    else
+      echo "Error: no DMG archives found in ${archives_dir}" >&2
+    fi
+    exit 1
+  fi
 }
 
 prepare_release_notes_for_archives

@@ -318,6 +318,7 @@ jobs:
           release_base_url="${PUSHGO_SPARKLE_BASE_URL%/}/${track}/v${SEMVER_FULL_VERSION}/"
 
           ./scripts/release_appcast.sh "$track" artifacts/release \
+            --expected-version "v${SEMVER_FULL_VERSION}" \
             --download-url-prefix "$release_base_url" \
             --release-notes-url-prefix "$release_base_url" \
             --ed-key-file "${PUSHGO_SPARKLE_PRIVATE_ED_KEY_PATH}" \
@@ -374,7 +375,8 @@ jobs:
             release/appcast.xml \
             "${PUSHGO_UPDATE_DEPLOY_USER}@${PUSHGO_UPDATE_DEPLOY_HOST}" \
             "${PUSHGO_UPDATE_DEPLOY_PATH}" \
-            "${track}"
+            "${track}" \
+            "v${SEMVER_FULL_VERSION}"
         env:
           PUSHGO_UPDATE_DEPLOY_HOST: ${{ secrets.PUSHGO_UPDATE_DEPLOY_HOST }}
           PUSHGO_UPDATE_DEPLOY_USER: ${{ secrets.PUSHGO_UPDATE_DEPLOY_USER }}

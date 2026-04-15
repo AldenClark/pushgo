@@ -4,10 +4,10 @@ set -euo pipefail
 usage() {
   cat <<'USAGE'
 Usage:
-  scripts/publish_update_artifacts.sh <artifacts_dir> <appcast_path> <remote_user_host> <remote_base_path> [stable|beta]
+  scripts/publish_update_artifacts.sh <artifacts_dir> <appcast_path> <remote_user_host> <remote_base_path> [stable|beta] [expected_version]
 
 Example:
-  scripts/publish_update_artifacts.sh artifacts/release release/appcast.xml deploy@update.pushgo.cn /var/www/update.pushgo.cn/macos beta
+  scripts/publish_update_artifacts.sh artifacts/release release/appcast.xml deploy@update.pushgo.cn /var/www/update.pushgo.cn/macos beta v1.2.0-beta.3
 
 Requirements:
   - rsync
@@ -30,9 +30,15 @@ appcast_path="$2"
 remote_user_host="$3"
 remote_base_path="$4"
 track="${5:-stable}"
+expected_version="${6:-}"
 
 if [[ "$track" != "stable" && "$track" != "beta" ]]; then
   echo "Error: track must be stable or beta, got: $track" >&2
+  exit 1
+fi
+
+if [[ -n "$expected_version" && ! "$expected_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$ ]]; then
+  echo "Error: expected_version must look like vX.Y.Z or vX.Y.Z-beta.N, got: $expected_version" >&2
   exit 1
 fi
 
@@ -70,18 +76,32 @@ fi
 
 dmg_path="${all_dmg_files[0]}"
 version=""
+matching_count=0
 for candidate in "${all_dmg_files[@]}"; do
   name="$(basename "$candidate")"
   if [[ "$name" =~ (v[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?) ]]; then
+    version_candidate="${BASH_REMATCH[1]}"
+    if [[ -n "$expected_version" && "$version_candidate" != "$expected_version" ]]; then
+      continue
+    fi
+    matching_count=$((matching_count + 1))
     dmg_path="$candidate"
-    version="${BASH_REMATCH[1]}"
-    break
+    version="$version_candidate"
   fi
 done
 
 if [[ -z "$version" ]]; then
-  echo "Error: unable to infer version from DMG filename: $(basename "$dmg_path")" >&2
-  echo "Hint: expected name like PushGo-macOS-vX.Y.Z(.beta.N).dmg" >&2
+  if [[ -n "$expected_version" ]]; then
+    echo "Error: no DMG artifact matches expected version ${expected_version} under ${artifacts_dir}" >&2
+  else
+    echo "Error: unable to infer version from DMG filename: $(basename "$dmg_path")" >&2
+    echo "Hint: expected name like PushGo-macOS-vX.Y.Z(.beta.N).dmg" >&2
+  fi
+  exit 1
+fi
+
+if (( matching_count > 1 )); then
+  echo "Error: multiple DMG artifacts match expected version ${version}; keep exactly one release DMG in ${artifacts_dir}" >&2
   exit 1
 fi
 
