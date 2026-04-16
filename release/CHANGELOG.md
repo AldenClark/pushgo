@@ -13,11 +13,11 @@ PushGo policy:
 ## [Unreleased]
 
 ### Changed
-- Bumped Apple release line to `v1.2.3-beta.2`.
-- Bumped Apple build number by `+1` (`CURRENT_PROJECT_VERSION: 60 -> 61`) across release targets.
+- Bumped Apple release line to `v1.2.0-beta.7`.
+- Bumped Apple build number by `+1` (`CURRENT_PROJECT_VERSION: 67 -> 68`) across release targets.
 - Updated project marketing/display version wiring:
-  - `MARKETING_VERSION = 1.2.3`
-  - `PUSHGO_DISPLAY_VERSION = v1.2.3-beta.2`
+  - `MARKETING_VERSION = 1.2.0`
+  - `PUSHGO_DISPLAY_VERSION = v1.2.0-beta.7`
 - iOS/macOS token update flow now triggers provider ingress sync immediately after provider route sync.
 
 ### Fixed

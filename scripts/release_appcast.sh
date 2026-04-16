@@ -12,7 +12,7 @@ Examples:
 
 Options:
   --account <name>                    Sparkle keychain account (default: pushgo)
-  --ed-key-file <path>                Sparkle Ed25519 private key file (supports base64 text, PEM, or DER)
+  --ed-key-file <path>                Sparkle Ed25519 private key file (supports Sparkle base64 secret, PEM, or DER)
   --expected-version <version>        Only process DMG files matching this version token (for example: v1.2.0-beta.3)
   --download-url-prefix <url>         Update file base URL (default: https://update.pushgo.cn/macos/)
   --release-notes-url-prefix <url>    Release notes base URL (default: same as download prefix)
@@ -183,14 +183,14 @@ normalize_ed_key_file() {
   normalized_path="$(mktemp "${TMPDIR:-/tmp}/pushgo-sparkle-ed-key.XXXXXX")"
   temp_files+=("$normalized_path")
 
-  # Convert PKCS#8 Ed25519 private key material to Sparkle secret format:
-  # base64(32-byte private key || 32-byte public key)
+  # Convert PKCS#8 Ed25519 private key material to Sparkle secret format.
+  # Newer Sparkle builds store/export base64(32-byte private seed).
+  # Older Sparkle builds store/export base64(64-byte private key || 32-byte public key).
   sparkle_secret_from_private_key_file() {
     local key_path="$1"
     local input_format="${2:-PEM}"
     local key_text
     local priv_hex
-    local pub_hex
 
     key_text="$(openssl pkey -inform "$input_format" -in "$key_path" -text -noout 2>/dev/null || true)"
     if [[ -z "$key_text" ]]; then
@@ -198,13 +198,13 @@ normalize_ed_key_file() {
     fi
 
     priv_hex="$(printf '%s\n' "$key_text" | awk '/^priv:/{capture=1;next}/^pub:/{capture=0}capture{print}' | tr -d '[:space:]:')"
-    pub_hex="$(printf '%s\n' "$key_text" | awk '/^pub:/{capture=1;next}capture{print}' | tr -d '[:space:]:')"
 
-    if [[ ${#priv_hex} -ne 64 || ${#pub_hex} -ne 64 ]]; then
+    # OpenSSL prints the Ed25519 private seed as 32 bytes under `priv:`.
+    if [[ ${#priv_hex} -ne 64 ]]; then
       return 1
     fi
 
-    printf '%s' "${priv_hex}${pub_hex}" | xxd -r -p | base64 | tr -d '\r\n'
+    printf '%s' "${priv_hex}" | xxd -r -p | base64 | tr -d '\r\n'
   }
 
   if grep -q "BEGIN PRIVATE KEY" "$source_path"; then
@@ -218,6 +218,13 @@ normalize_ed_key_file() {
     return
   fi
 
+  sparkle_secret_b64="$(sparkle_secret_from_private_key_file "$source_path" "DER" || true)"
+  if [[ -n "$sparkle_secret_b64" ]]; then
+    printf '%s\n' "$sparkle_secret_b64" > "$normalized_path"
+    echo "$normalized_path"
+    return
+  fi
+
   compact_content="$(tr -d '[:space:]' < "$source_path")"
   if [[ -n "$compact_content" ]] && printf '%s' "$compact_content" | openssl base64 -d -A >/dev/null 2>&1; then
     decoded_path="$(mktemp "${TMPDIR:-/tmp}/pushgo-sparkle-ed-key-decoded.XXXXXX")"
@@ -226,7 +233,7 @@ normalize_ed_key_file() {
     decoded_size="$(wc -c < "$decoded_path" | tr -d '[:space:]')"
 
     # Already Sparkle secret format.
-    if [[ "$decoded_size" == "64" ]]; then
+    if [[ "$decoded_size" == "32" || "$decoded_size" == "96" ]]; then
       printf '%s\n' "$compact_content" > "$normalized_path"
       echo "$normalized_path"
       return
@@ -241,16 +248,71 @@ normalize_ed_key_file() {
     fi
   fi
 
-  sparkle_secret_b64="$(sparkle_secret_from_private_key_file "$source_path" "DER" || true)"
-  if [[ -n "$sparkle_secret_b64" ]]; then
-    printf '%s\n' "$sparkle_secret_b64" > "$normalized_path"
-    echo "$normalized_path"
+  echo "Error: unsupported Ed25519 key format for --ed-key-file: $source_path" >&2
+  echo "Hint: provide a Sparkle-exported base64 secret (32 or 96 decoded bytes), PKCS#8 PEM, or DER private key." >&2
+  exit 1
+}
+
+locate_sign_update_tool() {
+  local candidate
+
+  if [[ -n "${SPARKLE_BIN:-}" && -x "${SPARKLE_BIN}/sign_update" ]]; then
+    echo "${SPARKLE_BIN}/sign_update"
     return
   fi
 
-  echo "Error: unsupported Ed25519 key format for --ed-key-file: $source_path" >&2
-  echo "Hint: provide base64-encoded private key text, PKCS#8 PEM, or DER private key." >&2
-  exit 1
+  candidate="$(dirname "$tool_path")/sign_update"
+  if [[ -x "$candidate" ]]; then
+    echo "$candidate"
+    return
+  fi
+
+  if [[ -n "$(command -v sign_update || true)" ]]; then
+    command -v sign_update
+    return
+  fi
+}
+
+verify_normalized_ed_key_file() {
+  local secret_path="$1"
+  local decoded_path
+  local decoded_size
+  local secret_b64
+  local sign_tool
+  local sample_file
+
+  secret_b64="$(tr -d '[:space:]' < "$secret_path")"
+  if [[ -z "$secret_b64" ]]; then
+    echo "Error: normalized Sparkle key file is empty: $secret_path" >&2
+    exit 1
+  fi
+
+  decoded_path="$(mktemp "${TMPDIR:-/tmp}/pushgo-sparkle-ed-key-verify.XXXXXX")"
+  temp_files+=("$decoded_path")
+  if ! printf '%s' "$secret_b64" | openssl base64 -d -A > "$decoded_path" 2>/dev/null; then
+    echo "Error: normalized Sparkle key file is not valid base64: $secret_path" >&2
+    exit 1
+  fi
+
+  decoded_size="$(wc -c < "$decoded_path" | tr -d '[:space:]')"
+  if [[ "$decoded_size" != "32" && "$decoded_size" != "96" ]]; then
+    echo "Error: normalized Sparkle key secret must decode to 32 or 96 bytes, got ${decoded_size}: $secret_path" >&2
+    exit 1
+  fi
+
+  sign_tool="$(locate_sign_update_tool || true)"
+  if [[ -z "$sign_tool" ]]; then
+    return
+  fi
+
+  sample_file="$(mktemp "${TMPDIR:-/tmp}/pushgo-sparkle-sign-check.XXXXXX")"
+  temp_files+=("$sample_file")
+  printf 'pushgo sparkle key validation\n' > "$sample_file"
+
+  if ! "$sign_tool" --ed-key-file "$secret_path" -p "$sample_file" >/dev/null 2>&1; then
+    echo "Error: normalized Sparkle key file was accepted syntactically but rejected by sign_update: $secret_path" >&2
+    exit 1
+  fi
 }
 
 emit_release_notes_from_json() {
@@ -403,6 +465,7 @@ prepare_release_notes_for_archives() {
 
 if [[ -n "$ed_key_file" ]]; then
   ed_key_file="$(normalize_ed_key_file "$ed_key_file")"
+  verify_normalized_ed_key_file "$ed_key_file"
 fi
 
 prepare_release_notes_for_archives

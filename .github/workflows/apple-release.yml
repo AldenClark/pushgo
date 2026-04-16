@@ -285,13 +285,33 @@ jobs:
         if: steps.resolve.outputs.release_kind == 'release'
         run: bundle _2.5.23_ exec fastlane ios release_dmg
 
-      - name: Upload release diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: pushgo-release-diagnostics-${{ github.run_id }}
-          path: artifacts/release/**
-          if-no-files-found: warn
+      - name: Resolve release DMG artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="v${SEMVER_FULL_VERSION}"
+
+          shopt -s nullglob
+          dmg_files=(artifacts/release/*"${version}"*.dmg)
+          shopt -u nullglob
+
+          if [[ ${#dmg_files[@]} -ne 1 ]]; then
+            echo "Expected exactly one release DMG for ${version} under artifacts/release, found ${#dmg_files[@]}" >&2
+            if (( ${#dmg_files[@]} > 0 )); then
+              printf '%s\n' "${dmg_files[@]}" >&2
+            fi
+            exit 1
+          fi
+
+          dmg_path="${dmg_files[0]}"
+          dmg_name="$(basename "${dmg_path}")"
+
+          {
+            echo "RELEASE_DMG_PATH=${dmg_path}"
+            echo "RELEASE_DMG_NAME=${dmg_name}"
+          } >> "$GITHUB_ENV"
+
+          ls -lh "${dmg_path}"
 
       - name: Prepare Sparkle Ed25519 signing key
         shell: bash
@@ -317,10 +337,22 @@ jobs:
           if [[ "${RELEASE_KIND}" == "beta" ]]; then
             track="beta"
           fi
+          version="v${SEMVER_FULL_VERSION}"
+          update_notes_json="release/update-notes/${version}.json"
+          if [[ ! -f "${update_notes_json}" ]]; then
+            echo "Missing update notes source for appcast: ${update_notes_json}" >&2
+            exit 1
+          fi
+
+          # Prevent generate_appcast from picking stale fallback notes (.md/.html).
+          # Sparkle notes for this workflow must come from release/update-notes/<version>.json.
+          dmg_stem="${RELEASE_DMG_PATH%.dmg}"
+          rm -f "${dmg_stem}.md" "${dmg_stem}.html"
+
           release_base_url="${PUSHGO_SPARKLE_BASE_URL%/}/${track}/v${SEMVER_FULL_VERSION}/"
 
           ./scripts/release_appcast.sh "$track" artifacts/release \
-            --expected-version "v${SEMVER_FULL_VERSION}" \
+            --expected-version "${version}" \
             --download-url-prefix "$release_base_url" \
             --release-notes-url-prefix "$release_base_url" \
             --ed-key-file "${PUSHGO_SPARKLE_PRIVATE_ED_KEY_PATH}" \
@@ -393,42 +425,11 @@ jobs:
             artifacts/release/*.txt
           if-no-files-found: error
 
-      - name: Commit Sparkle appcast state
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-        env:
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          target_branch="${DEFAULT_BRANCH:-main}"
-          appcast_snapshot="$RUNNER_TEMP/release-appcast.xml"
-
-          cp release/appcast.xml "$appcast_snapshot"
-          rm -f release/appcast.xml
-
-          git fetch origin "$target_branch"
-          git checkout -B "$target_branch" "origin/$target_branch"
-
-          mkdir -p release
-          cp "$appcast_snapshot" release/appcast.xml
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add release/appcast.xml
-
-          if git diff --cached --quiet -- release/appcast.xml; then
-            echo "release/appcast.xml unchanged; skipping commit"
-            exit 0
-          fi
-
-          git commit -m "Update Sparkle appcast for ${GITHUB_REF_NAME}"
-          git push origin "HEAD:${target_branch}"
-
       - name: Upload signed DMG artifact
         uses: actions/upload-artifact@v7
         with:
           name: pushgo-macos-dmg-${{ github.run_id }}
-          path: artifacts/release/*.dmg
+          path: ${{ env.RELEASE_DMG_PATH }}
           if-no-files-found: error
 
       - name: Publish DMG to GitHub Release
@@ -514,12 +515,9 @@ jobs:
           api_root="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
           release_id="${{ steps.github_release.outputs.release_id }}"
           upload_url="${{ steps.github_release.outputs.upload_url }}"
-
-          shopt -s nullglob
-          asset_files=(artifacts/release/*.dmg)
-          shopt -u nullglob
-          if [[ ${#asset_files[@]} -eq 0 ]]; then
-            echo "No DMG assets found under artifacts/release/" >&2
+          asset_file="${RELEASE_DMG_PATH}"
+          if [[ -z "${asset_file}" || ! -f "${asset_file}" ]]; then
+            echo "Resolved release DMG is missing: ${asset_file:-<empty>}" >&2
             exit 1
           fi
 
@@ -529,22 +527,72 @@ jobs:
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "${api_root}/releases/${release_id}/assets?per_page=100")"
 
-          for file in "${asset_files[@]}"; do
-            asset_name="$(basename "${file}")"
-            while IFS= read -r asset_id; do
-              [[ -z "${asset_id}" ]] && continue
-              curl -fsSL -X DELETE \
-                -H "Accept: application/vnd.github+json" \
-                -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-                -H "X-GitHub-Api-Version: 2022-11-28" \
-                "${api_root}/releases/assets/${asset_id}" >/dev/null
-            done < <(printf '%s' "${assets_json}" | jq -r --arg name "${asset_name}" '.[] | select(.name == $name) | .id')
-
-            encoded_asset_name="$(jq -rn --arg value "${asset_name}" '$value|@uri')"
-            curl -fsSL -X POST \
+          asset_name="$(basename "${asset_file}")"
+          while IFS= read -r asset_id; do
+            [[ -z "${asset_id}" ]] && continue
+            curl -fsSL -X DELETE \
               -H "Accept: application/vnd.github+json" \
               -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-              -H "Content-Type: application/x-apple-diskimage" \
-              --data-binary @"${file}" \
-              "${upload_url}?name=${encoded_asset_name}" >/dev/null
-          done
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${api_root}/releases/assets/${asset_id}" >/dev/null
+          done < <(printf '%s' "${assets_json}" | jq -r --arg name "${asset_name}" '.[] | select(.name == $name) | .id')
+
+          encoded_asset_name="$(jq -rn --arg value "${asset_name}" '$value|@uri')"
+          curl -fsSL -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Content-Type: application/x-apple-diskimage" \
+            --data-binary @"${asset_file}" \
+            "${upload_url}?name=${encoded_asset_name}" >/dev/null
+
+      - name: Commit Sparkle appcast state
+        id: commit_appcast
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        continue-on-error: true
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          target_branch="${DEFAULT_BRANCH:-main}"
+          appcast_snapshot="$RUNNER_TEMP/release-appcast.xml"
+
+          cp release/appcast.xml "$appcast_snapshot"
+          rm -f release/appcast.xml
+
+          git fetch origin "$target_branch"
+          git checkout -B "$target_branch" "origin/$target_branch"
+
+          mkdir -p release
+          cp "$appcast_snapshot" release/appcast.xml
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add release/appcast.xml
+
+          if git diff --cached --quiet -- release/appcast.xml; then
+            echo "release/appcast.xml unchanged; skipping commit"
+            exit 0
+          fi
+
+          git commit -m "Update Sparkle appcast for ${GITHUB_REF_NAME}"
+          git push origin "HEAD:${target_branch}"
+
+      - name: Report non-blocking appcast commit failure
+        if: steps.commit_appcast.outcome == 'failure'
+        shell: bash
+        run: |
+          {
+            echo "## Sparkle appcast repo sync warning"
+            echo
+            echo "Release artifacts were published, but committing \`release/appcast.xml\` back to the default branch failed."
+            echo "Please inspect the \`Commit Sparkle appcast state\` step and sync the file manually if needed."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload release diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pushgo-release-diagnostics-${{ github.run_id }}
+          path: artifacts/release/**
+          if-no-files-found: warn
