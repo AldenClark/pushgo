@@ -164,8 +164,11 @@ temp_files=()
 cleanup_temp_files() {
   local file
   for file in "${temp_files[@]-}"; do
-    [[ -n "$file" && -f "$file" ]] && rm -f "$file"
+    if [[ -n "$file" && -f "$file" ]]; then
+      rm -f "$file"
+    fi
   done
+  return 0
 }
 trap cleanup_temp_files EXIT
 
@@ -173,32 +176,74 @@ normalize_ed_key_file() {
   local source_path="$1"
   local normalized_path
   local compact_content
-  local der_b64
+  local sparkle_secret_b64
+  local decoded_path
+  local decoded_size
 
   normalized_path="$(mktemp "${TMPDIR:-/tmp}/pushgo-sparkle-ed-key.XXXXXX")"
   temp_files+=("$normalized_path")
 
+  # Convert PKCS#8 Ed25519 private key material to Sparkle secret format:
+  # base64(32-byte private key || 32-byte public key)
+  sparkle_secret_from_private_key_file() {
+    local key_path="$1"
+    local input_format="${2:-PEM}"
+    local key_text
+    local priv_hex
+    local pub_hex
+
+    key_text="$(openssl pkey -inform "$input_format" -in "$key_path" -text -noout 2>/dev/null || true)"
+    if [[ -z "$key_text" ]]; then
+      return 1
+    fi
+
+    priv_hex="$(printf '%s\n' "$key_text" | awk '/^priv:/{capture=1;next}/^pub:/{capture=0}capture{print}' | tr -d '[:space:]:')"
+    pub_hex="$(printf '%s\n' "$key_text" | awk '/^pub:/{capture=1;next}capture{print}' | tr -d '[:space:]:')"
+
+    if [[ ${#priv_hex} -ne 64 || ${#pub_hex} -ne 64 ]]; then
+      return 1
+    fi
+
+    printf '%s' "${priv_hex}${pub_hex}" | xxd -r -p | base64 | tr -d '\r\n'
+  }
+
   if grep -q "BEGIN PRIVATE KEY" "$source_path"; then
-    der_b64="$(openssl pkey -in "$source_path" -outform DER 2>/dev/null | base64 | tr -d '\r\n' || true)"
-    if [[ -z "$der_b64" ]]; then
+    sparkle_secret_b64="$(sparkle_secret_from_private_key_file "$source_path" "PEM" || true)"
+    if [[ -z "$sparkle_secret_b64" ]]; then
       echo "Error: failed to parse PEM private key from --ed-key-file: $source_path" >&2
       exit 1
     fi
-    printf '%s\n' "$der_b64" > "$normalized_path"
+    printf '%s\n' "$sparkle_secret_b64" > "$normalized_path"
     echo "$normalized_path"
     return
   fi
 
   compact_content="$(tr -d '[:space:]' < "$source_path")"
   if [[ -n "$compact_content" ]] && printf '%s' "$compact_content" | openssl base64 -d -A >/dev/null 2>&1; then
-    printf '%s\n' "$compact_content" > "$normalized_path"
-    echo "$normalized_path"
-    return
+    decoded_path="$(mktemp "${TMPDIR:-/tmp}/pushgo-sparkle-ed-key-decoded.XXXXXX")"
+    temp_files+=("$decoded_path")
+    printf '%s' "$compact_content" | openssl base64 -d -A > "$decoded_path"
+    decoded_size="$(wc -c < "$decoded_path" | tr -d '[:space:]')"
+
+    # Already Sparkle secret format.
+    if [[ "$decoded_size" == "64" ]]; then
+      printf '%s\n' "$compact_content" > "$normalized_path"
+      echo "$normalized_path"
+      return
+    fi
+
+    # Base64 payload may itself be DER private key data.
+    sparkle_secret_b64="$(sparkle_secret_from_private_key_file "$decoded_path" "DER" || true)"
+    if [[ -n "$sparkle_secret_b64" ]]; then
+      printf '%s\n' "$sparkle_secret_b64" > "$normalized_path"
+      echo "$normalized_path"
+      return
+    fi
   fi
 
-  der_b64="$(openssl pkey -inform DER -in "$source_path" -outform DER 2>/dev/null | base64 | tr -d '\r\n' || true)"
-  if [[ -n "$der_b64" ]]; then
-    printf '%s\n' "$der_b64" > "$normalized_path"
+  sparkle_secret_b64="$(sparkle_secret_from_private_key_file "$source_path" "DER" || true)"
+  if [[ -n "$sparkle_secret_b64" ]]; then
+    printf '%s\n' "$sparkle_secret_b64" > "$normalized_path"
     echo "$normalized_path"
     return
   fi
