@@ -1,0 +1,10 @@
+{
+  "en": "Provider token refresh now triggers ingress sync immediately to reduce delayed pulls.\nImproved message delivery continuity on iOS and macOS after provider route updates.\nReduced timing gaps between token updates and provider pull execution.",
+  "de": "Nach einer Aktualisierung des Provider-Tokens wird die Ingress-Synchronisierung jetzt sofort ausgelöst, um verzögerte Pulls zu reduzieren.\nDie Zustellkontinuität auf iOS und macOS nach Aktualisierungen der Provider-Routen wurde verbessert.\nZeitliche Lücken zwischen Token-Aktualisierung und Ausführung des Provider-Pulls wurden verringert.",
+  "es": "La actualización del token del proveedor ahora activa la sincronización de ingreso de inmediato para reducir extracciones retrasadas.\nSe mejoró la continuidad de entrega en iOS y macOS después de actualizar las rutas del proveedor.\nSe redujeron los desfases entre la actualización del token y la ejecución de la extracción del proveedor.",
+  "fr": "L'actualisation du jeton fournisseur déclenche désormais immédiatement la synchronisation d'ingestion afin de réduire les récupérations retardées.\nLa continuité de livraison sur iOS et macOS après les mises à jour des routes fournisseur a été améliorée.\nLes écarts de synchronisation entre la mise à jour du jeton et l'exécution de la récupération fournisseur ont été réduits.",
+  "ja": "プロバイダートークン更新時に、遅延した取得を減らすため ingress 同期を即時実行するようになりました。\nプロバイダールート更新後の iOS と macOS で、配信の継続性を改善しました。\nトークン更新からプロバイダー取得実行までのタイミングギャップを縮小しました。",
+  "ko": "제공자 토큰이 갱신되면 지연된 가져오기를 줄이기 위해 인그레스 동기화를 즉시 실행합니다.\n제공자 라우트 업데이트 후 iOS와 macOS에서 전달 연속성이 개선되었습니다.\n토큰 업데이트와 제공자 가져오기 실행 사이의 타이밍 간격을 줄였습니다.",
+  "zh-CN": "Provider token 刷新后会立即触发 ingress 同步，减少拉取延迟。\niOS 与 macOS 在 provider 路由更新后的消息投递连续性已提升。\n缩短了 token 更新到 provider 拉取执行之间的时间间隔。",
+  "zh-TW": "Provider token 重新整理後會立即觸發 ingress 同步，減少拉取延遲。\niOS 與 macOS 在 provider 路由更新後的訊息投遞連續性已提升。\n縮短了 token 更新到 provider 拉取執行之間的時間間隔。"
+}

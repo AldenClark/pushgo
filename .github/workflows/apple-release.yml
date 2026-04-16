@@ -25,6 +25,8 @@ jobs:
       TESTFLIGHT_EXTERNAL_GROUPS: ${{ vars.TESTFLIGHT_EXTERNAL_GROUPS || '' }}
       APP_STORE_SUBMIT_FOR_REVIEW: ${{ vars.APP_STORE_SUBMIT_FOR_REVIEW || 'false' }}
       APP_STORE_AUTOMATIC_RELEASE: ${{ vars.APP_STORE_AUTOMATIC_RELEASE || 'false' }}
+      APPLE_DISTRIBUTION_IDENTITY: ${{ vars.APPLE_DISTRIBUTION_IDENTITY || '' }}
+      MAC_INSTALLER_DISTRIBUTION_IDENTITY: ${{ vars.MAC_INSTALLER_DISTRIBUTION_IDENTITY || '' }}
       DEVELOPER_ID_APPLICATION_P12_BASE64: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_BASE64 }}
       DEVELOPER_ID_APPLICATION_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_PASSWORD }}
       DEVELOPER_ID_APPLICATION_IDENTITY: ${{ vars.DEVELOPER_ID_APPLICATION_IDENTITY || '' }}
@@ -33,6 +35,8 @@ jobs:
       PUSHGO_SPARKLE_SCHEDULED_CHECK_INTERVAL: ${{ vars.PUSHGO_SPARKLE_SCHEDULED_CHECK_INTERVAL || '21600' }}
       FASTLANE_DISABLE_COLORS: "1"
       FASTLANE_SKIP_UPDATE_CHECK: "1"
+      NETWORK_MAX_ATTEMPTS: ${{ vars.NETWORK_MAX_ATTEMPTS || '3' }}
+      NETWORK_RETRY_BASE_SECONDS: ${{ vars.NETWORK_RETRY_BASE_SECONDS || '20' }}
       ASC_UPLOAD_MAX_ATTEMPTS: ${{ vars.ASC_UPLOAD_MAX_ATTEMPTS || '3' }}
       ASC_UPLOAD_RETRY_BASE_SECONDS: ${{ vars.ASC_UPLOAD_RETRY_BASE_SECONDS || '20' }}
       LC_ALL: en_US.UTF-8
@@ -58,9 +62,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gem install bundler -v 2.5.23 --no-document
+          bash ./scripts/retry_command.sh --always -- \
+            gem install bundler -v 2.5.23 --no-document
           bundle _2.5.23_ config set path vendor/bundle
-          bundle _2.5.23_ install --jobs 4 --retry 3
+          bash ./scripts/retry_command.sh --always -- \
+            bundle _2.5.23_ install --jobs 4 --retry 3
 
       - name: Resolve SemVer release context
         id: resolve
@@ -122,7 +128,7 @@ jobs:
           fi
           echo "ASC_KEY_PATH=$ASC_KEY_PATH" >> "$GITHUB_ENV"
 
-      - name: Validate App Store signing secrets
+      - name: Validate local signing assets
         shell: bash
         run: |
           set -euo pipefail
@@ -131,13 +137,41 @@ jobs:
           [[ -z "${ASC_KEY_ID:-}" ]] && missing+=("ASC_KEY_ID")
           [[ -z "${ASC_ISSUER_ID:-}" ]] && missing+=("ASC_ISSUER_ID")
           [[ -z "${ASC_KEY_P8:-}" ]] && missing+=("ASC_KEY_P8")
+          [[ -z "${APPLE_DISTRIBUTION_P12_BASE64:-}" ]] && missing+=("APPLE_DISTRIBUTION_P12_BASE64")
+          [[ -z "${APPLE_DISTRIBUTION_P12_PASSWORD:-}" ]] && missing+=("APPLE_DISTRIBUTION_P12_PASSWORD")
+          [[ -z "${MAC_INSTALLER_DISTRIBUTION_P12_BASE64:-}" ]] && missing+=("MAC_INSTALLER_DISTRIBUTION_P12_BASE64")
+          [[ -z "${MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD:-}" ]] && missing+=("MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD")
+          [[ -z "${DEVELOPER_ID_APPLICATION_P12_BASE64:-}" ]] && missing+=("DEVELOPER_ID_APPLICATION_P12_BASE64")
+          [[ -z "${DEVELOPER_ID_APPLICATION_P12_PASSWORD:-}" ]] && missing+=("DEVELOPER_ID_APPLICATION_P12_PASSWORD")
+          [[ -z "${APP_STORE_PROFILE_IOS_APP_B64:-}" ]] && missing+=("APP_STORE_PROFILE_IOS_APP_B64")
+          [[ -z "${APP_STORE_PROFILE_IOS_NSE_B64:-}" ]] && missing+=("APP_STORE_PROFILE_IOS_NSE_B64")
+          [[ -z "${APP_STORE_PROFILE_WATCH_APP_B64:-}" ]] && missing+=("APP_STORE_PROFILE_WATCH_APP_B64")
+          [[ -z "${APP_STORE_PROFILE_WATCH_NSE_B64:-}" ]] && missing+=("APP_STORE_PROFILE_WATCH_NSE_B64")
+          [[ -z "${APP_STORE_PROFILE_MACOS_APP_B64:-}" ]] && missing+=("APP_STORE_PROFILE_MACOS_APP_B64")
+          [[ -z "${APP_STORE_PROFILE_MACOS_NSE_B64:-}" ]] && missing+=("APP_STORE_PROFILE_MACOS_NSE_B64")
           if (( ${#missing[@]} > 0 )); then
             printf 'Missing required secrets: %s\n' "${missing[*]}"
             exit 1
           fi
+        env:
+          APPLE_DISTRIBUTION_P12_BASE64: ${{ secrets.APPLE_DISTRIBUTION_P12_BASE64 }}
+          APPLE_DISTRIBUTION_P12_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_P12_PASSWORD }}
+          MAC_INSTALLER_DISTRIBUTION_P12_BASE64: ${{ secrets.MAC_INSTALLER_DISTRIBUTION_P12_BASE64 }}
+          MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD: ${{ secrets.MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD }}
+          DEVELOPER_ID_APPLICATION_P12_BASE64: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_BASE64 }}
+          DEVELOPER_ID_APPLICATION_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_PASSWORD }}
+          APP_STORE_PROFILE_IOS_APP_B64: ${{ secrets.APP_STORE_PROFILE_IOS_APP_B64 }}
+          APP_STORE_PROFILE_IOS_NSE_B64: ${{ secrets.APP_STORE_PROFILE_IOS_NSE_B64 }}
+          APP_STORE_PROFILE_WATCH_APP_B64: ${{ secrets.APP_STORE_PROFILE_WATCH_APP_B64 }}
+          APP_STORE_PROFILE_WATCH_NSE_B64: ${{ secrets.APP_STORE_PROFILE_WATCH_NSE_B64 }}
+          APP_STORE_PROFILE_MACOS_APP_B64: ${{ secrets.APP_STORE_PROFILE_MACOS_APP_B64 }}
+          APP_STORE_PROFILE_MACOS_NSE_B64: ${{ secrets.APP_STORE_PROFILE_MACOS_NSE_B64 }}
 
       - name: Resolve Swift packages
-        run: swift package resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash ./scripts/retry_command.sh --always -- swift package resolve
 
       - name: Extract release notes from release/RELEASE_NOTES
         shell: bash
@@ -194,26 +228,10 @@ jobs:
             echo "__PUSHGO_RELEASE_BODY_EOF__"
           } >> "$GITHUB_ENV"
 
-      - name: Run fastlane beta upload
-        if: steps.resolve.outputs.release_kind == 'beta'
-        run: bundle _2.5.23_ exec fastlane ios beta_upload
-
-      - name: Run fastlane release upload
-        if: steps.resolve.outputs.release_kind == 'release'
-        run: bundle _2.5.23_ exec fastlane ios release_upload
-
-      - name: Validate DMG signing secrets
+      - name: Validate Sparkle/update host configuration
         shell: bash
         run: |
           set -euo pipefail
-          missing=()
-          [[ -z "${DEVELOPER_ID_APPLICATION_P12_BASE64:-}" ]] && missing+=("DEVELOPER_ID_APPLICATION_P12_BASE64")
-          [[ -z "${DEVELOPER_ID_APPLICATION_P12_PASSWORD:-}" ]] && missing+=("DEVELOPER_ID_APPLICATION_P12_PASSWORD")
-          if (( ${#missing[@]} > 0 )); then
-            printf 'Missing required DMG signing secrets: %s\n' "${missing[*]}"
-            exit 1
-          fi
-
           if ! [[ "${PUSHGO_SPARKLE_SCHEDULED_CHECK_INTERVAL:-}" =~ ^[0-9]+$ ]]; then
             echo "PUSHGO_SPARKLE_SCHEDULED_CHECK_INTERVAL must be an integer number of seconds"
             exit 1
@@ -243,39 +261,129 @@ jobs:
           } > "$sparkle_xcconfig"
           echo "APP_MACOS_DMG_XCCONFIG=$sparkle_xcconfig" >> "$GITHUB_ENV"
 
-      - name: Import Developer ID certificate into temporary keychain
+      - name: Import local signing certificates into temporary keychain
         shell: bash
         run: |
           set -euo pipefail
           keychain_path="$RUNNER_TEMP/pushgo-signing.keychain-db"
           keychain_password="$(openssl rand -hex 24)"
-          p12_path="$RUNNER_TEMP/pushgo-developer-id.p12"
+          apple_distribution_p12="$RUNNER_TEMP/pushgo-apple-distribution.p12"
+          mac_installer_p12="$RUNNER_TEMP/pushgo-mac-installer-distribution.p12"
+          developer_id_p12="$RUNNER_TEMP/pushgo-developer-id.p12"
 
-          printf "%s" "$DEVELOPER_ID_APPLICATION_P12_BASE64" | base64 --decode > "$p12_path"
+          printf "%s" "$APPLE_DISTRIBUTION_P12_BASE64" | base64 --decode > "$apple_distribution_p12"
+          printf "%s" "$MAC_INSTALLER_DISTRIBUTION_P12_BASE64" | base64 --decode > "$mac_installer_p12"
+          printf "%s" "$DEVELOPER_ID_APPLICATION_P12_BASE64" | base64 --decode > "$developer_id_p12"
 
           security create-keychain -p "$keychain_password" "$keychain_path"
           security set-keychain-settings -lut 21600 "$keychain_path"
           security unlock-keychain -p "$keychain_password" "$keychain_path"
-          security import "$p12_path" \
-            -k "$keychain_path" \
-            -P "$DEVELOPER_ID_APPLICATION_P12_PASSWORD" \
-            -T /usr/bin/codesign \
-            -T /usr/bin/security \
-            -T /usr/bin/xcrun
+          import_p12() {
+            local p12_path="$1"
+            local p12_password="$2"
+            security import "$p12_path" \
+              -k "$keychain_path" \
+              -P "$p12_password" \
+              -T /usr/bin/codesign \
+              -T /usr/bin/productbuild \
+              -T /usr/bin/security \
+              -T /usr/bin/xcrun
+          }
+
+          import_p12 "$apple_distribution_p12" "$APPLE_DISTRIBUTION_P12_PASSWORD"
+          import_p12 "$mac_installer_p12" "$MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD"
+          import_p12 "$developer_id_p12" "$DEVELOPER_ID_APPLICATION_P12_PASSWORD"
+
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain_path" >/dev/null
           security list-keychains -d user -s "$keychain_path"
           security default-keychain -d user -s "$keychain_path"
           identity_output="$(security find-identity -v -p codesigning "$keychain_path")"
           printf '%s\n' "$identity_output"
+
+          if ! grep -q "Apple Distribution" <<<"$identity_output"; then
+            echo "Imported certificates do not expose an Apple Distribution signing identity."
+            exit 1
+          fi
+          if ! grep -Eq "Mac Installer Distribution|3rd Party Mac Developer Installer" <<<"$identity_output"; then
+            echo "Imported certificates do not expose a Mac Installer Distribution signing identity."
+            exit 1
+          fi
           if ! grep -q "Developer ID Application" <<<"$identity_output"; then
-            echo "Imported p12 does not expose a Developer ID Application signing identity. Ensure the secret is a base64-encoded .p12 exported with its private key."
+            echo "Imported certificates do not expose a Developer ID Application signing identity."
             exit 1
           fi
 
           {
+            echo "RELEASE_SIGNING_KEYCHAIN_PATH=$keychain_path"
+            echo "RELEASE_SIGNING_KEYCHAIN_PASSWORD=$keychain_password"
             echo "DEVELOPER_ID_KEYCHAIN_PATH=$keychain_path"
             echo "DEVELOPER_ID_KEYCHAIN_PASSWORD=$keychain_password"
           } >> "$GITHUB_ENV"
+        env:
+          APPLE_DISTRIBUTION_P12_BASE64: ${{ secrets.APPLE_DISTRIBUTION_P12_BASE64 }}
+          APPLE_DISTRIBUTION_P12_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_P12_PASSWORD }}
+          MAC_INSTALLER_DISTRIBUTION_P12_BASE64: ${{ secrets.MAC_INSTALLER_DISTRIBUTION_P12_BASE64 }}
+          MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD: ${{ secrets.MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD }}
+          DEVELOPER_ID_APPLICATION_P12_BASE64: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_BASE64 }}
+          DEVELOPER_ID_APPLICATION_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_PASSWORD }}
+
+      - name: Install local provisioning profiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          profiles_dir="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$profiles_dir"
+
+          install_profile() {
+            local secret_value="$1"
+            local expected_bundle_id="$2"
+            local env_var_name="$3"
+            local extension="$4"
+            local label="$5"
+            local raw_path decoded_path uuid profile_name application_identifier resolved_bundle_id
+
+            raw_path="$(mktemp "$RUNNER_TEMP/pushgo-profile-${env_var_name}.XXXXXX")"
+            decoded_path="$(mktemp "$RUNNER_TEMP/pushgo-profile-${env_var_name}.XXXXXX.plist")"
+            printf "%s" "$secret_value" | base64 --decode > "$raw_path"
+            security cms -D -i "$raw_path" > "$decoded_path"
+
+            uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$decoded_path")"
+            profile_name="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$decoded_path")"
+            application_identifier="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$decoded_path")"
+            resolved_bundle_id="${application_identifier#${APPLE_TEAM_ID}.}"
+            if [[ "$resolved_bundle_id" != "$expected_bundle_id" ]]; then
+              echo "Provisioning profile ${label} targets ${resolved_bundle_id}, expected ${expected_bundle_id}" >&2
+              exit 1
+            fi
+
+            cp "$raw_path" "${profiles_dir}/${uuid}.${extension}"
+            {
+              echo "${env_var_name}=${uuid}"
+              echo "${env_var_name}_NAME=${profile_name}"
+            } >> "$GITHUB_ENV"
+          }
+
+          install_profile "$APP_STORE_PROFILE_IOS_APP_B64" "io.ethan.pushgo" "APP_STORE_PROFILE_IOS_APP_UUID" "mobileprovision" "iOS app"
+          install_profile "$APP_STORE_PROFILE_IOS_NSE_B64" "io.ethan.pushgo.NotificationServiceExtension" "APP_STORE_PROFILE_IOS_NSE_UUID" "mobileprovision" "iOS NSE"
+          install_profile "$APP_STORE_PROFILE_WATCH_APP_B64" "io.ethan.pushgo.watchkitapp" "APP_STORE_PROFILE_WATCH_APP_UUID" "mobileprovision" "watch app"
+          install_profile "$APP_STORE_PROFILE_WATCH_NSE_B64" "io.ethan.pushgo.watchkitapp.NotificationServiceExtension" "APP_STORE_PROFILE_WATCH_NSE_UUID" "mobileprovision" "watch NSE"
+          install_profile "$APP_STORE_PROFILE_MACOS_APP_B64" "io.ethan.pushgo" "APP_STORE_PROFILE_MACOS_APP_UUID" "provisionprofile" "macOS app"
+          install_profile "$APP_STORE_PROFILE_MACOS_NSE_B64" "io.ethan.pushgo.NotificationServiceExtension" "APP_STORE_PROFILE_MACOS_NSE_UUID" "provisionprofile" "macOS NSE"
+        env:
+          APP_STORE_PROFILE_IOS_APP_B64: ${{ secrets.APP_STORE_PROFILE_IOS_APP_B64 }}
+          APP_STORE_PROFILE_IOS_NSE_B64: ${{ secrets.APP_STORE_PROFILE_IOS_NSE_B64 }}
+          APP_STORE_PROFILE_WATCH_APP_B64: ${{ secrets.APP_STORE_PROFILE_WATCH_APP_B64 }}
+          APP_STORE_PROFILE_WATCH_NSE_B64: ${{ secrets.APP_STORE_PROFILE_WATCH_NSE_B64 }}
+          APP_STORE_PROFILE_MACOS_APP_B64: ${{ secrets.APP_STORE_PROFILE_MACOS_APP_B64 }}
+          APP_STORE_PROFILE_MACOS_NSE_B64: ${{ secrets.APP_STORE_PROFILE_MACOS_NSE_B64 }}
+
+      - name: Run fastlane beta upload
+        if: steps.resolve.outputs.release_kind == 'beta'
+        run: bundle _2.5.23_ exec fastlane ios beta_upload
+
+      - name: Run fastlane release upload
+        if: steps.resolve.outputs.release_kind == 'release'
+        run: bundle _2.5.23_ exec fastlane ios release_upload
 
       - name: Run fastlane beta dmg
         if: steps.resolve.outputs.release_kind == 'beta'
@@ -464,6 +572,7 @@ jobs:
 
           release_lookup_file="$(mktemp)"
           release_status="$(
+            bash ./scripts/retry_command.sh --always -- \
             curl -sSL -o "${release_lookup_file}" -w "%{http_code}" \
               -H "Accept: application/vnd.github+json" \
               -H "Authorization: Bearer ${GITHUB_TOKEN}" \
@@ -474,6 +583,7 @@ jobs:
           if [[ "${release_status}" == "200" ]]; then
             release_id="$(jq -r '.id' "${release_lookup_file}")"
             release_response_file="$(mktemp)"
+            bash ./scripts/retry_command.sh --always -- \
             curl -fsSL -X PATCH \
               -H "Accept: application/vnd.github+json" \
               -H "Authorization: Bearer ${GITHUB_TOKEN}" \
@@ -483,6 +593,7 @@ jobs:
               -d "${release_payload}" >"${release_response_file}"
           elif [[ "${release_status}" == "404" ]]; then
             release_response_file="$(mktemp)"
+            bash ./scripts/retry_command.sh --always -- \
             curl -fsSL -X POST \
               -H "Accept: application/vnd.github+json" \
               -H "Authorization: Bearer ${GITHUB_TOKEN}" \
@@ -521,7 +632,8 @@ jobs:
             exit 1
           fi
 
-          assets_json="$(curl -fsSL \
+          assets_json="$(bash ./scripts/retry_command.sh --always -- \
+            curl -fsSL \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${GITHUB_TOKEN}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
@@ -530,6 +642,7 @@ jobs:
           asset_name="$(basename "${asset_file}")"
           while IFS= read -r asset_id; do
             [[ -z "${asset_id}" ]] && continue
+            bash ./scripts/retry_command.sh --always -- \
             curl -fsSL -X DELETE \
               -H "Accept: application/vnd.github+json" \
               -H "Authorization: Bearer ${GITHUB_TOKEN}" \
@@ -538,6 +651,7 @@ jobs:
           done < <(printf '%s' "${assets_json}" | jq -r --arg name "${asset_name}" '.[] | select(.name == $name) | .id')
 
           encoded_asset_name="$(jq -rn --arg value "${asset_name}" '$value|@uri')"
+          bash ./scripts/retry_command.sh --always -- \
           curl -fsSL -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: Bearer ${GITHUB_TOKEN}" \
@@ -560,7 +674,7 @@ jobs:
           cp release/appcast.xml "$appcast_snapshot"
           rm -f release/appcast.xml
 
-          git fetch origin "$target_branch"
+          bash ./scripts/retry_command.sh --always -- git fetch origin "$target_branch"
           git checkout -B "$target_branch" "origin/$target_branch"
 
           mkdir -p release
@@ -576,7 +690,7 @@ jobs:
           fi
 
           git commit -m "Update Sparkle appcast for ${GITHUB_REF_NAME}"
-          git push origin "HEAD:${target_branch}"
+          bash ./scripts/retry_command.sh --always -- git push origin "HEAD:${target_branch}"
 
       - name: Report non-blocking appcast commit failure
         if: steps.commit_appcast.outcome == 'failure'

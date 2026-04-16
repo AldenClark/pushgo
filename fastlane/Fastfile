@@ -37,23 +37,21 @@ platform :ios do
     )
   end
 
-  def signing_xcargs
-    parts = ["-allowProvisioningUpdates"]
-    key_path = ENV["ASC_KEY_PATH"]
-    key_id = ENV["ASC_KEY_ID"]
-    issuer_id = ENV["ASC_ISSUER_ID"]
+  def local_signing_xcargs(signing_identity: nil)
+    parts = []
     team_id = ENV["APPLE_TEAM_ID"].to_s.strip
 
-    if !key_path.to_s.empty? && !key_id.to_s.empty? && !issuer_id.to_s.empty?
-      parts << "-authenticationKeyPath #{Shellwords.escape(key_path)}"
-      parts << "-authenticationKeyID #{Shellwords.escape(key_id)}"
-      parts << "-authenticationKeyIssuerID #{Shellwords.escape(issuer_id)}"
-    end
     display_version = resolved_display_version
     unless display_version.empty?
       parts << "PUSHGO_DISPLAY_VERSION=#{Shellwords.escape(display_version)}"
     end
+
     parts << "DEVELOPMENT_TEAM=#{team_id}" unless team_id.empty?
+    keychain_path = release_signing_keychain_path!
+    parts << "OTHER_CODE_SIGN_FLAGS=#{Shellwords.escape("--keychain #{keychain_path}")}"
+    unless signing_identity.to_s.empty?
+      parts << "CODE_SIGN_IDENTITY=#{Shellwords.escape(signing_identity)}"
+    end
 
     parts.join(" ")
   end
@@ -110,33 +108,72 @@ platform :ios do
     keychain_path
   end
 
-  def developer_id_identity!
-    keychain_path = developer_id_keychain_path!
-    configured_identity = ENV["DEVELOPER_ID_APPLICATION_IDENTITY"].to_s.strip
+  def release_signing_keychain_path!
+    keychain_path = ENV["RELEASE_SIGNING_KEYCHAIN_PATH"].to_s.strip
+    UI.user_error!("Missing RELEASE_SIGNING_KEYCHAIN_PATH") if keychain_path.empty?
+    keychain_path
+  end
+
+  def matching_code_signing_identities(keychain_path:, labels:)
     output = sh(
       "security find-identity -v -p codesigning #{Shellwords.escape(keychain_path)}",
       log: false
     )
 
-    identities = output.lines.filter_map do |line|
-      next unless line.include?("Developer ID Application")
+    output.lines.filter_map do |line|
       next unless line =~ /\s*\d+\)\s+([0-9A-F]{40})\s+"([^"]+)"/
 
+      sha = Regexp.last_match(1)
+      name = Regexp.last_match(2)
+      next unless labels.any? { |label| name.include?(label) }
+
       {
-        sha: Regexp.last_match(1),
-        name: Regexp.last_match(2)
+        sha: sha,
+        name: name
       }
     end
+  end
 
-    UI.user_error!("No Developer ID Application identity found in #{keychain_path}") if identities.empty?
-    return identities.first[:sha] if configured_identity.empty?
+  def require_code_signing_identity!(labels:, configured_identity_env: nil, keychain_path:)
+    configured_identity = configured_identity_env.to_s.strip
+    identities = matching_code_signing_identities(keychain_path: keychain_path, labels: labels)
+    UI.user_error!("No signing identity found in #{keychain_path} for #{labels.join(' / ')}") if identities.empty?
+    return identities.first if configured_identity.empty?
 
     matched_identity = identities.find do |identity|
       identity[:sha] == configured_identity || identity[:name] == configured_identity
     end
-    UI.user_error!("Configured DEVELOPER_ID_APPLICATION_IDENTITY not found: #{configured_identity}") if matched_identity.nil?
+    if matched_identity.nil?
+      UI.user_error!("Configured signing identity not found: #{configured_identity} (expected one of #{labels.join(', ')})")
+    end
 
-    matched_identity[:sha]
+    matched_identity
+  end
+
+  def apple_distribution_identity!
+    require_code_signing_identity!(
+      labels: ["Apple Distribution"],
+      configured_identity_env: ENV["APPLE_DISTRIBUTION_IDENTITY"],
+      keychain_path: release_signing_keychain_path!
+    )
+  end
+
+  def mac_installer_distribution_identity!
+    require_code_signing_identity!(
+      labels: ["Mac Installer Distribution", "3rd Party Mac Developer Installer"],
+      configured_identity_env: ENV["MAC_INSTALLER_DISTRIBUTION_IDENTITY"],
+      keychain_path: release_signing_keychain_path!
+    )
+  end
+
+  def developer_id_identity!
+    keychain_path = developer_id_keychain_path!
+    configured_identity = ENV["DEVELOPER_ID_APPLICATION_IDENTITY"].to_s.strip
+    require_code_signing_identity!(
+      labels: ["Developer ID Application"],
+      configured_identity_env: configured_identity,
+      keychain_path: keychain_path
+    )[:sha]
   end
 
   def developer_id_entitlements_sources
@@ -438,6 +475,32 @@ platform :ios do
     )
   end
 
+  def env_value!(name)
+    value = ENV[name].to_s.strip
+    UI.user_error!("Missing #{name}") if value.empty?
+    value
+  end
+
+  def ios_export_provisioning_profiles
+    {
+      "io.ethan.pushgo" => env_value!("APP_STORE_PROFILE_IOS_APP_UUID"),
+      "io.ethan.pushgo.NotificationServiceExtension" => env_value!("APP_STORE_PROFILE_IOS_NSE_UUID"),
+      "io.ethan.pushgo.watchkitapp" => env_value!("APP_STORE_PROFILE_WATCH_APP_UUID"),
+      "io.ethan.pushgo.watchkitapp.NotificationServiceExtension" => env_value!("APP_STORE_PROFILE_WATCH_NSE_UUID")
+    }
+  end
+
+  def macos_export_provisioning_profiles
+    {
+      "io.ethan.pushgo" => env_value!("APP_STORE_PROFILE_MACOS_APP_UUID"),
+      "io.ethan.pushgo.NotificationServiceExtension" => env_value!("APP_STORE_PROFILE_MACOS_NSE_UUID")
+    }
+  end
+
+  def write_export_options_plist(path, payload)
+    write_plist_hash(path, payload)
+  end
+
   def archive_ios_app!
     scheme = ENV.fetch("APP_SCHEME", "PushGo-iOS")
     project = resolve_from_repo(ENV.fetch("APP_PROJECT", "pushgo.xcodeproj"))
@@ -449,7 +512,8 @@ platform :ios do
     export_path = File.join(output_directory, "#{output_name}-export")
     export_options_path = File.join(output_directory, "#{output_name}-ExportOptions.plist")
     ipa_path = File.join(output_directory, "#{output_name}.ipa")
-    xcargs = signing_xcargs
+    apple_distribution_identity!
+    xcargs = local_signing_xcargs(signing_identity: "Apple Distribution")
 
     FileUtils.mkdir_p(output_directory)
     FileUtils.rm_rf([archive_path, export_path, ipa_path])
@@ -463,26 +527,17 @@ platform :ios do
       "archive #{xcargs}"
     )
 
-    File.write(
+    write_export_options_plist(
       export_options_path,
-      <<~PLIST
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-          <key>method</key>
-          <string>#{export_method}</string>
-          <key>teamID</key>
-          <string>#{team_id}</string>
-          <key>signingStyle</key>
-          <string>automatic</string>
-          <key>stripSwiftSymbols</key>
-          <true/>
-          <key>manageAppVersionAndBuildNumber</key>
-          <false/>
-        </dict>
-        </plist>
-      PLIST
+      {
+        "method" => export_method,
+        "teamID" => team_id,
+        "signingStyle" => "manual",
+        "signingCertificate" => "Apple Distribution",
+        "provisioningProfiles" => ios_export_provisioning_profiles,
+        "stripSwiftSymbols" => true,
+        "manageAppVersionAndBuildNumber" => false
+      }
     )
 
     sh(
@@ -510,7 +565,9 @@ platform :ios do
     export_path = File.join(output_directory, "#{pkg_name}-export")
     export_options_path = File.join(output_directory, "#{pkg_name}-ExportOptions.plist")
     pkg_path = File.join(output_directory, "#{pkg_name}.pkg")
-    xcargs = signing_xcargs
+    apple_distribution_identity!
+    mac_installer_distribution_identity!
+    xcargs = local_signing_xcargs(signing_identity: "Apple Distribution")
 
     FileUtils.mkdir_p(output_directory)
     FileUtils.rm_rf([archive_path, export_path, pkg_path])
@@ -524,26 +581,18 @@ platform :ios do
       "archive #{xcargs}"
     )
 
-    File.write(
+    write_export_options_plist(
       export_options_path,
-      <<~PLIST
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-          <key>method</key>
-          <string>app-store-connect</string>
-          <key>teamID</key>
-          <string>#{team_id}</string>
-          <key>signingStyle</key>
-          <string>automatic</string>
-          <key>stripSwiftSymbols</key>
-          <true/>
-          <key>manageAppVersionAndBuildNumber</key>
-          <false/>
-        </dict>
-        </plist>
-      PLIST
+      {
+        "method" => "app-store-connect",
+        "teamID" => team_id,
+        "signingStyle" => "manual",
+        "signingCertificate" => "Apple Distribution",
+        "installerSigningCertificate" => "Mac Installer Distribution",
+        "provisioningProfiles" => macos_export_provisioning_profiles,
+        "stripSwiftSymbols" => true,
+        "manageAppVersionAndBuildNumber" => false
+      }
     )
 
     sh(
@@ -589,7 +638,7 @@ platform :ios do
     display_version = resolved_display_version
     reference_derived_data_path = nil
     reference_entitlements_by_bundle_id = {}
-    xcargs = signing_xcargs
+    xcargs = local_signing_xcargs
 
     FileUtils.mkdir_p(output_directory)
     FileUtils.rm_rf([archive_path, export_path, staging_dir, entitlements_dir, dmg_path])
@@ -666,11 +715,13 @@ platform :ios do
       auth_args = notarytool_auth_args(key_path: key_path, key_id: key_id, issuer_id: issuer_id)
       notary_submit_path = File.join(output_directory, "#{dmg_name}-notarytool-submit.json")
       notary_log_path = File.join(output_directory, "#{dmg_name}-notarytool-log.json")
-      notary_submit_output = sh(
-        "xcrun notarytool submit #{Shellwords.escape(dmg_path)} " \
-        "#{auth_args} --wait --output-format json",
-        log: false
-      )
+      notary_submit_output = with_transient_network_retry!("submit DMG to notarytool") do
+        sh(
+          "xcrun notarytool submit #{Shellwords.escape(dmg_path)} " \
+          "#{auth_args} --wait --output-format json",
+          log: false
+        )
+      end
       File.write(notary_submit_path, notary_submit_output)
 
       notary_submit_result = JSON.parse(notary_submit_output)
@@ -681,10 +732,12 @@ platform :ios do
         notary_log_output = ""
         unless notarization_id.empty?
           begin
-            notary_log_output = sh(
-              "xcrun notarytool log #{Shellwords.escape(notarization_id)} #{auth_args} --output-format json",
-              log: false
-            )
+            notary_log_output = with_transient_network_retry!("fetch notarytool log") do
+              sh(
+                "xcrun notarytool log #{Shellwords.escape(notarization_id)} #{auth_args} --output-format json",
+                log: false
+              )
+            end
             File.write(notary_log_path, notary_log_output)
           rescue StandardError => e
             File.write(notary_log_path, "Failed to fetch notary log: #{e.message}\n")
@@ -777,17 +830,17 @@ platform :ios do
     end
   end
 
-  def asc_upload_retry_attempts
-    raw = ENV.fetch("ASC_UPLOAD_MAX_ATTEMPTS", "3").to_i
+  def network_retry_attempts
+    raw = ENV.fetch("NETWORK_MAX_ATTEMPTS", ENV.fetch("ASC_UPLOAD_MAX_ATTEMPTS", "3")).to_i
     raw > 0 ? raw : 1
   end
 
-  def asc_upload_retry_base_seconds
-    raw = ENV.fetch("ASC_UPLOAD_RETRY_BASE_SECONDS", "20").to_i
+  def network_retry_base_seconds
+    raw = ENV.fetch("NETWORK_RETRY_BASE_SECONDS", ENV.fetch("ASC_UPLOAD_RETRY_BASE_SECONDS", "20")).to_i
     raw > 0 ? raw : 20
   end
 
-  def transient_asc_upload_error?(error)
+  def transient_network_error?(error)
     message = error.to_s
     return false if message.empty?
 
@@ -799,9 +852,16 @@ platform :ios do
       /connection (?:was )?lost/i,
       /connection reset/i,
       /network route/i,
+      /network is unreachable/i,
+      /broken pipe/i,
+      /could not resolve host/i,
       /GET UPLOAD STATE .* did not receive a response/i,
       /server returned an invalid response/i,
       /temporar(?:y|ily) unavailable/i,
+      /remote end hung up unexpectedly/i,
+      /kex_exchange_identification/i,
+      /TLS/i,
+      /SSL/i,
       /HTTP(?:\/\d\.\d)?\s+50[0-9]\b/i,
       /\b502\b|\b503\b|\b504\b/
     ]
@@ -809,27 +869,31 @@ platform :ios do
     patterns.any? { |pattern| message.match?(pattern) }
   end
 
-  def with_transient_asc_retry!(operation_name)
-    attempts = asc_upload_retry_attempts
-    base_sleep = asc_upload_retry_base_seconds
+  def with_transient_network_retry!(operation_name)
+    attempts = network_retry_attempts
+    base_sleep = network_retry_base_seconds
     current = 0
 
     begin
       current += 1
       return yield
     rescue StandardError => e
-      unless transient_asc_upload_error?(e) && current < attempts
+      unless transient_network_error?(e) && current < attempts
         raise
       end
 
       sleep_seconds = base_sleep * (2**(current - 1))
       UI.important(
-        "#{operation_name} failed with transient ASC/network error " \
+        "#{operation_name} failed with transient network error " \
         "(attempt #{current}/#{attempts}): #{e.message}\nRetrying in #{sleep_seconds}s..."
       )
       sleep(sleep_seconds)
       retry
     end
+  end
+
+  def with_transient_asc_retry!(operation_name, &block)
+    with_transient_network_retry!(operation_name, &block)
   end
 
   desc "Archive and upload build to TestFlight"

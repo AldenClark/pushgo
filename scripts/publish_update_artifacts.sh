@@ -10,8 +10,8 @@ Example:
   scripts/publish_update_artifacts.sh artifacts/release release/appcast.xml deploy@update.pushgo.cn /var/www/update.pushgo.cn/macos beta v1.2.0-beta.3
 
 Requirements:
-  - rsync
   - ssh access configured (optionally via PUSHGO_UPDATE_DEPLOY_SSH_KEY_FILE)
+  - tar
 USAGE
 }
 
@@ -52,18 +52,34 @@ if [[ ! -f "$appcast_path" ]]; then
   exit 1
 fi
 
-if ! command -v rsync >/dev/null 2>&1; then
-  echo "Error: rsync is required" >&2
+if ! command -v ssh >/dev/null 2>&1; then
+  echo "Error: ssh is required" >&2
   exit 1
 fi
 
-ssh_opts=()
+if ! command -v tar >/dev/null 2>&1; then
+  echo "Error: tar is required" >&2
+  exit 1
+fi
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+retry_cmd="${script_dir}/retry_command.sh"
+if [[ ! -f "$retry_cmd" ]]; then
+  echo "Error: retry helper not found: $retry_cmd" >&2
+  exit 1
+fi
+
+ssh_opts=(
+  -o BatchMode=yes
+  -o ServerAliveInterval=30
+  -o ServerAliveCountMax=6
+)
 if [[ -n "${PUSHGO_UPDATE_DEPLOY_SSH_KEY_FILE:-}" ]]; then
   if [[ ! -f "${PUSHGO_UPDATE_DEPLOY_SSH_KEY_FILE}" ]]; then
     echo "Error: PUSHGO_UPDATE_DEPLOY_SSH_KEY_FILE not found: ${PUSHGO_UPDATE_DEPLOY_SSH_KEY_FILE}" >&2
     exit 1
   fi
-  ssh_opts=(-i "${PUSHGO_UPDATE_DEPLOY_SSH_KEY_FILE}" -o IdentitiesOnly=yes)
+  ssh_opts+=(-i "${PUSHGO_UPDATE_DEPLOY_SSH_KEY_FILE}" -o IdentitiesOnly=yes)
 fi
 
 shopt -s nullglob
@@ -129,14 +145,16 @@ done
   shasum -a 256 "$dmg_name" > SHA256SUMS.txt
 )
 
-ssh "${ssh_opts[@]}" "$remote_user_host" "mkdir -p '$release_dir' '${remote_base_path%/}'"
+bash "$retry_cmd" --always -- ssh "${ssh_opts[@]}" "$remote_user_host" \
+  "rm -rf '$release_dir' && mkdir -p '$release_dir' '${remote_base_path%/}'"
 
-rsync -avz --delete -e "ssh ${ssh_opts[*]}" \
-  "$staging_dir/" \
-  "${remote_user_host}:${release_dir}/"
+(
+  cd "$staging_dir"
+  tar -cf - .
+) | bash "$retry_cmd" --always -- ssh "${ssh_opts[@]}" "$remote_user_host" \
+  "tar -xf - -C '$release_dir'"
 
-rsync -avz -e "ssh ${ssh_opts[*]}" \
-  "$appcast_path" \
-  "${remote_user_host}:${active_appcast_file}"
+bash "$retry_cmd" --always -- ssh "${ssh_opts[@]}" "$remote_user_host" \
+  "cat > '$active_appcast_file'" < "$appcast_path"
 
 echo "Published macOS update artifacts to ${remote_user_host}:${release_dir} and refreshed ${active_appcast_file}"
