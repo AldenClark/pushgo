@@ -56,6 +56,26 @@ platform :ios do
     parts.join(" ")
   end
 
+  def unsigned_archive_xcargs
+    parts = []
+    display_version = resolved_display_version
+    unless display_version.empty?
+      parts << "PUSHGO_DISPLAY_VERSION=#{Shellwords.escape(display_version)}"
+    end
+    parts << "CODE_SIGNING_ALLOWED=NO"
+    parts << "CODE_SIGNING_REQUIRED=NO"
+    parts << "CODE_SIGN_IDENTITY=''"
+    parts << "DEVELOPMENT_TEAM=''"
+    parts.join(" ")
+  end
+
+  def export_archive_xcargs
+    parts = []
+    keychain_path = release_signing_keychain_path!
+    parts << "OTHER_CODE_SIGN_FLAGS=#{Shellwords.escape("--keychain #{keychain_path}")}"
+    parts.join(" ")
+  end
+
   def resolved_display_version
     display_version = ENV["PUSHGO_DISPLAY_VERSION"].to_s.strip
     return display_version unless display_version.empty?
@@ -514,7 +534,8 @@ platform :ios do
     export_options_path = File.join(output_directory, "#{output_name}-ExportOptions.plist")
     ipa_path = File.join(output_directory, "#{output_name}.ipa")
     apple_distribution_identity!
-    xcargs = local_signing_xcargs
+    archive_xcargs = unsigned_archive_xcargs
+    export_xcargs = export_archive_xcargs
 
     FileUtils.mkdir_p(output_directory)
     FileUtils.rm_rf([archive_path, export_path, ipa_path])
@@ -525,7 +546,7 @@ platform :ios do
       "-configuration Release " \
       "-destination 'generic/platform=iOS' " \
       "-archivePath #{Shellwords.escape(archive_path)} " \
-      "archive #{xcargs}"
+      "archive #{archive_xcargs}"
     )
 
     write_export_options_plist(
@@ -546,7 +567,7 @@ platform :ios do
       "-archivePath #{Shellwords.escape(archive_path)} " \
       "-exportPath #{Shellwords.escape(export_path)} " \
       "-exportOptionsPlist #{Shellwords.escape(export_options_path)} " \
-      "#{xcargs}"
+      "#{export_xcargs}"
     )
 
     generated_ipa = Dir.glob(File.join(export_path, "*.ipa")).first
@@ -568,7 +589,8 @@ platform :ios do
     pkg_path = File.join(output_directory, "#{pkg_name}.pkg")
     apple_distribution_identity!
     mac_installer_distribution_identity!
-    xcargs = local_signing_xcargs
+    archive_xcargs = unsigned_archive_xcargs
+    export_xcargs = export_archive_xcargs
 
     FileUtils.mkdir_p(output_directory)
     FileUtils.rm_rf([archive_path, export_path, pkg_path])
@@ -579,7 +601,7 @@ platform :ios do
       "-configuration Release " \
       "-destination 'generic/platform=macOS' " \
       "-archivePath #{Shellwords.escape(archive_path)} " \
-      "archive #{xcargs}"
+      "archive #{archive_xcargs}"
     )
 
     write_export_options_plist(
@@ -601,7 +623,7 @@ platform :ios do
       "-archivePath #{Shellwords.escape(archive_path)} " \
       "-exportPath #{Shellwords.escape(export_path)} " \
       "-exportOptionsPlist #{Shellwords.escape(export_options_path)} " \
-      "#{xcargs}"
+      "#{export_xcargs}"
     )
 
     generated_pkg = Dir.glob(File.join(export_path, "*.pkg")).first
