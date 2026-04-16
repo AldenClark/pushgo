@@ -297,18 +297,20 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain_path" >/dev/null
           security list-keychains -d user -s "$keychain_path"
           security default-keychain -d user -s "$keychain_path"
-          identity_output="$(security find-identity -v -p codesigning "$keychain_path")"
-          printf '%s\n' "$identity_output"
+          codesigning_identity_output="$(security find-identity -v -p codesigning "$keychain_path")"
+          basic_identity_output="$(security find-identity -v -p basic "$keychain_path")"
+          printf '%s\n' "$codesigning_identity_output"
+          printf '%s\n' "$basic_identity_output"
 
-          if ! grep -q "Apple Distribution" <<<"$identity_output"; then
+          if ! grep -q "Apple Distribution" <<<"$codesigning_identity_output"; then
             echo "Imported certificates do not expose an Apple Distribution signing identity."
             exit 1
           fi
-          if ! grep -Eq "Mac Installer Distribution|3rd Party Mac Developer Installer" <<<"$identity_output"; then
+          if ! grep -Eq "Mac Installer Distribution|3rd Party Mac Developer Installer" <<<"$basic_identity_output"; then
             echo "Imported certificates do not expose a Mac Installer Distribution signing identity."
             exit 1
           fi
-          if ! grep -q "Developer ID Application" <<<"$identity_output"; then
+          if ! grep -q "Developer ID Application" <<<"$codesigning_identity_output"; then
             echo "Imported certificates do not expose a Developer ID Application signing identity."
             exit 1
           fi

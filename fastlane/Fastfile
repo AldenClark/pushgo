@@ -114,9 +114,9 @@ platform :ios do
     keychain_path
   end
 
-  def matching_code_signing_identities(keychain_path:, labels:)
+  def matching_keychain_identities(keychain_path:, labels:, policy: "codesigning")
     output = sh(
-      "security find-identity -v -p codesigning #{Shellwords.escape(keychain_path)}",
+      "security find-identity -v -p #{Shellwords.escape(policy)} #{Shellwords.escape(keychain_path)}",
       log: false
     )
 
@@ -134,9 +134,9 @@ platform :ios do
     end
   end
 
-  def require_code_signing_identity!(labels:, configured_identity_env: nil, keychain_path:)
+  def require_code_signing_identity!(labels:, configured_identity_env: nil, keychain_path:, policy: "codesigning")
     configured_identity = configured_identity_env.to_s.strip
-    identities = matching_code_signing_identities(keychain_path: keychain_path, labels: labels)
+    identities = matching_keychain_identities(keychain_path: keychain_path, labels: labels, policy: policy)
     UI.user_error!("No signing identity found in #{keychain_path} for #{labels.join(' / ')}") if identities.empty?
     return identities.first if configured_identity.empty?
 
@@ -162,7 +162,8 @@ platform :ios do
     require_code_signing_identity!(
       labels: ["Mac Installer Distribution", "3rd Party Mac Developer Installer"],
       configured_identity_env: ENV["MAC_INSTALLER_DISTRIBUTION_IDENTITY"],
-      keychain_path: release_signing_keychain_path!
+      keychain_path: release_signing_keychain_path!,
+      policy: "basic"
     )
   end
 
