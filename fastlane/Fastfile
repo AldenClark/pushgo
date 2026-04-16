@@ -514,7 +514,7 @@ platform :ios do
     export_options_path = File.join(output_directory, "#{output_name}-ExportOptions.plist")
     ipa_path = File.join(output_directory, "#{output_name}.ipa")
     apple_distribution_identity!
-    xcargs = local_signing_xcargs(signing_identity: "Apple Distribution")
+    xcargs = local_signing_xcargs
 
     FileUtils.mkdir_p(output_directory)
     FileUtils.rm_rf([archive_path, export_path, ipa_path])
@@ -568,7 +568,7 @@ platform :ios do
     pkg_path = File.join(output_directory, "#{pkg_name}.pkg")
     apple_distribution_identity!
     mac_installer_distribution_identity!
-    xcargs = local_signing_xcargs(signing_identity: "Apple Distribution")
+    xcargs = local_signing_xcargs
 
     FileUtils.mkdir_p(output_directory)
     FileUtils.rm_rf([archive_path, export_path, pkg_path])
