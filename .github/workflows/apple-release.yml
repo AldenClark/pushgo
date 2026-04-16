@@ -342,7 +342,7 @@ jobs:
             local env_var_name="$3"
             local extension="$4"
             local label="$5"
-            local raw_path decoded_path uuid profile_name application_identifier resolved_bundle_id
+            local raw_path decoded_path uuid profile_name application_identifier resolved_bundle_id team_identifier
 
             raw_path="$(mktemp "$RUNNER_TEMP/pushgo-profile-${env_var_name}.XXXXXX")"
             decoded_path="$(mktemp "$RUNNER_TEMP/pushgo-profile-${env_var_name}.XXXXXX.plist")"
@@ -351,10 +351,29 @@ jobs:
 
             uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$decoded_path")"
             profile_name="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$decoded_path")"
-            application_identifier="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$decoded_path")"
+            application_identifier="$(
+              /usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$decoded_path" 2>/dev/null || \
+              /usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.application-identifier' "$decoded_path" 2>/dev/null || \
+              true
+            )"
+            if [[ -z "$application_identifier" ]]; then
+              echo "Provisioning profile ${label} (${profile_name}) does not include an application identifier entitlement" >&2
+              exit 1
+            fi
+
+            team_identifier="$(
+              /usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.team-identifier' "$decoded_path" 2>/dev/null || \
+              /usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$decoded_path" 2>/dev/null || \
+              true
+            )"
+            if [[ -n "$team_identifier" && "$team_identifier" != "$APPLE_TEAM_ID" ]]; then
+              echo "Provisioning profile ${label} (${profile_name}) belongs to team ${team_identifier}, expected ${APPLE_TEAM_ID}" >&2
+              exit 1
+            fi
+
             resolved_bundle_id="${application_identifier#${APPLE_TEAM_ID}.}"
             if [[ "$resolved_bundle_id" != "$expected_bundle_id" ]]; then
-              echo "Provisioning profile ${label} targets ${resolved_bundle_id}, expected ${expected_bundle_id}" >&2
+              echo "Provisioning profile ${label} (${profile_name}) targets ${resolved_bundle_id}, expected ${expected_bundle_id}" >&2
               exit 1
             fi
 
