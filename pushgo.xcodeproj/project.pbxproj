@@ -66,7 +66,6 @@
 		94597579D3464B37971D63B0 /* PushGoMarkdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4145756AA5A340C3AC329C64 /* PushGoMarkdownView.swift */; };
 		A0AA00012F70000100AA0004 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0014 /* Textual */; };
 		A0AA00012F70000100AA0005 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0015 /* Textual */; };
-		A0AA00012F70000100AA0006 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0016 /* Textual */; };
 		A0C860A2E41DB50A4FE52E2B /* BadgeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C242EF2359D00AD1834 /* BadgeManager.swift */; };
 		A1E2D3C4B5A6978877665544 /* NotificationHandling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ADFF5A76CA49E94408B363E /* NotificationHandling.swift */; };
 		A1E2D3C4B5A6978877665545 /* NotificationHandling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ADFF5A76CA49E94408B363E /* NotificationHandling.swift */; };
@@ -107,11 +106,9 @@
 		AA8E2C972EF2359D00AD1834 /* UserInfoSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C362EF2359D00AD1834 /* UserInfoSanitizer.swift */; };
 		AA8E2C9B2EF2359D00AD1834 /* PushGoNotificationNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C332EF2359D00AD1834 /* PushGoNotificationNames.swift */; };
 		AA8E2C9F2EF2359D00AD1834 /* BadgeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C242EF2359D00AD1834 /* BadgeManager.swift */; };
-		AA9BCB4F2F7DA00700F6BE70 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = AA9BCB4E2F7DA00700F6BE70 /* GRDB */; };
 		AAA6F04C8F1BA6004768B932 /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2A2EF2359D00AD1834 /* AppConstants.swift */; };
 		AAC02D3B2F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0034 /* GRDB */; };
 		AAC02D3C2F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0037 /* GRDB */; };
-		AAC02D3D2F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0039 /* GRDB */; };
 		AAC02D3F2F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0038 /* GRDB */; };
 		AAC02D402F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0035 /* GRDB */; };
 		AAE0B0B12F6A000100C0FFEE /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2A2EF2359D00AD1834 /* AppConstants.swift */; };
@@ -617,8 +614,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AAC02D3D2F682C3900A179C3 /* GRDB in Frameworks */,
-				A0AA00012F70000100AA0006 /* Textual in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -640,7 +635,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA9BCB4F2F7DA00700F6BE70 /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -950,8 +944,6 @@
 			);
 			name = "PushGo-watchOS";
 			packageProductDependencies = (
-				A0AA00012F70000100AA0016 /* Textual */,
-				A0AA00012F70000100AA0039 /* GRDB */,
 			);
 			productName = PushGo;
 			productReference = AAFB52C12F0CA5F0009E61C5 /* PushGoWatch.app */;
@@ -971,7 +963,6 @@
 			);
 			name = "PushGoNSE-watchOS";
 			packageProductDependencies = (
-				AA9BCB4E2F7DA00700F6BE70 /* GRDB */,
 			);
 			productName = pushgowatchNotificationServiceExtension;
 			productReference = DE35C72B5C899D0FCCBAF070 /* NotificationServiceExtensionWatch.appex */;
@@ -1459,8 +1450,9 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-watchOS/pushgowatch NotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 69;
+				CURRENT_PROJECT_VERSION = 70;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
+				"EXCLUDED_ARCHS[sdk=watchsimulator*]" = x86_64;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -1472,6 +1464,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.2.0;
+				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.watchkitapp.NotificationServiceExtension;
 				PRODUCT_NAME = NotificationServiceExtensionWatch;
 				REGISTER_APP_GROUPS = YES;
@@ -1500,7 +1493,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-macOS/pushgomac.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 69;
+				CURRENT_PROJECT_VERSION = 70;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -1563,7 +1556,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-macOS/pushgomac.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 69;
+				CURRENT_PROJECT_VERSION = 70;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -1756,12 +1749,12 @@
 		AA49A1962EE3E31600C1EBF2 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-					ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-					ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-					CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-iOS/pushgo.entitlements";
-					CODE_SIGN_IDENTITY = "Apple Development";
-					CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 69;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-iOS/pushgo.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 70;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -1815,14 +1808,14 @@
 			};
 			name = Debug;
 		};
-			AA49A1972EE3E31600C1EBF2 /* Release */ = {
-				isa = XCBuildConfiguration;
-				buildSettings = {
-					ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-					ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-					CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-iOS/pushgo.entitlements";
-					CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 69;
+		AA49A1972EE3E31600C1EBF2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-iOS/pushgo.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 70;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -1881,7 +1874,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-iOS/NotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 69;
+				CURRENT_PROJECT_VERSION = 70;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1934,7 +1927,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-iOS/NotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 69;
+				CURRENT_PROJECT_VERSION = 70;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -1976,7 +1969,7 @@
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 69;
+				CURRENT_PROJECT_VERSION = 70;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -2031,7 +2024,7 @@
 				AUTOMATION_APPLE_EVENTS = NO;
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 69;
+				CURRENT_PROJECT_VERSION = 70;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -2087,9 +2080,22 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-watchOS/pushgowatch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 69;
+				CURRENT_PROJECT_VERSION = 70;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_PREVIEWS = YES;
+				"EXCLUDED_ARCHS[sdk=watchsimulator*]" = x86_64;
+				EXCLUDED_SOURCE_FILE_NAMES = (
+					EntityScreens.swift,
+					Shared/Repositories/LocalDataStore.swift,
+					MessageDetailViewModel.swift,
+					MessageListViewModel.swift,
+					MessageSearchViewModel.swift,
+					MessageStateCoordinator.swift,
+					Shared/Repositories/MessageSearchIndex.swift,
+					NotificationServiceProcessor.swift,
+					RootView.swift,
+					SettingsViewModel.swift,
+				);
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = PushGo;
@@ -2102,6 +2108,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.2.0;
+				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.watchkitapp;
 				PRODUCT_NAME = PushGoWatch;
 				SDKROOT = watchos;
@@ -2127,9 +2134,22 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-watchOS/pushgowatch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 69;
+				CURRENT_PROJECT_VERSION = 70;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_PREVIEWS = YES;
+				"EXCLUDED_ARCHS[sdk=watchsimulator*]" = x86_64;
+				EXCLUDED_SOURCE_FILE_NAMES = (
+					EntityScreens.swift,
+					Shared/Repositories/LocalDataStore.swift,
+					MessageDetailViewModel.swift,
+					MessageListViewModel.swift,
+					MessageSearchViewModel.swift,
+					MessageStateCoordinator.swift,
+					Shared/Repositories/MessageSearchIndex.swift,
+					NotificationServiceProcessor.swift,
+					RootView.swift,
+					SettingsViewModel.swift,
+				);
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = PushGo;
@@ -2142,6 +2162,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.2.0;
+				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.watchkitapp;
 				PRODUCT_NAME = PushGoWatch;
 				SDKROOT = watchos;
@@ -2170,7 +2191,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-macOS/pushgomac.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 69;
+				CURRENT_PROJECT_VERSION = 70;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -2227,11 +2248,11 @@
 			};
 			name = Release;
 		};
-			D90000112F7F000100A10009 /* Debug */ = {
-				isa = XCBuildConfiguration;
-				buildSettings = {
-					CODE_SIGN_IDENTITY = "Apple Development";
-					CODE_SIGN_STYLE = Automatic;
+		D90000112F7F000100A10009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -2326,7 +2347,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-macOS/pushgomac.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 69;
+				CURRENT_PROJECT_VERSION = 70;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -2388,8 +2409,9 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-watchOS/pushgowatch NotificationServiceExtension.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 69;
+				CURRENT_PROJECT_VERSION = 70;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
+				"EXCLUDED_ARCHS[sdk=watchsimulator*]" = x86_64;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -2401,6 +2423,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.2.0;
+				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.watchkitapp.NotificationServiceExtension;
 				PRODUCT_NAME = NotificationServiceExtensionWatch;
 				REGISTER_APP_GROUPS = YES;
@@ -2557,11 +2580,6 @@
 			package = A0AA00012F70000100AA0022 /* XCRemoteSwiftPackageReference "textual" */;
 			productName = Textual;
 		};
-		A0AA00012F70000100AA0016 /* Textual */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A0AA00012F70000100AA0022 /* XCRemoteSwiftPackageReference "textual" */;
-			productName = Textual;
-		};
 		A0AA00012F70000100AA0034 /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A0AA00012F70000100AA0033 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
@@ -2578,16 +2596,6 @@
 			productName = GRDB;
 		};
 		A0AA00012F70000100AA0038 /* GRDB */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A0AA00012F70000100AA0033 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
-			productName = GRDB;
-		};
-		A0AA00012F70000100AA0039 /* GRDB */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A0AA00012F70000100AA0033 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
-			productName = GRDB;
-		};
-		AA9BCB4E2F7DA00700F6BE70 /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A0AA00012F70000100AA0033 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
 			productName = GRDB;

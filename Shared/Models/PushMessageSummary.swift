@@ -22,6 +22,18 @@ struct PushMessageSummary: Identifiable, Hashable, Sendable {
     let eventId: String?
     let thingId: String?
     let eventState: String?
+
+    var rowLayoutKey: String {
+        [
+            id.uuidString,
+            title,
+            bodyPreview,
+            channel ?? "",
+            secondaryText,
+            imageURLs.map(\.absoluteString).joined(separator: ","),
+            isRead ? "1" : "0",
+        ].joined(separator: "|")
+    }
 }
 
 extension PushMessageSummary {

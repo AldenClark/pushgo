@@ -129,16 +129,13 @@ final class AppEnvironment {
 
     func updateServerConfig(_ config: ServerConfig?) async throws {
         let previousConfig = serverConfig
-        let previousDeviceKey = await dataStore.cachedProviderDeviceKey(
-            for: platformIdentifier(),
-            channelType: "apns"
-        )?
+        let previousDeviceKey = await dataStore.cachedDeviceKey(for: platformIdentifier())?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let normalized = config?.normalized()
         try await dataStore.saveWatchProvisioningServerConfig(normalized)
         serverConfig = normalized
         await refreshChannelSubscriptions()
-        scheduleLegacyGatewayDeviceCleanup(
+        schedulePreviousGatewayDeviceCleanup(
             previousConfig: previousConfig,
             previousDeviceKey: previousDeviceKey,
             nextConfig: normalized
@@ -528,10 +525,7 @@ final class AppEnvironment {
         guard let runtime = await loadPersistedProvisioningRuntimeState() else { return }
         let config = runtime.config
         let platform = platformIdentifier()
-        guard let deviceKey = await dataStore.cachedProviderDeviceKey(
-            for: platform,
-            channelType: "private"
-        )?
+        guard let deviceKey = await dataStore.cachedDeviceKey(for: platform)?
             .trimmingCharacters(in: .whitespacesAndNewlines),
             !deviceKey.isEmpty
         else {
@@ -1170,10 +1164,7 @@ final class AppEnvironment {
     }
 
     private func ensureProviderDeviceKey(config: ServerConfig, platform: String) async -> String? {
-        let existing = await dataStore.cachedProviderDeviceKey(
-            for: platform,
-            channelType: "private"
-        )
+        let existing = await dataStore.cachedDeviceKey(for: platform)
         if let existing,
            Date().timeIntervalSince(lastWakeupDeviceRegisterAt) < privateWakeupDeviceRegisterInterval
         {
@@ -1189,11 +1180,7 @@ final class AppEnvironment {
         guard let deviceKey = registered?.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines),
               !deviceKey.isEmpty
         else { return existing }
-        await dataStore.saveCachedProviderDeviceKey(
-            deviceKey,
-            for: platform,
-            channelType: "private"
-        )
+        await dataStore.saveCachedDeviceKey(deviceKey, for: platform)
         return deviceKey
     }
 
@@ -1208,7 +1195,7 @@ final class AppEnvironment {
         _ = await ensureProviderDeviceKey(config: config, platform: platformIdentifier())
     }
 
-    private func scheduleLegacyGatewayDeviceCleanup(
+    private func schedulePreviousGatewayDeviceCleanup(
         previousConfig: ServerConfig?,
         previousDeviceKey: String?,
         nextConfig: ServerConfig?
@@ -1253,12 +1240,9 @@ final class AppEnvironment {
             channelType: "apns",
             providerToken: providerToken
         ) {
-            let resolvedDeviceKey = route.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
-            let persistedDeviceKey = resolvedDeviceKey.isEmpty ? deviceKey : resolvedDeviceKey
-            await dataStore.saveCachedProviderDeviceKey(
-                persistedDeviceKey,
-                for: platform,
-                channelType: "apns"
+            await dataStore.saveCachedDeviceKey(
+                route.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines),
+                for: platform
             )
             lastWakeupRouteSyncAt = now
         }
@@ -1275,6 +1259,7 @@ final class AppEnvironment {
         guard let previousToken, previousToken != normalizedToken else {
             return
         }
+        await syncProviderPullRoute(config: config, providerToken: normalizedToken)
         await retireProviderToken(config: config, providerToken: previousToken)
     }
 
@@ -1282,37 +1267,12 @@ final class AppEnvironment {
         let normalized = providerToken.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return }
         let platform = platformIdentifier()
-        let cachedApnsKey = await dataStore.cachedProviderDeviceKey(
-            for: platform,
-            channelType: "apns"
-        )?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cachedPrivateKey = await ensureProviderDeviceKey(config: config, platform: platform)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let bootstrapDeviceKey = cachedApnsKey?.isEmpty == false ? cachedApnsKey : cachedPrivateKey
-        guard let bootstrapDeviceKey, !bootstrapDeviceKey.isEmpty else {
-            return
-        }
         do {
-            let route = try await channelSubscriptionService.upsertDeviceChannel(
+            try await channelSubscriptionService.retireProviderToken(
                 baseURL: config.baseURL,
                 token: config.token,
-                deviceKey: bootstrapDeviceKey,
                 platform: platform,
-                channelType: "apns",
                 providerToken: normalized
-            )
-            let resolvedDeviceKeyRaw = route.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
-            let resolvedDeviceKey = resolvedDeviceKeyRaw.isEmpty ? bootstrapDeviceKey : resolvedDeviceKeyRaw
-            await dataStore.saveCachedProviderDeviceKey(
-                resolvedDeviceKey,
-                for: platform,
-                channelType: "apns"
-            )
-            try await channelSubscriptionService.deleteDeviceChannel(
-                baseURL: config.baseURL,
-                token: config.token,
-                deviceKey: resolvedDeviceKey,
-                channelType: "apns"
             )
         } catch {}
     }
@@ -1347,12 +1307,15 @@ final class AppEnvironment {
         titleOverride: String?,
         bodyOverride: String?,
         urlOverride: URL?,
-        notificationRequestId: String?
+        notificationRequestId: String?,
+        ignoreSkipPersistence: Bool = false
     ) async -> Bool {
         let bridgedPayload: [AnyHashable: Any] = payload.reduce(into: [:]) { result, pair in
             result[pair.key] = pair.value
         }
-        if NotificationHandling.shouldSkipPersistence(for: bridgedPayload) {
+        if !ignoreSkipPersistence,
+           NotificationHandling.shouldSkipPersistence(for: bridgedPayload)
+        {
             return true
         }
         guard let lightPayload = WatchLightQuantizer.quantizeStandalonePayload(
@@ -1379,17 +1342,117 @@ final class AppEnvironment {
         guard pushRegistrationService.apnsToken == nil else { return }
         WKExtension.shared().registerForRemoteNotifications()
     }
+
+    private func resolvedStandaloneDisplayOverride(
+        from payload: [AnyHashable: Any],
+        fallbackTitle: String,
+        fallbackBody: String
+    ) -> (title: String, body: String) {
+        if let normalized = NotificationHandling.normalizeRemoteNotificationForDisplay(payload) {
+            return (normalized.title, normalized.body)
+        }
+        let sanitized = UserInfoSanitizer.sanitize(payload)
+        let title = (sanitized["title"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = (sanitized["body"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (
+            title?.isEmpty == false ? title! : fallbackTitle,
+            body?.isEmpty == false ? body! : fallbackBody
+        )
+    }
+
+    private func ackStandaloneProviderIngressIfNeeded(
+        ingress: NotificationIngressResolution,
+        source: String
+    ) {
+        guard let config = serverConfig else { return }
+        let deliveryId: String?
+        switch ingress {
+        case let .direct(payload, requestIdentifier):
+            if NotificationHandling.providerWakeupPullDeliveryId(from: payload) != nil {
+                return
+            }
+            deliveryId = requestIdentifier ?? NotificationHandling.providerIngressRequestIdentifier(from: payload)
+        case .pulled:
+            return
+        case .unresolvedWakeup:
+            return
+        }
+        let normalizedDeliveryId = deliveryId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !normalizedDeliveryId.isEmpty else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            let platform = self.platformIdentifier()
+            let deviceKey = await self.dataStore.cachedDeviceKey(for: platform)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !deviceKey.isEmpty else { return }
+            do {
+                _ = try await self.channelSubscriptionService.ackMessage(
+                    baseURL: config.baseURL,
+                    token: config.token,
+                    deviceKey: deviceKey,
+                    deliveryId: normalizedDeliveryId
+                )
+            } catch {
+                self.recordAutomationRuntimeError(error, source: source, category: "provider")
+            }
+        }
+    }
+
     @discardableResult
     func persistNotificationIfNeeded(_ notification: UNNotification) async -> Bool {
         guard isStandaloneMode else { return false }
-        let payload = WatchLightQuantizer.stringifyPayload(notification.request.content.userInfo)
-        return await persistStandaloneLightPayload(
-            payload,
-            titleOverride: notification.request.content.title,
-            bodyOverride: notification.request.content.body,
-            urlOverride: nil,
-            notificationRequestId: notification.request.identifier
+        let ingress = await NotificationHandling.resolveNotificationIngress(
+            from: notification.request.content.userInfo,
+            dataStore: dataStore,
+            fallbackServerConfig: serverConfig,
+            channelSubscriptionService: channelSubscriptionService
         )
+        let title = notification.request.content.title
+        let body = notification.request.content.body
+        let fallbackRequestIdentifier = notification.request.identifier
+        switch ingress {
+        case let .pulled(payload, requestIdentifier):
+            let display = resolvedStandaloneDisplayOverride(
+                from: payload,
+                fallbackTitle: title,
+                fallbackBody: body
+            )
+            let persisted = await persistStandaloneLightPayload(
+                WatchLightQuantizer.stringifyPayload(payload),
+                titleOverride: display.title,
+                bodyOverride: display.body,
+                urlOverride: nil,
+                notificationRequestId: requestIdentifier
+            )
+            return persisted
+        case let .direct(payload, requestIdentifier):
+            let display = resolvedStandaloneDisplayOverride(
+                from: payload,
+                fallbackTitle: title,
+                fallbackBody: body
+            )
+            let persisted = await persistStandaloneLightPayload(
+                WatchLightQuantizer.stringifyPayload(payload),
+                titleOverride: display.title,
+                bodyOverride: display.body,
+                urlOverride: nil,
+                notificationRequestId: requestIdentifier ?? fallbackRequestIdentifier
+            )
+            if persisted {
+                ackStandaloneProviderIngressIfNeeded(
+                    ingress: ingress,
+                    source: "provider.direct.ack.watchos"
+                )
+            }
+            return persisted
+        case let .unresolvedWakeup(payload, requestIdentifier):
+            _ = payload
+            _ = requestIdentifier
+            _ = fallbackRequestIdentifier
+            return true
+        }
     }
     func handleNotificationOpen(notificationRequestId: String) async {
         await handleNotificationOpenInternal(

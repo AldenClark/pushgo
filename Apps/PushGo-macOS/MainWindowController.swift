@@ -30,6 +30,7 @@ final class MainWindowController {
         preventAccessoryUntil = Date().addingTimeInterval(2.0)
         NotificationCenter.default.post(name: .pushgoCloseMenuBarPopover, object: nil)
 
+        AppEnvironment.shared.updateMainWindowVisibility(isVisible: true)
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
     }

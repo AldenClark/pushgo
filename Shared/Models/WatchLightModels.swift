@@ -70,7 +70,7 @@ enum WatchModeSwitchStatus: String, Codable, Hashable, Sendable {
     case failed
 }
 
-struct WatchModeControlState: Hashable, Sendable {
+struct WatchModeControlState: Codable, Hashable, Sendable {
     var desiredMode: WatchMode
     var effectiveMode: WatchMode
     var switchStatus: WatchModeSwitchStatus
@@ -275,7 +275,7 @@ struct WatchStandaloneProvisioningNack: Codable, Hashable, Sendable {
     let reportedAt: Date
 }
 
-struct WatchSyncGenerationState: Hashable, Sendable {
+struct WatchSyncGenerationState: Codable, Hashable, Sendable {
     var controlGeneration: Int64
     var mirrorSnapshotGeneration: Int64
     var standaloneProvisioningGeneration: Int64

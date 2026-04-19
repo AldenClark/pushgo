@@ -317,7 +317,7 @@ actor LocalDataStore {
     private let channelSubscriptionStore = ChannelSubscriptionStore()
     private let localConfigStore = LocalKeychainConfigStore()
     private let pushTokenStore = PushTokenStore()
-    private let providerDeviceKeyStore = ProviderDeviceKeyStore()
+    private let deviceKeyStore = ProviderDeviceKeyStore()
     private static let wakeupIngressConfigDefaultsKey = "io.ethan.pushgo.wakeup_ingress.server_config.v1"
 
     init(
@@ -866,47 +866,43 @@ actor LocalDataStore {
         )
     }
 
-    func cachedProviderDeviceKey(for platform: String) async -> String? {
-        let normalizedPlatform = platform.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalizedPlatform.isEmpty else { return nil }
-        return providerDeviceKeyStore.load(platform: normalizedPlatform)
+    func cachedDeviceKey(for platform: String) async -> String? {
+        guard let normalizedPlatform = normalizedDevicePlatform(platform) else {
+            return nil
+        }
+        return loadCanonicalDeviceKey(for: normalizedPlatform)
     }
 
-    func saveCachedProviderDeviceKey(_ deviceKey: String?, for platform: String) async {
-        let normalizedPlatform = platform.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalizedPlatform.isEmpty else { return }
-        providerDeviceKeyStore.save(deviceKey: deviceKey, platform: normalizedPlatform)
+    func saveCachedDeviceKey(_ deviceKey: String?, for platform: String) async {
+        guard let normalizedPlatform = normalizedDevicePlatform(platform) else { return }
+        deviceKeyStore.save(deviceKey: deviceKey, platform: normalizedPlatform)
     }
 
-    func cachedProviderDeviceKey(
+    func cachedDeviceKey(
         for platform: String,
         channelType: String
     ) async -> String? {
-        let normalizedPlatform = platform.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let normalizedChannelType = channelType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalizedPlatform.isEmpty, !normalizedChannelType.isEmpty else { return nil }
-        let scopedKey = providerDeviceKeyStore.load(
-            platform: "\(normalizedPlatform)|\(normalizedChannelType)"
-        )
-        return scopedKey
+        _ = channelType
+        return await cachedDeviceKey(for: platform)
     }
 
-    func saveCachedProviderDeviceKey(
+    func saveCachedDeviceKey(
         _ deviceKey: String?,
         for platform: String,
         channelType: String
     ) async {
-        let normalizedPlatform = platform.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let normalizedChannelType = channelType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalizedPlatform.isEmpty, !normalizedChannelType.isEmpty else { return }
-        providerDeviceKeyStore.save(
-            deviceKey: deviceKey,
-            platform: "\(normalizedPlatform)|\(normalizedChannelType)"
-        )
-        // Keep writing legacy private scope for backward compatibility.
-        if normalizedChannelType == "private" {
-            providerDeviceKeyStore.save(deviceKey: deviceKey, platform: normalizedPlatform)
-        }
+        _ = channelType
+        await saveCachedDeviceKey(deviceKey, for: platform)
+    }
+
+    private func normalizedDevicePlatform(_ platform: String) -> String? {
+        let normalizedPlatform = platform.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        return normalizedPlatform.isEmpty ? nil : normalizedPlatform
+    }
+
+    private func loadCanonicalDeviceKey(for normalizedPlatform: String) -> String? {
+        deviceKeyStore.load(platform: normalizedPlatform)
     }
 
     func loadManualKeyPreferences() async -> String? {

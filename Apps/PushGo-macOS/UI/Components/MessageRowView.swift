@@ -23,6 +23,7 @@ struct MessageRowView: View {
                                 .font(.headline)
                                 .fontWeight(.semibold)
                                 .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
                             MessageSeverityListBadge(severity: message.severity)
                             if !message.isRead {
                                 UnreadDotView()
@@ -36,11 +37,13 @@ struct MessageRowView: View {
                                 .font(.caption)
                                 .foregroundStyle(Color.appTextSecondary)
                                 .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
                         } else if !message.secondaryText.isEmpty {
                             Text(message.secondaryText)
                                 .font(.caption)
                                 .foregroundStyle(Color.appTextSecondary)
                                 .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
@@ -120,6 +123,7 @@ struct MessageRowView: View {
             .font(.subheadline)
             .foregroundStyle(Color.appTextSecondary)
             .lineLimit(Layout.bodyMaxLines)
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .layoutPriority(1)
             .frame(maxHeight: bodyPreviewMaxHeight, alignment: .top)

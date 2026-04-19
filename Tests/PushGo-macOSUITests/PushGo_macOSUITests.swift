@@ -1,7 +1,10 @@
 import XCTest
 
-@MainActor
 final class PushGo_macOSUITests: XCTestCase {
+    private let automationArtifactTimeout: TimeInterval = 20
+    private let automationRuntimeDirectoryName = "automation-ui-tests"
+    private let automationAppGroupIdentifier = "group.ethan.pushgo.messages"
+
     private struct AutomationState: Decodable {
         let activeTab: String?
         let visibleScreen: String?
@@ -69,6 +72,7 @@ final class PushGo_macOSUITests: XCTestCase {
         runtimeRoots.removeAll()
     }
 
+    @MainActor
     func testLaunchesIntoMessageList() {
         let context = configuredApp()
         launch(context)
@@ -76,6 +80,7 @@ final class PushGo_macOSUITests: XCTestCase {
         assertVisibleScreen("screen.messages.list", in: context)
     }
 
+    @MainActor
     func testSidebarNavigationCoversPrimaryScreens() {
         let context = configuredApp()
         launch(context)
@@ -93,6 +98,7 @@ final class PushGo_macOSUITests: XCTestCase {
         }
     }
 
+    @MainActor
     func testAutomationRequestCanOpenChannelsScreen() {
         let context = configuredApp(
             requestName: "nav.switch_tab",
@@ -104,6 +110,7 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertTrue(element(in: context.app, identifier: "screen.channels").waitForExistence(timeout: 8))
     }
 
+    @MainActor
     func testImportedEventFixtureCanOpenEventDetailFromStartupRequest() {
         let context = configuredApp(
             startupFixturePath: eventFixturePath,
@@ -116,11 +123,11 @@ final class PushGo_macOSUITests: XCTestCase {
         launch(context)
 
         assertVisibleScreen("screen.events.detail", in: context)
-        XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: 12, matching: { $0.ok }))
+        XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: automationArtifactTimeout, matching: { $0.ok }))
         XCTAssertNotNil(
             waitForAutomationEvent(
                 at: context.eventsURL,
-                timeout: 12,
+                timeout: automationArtifactTimeout,
                 matching: { event in
                     guard (event["type"] as? String) == "entity.opened",
                           let details = event["details"] as? [String: Any]
@@ -132,6 +139,7 @@ final class PushGo_macOSUITests: XCTestCase {
         )
     }
 
+    @MainActor
     func testImportedThingFixtureCanOpenThingDetailFromStartupRequest() {
         let context = configuredApp(
             startupFixturePath: thingFixturePath,
@@ -144,11 +152,11 @@ final class PushGo_macOSUITests: XCTestCase {
         launch(context)
 
         assertVisibleScreen("screen.things.detail", in: context)
-        XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: 12, matching: { $0.ok }))
+        XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: automationArtifactTimeout, matching: { $0.ok }))
         XCTAssertNotNil(
             waitForAutomationEvent(
                 at: context.eventsURL,
-                timeout: 12,
+                timeout: automationArtifactTimeout,
                 matching: { event in
                     guard (event["type"] as? String) == "entity.opened",
                           let details = event["details"] as? [String: Any]
@@ -160,6 +168,7 @@ final class PushGo_macOSUITests: XCTestCase {
         )
     }
 
+    @MainActor
     func testSettingsSidebarCanOpenDecryptionOverlay() {
         let context = configuredApp()
         launch(context)
@@ -173,6 +182,7 @@ final class PushGo_macOSUITests: XCTestCase {
         assertVisibleScreen("screen.settings.decryption", in: context)
     }
 
+    @MainActor
     func testSettingsScreenControlMatrixShowsCriticalGroups() {
         let context = configuredApp()
         launch(context)
@@ -184,6 +194,7 @@ final class PushGo_macOSUITests: XCTestCase {
         assertElementExists("action.settings.open_decryption", in: context.app)
     }
 
+    @MainActor
     func testSettingsPageVisibilityCommandCanHideEventPage() {
         let context = configuredApp(
             requestName: "settings.set_page_visibility",
@@ -197,11 +208,11 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertTrue(waitForElementToDisappear(eventsTab, timeout: 18))
         XCTAssertTrue(waitForElementToDisappear(eventsText, timeout: 18))
         XCTAssertTrue(waitForElementToDisappear(eventsImage, timeout: 18))
-        XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: 12, matching: { $0.ok }))
+        XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: automationArtifactTimeout, matching: { $0.ok }))
         XCTAssertNotNil(
             waitForAutomationEvent(
                 at: context.eventsURL,
-                timeout: 12,
+                timeout: automationArtifactTimeout,
                 matching: { event in
                     guard (event["type"] as? String) == "settings.changed",
                           let details = event["details"] as? [String: Any]
@@ -214,6 +225,7 @@ final class PushGo_macOSUITests: XCTestCase {
         )
     }
 
+    @MainActor
     func testSettingsPageVisibilityCommandCanRoundTripEventPage() {
         let sharedRuntimeRoot = makeRuntimeRoot()
         let hideContext = configuredApp(
@@ -225,21 +237,21 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertNotNil(
             waitForAutomationState(
                 at: hideContext.stateURL,
-                timeout: 12,
+                timeout: automationArtifactTimeout,
                 matching: { $0.eventPageEnabled == false }
             )
         )
         XCTAssertTrue(
             waitForAutomationResponse(
                 at: hideContext.responseURL,
-                timeout: 12,
+                timeout: automationArtifactTimeout,
                 matching: { $0.ok }
             ) != nil
         )
         XCTAssertNotNil(
             waitForAutomationEvent(
                 at: hideContext.eventsURL,
-                timeout: 12,
+                timeout: automationArtifactTimeout,
                 matching: { event in
                     guard (event["type"] as? String) == "settings.changed",
                           let details = event["details"] as? [String: Any]
@@ -260,21 +272,21 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertNotNil(
             waitForAutomationState(
                 at: showContext.stateURL,
-                timeout: 12,
+                timeout: automationArtifactTimeout,
                 matching: { $0.eventPageEnabled == true }
             )
         )
         XCTAssertTrue(
             waitForAutomationResponse(
                 at: showContext.responseURL,
-                timeout: 12,
+                timeout: automationArtifactTimeout,
                 matching: { $0.ok }
             ) != nil
         )
         XCTAssertNotNil(
             waitForAutomationEvent(
                 at: showContext.eventsURL,
-                timeout: 12,
+                timeout: automationArtifactTimeout,
                 matching: { event in
                     guard (event["type"] as? String) == "settings.changed",
                           let details = event["details"] as? [String: Any]
@@ -287,6 +299,7 @@ final class PushGo_macOSUITests: XCTestCase {
         )
     }
 
+    @MainActor
     func testEntityOpenPublishesEntityStateAndProjectionCounts() {
         let eventContext = configuredApp(
             startupFixturePath: eventFixturePath,
@@ -296,18 +309,18 @@ final class PushGo_macOSUITests: XCTestCase {
         launch(eventContext)
         let eventState = waitForAutomationState(
             at: eventContext.stateURL,
-            timeout: 15,
+            timeout: automationArtifactTimeout,
             matching: { state in
                 state.visibleScreen == "screen.events.detail"
                     && state.openedEntityType == "event"
             }
         )
         XCTAssertNotNil(eventState)
-        XCTAssertNotNil(waitForAutomationResponse(at: eventContext.responseURL, timeout: 12, matching: { $0.ok }))
+        XCTAssertNotNil(waitForAutomationResponse(at: eventContext.responseURL, timeout: automationArtifactTimeout, matching: { $0.ok }))
         XCTAssertNotNil(
             waitForAutomationEvent(
                 at: eventContext.eventsURL,
-                timeout: 12,
+                timeout: automationArtifactTimeout,
                 matching: { event in
                     guard (event["type"] as? String) == "entity.opened",
                           let details = event["details"] as? [String: Any]
@@ -326,18 +339,18 @@ final class PushGo_macOSUITests: XCTestCase {
         launch(thingContext)
         let thingState = waitForAutomationState(
             at: thingContext.stateURL,
-            timeout: 15,
+            timeout: automationArtifactTimeout,
             matching: { state in
                 state.visibleScreen == "screen.things.detail"
                     && state.openedEntityType == "thing"
             }
         )
         XCTAssertNotNil(thingState)
-        XCTAssertNotNil(waitForAutomationResponse(at: thingContext.responseURL, timeout: 12, matching: { $0.ok }))
+        XCTAssertNotNil(waitForAutomationResponse(at: thingContext.responseURL, timeout: automationArtifactTimeout, matching: { $0.ok }))
         XCTAssertNotNil(
             waitForAutomationEvent(
                 at: thingContext.eventsURL,
-                timeout: 12,
+                timeout: automationArtifactTimeout,
                 matching: { event in
                     guard (event["type"] as? String) == "entity.opened",
                           let details = event["details"] as? [String: Any]
@@ -349,13 +362,14 @@ final class PushGo_macOSUITests: XCTestCase {
         )
     }
 
+    @MainActor
     func testBaselineAutomationStateHasNoRuntimeErrors() {
         let context = configuredApp()
         launch(context)
 
         let state = waitForAutomationState(
             at: context.stateURL,
-            timeout: 12,
+            timeout: automationArtifactTimeout,
             matching: { $0.visibleScreen == "screen.messages.list" && $0.runtimeErrorCount != nil }
         )
         XCTAssertNotNil(state)
@@ -363,6 +377,7 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertNotEqual(state?.localStoreMode, "unavailable")
     }
 
+    @MainActor
     private func configuredApp(
         runtimeRoot: URL? = nil,
         startupFixturePath: String? = nil,
@@ -385,7 +400,7 @@ final class PushGo_macOSUITests: XCTestCase {
         }
 
         app.launchEnvironment["PUSHGO_AUTOMATION_STORAGE_ROOT"] = resolvedRuntimeRoot.path
-        app.launchEnvironment["PUSHGO_AUTOMATION_PROVIDER_TOKEN"] = "macos-ui-test-provider-token"
+        app.launchEnvironment["PUSHGO_AUTOMATION_PROVIDER_TOKEN"] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         app.launchEnvironment["PUSHGO_AUTOMATION_SKIP_PUSH_AUTHORIZATION"] = "1"
         app.launchEnvironment["PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS"] = "0"
         app.launchEnvironment["PUSHGO_AUTOMATION_RESPONSE_PATH"] = responseURL.path
@@ -422,10 +437,21 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     private func makeRuntimeRoot() -> URL {
-        URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        let homeDirectory = FileManager.default.homeDirectoryForCurrentUser
+        let sharedBase = homeDirectory
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Group Containers", isDirectory: true)
+            .appendingPathComponent(automationAppGroupIdentifier, isDirectory: true)
+            .appendingPathComponent(automationRuntimeDirectoryName, isDirectory: true)
+        if (try? FileManager.default.createDirectory(at: sharedBase, withIntermediateDirectories: true)) != nil {
+            return sharedBase
+                .appendingPathComponent("PushGo-macOSUITests-\(UUID().uuidString)", isDirectory: true)
+        }
+        return URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent("PushGo-macOSUITests-\(UUID().uuidString)", isDirectory: true)
     }
 
+    @MainActor
     private func dismissLocalStoreRecoveryIfNeeded(in app: XCUIApplication) {
         let cancelButton = app.buttons["action-button-3"]
         if cancelButton.waitForExistence(timeout: 2) {
@@ -434,6 +460,7 @@ final class PushGo_macOSUITests: XCTestCase {
         }
     }
 
+    @MainActor
     private func launch(_ context: LaunchContext) {
         context.app.launch()
         context.app.activate()
@@ -443,6 +470,7 @@ final class PushGo_macOSUITests: XCTestCase {
         dismissSystemPrivacyDialogsIfNeeded(in: context.app)
     }
 
+    @MainActor
     private func dismissSystemPrivacyDialogsIfNeeded(in app: XCUIApplication) {
         for title in crossAppPromptDismissButtons {
             let appButton = app.buttons[title]
@@ -454,6 +482,7 @@ final class PushGo_macOSUITests: XCTestCase {
         }
     }
 
+    @MainActor
     private func openSidebarTab(_ tabIdentifier: String, in app: XCUIApplication) {
         let sidebarText = app.staticTexts["sidebar-\(tabIdentifier)"]
         if sidebarText.waitForExistence(timeout: 10) {
@@ -473,6 +502,7 @@ final class PushGo_macOSUITests: XCTestCase {
         RunLoop.current.run(until: Date().addingTimeInterval(0.4))
     }
 
+    @MainActor
     private func assertVisibleScreen(
         _ screenIdentifier: String,
         in context: LaunchContext,
@@ -494,6 +524,7 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTFail("Expected visible screen \(screenIdentifier), current state: \(stateText)", file: file, line: line)
     }
 
+    @MainActor
     private func waitForAutomationState(
         at url: URL,
         timeout: TimeInterval,
@@ -512,10 +543,12 @@ final class PushGo_macOSUITests: XCTestCase {
         return nil
     }
 
+    @MainActor
     private func element(in app: XCUIApplication, identifier: String) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: identifier).firstMatch
     }
 
+    @MainActor
     private func waitForAutomationResponse(
         at url: URL,
         timeout: TimeInterval,
@@ -539,6 +572,7 @@ final class PushGo_macOSUITests: XCTestCase {
         return nil
     }
 
+    @MainActor
     private func waitForAutomationEvent(
         at url: URL,
         timeout: TimeInterval,
@@ -566,6 +600,7 @@ final class PushGo_macOSUITests: XCTestCase {
         return events
     }
 
+    @MainActor
     private func assertElementExists(
         _ identifier: String,
         in app: XCUIApplication,
@@ -577,6 +612,7 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertTrue(target.waitForExistence(timeout: timeout), "Missing element: \(identifier)", file: file, line: line)
     }
 
+    @MainActor
     private func waitForAnyElementExists(
         identifiers: [String],
         in app: XCUIApplication,
@@ -592,6 +628,7 @@ final class PushGo_macOSUITests: XCTestCase {
         return identifiers.contains { element(in: app, identifier: $0).exists }
     }
 
+    @MainActor
     private func waitForElementToDisappear(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {

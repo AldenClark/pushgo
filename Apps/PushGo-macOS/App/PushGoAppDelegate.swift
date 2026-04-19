@@ -76,7 +76,9 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency 
         if MainWindowController.shared.shouldPreventAccessory {
             return false
         }
-        NSApp.setActivationPolicy(.accessory)
+        if NSApp.activationPolicy() != .accessory {
+            NSApp.setActivationPolicy(.accessory)
+        }
         AppEnvironment.shared.updateMainWindowVisibility(isVisible: false)
         return false
     }
@@ -202,30 +204,26 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency 
             result[element.key] = element.value
         }
         let sanitizedPayload = UserInfoSanitizer.sanitize(bridgedPayload)
-        let wakeupResolution = await NotificationHandling.resolveProviderWakeup(
+        let ingress = await NotificationHandling.resolveNotificationIngress(
             from: sanitizedPayload,
             dataStore: AppEnvironment.shared.dataStore,
             fallbackServerConfig: AppEnvironment.shared.serverConfig,
             channelSubscriptionService: channelSubscriptionService
         )
-        switch wakeupResolution {
-        case .unresolvedWakeup:
-            return
+        switch ingress {
+        case let .unresolvedWakeup(resolvedPayload, requestIdentifier):
+            _ = resolvedPayload
+            _ = requestIdentifier
         case let .pulled(resolvedPayload, requestIdentifier):
             _ = await AppEnvironment.shared.persistRemotePayloadIfNeeded(
                 resolvedPayload,
                 requestIdentifier: requestIdentifier
             )
-        case .notWakeup:
-            let requestIdentifier: String? = {
-                let trimmed = (sanitizedPayload["delivery_id"] as? String)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                return trimmed.isEmpty ? nil : trimmed
-            }()
+        case let .direct(resolvedPayload, requestIdentifier):
             _ = await AppEnvironment.shared.persistRemotePayloadIfNeeded(
-                sanitizedPayload,
+                resolvedPayload,
                 requestIdentifier: requestIdentifier,
-                shouldAckDirect: true
+                ackSource: "provider.direct.ack.macos"
             )
         }
     }

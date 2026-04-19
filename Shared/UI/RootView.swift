@@ -106,7 +106,7 @@ struct PushGoAutomationState: Encodable, Equatable {
     let watchCompanionAvailable: Bool
     let providerMode: String
     let providerTokenPresent: Bool
-    let providerDeviceKeyPresent: Bool
+    let deviceKeyPresent: Bool
     let privateRoute: String
     let privateTransport: String
     let privateStage: String
@@ -155,7 +155,7 @@ struct PushGoAutomationState: Encodable, Equatable {
         case watchCompanionAvailable = "watch_companion_available"
         case providerMode = "provider_mode"
         case providerTokenPresent = "provider_token_present"
-        case providerDeviceKeyPresent = "provider_device_key_present"
+        case deviceKeyPresent = "device_key_present"
         case privateRoute = "private_route"
         case privateTransport = "private_transport"
         case privateStage = "private_stage"
@@ -479,7 +479,7 @@ final class PushGoAutomationRuntime {
             watchCompanionAvailable: watchCompanionAvailable(environment: environment),
             providerMode: providerMode,
             providerTokenPresent: false,
-            providerDeviceKeyPresent: false,
+            deviceKeyPresent: false,
             privateRoute: "idle",
             privateTransport: providerTransport,
             privateStage: "idle",
@@ -510,6 +510,18 @@ final class PushGoAutomationRuntime {
         writeDerivedEvents(previous: previousState, current: state)
         Task { @MainActor [weak self] in
             await self?.publishEnrichedState(baseState: state, environment: environment)
+        }
+    }
+
+    func refreshState(environment: AppEnvironment) {
+        configureFromProcessEnvironment()
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let previousState = latestState
+            let state = await currentState(environment: environment)
+            latestState = state
+            writeJSON(state, to: stateURL)
+            writeDerivedEvents(previous: previousState, current: state)
         }
     }
 
@@ -667,6 +679,7 @@ final class PushGoAutomationRuntime {
                 sourcePath: startupFixturePath,
                 environment: environment
             )
+            refreshState(environment: environment)
         } catch {
             recordRuntimeError(
                 source: "automation",
@@ -674,6 +687,7 @@ final class PushGoAutomationRuntime {
                 code: "startup_fixture_import_failed",
                 message: error.localizedDescription
             )
+            refreshState(environment: environment)
         }
     }
 
@@ -740,7 +754,7 @@ final class PushGoAutomationRuntime {
             watchCompanionAvailable: refreshed.watchCompanionAvailable,
             providerMode: refreshed.providerMode,
             providerTokenPresent: refreshed.providerTokenPresent,
-            providerDeviceKeyPresent: refreshed.providerDeviceKeyPresent,
+            deviceKeyPresent: refreshed.deviceKeyPresent,
             privateRoute: refreshed.privateRoute,
             privateTransport: refreshed.privateTransport,
             privateStage: refreshed.privateStage,
@@ -1235,7 +1249,7 @@ final class PushGoAutomationRuntime {
             watchCompanionAvailable: watchCompanionAvailable(environment: environment),
             providerMode: providerMode,
             providerTokenPresent: false,
-            providerDeviceKeyPresent: false,
+            deviceKeyPresent: false,
             privateRoute: "idle",
             privateTransport: providerTransport,
             privateStage: "idle",
@@ -1295,7 +1309,7 @@ final class PushGoAutomationRuntime {
         let platform = platformIdentifier
         let providerToken = await environment.dataStore.cachedPushToken(for: platform)
             ?? PushGoAutomationContext.providerToken
-        let providerDeviceKey = await environment.dataStore.cachedProviderDeviceKey(for: platform)
+        let deviceKey = await environment.dataStore.cachedDeviceKey(for: platform)
         let ackPendingCount = 0
         let eventCount = (try? await environment.dataStore.loadEventMessagesForProjection().count) ?? 0
         let thingCount = (try? await environment.dataStore.loadThingMessagesForProjection().count) ?? 0
@@ -1306,9 +1320,9 @@ final class PushGoAutomationRuntime {
             environment: environment
         )
         let providerTokenPresent = normalizedIdentifier(providerToken) != nil
-        let providerDeviceKeyPresent = normalizedIdentifier(providerDeviceKey) != nil
+        let deviceKeyPresent = normalizedIdentifier(deviceKey) != nil
         let privateRoute = providerTokenPresent ? "provider" : "idle"
-        let privateStage = providerDeviceKeyPresent ? "ready" : (providerTokenPresent ? "route_pending" : "idle")
+        let privateStage = deviceKeyPresent ? "ready" : (providerTokenPresent ? "route_pending" : "idle")
         let privateDetail: String? = {
             if environment.serverConfig == nil {
                 return "server configuration missing"
@@ -1316,7 +1330,7 @@ final class PushGoAutomationRuntime {
             if !providerTokenPresent {
                 return "provider token missing"
             }
-            if !providerDeviceKeyPresent {
+            if !deviceKeyPresent {
                 return "provider route not ready"
             }
             return nil
@@ -1348,7 +1362,7 @@ final class PushGoAutomationRuntime {
             watchCompanionAvailable: watchCompanionAvailable(environment: environment),
             providerMode: state.providerMode,
             providerTokenPresent: providerTokenPresent,
-            providerDeviceKeyPresent: providerDeviceKeyPresent,
+            deviceKeyPresent: deviceKeyPresent,
             privateRoute: privateRoute,
             privateTransport: providerTransport,
             privateStage: privateStage,
@@ -1582,7 +1596,7 @@ final class PushGoAutomationRuntime {
         }
         let platform = platformIdentifier
         await environment.dataStore.saveCachedPushToken(nil, for: platform)
-        await environment.dataStore.saveCachedProviderDeviceKey(nil, for: platform)
+        await environment.dataStore.saveCachedDeviceKey(nil, for: platform)
         let defaultConfig = defaultServerConfig().normalized()
         try await environment.updateServerConfig(defaultConfig)
         environment.setMessagePageEnabled(true)
@@ -1722,6 +1736,17 @@ final class PushGoAutomationRuntime {
         }
         if !bundle.channelSubscriptions.isEmpty {
             try await applyFixtureSubscriptions(bundle.channelSubscriptions, environment: environment)
+            do {
+                try await environment.syncSubscriptionsIfNeeded()
+            } catch {
+                recordRuntimeError(
+                    source: "automation",
+                    category: "fixture_sync",
+                    code: "fixture_subscription_sync_failed",
+                    message: error.localizedDescription
+                )
+                throw error
+            }
         }
         await environment.refreshMessageCountsAndNotify()
         environment.publishStoreRefreshForAutomation()

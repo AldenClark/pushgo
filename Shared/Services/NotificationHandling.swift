@@ -16,6 +16,23 @@ struct NormalizedRemoteNotification {
     let thingId: String?
 }
 
+enum ProviderWakeupResolution {
+    case notWakeup
+    case pulled(payload: [AnyHashable: Any], requestIdentifier: String)
+    case unresolvedWakeup(payload: [AnyHashable: Any], requestIdentifier: String?)
+}
+
+enum NotificationIngressResolution {
+    case direct(payload: [AnyHashable: Any], requestIdentifier: String?)
+    case pulled(payload: [AnyHashable: Any], requestIdentifier: String)
+    case unresolvedWakeup(payload: [AnyHashable: Any], requestIdentifier: String?)
+}
+
+private struct WakeupServerCandidate {
+    let config: ServerConfig
+    let source: String
+}
+
 #if !os(watchOS)
 enum NotificationPersistenceOutcome {
     case persistedMain(PushMessage)
@@ -23,12 +40,6 @@ enum NotificationPersistenceOutcome {
     case duplicate
     case rejected
     case failed
-}
-
-enum ProviderWakeupResolution {
-    case notWakeup
-    case pulled(payload: [AnyHashable: Any], requestIdentifier: String)
-    case unresolvedWakeup
 }
 
 enum NotificationPersistenceCoordinator {
@@ -87,13 +98,32 @@ enum NotificationPersistenceCoordinator {
         dataStore: LocalDataStore,
         beforeSave: (@Sendable (PushMessage) async -> Void)? = nil
     ) async -> NotificationPersistenceOutcome {
+        await persistPreparedContentIfNeeded(
+            content: content,
+            requestIdentifier: nil,
+            fallbackRequestIdentifier: request.identifier,
+            dataStore: dataStore,
+            beforeSave: beforeSave
+        )
+    }
+
+    static func persistPreparedContentIfNeeded(
+        content: UNNotificationContent,
+        requestIdentifier: String?,
+        fallbackRequestIdentifier: String,
+        dataStore: LocalDataStore,
+        beforeSave: (@Sendable (PushMessage) async -> Void)? = nil
+    ) async -> NotificationPersistenceOutcome {
         if NotificationHandling.shouldSkipPersistence(for: content.userInfo) {
             return .rejected
         }
 
+        let resolvedRequestIdentifier = normalizedText(requestIdentifier)
+            ?? normalizedText(fallbackRequestIdentifier)
+            ?? UUID().uuidString
         let normalized = NotificationPayloadNormalizer.normalize(
             content: content,
-            requestId: request.identifier
+            requestId: resolvedRequestIdentifier
         )
         return await persistNormalizedPayload(
             title: normalized.title,
@@ -212,11 +242,6 @@ enum NotificationHandling {
         let shouldReloadCounts: Bool
         let shouldPresentAlert: Bool
     }
-
-    private struct WakeupServerCandidate {
-        let config: ServerConfig
-        let source: String
-    }
 #endif
 
     struct EntityOpenTargetComponents: Equatable {
@@ -301,7 +326,12 @@ enum NotificationHandling {
         )
     }
 
-    #if !os(watchOS)
+    static func normalizeRemoteNotificationForDisplay(
+        _ userInfo: [AnyHashable: Any]
+    ) -> NormalizedRemoteNotification? {
+        normalizeRemoteNotification(userInfo) ?? fallbackNormalizedRemoteNotification(userInfo)
+    }
+
     static func fallbackNormalizedRemoteNotification(
         _ userInfo: [AnyHashable: Any]
     ) -> NormalizedRemoteNotification? {
@@ -361,11 +391,93 @@ enum NotificationHandling {
             thingId: thingId
         )
     }
-    #endif
 
     static func shouldSkipPersistence(for payload: [AnyHashable: Any]) -> Bool {
         let sanitized = UserInfoSanitizer.sanitize(payload)
         return normalizedPayloadBoolean(sanitized["_skip_persist"]) == true
+    }
+
+    static func resolveNotificationIngress(
+        from payload: [AnyHashable: Any],
+        dataStore: LocalDataStore,
+        fallbackServerConfig: ServerConfig? = nil,
+        channelSubscriptionService: ChannelSubscriptionService
+    ) async -> NotificationIngressResolution {
+        let sanitized = UserInfoSanitizer.sanitize(payload)
+        let resolution = await resolveProviderWakeup(
+            from: sanitized,
+            dataStore: dataStore,
+            fallbackServerConfig: fallbackServerConfig,
+            channelSubscriptionService: channelSubscriptionService
+        )
+        switch resolution {
+        case .notWakeup:
+            return .direct(
+                payload: sanitized,
+                requestIdentifier: providerIngressRequestIdentifier(from: sanitized)
+            )
+        case let .pulled(resolvedPayload, requestIdentifier):
+            return .pulled(payload: resolvedPayload, requestIdentifier: requestIdentifier)
+        case let .unresolvedWakeup(unresolvedPayload, requestIdentifier):
+            return .unresolvedWakeup(
+                payload: unresolvedPayload,
+                requestIdentifier: requestIdentifier
+            )
+        }
+    }
+
+    static func providerIngressRequestIdentifier(from payload: [AnyHashable: Any]) -> String? {
+        let sanitized = UserInfoSanitizer.sanitize(payload)
+        return normalizedPayloadString(sanitized["delivery_id"])
+    }
+
+#if !os(watchOS)
+    static func providerIngressAckDeliveryId(
+        for ingress: NotificationIngressResolution,
+        outcome: NotificationPersistenceOutcome
+    ) -> String? {
+        switch outcome {
+        case .duplicate, .persistedMain, .persistedPending:
+            break
+        case .rejected, .failed:
+            return nil
+        }
+
+        switch ingress {
+        case let .direct(payload, requestIdentifier):
+            if providerWakeupPullDeliveryId(from: payload) != nil {
+                return nil
+            }
+            return requestIdentifier ?? providerIngressRequestIdentifier(from: payload)
+        case .pulled:
+            return nil
+        case .unresolvedWakeup:
+            return nil
+        }
+    }
+#endif
+
+    static func wakeupFallbackDisplayPayload(
+        from payload: [AnyHashable: Any]
+    ) -> [AnyHashable: Any]? {
+        let sanitized = UserInfoSanitizer.sanitize(payload)
+        guard providerWakeupPullDeliveryId(from: sanitized) != nil,
+              let normalized = normalizeRemoteNotificationForDisplay(sanitized)
+        else {
+            return nil
+        }
+
+        var rawPayload: [AnyHashable: Any] = normalized.rawPayload.reduce(into: [:]) { result, element in
+            result[element.key] = element.value
+        }
+        if normalizedPayloadString(rawPayload["title"]) == nil {
+            rawPayload["title"] = normalized.title
+        }
+        if normalizedPayloadString(rawPayload["body"]) == nil {
+            rawPayload["body"] = normalized.body
+        }
+        rawPayload.removeValue(forKey: "_skip_persist")
+        return UserInfoSanitizer.sanitize(rawPayload)
     }
 
     static func providerWakeupPullDeliveryId(from payload: [AnyHashable: Any]) -> String? {
@@ -387,7 +499,6 @@ enum NotificationHandling {
         return deliveryId
     }
 
-#if !os(watchOS)
     static func resolveProviderWakeup(
         from payload: [AnyHashable: Any],
         dataStore: LocalDataStore,
@@ -404,10 +515,10 @@ enum NotificationHandling {
             fallbackServerConfig: fallbackServerConfig
         )
         guard !candidates.isEmpty else {
-            return .unresolvedWakeup
+            return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId)
         }
         guard let deviceKey = await activeProviderDeviceKeyForWakeupIngress(dataStore: dataStore) else {
-            return .unresolvedWakeup
+            return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId)
         }
 
         for candidate in candidates {
@@ -433,7 +544,7 @@ enum NotificationHandling {
             }
         }
 
-        return .unresolvedWakeup
+        return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId)
     }
 
     static func applyResolvedPayload(
@@ -442,7 +553,7 @@ enum NotificationHandling {
     ) {
         let userInfo = UserInfoSanitizer.sanitize(payload)
         content.userInfo = userInfo
-        if let normalized = normalizeRemoteNotification(userInfo) {
+        if let normalized = normalizeRemoteNotificationForDisplay(userInfo) {
             content.title = normalized.title
             content.body = normalized.body
         } else {
@@ -454,7 +565,6 @@ enum NotificationHandling {
         ) ?? ""
         content.categoryIdentifier = notificationCategoryIdentifier(for: userInfo)
     }
-#endif
 
     static func isEntityReminderPayload(_ payload: [AnyHashable: Any]) -> Bool {
         entityOpenTargetComponents(from: payload) != nil
@@ -493,7 +603,6 @@ enum NotificationHandling {
         }
     }
 
-#if !os(watchOS)
     private static func activeServerConfigsForWakeupIngress(
         dataStore: LocalDataStore,
         payload: [String: Any],
@@ -515,11 +624,11 @@ enum NotificationHandling {
         }
 
         if let channelId = normalizedPayloadString(payload["channel_id"]) {
-            let urls = await dataStore.loadGatewayURLsForChannel(
-                channelId: channelId,
-                includeDeleted: true
-            )
-            for url in urls {
+            let subscriptions = (try? await dataStore.loadChannelSubscriptions(includeDeleted: true)) ?? []
+            for subscription in subscriptions where subscription.channelId == channelId {
+                guard let url = URLSanitizer.validatedServerURL(from: subscription.gateway) else {
+                    continue
+                }
                 appendCandidate(
                     baseURL: url,
                     token: nil,
@@ -545,6 +654,14 @@ enum NotificationHandling {
             )
         }
 
+        if let persistedServerConfig = (try? await dataStore.loadServerConfig())?.normalized() {
+            appendCandidate(
+                baseURL: persistedServerConfig.baseURL,
+                token: persistedServerConfig.token,
+                source: "data_store.server_config"
+            )
+        }
+
         return candidates
     }
 
@@ -552,22 +669,9 @@ enum NotificationHandling {
         dataStore: LocalDataStore
     ) async -> String? {
         let platform = providerPullPlatformIdentifier()
-        if let scoped = await dataStore.cachedProviderDeviceKey(
-            for: platform,
-            channelType: "apns"
-        )?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !scoped.isEmpty
-        {
-            return scoped
-        }
-        if let legacy = await dataStore.cachedProviderDeviceKey(
-            for: platform
-        )?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !legacy.isEmpty
-        {
-            return legacy
-        }
-        return nil
+        let deviceKey = await dataStore.cachedDeviceKey(for: platform)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return deviceKey?.isEmpty == false ? deviceKey : nil
     }
 
     private static func providerPullPlatformIdentifier() -> String {
@@ -603,5 +707,4 @@ enum NotificationHandling {
         }
         return nil
     }
-#endif
 }

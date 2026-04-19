@@ -98,20 +98,42 @@ struct RemoteImageView<Content: View, Placeholder: View>: View {
 
 enum RemoteImageCache {
     private static let decodeQueue = DispatchQueue(label: "io.ethan.pushgo.remote-image-decode", qos: .userInitiated)
+    private static let imageCacheLimitBytes = 256 * 1024 * 1024
 
     private actor MemoryCache {
         private let cache = NSCache<NSURL, PlatformImage>()
+
+        init() {
+            cache.totalCostLimit = RemoteImageCache.imageCacheLimitBytes
+            cache.countLimit = 512
+        }
 
         func image(for key: NSURL) -> PlatformImage? {
             cache.object(forKey: key)
         }
 
         func set(_ image: PlatformImage, for key: NSURL) {
-            cache.setObject(image, forKey: key)
+            cache.setObject(image, forKey: key, cost: Self.approximateCost(for: image))
         }
 
         func remove(for key: NSURL) {
             cache.removeObject(forKey: key)
+        }
+
+        private static func approximateCost(for image: PlatformImage) -> Int {
+#if canImport(UIKit)
+            let pixelWidth = max(Int(image.size.width * image.scale), 1)
+            let pixelHeight = max(Int(image.size.height * image.scale), 1)
+            return pixelWidth * pixelHeight * 4
+#else
+            if let bitmap = image.representations.compactMap({ $0 as? NSBitmapImageRep }).first {
+                let bitsPerPixel = max(bitmap.bitsPerPixel, 32)
+                return max(bitmap.pixelsWide, 1) * max(bitmap.pixelsHigh, 1) * bitsPerPixel / 8
+            }
+            let fallbackPixelWidth = max(Int(image.size.width * 2), 1)
+            let fallbackPixelHeight = max(Int(image.size.height * 2), 1)
+            return fallbackPixelWidth * fallbackPixelHeight * 4
+#endif
         }
     }
 

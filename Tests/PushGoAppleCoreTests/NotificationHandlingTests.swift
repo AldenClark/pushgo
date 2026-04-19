@@ -57,6 +57,133 @@ struct NotificationHandlingTests {
     }
 
     @Test
+    func providerIngressAckDeliveryIdOnlyAcknowledgesDirectPayloads() {
+        let directIngress = NotificationIngressResolution.direct(
+            payload: [
+                "delivery_id": "delivery-direct-001",
+                "message_id": "msg-direct-001",
+            ],
+            requestIdentifier: "delivery-direct-001"
+        )
+        let pulledIngress = NotificationIngressResolution.pulled(
+            payload: [
+                "delivery_id": "delivery-pulled-001",
+                "message_id": "msg-pulled-001",
+                "body": "Pulled body",
+            ],
+            requestIdentifier: "delivery-pulled-001"
+        )
+        let unresolvedIngress = NotificationIngressResolution.unresolvedWakeup(
+            payload: [
+                "provider_wakeup": "1",
+                "provider_mode": "wakeup",
+                "delivery_id": "delivery-wakeup-ack-001",
+            ],
+            requestIdentifier: "delivery-wakeup-ack-001"
+        )
+
+        #expect(
+            NotificationHandling.providerIngressAckDeliveryId(
+                for: directIngress,
+                outcome: .persistedMain(
+                    PushMessage(messageId: "msg-direct-001", title: "Direct", body: "Body")
+                )
+            ) == "delivery-direct-001"
+        )
+        #expect(
+            NotificationHandling.providerIngressAckDeliveryId(
+                for: pulledIngress,
+                outcome: .duplicate
+            ) == nil
+        )
+        #expect(
+            NotificationHandling.providerIngressAckDeliveryId(
+                for: unresolvedIngress,
+                outcome: .persistedMain(
+                    PushMessage(messageId: "msg-wakeup-ack-001", title: "Wakeup", body: "Body")
+                )
+            ) == nil
+        )
+    }
+
+    @Test
+    func resolveNotificationIngressSurfacesUnresolvedWakeupWithDeliveryIdentity() async throws {
+        await withIsolatedLocalDataStore { store, _ in
+            let payload: [AnyHashable: Any] = [
+                "provider_wakeup": "1",
+                "provider_mode": "wakeup",
+                "delivery_id": "delivery-wakeup-unresolved-001",
+                "message_id": "msg-wakeup-unresolved-001",
+            ]
+
+            let resolution = await NotificationHandling.resolveNotificationIngress(
+                from: payload,
+                dataStore: store,
+                channelSubscriptionService: ChannelSubscriptionService()
+            )
+
+            guard case let .unresolvedWakeup(unresolvedPayload, requestIdentifier) = resolution else {
+                Issue.record("Expected wakeup ingress without server candidates to remain unresolved.")
+                return
+            }
+            #expect(requestIdentifier == "delivery-wakeup-unresolved-001")
+            #expect(unresolvedPayload["delivery_id"] as? String == "delivery-wakeup-unresolved-001")
+            #expect(unresolvedPayload["message_id"] as? String == "msg-wakeup-unresolved-001")
+        }
+    }
+
+    @Test
+    func normalizeRemoteNotificationForDisplayKeepsWakeupAlertTitleForLongMessageFallback() {
+        let payload: [AnyHashable: Any] = [
+            "provider_wakeup": "1",
+            "provider_mode": "wakeup",
+            "delivery_id": "delivery-long-message-001",
+            "message_id": "msg-long-message-001",
+            "entity_type": "message",
+            "entity_id": "msg-long-message-001",
+            "aps": [
+                "alert": [
+                    "title": "这是一条超长消息",
+                    "body": "这是长消息的预览正文",
+                ],
+            ],
+            "_skip_persist": "1",
+        ]
+
+        let normalized = NotificationHandling.normalizeRemoteNotificationForDisplay(payload)
+
+        #expect(normalized?.title == "这是一条超长消息")
+        #expect(normalized?.body == "这是长消息的预览正文")
+        #expect(normalized?.messageId == "msg-long-message-001")
+        #expect(normalized?.entityType == "message")
+    }
+
+    @Test
+    func wakeupFallbackDisplayPayloadCarriesResolvedBodyIntoTopLevelPayload() {
+        let payload: [AnyHashable: Any] = [
+            "provider_wakeup": "1",
+            "provider_mode": "wakeup",
+            "delivery_id": "delivery-nse-fallback-001",
+            "message_id": "msg-nse-fallback-001",
+            "entity_type": "message",
+            "entity_id": "msg-nse-fallback-001",
+            "aps": [
+                "alert": [
+                    "title": "Fallback title",
+                    "body": "Fallback body preview",
+                ],
+            ],
+            "_skip_persist": "1",
+        ]
+
+        let fallbackPayload = NotificationHandling.wakeupFallbackDisplayPayload(from: payload)
+
+        #expect(fallbackPayload?["title"] as? String == "Fallback title")
+        #expect(fallbackPayload?["body"] as? String == "Fallback body preview")
+        #expect(fallbackPayload?["_skip_persist"] == nil)
+    }
+
+    @Test
     func categoryIdentifierUsesReminderCategoryForEntityPayloads() {
         let eventPayload: [AnyHashable: Any] = [
             "entity_type": "event",
@@ -276,6 +403,37 @@ struct NotificationHandlingTests {
             #expect(beforeSaveSnapshot?.messageId == "msg-notification-002")
             #expect(messages.count == 1)
             #expect(storedMessage?.title == "Updated title")
+        }
+    }
+
+    @Test
+    func persistPreparedContentIfNeededPrefersIngressRequestIdentifier() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let content = UNMutableNotificationContent()
+            content.title = "Direct title"
+            content.body = "Direct body"
+            content.userInfo = [
+                "message_id": "msg-direct-ingress-001",
+                "title": "Direct title",
+                "body": "Direct body",
+                "sent_at": "2026-03-10T03:04:05Z",
+            ]
+
+            let outcome = await NotificationPersistenceCoordinator.persistPreparedContentIfNeeded(
+                content: content,
+                requestIdentifier: "delivery-direct-ingress-001",
+                fallbackRequestIdentifier: "apple-request-ignored-001",
+                dataStore: store
+            )
+
+            guard case let .persistedMain(stored) = outcome else {
+                Issue.record("Expected explicit ingress request identifier to persist direct notification content.")
+                return
+            }
+            #expect(stored.notificationRequestId == "delivery-direct-ingress-001")
+            let loaded = try await store.loadMessage(notificationRequestId: "delivery-direct-ingress-001")
+            #expect(loaded?.messageId == "msg-direct-ingress-001")
+            #expect(loaded?.notificationRequestId == "delivery-direct-ingress-001")
         }
     }
 

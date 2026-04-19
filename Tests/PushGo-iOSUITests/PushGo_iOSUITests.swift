@@ -466,7 +466,7 @@ final class PushGo_iOSUITests: XCTestCase {
         }
 
         app.launchEnvironment["PUSHGO_AUTOMATION_STORAGE_ROOT"] = resolvedRuntimeRoot.path
-        app.launchEnvironment["PUSHGO_AUTOMATION_PROVIDER_TOKEN"] = "ios-ui-test-provider-token"
+        app.launchEnvironment["PUSHGO_AUTOMATION_PROVIDER_TOKEN"] = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         app.launchEnvironment["PUSHGO_AUTOMATION_SKIP_PUSH_AUTHORIZATION"] = "1"
         app.launchEnvironment["PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS"] = "0"
         app.launchEnvironment["PUSHGO_AUTOMATION_RESPONSE_PATH"] = responseURL.path

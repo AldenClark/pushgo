@@ -2,7 +2,9 @@ import Foundation
 
 struct ChannelSubscriptionService {
     static let deviceRegisterPath = "/device/register"
+    static let deviceRoutePath = "/channel/device"
     static let deviceChannelDeletePath = "/channel/device/delete"
+    static let providerTokenRetirePath = "/channel/device/provider-token/retire"
 
     struct DeviceRegisterPayload: Decodable {
         let deviceKey: String
@@ -24,8 +26,18 @@ struct ChannelSubscriptionService {
         }
     }
 
-    struct DeviceChannelRequest: Encodable {
+    struct DeviceRegisterRequest: Encodable {
         let deviceKey: String?
+        let platform: String
+
+        enum CodingKeys: String, CodingKey {
+            case deviceKey = "device_key"
+            case platform
+        }
+    }
+
+    struct DeviceChannelUpsertRequest: Encodable {
+        let deviceKey: String
         let platform: String
         let channelType: String
         let providerToken: String?
@@ -45,6 +57,16 @@ struct ChannelSubscriptionService {
         enum CodingKeys: String, CodingKey {
             case deviceKey = "device_key"
             case channelType = "channel_type"
+        }
+    }
+
+    struct ProviderTokenRetireRequest: Encodable {
+        let platform: String
+        let providerToken: String
+
+        enum CodingKeys: String, CodingKey {
+            case platform
+            case providerToken = "provider_token"
         }
     }
 
@@ -250,25 +272,6 @@ struct ChannelSubscriptionService {
         platform: String,
         existingDeviceKey: String?
     ) async throws -> DeviceRegisterPayload {
-        let payload = try await upsertDeviceChannel(
-            baseURL: baseURL,
-            token: token,
-            deviceKey: existingDeviceKey,
-            platform: platform,
-            channelType: "private",
-            providerToken: nil
-        )
-        return DeviceRegisterPayload(deviceKey: payload.deviceKey)
-    }
-
-    func upsertDeviceChannel(
-        baseURL: URL,
-        token: String?,
-        deviceKey: String?,
-        platform: String,
-        channelType: String,
-        providerToken: String?
-    ) async throws -> DeviceChannelPayload {
         let baseURL = try validatedBaseURL(baseURL)
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw AppError.invalidURL
@@ -286,8 +289,43 @@ struct ChannelSubscriptionService {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         request.httpBody = try JSONEncoder().encode(
-            DeviceChannelRequest(
-                deviceKey: deviceKey,
+            DeviceRegisterRequest(
+                deviceKey: existingDeviceKey,
+                platform: platform
+            )
+        )
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let payload = try decodePayload(DeviceRegisterPayload.self, data: data, response: response)
+        return DeviceRegisterPayload(deviceKey: try requireResolvedDeviceKey(payload.deviceKey))
+    }
+
+    func upsertDeviceChannel(
+        baseURL: URL,
+        token: String?,
+        deviceKey: String?,
+        platform: String,
+        channelType: String,
+        providerToken: String?
+    ) async throws -> DeviceChannelPayload {
+        let baseURL = try validatedBaseURL(baseURL)
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw AppError.invalidURL
+        }
+        components.path = components.path.appendingPathComponent(Self.deviceRoutePath)
+        guard let url = components.url else {
+            throw AppError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = AppConstants.deviceRegistrationTimeout
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let token, !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = try JSONEncoder().encode(
+            DeviceChannelUpsertRequest(
+                deviceKey: try normalizedRequiredDeviceKey(deviceKey),
                 platform: platform,
                 channelType: channelType,
                 providerToken: providerToken
@@ -295,19 +333,27 @@ struct ChannelSubscriptionService {
         )
         let (data, response) = try await URLSession.shared.data(for: request)
         let payload = try decodePayload(DeviceChannelPayload.self, data: data, response: response)
-        let resolvedDeviceKey = payload.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if resolvedDeviceKey.isEmpty {
-            let fallback = deviceKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            guard !fallback.isEmpty else {
-                throw AppError.unknown("gateway response missing device_key")
-            }
-            return DeviceChannelPayload(
-                deviceKey: fallback,
-                channelType: payload.channelType,
-                providerToken: payload.providerToken
-            )
+        return DeviceChannelPayload(
+            deviceKey: try requireResolvedDeviceKey(payload.deviceKey),
+            channelType: payload.channelType,
+            providerToken: payload.providerToken
+        )
+    }
+
+    private func normalizedRequiredDeviceKey(_ deviceKey: String?) throws -> String {
+        let normalized = deviceKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !normalized.isEmpty else {
+            throw AppError.unknown("missing device_key")
         }
-        return payload
+        return normalized
+    }
+
+    private func requireResolvedDeviceKey(_ deviceKey: String) throws -> String {
+        let normalized = deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else {
+            throw AppError.unknown("gateway response missing device_key")
+        }
+        return normalized
     }
 
     func deleteDeviceChannel(
@@ -336,6 +382,38 @@ struct ChannelSubscriptionService {
             DeviceChannelDeleteRequest(
                 deviceKey: deviceKey,
                 channelType: channelType
+            )
+        )
+        let (data, response) = try await URLSession.shared.data(for: request)
+        _ = try decodePayload(EmptyPayload.self, data: data, response: response)
+    }
+
+    func retireProviderToken(
+        baseURL: URL,
+        token: String?,
+        platform: String,
+        providerToken: String
+    ) async throws {
+        let baseURL = try validatedBaseURL(baseURL)
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw AppError.invalidURL
+        }
+        components.path = components.path.appendingPathComponent(Self.providerTokenRetirePath)
+        guard let url = components.url else {
+            throw AppError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = AppConstants.deviceRegistrationTimeout
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let token, !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = try JSONEncoder().encode(
+            ProviderTokenRetireRequest(
+                platform: platform,
+                providerToken: providerToken
             )
         )
         let (data, response) = try await URLSession.shared.data(for: request)

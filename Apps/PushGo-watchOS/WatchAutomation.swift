@@ -57,7 +57,7 @@ private struct PushGoWatchAutomationState: Encodable, Equatable {
     let gatewayTokenPresent: Bool
     let providerMode: String
     let providerTokenPresent: Bool
-    let providerDeviceKeyPresent: Bool
+    let deviceKeyPresent: Bool
     let privateRoute: String
     let privateTransport: String
     let privateStage: String
@@ -93,7 +93,7 @@ private struct PushGoWatchAutomationState: Encodable, Equatable {
         case gatewayTokenPresent = "gateway_token_present"
         case providerMode = "provider_mode"
         case providerTokenPresent = "provider_token_present"
-        case providerDeviceKeyPresent = "provider_device_key_present"
+        case deviceKeyPresent = "device_key_present"
         case privateRoute = "private_route"
         case privateTransport = "private_transport"
         case privateStage = "private_stage"
@@ -374,7 +374,7 @@ final class PushGoWatchAutomationRuntime {
             gatewayTokenPresent: normalizedIdentifier(environment.serverConfig?.token) != nil,
             providerMode: "provider",
             providerTokenPresent: false,
-            providerDeviceKeyPresent: false,
+            deviceKeyPresent: false,
             privateRoute: "idle",
             privateTransport: "watch",
             privateStage: "idle",
@@ -518,7 +518,7 @@ final class PushGoWatchAutomationRuntime {
         )
         let providerToken = await environment.dataStore.cachedPushToken(for: platformIdentifier)
             ?? PushGoAutomationContext.providerToken
-        let providerDeviceKey = await environment.dataStore.cachedProviderDeviceKey(for: platformIdentifier)
+        let deviceKey = await environment.dataStore.cachedDeviceKey(for: platformIdentifier)
         let ackPendingCount = 0
         let eventCount = (try? await environment.dataStore.loadWatchLightEvents().count) ?? 0
         let thingCount = (try? await environment.dataStore.loadWatchLightThings().count) ?? 0
@@ -527,9 +527,9 @@ final class PushGoWatchAutomationRuntime {
             environment: environment
         )
         let providerTokenPresent = normalizedIdentifier(providerToken) != nil
-        let providerDeviceKeyPresent = normalizedIdentifier(providerDeviceKey) != nil
+        let deviceKeyPresent = normalizedIdentifier(deviceKey) != nil
         let privateRoute = providerTokenPresent ? "provider" : "idle"
-        let privateStage = providerDeviceKeyPresent ? "ready" : (providerTokenPresent ? "route_pending" : "idle")
+        let privateStage = deviceKeyPresent ? "ready" : (providerTokenPresent ? "route_pending" : "idle")
         let privateDetail: String? = {
             if environment.serverConfig == nil {
                 return "server configuration missing"
@@ -537,7 +537,7 @@ final class PushGoWatchAutomationRuntime {
             if !providerTokenPresent {
                 return "provider token missing"
             }
-            if !providerDeviceKeyPresent {
+            if !deviceKeyPresent {
                 return "provider route not ready"
             }
             return nil
@@ -562,7 +562,7 @@ final class PushGoWatchAutomationRuntime {
             gatewayTokenPresent: state.gatewayTokenPresent,
             providerMode: state.providerMode,
             providerTokenPresent: providerTokenPresent,
-            providerDeviceKeyPresent: providerDeviceKeyPresent,
+            deviceKeyPresent: deviceKeyPresent,
             privateRoute: privateRoute,
             privateTransport: state.privateTransport,
             privateStage: privateStage,
@@ -675,12 +675,13 @@ final class PushGoWatchAutomationRuntime {
         let subscriptions = try await environment.dataStore.loadChannelSubscriptions(includeDeleted: false)
         for subscription in subscriptions {
             try await environment.dataStore.softDeleteChannelSubscription(
+                gateway: subscription.gateway,
                 channelId: subscription.channelId,
                 deletedAt: Date()
             )
         }
         await environment.dataStore.saveCachedPushToken(nil, for: platformIdentifier)
-        await environment.dataStore.saveCachedProviderDeviceKey(nil, for: platformIdentifier)
+        await environment.dataStore.saveCachedDeviceKey(nil, for: platformIdentifier)
         let defaultConfig = ServerConfig(
             baseURL: AppConstants.defaultServerURL ?? URL(string: AppConstants.defaultServerAddress)!,
             token: PushGoAutomationContext.gatewayToken
@@ -876,7 +877,7 @@ final class PushGoWatchAutomationRuntime {
             gatewayTokenPresent: normalizedIdentifier(environment.serverConfig?.token) != nil,
             providerMode: "provider",
             providerTokenPresent: false,
-            providerDeviceKeyPresent: false,
+            deviceKeyPresent: false,
             privateRoute: "idle",
             privateTransport: "watch",
             privateStage: "idle",

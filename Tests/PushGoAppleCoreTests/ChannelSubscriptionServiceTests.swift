@@ -6,12 +6,30 @@ struct ChannelSubscriptionServiceTests {
     @Test
     func deviceRouteEndpointsMatchGatewayContract() {
         #expect(ChannelSubscriptionService.deviceRegisterPath == "/device/register")
+        #expect(ChannelSubscriptionService.deviceRoutePath == "/channel/device")
         #expect(ChannelSubscriptionService.deviceChannelDeletePath == "/channel/device/delete")
+        #expect(ChannelSubscriptionService.providerTokenRetirePath == "/channel/device/provider-token/retire")
     }
 
     @Test
-    func deviceChannelRequestEncodesExpectedGatewayKeys() throws {
-        let request = ChannelSubscriptionService.DeviceChannelRequest(
+    func deviceRegisterRequestEncodesExpectedGatewayKeys() throws {
+        let request = ChannelSubscriptionService.DeviceRegisterRequest(
+            deviceKey: "dev-001",
+            platform: "ios"
+        )
+
+        let data = try JSONEncoder().encode(request)
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        #expect(object["device_key"] as? String == "dev-001")
+        #expect(object["platform"] as? String == "ios")
+        #expect(object["channel_type"] == nil)
+        #expect(object["provider_token"] == nil)
+    }
+
+    @Test
+    func deviceChannelUpsertRequestEncodesExpectedGatewayKeys() throws {
+        let request = ChannelSubscriptionService.DeviceChannelUpsertRequest(
             deviceKey: "dev-001",
             platform: "ios",
             channelType: "apns",
@@ -39,6 +57,43 @@ struct ChannelSubscriptionServiceTests {
 
         #expect(object["device_key"] as? String == "dev-001")
         #expect(object["channel_type"] as? String == "private")
+    }
+
+    @Test
+    func providerTokenRetireRequestEncodesSnakeCaseKeys() throws {
+        let request = ChannelSubscriptionService.ProviderTokenRetireRequest(
+            platform: "ios",
+            providerToken: "token-001"
+        )
+
+        let data = try JSONEncoder().encode(request)
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        #expect(object["platform"] as? String == "ios")
+        #expect(object["provider_token"] as? String == "token-001")
+    }
+
+    @Test
+    func syncRequestEncodesDeviceKeyAndChannels() throws {
+        let request = ChannelSubscriptionService.SyncRequest(
+            deviceKey: "dev-001",
+            channels: [
+                .init(channelId: "channel-001", password: "pw-001"),
+                .init(channelId: "channel-002", password: "pw-002"),
+            ]
+        )
+
+        let data = try JSONEncoder().encode(request)
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let channels = try #require(object["channels"] as? [[String: Any]])
+
+        #expect(object["device_key"] as? String == "dev-001")
+        #expect(object["channel_type"] == nil)
+        #expect(channels.count == 2)
+        #expect(channels[0]["channel_id"] as? String == "channel-001")
+        #expect(channels[0]["password"] as? String == "pw-001")
+        #expect(channels[1]["channel_id"] as? String == "channel-002")
+        #expect(channels[1]["password"] as? String == "pw-002")
     }
 
     @Test

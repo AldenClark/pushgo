@@ -61,6 +61,7 @@ struct MessageListScreen: View {
                         selection = message.id
                     } label: {
                         MessageRowView(message: message)
+                            .id(message.rowLayoutKey)
                             .entityListRowTapTarget()
                     }
                     .buttonStyle(.plain)
@@ -101,6 +102,7 @@ struct MessageListScreen: View {
                         Image(systemName: batchSelection.contains(message.id) ? "checkmark.circle.fill" : "circle")
                             .foregroundStyle(batchSelection.contains(message.id) ? .accent : .secondary)
                         MessageRowView(message: message)
+                            .id(message.rowLayoutKey)
                     }
                     .entityListRowTapTarget()
                 }
@@ -135,6 +137,7 @@ struct MessageListScreen: View {
                                 selection = message.id
                             } label: {
                                 MessageRowView(message: message)
+                                    .id(message.rowLayoutKey)
                                     .entityListRowTapTarget()
                             }
                             .buttonStyle(.plain)
@@ -191,6 +194,7 @@ struct MessageListScreen: View {
                                 Image(systemName: batchSelection.contains(message.id) ? "checkmark.circle.fill" : "circle")
                                     .foregroundStyle(batchSelection.contains(message.id) ? .accent : .secondary)
                                 MessageRowView(message: message)
+                                    .id(message.rowLayoutKey)
                             }
                             .entityListRowTapTarget()
                         }

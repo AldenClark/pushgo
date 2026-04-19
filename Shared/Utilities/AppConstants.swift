@@ -645,17 +645,34 @@ enum URLSanitizer {
 
     static func validatedServerURL(from raw: String) -> URL? {
         guard let components = URLComponents(string: raw),
-              let scheme = components.scheme?.lowercased(), scheme == "https",
+              let scheme = components.scheme?.lowercased(),
               let host = components.host, !host.isEmpty
         else { return nil }
+        guard isAllowedServerURL(scheme: scheme, host: host) else { return nil }
         return components.url
     }
 
     static func validatedServerURL(_ baseURL: URL) -> URL? {
-        guard let scheme = baseURL.scheme?.lowercased(), scheme == "https",
+        guard let scheme = baseURL.scheme?.lowercased(),
               let host = baseURL.host, !host.isEmpty
         else { return nil }
+        guard isAllowedServerURL(scheme: scheme, host: host) else { return nil }
         return baseURL
+    }
+
+    private static func isAllowedServerURL(scheme: String, host: String) -> Bool {
+        if scheme == "https" {
+            return true
+        }
+        guard scheme == "http", PushGoAutomationContext.isActive else {
+            return false
+        }
+        return isLoopbackHost(host)
+    }
+
+    private static func isLoopbackHost(_ host: String) -> Bool {
+        let normalized = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized == "localhost" || normalized == "127.0.0.1" || normalized == "::1"
     }
 }
 

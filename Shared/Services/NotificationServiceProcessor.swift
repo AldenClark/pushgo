@@ -10,21 +10,20 @@ final class NotificationServiceProcessor {
         request: UNNotificationRequest,
         content: UNMutableNotificationContent
     ) async -> UNNotificationContent {
-        let directDeliveryId = providerIngressDeliveryId(from: request.content.userInfo)
-        let isProviderWakeup = NotificationHandling.providerWakeupPullDeliveryId(
-            from: request.content.userInfo
-        ) != nil
-        let content = await prepareContentForPersistence(request: request, content: content)
-        let shouldSkipPersist = (content.userInfo["_skip_persist"] as? String) == "1"
-        var shouldAckDirect = false
-        if !shouldSkipPersist {
-            shouldAckDirect = await persistMessage(for: request, content: content)
-        }
-        if !isProviderWakeup,
-           shouldAckDirect,
-           let deliveryId = directDeliveryId
+        let ingress = await NotificationHandling.resolveNotificationIngress(
+            from: request.content.userInfo,
+            dataStore: localDataStore,
+            channelSubscriptionService: channelSubscriptionService
+        )
+        let content = await prepareContentForPersistence(content: content, ingress: ingress)
+        let outcome = await persistMessage(for: request, content: content, ingress: ingress)
+        if let outcome,
+           let deliveryId = NotificationHandling.providerIngressAckDeliveryId(
+               for: ingress,
+               outcome: outcome
+           )
         {
-            fireAndForgetProviderDirectAck(deliveryId: deliveryId)
+            fireAndForgetProviderIngressAck(deliveryId: deliveryId)
         }
         guard !Task.isCancelled else { return content }
         let persistenceFailed = (content.userInfo["_persist_failed"] as? String) == "1"
@@ -33,54 +32,70 @@ final class NotificationServiceProcessor {
     }
 
     func prepareContentForPersistence(
-        request: UNNotificationRequest,
-        content: UNMutableNotificationContent
+        content: UNMutableNotificationContent,
+        ingress: NotificationIngressResolution
     ) async -> UNMutableNotificationContent {
-        await resolveProviderWakeupIfNeeded(content: content)
+        applyIngressPayloadIfNeeded(ingress, to: content)
         return await contentPreparer.prepare(content, includeMediaAttachments: false)
     }
 
-    private func resolveProviderWakeupIfNeeded(content: UNMutableNotificationContent) async {
-        let resolution = await NotificationHandling.resolveProviderWakeup(
-            from: content.userInfo,
-            dataStore: localDataStore,
-            channelSubscriptionService: channelSubscriptionService
-        )
-        if case let .pulled(payload, _) = resolution {
+    private func applyIngressPayloadIfNeeded(
+        _ ingress: NotificationIngressResolution,
+        to content: UNMutableNotificationContent
+    ) {
+        switch ingress {
+        case let .pulled(payload, _):
             NotificationHandling.applyResolvedPayload(payload, to: content)
-        }
-        switch resolution {
-        case .notWakeup:
-            break
-        case .unresolvedWakeup:
-            applyUnresolvedWakeupNotice(to: content)
-        case .pulled:
+        case let .unresolvedWakeup(payload, _):
+            if let fallbackPayload = NotificationHandling.wakeupFallbackDisplayPayload(from: payload) {
+                NotificationHandling.applyResolvedPayload(fallbackPayload, to: content)
+            } else {
+                content.userInfo = UserInfoSanitizer.sanitize(payload)
+                applyUnresolvedWakeupNotice(to: content)
+            }
+        case .direct:
             break
         }
     }
 
     private func persistMessage(
         for request: UNNotificationRequest,
-        content: UNMutableNotificationContent
-    ) async -> Bool {
+        content: UNMutableNotificationContent,
+        ingress: NotificationIngressResolution
+    ) async -> NotificationPersistenceOutcome? {
         let store = localDataStore
         var unreadCount = 1
         var persistenceFailed = false
         var shouldNotifyStoreChanged = false
-        var shouldAckDirect = false
+        var persistenceOutcome: NotificationPersistenceOutcome?
         do {
-            let outcome = await NotificationPersistenceCoordinator.persistIfNeeded(
-                request: request,
-                content: content,
-                dataStore: store
-            )
+            let outcome: NotificationPersistenceOutcome
+            switch ingress {
+            case let .pulled(payload, requestIdentifier):
+                outcome = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
+                    payload,
+                    requestIdentifier: requestIdentifier,
+                    dataStore: store
+                )
+            case let .direct(_, requestIdentifier):
+                outcome = await NotificationPersistenceCoordinator.persistPreparedContentIfNeeded(
+                    content: content,
+                    requestIdentifier: requestIdentifier,
+                    fallbackRequestIdentifier: request.identifier,
+                    dataStore: store
+                )
+            case let .unresolvedWakeup(payload, requestIdentifier):
+                _ = payload
+                _ = requestIdentifier
+                outcome = .rejected
+            }
+            persistenceOutcome = outcome
             switch outcome {
             case .duplicate, .persistedPending:
                 await store.flushWrites()
                 shouldNotifyStoreChanged = true
                 let counts = try await store.messageCounts()
                 unreadCount = counts.unread
-                shouldAckDirect = true
             case .rejected:
                 let counts = try await store.messageCounts()
                 unreadCount = counts.unread
@@ -93,7 +108,6 @@ final class NotificationServiceProcessor {
                 shouldNotifyStoreChanged = true
                 let counts = try await store.messageCounts()
                 unreadCount = counts.unread
-                shouldAckDirect = true
             }
         } catch {
             persistenceFailed = true
@@ -105,7 +119,7 @@ final class NotificationServiceProcessor {
             applyPersistenceFailureNotice(to: content)
         }
         content.badge = NSNumber(value: unreadCount)
-        return shouldAckDirect
+        return persistenceOutcome
     }
 
     private func applyPersistenceFailureNotice(to content: UNMutableNotificationContent) {
@@ -126,15 +140,7 @@ final class NotificationServiceProcessor {
         content.userInfo = userInfo
     }
 
-    private func providerIngressDeliveryId(from payload: [AnyHashable: Any]) -> String? {
-        let sanitized = UserInfoSanitizer.sanitize(payload)
-        let trimmed = (sanitized["delivery_id"] as? String)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !trimmed.isEmpty else { return nil }
-        return trimmed
-    }
-
-    private func fireAndForgetProviderDirectAck(deliveryId: String) {
+    private func fireAndForgetProviderIngressAck(deliveryId: String) {
         let normalizedDeliveryId = deliveryId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedDeliveryId.isEmpty else { return }
         Task(priority: .utility) {
@@ -143,14 +149,8 @@ final class NotificationServiceProcessor {
                 return
             }
             let platform = NotificationServiceProcessor.providerPullPlatformIdentifier()
-            let scopedKey = await dataStore.cachedProviderDeviceKey(
-                for: platform,
-                channelType: "apns"
-            )?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let legacyKey = await dataStore.cachedProviderDeviceKey(
-                for: platform
-            )?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let deviceKey = (scopedKey?.isEmpty == false ? scopedKey : legacyKey) ?? ""
+            let deviceKey = await dataStore.cachedDeviceKey(for: platform)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !deviceKey.isEmpty else { return }
             do {
                 _ = try await ChannelSubscriptionService().ackMessage(

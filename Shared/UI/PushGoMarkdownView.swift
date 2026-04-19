@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-#if canImport(Textual)
+#if canImport(Textual) && !os(watchOS)
 import Textual
 #endif
 
@@ -26,7 +26,7 @@ struct MarkdownRenderer: View {
     }
 
     var body: some View {
-        #if canImport(Textual)
+        #if canImport(Textual) && !os(watchOS)
         Group {
             if prefersStructuredText {
                 StructuredText(markdown: normalizedText)
@@ -59,7 +59,7 @@ struct MarkdownRenderer: View {
     }
 }
 
-#if canImport(Textual)
+#if canImport(Textual) && !os(watchOS)
 private struct PushGoRefinedTableCellStyle: StructuredText.TableCellStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -71,7 +71,7 @@ private struct PushGoRefinedTableCellStyle: StructuredText.TableCellStyle {
 }
 #endif
 
-#if canImport(Textual)
+#if canImport(Textual) && !os(watchOS)
 private struct PushGoRefinedTableStyle: StructuredText.TableStyle {
     private static let borderWidth: CGFloat = 1
     private static let cornerRadius: CGFloat = 10

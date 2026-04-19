@@ -315,7 +315,21 @@ jobs:
             exit 1
           fi
 
+          apple_distribution_sha="$(
+            awk '
+              match($0, /[0-9A-F]{40}/) && /Apple Distribution/ {
+                print substr($0, RSTART, RLENGTH)
+                exit
+              }
+            ' <<<"$codesigning_identity_output"
+          )"
+          if [[ -z "$apple_distribution_sha" ]]; then
+            echo "Unable to resolve the imported Apple Distribution certificate fingerprint." >&2
+            exit 1
+          fi
+
           {
+            echo "APPLE_DISTRIBUTION_SHA1=$apple_distribution_sha"
             echo "RELEASE_SIGNING_KEYCHAIN_PATH=$keychain_path"
             echo "RELEASE_SIGNING_KEYCHAIN_PASSWORD=$keychain_password"
             echo "DEVELOPER_ID_KEYCHAIN_PATH=$keychain_path"
@@ -342,7 +356,7 @@ jobs:
             local env_var_name="$3"
             local extension="$4"
             local label="$5"
-            local raw_path decoded_path uuid profile_name application_identifier resolved_bundle_id team_identifier
+            local raw_path decoded_path uuid profile_name application_identifier resolved_bundle_id team_identifier profile_analysis is_xcode_managed profile_cert_sha1s
 
             raw_path="$(mktemp "$RUNNER_TEMP/pushgo-profile-${env_var_name}.XXXXXX")"
             decoded_path="$(mktemp "$RUNNER_TEMP/pushgo-profile-${env_var_name}.XXXXXX.plist")"
@@ -374,6 +388,27 @@ jobs:
             resolved_bundle_id="${application_identifier#${APPLE_TEAM_ID}.}"
             if [[ "$resolved_bundle_id" != "$expected_bundle_id" ]]; then
               echo "Provisioning profile ${label} (${profile_name}) targets ${resolved_bundle_id}, expected ${expected_bundle_id}" >&2
+              exit 1
+            fi
+
+            profile_analysis="$(
+              python3 -c 'import hashlib, plistlib, sys; profile = plistlib.load(open(sys.argv[1], "rb")); sha1s = [hashlib.sha1(cert).hexdigest().upper() for cert in profile.get("DeveloperCertificates", [])]; print("xcode_managed=" + ("true" if profile.get("IsXcodeManaged") else "false")); print("developer_certificate_sha1s=" + ",".join(sha1s))' "$decoded_path"
+            )"
+            is_xcode_managed="$(awk -F= '/^xcode_managed=/{print $2}' <<<"$profile_analysis")"
+            profile_cert_sha1s="$(awk -F= '/^developer_certificate_sha1s=/{print $2}' <<<"$profile_analysis")"
+
+            if [[ "$is_xcode_managed" == "true" ]]; then
+              echo "Provisioning profile ${label} (${profile_name}) is Xcode-managed. Manual export requires a manually managed App Store profile bound to the imported Apple Distribution certificate." >&2
+              exit 1
+            fi
+
+            if [[ -z "$profile_cert_sha1s" ]]; then
+              echo "Provisioning profile ${label} (${profile_name}) does not embed any developer certificates." >&2
+              exit 1
+            fi
+
+            if [[ ",${profile_cert_sha1s}," != *",${APPLE_DISTRIBUTION_SHA1},"* ]]; then
+              echo "Provisioning profile ${label} (${profile_name}) does not include the imported Apple Distribution certificate ${APPLE_DISTRIBUTION_SHA1}. Embedded fingerprints: ${profile_cert_sha1s}" >&2
               exit 1
             fi
 
