@@ -996,12 +996,9 @@ private final class WatchLocalSQLiteStore {
     }
 
     private static func execute(_ sql: String, db: OpaquePointer) throws {
-        var errorPointer: UnsafeMutablePointer<CChar>?
-        defer { if let errorPointer { sqlite3_free(errorPointer) } }
-        let result = sqlite3_exec(db, sql, nil, nil, &errorPointer)
+        let result = sqlite3_exec(db, sql, nil, nil, nil)
         guard result == SQLITE_OK else {
-            let message = errorPointer.map { String(cString: $0) } ?? String(cString: sqlite3_errmsg(db))
-            throw StoreError.sqliteStepFailed(message)
+            throw StoreError.sqliteStepFailed(String(cString: sqlite3_errmsg(db)))
         }
     }
 
