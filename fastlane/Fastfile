@@ -533,7 +533,7 @@ platform :ios do
     export_path = File.join(output_directory, "#{output_name}-export")
     export_options_path = File.join(output_directory, "#{output_name}-ExportOptions.plist")
     ipa_path = File.join(output_directory, "#{output_name}.ipa")
-    apple_distribution_identity!
+    apple_distribution = apple_distribution_identity!
     archive_xcargs = unsigned_archive_xcargs
     export_xcargs = export_archive_xcargs
 
@@ -555,7 +555,7 @@ platform :ios do
         "method" => export_method,
         "teamID" => team_id,
         "signingStyle" => "manual",
-        "signingCertificate" => "Apple Distribution",
+        "signingCertificate" => apple_distribution[:name],
         "provisioningProfiles" => ios_export_provisioning_profiles,
         "stripSwiftSymbols" => true,
         "manageAppVersionAndBuildNumber" => false
@@ -587,8 +587,8 @@ platform :ios do
     export_path = File.join(output_directory, "#{pkg_name}-export")
     export_options_path = File.join(output_directory, "#{pkg_name}-ExportOptions.plist")
     pkg_path = File.join(output_directory, "#{pkg_name}.pkg")
-    apple_distribution_identity!
-    mac_installer_distribution_identity!
+    apple_distribution = apple_distribution_identity!
+    installer_distribution = mac_installer_distribution_identity!
     archive_xcargs = unsigned_archive_xcargs
     export_xcargs = export_archive_xcargs
 
@@ -610,8 +610,8 @@ platform :ios do
         "method" => "app-store-connect",
         "teamID" => team_id,
         "signingStyle" => "manual",
-        "signingCertificate" => "Apple Distribution",
-        "installerSigningCertificate" => "Mac Installer Distribution",
+        "signingCertificate" => apple_distribution[:name],
+        "installerSigningCertificate" => installer_distribution[:name],
         "provisioningProfiles" => macos_export_provisioning_profiles,
         "stripSwiftSymbols" => true,
         "manageAppVersionAndBuildNumber" => false
