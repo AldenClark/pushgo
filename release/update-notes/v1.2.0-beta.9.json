@@ -1,0 +1,10 @@
+{
+  "en": "This beta includes all Apple-side changes accumulated since v1.2.0-beta.8.\nProvider token refresh now triggers ingress sync immediately to reduce delayed pulls.\nImproved delivery continuity on iOS and macOS after provider route updates.",
+  "de": "Diese Beta enthalt alle Apple-seitigen Anderungen seit v1.2.0-beta.8.\nNach einer Aktualisierung des Provider-Tokens wird die Ingress-Synchronisierung jetzt sofort ausgelost, um verzogerte Pulls zu reduzieren.\nDie Zustellkontinuitat auf iOS und macOS nach Aktualisierungen der Provider-Routen wurde verbessert.",
+  "es": "Esta beta incluye todos los cambios del lado de Apple acumulados desde v1.2.0-beta.8.\nLa actualizacion del token del proveedor ahora activa la sincronizacion de ingreso de inmediato para reducir extracciones retrasadas.\nSe mejoro la continuidad de entrega en iOS y macOS despues de actualizar las rutas del proveedor.",
+  "fr": "Cette beta inclut toutes les modifications cote Apple accumulees depuis v1.2.0-beta.8.\nL'actualisation du jeton fournisseur declenche desormais immediatement la synchronisation d'ingestion afin de reduire les recuperations retardees.\nLa continuite de livraison sur iOS et macOS apres les mises a jour des routes fournisseur a ete amelioree.",
+  "ja": "このベータには、v1.2.0-beta.8 以降に蓄積した Apple 側の変更をすべて含みます。\nプロバイダートークン更新時に、遅延した取得を減らすため ingress 同期を即時実行するようになりました。\nプロバイダールート更新後の iOS と macOS で、配信の継続性を改善しました。",
+  "ko": "이번 베타에는 v1.2.0-beta.8 이후 누적된 Apple 측 변경사항이 모두 포함됩니다.\n제공자 토큰이 갱신되면 지연된 가져오기를 줄이기 위해 인그레스 동기화를 즉시 실행합니다.\n제공자 라우트 업데이트 후 iOS와 macOS에서 전달 연속성이 개선되었습니다.",
+  "zh-CN": "此测试版包含自 v1.2.0-beta.8 以来 Apple 侧的全部累积改动。\nProvider token 刷新后会立即触发 ingress 同步，减少拉取延迟。\niOS 与 macOS 在 provider 路由更新后的消息投递连续性已提升。",
+  "zh-TW": "此測試版包含自 v1.2.0-beta.8 以來 Apple 側的全部累積改動。\nProvider token 重新整理後會立即觸發 ingress 同步，減少拉取延遲。\niOS 與 macOS 在 provider 路由更新後的訊息投遞連續性已提升。"
+}
