@@ -56,6 +56,19 @@ platform :ios do
     parts.join(" ")
   end
 
+  def unsigned_archive_xcargs
+    parts = []
+    display_version = resolved_display_version
+    unless display_version.empty?
+      parts << "PUSHGO_DISPLAY_VERSION=#{Shellwords.escape(display_version)}"
+    end
+    parts << "CODE_SIGNING_ALLOWED=NO"
+    parts << "CODE_SIGNING_REQUIRED=NO"
+    parts << "CODE_SIGN_IDENTITY=''"
+    parts << "DEVELOPMENT_TEAM=''"
+    parts.join(" ")
+  end
+
   def export_archive_xcargs
     parts = []
     keychain_path = release_signing_keychain_path!
@@ -652,7 +665,7 @@ platform :ios do
     export_options_path = File.join(output_directory, "#{output_name}-ExportOptions.plist")
     ipa_path = File.join(output_directory, "#{output_name}.ipa")
     apple_distribution = apple_distribution_identity!
-    archive_xcargs = local_signing_xcargs
+    archive_xcargs = unsigned_archive_xcargs
     export_xcargs = export_archive_xcargs
 
     FileUtils.mkdir_p(output_directory)
@@ -707,7 +720,7 @@ platform :ios do
     pkg_path = File.join(output_directory, "#{pkg_name}.pkg")
     apple_distribution = apple_distribution_identity!
     installer_distribution = mac_installer_distribution_identity!
-    archive_xcargs = local_signing_xcargs
+    archive_xcargs = unsigned_archive_xcargs
     export_xcargs = export_archive_xcargs
 
     FileUtils.mkdir_p(output_directory)
