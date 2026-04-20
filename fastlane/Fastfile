@@ -226,6 +226,13 @@ platform :ios do
     }
   end
 
+  def developer_id_provisioning_profiles
+    {
+      "io.ethan.pushgo" => env_value!("DEVELOPER_ID_PROFILE_MACOS_APP_UUID"),
+      "io.ethan.pushgo.NotificationServiceExtension" => env_value!("DEVELOPER_ID_PROFILE_MACOS_NSE_UUID")
+    }
+  end
+
   def developer_id_signing_targets
     {
       "io.ethan.pushgo" => ENV.fetch("APP_MACOS_DMG_SCHEME", ENV.fetch("APP_MACOS_SCHEME", "PushGo-macOS-DMG")),
@@ -265,7 +272,7 @@ platform :ios do
   def extracted_entitlements_by_bundle_id(root_bundle_path)
     entitlements_by_bundle_id = {}
 
-    ([root_bundle_path] + nested_code_bundles(root_bundle_path)).each do |bundle_path|
+    ([root_bundle_path] + all_nested_code_bundles(root_bundle_path)).each do |bundle_path|
       bundle_id = bundle_identifier_for(bundle_path)
       next if bundle_id.to_s.empty?
 
@@ -276,6 +283,20 @@ platform :ios do
     end
 
     entitlements_by_bundle_id
+  end
+
+  def all_nested_code_bundles(path)
+    bundles = []
+
+    Find.find(path) do |candidate|
+      next if candidate == path
+      next unless File.directory?(candidate)
+      next unless %w[.app .appex .framework .xpc].include?(File.extname(candidate))
+
+      bundles << candidate
+    end
+
+    bundles.sort_by { |bundle_path| bundle_path.count(File::SEPARATOR) }.reverse
   end
 
   def normalized_entitlements_hash(entitlements)
@@ -499,6 +520,24 @@ platform :ios do
     entitlements_path
   end
 
+  def installed_provisioning_profile_path(uuid)
+    profiles_dir = File.join(Dir.home, "Library", "MobileDevice", "Provisioning Profiles")
+    matches = Dir.glob(File.join(profiles_dir, "#{uuid}.*"))
+    UI.user_error!("Provisioning profile #{uuid} is not installed under #{profiles_dir}") if matches.empty?
+    matches.first
+  end
+
+  def embed_provisioning_profile!(bundle_path, profile_path)
+    destination =
+      if File.directory?(File.join(bundle_path, "Contents"))
+        File.join(bundle_path, "Contents", "embedded.provisionprofile")
+      else
+        File.join(bundle_path, "embedded.mobileprovision")
+      end
+    FileUtils.cp(profile_path, destination)
+    destination
+  end
+
   def nested_code_bundles(path)
     bundles = []
 
@@ -606,6 +645,12 @@ platform :ios do
     end
 
     bundle_id = bundle_identifier_for(bundle_path)
+    unless bundle_id.nil?
+      profile_uuid = developer_id_provisioning_profiles[bundle_id] rescue nil
+      unless profile_uuid.to_s.empty?
+        embed_provisioning_profile!(bundle_path, installed_provisioning_profile_path(profile_uuid))
+      end
+    end
     entitlements_path =
       if bundle_id.nil?
         nil
@@ -846,6 +891,7 @@ platform :ios do
 
       FileUtils.mkdir_p(staging_dir)
       sh("cp -R #{Shellwords.escape(app_path)} #{Shellwords.escape(staging_dir)}")
+      FileUtils.ln_s("/Applications", File.join(staging_dir, "Applications"), force: true)
       sh(
         "hdiutil create " \
         "-volname #{Shellwords.escape(dmg_name)} " \

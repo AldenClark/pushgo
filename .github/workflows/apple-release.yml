@@ -249,7 +249,7 @@ jobs:
 
       - name: Download iOS App Store profile
         id: profile_ios_app
-        uses: Apple-Actions/download-provisioning-profiles@v4
+        uses: Apple-Actions/download-provisioning-profiles@v5
         with:
           bundle-id: io.ethan.pushgo
           profile-type: IOS_APP_STORE
@@ -259,7 +259,7 @@ jobs:
 
       - name: Download iOS NSE App Store profile
         id: profile_ios_nse
-        uses: Apple-Actions/download-provisioning-profiles@v4
+        uses: Apple-Actions/download-provisioning-profiles@v5
         with:
           bundle-id: io.ethan.pushgo.NotificationServiceExtension
           profile-type: IOS_APP_STORE
@@ -269,7 +269,7 @@ jobs:
 
       - name: Download watch App Store profile
         id: profile_watch_app
-        uses: Apple-Actions/download-provisioning-profiles@v4
+        uses: Apple-Actions/download-provisioning-profiles@v5
         with:
           bundle-id: io.ethan.pushgo.watchkitapp
           profile-type: IOS_APP_STORE
@@ -279,7 +279,7 @@ jobs:
 
       - name: Download watch NSE App Store profile
         id: profile_watch_nse
-        uses: Apple-Actions/download-provisioning-profiles@v4
+        uses: Apple-Actions/download-provisioning-profiles@v5
         with:
           bundle-id: io.ethan.pushgo.watchkitapp.NotificationServiceExtension
           profile-type: IOS_APP_STORE
@@ -289,7 +289,7 @@ jobs:
 
       - name: Download macOS App Store profile
         id: profile_macos_app
-        uses: Apple-Actions/download-provisioning-profiles@v4
+        uses: Apple-Actions/download-provisioning-profiles@v5
         with:
           bundle-id: io.ethan.pushgo
           profile-type: MAC_APP_STORE
@@ -299,7 +299,7 @@ jobs:
 
       - name: Download macOS NSE App Store profile
         id: profile_macos_nse
-        uses: Apple-Actions/download-provisioning-profiles@v4
+        uses: Apple-Actions/download-provisioning-profiles@v5
         with:
           bundle-id: io.ethan.pushgo.NotificationServiceExtension
           profile-type: MAC_APP_STORE
@@ -496,6 +496,75 @@ jobs:
           DEVELOPER_ID_APPLICATION_P12_BASE64: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_BASE64 }}
           DEVELOPER_ID_APPLICATION_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_PASSWORD }}
 
+      - name: Normalize App Store Connect private key for Apple Actions
+        id: normalize_asc_key
+        shell: bash
+        run: |
+          set -euo pipefail
+          decoded_key="${ASC_KEY_P8}"
+          if [[ "${ASC_KEY_IS_BASE64}" == "true" ]]; then
+            decoded_key="$(printf "%s" "${ASC_KEY_P8}" | base64 --decode)"
+          fi
+          {
+            echo "api_private_key<<__PUSHGO_ASC_KEY_EOF__"
+            printf "%s\n" "${decoded_key}"
+            echo "__PUSHGO_ASC_KEY_EOF__"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Download macOS direct-distribution profile
+        id: profile_direct_macos_app
+        uses: Apple-Actions/download-provisioning-profiles@v5
+        with:
+          bundle-id: io.ethan.pushgo
+          profile-type: MAC_APP_DIRECT
+          issuer-id: ${{ secrets.ASC_ISSUER_ID }}
+          api-key-id: ${{ secrets.ASC_KEY_ID }}
+          api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
+
+      - name: Download macOS direct-distribution NSE profile
+        id: profile_direct_macos_nse
+        uses: Apple-Actions/download-provisioning-profiles@v5
+        with:
+          bundle-id: io.ethan.pushgo.NotificationServiceExtension
+          profile-type: MAC_APP_DIRECT
+          issuer-id: ${{ secrets.ASC_ISSUER_ID }}
+          api-key-id: ${{ secrets.ASC_KEY_ID }}
+          api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
+
+      - name: Resolve direct-distribution provisioning profiles
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          export_profile_metadata() {
+            local json="$1"
+            local uuid_env="$2"
+            local name_env="$3"
+            local label="$4"
+            local count uuid name
+
+            count="$(jq 'length' <<<"$json")"
+            if [[ "$count" != "1" ]]; then
+              echo "Expected exactly one ${label} direct-distribution provisioning profile, found ${count}. Raw output: ${json}" >&2
+              exit 1
+            fi
+
+            uuid="$(jq -r '.[0].udid' <<<"$json")"
+            name="$(jq -r '.[0].name' <<<"$json")"
+            if [[ -z "$uuid" || "$uuid" == "null" || -z "$name" || "$name" == "null" ]]; then
+              echo "Downloaded ${label} direct-distribution provisioning profile metadata is incomplete: ${json}" >&2
+              exit 1
+            fi
+
+            {
+              echo "${uuid_env}=${uuid}"
+              echo "${name_env}=${name}"
+            } >> "$GITHUB_ENV"
+          }
+
+          export_profile_metadata '${{ steps.profile_direct_macos_app.outputs.profiles }}' 'DEVELOPER_ID_PROFILE_MACOS_APP_UUID' 'DEVELOPER_ID_PROFILE_MACOS_APP_NAME' 'macOS app'
+          export_profile_metadata '${{ steps.profile_direct_macos_nse.outputs.profiles }}' 'DEVELOPER_ID_PROFILE_MACOS_NSE_UUID' 'DEVELOPER_ID_PROFILE_MACOS_NSE_NAME' 'macOS NSE'
+
       - name: Resolve Swift packages
         shell: bash
         run: |
@@ -535,13 +604,14 @@ jobs:
             exit 1
           fi
 
-          release_title="${GITHUB_REF_NAME}"
+          release_title="PushGo macOS ${GITHUB_REF_NAME}"
           release_notes_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_SHA}/release/RELEASE_NOTES.md"
-          release_body="# ${release_title}"$'\n\n'"Source: [release/RELEASE_NOTES.md](${release_notes_url}) [$section]"$'\n\n'"$section_body"
+          release_body="Source: [release/RELEASE_NOTES.md](${release_notes_url}) [$section]"$'\n\n'"$section_body"
 
           echo "RELEASE_CHANGELOG_BODY<<__PUSHGO_RELEASE_BODY_EOF__" >> "$GITHUB_ENV"
           printf "%s\n" "$release_body" >> "$GITHUB_ENV"
           echo "__PUSHGO_RELEASE_BODY_EOF__" >> "$GITHUB_ENV"
+          echo "RELEASE_TITLE=${release_title}" >> "$GITHUB_ENV"
 
       - name: Validate Sparkle/update host configuration
         shell: bash
@@ -784,7 +854,7 @@ jobs:
           release_payload="$(jq -cn \
             --arg tag_name "${GITHUB_REF_NAME}" \
             --arg target_commitish "${GITHUB_SHA}" \
-            --arg name "${GITHUB_REF_NAME}" \
+            --arg name "${RELEASE_TITLE}" \
             --arg body "${RELEASE_CHANGELOG_BODY}" \
             --argjson prerelease "${prerelease}" \
             '{
