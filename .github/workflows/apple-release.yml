@@ -6,16 +6,13 @@ on:
       - "v*"
 
 jobs:
-  release:
+  app_store_release:
     runs-on: macos-26
     timeout-minutes: 120
-    permissions:
-      contents: write
     env:
       APP_PROJECT: pushgo.xcodeproj
       APP_SCHEME: PushGo-iOS
       APP_MACOS_SCHEME: PushGo-macOS
-      APP_MACOS_DMG_SCHEME: PushGo-macOS-DMG
       APP_BUNDLE_ID: io.ethan.pushgo
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
@@ -27,8 +24,360 @@ jobs:
       APP_STORE_AUTOMATIC_RELEASE: ${{ vars.APP_STORE_AUTOMATIC_RELEASE || 'false' }}
       APPLE_DISTRIBUTION_IDENTITY: ${{ vars.APPLE_DISTRIBUTION_IDENTITY || '' }}
       MAC_INSTALLER_DISTRIBUTION_IDENTITY: ${{ vars.MAC_INSTALLER_DISTRIBUTION_IDENTITY || '' }}
-      DEVELOPER_ID_APPLICATION_P12_BASE64: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_BASE64 }}
-      DEVELOPER_ID_APPLICATION_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_PASSWORD }}
+      FASTLANE_DISABLE_COLORS: "1"
+      FASTLANE_SKIP_UPDATE_CHECK: "1"
+      NETWORK_MAX_ATTEMPTS: ${{ vars.NETWORK_MAX_ATTEMPTS || '3' }}
+      NETWORK_RETRY_BASE_SECONDS: ${{ vars.NETWORK_RETRY_BASE_SECONDS || '20' }}
+      ASC_UPLOAD_MAX_ATTEMPTS: ${{ vars.ASC_UPLOAD_MAX_ATTEMPTS || '3' }}
+      ASC_UPLOAD_RETRY_BASE_SECONDS: ${{ vars.ASC_UPLOAD_RETRY_BASE_SECONDS || '20' }}
+      LC_ALL: en_US.UTF-8
+      LANG: en_US.UTF-8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "26.4"
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: false
+
+      - name: Setup Bundler
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash ./scripts/retry_command.sh --always -- \
+            gem install bundler -v 2.5.23 --no-document
+          bundle _2.5.23_ config set path vendor/bundle
+          bash ./scripts/retry_command.sh --always -- \
+            bundle _2.5.23_ install --jobs 4 --retry 3
+
+      - name: Resolve SemVer release context
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag_name="${GITHUB_REF_NAME:-}"
+          release_kind=""
+          semver_version=""
+          semver_full_version=""
+
+          if [[ "$tag_name" =~ ^v(([0-9]+\.[0-9]+\.[0-9]+)-beta\.[0-9]+)$ ]]; then
+            release_kind="beta"
+            semver_full_version="${BASH_REMATCH[1]}"
+            semver_version="${BASH_REMATCH[2]}"
+          elif [[ "$tag_name" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            release_kind="release"
+            semver_full_version="${BASH_REMATCH[1]}"
+            semver_version="${BASH_REMATCH[1]}"
+          else
+            echo "Unsupported tag format: $tag_name"
+            echo "Allowed formats: vX.Y.Z or vX.Y.Z-beta.N"
+            exit 1
+          fi
+
+          {
+            echo "release_kind=$release_kind"
+            echo "semver_version=$semver_version"
+            echo "semver_full_version=$semver_full_version"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "RELEASE_KIND=$release_kind"
+            echo "SEMVER_VERSION=$semver_version"
+            echo "SEMVER_FULL_VERSION=$semver_full_version"
+            echo "PUSHGO_DISPLAY_VERSION=v$semver_full_version"
+          } >> "$GITHUB_ENV"
+
+      - name: Validate App Store signing assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          [[ -z "${APPLE_TEAM_ID:-}" ]] && missing+=("APPLE_TEAM_ID")
+          [[ -z "${ASC_KEY_ID:-}" ]] && missing+=("ASC_KEY_ID")
+          [[ -z "${ASC_ISSUER_ID:-}" ]] && missing+=("ASC_ISSUER_ID")
+          [[ -z "${ASC_KEY_P8:-}" ]] && missing+=("ASC_KEY_P8")
+          [[ -z "${APPLE_DISTRIBUTION_P12_BASE64:-}" ]] && missing+=("APPLE_DISTRIBUTION_P12_BASE64")
+          [[ -z "${APPLE_DISTRIBUTION_P12_PASSWORD:-}" ]] && missing+=("APPLE_DISTRIBUTION_P12_PASSWORD")
+          [[ -z "${MAC_INSTALLER_DISTRIBUTION_P12_BASE64:-}" ]] && missing+=("MAC_INSTALLER_DISTRIBUTION_P12_BASE64")
+          [[ -z "${MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD:-}" ]] && missing+=("MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD")
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing required secrets: %s\n' "${missing[*]}"
+            exit 1
+          fi
+        env:
+          APPLE_DISTRIBUTION_P12_BASE64: ${{ secrets.APPLE_DISTRIBUTION_P12_BASE64 }}
+          APPLE_DISTRIBUTION_P12_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_P12_PASSWORD }}
+          MAC_INSTALLER_DISTRIBUTION_P12_BASE64: ${{ secrets.MAC_INSTALLER_DISTRIBUTION_P12_BASE64 }}
+          MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD: ${{ secrets.MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD }}
+
+      - name: Resolve Swift packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash ./scripts/retry_command.sh --always -- swift package resolve
+
+      - name: Extract release notes from release/RELEASE_NOTES
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_notes_file="release/RELEASE_NOTES.md"
+          if [[ ! -f "$release_notes_file" ]]; then
+            echo "Missing $release_notes_file"
+            exit 1
+          fi
+
+          if [[ "${RELEASE_KIND}" == "beta" ]]; then
+            section="Unreleased"
+          else
+            section="v${SEMVER_VERSION}"
+          fi
+
+          section_body="$(awk -v sec="$section" '
+            BEGIN { in_section = 0 }
+            /^## \[/ {
+              if (in_section == 1) exit
+              if ($0 ~ "^## \\[" sec "\\]([[:space:]]|$|[[:space:]]-)") {
+                in_section = 1
+                next
+              }
+            }
+            in_section == 1 { print }
+          ' "$release_notes_file" | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' )"
+
+          if [[ -z "$section_body" ]]; then
+            echo "RELEASE_NOTES section not found or empty: [$section]"
+            exit 1
+          fi
+
+          asc_notes="$section_body"
+          if (( ${#asc_notes} > 3800 )); then
+            asc_notes="${asc_notes:0:3800}"$'\n'"... (truncated for App Store/TestFlight limit; full notes are in GitHub Release body)"
+          fi
+
+          {
+            echo "TESTFLIGHT_CHANGELOG<<__PUSHGO_CHANGELOG_EOF__"
+            printf "%s\n" "$asc_notes"
+            echo "__PUSHGO_CHANGELOG_EOF__"
+            echo "APP_STORE_RELEASE_NOTES<<__PUSHGO_RELEASE_NOTES_EOF__"
+            printf "%s\n" "$asc_notes"
+            echo "__PUSHGO_RELEASE_NOTES_EOF__"
+          } >> "$GITHUB_ENV"
+
+      - name: Import App Store signing certificates into temporary keychain
+        shell: bash
+        run: |
+          set -euo pipefail
+          keychain_path="$RUNNER_TEMP/pushgo-app-store-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+          apple_distribution_p12="$RUNNER_TEMP/pushgo-apple-distribution.p12"
+          mac_installer_p12="$RUNNER_TEMP/pushgo-mac-installer-distribution.p12"
+
+          printf "%s" "$APPLE_DISTRIBUTION_P12_BASE64" | base64 --decode > "$apple_distribution_p12"
+          printf "%s" "$MAC_INSTALLER_DISTRIBUTION_P12_BASE64" | base64 --decode > "$mac_installer_p12"
+
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+
+          import_p12() {
+            local p12_path="$1"
+            local p12_password="$2"
+            security import "$p12_path" \
+              -k "$keychain_path" \
+              -P "$p12_password" \
+              -T /usr/bin/codesign \
+              -T /usr/bin/productbuild \
+              -T /usr/bin/security \
+              -T /usr/bin/xcrun
+          }
+
+          import_p12 "$apple_distribution_p12" "$APPLE_DISTRIBUTION_P12_PASSWORD"
+          import_p12 "$mac_installer_p12" "$MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD"
+
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain_path" >/dev/null
+          security list-keychains -d user -s "$keychain_path"
+          security default-keychain -d user -s "$keychain_path"
+
+          codesigning_identity_output="$(security find-identity -v -p codesigning "$keychain_path")"
+          basic_identity_output="$(security find-identity -v -p basic "$keychain_path")"
+          printf '%s\n' "$codesigning_identity_output"
+          printf '%s\n' "$basic_identity_output"
+
+          if ! grep -q "Apple Distribution" <<<"$codesigning_identity_output"; then
+            echo "Imported certificates do not expose an Apple Distribution signing identity."
+            exit 1
+          fi
+          if ! grep -Eq "Mac Installer Distribution|3rd Party Mac Developer Installer" <<<"$basic_identity_output"; then
+            echo "Imported certificates do not expose a Mac Installer Distribution signing identity."
+            exit 1
+          fi
+
+          {
+            echo "RELEASE_SIGNING_KEYCHAIN_PATH=$keychain_path"
+            echo "RELEASE_SIGNING_KEYCHAIN_PASSWORD=$keychain_password"
+          } >> "$GITHUB_ENV"
+        env:
+          APPLE_DISTRIBUTION_P12_BASE64: ${{ secrets.APPLE_DISTRIBUTION_P12_BASE64 }}
+          APPLE_DISTRIBUTION_P12_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_P12_PASSWORD }}
+          MAC_INSTALLER_DISTRIBUTION_P12_BASE64: ${{ secrets.MAC_INSTALLER_DISTRIBUTION_P12_BASE64 }}
+          MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD: ${{ secrets.MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD }}
+
+      - name: Normalize App Store Connect private key for Apple Actions
+        id: normalize_asc_key
+        shell: bash
+        run: |
+          set -euo pipefail
+          decoded_key="${ASC_KEY_P8}"
+          if [[ "${ASC_KEY_IS_BASE64}" == "true" ]]; then
+            decoded_key="$(printf "%s" "${ASC_KEY_P8}" | base64 --decode)"
+          fi
+          {
+            echo "api_private_key<<__PUSHGO_ASC_KEY_EOF__"
+            printf "%s\n" "${decoded_key}"
+            echo "__PUSHGO_ASC_KEY_EOF__"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Download iOS App Store profile
+        id: profile_ios_app
+        uses: Apple-Actions/download-provisioning-profiles@v4
+        with:
+          bundle-id: io.ethan.pushgo
+          profile-type: IOS_APP_STORE
+          issuer-id: ${{ secrets.ASC_ISSUER_ID }}
+          api-key-id: ${{ secrets.ASC_KEY_ID }}
+          api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
+
+      - name: Download iOS NSE App Store profile
+        id: profile_ios_nse
+        uses: Apple-Actions/download-provisioning-profiles@v4
+        with:
+          bundle-id: io.ethan.pushgo.NotificationServiceExtension
+          profile-type: IOS_APP_STORE
+          issuer-id: ${{ secrets.ASC_ISSUER_ID }}
+          api-key-id: ${{ secrets.ASC_KEY_ID }}
+          api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
+
+      - name: Download watch App Store profile
+        id: profile_watch_app
+        uses: Apple-Actions/download-provisioning-profiles@v4
+        with:
+          bundle-id: io.ethan.pushgo.watchkitapp
+          profile-type: IOS_APP_STORE
+          issuer-id: ${{ secrets.ASC_ISSUER_ID }}
+          api-key-id: ${{ secrets.ASC_KEY_ID }}
+          api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
+
+      - name: Download watch NSE App Store profile
+        id: profile_watch_nse
+        uses: Apple-Actions/download-provisioning-profiles@v4
+        with:
+          bundle-id: io.ethan.pushgo.watchkitapp.NotificationServiceExtension
+          profile-type: IOS_APP_STORE
+          issuer-id: ${{ secrets.ASC_ISSUER_ID }}
+          api-key-id: ${{ secrets.ASC_KEY_ID }}
+          api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
+
+      - name: Download macOS App Store profile
+        id: profile_macos_app
+        uses: Apple-Actions/download-provisioning-profiles@v4
+        with:
+          bundle-id: io.ethan.pushgo
+          profile-type: MAC_APP_STORE
+          issuer-id: ${{ secrets.ASC_ISSUER_ID }}
+          api-key-id: ${{ secrets.ASC_KEY_ID }}
+          api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
+
+      - name: Download macOS NSE App Store profile
+        id: profile_macos_nse
+        uses: Apple-Actions/download-provisioning-profiles@v4
+        with:
+          bundle-id: io.ethan.pushgo.NotificationServiceExtension
+          profile-type: MAC_APP_STORE
+          issuer-id: ${{ secrets.ASC_ISSUER_ID }}
+          api-key-id: ${{ secrets.ASC_KEY_ID }}
+          api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
+
+      - name: Resolve downloaded provisioning profiles
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          export_profile_metadata() {
+            local json="$1"
+            local expected_name="$2"
+            local uuid_env="$3"
+            local name_env="$4"
+            local label="$5"
+            local count uuid name filtered
+
+            filtered="$(jq -c --arg name "$expected_name" '[.[] | select(.name == $name)]' <<<"$json")"
+            count="$(jq 'length' <<<"$filtered")"
+            if [[ "$count" != "1" ]]; then
+              echo "Expected exactly one ${label} provisioning profile named '${expected_name}', found ${count}. Raw output: ${json}" >&2
+              exit 1
+            fi
+
+            uuid="$(jq -r '.[0].udid' <<<"$filtered")"
+            name="$(jq -r '.[0].name' <<<"$filtered")"
+
+            if [[ -z "$uuid" || "$uuid" == "null" || -z "$name" || "$name" == "null" ]]; then
+              echo "Downloaded ${label} provisioning profile metadata is incomplete: ${filtered}" >&2
+              exit 1
+            fi
+
+            {
+              echo "${uuid_env}=${uuid}"
+              echo "${name_env}=${name}"
+            } >> "$GITHUB_ENV"
+          }
+
+          export_profile_metadata '${{ steps.profile_ios_app.outputs.profiles }}' 'PushGo' 'APP_STORE_PROFILE_IOS_APP_UUID' 'APP_STORE_PROFILE_IOS_APP_NAME' 'iOS app'
+          export_profile_metadata '${{ steps.profile_ios_nse.outputs.profiles }}' 'PushGo NSE' 'APP_STORE_PROFILE_IOS_NSE_UUID' 'APP_STORE_PROFILE_IOS_NSE_NAME' 'iOS NSE'
+          export_profile_metadata '${{ steps.profile_watch_app.outputs.profiles }}' 'PushGo watch' 'APP_STORE_PROFILE_WATCH_APP_UUID' 'APP_STORE_PROFILE_WATCH_APP_NAME' 'watch app'
+          export_profile_metadata '${{ steps.profile_watch_nse.outputs.profiles }}' 'PushGo watch NSE' 'APP_STORE_PROFILE_WATCH_NSE_UUID' 'APP_STORE_PROFILE_WATCH_NSE_NAME' 'watch NSE'
+          export_profile_metadata '${{ steps.profile_macos_app.outputs.profiles }}' 'PushGo mac' 'APP_STORE_PROFILE_MACOS_APP_UUID' 'APP_STORE_PROFILE_MACOS_APP_NAME' 'macOS app'
+          export_profile_metadata '${{ steps.profile_macos_nse.outputs.profiles }}' 'PushGo mac NSE' 'APP_STORE_PROFILE_MACOS_NSE_UUID' 'APP_STORE_PROFILE_MACOS_NSE_NAME' 'macOS NSE'
+
+      - name: Run fastlane beta upload
+        if: steps.resolve.outputs.release_kind == 'beta'
+        run: bundle _2.5.23_ exec fastlane ios beta_upload
+
+      - name: Run fastlane release upload
+        if: steps.resolve.outputs.release_kind == 'release'
+        run: bundle _2.5.23_ exec fastlane ios release_upload
+
+      - name: Upload App Store diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pushgo-app-store-diagnostics-${{ github.run_id }}
+          path: artifacts/release/**
+          if-no-files-found: warn
+
+  dmg_release:
+    runs-on: macos-26
+    timeout-minutes: 120
+    permissions:
+      contents: write
+    env:
+      APP_PROJECT: pushgo.xcodeproj
+      APP_MACOS_SCHEME: PushGo-macOS
+      APP_MACOS_DMG_SCHEME: PushGo-macOS-DMG
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      ASC_KEY_IS_BASE64: ${{ vars.ASC_KEY_IS_BASE64 || 'false' }}
       DEVELOPER_ID_APPLICATION_IDENTITY: ${{ vars.DEVELOPER_ID_APPLICATION_IDENTITY || '' }}
       PUSHGO_SPARKLE_FEED_URL: ${{ vars.PUSHGO_SPARKLE_FEED_URL || 'https://update.pushgo.cn/macos/appcast.xml' }}
       PUSHGO_SPARKLE_BASE_URL: ${{ vars.PUSHGO_SPARKLE_BASE_URL != '' && vars.PUSHGO_SPARKLE_BASE_URL || secrets.PUSHGO_SPARKLE_BASE_URL }}
@@ -128,44 +477,24 @@ jobs:
           fi
           echo "ASC_KEY_PATH=$ASC_KEY_PATH" >> "$GITHUB_ENV"
 
-      - name: Validate local signing assets
+      - name: Validate DMG signing and deploy assets
         shell: bash
         run: |
           set -euo pipefail
           missing=()
-          [[ -z "${APPLE_TEAM_ID:-}" ]] && missing+=("APPLE_TEAM_ID")
           [[ -z "${ASC_KEY_ID:-}" ]] && missing+=("ASC_KEY_ID")
           [[ -z "${ASC_ISSUER_ID:-}" ]] && missing+=("ASC_ISSUER_ID")
           [[ -z "${ASC_KEY_P8:-}" ]] && missing+=("ASC_KEY_P8")
-          [[ -z "${APPLE_DISTRIBUTION_P12_BASE64:-}" ]] && missing+=("APPLE_DISTRIBUTION_P12_BASE64")
-          [[ -z "${APPLE_DISTRIBUTION_P12_PASSWORD:-}" ]] && missing+=("APPLE_DISTRIBUTION_P12_PASSWORD")
-          [[ -z "${MAC_INSTALLER_DISTRIBUTION_P12_BASE64:-}" ]] && missing+=("MAC_INSTALLER_DISTRIBUTION_P12_BASE64")
-          [[ -z "${MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD:-}" ]] && missing+=("MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD")
           [[ -z "${DEVELOPER_ID_APPLICATION_P12_BASE64:-}" ]] && missing+=("DEVELOPER_ID_APPLICATION_P12_BASE64")
           [[ -z "${DEVELOPER_ID_APPLICATION_P12_PASSWORD:-}" ]] && missing+=("DEVELOPER_ID_APPLICATION_P12_PASSWORD")
-          [[ -z "${APP_STORE_PROFILE_IOS_APP_B64:-}" ]] && missing+=("APP_STORE_PROFILE_IOS_APP_B64")
-          [[ -z "${APP_STORE_PROFILE_IOS_NSE_B64:-}" ]] && missing+=("APP_STORE_PROFILE_IOS_NSE_B64")
-          [[ -z "${APP_STORE_PROFILE_WATCH_APP_B64:-}" ]] && missing+=("APP_STORE_PROFILE_WATCH_APP_B64")
-          [[ -z "${APP_STORE_PROFILE_WATCH_NSE_B64:-}" ]] && missing+=("APP_STORE_PROFILE_WATCH_NSE_B64")
-          [[ -z "${APP_STORE_PROFILE_MACOS_APP_B64:-}" ]] && missing+=("APP_STORE_PROFILE_MACOS_APP_B64")
-          [[ -z "${APP_STORE_PROFILE_MACOS_NSE_B64:-}" ]] && missing+=("APP_STORE_PROFILE_MACOS_NSE_B64")
+          [[ -z "${PUSHGO_SPARKLE_BASE_URL:-}" ]] && missing+=("PUSHGO_SPARKLE_BASE_URL")
           if (( ${#missing[@]} > 0 )); then
-            printf 'Missing required secrets: %s\n' "${missing[*]}"
+            printf 'Missing required secrets/vars: %s\n' "${missing[*]}"
             exit 1
           fi
         env:
-          APPLE_DISTRIBUTION_P12_BASE64: ${{ secrets.APPLE_DISTRIBUTION_P12_BASE64 }}
-          APPLE_DISTRIBUTION_P12_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_P12_PASSWORD }}
-          MAC_INSTALLER_DISTRIBUTION_P12_BASE64: ${{ secrets.MAC_INSTALLER_DISTRIBUTION_P12_BASE64 }}
-          MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD: ${{ secrets.MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD }}
           DEVELOPER_ID_APPLICATION_P12_BASE64: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_BASE64 }}
           DEVELOPER_ID_APPLICATION_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_PASSWORD }}
-          APP_STORE_PROFILE_IOS_APP_B64: ${{ secrets.APP_STORE_PROFILE_IOS_APP_B64 }}
-          APP_STORE_PROFILE_IOS_NSE_B64: ${{ secrets.APP_STORE_PROFILE_IOS_NSE_B64 }}
-          APP_STORE_PROFILE_WATCH_APP_B64: ${{ secrets.APP_STORE_PROFILE_WATCH_APP_B64 }}
-          APP_STORE_PROFILE_WATCH_NSE_B64: ${{ secrets.APP_STORE_PROFILE_WATCH_NSE_B64 }}
-          APP_STORE_PROFILE_MACOS_APP_B64: ${{ secrets.APP_STORE_PROFILE_MACOS_APP_B64 }}
-          APP_STORE_PROFILE_MACOS_NSE_B64: ${{ secrets.APP_STORE_PROFILE_MACOS_NSE_B64 }}
 
       - name: Resolve Swift packages
         shell: bash
@@ -206,27 +535,13 @@ jobs:
             exit 1
           fi
 
-          asc_notes="$section_body"
-          if (( ${#asc_notes} > 3800 )); then
-            asc_notes="${asc_notes:0:3800}"$'\n'"... (truncated for App Store/TestFlight limit; full notes are in GitHub Release body)"
-          fi
-
           release_title="${GITHUB_REF_NAME}"
-
           release_notes_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_SHA}/release/RELEASE_NOTES.md"
           release_body="# ${release_title}"$'\n\n'"Source: [release/RELEASE_NOTES.md](${release_notes_url}) [$section]"$'\n\n'"$section_body"
 
-          {
-            echo "TESTFLIGHT_CHANGELOG<<__PUSHGO_CHANGELOG_EOF__"
-            printf "%s\n" "$asc_notes"
-            echo "__PUSHGO_CHANGELOG_EOF__"
-            echo "APP_STORE_RELEASE_NOTES<<__PUSHGO_RELEASE_NOTES_EOF__"
-            printf "%s\n" "$asc_notes"
-            echo "__PUSHGO_RELEASE_NOTES_EOF__"
-            echo "RELEASE_CHANGELOG_BODY<<__PUSHGO_RELEASE_BODY_EOF__"
-            printf "%s\n" "$release_body"
-            echo "__PUSHGO_RELEASE_BODY_EOF__"
-          } >> "$GITHUB_ENV"
+          echo "RELEASE_CHANGELOG_BODY<<__PUSHGO_RELEASE_BODY_EOF__" >> "$GITHUB_ENV"
+          printf "%s\n" "$release_body" >> "$GITHUB_ENV"
+          echo "__PUSHGO_RELEASE_BODY_EOF__" >> "$GITHUB_ENV"
 
       - name: Validate Sparkle/update host configuration
         shell: bash
@@ -252,8 +567,6 @@ jobs:
         run: |
           set -euo pipefail
           sparkle_xcconfig="$RUNNER_TEMP/pushgo-dmg-sparkle.xcconfig"
-          # In xcconfig files `//` starts a comment. Sparkle values can contain this sequence.
-          # Replace `//` with `/$()/` so Xcode expands it back to `//` at build time.
           feed_url_xcconfig="$(printf '%s' "$PUSHGO_SPARKLE_FEED_URL" | sed 's#//#/$()/#g')"
           {
             printf 'PUSHGO_SPARKLE_FEED_URL = %s\n' "$feed_url_xcconfig"
@@ -261,185 +574,47 @@ jobs:
           } > "$sparkle_xcconfig"
           echo "APP_MACOS_DMG_XCCONFIG=$sparkle_xcconfig" >> "$GITHUB_ENV"
 
-      - name: Import local signing certificates into temporary keychain
+      - name: Import Developer ID certificate into temporary keychain
         shell: bash
         run: |
           set -euo pipefail
-          keychain_path="$RUNNER_TEMP/pushgo-signing.keychain-db"
+          keychain_path="$RUNNER_TEMP/pushgo-developer-id.keychain-db"
           keychain_password="$(openssl rand -hex 24)"
-          apple_distribution_p12="$RUNNER_TEMP/pushgo-apple-distribution.p12"
-          mac_installer_p12="$RUNNER_TEMP/pushgo-mac-installer-distribution.p12"
           developer_id_p12="$RUNNER_TEMP/pushgo-developer-id.p12"
 
-          printf "%s" "$APPLE_DISTRIBUTION_P12_BASE64" | base64 --decode > "$apple_distribution_p12"
-          printf "%s" "$MAC_INSTALLER_DISTRIBUTION_P12_BASE64" | base64 --decode > "$mac_installer_p12"
           printf "%s" "$DEVELOPER_ID_APPLICATION_P12_BASE64" | base64 --decode > "$developer_id_p12"
 
           security create-keychain -p "$keychain_password" "$keychain_path"
           security set-keychain-settings -lut 21600 "$keychain_path"
           security unlock-keychain -p "$keychain_password" "$keychain_path"
-          import_p12() {
-            local p12_path="$1"
-            local p12_password="$2"
-            security import "$p12_path" \
-              -k "$keychain_path" \
-              -P "$p12_password" \
-              -T /usr/bin/codesign \
-              -T /usr/bin/productbuild \
-              -T /usr/bin/security \
-              -T /usr/bin/xcrun
-          }
-
-          import_p12 "$apple_distribution_p12" "$APPLE_DISTRIBUTION_P12_PASSWORD"
-          import_p12 "$mac_installer_p12" "$MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD"
-          import_p12 "$developer_id_p12" "$DEVELOPER_ID_APPLICATION_P12_PASSWORD"
+          security import "$developer_id_p12" \
+            -k "$keychain_path" \
+            -P "$DEVELOPER_ID_APPLICATION_P12_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/productbuild \
+            -T /usr/bin/security \
+            -T /usr/bin/xcrun
 
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain_path" >/dev/null
           security list-keychains -d user -s "$keychain_path"
           security default-keychain -d user -s "$keychain_path"
-          codesigning_identity_output="$(security find-identity -v -p codesigning "$keychain_path")"
-          basic_identity_output="$(security find-identity -v -p basic "$keychain_path")"
-          printf '%s\n' "$codesigning_identity_output"
-          printf '%s\n' "$basic_identity_output"
 
-          if ! grep -q "Apple Distribution" <<<"$codesigning_identity_output"; then
-            echo "Imported certificates do not expose an Apple Distribution signing identity."
-            exit 1
-          fi
-          if ! grep -Eq "Mac Installer Distribution|3rd Party Mac Developer Installer" <<<"$basic_identity_output"; then
-            echo "Imported certificates do not expose a Mac Installer Distribution signing identity."
-            exit 1
-          fi
+          codesigning_identity_output="$(security find-identity -v -p codesigning "$keychain_path")"
+          printf '%s\n' "$codesigning_identity_output"
           if ! grep -q "Developer ID Application" <<<"$codesigning_identity_output"; then
             echo "Imported certificates do not expose a Developer ID Application signing identity."
             exit 1
           fi
 
-          apple_distribution_sha="$(
-            awk '
-              match($0, /[0-9A-F]{40}/) && /Apple Distribution/ {
-                print substr($0, RSTART, RLENGTH)
-                exit
-              }
-            ' <<<"$codesigning_identity_output"
-          )"
-          if [[ -z "$apple_distribution_sha" ]]; then
-            echo "Unable to resolve the imported Apple Distribution certificate fingerprint." >&2
-            exit 1
-          fi
-
           {
-            echo "APPLE_DISTRIBUTION_SHA1=$apple_distribution_sha"
-            echo "RELEASE_SIGNING_KEYCHAIN_PATH=$keychain_path"
-            echo "RELEASE_SIGNING_KEYCHAIN_PASSWORD=$keychain_password"
             echo "DEVELOPER_ID_KEYCHAIN_PATH=$keychain_path"
             echo "DEVELOPER_ID_KEYCHAIN_PASSWORD=$keychain_password"
+            echo "RELEASE_SIGNING_KEYCHAIN_PATH=$keychain_path"
+            echo "RELEASE_SIGNING_KEYCHAIN_PASSWORD=$keychain_password"
           } >> "$GITHUB_ENV"
         env:
-          APPLE_DISTRIBUTION_P12_BASE64: ${{ secrets.APPLE_DISTRIBUTION_P12_BASE64 }}
-          APPLE_DISTRIBUTION_P12_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_P12_PASSWORD }}
-          MAC_INSTALLER_DISTRIBUTION_P12_BASE64: ${{ secrets.MAC_INSTALLER_DISTRIBUTION_P12_BASE64 }}
-          MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD: ${{ secrets.MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD }}
           DEVELOPER_ID_APPLICATION_P12_BASE64: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_BASE64 }}
           DEVELOPER_ID_APPLICATION_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_PASSWORD }}
-
-      - name: Install local provisioning profiles
-        shell: bash
-        run: |
-          set -euo pipefail
-          profiles_dir="$HOME/Library/MobileDevice/Provisioning Profiles"
-          mkdir -p "$profiles_dir"
-
-          install_profile() {
-            local secret_value="$1"
-            local expected_bundle_id="$2"
-            local env_var_name="$3"
-            local extension="$4"
-            local label="$5"
-            local raw_path decoded_path uuid profile_name application_identifier resolved_bundle_id team_identifier profile_analysis is_xcode_managed profile_cert_sha1s
-
-            raw_path="$(mktemp "$RUNNER_TEMP/pushgo-profile-${env_var_name}.XXXXXX")"
-            decoded_path="$(mktemp "$RUNNER_TEMP/pushgo-profile-${env_var_name}.XXXXXX.plist")"
-            printf "%s" "$secret_value" | base64 --decode > "$raw_path"
-            security cms -D -i "$raw_path" > "$decoded_path"
-
-            uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$decoded_path")"
-            profile_name="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$decoded_path")"
-            application_identifier="$(
-              /usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$decoded_path" 2>/dev/null || \
-              /usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.application-identifier' "$decoded_path" 2>/dev/null || \
-              true
-            )"
-            if [[ -z "$application_identifier" ]]; then
-              echo "Provisioning profile ${label} (${profile_name}) does not include an application identifier entitlement" >&2
-              exit 1
-            fi
-
-            team_identifier="$(
-              /usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.team-identifier' "$decoded_path" 2>/dev/null || \
-              /usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$decoded_path" 2>/dev/null || \
-              true
-            )"
-            if [[ -n "$team_identifier" && "$team_identifier" != "$APPLE_TEAM_ID" ]]; then
-              echo "Provisioning profile ${label} (${profile_name}) belongs to team ${team_identifier}, expected ${APPLE_TEAM_ID}" >&2
-              exit 1
-            fi
-
-            resolved_bundle_id="${application_identifier#${APPLE_TEAM_ID}.}"
-            if [[ "$resolved_bundle_id" != "$expected_bundle_id" ]]; then
-              echo "Provisioning profile ${label} (${profile_name}) targets ${resolved_bundle_id}, expected ${expected_bundle_id}" >&2
-              exit 1
-            fi
-
-            profile_analysis="$(
-              python3 -c 'import hashlib, plistlib, sys; profile = plistlib.load(open(sys.argv[1], "rb")); sha1s = [hashlib.sha1(cert).hexdigest().upper() for cert in profile.get("DeveloperCertificates", [])]; print("xcode_managed=" + ("true" if profile.get("IsXcodeManaged") else "false")); print("developer_certificate_sha1s=" + ",".join(sha1s))' "$decoded_path"
-            )"
-            is_xcode_managed="$(awk -F= '/^xcode_managed=/{print $2}' <<<"$profile_analysis")"
-            profile_cert_sha1s="$(awk -F= '/^developer_certificate_sha1s=/{print $2}' <<<"$profile_analysis")"
-
-            if [[ "$is_xcode_managed" == "true" ]]; then
-              echo "Provisioning profile ${label} (${profile_name}) is Xcode-managed. Manual export requires a manually managed App Store profile bound to the imported Apple Distribution certificate." >&2
-              exit 1
-            fi
-
-            if [[ -z "$profile_cert_sha1s" ]]; then
-              echo "Provisioning profile ${label} (${profile_name}) does not embed any developer certificates." >&2
-              exit 1
-            fi
-
-            if [[ ",${profile_cert_sha1s}," != *",${APPLE_DISTRIBUTION_SHA1},"* ]]; then
-              echo "Provisioning profile ${label} (${profile_name}) does not include the imported Apple Distribution certificate ${APPLE_DISTRIBUTION_SHA1}. Embedded fingerprints: ${profile_cert_sha1s}" >&2
-              exit 1
-            fi
-
-            cp "$raw_path" "${profiles_dir}/${uuid}.${extension}"
-            {
-              echo "${env_var_name}=${uuid}"
-              echo "${env_var_name}_NAME=${profile_name}"
-            } >> "$GITHUB_ENV"
-          }
-
-          install_profile "$APP_STORE_PROFILE_IOS_APP_B64" "io.ethan.pushgo" "APP_STORE_PROFILE_IOS_APP_UUID" "mobileprovision" "iOS app"
-          install_profile "$APP_STORE_PROFILE_IOS_NSE_B64" "io.ethan.pushgo.NotificationServiceExtension" "APP_STORE_PROFILE_IOS_NSE_UUID" "mobileprovision" "iOS NSE"
-          install_profile "$APP_STORE_PROFILE_WATCH_APP_B64" "io.ethan.pushgo.watchkitapp" "APP_STORE_PROFILE_WATCH_APP_UUID" "mobileprovision" "watch app"
-          install_profile "$APP_STORE_PROFILE_WATCH_NSE_B64" "io.ethan.pushgo.watchkitapp.NotificationServiceExtension" "APP_STORE_PROFILE_WATCH_NSE_UUID" "mobileprovision" "watch NSE"
-          install_profile "$APP_STORE_PROFILE_MACOS_APP_B64" "io.ethan.pushgo" "APP_STORE_PROFILE_MACOS_APP_UUID" "provisionprofile" "macOS app"
-          install_profile "$APP_STORE_PROFILE_MACOS_NSE_B64" "io.ethan.pushgo.NotificationServiceExtension" "APP_STORE_PROFILE_MACOS_NSE_UUID" "provisionprofile" "macOS NSE"
-        env:
-          APP_STORE_PROFILE_IOS_APP_B64: ${{ secrets.APP_STORE_PROFILE_IOS_APP_B64 }}
-          APP_STORE_PROFILE_IOS_NSE_B64: ${{ secrets.APP_STORE_PROFILE_IOS_NSE_B64 }}
-          APP_STORE_PROFILE_WATCH_APP_B64: ${{ secrets.APP_STORE_PROFILE_WATCH_APP_B64 }}
-          APP_STORE_PROFILE_WATCH_NSE_B64: ${{ secrets.APP_STORE_PROFILE_WATCH_NSE_B64 }}
-          APP_STORE_PROFILE_MACOS_APP_B64: ${{ secrets.APP_STORE_PROFILE_MACOS_APP_B64 }}
-          APP_STORE_PROFILE_MACOS_NSE_B64: ${{ secrets.APP_STORE_PROFILE_MACOS_NSE_B64 }}
-
-      - name: Run fastlane beta upload
-        if: steps.resolve.outputs.release_kind == 'beta'
-        run: bundle _2.5.23_ exec fastlane ios beta_upload
-
-      - name: Run fastlane release upload
-        if: steps.resolve.outputs.release_kind == 'release'
-        run: bundle _2.5.23_ exec fastlane ios release_upload
 
       - name: Run fastlane beta dmg
         if: steps.resolve.outputs.release_kind == 'beta'
@@ -508,8 +683,6 @@ jobs:
             exit 1
           fi
 
-          # Prevent generate_appcast from picking stale fallback notes (.md/.html).
-          # Sparkle notes for this workflow must come from release/update-notes/<version>.json.
           dmg_stem="${RELEASE_DMG_PATH%.dmg}"
           rm -f "${dmg_stem}.md" "${dmg_stem}.html"
 
@@ -549,9 +722,7 @@ jobs:
           fi
           mkdir -p "$HOME/.ssh"
           chmod 700 "$HOME/.ssh"
-
           printf '%s\n' "$PUSHGO_UPDATE_DEPLOY_KNOWN_HOSTS" | sed 's/\r$//' > "$HOME/.ssh/known_hosts"
-
           chmod 600 "$HOME/.ssh/known_hosts"
         env:
           PUSHGO_UPDATE_DEPLOY_KNOWN_HOSTS: ${{ secrets.PUSHGO_UPDATE_DEPLOY_KNOWN_HOSTS }}
@@ -759,10 +930,10 @@ jobs:
             echo "Please inspect the \`Commit Sparkle appcast state\` step and sync the file manually if needed."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload release diagnostics
+      - name: Upload DMG diagnostics
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: pushgo-release-diagnostics-${{ github.run_id }}
+          name: pushgo-dmg-diagnostics-${{ github.run_id }}
           path: artifacts/release/**
           if-no-files-found: warn
