@@ -538,21 +538,23 @@ jobs:
 
           export_profile_metadata() {
             local json="$1"
-            local uuid_env="$2"
-            local name_env="$3"
-            local label="$4"
-            local count uuid name
+            local expected_name="$2"
+            local uuid_env="$3"
+            local name_env="$4"
+            local label="$5"
+            local count uuid name filtered
 
-            count="$(jq 'length' <<<"$json")"
+            filtered="$(jq -c --arg name "$expected_name" '[.[] | select(.name == $name)]' <<<"$json")"
+            count="$(jq 'length' <<<"$filtered")"
             if [[ "$count" != "1" ]]; then
-              echo "Expected exactly one ${label} direct-distribution provisioning profile, found ${count}. Raw output: ${json}" >&2
+              echo "Expected exactly one ${label} direct-distribution provisioning profile named '${expected_name}', found ${count}. Raw output: ${json}" >&2
               exit 1
             fi
 
-            uuid="$(jq -r '.[0].udid' <<<"$json")"
-            name="$(jq -r '.[0].name' <<<"$json")"
+            uuid="$(jq -r '.[0].udid' <<<"$filtered")"
+            name="$(jq -r '.[0].name' <<<"$filtered")"
             if [[ -z "$uuid" || "$uuid" == "null" || -z "$name" || "$name" == "null" ]]; then
-              echo "Downloaded ${label} direct-distribution provisioning profile metadata is incomplete: ${json}" >&2
+              echo "Downloaded ${label} direct-distribution provisioning profile metadata is incomplete: ${filtered}" >&2
               exit 1
             fi
 
@@ -562,8 +564,8 @@ jobs:
             } >> "$GITHUB_ENV"
           }
 
-          export_profile_metadata '${{ steps.profile_direct_macos_app.outputs.profiles }}' 'DEVELOPER_ID_PROFILE_MACOS_APP_UUID' 'DEVELOPER_ID_PROFILE_MACOS_APP_NAME' 'macOS app'
-          export_profile_metadata '${{ steps.profile_direct_macos_nse.outputs.profiles }}' 'DEVELOPER_ID_PROFILE_MACOS_NSE_UUID' 'DEVELOPER_ID_PROFILE_MACOS_NSE_NAME' 'macOS NSE'
+          export_profile_metadata '${{ steps.profile_direct_macos_app.outputs.profiles }}' 'PushGo mac direct' 'DEVELOPER_ID_PROFILE_MACOS_APP_UUID' 'DEVELOPER_ID_PROFILE_MACOS_APP_NAME' 'macOS app'
+          export_profile_metadata '${{ steps.profile_direct_macos_nse.outputs.profiles }}' 'PushGo mac NSE direct' 'DEVELOPER_ID_PROFILE_MACOS_NSE_UUID' 'DEVELOPER_ID_PROFILE_MACOS_NSE_NAME' 'macOS NSE'
 
       - name: Resolve Swift packages
         shell: bash

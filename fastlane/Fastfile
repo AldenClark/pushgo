@@ -1015,6 +1015,7 @@ platform :ios do
         release_notes: release_notes,
         submit_for_review: ENV.fetch("APP_STORE_SUBMIT_FOR_REVIEW", "false") == "true",
         automatic_release: ENV.fetch("APP_STORE_AUTOMATIC_RELEASE", "false") == "true",
+        run_precheck_before_submit: false,
         force: true
       )
     end
@@ -1027,6 +1028,7 @@ platform :ios do
         release_notes: release_notes,
         submit_for_review: ENV.fetch("APP_STORE_SUBMIT_FOR_REVIEW", "false") == "true",
         automatic_release: ENV.fetch("APP_STORE_AUTOMATIC_RELEASE", "false") == "true",
+        run_precheck_before_submit: false,
         force: true
       )
     end
