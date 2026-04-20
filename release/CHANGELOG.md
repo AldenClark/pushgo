@@ -12,14 +12,12 @@ PushGo policy:
 
 ## [Unreleased]
 
+## [v1.2.0] - 2026-04-20
+
 ### Changed
-- Bumped Apple release line to `v1.2.0-beta.9`.
-- Bumped Apple build number by `+1` (`CURRENT_PROJECT_VERSION: 70 -> 71`) across release targets.
-- Updated project marketing/display version wiring:
-  - `MARKETING_VERSION = 1.2.0`
-  - `PUSHGO_DISPLAY_VERSION = v1.2.0-beta.9`
-- Marked this beta line as the publication baseline for all Apple changes accumulated since the previous Apple tag.
-- iOS/macOS token update flow now triggers provider ingress sync immediately after provider route sync.
+- Finalized Apple release display version to `v1.2.0` across release targets.
+- Bumped Apple build number by `+1` for release packaging (`CURRENT_PROJECT_VERSION: 72 -> 73`).
+- Added versioned release note source file: `release/update-notes/v1.2.0.json`.
 
 ### Fixed
-- Reduced missed provider pull windows after token refresh by actively pulling ingress on `token_update`.
+- Reduced delayed provider pull windows after token refresh by triggering ingress sync immediately.

@@ -56,19 +56,6 @@ platform :ios do
     parts.join(" ")
   end
 
-  def unsigned_archive_xcargs
-    parts = []
-    display_version = resolved_display_version
-    unless display_version.empty?
-      parts << "PUSHGO_DISPLAY_VERSION=#{Shellwords.escape(display_version)}"
-    end
-    parts << "CODE_SIGNING_ALLOWED=NO"
-    parts << "CODE_SIGNING_REQUIRED=NO"
-    parts << "CODE_SIGN_IDENTITY=''"
-    parts << "DEVELOPMENT_TEAM=''"
-    parts.join(" ")
-  end
-
   def export_archive_xcargs
     parts = []
     keychain_path = release_signing_keychain_path!
@@ -99,9 +86,15 @@ platform :ios do
       app_path = Dir.glob(File.join(scratch_dir, "Payload", "*.app")).first
       UI.user_error!("No .app found inside IPA payload at #{ipa_path}") if app_path.to_s.empty?
       output = sh("codesign -d --verbose=4 #{Shellwords.escape(app_path)} 2>&1", log: false)
-      return if output.include?("Authority=Apple Distribution")
+      unless output.include?("Authority=Apple Distribution")
+        UI.user_error!("iOS IPA is not signed with Apple Distribution.\n#{output}")
+      end
 
-      UI.user_error!("iOS IPA is not signed with Apple Distribution.\n#{output}")
+      verify_expected_entitlements!(
+        artifact_label: "iOS IPA",
+        actual_entitlements_by_bundle_id: extracted_entitlements_by_bundle_id(app_path),
+        expected_entitlements_by_bundle_id: expected_store_entitlements_by_bundle_id(ios_store_entitlements_sources)
+      )
     ensure
       FileUtils.rm_rf(scratch_dir)
     end
@@ -109,10 +102,26 @@ platform :ios do
 
   def verify_macos_pkg_distribution_signature!(pkg_path)
     output = sh("pkgutil --check-signature #{Shellwords.escape(pkg_path)} 2>&1", log: false)
-    return if output.include?("Mac Installer Distribution")
-    return if output.include?("3rd Party Mac Developer Installer")
+    unless output.include?("Mac Installer Distribution") || output.include?("3rd Party Mac Developer Installer")
+      UI.user_error!("macOS pkg is not signed with a Mac Installer Distribution certificate.\n#{output}")
+    end
 
-    UI.user_error!("macOS pkg is not signed with a Mac Installer Distribution certificate.\n#{output}")
+    scratch_dir = Dir.mktmpdir("pushgo-macos-pkg-")
+    begin
+      sh("pkgutil --expand-full #{Shellwords.escape(pkg_path)} #{Shellwords.escape(scratch_dir)}")
+      app_path = Dir.glob(File.join(scratch_dir, "**", "*.app")).find do |candidate|
+        bundle_identifier_for(candidate) == "io.ethan.pushgo"
+      end
+      UI.user_error!("No PushGo.app found inside pkg payload at #{pkg_path}") if app_path.to_s.empty?
+
+      verify_expected_entitlements!(
+        artifact_label: "macOS pkg",
+        actual_entitlements_by_bundle_id: extracted_entitlements_by_bundle_id(app_path),
+        expected_entitlements_by_bundle_id: expected_store_entitlements_by_bundle_id(macos_store_entitlements_sources)
+      )
+    ensure
+      FileUtils.rm_rf(scratch_dir)
+    end
   end
 
   def verify_developer_id_app_signature!(app_path)
@@ -256,6 +265,105 @@ platform :ios do
     entitlements_by_bundle_id
   end
 
+  def normalized_entitlements_hash(entitlements)
+    normalized = deep_copy_hash(entitlements)
+
+    application_identifier = normalized["application-identifier"] || normalized["com.apple.application-identifier"]
+    unless application_identifier.nil?
+      normalized["application-identifier"] = application_identifier
+      normalized["com.apple.application-identifier"] = application_identifier
+    end
+
+    aps_environment = normalized["aps-environment"] || normalized["com.apple.developer.aps-environment"]
+    unless aps_environment.nil?
+      normalized["aps-environment"] = aps_environment
+      normalized["com.apple.developer.aps-environment"] = aps_environment
+    end
+
+    normalized
+  end
+
+  def ios_store_entitlements_sources
+    {
+      "io.ethan.pushgo" => resolve_from_repo("Apps/PushGo-iOS/pushgo.entitlements"),
+      "io.ethan.pushgo.NotificationServiceExtension" => resolve_from_repo("Extensions/PushGoNSE-iOS/NotificationServiceExtension.entitlements"),
+      "io.ethan.pushgo.watchkitapp" => resolve_from_repo("Apps/PushGo-watchOS/pushgowatch Watch App.entitlements"),
+      "io.ethan.pushgo.watchkitapp.NotificationServiceExtension" => resolve_from_repo("Extensions/PushGoNSE-watchOS/pushgowatch NotificationServiceExtension.entitlements")
+    }
+  end
+
+  def macos_store_entitlements_sources
+    {
+      "io.ethan.pushgo" => resolve_from_repo("Apps/PushGo-macOS/pushgomac.entitlements"),
+      "io.ethan.pushgo.NotificationServiceExtension" => resolve_from_repo("Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements")
+    }
+  end
+
+  def sanitized_store_entitlements_for(bundle_id, entitlements_sources)
+    source_path = entitlements_sources[bundle_id]
+    return nil if source_path.to_s.empty?
+
+    entitlements = normalized_entitlements_hash(plist_hash(source_path))
+    team_id = ensure_team_id!
+    application_identifier = "#{team_id}.#{bundle_id}"
+
+    entitlements.delete("com.apple.security.get-task-allow")
+    entitlements.delete("get-task-allow")
+    entitlements["application-identifier"] = application_identifier
+    entitlements["com.apple.application-identifier"] = application_identifier
+    entitlements["com.apple.developer.team-identifier"] = team_id
+
+    if entitlements.key?("aps-environment") || entitlements.key?("com.apple.developer.aps-environment")
+      entitlements["aps-environment"] = "production"
+      entitlements["com.apple.developer.aps-environment"] = "production"
+    end
+
+    if entitlements["keychain-access-groups"].is_a?(Array)
+      entitlements["keychain-access-groups"] =
+        entitlements["keychain-access-groups"].map do |group|
+          group.gsub(/\A[A-Z0-9]+\./, "#{team_id}.").gsub("$(AppIdentifierPrefix)", "#{team_id}.")
+        end
+    end
+
+    normalized_entitlements_hash(entitlements)
+  end
+
+  def expected_store_entitlements_by_bundle_id(entitlements_sources)
+    entitlements_sources.each_with_object({}) do |(bundle_id, _), result|
+      entitlements = sanitized_store_entitlements_for(bundle_id, entitlements_sources)
+      next if entitlements.nil?
+
+      result[bundle_id] = entitlements
+    end
+  end
+
+  def verify_expected_entitlements!(artifact_label:, actual_entitlements_by_bundle_id:, expected_entitlements_by_bundle_id:)
+    actual = actual_entitlements_by_bundle_id.transform_values { |entitlements| normalized_entitlements_hash(entitlements) }
+    errors = []
+
+    expected_entitlements_by_bundle_id.each do |bundle_id, expected_entitlements|
+      actual_entitlements = actual[bundle_id]
+      if actual_entitlements.nil?
+        errors << "#{bundle_id}: missing signed bundle entitlements"
+        next
+      end
+
+      expected_entitlements.each do |key, expected_value|
+        actual_value = actual_entitlements[key]
+        next if actual_value == expected_value
+
+        errors << "#{bundle_id}: entitlement #{key} expected #{expected_value.inspect}, got #{actual_value.inspect}"
+      end
+    end
+
+    return if errors.empty?
+
+    UI.user_error!(
+      "#{artifact_label} is missing required signed entitlements:\n" \
+      "#{errors.first(20).join("\n")}"
+    )
+  end
+
   def build_settings_for_target(target_name)
     @build_settings_for_target ||= {}
     return @build_settings_for_target[target_name] if @build_settings_for_target.key?(target_name)
@@ -279,8 +387,10 @@ platform :ios do
   end
 
   def bundle_identifier_for(path)
-    info_plist_path = File.join(path, "Contents", "Info.plist")
-    return nil unless File.exist?(info_plist_path)
+    info_plist_path = [File.join(path, "Info.plist"), File.join(path, "Contents", "Info.plist")].find do |candidate|
+      File.exist?(candidate)
+    end
+    return nil if info_plist_path.nil?
 
     sh(
       "/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' #{Shellwords.escape(info_plist_path)}",
@@ -291,8 +401,10 @@ platform :ios do
   end
 
   def bundle_executable_path(path)
-    info_plist_path = File.join(path, "Contents", "Info.plist")
-    return nil unless File.exist?(info_plist_path)
+    info_plist_path = [File.join(path, "Info.plist"), File.join(path, "Contents", "Info.plist")].find do |candidate|
+      File.exist?(candidate)
+    end
+    return nil if info_plist_path.nil?
 
     executable_name = sh(
       "/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' #{Shellwords.escape(info_plist_path)}",
@@ -300,7 +412,13 @@ platform :ios do
     ).strip
     return nil if executable_name.empty?
 
-    File.join(path, "Contents", "MacOS", executable_name)
+    macos_executable_path = File.join(path, "Contents", "MacOS", executable_name)
+    return macos_executable_path if File.exist?(macos_executable_path)
+
+    direct_executable_path = File.join(path, executable_name)
+    return direct_executable_path if File.exist?(direct_executable_path)
+
+    nil
   rescue
     nil
   end
@@ -534,7 +652,7 @@ platform :ios do
     export_options_path = File.join(output_directory, "#{output_name}-ExportOptions.plist")
     ipa_path = File.join(output_directory, "#{output_name}.ipa")
     apple_distribution = apple_distribution_identity!
-    archive_xcargs = unsigned_archive_xcargs
+    archive_xcargs = local_signing_xcargs
     export_xcargs = export_archive_xcargs
 
     FileUtils.mkdir_p(output_directory)
@@ -589,7 +707,7 @@ platform :ios do
     pkg_path = File.join(output_directory, "#{pkg_name}.pkg")
     apple_distribution = apple_distribution_identity!
     installer_distribution = mac_installer_distribution_identity!
-    archive_xcargs = unsigned_archive_xcargs
+    archive_xcargs = local_signing_xcargs
     export_xcargs = export_archive_xcargs
 
     FileUtils.mkdir_p(output_directory)
