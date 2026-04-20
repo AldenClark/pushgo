@@ -119,10 +119,12 @@ platform :ios do
       UI.user_error!("macOS pkg is not signed with a Mac Installer Distribution certificate.\n#{output}")
     end
 
-    scratch_dir = Dir.mktmpdir("pushgo-macos-pkg-")
+    scratch_root = Dir.mktmpdir("pushgo-macos-pkg-")
+    expanded_pkg_dir = File.join(scratch_root, "expanded")
     begin
-      sh("pkgutil --expand-full #{Shellwords.escape(pkg_path)} #{Shellwords.escape(scratch_dir)}")
-      app_path = Dir.glob(File.join(scratch_dir, "**", "*.app")).find do |candidate|
+      # pkgutil expects a destination path that does not already exist.
+      sh("pkgutil --expand-full #{Shellwords.escape(pkg_path)} #{Shellwords.escape(expanded_pkg_dir)}")
+      app_path = Dir.glob(File.join(expanded_pkg_dir, "**", "*.app")).find do |candidate|
         bundle_identifier_for(candidate) == "io.ethan.pushgo"
       end
       UI.user_error!("No PushGo.app found inside pkg payload at #{pkg_path}") if app_path.to_s.empty?
@@ -133,7 +135,7 @@ platform :ios do
         expected_entitlements_by_bundle_id: expected_store_entitlements_by_bundle_id(macos_store_entitlements_sources)
       )
     ensure
-      FileUtils.rm_rf(scratch_dir)
+      FileUtils.rm_rf(scratch_root)
     end
   end
 
