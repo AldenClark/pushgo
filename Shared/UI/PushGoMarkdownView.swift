@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 import SwiftUI
 
 #if canImport(Textual) && !os(watchOS)
@@ -38,7 +39,10 @@ struct MarkdownRenderer: View {
             }
         }
         .textual.imageAttachmentLoader(
-            .adaptiveImage(backend: .sdWebImage)
+            .adaptiveImage(
+                backend: .sdWebImage,
+                sizeProvider: markdownImageSizeProvider
+            )
         )
         .textual.imageAttachmentURLResolver(
             .init { url in
@@ -50,6 +54,7 @@ struct MarkdownRenderer: View {
                 )
             }
         )
+        .attachmentRenderingMode(.interactive)
         .textual.fontScale(Self.textualScale)
         .textual.inlineStyle(.gitHub)
         .environment(\.openURL, OpenURLAction { incoming in
@@ -71,6 +76,33 @@ struct MarkdownRenderer: View {
         #endif
     }
 }
+
+#if canImport(Textual) && !os(watchOS)
+private let markdownImageSizeProvider: URLImageAttachmentSizeProvider = { url in
+    guard let data = await SharedImageCache.cachedData(for: url, rendition: .original) else {
+        return nil
+    }
+    return cachedImageSize(from: data)
+}
+
+private func cachedImageSize(from data: Data) -> CGSize? {
+    guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
+        return nil
+    }
+    guard
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+        let widthNumber = properties[kCGImagePropertyPixelWidth] as? NSNumber,
+        let heightNumber = properties[kCGImagePropertyPixelHeight] as? NSNumber
+    else {
+        return nil
+    }
+
+    let width = CGFloat(truncating: widthNumber)
+    let height = CGFloat(truncating: heightNumber)
+    guard width > 0, height > 0 else { return nil }
+    return CGSize(width: width, height: height)
+}
+#endif
 
 #if canImport(Textual) && !os(watchOS)
 private struct PushGoRefinedTableCellStyle: StructuredText.TableCellStyle {
