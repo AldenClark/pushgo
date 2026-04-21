@@ -2557,14 +2557,14 @@
 				minimumVersion = 2.7.0;
 			};
 		};
-		A0AA00012F70000100AA0022 /* XCRemoteSwiftPackageReference "textual" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/gonzalezreal/textual";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.3.1;
+			A0AA00012F70000100AA0022 /* XCRemoteSwiftPackageReference "textual" */ = {
+				isa = XCRemoteSwiftPackageReference;
+				repositoryURL = "https://github.com/AldenClark/textual";
+				requirement = {
+					branch = main;
+					kind = branch;
+				};
 			};
-		};
 		A0AA00012F70000100AA0033 /* XCRemoteSwiftPackageReference "GRDB.swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/groue/GRDB.swift.git";

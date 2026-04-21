@@ -53,6 +53,10 @@ enum SharedImageCache {
         func remove(for key: NSURL) {
             cache.removeObject(forKey: key)
         }
+
+        func removeAll() {
+            cache.removeAllObjects()
+        }
     }
 
     private actor DiskCache {
@@ -99,6 +103,11 @@ enum SharedImageCache {
                     try? fileManager.removeItem(at: fileURL)
                 }
             }
+        }
+
+        func purgeAll() {
+            guard let directory = SharedImageCache.cacheDirectory() else { return }
+            try? fileManager.removeItem(at: directory)
         }
 
         private func enforceDiskLimitIfNeeded() {
@@ -278,6 +287,36 @@ enum SharedImageCache {
             }
         }
         await disk.purge(urls: urls, renditions: renditions)
+    }
+
+    static func purgeAll() async {
+        if profile.memoryEnabled {
+            await memory.removeAll()
+        }
+        await disk.purgeAll()
+    }
+
+    static func sourceURL(
+        for url: URL,
+        rendition: Rendition = .original,
+        maxBytes: Int64? = nil,
+        timeout: TimeInterval = 10
+    ) async -> URL {
+        guard URLSanitizer.isAllowedRemoteURL(url) else { return url }
+        if let cached = cachedFileURL(for: url, rendition: rendition) {
+            return cached
+        }
+        do {
+            _ = try await fetchData(
+                from: url,
+                rendition: rendition,
+                maxBytes: maxBytes,
+                timeout: timeout
+            )
+            return cachedFileURL(for: url, rendition: rendition) ?? url
+        } catch {
+            return url
+        }
     }
 
     static func cacheKeyURL(for url: URL, rendition: Rendition = .original) -> NSURL {

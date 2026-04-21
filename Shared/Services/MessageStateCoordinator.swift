@@ -58,6 +58,7 @@ final class MessageStateCoordinator {
         try await dataStore.deleteMessage(id: messageId)
         if let message {
             removeDeliveredNotifications(identifiers: notificationRequestIds(from: [message]))
+            await purgeImages(for: [message])
         }
         await refreshCountsAndNotify()
     }
@@ -72,6 +73,7 @@ final class MessageStateCoordinator {
         }
         if let message {
             try await dataStore.deleteMessage(id: message.id)
+            await purgeImages(for: [message])
         } else {
             try await dataStore.deleteMessage(notificationRequestId: notificationRequestId)
         }
@@ -89,6 +91,7 @@ final class MessageStateCoordinator {
         let deleted = try await dataStore.deleteMessages(channel: channel, readState: readState)
         if deleted > 0 {
             removeDeliveredNotifications(identifiers: notificationRequestIds(from: deletionCandidates))
+            await purgeImages(for: deletionCandidates)
             await refreshCountsAndNotify()
         }
         return deleted
@@ -109,6 +112,7 @@ final class MessageStateCoordinator {
         let deleted = try await dataStore.deleteMessages(readState: readState, before: cutoff)
         if deleted > 0 {
             removeDeliveredNotifications(identifiers: notificationRequestIds(from: deletionCandidates))
+            await purgeImages(for: deletionCandidates)
             await refreshCountsAndNotify()
         }
         return deleted
@@ -117,6 +121,9 @@ final class MessageStateCoordinator {
     @discardableResult
     func deleteAllMessages() async throws -> Int {
         let deletedCount = try await dataStore.deleteMessages(readState: nil, before: nil)
+        if deletedCount > 0 {
+            await SharedImageCache.purgeAll()
+        }
         removeAllDeliveredNotifications()
         await refreshCountsAndNotify()
         return deletedCount
@@ -135,6 +142,7 @@ final class MessageStateCoordinator {
         )
         if deleted > 0 {
             removeDeliveredNotifications(identifiers: notificationRequestIds(from: candidates))
+            await purgeImages(for: candidates)
             await refreshCountsAndNotify()
         }
         return deleted
@@ -151,6 +159,7 @@ final class MessageStateCoordinator {
         )
         if deleted > 0 {
             removeDeliveredNotifications(identifiers: notificationRequestIds(from: candidates))
+            await purgeImages(for: candidates)
             await refreshCountsAndNotify()
         }
     }
@@ -184,5 +193,26 @@ final class MessageStateCoordinator {
 
     private func removeAllDeliveredNotifications() {
         UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+    }
+
+    private func purgeImages(for messages: [PushMessage]) async {
+        let urls = uniqueImageURLs(from: messages)
+        guard !urls.isEmpty else { return }
+        await SharedImageCache.purge(urls: urls)
+    }
+
+    private func uniqueImageURLs(from messages: [PushMessage]) -> [URL] {
+        var seen = Set<String>()
+        var urls: [URL] = []
+        urls.reserveCapacity(messages.count)
+        for message in messages {
+            for url in message.imageURLs {
+                let key = url.absoluteString
+                if seen.insert(key).inserted {
+                    urls.append(url)
+                }
+            }
+        }
+        return urls
     }
 }

@@ -1198,6 +1198,14 @@ final class AppEnvironment {
         await syncPrivateChannelState()
 
         guard deleteLocalMessages else { return 0 }
+        let eventImageURLs = try await dataStore
+            .loadEventMessagesForProjection()
+            .filter { channelMatches($0.channel, normalizedChannel: normalized) }
+            .flatMap(\.imageURLs)
+        let thingImageURLs = try await dataStore
+            .loadThingMessagesForProjection()
+            .filter { channelMatches($0.channel, normalizedChannel: normalized) }
+            .flatMap(\.imageURLs)
         let removedMessages = try await messageStateCoordinator.deleteMessages(channel: normalized, readState: nil)
         let removedEvents = try await dataStore.deleteEventRecords(channel: normalized)
         let removedThings = try await dataStore.deleteThingRecords(channel: normalized)
@@ -1213,6 +1221,7 @@ final class AppEnvironment {
                 "channel cleanup incomplete messages=\(remainingMessages.count) events=\(remainingEvents.count) things=\(remainingThings.count)"
             )
         }
+        await SharedImageCache.purge(urls: eventImageURLs + thingImageURLs)
         await refreshMessageCountsAndNotify()
         return removedMessages + removedEvents + removedThings
     }

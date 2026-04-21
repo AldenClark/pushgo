@@ -37,6 +37,19 @@ struct MarkdownRenderer: View {
                 InlineText(markdown: normalizedText)
             }
         }
+        .textual.imageAttachmentLoader(
+            .adaptiveImage(backend: .sdWebImage)
+        )
+        .textual.imageAttachmentURLResolver(
+            .init { url in
+                await SharedImageCache.sourceURL(
+                    for: url,
+                    rendition: .original,
+                    maxBytes: AppConstants.maxMessageImageBytes,
+                    timeout: 10
+                )
+            }
+        )
         .textual.fontScale(Self.textualScale)
         .textual.inlineStyle(.gitHub)
         .environment(\.openURL, OpenURLAction { incoming in
