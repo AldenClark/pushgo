@@ -3,6 +3,23 @@
     <channel>
         <title>PushGo</title>
         <item>
+            <title>1.3.0-beta.1</title>
+            <pubDate>Wed, 22 Apr 2026 04:13:56 +0000</pubDate>
+            <sparkle:channel>beta</sparkle:channel>
+            <sparkle:version>75</sparkle:version>
+            <sparkle:shortVersionString>1.3.0-beta.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <sparkle:releaseNotesLink>https://update.pushgo.cn/macos/beta/v1.3.0-beta.1/PushGo-macOS-v1.3.0-beta.1.txt</sparkle:releaseNotesLink>
+            <sparkle:releaseNotesLink xml:lang="de">https://update.pushgo.cn/macos/beta/v1.3.0-beta.1/PushGo-macOS-v1.3.0-beta.1.de.txt</sparkle:releaseNotesLink>
+            <sparkle:releaseNotesLink xml:lang="en">https://update.pushgo.cn/macos/beta/v1.3.0-beta.1/PushGo-macOS-v1.3.0-beta.1.en.txt</sparkle:releaseNotesLink>
+            <sparkle:releaseNotesLink xml:lang="es">https://update.pushgo.cn/macos/beta/v1.3.0-beta.1/PushGo-macOS-v1.3.0-beta.1.es.txt</sparkle:releaseNotesLink>
+            <sparkle:releaseNotesLink xml:lang="fr">https://update.pushgo.cn/macos/beta/v1.3.0-beta.1/PushGo-macOS-v1.3.0-beta.1.fr.txt</sparkle:releaseNotesLink>
+            <sparkle:releaseNotesLink xml:lang="ja">https://update.pushgo.cn/macos/beta/v1.3.0-beta.1/PushGo-macOS-v1.3.0-beta.1.ja.txt</sparkle:releaseNotesLink>
+            <sparkle:releaseNotesLink xml:lang="ko">https://update.pushgo.cn/macos/beta/v1.3.0-beta.1/PushGo-macOS-v1.3.0-beta.1.ko.txt</sparkle:releaseNotesLink>
+            <sparkle:releaseNotesLink xml:lang="zh">https://update.pushgo.cn/macos/beta/v1.3.0-beta.1/PushGo-macOS-v1.3.0-beta.1.zh.txt</sparkle:releaseNotesLink>
+            <enclosure url="https://update.pushgo.cn/macos/beta/v1.3.0-beta.1/PushGo-macOS-v1.3.0-beta.1.dmg" length="20478807" type="application/octet-stream" sparkle:edSignature="l4JmG3ni2XRF8m2XXW5Tgnb+8rjZQzMnPERL9iX//yHNRbcrtS8l1naPXp9TEY7afu0yuptCcbnh0E5ciqdlDg=="/>
+        </item>
+        <item>
             <title>1.2.0</title>
             <pubDate>Mon, 20 Apr 2026 09:02:12 +0000</pubDate>
             <sparkle:version>74</sparkle:version>
