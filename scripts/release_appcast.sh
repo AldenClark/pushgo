@@ -522,16 +522,24 @@ if [[ "$unsigned_count" != "0" ]]; then
 fi
 
 if [[ "$track" == "beta" ]]; then
-  beta_item_count="$(xmllint --xpath 'count(//*[local-name()="item"][.//*[local-name()="channel" and normalize-space(text())="beta"]])' "$appcast_path" 2>/dev/null || echo 0)"
-  if [[ "$beta_item_count" == "0" ]]; then
+  track_item_xpath='//*[local-name()="item"][.//*[local-name()="channel" and normalize-space(text())="beta"]]'
+  track_item_count="$(xmllint --xpath "count(${track_item_xpath})" "$appcast_path" 2>/dev/null || echo 0)"
+  if [[ "$track_item_count" == "0" ]]; then
     echo "Error: beta track was requested but no sparkle:channel=beta item was found in appcast: $appcast_path" >&2
+    exit 1
+  fi
+else
+  track_item_xpath='//*[local-name()="item"][not(.//*[local-name()="channel"])]'
+  track_item_count="$(xmllint --xpath "count(${track_item_xpath})" "$appcast_path" 2>/dev/null || echo 0)"
+  if [[ "$track_item_count" == "0" ]]; then
+    echo "Error: stable track was requested but no default-channel item was found in appcast: $appcast_path" >&2
     exit 1
   fi
 fi
 
-invalid_url_count="$(xmllint --xpath "count(//*[local-name()='enclosure'][not(starts-with(@url, '${download_url_prefix}'))])" "$appcast_path" 2>/dev/null || echo 1)"
+invalid_url_count="$(xmllint --xpath "count(${track_item_xpath}/*[local-name()='enclosure'][not(starts-with(@url, '${download_url_prefix}'))])" "$appcast_path" 2>/dev/null || echo 1)"
 if [[ "$invalid_url_count" != "0" ]]; then
-  echo "Error: generated appcast contains enclosure URL(s) outside --download-url-prefix=${download_url_prefix}" >&2
+  echo "Error: generated appcast contains ${track} enclosure URL(s) outside --download-url-prefix=${download_url_prefix}" >&2
   exit 1
 fi
 

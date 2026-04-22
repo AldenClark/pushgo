@@ -134,9 +134,13 @@ cp "$dmg_path" "$staging_dir/$dmg_name"
 
 dmg_stem="${dmg_name%.dmg}"
 shopt -s nullglob
-note_files=("${artifacts_dir%/}/${dmg_stem}."*.txt)
+note_files=(
+  "${artifacts_dir%/}/${dmg_stem}.txt"
+  "${artifacts_dir%/}/${dmg_stem}."*.txt
+)
 shopt -u nullglob
 for note_file in "${note_files[@]}"; do
+  [[ -f "$note_file" ]] || continue
   cp "$note_file" "$staging_dir/$(basename "$note_file")"
 done
 

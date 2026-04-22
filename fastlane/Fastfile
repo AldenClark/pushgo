@@ -712,7 +712,7 @@ platform :ios do
     export_options_path = File.join(output_directory, "#{output_name}-ExportOptions.plist")
     ipa_path = File.join(output_directory, "#{output_name}.ipa")
     apple_distribution = apple_distribution_identity!
-    archive_xcargs = local_signing_xcargs
+    archive_xcargs = unsigned_archive_xcargs
     export_xcargs = export_archive_xcargs
 
     FileUtils.mkdir_p(output_directory)
@@ -767,7 +767,7 @@ platform :ios do
     pkg_path = File.join(output_directory, "#{pkg_name}.pkg")
     apple_distribution = apple_distribution_identity!
     installer_distribution = mac_installer_distribution_identity!
-    archive_xcargs = local_signing_xcargs
+    archive_xcargs = unsigned_archive_xcargs
     export_xcargs = export_archive_xcargs
 
     FileUtils.mkdir_p(output_directory)
@@ -812,13 +812,15 @@ platform :ios do
   end
 
   def release_notes_payload
-    notes = ENV["APP_STORE_RELEASE_NOTES"].to_s.strip
-    return nil if notes.empty?
+    en_us_notes = ENV["APP_STORE_RELEASE_NOTES_EN_US"].to_s.strip
+    zh_hans_notes = ENV["APP_STORE_RELEASE_NOTES_ZH_HANS"].to_s.strip
 
-    {
-      "en-US" => notes,
-      "zh-Hans" => notes
-    }
+    payload = {}
+    payload["en-US"] = en_us_notes unless en_us_notes.empty?
+    payload["zh-Hans"] = zh_hans_notes unless zh_hans_notes.empty?
+    return nil if payload.empty?
+
+    payload
   end
 
   def build_release_dmg!

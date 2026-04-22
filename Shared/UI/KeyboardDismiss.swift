@@ -608,7 +608,7 @@ private struct PushgoImagePreviewOverlay: View {
     }
 
     nonisolated private static func animationMetadata(at url: URL) async -> AnimationMetadata {
-        await Task.detached(priority: .utility) {
+        await Task(priority: .utility) {
             readAnimationMetadata(at: url)
         }
         .value
