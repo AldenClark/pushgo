@@ -17,7 +17,7 @@
             <sparkle:releaseNotesLink xml:lang="ja">https://update.pushgo.cn/macos/beta/v1.3.0-beta.1/PushGo-macOS-v1.3.0-beta.1.ja.txt</sparkle:releaseNotesLink>
             <sparkle:releaseNotesLink xml:lang="ko">https://update.pushgo.cn/macos/beta/v1.3.0-beta.1/PushGo-macOS-v1.3.0-beta.1.ko.txt</sparkle:releaseNotesLink>
             <sparkle:releaseNotesLink xml:lang="zh">https://update.pushgo.cn/macos/beta/v1.3.0-beta.1/PushGo-macOS-v1.3.0-beta.1.zh.txt</sparkle:releaseNotesLink>
-            <enclosure url="https://update.pushgo.cn/macos/beta/v1.3.0-beta.1/PushGo-macOS-v1.3.0-beta.1.dmg" length="20478807" type="application/octet-stream" sparkle:edSignature="l4JmG3ni2XRF8m2XXW5Tgnb+8rjZQzMnPERL9iX//yHNRbcrtS8l1naPXp9TEY7afu0yuptCcbnh0E5ciqdlDg=="/>
+            <enclosure url="https://update.pushgo.cn/macos/beta/v1.3.0-beta.1/PushGo-macOS-v1.3.0-beta.1.dmg" length="20478850" type="application/octet-stream" sparkle:edSignature="zbkbOgBm9L2lfV83CM4nz+gCaVUWArtGUoEzV391s3WOHb86bss6uuXgn4W7mC75rkugUhSM/td1MvzFqu41Bw=="/>
         </item>
         <item>
             <title>1.2.0</title>
