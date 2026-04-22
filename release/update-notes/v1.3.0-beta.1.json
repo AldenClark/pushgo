@@ -1,0 +1,10 @@
+{
+  "en": "PushGo 1.3.0-beta.1 includes the latest Apple-side reliability and UI consistency improvements.\nImproved behavior consistency across iOS, macOS, and watchOS in this beta cycle.\nImproved markdown and remote image rendering stability in shared app surfaces.",
+  "de": "PushGo 1.3.0-beta.1 enthalt die neuesten Apple-seitigen Verbesserungen bei Zuverlassigkeit und UI-Konsistenz.\nDie Verhaltenskonsistenz auf iOS, macOS und watchOS wurde in diesem Beta-Zyklus verbessert.\nDie Stabilitat beim Rendern von Markdown und Remote-Bildern in gemeinsamen App-Oberflachen wurde verbessert.",
+  "es": "PushGo 1.3.0-beta.1 incluye las ultimas mejoras del lado de Apple en fiabilidad y consistencia de la interfaz.\nSe mejoro la consistencia de comportamiento en iOS, macOS y watchOS durante este ciclo beta.\nSe mejoro la estabilidad del renderizado de markdown e imagenes remotas en superficies compartidas de la app.",
+  "fr": "PushGo 1.3.0-beta.1 inclut les dernieres ameliorations cote Apple en fiabilite et en coherence de l'interface.\nLa coherence du comportement sur iOS, macOS et watchOS a ete amelioree durant ce cycle beta.\nLa stabilite du rendu Markdown et des images distantes dans les surfaces partagees de l'app a ete amelioree.",
+  "ja": "PushGo 1.3.0-beta.1 には、Apple 側の信頼性と UI 一貫性に関する最新の改善が含まれます。\nこのベータサイクルでは、iOS・macOS・watchOS 間の挙動の一貫性を改善しました。\n共有 UI における Markdown とリモート画像の描画安定性を改善しました。",
+  "ko": "PushGo 1.3.0-beta.1에는 Apple 측 신뢰성과 UI 일관성에 대한 최신 개선이 포함됩니다.\n이번 베타 사이클에서 iOS, macOS, watchOS 전반의 동작 일관성이 개선되었습니다.\n공용 앱 화면에서 마크다운 및 원격 이미지 렌더링 안정성이 향상되었습니다.",
+  "zh-CN": "PushGo 1.3.0-beta.1 包含最新的 Apple 侧可靠性与 UI 一致性改进。\n在本轮测试版中，iOS、macOS 与 watchOS 的行为一致性已提升。\n共享界面中的 Markdown 与远程图片渲染稳定性已提升。",
+  "zh-TW": "PushGo 1.3.0-beta.1 包含最新的 Apple 側可靠性與 UI 一致性改進。\n在本輪測試版中，iOS、macOS 與 watchOS 的行為一致性已提升。\n共享介面中的 Markdown 與遠端圖片渲染穩定性已提升。"
+}

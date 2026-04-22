@@ -10,6 +10,10 @@ Policy:
 
 ## [Unreleased]
 
+### Improved
+- Improved overall reliability and behavior consistency across iOS, macOS, and watchOS in this beta cycle.
+- Improved markdown and remote image rendering stability in shared Apple UI surfaces.
+
 ## [v1.2.0]
 
 ### Improved
