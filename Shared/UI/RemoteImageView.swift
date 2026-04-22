@@ -1,5 +1,8 @@
 import Foundation
 import SwiftUI
+#if canImport(SDWebImageSwiftUI) && !os(watchOS)
+import SDWebImageSwiftUI
+#endif
 
 #if canImport(UIKit)
 import UIKit
@@ -14,14 +17,7 @@ struct RemoteImageView<Content: View, Placeholder: View>: View {
     let content: (Image) -> Content
     let placeholder: () -> Placeholder
 
-    @State private var phase: Phase = .idle
-
-    enum Phase {
-        case idle
-        case loading
-        case failure
-        case success(Image)
-    }
+    @State private var sourceURL: URL?
 
     init(
         url: URL?,
@@ -37,62 +33,56 @@ struct RemoteImageView<Content: View, Placeholder: View>: View {
 
     var body: some View {
         Group {
-            switch phase {
-            case .idle, .loading, .failure:
+#if canImport(SDWebImageSwiftUI) && !os(watchOS)
+            if let sourceURL {
+                WebImage(
+                    url: sourceURL,
+                    options: [.fromLoaderOnly],
+                    isAnimating: .constant(false)
+                ) { image in
+                    content(image)
+                } placeholder: {
+                    placeholder()
+                }
+                .indicator(.activity)
+            } else {
                 placeholder()
-            case let .success(image):
-                content(image)
             }
+#else
+            placeholder()
+#endif
         }
-        .task(id: url) {
-            await load(url: url, rendition: rendition)
-        }
-        .onAppear {
-            guard case .failure = phase else { return }
-            Task { await load(url: url, rendition: rendition) }
+        .task(id: sourceIdentity) {
+            await resolveSourceURL()
         }
     }
 
-    private func load(url: URL?, rendition: SharedImageCache.Rendition) async {
+    private var sourceIdentity: String {
+        "\(url?.absoluteString ?? "nil")#\(rendition.rawValue)"
+    }
+
+    private func resolveSourceURL() async {
         guard let url else {
             await MainActor.run {
-                phase = .failure
+                sourceURL = nil
             }
             return
         }
-        if let cached = await RemoteImageCache.cachedImage(for: url, rendition: rendition) {
+        if let cached = SharedImageCache.cachedFileURL(for: url, rendition: rendition) {
             await MainActor.run {
-                phase = .success(Self.makeImage(from: cached))
+                sourceURL = cached
             }
             return
         }
+        let resolved = await SharedImageCache.localSourceURL(
+            for: url,
+            rendition: rendition,
+            maxBytes: AppConstants.maxMessageImageBytes,
+            timeout: 10
+        )
         await MainActor.run {
-            if case .success = phase {
-                return
-            }
-            phase = .loading
+            sourceURL = resolved
         }
-        do {
-            let platformImage = try await RemoteImageCache.loadImage(from: url, rendition: rendition)
-            await MainActor.run {
-                phase = .success(Self.makeImage(from: platformImage))
-            }
-        } catch {
-            if error is CancellationError {
-                return
-            }
-            await MainActor.run {
-                phase = .failure
-            }
-        }
-    }
-
-    private static func makeImage(from platformImage: PlatformImage) -> Image {
-#if canImport(UIKit)
-        Image(uiImage: platformImage)
-#else
-        Image(nsImage: platformImage)
-#endif
     }
 }
 

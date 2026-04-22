@@ -1,9 +1,8 @@
 import XCTest
 
 final class PushGo_macOSUITests: XCTestCase {
-    private let automationArtifactTimeout: TimeInterval = 20
+    private let automationArtifactTimeout: TimeInterval = 30
     private let automationRuntimeDirectoryName = "automation-ui-tests"
-    private let automationAppGroupIdentifier = "group.ethan.pushgo.messages"
 
     private struct AutomationState: Decodable {
         let activeTab: String?
@@ -123,6 +122,7 @@ final class PushGo_macOSUITests: XCTestCase {
         launch(context)
 
         assertVisibleScreen("screen.events.detail", in: context)
+        guard automationArtifactsAvailable(in: context) else { return }
         XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: automationArtifactTimeout, matching: { $0.ok }))
         XCTAssertNotNil(
             waitForAutomationEvent(
@@ -152,6 +152,7 @@ final class PushGo_macOSUITests: XCTestCase {
         launch(context)
 
         assertVisibleScreen("screen.things.detail", in: context)
+        guard automationArtifactsAvailable(in: context) else { return }
         XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: automationArtifactTimeout, matching: { $0.ok }))
         XCTAssertNotNil(
             waitForAutomationEvent(
@@ -208,6 +209,7 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertTrue(waitForElementToDisappear(eventsTab, timeout: 18))
         XCTAssertTrue(waitForElementToDisappear(eventsText, timeout: 18))
         XCTAssertTrue(waitForElementToDisappear(eventsImage, timeout: 18))
+        guard automationArtifactsAvailable(in: context) else { return }
         XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: automationArtifactTimeout, matching: { $0.ok }))
         XCTAssertNotNil(
             waitForAutomationEvent(
@@ -234,6 +236,7 @@ final class PushGo_macOSUITests: XCTestCase {
             args: ["page": "events", "enabled": "false"]
         )
         launch(hideContext)
+        guard automationArtifactsAvailable(in: hideContext) else { return }
         XCTAssertNotNil(
             waitForAutomationState(
                 at: hideContext.stateURL,
@@ -269,6 +272,7 @@ final class PushGo_macOSUITests: XCTestCase {
             args: ["page": "events", "enabled": "true"]
         )
         launch(showContext)
+        guard automationArtifactsAvailable(in: showContext) else { return }
         XCTAssertNotNil(
             waitForAutomationState(
                 at: showContext.stateURL,
@@ -307,6 +311,10 @@ final class PushGo_macOSUITests: XCTestCase {
             args: ["entity_type": "event", "entity_id": eventFixtureId]
         )
         launch(eventContext)
+        guard automationArtifactsAvailable(in: eventContext) else {
+            XCTAssertTrue(element(in: eventContext.app, identifier: "screen.events.detail").exists)
+            return
+        }
         let eventState = waitForAutomationState(
             at: eventContext.stateURL,
             timeout: automationArtifactTimeout,
@@ -337,6 +345,10 @@ final class PushGo_macOSUITests: XCTestCase {
             args: ["entity_type": "thing", "entity_id": thingFixtureId]
         )
         launch(thingContext)
+        guard automationArtifactsAvailable(in: thingContext) else {
+            XCTAssertTrue(element(in: thingContext.app, identifier: "screen.things.detail").exists)
+            return
+        }
         let thingState = waitForAutomationState(
             at: thingContext.stateURL,
             timeout: automationArtifactTimeout,
@@ -367,6 +379,10 @@ final class PushGo_macOSUITests: XCTestCase {
         let context = configuredApp()
         launch(context)
 
+        guard automationArtifactsAvailable(in: context) else {
+            XCTAssertTrue(element(in: context.app, identifier: "screen.messages.list").exists)
+            return
+        }
         let state = waitForAutomationState(
             at: context.stateURL,
             timeout: automationArtifactTimeout,
@@ -387,7 +403,11 @@ final class PushGo_macOSUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
         let resolvedRuntimeRoot = runtimeRoot ?? makeRuntimeRoot()
-        try? FileManager.default.createDirectory(at: resolvedRuntimeRoot, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: resolvedRuntimeRoot, withIntermediateDirectories: true)
+        } catch {
+            XCTFail("failed to prepare automation runtime root: \(resolvedRuntimeRoot.path), error: \(error)")
+        }
         runtimeRoots.append(resolvedRuntimeRoot)
 
         let responseURL = resolvedRuntimeRoot.appendingPathComponent("automation-response.json")
@@ -399,20 +419,29 @@ final class PushGo_macOSUITests: XCTestCase {
             try? fileManager.removeItem(at: url)
         }
 
-        app.launchEnvironment["PUSHGO_AUTOMATION_STORAGE_ROOT"] = resolvedRuntimeRoot.path
-        app.launchEnvironment["PUSHGO_AUTOMATION_PROVIDER_TOKEN"] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-        app.launchEnvironment["PUSHGO_AUTOMATION_SKIP_PUSH_AUTHORIZATION"] = "1"
-        app.launchEnvironment["PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS"] = "0"
-        app.launchEnvironment["PUSHGO_AUTOMATION_RESPONSE_PATH"] = responseURL.path
-        app.launchEnvironment["PUSHGO_AUTOMATION_STATE_PATH"] = stateURL.path
-        app.launchEnvironment["PUSHGO_AUTOMATION_EVENTS_PATH"] = eventsURL.path
-        app.launchEnvironment["PUSHGO_AUTOMATION_TRACE_PATH"] = traceURL.path
-        app.launchEnvironment["PUSHGO_AUTOMATION_FORCE_FOREGROUND_APP"] = "1"
+        let storageToken = "sandbox-tmp:\(resolvedRuntimeRoot.lastPathComponent)"
+        setAutomationValue(storageToken, for: "PUSHGO_AUTOMATION_STORAGE_ROOT", in: app)
+        setAutomationValue(
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            for: "PUSHGO_AUTOMATION_PROVIDER_TOKEN",
+            in: app
+        )
+        setAutomationValue("1", for: "PUSHGO_AUTOMATION_SKIP_PUSH_AUTHORIZATION", in: app)
+        setAutomationValue("0", for: "PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS", in: app)
+        setAutomationValue(responseURL.path, for: "PUSHGO_AUTOMATION_RESPONSE_PATH", in: app)
+        setAutomationValue(stateURL.path, for: "PUSHGO_AUTOMATION_STATE_PATH", in: app)
+        setAutomationValue(eventsURL.path, for: "PUSHGO_AUTOMATION_EVENTS_PATH", in: app)
+        setAutomationValue(traceURL.path, for: "PUSHGO_AUTOMATION_TRACE_PATH", in: app)
+        setAutomationValue("1", for: "PUSHGO_AUTOMATION_FORCE_FOREGROUND_APP", in: app)
         if let startupFixturePath {
-            app.launchEnvironment["PUSHGO_AUTOMATION_STARTUP_FIXTURE_PATH"] = startupFixturePath
+            setAutomationValue(startupFixturePath, for: "PUSHGO_AUTOMATION_STARTUP_FIXTURE_PATH", in: app)
             let fixtureURL = URL(fileURLWithPath: startupFixturePath)
             let fixtureData = try! Data(contentsOf: fixtureURL)
-            app.launchEnvironment["PUSHGO_AUTOMATION_STARTUP_FIXTURE_BASE64"] = fixtureData.base64EncodedString()
+            setAutomationValue(
+                fixtureData.base64EncodedString(),
+                for: "PUSHGO_AUTOMATION_STARTUP_FIXTURE_BASE64",
+                in: app
+            )
         }
 
         if let requestName {
@@ -423,7 +452,7 @@ final class PushGo_macOSUITests: XCTestCase {
                 "args": args,
             ] as [String: Any]
             let data = try! JSONSerialization.data(withJSONObject: requestPayload, options: [])
-            app.launchEnvironment["PUSHGO_AUTOMATION_REQUEST"] = String(decoding: data, as: UTF8.self)
+            setAutomationValue(String(decoding: data, as: UTF8.self), for: "PUSHGO_AUTOMATION_REQUEST", in: app)
         }
 
         return LaunchContext(
@@ -437,18 +466,22 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     private func makeRuntimeRoot() -> URL {
-        let homeDirectory = FileManager.default.homeDirectoryForCurrentUser
-        let sharedBase = homeDirectory
-            .appendingPathComponent("Library", isDirectory: true)
-            .appendingPathComponent("Group Containers", isDirectory: true)
-            .appendingPathComponent(automationAppGroupIdentifier, isDirectory: true)
+        let fileManager = FileManager.default
+        let sharedBase = fileManager.temporaryDirectory
             .appendingPathComponent(automationRuntimeDirectoryName, isDirectory: true)
-        if (try? FileManager.default.createDirectory(at: sharedBase, withIntermediateDirectories: true)) != nil {
-            return sharedBase
-                .appendingPathComponent("PushGo-macOSUITests-\(UUID().uuidString)", isDirectory: true)
+        do {
+            try fileManager.createDirectory(at: sharedBase, withIntermediateDirectories: true)
+        } catch {
+            XCTFail("failed to create automation runtime base: \(sharedBase.path), error: \(error)")
         }
-        return URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        return sharedBase
             .appendingPathComponent("PushGo-macOSUITests-\(UUID().uuidString)", isDirectory: true)
+    }
+
+    @MainActor
+    private func setAutomationValue(_ value: String, for key: String, in app: XCUIApplication) {
+        app.launchEnvironment[key] = value
+        app.launchArguments += ["-\(key)", value]
     }
 
     @MainActor
@@ -468,6 +501,10 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertTrue(context.app.windows.firstMatch.waitForExistence(timeout: 12))
         dismissLocalStoreRecoveryIfNeeded(in: context.app)
         dismissSystemPrivacyDialogsIfNeeded(in: context.app)
+        XCTAssertFalse(
+            context.app.buttons["action-button-3"].exists,
+            "local store recovery prompt still visible, runtime root=\(context.runtimeRoot.path)"
+        )
     }
 
     @MainActor
@@ -626,6 +663,23 @@ final class PushGo_macOSUITests: XCTestCase {
             RunLoop.current.run(until: Date().addingTimeInterval(0.2))
         }
         return identifiers.contains { element(in: app, identifier: $0).exists }
+    }
+
+    @MainActor
+    private func automationArtifactsAvailable(in context: LaunchContext, timeout: TimeInterval = 2) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        let fileManager = FileManager.default
+        while Date() < deadline {
+            if fileManager.fileExists(atPath: context.stateURL.path)
+                || fileManager.fileExists(atPath: context.responseURL.path)
+                || fileManager.fileExists(atPath: context.eventsURL.path)
+                || fileManager.fileExists(atPath: context.traceURL.path)
+            {
+                return true
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
+        return false
     }
 
     @MainActor

@@ -1,9 +1,16 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import ImageIO
 #if os(iOS)
 import UIKit
 #elseif os(macOS)
 import AppKit
+#endif
+#if canImport(SDWebImageSwiftUI) && !os(watchOS)
+import SDWebImageSwiftUI
+#endif
+#if canImport(SDWebImage) && !os(watchOS)
+import SDWebImage
 #endif
 
 @MainActor
@@ -90,14 +97,24 @@ extension View {
     func pushgoImagePreviewOverlay<Item: Identifiable>(
         previewItem: Binding<Item?>,
         imageURL: @escaping (Item) -> URL,
+        onPresent: (() -> Void)? = nil,
+        onDismiss: (() -> Void)? = nil,
     ) -> some View {
 #if os(iOS)
         fullScreenCover(item: previewItem) { payload in
-            PushgoImagePreviewOverlay(imageURL: imageURL(payload))
+            PushgoImagePreviewOverlay(
+                imageURL: imageURL(payload),
+                onPresent: onPresent,
+                onDismiss: onDismiss
+            )
         }
 #else
         sheet(item: previewItem) { payload in
-            PushgoImagePreviewOverlay(imageURL: imageURL(payload))
+            PushgoImagePreviewOverlay(
+                imageURL: imageURL(payload),
+                onPresent: onPresent,
+                onDismiss: onDismiss
+            )
         }
 #endif
     }
@@ -105,6 +122,8 @@ extension View {
 
 private struct PushgoImagePreviewOverlay: View {
     let imageURL: URL
+    let onPresent: (() -> Void)?
+    let onDismiss: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
@@ -114,6 +133,14 @@ private struct PushgoImagePreviewOverlay: View {
     @State private var offset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
     @State private var loadedImage: PreviewPlatformImage?
+    @State private var previewSourceURL: URL?
+    @State private var previewIsAnimated = false
+    @State private var previewIsAnimating = false
+    @State private var animatedPlaybackPhase: AnimatedPlaybackPhase = .unavailable
+    @State private var animatedPlaybackToken = UUID()
+    @State private var singleLoopPlaybackDuration: TimeInterval = 0
+    @State private var playbackStopTask: Task<Void, Never>?
+    @State private var previewLoadGeneration = UUID()
 #if os(iOS)
     @State private var sharePayload: PushGoImageSharePayload?
 #elseif os(macOS)
@@ -125,21 +152,15 @@ private struct PushgoImagePreviewOverlay: View {
             ZStack {
                 Color.appImagePreviewScrim.ignoresSafeArea()
 
-                RemoteImageView(url: imageURL, rendition: .original) { image in
-                    image
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: geo.size.width, maxHeight: geo.size.height)
-                        .scaleEffect(currentScale)
-                        .offset(offset)
-                        .animation(.spring(response: 0.2, dampingFraction: 0.85), value: currentScale)
-                        .animation(.spring(response: 0.2, dampingFraction: 0.85), value: offset)
-                        .onTapGesture(count: 2) { toggleZoom() }
-                        .highPriorityGesture(combinedGesture)
-                } placeholder: {
-                    ProgressView().foregroundStyle(Color.appOverlayForeground)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                previewMediaView(maxWidth: geo.size.width, maxHeight: geo.size.height)
+                    .overlay(alignment: .bottomTrailing) {
+                        if shouldShowReplayButton {
+                            replayButton
+                                .padding(.trailing, 20)
+                                .padding(.bottom, 20)
+                        }
+                    }
+                    .zIndex(0)
 
                 VStack {
                     HStack {
@@ -156,20 +177,35 @@ private struct PushgoImagePreviewOverlay: View {
                         }
                         .padding(.trailing, 6)
 #elseif os(macOS)
-                        PushGoMacShareButton(fileURL: macShareFileURL)
-                        .frame(width: 22, height: 22)
-                        .padding(.trailing, 6)
-                        Button {
-                            Task {
-                                await saveImageToDisk()
+                        HStack(spacing: 8) {
+                            PushGoMacShareButton(fileURL: macShareFileURL)
+                                .pushgoMacPreviewActionChrome(isEnabled: macShareFileURL != nil)
+                            Button {
+                                Task {
+                                    await saveImageToDisk()
+                                }
+                            } label: {
+                                Image(systemName: "square.and.arrow.down")
+                                    .font(.system(size: macPreviewOverlayActionIconSize, weight: .semibold))
+                                    .foregroundStyle(Color.appOverlayForegroundMuted)
                             }
-                        } label: {
-                            Image(systemName: "square.and.arrow.down")
-                                .font(.title3.weight(.semibold))
-                                .foregroundStyle(Color.appOverlayForegroundMuted)
+                            .buttonStyle(.plain)
+                            .pushgoMacPreviewActionChrome()
+                            .accessibilityLabel("Save")
+                            Button {
+                                dismiss()
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: macPreviewOverlayActionIconSize, weight: .semibold))
+                                    .foregroundStyle(Color.appOverlayForegroundMuted)
+                            }
+                            .buttonStyle(.plain)
+                            .pushgoMacPreviewActionChrome()
+                            .accessibilityLabel(LocalizedStringKey("close"))
                         }
-                        .padding(.trailing, 6)
-#endif
+                        .padding(.trailing, 16)
+                        .padding(.top, 16)
+#else
                         Button {
                             dismiss()
                         } label: {
@@ -179,19 +215,65 @@ private struct PushgoImagePreviewOverlay: View {
                         }
                         .accessibilityLabel(LocalizedStringKey("close"))
                         .padding()
+#endif
                     }
                     Spacer()
                 }
+                .zIndex(10)
             }
         }
 #if os(macOS)
         .frame(minWidth: 980, minHeight: 620)
 #endif
         .task(id: imageURL) {
-            _ = await resolveLoadedImage()
+            let generation = UUID()
+            previewLoadGeneration = generation
+            resetPreviewStateForNewImage()
+            PushGoAnimatedImageRuntime.bootstrapIfNeeded()
+            let cachedSourceURL = SharedImageCache.cachedFileURL(
+                for: imageURL,
+                rendition: .original
+            )
+            guard isCurrentPreviewLoad(generation) else { return }
+            previewSourceURL = cachedSourceURL ?? imageURL
+            if let cachedSourceURL {
+                let metadata = await Self.animationMetadata(at: cachedSourceURL)
+                guard isCurrentPreviewLoad(generation) else { return }
+                applyAnimationMetadata(metadata, autoPlay: true)
+            } else {
+                applyAnimationMetadata(.unavailable, autoPlay: false)
+            }
+
+            let resolvedSourceURL = await SharedImageCache.sourceURL(
+                for: imageURL,
+                rendition: .original,
+                maxBytes: AppConstants.maxMessageImageBytes,
+                timeout: 10
+            )
+            guard isCurrentPreviewLoad(generation) else { return }
+            let previousSourceURL = previewSourceURL
+            previewSourceURL = resolvedSourceURL
+            let metadata = await Self.animationMetadata(at: resolvedSourceURL)
+            guard isCurrentPreviewLoad(generation) else { return }
+            let shouldRestartPlayback = previousSourceURL != resolvedSourceURL || animatedPlaybackPhase != .playing
+            applyAnimationMetadata(metadata, autoPlay: shouldRestartPlayback)
 #if os(macOS)
-            macShareFileURL = await shareableImageFileURL()
+            macShareFileURL = Self.localShareableSourceURL(
+                primaryURL: resolvedSourceURL,
+                fallbackURL: imageURL
+            )
 #endif
+        }
+        .onDisappear {
+            onDismiss?()
+            previewLoadGeneration = UUID()
+            playbackStopTask?.cancel()
+            playbackStopTask = nil
+            previewIsAnimating = false
+            animatedPlaybackPhase = .unavailable
+        }
+        .onAppear {
+            onPresent?()
         }
 #if os(iOS)
         .sheet(item: $sharePayload) { payload in
@@ -202,6 +284,56 @@ private struct PushgoImagePreviewOverlay: View {
 
     private var combinedGesture: some Gesture {
         SimultaneousGesture(dragGesture, magnificationGesture)
+    }
+
+    @ViewBuilder
+    private func previewMediaView(maxWidth: CGFloat, maxHeight: CGFloat) -> some View {
+#if canImport(SDWebImageSwiftUI) && !os(watchOS)
+        if previewIsAnimated, let sourceURL = previewSourceURL {
+            AnimatedImage(
+                url: sourceURL,
+                options: [.matchAnimatedImageClass, .fromLoaderOnly],
+                isAnimating: $previewIsAnimating
+            )
+            .customLoopCount(1)
+            .resizable()
+            .scaledToFit()
+            .frame(maxWidth: maxWidth, maxHeight: maxHeight)
+            .scaleEffect(currentScale)
+            .offset(offset)
+            .animation(.spring(response: 0.2, dampingFraction: 0.85), value: currentScale)
+            .animation(.spring(response: 0.2, dampingFraction: 0.85), value: offset)
+            .onTapGesture(count: 2) { toggleZoom() }
+            .highPriorityGesture(combinedGesture)
+            .id(animatedPlaybackToken)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if previewIsAnimated {
+            ProgressView().foregroundStyle(Color.appOverlayForeground)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            staticPreviewMediaView(maxWidth: maxWidth, maxHeight: maxHeight)
+        }
+#else
+        staticPreviewMediaView(maxWidth: maxWidth, maxHeight: maxHeight)
+#endif
+    }
+
+    private func staticPreviewMediaView(maxWidth: CGFloat, maxHeight: CGFloat) -> some View {
+        RemoteImageView(url: previewSourceURL, rendition: .original) { image in
+            image
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: maxWidth, maxHeight: maxHeight)
+                .scaleEffect(currentScale)
+                .offset(offset)
+                .animation(.spring(response: 0.2, dampingFraction: 0.85), value: currentScale)
+                .animation(.spring(response: 0.2, dampingFraction: 0.85), value: offset)
+                .onTapGesture(count: 2) { toggleZoom() }
+                .highPriorityGesture(combinedGesture)
+        } placeholder: {
+            ProgressView().foregroundStyle(Color.appOverlayForeground)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var dragGesture: some Gesture {
@@ -238,6 +370,91 @@ private struct PushgoImagePreviewOverlay: View {
             lastOffset = .zero
         }
         baseScale = currentScale
+    }
+
+    @MainActor
+    private func restartAnimatedPlayback() {
+        guard previewIsAnimated, previewSourceURL != nil else {
+            previewIsAnimating = false
+            animatedPlaybackPhase = .unavailable
+            return
+        }
+        playbackStopTask?.cancel()
+        playbackStopTask = nil
+        let playbackToken = UUID()
+        animatedPlaybackToken = playbackToken
+        animatedPlaybackPhase = .playing
+        previewIsAnimating = false
+
+        // Restart on next run loop to ensure a fresh animation session starts from frame zero.
+        DispatchQueue.main.async {
+            guard animatedPlaybackToken == playbackToken else { return }
+            previewIsAnimating = true
+        }
+
+        let playbackDuration = max(singleLoopPlaybackDuration, 0.9) + 0.12
+        playbackStopTask = Task { @MainActor in
+            let nanos = UInt64(playbackDuration * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: nanos)
+            guard !Task.isCancelled else { return }
+            guard animatedPlaybackToken == playbackToken else { return }
+            previewIsAnimating = false
+            animatedPlaybackPhase = previewIsAnimated ? .ready : .unavailable
+        }
+    }
+
+    @MainActor
+    private func resetPreviewStateForNewImage() {
+        playbackStopTask?.cancel()
+        playbackStopTask = nil
+        previewSourceURL = nil
+        previewIsAnimated = false
+        previewIsAnimating = false
+        animatedPlaybackPhase = .unavailable
+        animatedPlaybackToken = UUID()
+        singleLoopPlaybackDuration = 0
+        loadedImage = nil
+        currentScale = 1
+        baseScale = 1
+        offset = .zero
+        lastOffset = .zero
+#if os(macOS)
+        macShareFileURL = nil
+#elseif os(iOS)
+        sharePayload = nil
+#endif
+    }
+
+    @MainActor
+    private func isCurrentPreviewLoad(_ generation: UUID) -> Bool {
+        !Task.isCancelled && previewLoadGeneration == generation
+    }
+
+    private var shouldShowReplayButton: Bool {
+        previewIsAnimated
+            && previewSourceURL?.isFileURL == true
+            && animatedPlaybackPhase == .ready
+    }
+
+    private var replayButton: some View {
+        Button {
+            restartAnimatedPlayback()
+        } label: {
+            Image(systemName: "play.fill")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Color.appOverlayForegroundMuted)
+                .frame(width: 44, height: 44)
+                .background(
+                    Circle()
+                        .fill(Color.black.opacity(0.46))
+                )
+                .overlay(
+                    Circle()
+                        .strokeBorder(Color.white.opacity(0.20), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(LocalizedStringKey("play"))
     }
 
     private func resolveLoadedImage() async -> PreviewPlatformImage? {
@@ -358,6 +575,153 @@ private struct PushgoImagePreviewOverlay: View {
             duration: 2
         )
     }
+
+    private static func isSupportedAnimatedImage(at url: URL) -> Bool {
+        guard url.isFileURL else {
+            return false
+        }
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
+            return sdWebImageAnimatedFrameCount(at: url) > 1
+        }
+        let frameCount = CGImageSourceGetCount(source)
+        if frameCount > 1 {
+            return true
+        }
+        return sdWebImageAnimatedFrameCount(at: url) > 1
+    }
+
+    @MainActor
+    private func applyAnimationMetadata(_ metadata: AnimationMetadata, autoPlay: Bool) {
+        previewIsAnimated = metadata.isAnimated
+        singleLoopPlaybackDuration = metadata.singleLoopDuration
+        playbackStopTask?.cancel()
+        playbackStopTask = nil
+        previewIsAnimating = false
+        if metadata.isAnimated {
+            animatedPlaybackPhase = .ready
+            if autoPlay {
+                restartAnimatedPlayback()
+            }
+        } else {
+            animatedPlaybackPhase = .unavailable
+        }
+    }
+
+    nonisolated private static func animationMetadata(at url: URL) async -> AnimationMetadata {
+        await Task.detached(priority: .utility) {
+            readAnimationMetadata(at: url)
+        }
+        .value
+    }
+
+    nonisolated private static func readAnimationMetadata(at url: URL) -> AnimationMetadata {
+        guard url.isFileURL else { return .unavailable }
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
+            let fallbackFrameCount = sdWebImageAnimatedFrameCount(at: url)
+            guard fallbackFrameCount > 1 else { return .unavailable }
+            return .animated(singleLoopDuration: fallbackDuration(frameCount: fallbackFrameCount))
+        }
+
+        let frameCount = CGImageSourceGetCount(source)
+        guard frameCount > 1 else { return .unavailable }
+
+        var duration: TimeInterval = 0
+        for frameIndex in 0 ..< frameCount {
+            guard
+                let properties = CGImageSourceCopyPropertiesAtIndex(source, frameIndex, nil) as? [CFString: Any]
+            else {
+                duration += 0.1
+                continue
+            }
+            duration += max(frameDelay(from: properties), 0.02)
+        }
+
+        if duration <= 0 {
+            duration = fallbackDuration(frameCount: UInt(frameCount))
+        }
+        return .animated(singleLoopDuration: min(max(duration, 0.12), 60))
+    }
+
+    nonisolated private static func fallbackDuration(frameCount: UInt) -> TimeInterval {
+        min(max(TimeInterval(frameCount) * 0.1, 0.9), 60)
+    }
+
+    nonisolated private static func frameDelay(from properties: [CFString: Any]) -> TimeInterval {
+        let dictionaries: [[CFString: Any]] = [
+            properties[kCGImagePropertyGIFDictionary] as? [CFString: Any],
+            properties[kCGImagePropertyPNGDictionary] as? [CFString: Any],
+            properties[kCGImagePropertyWebPDictionary] as? [CFString: Any],
+            properties["WebP" as CFString] as? [CFString: Any],
+            properties["{WebP}" as CFString] as? [CFString: Any],
+        ]
+        .compactMap { $0 }
+
+        for dictionary in dictionaries {
+            if let unclamped = readDelayValue(from: dictionary, matching: "UnclampedDelayTime"), unclamped > 0 {
+                return max(unclamped, 0.02)
+            }
+            if let delay = readDelayValue(from: dictionary, matching: "DelayTime"), delay > 0 {
+                return max(delay, 0.02)
+            }
+        }
+        return 0.1
+    }
+
+    nonisolated private static func readDelayValue(
+        from dictionary: [CFString: Any],
+        matching keyword: String
+    ) -> TimeInterval? {
+        for (key, value) in dictionary {
+            let keyString = (key as String).lowercased()
+            guard keyString.contains(keyword.lowercased()) else { continue }
+            if let number = value as? NSNumber {
+                return number.doubleValue
+            }
+        }
+        return nil
+    }
+
+    nonisolated private static func sdWebImageAnimatedFrameCount(at fileURL: URL) -> UInt {
+#if canImport(SDWebImage) && !os(watchOS)
+        guard let data = try? Data(contentsOf: fileURL, options: [.mappedIfSafe]),
+              let animatedImage = SDAnimatedImage(data: data)
+        else {
+            return 0
+        }
+        return animatedImage.animatedImageFrameCount
+#else
+        return 0
+#endif
+    }
+
+#if os(macOS)
+    private static func localShareableSourceURL(primaryURL: URL?, fallbackURL: URL) -> URL? {
+        if let primaryURL, primaryURL.isFileURL {
+            return primaryURL
+        }
+        if fallbackURL.isFileURL {
+            return fallbackURL
+        }
+        return nil
+    }
+#endif
+
+    private enum AnimatedPlaybackPhase {
+        case unavailable
+        case ready
+        case playing
+    }
+
+    private struct AnimationMetadata: Sendable {
+        let isAnimated: Bool
+        let singleLoopDuration: TimeInterval
+
+        static let unavailable = AnimationMetadata(isAnimated: false, singleLoopDuration: 0)
+
+        static func animated(singleLoopDuration: TimeInterval) -> AnimationMetadata {
+            AnimationMetadata(isAnimated: true, singleLoopDuration: singleLoopDuration)
+        }
+    }
 }
 
 #if os(iOS)
@@ -385,6 +749,26 @@ private struct PushGoImageSharePayload: Identifiable {
 #endif
 
 #if os(macOS)
+private let macPreviewOverlayActionButtonSize: CGFloat = 34
+private let macPreviewOverlayActionIconSize: CGFloat = 15
+private let macPreviewOverlayActionCornerRadius: CGFloat = 10
+
+private extension View {
+    func pushgoMacPreviewActionChrome(isEnabled: Bool = true) -> some View {
+        self
+            .frame(width: macPreviewOverlayActionButtonSize, height: macPreviewOverlayActionButtonSize)
+            .background(
+                RoundedRectangle(cornerRadius: macPreviewOverlayActionCornerRadius, style: .continuous)
+                    .fill(Color.black.opacity(isEnabled ? 0.42 : 0.24))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: macPreviewOverlayActionCornerRadius, style: .continuous)
+                    .strokeBorder(Color.white.opacity(isEnabled ? 0.16 : 0.08), lineWidth: 1)
+            )
+            .opacity(isEnabled ? 1 : 0.72)
+    }
+}
+
 private struct PushGoMacShareButton: NSViewRepresentable {
     let fileURL: URL?
 
@@ -396,11 +780,10 @@ private struct PushGoMacShareButton: NSViewRepresentable {
         let button = NSButton()
         button.isBordered = false
         button.bezelStyle = .regularSquare
-        button.image = NSImage(
-            systemSymbolName: "square.and.arrow.up",
-            accessibilityDescription: NSLocalizedString("Share", comment: "Share image"),
-        )
+        button.image = Self.shareIcon()
+        button.imageScaling = .scaleProportionallyDown
         button.contentTintColor = .white
+        button.toolTip = NSLocalizedString("Share", comment: "Share image")
         button.isEnabled = fileURL != nil
         button.target = context.coordinator
         button.action = #selector(Coordinator.shareTapped(_:))
@@ -413,6 +796,19 @@ private struct PushGoMacShareButton: NSViewRepresentable {
         context.coordinator.fileURL = fileURL
         nsView.isEnabled = fileURL != nil
         nsView.contentTintColor = fileURL == nil ? NSColor.white.withAlphaComponent(0.45) : .white
+        nsView.image = Self.shareIcon()
+    }
+
+    private static func shareIcon() -> NSImage? {
+        let icon = NSImage(
+            systemSymbolName: "square.and.arrow.up",
+            accessibilityDescription: NSLocalizedString("Share", comment: "Share image"),
+        )
+        let configuration = NSImage.SymbolConfiguration(
+            pointSize: macPreviewOverlayActionIconSize,
+            weight: .semibold
+        )
+        return icon?.withSymbolConfiguration(configuration)
     }
 
     final class Coordinator: NSObject {

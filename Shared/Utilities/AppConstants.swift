@@ -6,14 +6,44 @@ import Network
 import Security
 import UniformTypeIdentifiers
 import UserNotifications
+#if canImport(SDWebImage)
+import SDWebImage
+#endif
 #if os(iOS)
 import UIKit
 #elseif os(macOS)
 import AppKit
 #endif
 
+enum PushGoAnimatedImageRuntime {
+    static func bootstrapIfNeeded() {
+#if canImport(SDWebImage)
+        _ = didBootstrap
+#endif
+    }
+
+#if canImport(SDWebImage)
+    private static let didBootstrap: Void = {
+        let manager = SDImageCodersManager.shared
+        registerIfNeeded(SDImageGIFCoder.shared, into: manager)
+        registerIfNeeded(SDImageAPNGCoder.shared, into: manager)
+        registerIfNeeded(SDImageAWebPCoder.shared, into: manager)
+    }()
+
+    private static func registerIfNeeded(_ coder: any SDImageCoder, into manager: SDImageCodersManager) {
+        let isAlreadyRegistered = (manager.coders ?? []).contains { existing in
+            String(reflecting: type(of: existing)) == String(reflecting: type(of: coder))
+        }
+        if !isAlreadyRegistered {
+            manager.addCoder(coder)
+        }
+    }
+#endif
+}
+
 enum PushGoAutomationContext {
     private static let storageRootEnv = "PUSHGO_AUTOMATION_STORAGE_ROOT"
+    private static let sandboxTempStoragePrefix = "sandbox-tmp:"
     private static let providerTokenEnv = "PUSHGO_AUTOMATION_PROVIDER_TOKEN"
     private static let skipPushAuthorizationEnv = "PUSHGO_AUTOMATION_SKIP_PUSH_AUTHORIZATION"
     private static let gatewayBaseURLEnv = "PUSHGO_AUTOMATION_GATEWAY_BASE_URL"
@@ -50,8 +80,7 @@ enum PushGoAutomationContext {
 
     static var forceForegroundApp: Bool {
         guard isActive else { return false }
-        guard let raw = ProcessInfo.processInfo.environment[forceForegroundAppEnv]?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let raw = normalizedString(for: forceForegroundAppEnv)?
             .lowercased()
         else {
             return true
@@ -63,10 +92,7 @@ enum PushGoAutomationContext {
     }
 
     static var bypassPushAuthorizationPrompt: Bool {
-        if let raw = ProcessInfo.processInfo.environment[skipPushAuthorizationEnv]?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-        {
+        if let raw = normalizedString(for: skipPushAuthorizationEnv)?.lowercased() {
             if ["1", "true", "yes", "on"].contains(raw) {
                 return true
             }
@@ -79,8 +105,7 @@ enum PushGoAutomationContext {
 
     static var blocksCrossAppDataAccess: Bool {
         guard isActive else { return false }
-        guard let raw = ProcessInfo.processInfo.environment[allowCrossAppDataAccessEnv]?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let raw = normalizedString(for: allowCrossAppDataAccessEnv)?
             .lowercased()
         else {
             return true
@@ -103,7 +128,29 @@ enum PushGoAutomationContext {
 
     private static func normalizedURL(for envKey: String) -> URL? {
         guard let raw = normalizedString(for: envKey) else { return nil }
+        if envKey == storageRootEnv, let sandboxURL = sandboxTempStorageURL(from: raw) {
+            return sandboxURL
+        }
         return URL(fileURLWithPath: raw, isDirectory: true)
+    }
+
+    private static func sandboxTempStorageURL(from raw: String) -> URL? {
+        guard raw.hasPrefix(sandboxTempStoragePrefix) else { return nil }
+        let relative = raw
+            .dropFirst(sandboxTempStoragePrefix.count)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        var url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pushgo-automation-storage", isDirectory: true)
+        guard !relative.isEmpty else { return url }
+        let parts = relative
+            .split(separator: "/")
+            .map(String.init)
+            .filter { !$0.isEmpty && $0 != "." && $0 != ".." }
+        guard !parts.isEmpty else { return url }
+        for part in parts {
+            url.appendPathComponent(part, isDirectory: true)
+        }
+        return url
     }
 
     private static func normalizedString(for envKey: String) -> String? {
@@ -111,10 +158,23 @@ enum PushGoAutomationContext {
         if let cString = getenv(envKey) {
             rawValue = String(cString: cString)
         } else {
-            rawValue = ProcessInfo.processInfo.environment[envKey] ?? ""
+            rawValue = ProcessInfo.processInfo.environment[envKey]
+                ?? launchArgumentValue(for: envKey)
+                ?? ""
         }
         let raw = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
         return raw.isEmpty ? nil : raw
+    }
+
+    private static func launchArgumentValue(for envKey: String) -> String? {
+        let arguments = ProcessInfo.processInfo.arguments
+        let key = "-\(envKey)"
+        guard let index = arguments.firstIndex(of: key),
+              arguments.indices.contains(index + 1)
+        else {
+            return nil
+        }
+        return arguments[index + 1]
     }
 }
 

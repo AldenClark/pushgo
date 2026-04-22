@@ -12,6 +12,7 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency 
     }
 
     func applicationDidFinishLaunching(_: Notification) {
+        PushGoAnimatedImageRuntime.bootstrapIfNeeded()
         NSApp.setActivationPolicy(.regular)
         activateForAutomationIfNeeded()
         UNUserNotificationCenter.current().delegate = self

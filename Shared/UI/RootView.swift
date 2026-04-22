@@ -412,13 +412,13 @@ final class PushGoAutomationRuntime {
         eventsURL = fileURL(for: PushGoAutomationEnvironment.eventsPath)
         traceURL = fileURL(for: PushGoAutomationEnvironment.tracePath)
         startupFixturePath = normalizedIdentifier(
-            ProcessInfo.processInfo.environment[PushGoAutomationEnvironment.startupFixturePath]
+            environmentValue(for: PushGoAutomationEnvironment.startupFixturePath)
         )
         startupFixtureBase64 = normalizedIdentifier(
-            ProcessInfo.processInfo.environment[PushGoAutomationEnvironment.startupFixtureBase64]
+            environmentValue(for: PushGoAutomationEnvironment.startupFixtureBase64)
         )
 
-        guard let rawRequest = ProcessInfo.processInfo.environment[PushGoAutomationEnvironment.request]?
+        guard let rawRequest = environmentValue(for: PushGoAutomationEnvironment.request)?
             .trimmingCharacters(in: .whitespacesAndNewlines),
               !rawRequest.isEmpty
         else {
@@ -806,13 +806,27 @@ final class PushGoAutomationRuntime {
     }
 
     private func fileURL(for environmentKey: String) -> URL? {
-        guard let rawPath = ProcessInfo.processInfo.environment[environmentKey]?
+        guard let rawPath = environmentValue(for: environmentKey)?
             .trimmingCharacters(in: .whitespacesAndNewlines),
               !rawPath.isEmpty
         else {
             return nil
         }
         return URL(fileURLWithPath: rawPath)
+    }
+
+    private func environmentValue(for key: String) -> String? {
+        if let value = ProcessInfo.processInfo.environment[key] {
+            return value
+        }
+        let arguments = ProcessInfo.processInfo.arguments
+        let argumentKey = "-\(key)"
+        guard let index = arguments.firstIndex(of: argumentKey),
+              arguments.indices.contains(index + 1)
+        else {
+            return nil
+        }
+        return arguments[index + 1]
     }
 
     private func writeJSON<Value: Encodable>(_ value: Value, to url: URL?) {

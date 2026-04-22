@@ -164,14 +164,14 @@ platform :ios do
       log: false
     )
 
-    output.lines.filter_map do |line|
+    output.lines.each_with_object([]) do |line, result|
       next unless line =~ /\s*\d+\)\s+([0-9A-F]{40})\s+"([^"]+)"/
 
       sha = Regexp.last_match(1)
       name = Regexp.last_match(2)
       next unless labels.any? { |label| name.include?(label) }
 
-      {
+      result << {
         sha: sha,
         name: name
       }

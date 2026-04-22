@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="fastlane.lanes">
+    
+    
+    
+      
+      <testcase classname="fastlane.lanes" name="00: default_platform" time="0.000217">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="01: shell command" time="0.031289">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="02: xcodebuild -project /Users/ethan/Repo/PushGo/pushgo/pushgo.xcodeproj -scheme PushGo-macOS-DMG -xcconfig /Users/ethan/Repo/PushGo/pushgo/config/PushGo-macOS-DMG-Sparkle.xcconfig -configuration Release -destination 'generic/platform=macOS' -derivedDataPath /var/folders/fp/pm0_l91s6llgdn240_ptb9f40000gn/T/pushgo-macos-dmg-reference-20260421-22732-8tfv0q build PUSHGO_DISPLAY_VERSION='' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' DEVELOPMENT_TEAM=''" time="150.700545">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="03: shell command" time="0.012264">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="04: shell command" time="0.013686">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="05: shell command" time="0.009883">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="06: shell command" time="0.013543">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="07: shell command" time="0.00986">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="08: shell command" time="0.008984">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="09: shell command" time="0.012267">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="10: shell command" time="0.006551">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="11: shell command" time="0.008326">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="12: shell command" time="0.013322">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="13: shell command" time="0.005784">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="14: shell command" time="0.011166">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="15: shell command" time="0.012822">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="16: shell command" time="0.006213">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="17: shell command" time="0.010249">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="18: shell command" time="0.012783">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="19: xcodebuild -project /Users/ethan/Repo/PushGo/pushgo/pushgo.xcodeproj -scheme PushGo-macOS-DMG -xcconfig /Users/ethan/Repo/PushGo/pushgo/config/PushGo-macOS-DMG-Sparkle.xcconfig -configuration Release -destination 'generic/platform=macOS' -archivePath /Users/ethan/Repo/PushGo/pushgo/artifacts/release/PushGo-macOS.xcarchive archive PUSHGO_DISPLAY_VERSION='' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' DEVELOPMENT_TEAM=''" time="140.398922">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="20: cp -R /Users/ethan/Repo/PushGo/pushgo/artifacts/release/PushGo-macOS.xcarchive/Products/Applications/PushGo.app /Users/ethan/Repo/PushGo/pushgo/artifacts/release/PushGo-macOS-export/PushGo.app" time="0.134539">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="21: shell command" time="0.011565">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="22: shell command" time="0.010472">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="23: shell command" time="0.007165">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="24: shell command" time="5.968493">
+        
+      </testcase>
+    
+  </testsuite>
+</testsuites>

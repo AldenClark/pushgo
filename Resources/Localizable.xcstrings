@@ -16904,6 +16904,9 @@
         }
       }
     },
+    "Save" : {
+
+    },
     "save_configuration" : {
       "extractionState" : "manual",
       "localizations" : {

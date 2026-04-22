@@ -12,6 +12,10 @@ struct MarkdownRenderer: View {
     var maxNewlines: Int? = nil
     var font: Font = .body
     var foreground: Color = .primary
+#if canImport(Textual) && !os(watchOS)
+    @State private var previewingImage: MarkdownImagePreviewItem?
+    @State private var imagePlaybackController = ImageAttachmentPlaybackController()
+#endif
 
     private var displayText: String {
         guard let max = maxNewlines else { return text }
@@ -46,14 +50,23 @@ struct MarkdownRenderer: View {
         )
         .textual.imageAttachmentURLResolver(
             .init { url in
-                await SharedImageCache.sourceURL(
+                if let sourceURL = await SharedImageCache.localSourceURL(
                     for: url,
                     rendition: .original,
                     maxBytes: AppConstants.maxMessageImageBytes,
                     timeout: 10
-                )
+                ) {
+                    return sourceURL
+                }
+                return markdownImageFallbackURL
             }
         )
+        .textual.imageAttachmentTapAction(
+            .init { tappedURL in
+                previewingImage = MarkdownImagePreviewItem(url: tappedURL)
+            }
+        )
+        .textual.imageAttachmentPlaybackController(imagePlaybackController)
         .attachmentRenderingMode(.interactive)
         .textual.fontScale(Self.textualScale)
         .textual.inlineStyle(.gitHub)
@@ -67,6 +80,16 @@ struct MarkdownRenderer: View {
         .foregroundStyle(foreground)
         .lineLimit(nil)
         .fixedSize(horizontal: false, vertical: true)
+        .pushgoImagePreviewOverlay(
+            previewItem: $previewingImage,
+            imageURL: \.url,
+            onPresent: {
+                imagePlaybackController.stop()
+            }
+        )
+        .onDisappear {
+            imagePlaybackController.stop()
+        }
         #else
         Text(displayText)
             .font(font)
@@ -101,6 +124,29 @@ private func cachedImageSize(from data: Data) -> CGSize? {
     let height = CGFloat(truncating: heightNumber)
     guard width > 0, height > 0 else { return nil }
     return CGSize(width: width, height: height)
+}
+
+private let markdownImageFallbackURL: URL = {
+    let fallbackData = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO6h2z8AAAAASUVORK5CYII=") ?? Data()
+    let fallbackDirectory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("pushgo-markdown-image-fallback", isDirectory: true)
+    let fallbackURL = fallbackDirectory.appendingPathComponent("transparent-1x1.png")
+    do {
+        try FileManager.default.createDirectory(at: fallbackDirectory, withIntermediateDirectories: true)
+        if !FileManager.default.fileExists(atPath: fallbackURL.path) {
+            try fallbackData.write(to: fallbackURL, options: .atomic)
+        }
+    } catch {
+        return fallbackURL
+    }
+    return fallbackURL
+}()
+#endif
+
+#if canImport(Textual) && !os(watchOS)
+private struct MarkdownImagePreviewItem: Identifiable {
+    let id = UUID()
+    let url: URL
 }
 #endif
 

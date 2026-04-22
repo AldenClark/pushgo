@@ -255,3 +255,110 @@ struct NotificationPayloadSemanticsTests {
         #expect(NotificationPayloadSemantics.extractMessageId(from: payload) == nil)
     }
 }
+
+struct ImageRenderingPolicyTests {
+    @Test
+    func iosAndMacOSSourcesDoNotUseAsyncImageDirectly() throws {
+        let fileURLs = try sourceFiles(
+            roots: [
+                sourceRoot.appendingPathComponent("Apps/PushGo-iOS", isDirectory: true),
+                sourceRoot.appendingPathComponent("Apps/PushGo-macOS", isDirectory: true),
+                sourceRoot.appendingPathComponent("Shared", isDirectory: true),
+            ]
+        )
+
+        var violations: [String] = []
+        for fileURL in fileURLs {
+            let content = try String(contentsOf: fileURL, encoding: .utf8)
+            if content.contains("AsyncImage(") {
+                violations.append(fileURL.path)
+            }
+        }
+
+        #expect(
+            violations.isEmpty,
+            "AsyncImage is only allowed on watchOS. Violations:\n\(violations.joined(separator: "\n"))"
+        )
+    }
+
+    @Test
+    func directSDWebImageViewsAreRestrictedToSharedRenderEntrypoints() throws {
+        let fileURLs = try sourceFiles(
+            roots: [
+                sourceRoot.appendingPathComponent("Apps/PushGo-iOS", isDirectory: true),
+                sourceRoot.appendingPathComponent("Apps/PushGo-macOS", isDirectory: true),
+                sourceRoot.appendingPathComponent("Shared", isDirectory: true),
+            ]
+        )
+
+        let allowedFiles: Set<String> = [
+            sourceRoot.appendingPathComponent("Shared/UI/RemoteImageView.swift").path,
+            sourceRoot.appendingPathComponent("Shared/UI/KeyboardDismiss.swift").path,
+        ]
+
+        var violations: [String] = []
+        for fileURL in fileURLs {
+            let content = try String(contentsOf: fileURL, encoding: .utf8)
+            let usesDirectSDWebImage = content.contains("WebImage(") || content.contains("AnimatedImage(")
+            if usesDirectSDWebImage && !allowedFiles.contains(fileURL.path) {
+                violations.append(fileURL.path)
+            }
+        }
+
+        #expect(
+            violations.isEmpty,
+            "Direct SDWebImage usage is restricted to shared rendering entrypoints. Violations:\n\(violations.joined(separator: "\n"))"
+        )
+    }
+
+    @Test
+    func watchOSSourcesDoNotImportSDWebImage() throws {
+        let fileURLs = try sourceFiles(
+            roots: [sourceRoot.appendingPathComponent("Apps/PushGo-watchOS", isDirectory: true)]
+        )
+
+        var violations: [String] = []
+        for fileURL in fileURLs {
+            let content = try String(contentsOf: fileURL, encoding: .utf8)
+            if content.contains("SDWebImage") || content.contains("SDWebImageSwiftUI") {
+                violations.append(fileURL.path)
+            }
+        }
+
+        #expect(
+            violations.isEmpty,
+            "watchOS should stay on system image APIs without SDWebImage. Violations:\n\(violations.joined(separator: "\n"))"
+        )
+    }
+
+    private var sourceRoot: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent() // PushGoAppleCoreTests
+            .deletingLastPathComponent() // Tests
+            .deletingLastPathComponent() // pushgo
+    }
+
+    private func sourceFiles(roots: [URL]) throws -> [URL] {
+        var files: [URL] = []
+        let fileManager = FileManager.default
+
+        for root in roots {
+            guard fileManager.fileExists(atPath: root.path) else { continue }
+            guard let enumerator = fileManager.enumerator(
+                at: root,
+                includingPropertiesForKeys: [.isRegularFileKey],
+                options: [.skipsHiddenFiles]
+            ) else {
+                continue
+            }
+            for case let fileURL as URL in enumerator {
+                guard fileURL.pathExtension == "swift" else { continue }
+                let values = try fileURL.resourceValues(forKeys: [.isRegularFileKey])
+                guard values.isRegularFile == true else { continue }
+                files.append(fileURL)
+            }
+        }
+
+        return files.sorted { $0.path < $1.path }
+    }
+}

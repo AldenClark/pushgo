@@ -302,7 +302,24 @@ enum SharedImageCache {
         maxBytes: Int64? = nil,
         timeout: TimeInterval = 10
     ) async -> URL {
-        guard URLSanitizer.isAllowedRemoteURL(url) else { return url }
+        await localSourceURL(
+            for: url,
+            rendition: rendition,
+            maxBytes: maxBytes,
+            timeout: timeout
+        ) ?? url
+    }
+
+    static func localSourceURL(
+        for url: URL,
+        rendition: Rendition = .original,
+        maxBytes: Int64? = nil,
+        timeout: TimeInterval = 10
+    ) async -> URL? {
+        if url.isFileURL {
+            return url
+        }
+        guard URLSanitizer.isAllowedRemoteURL(url) else { return nil }
         if let cached = cachedFileURL(for: url, rendition: rendition) {
             return cached
         }
@@ -313,9 +330,9 @@ enum SharedImageCache {
                 maxBytes: maxBytes,
                 timeout: timeout
             )
-            return cachedFileURL(for: url, rendition: rendition) ?? url
+            return cachedFileURL(for: url, rendition: rendition)
         } catch {
-            return url
+            return nil
         }
     }
 
