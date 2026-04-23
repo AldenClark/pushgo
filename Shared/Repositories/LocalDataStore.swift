@@ -1930,7 +1930,7 @@ private struct GRDBMessageRecord {
         let payloadData = rawPayloadJSON.data(using: .utf8) ?? Data("{}".utf8)
         let payload = (try? decoder.decode([String: AnyCodable].self, from: payloadData)) ?? [:]
         let resolvedStatus = PushMessage.Status(rawValue: status) ?? .normal
-        let resolvedDecryptionState = decryptionState.flatMap(PushMessage.DecryptionState.init(rawValue:))
+        let resolvedDecryptionState = PushMessage.DecryptionState.from(raw: decryptionState)
         return PushMessage(
             id: id,
             messageId: messageId,

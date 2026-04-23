@@ -226,6 +226,22 @@ struct NotificationHandlingTests {
     }
 
     @Test
+    func normalizeRemoteNotificationAcceptsSnakeCaseDecryptionState() {
+        let payload: [AnyHashable: Any] = [
+            "entity_type": "message",
+            "message_id": "msg-crypto-002",
+            "entity_id": "msg-crypto-002",
+            "decryption_state": "decrypt_failed",
+            "title": "Encrypted",
+            "body": "Body",
+        ]
+
+        let normalized = NotificationHandling.normalizeRemoteNotification(payload)
+
+        #expect(normalized?.decryptionState == .decryptFailed)
+    }
+
+    @Test
     func shouldPresentUserAlertRespectsExpiryAndExplicitOverrides() {
         let expiredPayload: [AnyHashable: Any] = [
             "entity_type": "event",

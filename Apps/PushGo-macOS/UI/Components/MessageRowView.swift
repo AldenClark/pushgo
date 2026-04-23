@@ -142,18 +142,16 @@ struct MessageRowView: View {
     private var encryptionIndicator: some View {
         if message.isEncrypted {
             let isDecryptFailed = message.decryptionState == .decryptFailed
-            let icon = isDecryptFailed ? "lock.slash" : "lock.fill"
+            let isDecryptOk = message.decryptionState == .decryptOk
+            let icon = isDecryptFailed ? "lock.slash" : (isDecryptOk ? "lock.open.fill" : "lock.fill")
             let color: Color = isDecryptFailed ? AppSemanticTone.danger.foreground : .appAccentPrimary
+            let accessibilityLabel: LocalizedStringKey = isDecryptFailed
+                ? "decryption_failed_the_original_text_has_been_displayed"
+                : (isDecryptOk ? "decrypted" : "encrypted_message")
             Image(systemName: icon)
                 .font(.caption.bold())
                 .foregroundStyle(color)
-                .accessibilityLabel(
-                    LocalizedStringKey(
-                        isDecryptFailed
-                            ? "decryption_failed_the_original_text_has_been_displayed"
-                            : "encrypted_message",
-                    ),
-                )
+                .accessibilityLabel(accessibilityLabel)
         } else {
             EmptyView()
         }

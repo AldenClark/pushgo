@@ -1,5 +1,4 @@
 import Foundation
-import ImageIO
 import SwiftUI
 
 #if canImport(Textual) && !os(watchOS)
@@ -12,9 +11,9 @@ struct MarkdownRenderer: View {
     var maxNewlines: Int? = nil
     var font: Font = .body
     var foreground: Color = .primary
+    var attachmentWidthHint: CGFloat? = nil
 #if canImport(Textual) && !os(watchOS)
     @State private var previewingImage: MarkdownImagePreviewItem?
-    @State private var imagePlaybackController = ImageAttachmentPlaybackController()
 #endif
 
     private var displayText: String {
@@ -32,6 +31,24 @@ struct MarkdownRenderer: View {
 
     var body: some View {
         #if canImport(Textual) && !os(watchOS)
+        markdownContent
+            .pushgoImagePreviewOverlay(
+                previewItem: $previewingImage,
+                imageURL: \.url
+            )
+        #else
+        Text(displayText)
+            .font(font)
+            .foregroundStyle(foreground)
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
+        #endif
+    }
+}
+
+#if canImport(Textual) && !os(watchOS)
+extension MarkdownRenderer {
+    private var markdownContent: some View {
         Group {
             if prefersStructuredText {
                 StructuredText(markdown: normalizedText)
@@ -42,10 +59,14 @@ struct MarkdownRenderer: View {
                 InlineText(markdown: normalizedText)
             }
         }
+        .transaction { transaction in
+            transaction.animation = nil
+        }
         .textual.imageAttachmentLoader(
             .adaptiveImage(
                 backend: .sdWebImage,
-                sizeProvider: markdownImageSizeProvider
+                sizeProvider: markdownImageSizeProvider,
+                syncSizeProvider: markdownImageSyncSizeProvider
             )
         )
         .textual.imageAttachmentURLResolver(
@@ -58,7 +79,7 @@ struct MarkdownRenderer: View {
                 ) {
                     return sourceURL
                 }
-                return markdownImageFallbackURL
+                return url
             }
         )
         .textual.imageAttachmentTapAction(
@@ -66,7 +87,7 @@ struct MarkdownRenderer: View {
                 previewingImage = MarkdownImagePreviewItem(url: tappedURL)
             }
         )
-        .textual.imageAttachmentPlaybackController(imagePlaybackController)
+        .textual.imageAttachmentWidthHint(attachmentWidthHint)
         .attachmentRenderingMode(.interactive)
         .textual.fontScale(Self.textualScale)
         .textual.inlineStyle(.gitHub)
@@ -80,67 +101,88 @@ struct MarkdownRenderer: View {
         .foregroundStyle(foreground)
         .lineLimit(nil)
         .fixedSize(horizontal: false, vertical: true)
-        .pushgoImagePreviewOverlay(
-            previewItem: $previewingImage,
-            imageURL: \.url,
-            onPresent: {
-                imagePlaybackController.stop()
-            }
-        )
-        .onDisappear {
-            imagePlaybackController.stop()
-        }
-        #else
-        Text(displayText)
-            .font(font)
-            .foregroundStyle(foreground)
-            .lineLimit(nil)
-            .fixedSize(horizontal: false, vertical: true)
-        #endif
     }
 }
 
-#if canImport(Textual) && !os(watchOS)
-private let markdownImageSizeProvider: URLImageAttachmentSizeProvider = { url in
-    guard let data = await SharedImageCache.cachedData(for: url, rendition: .original) else {
-        return nil
+let markdownImageSizeProvider: URLImageAttachmentSizeProvider = { url in
+    let metadata = if let cached = await SharedImageCache.metadata(for: url) {
+        cached
+    } else {
+        await SharedImageCache.ensureMetadataFromCache(for: url)
     }
-    return cachedImageSize(from: data)
+    if let metadata,
+       metadata.pixelWidth > 0,
+       metadata.pixelHeight > 0
+    {
+        return CGSize(width: metadata.pixelWidth, height: metadata.pixelHeight)
+    }
+    return nil
 }
 
-private func cachedImageSize(from data: Data) -> CGSize? {
-    guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
-        return nil
-    }
-    guard
-        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-        let widthNumber = properties[kCGImagePropertyPixelWidth] as? NSNumber,
-        let heightNumber = properties[kCGImagePropertyPixelHeight] as? NSNumber
+let markdownImageSyncSizeProvider: URLImageAttachmentSyncSizeProvider = { url in
+    guard let metadata = SharedImageCache.metadataSnapshot(for: url),
+          metadata.pixelWidth > 0,
+          metadata.pixelHeight > 0
     else {
         return nil
     }
-
-    let width = CGFloat(truncating: widthNumber)
-    let height = CGFloat(truncating: heightNumber)
-    guard width > 0, height > 0 else { return nil }
-    return CGSize(width: width, height: height)
+    return CGSize(width: metadata.pixelWidth, height: metadata.pixelHeight)
 }
 
-private let markdownImageFallbackURL: URL = {
-    let fallbackData = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO6h2z8AAAAASUVORK5CYII=") ?? Data()
-    let fallbackDirectory = FileManager.default.temporaryDirectory
-        .appendingPathComponent("pushgo-markdown-image-fallback", isDirectory: true)
-    let fallbackURL = fallbackDirectory.appendingPathComponent("transparent-1x1.png")
-    do {
-        try FileManager.default.createDirectory(at: fallbackDirectory, withIntermediateDirectories: true)
-        if !FileManager.default.fileExists(atPath: fallbackURL.path) {
-            try fallbackData.write(to: fallbackURL, options: .atomic)
+
+enum MarkdownImageURLExtractor {
+    static func extractURLs(from markdown: String) -> [URL] {
+        guard !markdown.isEmpty else { return [] }
+        let nsRange = NSRange(markdown.startIndex..<markdown.endIndex, in: markdown)
+        var candidates: [String] = []
+
+        let patterns = [
+            "!\\[[^\\]]*\\]\\(([^)]+)\\)",
+            "<img[^>]+src\\s*=\\s*['\\\"]([^'\\\"]+)['\\\"][^>]*>",
+            "\\[[^\\]]+\\]:\\s*(https?://\\S+)",
+        ]
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+                continue
+            }
+            for match in regex.matches(in: markdown, options: [], range: nsRange) {
+                guard match.numberOfRanges >= 2 else { continue }
+                guard let swiftRange = Range(match.range(at: 1), in: markdown) else { continue }
+                candidates.append(String(markdown[swiftRange]))
+            }
         }
-    } catch {
-        return fallbackURL
+
+        if let bareURLRegex = try? NSRegularExpression(
+            pattern: "(https?://\\S+\\.(?:png|jpe?g|gif|webp|avif|heic|heif|bmp)(?:\\?\\S*)?)",
+            options: [.caseInsensitive]
+        ) {
+            for match in bareURLRegex.matches(in: markdown, options: [], range: nsRange) {
+                guard let range = Range(match.range(at: 1), in: markdown) else { continue }
+                candidates.append(String(markdown[range]))
+            }
+        }
+
+        var seen = Set<String>()
+        var urls: [URL] = []
+        urls.reserveCapacity(candidates.count)
+        for raw in candidates {
+            let cleaned = cleanURLToken(raw)
+            guard let url = URLSanitizer.resolveHTTPSURL(from: cleaned) else { continue }
+            if seen.insert(url.absoluteString).inserted {
+                urls.append(url)
+            }
+        }
+        return urls
     }
-    return fallbackURL
-}()
+
+    private static func cleanURLToken(_ raw: String) -> String {
+        var token = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        token = token
+            .trimmingCharacters(in: CharacterSet(charactersIn: "<>\"'"))
+            .trimmingCharacters(in: CharacterSet(charactersIn: ")]}.,;"))
+        return token
+    }
+}
 #endif
 
 #if canImport(Textual) && !os(watchOS)

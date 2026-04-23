@@ -6,12 +6,14 @@ import Observation
 final class MessageDetailViewModel {
     private(set) var message: PushMessage?
     private(set) var hasResolvedMessage = false
+    private(set) var isLoading = false
     var alertMessage: String?
 
     private let environment: AppEnvironment
     private let messageId: UUID
     private let localizationManager: LocalizationManager
     private let dataStore: LocalDataStore
+    private var seedMessage: PushMessage?
 
     init(
         environment: AppEnvironment? = nil,
@@ -34,10 +36,9 @@ final class MessageDetailViewModel {
         self.hasResolvedMessage = resolvedInitialMessage != nil
         self.localizationManager = localizationManager ?? LocalizationManager.shared
         dataStore = self.environment.dataStore
-        if resolvedInitialMessage == nil {
-            Task { @MainActor in
-                await loadMessage()
-            }
+        seedMessage = resolvedInitialMessage
+        Task { @MainActor in
+            await loadMessage()
         }
     }
 
@@ -48,7 +49,7 @@ final class MessageDetailViewModel {
     }
 
     func ensureLoaded() async {
-        guard message == nil else { return }
+        guard message == nil, !isLoading else { return }
         await loadMessage()
     }
 
@@ -103,16 +104,58 @@ final class MessageDetailViewModel {
     }
 
     private func loadMessage() async {
-        let revision = environment.messageStoreRevision
-        let result = await MessageDetailSnapshotCache.shared.loadMessage(
-            id: messageId,
-            revision: revision
-        ) { [dataStore, messageId] in
-            try await dataStore.loadMessage(id: messageId)
+        guard !isLoading else { return }
+        isLoading = true
+        defer {
+            isLoading = false
+            hasResolvedMessage = true
         }
-        message = result.message
-        hasResolvedMessage = true
+
+        let revision = environment.messageStoreRevision
+        let resolvedMessage: PushMessage?
+        if let seeded = seedMessage {
+            seedMessage = nil
+            resolvedMessage = seeded
+        } else {
+            let result = await MessageDetailSnapshotCache.shared.loadMessage(
+                id: messageId,
+                revision: revision
+            ) { [dataStore, messageId] in
+                try await dataStore.loadMessage(id: messageId)
+            }
+            resolvedMessage = result.message
+        }
+
+        if let resolvedMessage {
+            let imageURLs = resolvedDetailImageAssetURLs(for: resolvedMessage)
+            await SharedImageCache.primeMetadataSnapshots(for: imageURLs)
+            message = resolvedMessage
+            hasResolvedMessage = true
+            MessageDetailSnapshotCache.shared.store(
+                message: resolvedMessage,
+                id: messageId,
+                revision: revision
+            )
+            await preloadImageAssets(for: resolvedMessage, imageURLs: imageURLs)
+        } else {
+            message = nil
+        }
     }
+
+    private func preloadImageAssets(for message: PushMessage, imageURLs: [URL]? = nil) async {
+        let allURLs = imageURLs ?? resolvedDetailImageAssetURLs(for: message)
+        guard !allURLs.isEmpty else { return }
+        await SharedImageCache.preheatMetadata(
+            for: allURLs,
+            maxBytes: AppConstants.maxMessageImageBytes,
+            timeout: 10
+        )
+    }
+}
+
+func resolvedDetailImageAssetURLs(for message: PushMessage) -> [URL] {
+    let markdownImageURLs = MarkdownImageURLExtractor.extractURLs(from: message.resolvedBody.rawText)
+    return Array(Set(message.imageURLs + markdownImageURLs))
 }
 
 @MainActor

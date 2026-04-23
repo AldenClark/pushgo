@@ -12,7 +12,7 @@ struct MessageDetailScreen: View {
     @State private var showDeleteConfirmation = false
     @State private var isShowingRuntimeAlert = false
     @State private var previewingImage: ImagePreview?
-    @State private var isTextSelectionEnabled = false
+    @State private var isTextSelectionEnabled = true
     @State private var didLoad: Bool = false
     private let onDelete: (() -> Void)?
     private let shouldDismissOnDelete: Bool
@@ -58,20 +58,9 @@ struct MessageDetailScreen: View {
             guard !didLoad else { return }
             didLoad = true
             Task {
-                viewModel.refresh()
+                await viewModel.ensureLoaded()
                 await viewModel.markAsReadIfNeeded()
             }
-            Task { @MainActor in
-                // Wait for the initial detail layout transition to settle before
-                // enabling Textual selection to avoid per-frame update warnings.
-                guard !isTextSelectionEnabled else { return }
-                await Task.yield()
-                try? await Task.sleep(nanoseconds: 250_000_000)
-                isTextSelectionEnabled = true
-            }
-        }
-        .onDisappear {
-            isTextSelectionEnabled = false
         }
         .onChange(of: viewModel.alertMessage) { _, newValue in
             isShowingRuntimeAlert = newValue != nil
@@ -113,29 +102,34 @@ struct MessageDetailScreen: View {
     @ViewBuilder
     private var detailContent: some View {
         if let message = viewModel.message {
-            ScrollView {
-                VStack(alignment: .leading, spacing: EntityVisualTokens.detailSectionSpacing) {
+            GeometryReader { proxy in
+                let markdownWidthHint = max(proxy.size.width - (EntityVisualTokens.detailPaddingHorizontal * 2), 1)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: EntityVisualTokens.detailSectionSpacing) {
                     HStack(alignment: .center, spacing: 12) {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack(alignment: .top, spacing: 8) {
                                 MarkdownRenderer(
                                     text: message.title,
                                     font: .title2.weight(.semibold),
-                                    foreground: .primary
+                                    foreground: .primary,
+                                    attachmentWidthHint: markdownWidthHint
                                 )
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .compatTextSelectionEnabled(isTextSelectionEnabled)
                                 encryptionBadge(for: message)
                             }
 
-                            HStack(spacing: 8) {
-                                Text(message.receivedAt.pushgoDetailTimestamp())
-                                    .font(.subheadline)
-                                    .foregroundStyle(Color.appTextSecondary)
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 8) {
+                                    Text(message.receivedAt.pushgoDetailTimestamp())
+                                        .font(.subheadline)
+                                        .foregroundStyle(Color.appTextSecondary)
+                                    messageSeverityBadge(for: message.severity)
+                                }
                                 if let channelName = environment.channelDisplayName(for: message.channel) {
                                     ChannelTagView(text: channelName)
                                 }
-                                messageSeverityBadge(for: message.severity)
                             }
                         }
                     }
@@ -153,7 +147,8 @@ struct MessageDetailScreen: View {
                     MarkdownRenderer(
                         text: resolvedBody.rawText,
                         font: .body,
-                        foreground: .primary
+                        foreground: .primary,
+                        attachmentWidthHint: markdownWidthHint
                     )
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .compatTextSelectionEnabled(isTextSelectionEnabled)
@@ -180,12 +175,13 @@ struct MessageDetailScreen: View {
                             .accessibilityLabel(localizationManager.localized("copy_content"))
                         }
                     }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, EntityVisualTokens.detailPaddingHorizontal)
+                .padding(.vertical, EntityVisualTokens.detailPaddingVertical)
+                .background(EntityVisualTokens.pageBackground)
+                .contentShape(Rectangle())
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, EntityVisualTokens.detailPaddingHorizontal)
-            .padding(.vertical, EntityVisualTokens.detailPaddingVertical)
-            .background(EntityVisualTokens.pageBackground)
-            .contentShape(Rectangle())
         }
             .alert(isPresented: $showDeleteConfirmation) {
                 Alert(
@@ -205,7 +201,10 @@ struct MessageDetailScreen: View {
                 )
             }
         } else {
-            if viewModel.hasResolvedMessage {
+            if viewModel.isLoading {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            } else if viewModel.hasResolvedMessage {
                 missingState
             } else {
                 Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity)

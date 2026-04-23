@@ -64,9 +64,6 @@ struct MessageSplitScreen: View {
             if newValue != pendingNotificationSelectionId {
                 pendingNotificationSelectionId = nil
             }
-            if let newValue, selectedMessageSnapshot?.id != newValue {
-                selectedMessageSnapshot = nil
-            }
             ensureMessagesSelectionIfNeeded()
             Task { await syncSelectedMessageSnapshot(for: newValue, markRead: true) }
             if let newValue {
@@ -114,18 +111,25 @@ struct MessageSplitScreen: View {
 
     private var messagesDetail: some View {
         Group {
-            if let messageId = selection {
+            if let displayedMessage = selectedMessageSnapshot {
                 MessageDetailScreen(
-                    messageId: messageId,
-                    message: selectedMessageSnapshot,
+                    messageId: displayedMessage.id,
+                    message: displayedMessage,
                     onDelete: {
-                        selection = nil
+                        if selection == displayedMessage.id {
+                            selection = nil
+                        }
                         selectedMessageSnapshot = nil
                     },
                     shouldDismissOnDelete: false,
                     useNavigationContainer: false,
                 )
-                .id(messageId)
+                .id(displayedMessage.id)
+            } else if let messageId = selection {
+                Color.clear
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(messageDetailEmptyBackground)
+                    .id(messageId)
             } else {
                 EntityEmptyView(
                     iconName: "rectangle.split.2x1",
@@ -209,6 +213,9 @@ struct MessageSplitScreen: View {
             try await dataStore.loadMessage(id: messageId)
         }
         let loaded = loadResult.message
+        if let loaded {
+            await SharedImageCache.primeMetadataSnapshots(for: resolvedDetailImageAssetURLs(for: loaded))
+        }
         await MainActor.run {
             guard selection == messageId else { return }
             selectedMessageSnapshot = loaded
@@ -228,6 +235,7 @@ struct MessageSplitScreen: View {
             }
             let loaded = loadResult.message
             guard let message = loaded else { return }
+            await SharedImageCache.primeMetadataSnapshots(for: resolvedDetailImageAssetURLs(for: message))
             await MainActor.run {
                 pendingNotificationSelectionId = targetId
                 selection = targetId
@@ -285,6 +293,7 @@ struct MessageSplitScreen: View {
 
     private func deleteSelectedMessage() {
         guard let message = selectedMessageSnapshot else { return }
+        guard message.id == selection else { return }
         ignoreNextMessageStoreRevisions(for: 1.2)
         Task {
             await messageListViewModel.delete(PushMessageSummary(message: message))
@@ -428,7 +437,7 @@ struct MessageSplitScreen: View {
             }
             .help(localizationManager.localized("delete"))
             .accessibilityLabel(localizationManager.localized("delete"))
-            .disabled(selectedMessageSnapshot == nil || isBatchMode)
+            .disabled(selectedMessageSnapshot?.id != selection || isBatchMode)
         }
     }
 

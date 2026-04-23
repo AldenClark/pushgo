@@ -122,9 +122,6 @@ final class NotificationContentPreparer {
     private static let minimumAttachmentWindow: TimeInterval = 0.5
 
     private let keychainConfigStore = LocalKeychainConfigStore()
-    private let isNotificationServiceExtensionProcess = (
-        Bundle.main.bundleIdentifier?.hasSuffix(".NotificationServiceExtension") == true
-    )
 #if os(watchOS)
     private let watchProvisioningStore = try? WatchLightNotificationStore()
 #endif
@@ -142,19 +139,17 @@ final class NotificationContentPreparer {
             content.userInfo["decryption_state"] = NotificationDecryptionState.notConfigured.rawValue
         }
 
-        if !isNotificationServiceExtensionProcess {
-            do {
-                if let result = try await handleDecryptionIfNeeded(for: content, likelyEncrypted: likelyEncrypted) {
-                    if result.inline == .failure || result.cipher.status == .failure {
-                        content.userInfo["decryption_state"] = NotificationDecryptionState.decryptFailed.rawValue
-                    } else if result.inline == .success || result.cipher.status == .success {
-                        content.userInfo["decryption_state"] = NotificationDecryptionState.decryptOk.rawValue
-                    }
-                }
-            } catch {
-                if likelyEncrypted {
+        do {
+            if let result = try await handleDecryptionIfNeeded(for: content, likelyEncrypted: likelyEncrypted) {
+                if result.inline == .failure || result.cipher.status == .failure {
                     content.userInfo["decryption_state"] = NotificationDecryptionState.decryptFailed.rawValue
+                } else if result.inline == .success || result.cipher.status == .success {
+                    content.userInfo["decryption_state"] = NotificationDecryptionState.decryptOk.rawValue
                 }
+            }
+        } catch {
+            if likelyEncrypted {
+                content.userInfo["decryption_state"] = NotificationDecryptionState.decryptFailed.rawValue
             }
         }
 

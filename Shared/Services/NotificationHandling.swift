@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import UserNotifications
 
@@ -52,28 +53,15 @@ enum NotificationPersistenceCoordinator {
         if NotificationHandling.shouldSkipPersistence(for: payload) {
             return .rejected
         }
-        let normalized = NotificationHandling.normalizeRemoteNotification(payload)
-            ?? NotificationHandling.fallbackNormalizedRemoteNotification(payload)
-        guard let normalized else { return .rejected }
+        let preparedContent = await preparedContentForPersistence(from: payload)
+        let resolvedFallbackRequestIdentifier = normalizedText(requestIdentifier)
+            ?? normalizedText(preparedContent.userInfo["delivery_id"] as? String)
+            ?? UUID().uuidString
 
-        var rawPayload = normalized.rawPayload.reduce(into: [String: AnyCodable]()) { result, element in
-            result[element.key] = AnyCodable(element.value)
-        }
-        let resolvedRequestIdentifier = normalizedText(requestIdentifier)
-            ?? normalizedText(rawPayload["delivery_id"]?.value as? String)
-        if let resolvedRequestIdentifier {
-            rawPayload["_notificationRequestId"] = AnyCodable(resolvedRequestIdentifier)
-        }
-
-        return await persistNormalizedPayload(
-            title: normalized.title,
-            body: normalized.body,
-            hasExplicitTitle: normalized.hasExplicitTitle,
-            channel: normalized.channel,
-            url: normalized.url,
-            decryptionState: normalized.decryptionState,
-            rawPayload: rawPayload,
-            messageId: normalized.messageId,
+        return await persistPreparedContentIfNeeded(
+            content: preparedContent,
+            requestIdentifier: requestIdentifier,
+            fallbackRequestIdentifier: resolvedFallbackRequestIdentifier,
             dataStore: dataStore,
             beforeSave: beforeSave
         )
@@ -114,7 +102,8 @@ enum NotificationPersistenceCoordinator {
         dataStore: LocalDataStore,
         beforeSave: (@Sendable (PushMessage) async -> Void)? = nil
     ) async -> NotificationPersistenceOutcome {
-        if NotificationHandling.shouldSkipPersistence(for: content.userInfo) {
+        let preparedContent = await preparedContentForPersistence(from: content)
+        if NotificationHandling.shouldSkipPersistence(for: preparedContent.userInfo) {
             return .rejected
         }
 
@@ -122,7 +111,7 @@ enum NotificationPersistenceCoordinator {
             ?? normalizedText(fallbackRequestIdentifier)
             ?? UUID().uuidString
         let normalized = NotificationPayloadNormalizer.normalize(
-            content: content,
+            content: preparedContent,
             requestId: resolvedRequestIdentifier
         )
         return await persistNormalizedPayload(
@@ -229,6 +218,222 @@ enum NotificationPersistenceCoordinator {
         .first(where: { !$0.isEmpty })
     }
 
+    private static func preparedContentForPersistence(
+        from payload: [AnyHashable: Any]
+    ) async -> UNNotificationContent {
+        let sanitizedPayload = UserInfoSanitizer.sanitize(payload)
+        let mutableContent = UNMutableNotificationContent()
+        mutableContent.userInfo = sanitizedPayload
+        mutableContent.title = (sanitizedPayload["title"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        mutableContent.body = (sanitizedPayload["body"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return prepareDecryptedContentForPersistence(from: mutableContent)
+    }
+
+    private static func preparedContentForPersistence(
+        from content: UNNotificationContent
+    ) async -> UNNotificationContent {
+        guard let mutableContent = content.mutableCopy() as? UNMutableNotificationContent else {
+            return content
+        }
+        return prepareDecryptedContentForPersistence(from: mutableContent)
+    }
+
+    private static func prepareDecryptedContentForPersistence(
+        from content: UNMutableNotificationContent
+    ) -> UNNotificationContent {
+        let material = try? LocalKeychainConfigStore().loadServerConfig()?.notificationKeyMaterial
+        let hasCiphertext = (content.userInfo["ciphertext"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty == false
+        let likelyEncrypted = hasCiphertext
+            || InlineCipherEnvelope.looksLikeCiphertext(content.title)
+            || InlineCipherEnvelope.looksLikeCiphertext(content.body)
+
+        guard let material, material.isConfigured else {
+            if likelyEncrypted {
+                content.userInfo["decryption_state"] = "notConfigured"
+            }
+            return content
+        }
+
+        guard material.algorithm == .aesGcm else {
+            if likelyEncrypted {
+                content.userInfo["decryption_state"] = "algMismatch"
+            }
+            return content
+        }
+
+        guard [16, 24, 32].contains(material.keyData.count) else {
+            if likelyEncrypted {
+                content.userInfo["decryption_state"] = "decryptFailed"
+            }
+            return content
+        }
+
+        let key = SymmetricKey(data: material.keyData)
+        var decryptSucceeded = false
+        var decryptFailed = false
+
+        if let decryptedTitle = decryptInlineFieldIfNeeded(content.title, key: key, failed: &decryptFailed) {
+            content.title = decryptedTitle
+            content.userInfo["title"] = decryptedTitle
+            decryptSucceeded = true
+        }
+        if let decryptedBody = decryptInlineFieldIfNeeded(content.body, key: key, failed: &decryptFailed) {
+            content.body = decryptedBody
+            content.userInfo["body"] = decryptedBody
+            decryptSucceeded = true
+        }
+        if applyCiphertextPayloadIfNeeded(content: content, key: key, failed: &decryptFailed) {
+            decryptSucceeded = true
+        }
+
+        if decryptFailed {
+            content.userInfo["decryption_state"] = "decryptFailed"
+        } else if decryptSucceeded {
+            content.userInfo["decryption_state"] = "decryptOk"
+        }
+        return content
+    }
+
+    private static func decryptInlineFieldIfNeeded(
+        _ value: String,
+        key: SymmetricKey,
+        failed: inout Bool
+    ) -> String? {
+        guard let envelope = InlineCipherEnvelope(from: value) else {
+            return nil
+        }
+        do {
+            let nonce = try AES.GCM.Nonce(data: envelope.iv)
+            let sealedBox = try AES.GCM.SealedBox(
+                nonce: nonce,
+                ciphertext: envelope.ciphertext,
+                tag: envelope.tag
+            )
+            let decrypted = try AES.GCM.open(sealedBox, using: key)
+            guard let text = String(data: decrypted, encoding: .utf8) else {
+                failed = true
+                return nil
+            }
+            return text
+        } catch {
+            failed = true
+            return nil
+        }
+    }
+
+    private static func applyCiphertextPayloadIfNeeded(
+        content: UNMutableNotificationContent,
+        key: SymmetricKey,
+        failed: inout Bool
+    ) -> Bool {
+        guard let ciphertext = content.userInfo["ciphertext"] as? String,
+              let envelope = InlineCipherEnvelope(from: ciphertext)
+        else {
+            return false
+        }
+        do {
+            let nonce = try AES.GCM.Nonce(data: envelope.iv)
+            let sealedBox = try AES.GCM.SealedBox(
+                nonce: nonce,
+                ciphertext: envelope.ciphertext,
+                tag: envelope.tag
+            )
+            let decrypted = try AES.GCM.open(sealedBox, using: key)
+            guard let jsonText = String(data: decrypted, encoding: .utf8) else {
+                failed = true
+                return false
+            }
+            guard let data = jsonText.data(using: .utf8),
+                  let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else {
+                failed = true
+                return false
+            }
+
+            var applied = false
+            if let title = (object["title"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                !title.isEmpty
+            {
+                content.title = title
+                content.userInfo["title"] = title
+                applied = true
+            }
+            if let body = (object["body"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                !body.isEmpty
+            {
+                content.body = body
+                content.userInfo["body"] = body
+                applied = true
+            }
+            if let images = normalizedImages(from: object["images"]), !images.isEmpty {
+                content.userInfo["images"] = images
+                applied = true
+            }
+            return applied
+        } catch {
+            failed = true
+            return false
+        }
+    }
+
+    private static func normalizedImages(from raw: Any?) -> [String]? {
+        if let values = raw as? [String] {
+            return values
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        if let text = (raw as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !text.isEmpty,
+           let data = text.data(using: .utf8),
+           let object = try? JSONSerialization.jsonObject(with: data),
+           let values = object as? [String]
+        {
+            return values
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        return nil
+    }
+
+    private struct InlineCipherEnvelope {
+        let ciphertext: Data
+        let tag: Data
+        let iv: Data
+
+        init?(from base64: String) {
+            let trimmed = base64.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard Self.looksLikeCiphertext(trimmed),
+                  let decoded = Data(base64Encoded: trimmed)
+            else {
+                return nil
+            }
+            guard decoded.count >= 29 else { return nil }
+            let iv = decoded.suffix(12)
+            let cipherAndTag = decoded.prefix(decoded.count - 12)
+            guard cipherAndTag.count > 16 else { return nil }
+            let tag = cipherAndTag.suffix(16)
+            let ciphertext = cipherAndTag.prefix(cipherAndTag.count - 16)
+            self.ciphertext = ciphertext
+            self.tag = tag
+            self.iv = iv
+        }
+
+        static func looksLikeCiphertext(_ value: String) -> Bool {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, trimmed.count % 4 == 0, trimmed.count >= 40 else {
+                return false
+            }
+            let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=")
+            return trimmed.rangeOfCharacter(from: allowed.inverted) == nil
+        }
+    }
+
     private static func normalizedText(_ value: String?) -> String? {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed
@@ -317,7 +522,7 @@ enum NotificationHandling {
             channel: normalized.channel,
             url: normalized.url,
             rawPayload: normalized.rawPayload,
-            decryptionState: normalized.decryptionStateRaw.flatMap(PushMessage.DecryptionState.init(rawValue:)),
+            decryptionState: PushMessage.DecryptionState.from(raw: normalized.decryptionStateRaw),
             messageId: normalized.messageId,
             operationId: normalized.operationId,
             entityType: normalized.entityType,
@@ -375,7 +580,7 @@ enum NotificationHandling {
         let thingId = normalizedPayloadString(sanitized["thing_id"])
         let decryptionState = ((sanitized["decryption_state"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines))
-            .flatMap(PushMessage.DecryptionState.init(rawValue:))
+            .flatMap(PushMessage.DecryptionState.from(raw:))
         return NormalizedRemoteNotification(
             title: normalizedTitle,
             body: normalizedBody,

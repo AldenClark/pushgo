@@ -13,6 +13,32 @@ struct PushMessage: Identifiable, Codable, Equatable {
         case algMismatch
         case decryptOk
         case decryptFailed
+
+        static func from(raw value: String?) -> DecryptionState? {
+            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !trimmed.isEmpty else { return nil }
+
+            if let exact = DecryptionState(rawValue: trimmed) {
+                return exact
+            }
+
+            let normalized = trimmed
+                .replacingOccurrences(of: "_", with: "")
+                .replacingOccurrences(of: "-", with: "")
+                .lowercased()
+            switch normalized {
+            case "notconfigured":
+                return .notConfigured
+            case "algmismatch":
+                return .algMismatch
+            case "decryptok", "decrypted":
+                return .decryptOk
+            case "decryptfailed":
+                return .decryptFailed
+            default:
+                return nil
+            }
+        }
     }
 
     enum Severity: String, Codable {

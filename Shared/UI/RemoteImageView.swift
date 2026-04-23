@@ -18,6 +18,7 @@ struct RemoteImageView<Content: View, Placeholder: View>: View {
     let placeholder: () -> Placeholder
 
     @State private var sourceURL: URL?
+    @State private var isAnimatedAsset = false
 
     init(
         url: URL?,
@@ -35,16 +36,28 @@ struct RemoteImageView<Content: View, Placeholder: View>: View {
         Group {
 #if canImport(SDWebImageSwiftUI) && !os(watchOS)
             if let sourceURL {
-                WebImage(
-                    url: sourceURL,
-                    options: [.fromLoaderOnly],
-                    isAnimating: .constant(false)
-                ) { image in
-                    content(image)
-                } placeholder: {
-                    placeholder()
+                if isAnimatedAsset {
+                    WebImage(
+                        url: sourceURL,
+                        options: [.fromLoaderOnly],
+                        isAnimating: .constant(false)
+                    ) { image in
+                        content(image)
+                    } placeholder: {
+                        placeholder()
+                    }
+                    .transaction { transaction in
+                        transaction.animation = nil
+                    }
+                } else {
+                    StaticRemoteImageContent(
+                        originalURL: url,
+                        sourceURL: sourceURL,
+                        rendition: rendition,
+                        content: content,
+                        placeholder: placeholder
+                    )
                 }
-                .indicator(.activity)
             } else {
                 placeholder()
             }
@@ -65,12 +78,19 @@ struct RemoteImageView<Content: View, Placeholder: View>: View {
         guard let url else {
             await MainActor.run {
                 sourceURL = nil
+                isAnimatedAsset = false
             }
             return
         }
+        let animatedHint = await animatedAssetHint(for: url)
         if let cached = SharedImageCache.cachedFileURL(for: url, rendition: rendition) {
             await MainActor.run {
-                sourceURL = cached
+                if sourceURL != cached {
+                    sourceURL = cached
+                }
+                if isAnimatedAsset != animatedHint {
+                    isAnimatedAsset = animatedHint
+                }
             }
             return
         }
@@ -81,8 +101,88 @@ struct RemoteImageView<Content: View, Placeholder: View>: View {
             timeout: 10
         )
         await MainActor.run {
-            sourceURL = resolved
+            if sourceURL != resolved {
+                sourceURL = resolved
+            }
+            if isAnimatedAsset != animatedHint {
+                isAnimatedAsset = animatedHint
+            }
         }
+    }
+
+    private func animatedAssetHint(for url: URL) async -> Bool {
+        if let metadata = await SharedImageCache.ensureMetadataFromCache(for: url) {
+            return metadata.isAnimated
+        }
+        let ext = url.pathExtension.lowercased()
+        return ext == "gif" || ext == "webp" || ext == "apng"
+    }
+}
+
+private struct StaticRemoteImageContent<Content: View, Placeholder: View>: View {
+    let originalURL: URL?
+    let sourceURL: URL
+    let rendition: SharedImageCache.Rendition
+    let content: (Image) -> Content
+    let placeholder: () -> Placeholder
+
+    @State private var loadedImage: Image?
+
+    var body: some View {
+        Group {
+            if let loadedImage {
+                content(loadedImage)
+            } else {
+                placeholder()
+            }
+        }
+        .task(id: sourceIdentity) {
+            await loadImage()
+        }
+    }
+
+    private var sourceIdentity: String {
+        let original = originalURL?.absoluteString ?? "nil"
+        return "\(original)#\(rendition.rawValue)#\(sourceURL.absoluteString)"
+    }
+
+    private func loadImage() async {
+        if let originalURL,
+           !originalURL.isFileURL
+        {
+            if let cached = await RemoteImageCache.cachedImage(for: originalURL, rendition: rendition) {
+                await MainActor.run {
+                    loadedImage = swiftUIImage(from: cached)
+                }
+                return
+            }
+            if let remote = try? await RemoteImageCache.loadImage(from: originalURL, rendition: rendition) {
+                await MainActor.run {
+                    loadedImage = swiftUIImage(from: remote)
+                }
+                return
+            }
+        }
+
+        if let data = try? Data(contentsOf: sourceURL),
+           let platformImage = PlatformImage(data: data)
+        {
+            await MainActor.run {
+                loadedImage = swiftUIImage(from: platformImage)
+            }
+            return
+        }
+        await MainActor.run {
+            loadedImage = nil
+        }
+    }
+
+    private func swiftUIImage(from image: PlatformImage) -> Image {
+#if canImport(UIKit)
+        Image(uiImage: image)
+#else
+        Image(nsImage: image)
+#endif
     }
 }
 

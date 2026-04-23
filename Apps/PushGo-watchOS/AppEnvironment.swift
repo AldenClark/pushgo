@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Observation
 import SwiftUI
@@ -1343,6 +1344,251 @@ final class AppEnvironment {
         WKExtension.shared().registerForRemoteNotifications()
     }
 
+    private func prepareStandalonePayloadForPersistence(
+        _ payload: [AnyHashable: Any],
+        fallbackTitle: String,
+        fallbackBody: String
+    ) async -> (payload: [AnyHashable: Any], fallbackTitle: String, fallbackBody: String) {
+        let sanitizedPayload = UserInfoSanitizer.sanitize(payload)
+        var preparedPayload = sanitizedPayload
+        let payloadTitle = (sanitizedPayload["title"] as? String)?
+            .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
+        let payloadBody = (sanitizedPayload["body"] as? String)?
+            .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
+        var resolvedTitle = payloadTitle.isEmpty ? fallbackTitle : payloadTitle
+        var resolvedBody = payloadBody.isEmpty ? fallbackBody : payloadBody
+
+        let hasCiphertext = (sanitizedPayload["ciphertext"] as? String)?
+            .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+            .isEmpty == false
+        let likelyEncrypted = hasCiphertext
+            || InlineCipherEnvelope.looksLikeCiphertext(resolvedTitle)
+            || InlineCipherEnvelope.looksLikeCiphertext(resolvedBody)
+
+        guard let material = currentNotificationMaterial, material.isConfigured else {
+            if likelyEncrypted {
+                preparedPayload["decryption_state"] = "notConfigured"
+            }
+            return (
+                payload: preparedPayload,
+                fallbackTitle: resolvedTitle,
+                fallbackBody: resolvedBody
+            )
+        }
+
+        guard material.algorithm == .aesGcm else {
+            if likelyEncrypted {
+                preparedPayload["decryption_state"] = "algMismatch"
+            }
+            return (
+                payload: preparedPayload,
+                fallbackTitle: resolvedTitle,
+                fallbackBody: resolvedBody
+            )
+        }
+
+        guard [16, 24, 32].contains(material.keyData.count) else {
+            if likelyEncrypted {
+                preparedPayload["decryption_state"] = "decryptFailed"
+            }
+            return (
+                payload: preparedPayload,
+                fallbackTitle: resolvedTitle,
+                fallbackBody: resolvedBody
+            )
+        }
+
+        let key = SymmetricKey(data: material.keyData)
+        var decryptSucceeded = false
+        var decryptFailed = false
+
+        switch decryptInlineText(resolvedTitle, key: key) {
+        case let .decrypted(text):
+            resolvedTitle = text
+            preparedPayload["title"] = text
+            decryptSucceeded = true
+        case .failed:
+            decryptFailed = true
+        case .skipped:
+            break
+        }
+        switch decryptInlineText(resolvedBody, key: key) {
+        case let .decrypted(text):
+            resolvedBody = text
+            preparedPayload["body"] = text
+            decryptSucceeded = true
+        case .failed:
+            decryptFailed = true
+        case .skipped:
+            break
+        }
+
+        switch applyCiphertextPayloadIfNeeded(
+            payload: &preparedPayload,
+            resolvedTitle: &resolvedTitle,
+            resolvedBody: &resolvedBody,
+            key: key
+        ) {
+        case .success:
+            decryptSucceeded = true
+        case .failed:
+            decryptFailed = true
+        case .none:
+            break
+        }
+
+        if decryptFailed {
+            preparedPayload["decryption_state"] = "decryptFailed"
+        } else if decryptSucceeded {
+            preparedPayload["decryption_state"] = "decryptOk"
+        }
+
+        return (
+            payload: preparedPayload,
+            fallbackTitle: resolvedTitle,
+            fallbackBody: resolvedBody
+        )
+    }
+
+    private enum InlineDecryptResult {
+        case skipped
+        case decrypted(String)
+        case failed
+    }
+
+    private enum CipherPayloadDecryptResult {
+        case none
+        case success
+        case failed
+    }
+
+    private struct InlineCipherEnvelope {
+        let ciphertext: Data
+        let tag: Data
+        let iv: Data
+
+        init?(from base64: String) {
+            let trimmed = base64.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+            guard Self.looksLikeCiphertext(trimmed),
+                  let decoded = Data(base64Encoded: trimmed),
+                  decoded.count >= 29
+            else {
+                return nil
+            }
+            let iv = decoded.suffix(12)
+            let cipherAndTag = decoded.prefix(decoded.count - 12)
+            guard cipherAndTag.count > 16 else { return nil }
+            let tag = cipherAndTag.suffix(16)
+            let ciphertext = cipherAndTag.prefix(cipherAndTag.count - 16)
+            self.ciphertext = ciphertext
+            self.tag = tag
+            self.iv = iv
+        }
+
+        static func looksLikeCiphertext(_ value: String) -> Bool {
+            let trimmed = value.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+            guard !trimmed.isEmpty, trimmed.count % 4 == 0, trimmed.count >= 40 else {
+                return false
+            }
+            let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=")
+            return trimmed.rangeOfCharacter(from: allowed.inverted) == nil
+        }
+    }
+
+    private func decryptInlineText(_ value: String, key: SymmetricKey) -> InlineDecryptResult {
+        guard let envelope = InlineCipherEnvelope(from: value) else {
+            return .skipped
+        }
+        do {
+            let nonce = try AES.GCM.Nonce(data: envelope.iv)
+            let sealedBox = try AES.GCM.SealedBox(
+                nonce: nonce,
+                ciphertext: envelope.ciphertext,
+                tag: envelope.tag
+            )
+            let decrypted = try AES.GCM.open(sealedBox, using: key)
+            guard let text = String(data: decrypted, encoding: .utf8) else {
+                return .failed
+            }
+            return .decrypted(text)
+        } catch {
+            return .failed
+        }
+    }
+
+    private func applyCiphertextPayloadIfNeeded(
+        payload: inout [String: Any],
+        resolvedTitle: inout String,
+        resolvedBody: inout String,
+        key: SymmetricKey
+    ) -> CipherPayloadDecryptResult {
+        guard let ciphertext = payload["ciphertext"] as? String,
+              let envelope = InlineCipherEnvelope(from: ciphertext)
+        else {
+            return .none
+        }
+        do {
+            let nonce = try AES.GCM.Nonce(data: envelope.iv)
+            let sealedBox = try AES.GCM.SealedBox(
+                nonce: nonce,
+                ciphertext: envelope.ciphertext,
+                tag: envelope.tag
+            )
+            let decrypted = try AES.GCM.open(sealedBox, using: key)
+            guard let jsonText = String(data: decrypted, encoding: .utf8),
+                  let data = jsonText.data(using: .utf8),
+                  let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else {
+                return .failed
+            }
+
+            var applied = false
+            if let title = (object["title"] as? String)?
+                .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
+                !title.isEmpty
+            {
+                resolvedTitle = title
+                payload["title"] = title
+                applied = true
+            }
+            if let body = (object["body"] as? String)?
+                .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
+                !body.isEmpty
+            {
+                resolvedBody = body
+                payload["body"] = body
+                applied = true
+            }
+            if let images = normalizedImages(from: object["images"]), !images.isEmpty {
+                payload["images"] = images
+                applied = true
+            }
+            return applied ? .success : .none
+        } catch {
+            return .failed
+        }
+    }
+
+    private func normalizedImages(from raw: Any?) -> [String]? {
+        if let values = raw as? [String] {
+            return values
+                .map { $0.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        if let text = (raw as? String)?
+            .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
+           !text.isEmpty,
+           let data = text.data(using: .utf8),
+           let object = try? JSONSerialization.jsonObject(with: data),
+           let values = object as? [String]
+        {
+            return values
+                .map { $0.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        return nil
+    }
+
     private func resolvedStandaloneDisplayOverride(
         from payload: [AnyHashable: Any],
         fallbackTitle: String,
@@ -1414,13 +1660,18 @@ final class AppEnvironment {
         let fallbackRequestIdentifier = notification.request.identifier
         switch ingress {
         case let .pulled(payload, requestIdentifier):
-            let display = resolvedStandaloneDisplayOverride(
-                from: payload,
+            let prepared = await prepareStandalonePayloadForPersistence(
+                payload,
                 fallbackTitle: title,
                 fallbackBody: body
             )
+            let display = resolvedStandaloneDisplayOverride(
+                from: prepared.payload,
+                fallbackTitle: prepared.fallbackTitle,
+                fallbackBody: prepared.fallbackBody
+            )
             let persisted = await persistStandaloneLightPayload(
-                WatchLightQuantizer.stringifyPayload(payload),
+                WatchLightQuantizer.stringifyPayload(prepared.payload),
                 titleOverride: display.title,
                 bodyOverride: display.body,
                 urlOverride: nil,
@@ -1428,13 +1679,18 @@ final class AppEnvironment {
             )
             return persisted
         case let .direct(payload, requestIdentifier):
-            let display = resolvedStandaloneDisplayOverride(
-                from: payload,
+            let prepared = await prepareStandalonePayloadForPersistence(
+                payload,
                 fallbackTitle: title,
                 fallbackBody: body
             )
+            let display = resolvedStandaloneDisplayOverride(
+                from: prepared.payload,
+                fallbackTitle: prepared.fallbackTitle,
+                fallbackBody: prepared.fallbackBody
+            )
             let persisted = await persistStandaloneLightPayload(
-                WatchLightQuantizer.stringifyPayload(payload),
+                WatchLightQuantizer.stringifyPayload(prepared.payload),
                 titleOverride: display.title,
                 bodyOverride: display.body,
                 urlOverride: nil,

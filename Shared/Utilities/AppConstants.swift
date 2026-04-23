@@ -1302,7 +1302,7 @@ enum NotificationPayloadNormalizer {
         let resolvedChannel = trimmedChannel?.isEmpty == true ? nil : trimmedChannel
         let url = (sanitizedPayload["url"] as? String).flatMap { URLSanitizer.resolveExternalOpenURL(from: $0) }
         let stateRaw = sanitizedPayload["decryption_state"] as? String
-        let decryptionState = stateRaw.flatMap(PushMessage.DecryptionState.init(rawValue:))
+        let decryptionState = PushMessage.DecryptionState.from(raw: stateRaw)
 
         let bridgedPayload = sanitizedPayload.reduce(into: [AnyHashable: Any]()) { result, element in
             result[element.key] = element.value
