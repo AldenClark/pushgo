@@ -166,16 +166,49 @@ private struct PushgoImagePreviewOverlay: View {
                     HStack {
                         Spacer()
 #if os(iOS)
-                        Button {
-                            Task {
-                                await prepareSharePayload()
+                        HStack(spacing: 8) {
+                            Button {
+                                Task {
+                                    await prepareSharePayload()
+                                }
+                            } label: {
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(Color.appOverlayForegroundMuted)
+                                    .frame(width: 34, height: 34)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .fill(Color.black.opacity(0.42))
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+                                    )
                             }
-                        } label: {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.title3.weight(.semibold))
-                                .foregroundStyle(Color.appOverlayForegroundMuted)
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(LocalizedStringKey("share"))
+
+                            Button {
+                                dismiss()
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(Color.appOverlayForegroundMuted)
+                                    .frame(width: 34, height: 34)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .fill(Color.black.opacity(0.42))
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(LocalizedStringKey("close"))
                         }
-                        .padding(.trailing, 6)
+                        .padding(.trailing, 16)
+                        .padding(.top, 16)
 #elseif os(macOS)
                         HStack(spacing: 8) {
                             PushGoMacShareButton(fileURL: macShareFileURL)

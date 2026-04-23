@@ -1,69 +1,69 @@
 {
-  "originHash": "008451f0f5eba8f8b6e1db62f0a651aae3dce2c8d203bf09d91f84278ee95703",
-  "pins": [
+  "originHash" : "008451f0f5eba8f8b6e1db62f0a651aae3dce2c8d203bf09d91f84278ee95703",
+  "pins" : [
     {
-      "identity": "grdb.swift",
-      "kind": "remoteSourceControl",
-      "location": "https://github.com/groue/GRDB.swift.git",
-      "state": {
-        "revision": "36e30a6f1ef10e4194f6af0cff90888526f0c115",
-        "version": "7.10.0"
+      "identity" : "grdb.swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/groue/GRDB.swift.git",
+      "state" : {
+        "revision" : "36e30a6f1ef10e4194f6af0cff90888526f0c115",
+        "version" : "7.10.0"
       }
     },
     {
-      "identity": "sdwebimage",
-      "kind": "remoteSourceControl",
-      "location": "https://github.com/SDWebImage/SDWebImage.git",
-      "state": {
-        "revision": "2de3a496eaf6df9a1312862adcfd54acd73c39c0",
-        "version": "5.21.7"
+      "identity" : "sdwebimage",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/SDWebImage/SDWebImage.git",
+      "state" : {
+        "revision" : "2de3a496eaf6df9a1312862adcfd54acd73c39c0",
+        "version" : "5.21.7"
       }
     },
     {
-      "identity": "sdwebimageswiftui",
-      "kind": "remoteSourceControl",
-      "location": "https://github.com/SDWebImage/SDWebImageSwiftUI.git",
-      "state": {
-        "revision": "0e331457ca9af2f0b08bcaa138a91ffb907b004f",
-        "version": "3.1.4"
+      "identity" : "sdwebimageswiftui",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/SDWebImage/SDWebImageSwiftUI.git",
+      "state" : {
+        "revision" : "0e331457ca9af2f0b08bcaa138a91ffb907b004f",
+        "version" : "3.1.4"
       }
     },
     {
-      "identity": "sparkle",
-      "kind": "remoteSourceControl",
-      "location": "https://github.com/sparkle-project/Sparkle",
-      "state": {
-        "revision": "066e75a8b3e99962685d6a90cdd5293ebffd9261",
-        "version": "2.9.1"
+      "identity" : "sparkle",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/sparkle-project/Sparkle",
+      "state" : {
+        "revision" : "066e75a8b3e99962685d6a90cdd5293ebffd9261",
+        "version" : "2.9.1"
       }
     },
     {
-      "identity": "swift-concurrency-extras",
-      "kind": "remoteSourceControl",
-      "location": "https://github.com/pointfreeco/swift-concurrency-extras",
-      "state": {
-        "revision": "5a3825302b1a0d744183200915a47b508c828e6f",
-        "version": "1.3.2"
+      "identity" : "swift-concurrency-extras",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/pointfreeco/swift-concurrency-extras",
+      "state" : {
+        "revision" : "5a3825302b1a0d744183200915a47b508c828e6f",
+        "version" : "1.3.2"
       }
     },
     {
-      "identity": "swiftui-math",
-      "kind": "remoteSourceControl",
-      "location": "https://github.com/gonzalezreal/swiftui-math",
-      "state": {
-        "revision": "0b5c2cfaaec8d6193db206f675048eeb5ce95f71",
-        "version": "0.1.0"
+      "identity" : "swiftui-math",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/gonzalezreal/swiftui-math",
+      "state" : {
+        "revision" : "0b5c2cfaaec8d6193db206f675048eeb5ce95f71",
+        "version" : "0.1.0"
       }
     },
     {
-      "identity": "textual",
-      "kind": "remoteSourceControl",
-      "location": "https://github.com/AldenClark/textual",
-      "state": {
-        "branch": "main",
-        "revision": "87d79885c270b87974ea16fa5634a167a45eede3"
+      "identity" : "textual",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/AldenClark/textual",
+      "state" : {
+        "branch" : "main",
+        "revision" : "156421fbd15e57e297b96c9017463c5b2d950a8f"
       }
     }
   ],
-  "version": 3
+  "version" : 3
 }

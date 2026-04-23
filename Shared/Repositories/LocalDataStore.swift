@@ -436,22 +436,7 @@ actor LocalDataStore {
     }
 
     private func eventTime(for message: PushMessage) -> Date? {
-        let rawValue = message.rawPayload["event_time"]?.value
-        if let int = rawValue as? Int {
-            return Date(timeIntervalSince1970: TimeInterval(int))
-        }
-        if let int64 = rawValue as? Int64 {
-            return Date(timeIntervalSince1970: TimeInterval(int64))
-        }
-        if let number = rawValue as? NSNumber {
-            return Date(timeIntervalSince1970: number.doubleValue)
-        }
-        if let text = rawValue as? String,
-           let parsed = TimeInterval(text.trimmingCharacters(in: .whitespacesAndNewlines))
-        {
-            return Date(timeIntervalSince1970: parsed)
-        }
-        return nil
+        PayloadTimeParser.date(from: message.rawPayload["event_time"]?.value)
     }
 
     private func normalizeChannelKey(_ channel: String?) -> String? {
@@ -1921,7 +1906,7 @@ private struct GRDBMessageRecord {
         let isReadInt: Int64 = row["is_read"]
         isRead = isReadInt != 0
         let receivedAtEpoch: Double = row["received_at"]
-        receivedAt = Date(timeIntervalSince1970: receivedAtEpoch)
+        receivedAt = GRDBStore.dateFromStoredEpoch(receivedAtEpoch)
         rawPayloadJSON = row["raw_payload_json"]
         status = row["status"]
         decryptionState = row["decryption_state"]
@@ -1995,9 +1980,9 @@ private struct GRDBMessageRecord {
             thingId: normalizeOptional(canonicalMessage.thingId),
             projectionDestination: normalizeOptional(canonicalMessage.projectionDestination),
             eventState: normalizeOptional(canonicalMessage.eventState),
-            eventTimeEpoch: Self.epochSeconds(from: canonicalMessage.rawPayload["event_time"]?.value),
-            observedTimeEpoch: Self.epochSeconds(from: canonicalMessage.rawPayload["observed_at"]?.value),
-            occurredAtEpoch: Self.epochSeconds(from: canonicalMessage.rawPayload["occurred_at"]?.value),
+            eventTimeEpoch: Self.epochMilliseconds(from: canonicalMessage.rawPayload["event_time"]?.value),
+            observedTimeEpoch: Self.epochMilliseconds(from: canonicalMessage.rawPayload["observed_at"]?.value),
+            occurredAtEpoch: Self.epochMilliseconds(from: canonicalMessage.rawPayload["occurred_at"]?.value),
             topLevelMessage: isTopLevelMessage(canonicalMessage)
         )
     }
@@ -2007,21 +1992,8 @@ private struct GRDBMessageRecord {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    private static func epochSeconds(from value: Any?) -> Int64? {
-        switch value {
-        case let int as Int:
-            return Int64(int)
-        case let int64 as Int64:
-            return int64
-        case let number as NSNumber:
-            return number.int64Value
-        case let double as Double:
-            return Int64(double)
-        case let text as String:
-            return Int64(text.trimmingCharacters(in: .whitespacesAndNewlines))
-        default:
-            return nil
-        }
+    private static func epochMilliseconds(from value: Any?) -> Int64? {
+        PayloadTimeParser.epochMilliseconds(from: value)
     }
 }
 
@@ -2058,7 +2030,7 @@ private struct GRDBPendingInboundMessageRecord {
         channel = row["channel"]
         url = row["url"]
         let receivedAtEpoch: Double = row["received_at"]
-        receivedAt = Date(timeIntervalSince1970: receivedAtEpoch)
+        receivedAt = GRDBStore.dateFromStoredEpoch(receivedAtEpoch)
         status = row["status"]
         decryptionState = row["decryption_state"]
         notificationRequestId = row["notification_request_id"]
@@ -2122,7 +2094,7 @@ private struct GRDBOperationLedgerRecord {
         entityId = row["entity_id"]
         deliveryId = row["delivery_id"]
         let appliedAtEpoch: Double = row["applied_at"]
-        appliedAt = Date(timeIntervalSince1970: appliedAtEpoch)
+        appliedAt = GRDBStore.dateFromStoredEpoch(appliedAtEpoch)
     }
 }
 
@@ -2147,7 +2119,7 @@ private struct GRDBWatchLightMessageRecord {
         url = row["url"]
         severity = row["severity"]
         let receivedAtEpoch: Double = row["received_at"]
-        receivedAt = Date(timeIntervalSince1970: receivedAtEpoch)
+        receivedAt = GRDBStore.dateFromStoredEpoch(receivedAtEpoch)
         let isReadInt: Int64 = row["is_read"]
         isRead = isReadInt != 0
         entityType = row["entity_type"]
@@ -2189,7 +2161,7 @@ private struct GRDBWatchLightEventRecord {
         severity = row["severity"]
         imageURL = row["image_url"]
         let updatedAtEpoch: Double = row["updated_at"]
-        updatedAt = Date(timeIntervalSince1970: updatedAtEpoch)
+        updatedAt = GRDBStore.dateFromStoredEpoch(updatedAtEpoch)
     }
 
     func toModel() -> WatchLightEvent {
@@ -2220,7 +2192,7 @@ private struct GRDBWatchLightThingRecord {
         attrsJSON = row["attrs_json"]
         imageURL = row["image_url"]
         let updatedAtEpoch: Double = row["updated_at"]
-        updatedAt = Date(timeIntervalSince1970: updatedAtEpoch)
+        updatedAt = GRDBStore.dateFromStoredEpoch(updatedAtEpoch)
     }
 
     func toModel() -> WatchLightThing {
@@ -2246,7 +2218,7 @@ private struct GRDBWatchMirrorActionRecord {
         kind = row["kind"]
         messageId = row["message_id"]
         let issuedAtEpoch: Double = row["issued_at"]
-        issuedAt = Date(timeIntervalSince1970: issuedAtEpoch)
+        issuedAt = GRDBStore.dateFromStoredEpoch(issuedAtEpoch)
     }
 
     func toModel() -> WatchMirrorAction? {
@@ -2784,6 +2756,90 @@ private actor GRDBStore {
                 """)
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_pending_inbound_messages_thing_order ON pending_inbound_messages(thing_id, occurred_at_epoch ASC, event_time_epoch ASC, observed_time_epoch ASC, received_at ASC, pending_id ASC);")
         }
+        migrator.registerMigration("v11_projection_epoch_millis") { db in
+            let threshold = 1_000_000_000_000 as Int64
+            try db.execute(
+                sql: """
+                    UPDATE messages
+                    SET event_time_epoch = event_time_epoch * 1000
+                    WHERE event_time_epoch IS NOT NULL
+                      AND ABS(event_time_epoch) < ?;
+                    """,
+                arguments: [threshold]
+            )
+            try db.execute(
+                sql: """
+                    UPDATE messages
+                    SET observed_time_epoch = observed_time_epoch * 1000
+                    WHERE observed_time_epoch IS NOT NULL
+                      AND ABS(observed_time_epoch) < ?;
+                    """,
+                arguments: [threshold]
+            )
+            try db.execute(
+                sql: """
+                    UPDATE messages
+                    SET occurred_at_epoch = occurred_at_epoch * 1000
+                    WHERE occurred_at_epoch IS NOT NULL
+                      AND ABS(occurred_at_epoch) < ?;
+                    """,
+                arguments: [threshold]
+            )
+            try db.execute(
+                sql: """
+                    UPDATE pending_inbound_messages
+                    SET event_time_epoch = event_time_epoch * 1000
+                    WHERE event_time_epoch IS NOT NULL
+                      AND ABS(event_time_epoch) < ?;
+                    """,
+                arguments: [threshold]
+            )
+            try db.execute(
+                sql: """
+                    UPDATE pending_inbound_messages
+                    SET observed_time_epoch = observed_time_epoch * 1000
+                    WHERE observed_time_epoch IS NOT NULL
+                      AND ABS(observed_time_epoch) < ?;
+                    """,
+                arguments: [threshold]
+            )
+            try db.execute(
+                sql: """
+                    UPDATE pending_inbound_messages
+                    SET occurred_at_epoch = occurred_at_epoch * 1000
+                    WHERE occurred_at_epoch IS NOT NULL
+                      AND ABS(occurred_at_epoch) < ?;
+                    """,
+                arguments: [threshold]
+            )
+        }
+        migrator.registerMigration("v12_all_epoch_millis") { db in
+            let threshold = 1_000_000_000_000 as Int64
+            let targets: [(String, [String])] = [
+                ("messages", ["received_at", "event_time_epoch", "observed_time_epoch", "occurred_at_epoch"]),
+                ("pending_inbound_messages", ["received_at", "created_at", "event_time_epoch", "observed_time_epoch", "occurred_at_epoch"]),
+                ("operation_ledger", ["applied_at"]),
+                ("channel_subscriptions", ["updated_at", "last_synced_at", "deleted_at"]),
+                ("app_settings", ["updated_at", "watch_provisioning_applied_at"]),
+                ("watch_light_messages", ["received_at"]),
+                ("watch_light_events", ["updated_at"]),
+                ("watch_light_things", ["updated_at"]),
+                ("watch_mirror_action_queue", ["issued_at"]),
+            ]
+            for (table, columns) in targets {
+                for column in columns {
+                    try db.execute(
+                        sql: """
+                            UPDATE \(table)
+                            SET \(column) = \(column) * 1000
+                            WHERE \(column) IS NOT NULL
+                              AND ABS(\(column)) < ?;
+                            """,
+                        arguments: [threshold]
+                    )
+                }
+            }
+        }
         return migrator
     }()
 
@@ -2799,6 +2855,19 @@ private actor GRDBStore {
     private static func sqlOptionalDouble(_ value: Double?) -> String {
         guard let value else { return "NULL" }
         return String(value)
+    }
+
+    fileprivate static func normalizeStoredEpochMillis(_ value: Double) -> Double {
+        let threshold = Double(1_000_000_000_000 as Int64)
+        return abs(value) >= threshold ? value : value * 1000.0
+    }
+
+    fileprivate static func storedEpoch(_ date: Date) -> Double {
+        date.timeIntervalSince1970 * 1000.0
+    }
+
+    fileprivate static func dateFromStoredEpoch(_ value: Double) -> Date {
+        Date(timeIntervalSince1970: normalizeStoredEpochMillis(value) / 1000.0)
     }
 
     private static func sqlOptionalInt64(_ value: Int64?) -> String {
@@ -2934,7 +3003,7 @@ private actor GRDBStore {
             watchProvisioningSchemaVersion: watchProvisioningSchemaVersion,
             watchProvisioningGeneration: watchProvisioningGeneration,
             watchProvisioningContentDigest: watchProvisioningContentDigest,
-            watchProvisioningAppliedAt: watchProvisioningAppliedAtEpoch.map { Date(timeIntervalSince1970: $0) },
+            watchProvisioningAppliedAt: watchProvisioningAppliedAtEpoch.map(GRDBStore.dateFromStoredEpoch),
             watchProvisioningModeRawValue: watchProvisioningModeRawValue,
             watchProvisioningSourceControlGeneration: watchProvisioningSourceControlGeneration
         )
@@ -2980,10 +3049,10 @@ private actor GRDBStore {
                 \(snapshot.watchProvisioningSchemaVersion.map(String.init) ?? "NULL"),
                 \(Self.sqlOptionalInt64(snapshot.watchProvisioningGeneration)),
                 \(Self.sqlOptionalText(snapshot.watchProvisioningContentDigest)),
-                \(Self.sqlOptionalDouble(snapshot.watchProvisioningAppliedAt?.timeIntervalSince1970)),
+                \(Self.sqlOptionalDouble(snapshot.watchProvisioningAppliedAt.map(Self.storedEpoch))),
                 \(Self.sqlOptionalText(snapshot.watchProvisioningModeRawValue)),
                 \(Self.sqlOptionalInt64(snapshot.watchProvisioningSourceControlGeneration)),
-                \(Date().timeIntervalSince1970)
+                \(Self.storedEpoch(Date()))
             )
             ON CONFLICT(id) DO UPDATE SET
                 manual_key_encoding = excluded.manual_key_encoding,
@@ -3074,7 +3143,7 @@ private actor GRDBStore {
                 \(Self.sqlQuoted(record.body)),
                 \(Self.sqlOptionalText(record.channel)),
                 \(Self.sqlOptionalText(record.url)),
-                \(record.receivedAt.timeIntervalSince1970),
+                \(Self.storedEpoch(record.receivedAt)),
                 \(Self.sqlQuoted(record.status)),
                 \(Self.sqlOptionalText(record.decryptionState)),
                 \(Self.sqlOptionalText(record.notificationRequestId)),
@@ -3087,7 +3156,7 @@ private actor GRDBStore {
                 \(Self.sqlOptionalInt64(record.eventTimeEpoch)),
                 \(Self.sqlOptionalInt64(record.observedTimeEpoch)),
                 \(Self.sqlOptionalInt64(record.occurredAtEpoch)),
-                \(Date().timeIntervalSince1970)
+                \(Self.storedEpoch(Date()))
             );
             """
         try db.execute(sql: sql)
@@ -3162,7 +3231,7 @@ private actor GRDBStore {
                 \(Self.sqlOptionalText(record.channel)),
                 \(Self.sqlOptionalText(record.url)),
                 \(record.isRead ? 1 : 0),
-                \(record.receivedAt.timeIntervalSince1970),
+                \(Self.storedEpoch(record.receivedAt)),
                 \(Self.sqlQuoted(record.rawPayloadJSON)),
                 \(Self.sqlQuoted(record.status)),
                 \(Self.sqlOptionalText(record.decryptionState)),
@@ -3301,10 +3370,10 @@ private actor GRDBStore {
     ) -> String {
         switch sortMode {
         case .timeDescending:
-            return "(received_at < \(cursor.receivedAt.timeIntervalSince1970) OR (received_at = \(cursor.receivedAt.timeIntervalSince1970) AND id < \(Self.sqlQuoted(cursor.id.uuidString))))"
+            return "(received_at < \(Self.storedEpoch(cursor.receivedAt)) OR (received_at = \(Self.storedEpoch(cursor.receivedAt)) AND id < \(Self.sqlQuoted(cursor.id.uuidString))))"
         case .unreadFirst:
             let readFlag = cursor.isRead ? 1 : 0
-            return "(is_read > \(readFlag) OR (is_read = \(readFlag) AND (received_at < \(cursor.receivedAt.timeIntervalSince1970) OR (received_at = \(cursor.receivedAt.timeIntervalSince1970) AND id < \(Self.sqlQuoted(cursor.id.uuidString)))))"
+            return "(is_read > \(readFlag) OR (is_read = \(readFlag) AND (received_at < \(Self.storedEpoch(cursor.receivedAt)) OR (received_at = \(Self.storedEpoch(cursor.receivedAt)) AND id < \(Self.sqlQuoted(cursor.id.uuidString)))))"
         }
     }
 
@@ -3401,7 +3470,7 @@ private actor GRDBStore {
             var conditions = entityConditions
             if let cursor {
                 conditions.append(
-                    "(received_at < \(cursor.receivedAt.timeIntervalSince1970) OR (received_at = \(cursor.receivedAt.timeIntervalSince1970) AND id < \(Self.sqlQuoted(cursor.id.uuidString))))"
+                    "(received_at < \(Self.storedEpoch(cursor.receivedAt)) OR (received_at = \(Self.storedEpoch(cursor.receivedAt)) AND id < \(Self.sqlQuoted(cursor.id.uuidString))))"
                 )
             }
             return try fetchMessages(
@@ -3481,7 +3550,7 @@ private actor GRDBStore {
                 \(Self.sqlQuoted(identity.entityType)),
                 \(Self.sqlQuoted(identity.entityId)),
                 \(Self.sqlOptionalText(identity.deliveryId)),
-                \(appliedAt.timeIntervalSince1970)
+                \(Self.storedEpoch(appliedAt))
             )
             ON CONFLICT(scope_key) DO UPDATE SET
                 message_id = excluded.message_id,
@@ -3514,8 +3583,8 @@ private actor GRDBStore {
                     gateway: gateway,
                     channelId: channelId,
                     displayName: displayName,
-                    updatedAt: Date(timeIntervalSince1970: updatedAtEpoch),
-                    lastSyncedAt: lastSyncedAtEpoch.map { Date(timeIntervalSince1970: $0) }
+                    updatedAt: GRDBStore.dateFromStoredEpoch(updatedAtEpoch),
+                    lastSyncedAt: lastSyncedAtEpoch.map(GRDBStore.dateFromStoredEpoch)
                 )
             }
         }
@@ -3552,10 +3621,10 @@ private actor GRDBStore {
                     \(Self.sqlQuoted(normalizedChannelId)),
                     \(Self.sqlQuoted(normalizedDisplayName)),
                     \(Self.sqlQuoted(normalizedPassword)),
-                    \(Self.sqlOptionalDouble(lastSyncedAt?.timeIntervalSince1970)),
-                    \(updatedAt.timeIntervalSince1970),
+                    \(Self.sqlOptionalDouble(lastSyncedAt.map(Self.storedEpoch))),
+                    \(Self.storedEpoch(updatedAt)),
                     \(isDeleted ? 1 : 0),
-                    \(Self.sqlOptionalDouble(deletedAt?.timeIntervalSince1970))
+                    \(Self.sqlOptionalDouble(deletedAt.map(Self.storedEpoch)))
                 )
                 ON CONFLICT(gateway, channel_id) DO UPDATE SET
                     display_name = excluded.display_name,
@@ -3582,9 +3651,9 @@ private actor GRDBStore {
             let sql = """
                 UPDATE channel_subscriptions
                 SET is_deleted = 1,
-                    deleted_at = \(deletedAt.timeIntervalSince1970),
+                    deleted_at = \(Self.storedEpoch(deletedAt)),
                     password = '',
-                    updated_at = \(deletedAt.timeIntervalSince1970)
+                    updated_at = \(Self.storedEpoch(deletedAt))
                 WHERE gateway = \(Self.sqlQuoted(normalizedGateway))
                   AND channel_id = \(Self.sqlQuoted(normalizedChannelId));
                 """
@@ -3603,9 +3672,9 @@ private actor GRDBStore {
             let sql = """
                 UPDATE channel_subscriptions
                 SET is_deleted = 1,
-                    deleted_at = \(deletedAt.timeIntervalSince1970),
+                    deleted_at = \(Self.storedEpoch(deletedAt)),
                     password = '',
-                    updated_at = \(deletedAt.timeIntervalSince1970)
+                    updated_at = \(Self.storedEpoch(deletedAt))
                 WHERE channel_id = \(Self.sqlQuoted(normalizedChannelId));
                 """
             try db.execute(sql: sql)
@@ -3732,7 +3801,7 @@ private actor GRDBStore {
                         \(Self.sqlQuoted(displayName)),
                         \(Self.sqlQuoted(channel.password)),
                         NULL,
-                        \(channel.updatedAt.timeIntervalSince1970),
+                        \(Self.storedEpoch(channel.updatedAt)),
                         0,
                         NULL
                     )
@@ -3754,9 +3823,9 @@ private actor GRDBStore {
                 let sql = """
                     UPDATE channel_subscriptions
                     SET is_deleted = 1,
-                        deleted_at = \(deletedAt.timeIntervalSince1970),
+                        deleted_at = \(Self.storedEpoch(deletedAt)),
                         password = '',
-                        updated_at = \(deletedAt.timeIntervalSince1970)
+                        updated_at = \(Self.storedEpoch(deletedAt))
                     WHERE gateway = \(Self.sqlQuoted(parts[0]))
                       AND channel_id = \(Self.sqlQuoted(parts[1]));
                     """
@@ -3781,7 +3850,7 @@ private actor GRDBStore {
             let sql = """
                 UPDATE channel_subscriptions
                 SET display_name = \(Self.sqlQuoted(resolvedDisplayName)),
-                    updated_at = \(Date().timeIntervalSince1970),
+                    updated_at = \(Self.storedEpoch(Date())),
                     is_deleted = 0,
                     deleted_at = NULL
                 WHERE gateway = \(Self.sqlQuoted(normalizedGateway))
@@ -3802,7 +3871,7 @@ private actor GRDBStore {
         try write { db in
             let sql = """
                 UPDATE channel_subscriptions
-                SET last_synced_at = \(date.timeIntervalSince1970)
+                SET last_synced_at = \(Self.storedEpoch(date))
                 WHERE gateway = \(Self.sqlQuoted(normalizedGateway))
                   AND channel_id = \(Self.sqlQuoted(normalizedChannelId));
                 """
@@ -4029,7 +4098,7 @@ private actor GRDBStore {
                         \(Self.sqlQuoted(action.actionId)),
                         \(Self.sqlQuoted(action.kind.rawValue)),
                         \(Self.sqlQuoted(action.messageId)),
-                        \(action.issuedAt.timeIntervalSince1970)
+                        \(Self.storedEpoch(action.issuedAt))
                     )
                     ON CONFLICT(action_id) DO UPDATE SET
                         kind = excluded.kind,
@@ -4082,7 +4151,7 @@ private actor GRDBStore {
                     \(Self.sqlOptionalText(message.imageURL?.absoluteString)),
                     \(Self.sqlOptionalText(message.url?.absoluteString)),
                     \(Self.sqlOptionalText(message.severity)),
-                    \(message.receivedAt.timeIntervalSince1970),
+                    \(Self.storedEpoch(message.receivedAt)),
                     \(message.isRead ? 1 : 0),
                     \(Self.sqlQuoted(message.entityType)),
                     \(Self.sqlOptionalText(message.entityId)),
@@ -4115,7 +4184,7 @@ private actor GRDBStore {
                     \(Self.sqlOptionalText(event.state)),
                     \(Self.sqlOptionalText(event.severity)),
                     \(Self.sqlOptionalText(event.imageURL?.absoluteString)),
-                    \(event.updatedAt.timeIntervalSince1970)
+                    \(Self.storedEpoch(event.updatedAt))
                 )
                 ON CONFLICT(event_id) DO UPDATE SET
                     title = excluded.title,
@@ -4139,7 +4208,7 @@ private actor GRDBStore {
                     \(Self.sqlOptionalText(thing.summary)),
                     \(Self.sqlOptionalText(thing.attrsJSON)),
                     \(Self.sqlOptionalText(thing.imageURL?.absoluteString)),
-                    \(thing.updatedAt.timeIntervalSince1970)
+                    \(Self.storedEpoch(thing.updatedAt))
                 )
                 ON CONFLICT(thing_id) DO UPDATE SET
                     title = excluded.title,
@@ -4560,8 +4629,8 @@ private actor GRDBStore {
                     channel: channel,
                     totalCount: totalCount,
                     unreadCount: unreadCount,
-                    latestReceivedAt: latestReceivedAtEpoch.map { Date(timeIntervalSince1970: $0) },
-                    latestUnreadAt: latestUnreadAtEpoch.map { Date(timeIntervalSince1970: $0) }
+                    latestReceivedAt: latestReceivedAtEpoch.map(GRDBStore.dateFromStoredEpoch),
+                    latestUnreadAt: latestUnreadAtEpoch.map(GRDBStore.dateFromStoredEpoch)
                 )
             }
         }
@@ -4763,7 +4832,7 @@ private actor GRDBStore {
                 conditions.append("is_read = \(readState ? 1 : 0)")
             }
             if let cutoff {
-                conditions.append("received_at < \(cutoff.timeIntervalSince1970)")
+                conditions.append("received_at < \(Self.storedEpoch(cutoff))")
             }
             let whereClause = conditions.joined(separator: " AND ")
             let idsSQL = "SELECT id FROM messages WHERE \(whereClause);"

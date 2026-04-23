@@ -1182,23 +1182,41 @@ enum OperationIdExtractor {
 }
 
 enum PayloadTimeParser {
-    static func epochSeconds(from value: Any?) -> Int64? {
+    private static let millisThreshold: Int64 = 1_000_000_000_000
+
+    private static func normalizeEpochMilliseconds(_ raw: Int64) -> Int64 {
+        if raw >= millisThreshold || raw <= -millisThreshold {
+            return raw
+        }
+        return raw.saturatingMultiplication(by: 1000)
+    }
+
+    static func epochMilliseconds(from value: Any?) -> Int64? {
         switch value {
         case let number as Int:
-            return Int64(number)
+            return normalizeEpochMilliseconds(Int64(number))
         case let number as Int64:
-            return number
+            return normalizeEpochMilliseconds(number)
         case let number as Double:
-            return Int64(number)
+            return normalizeEpochMilliseconds(Int64(number))
         case let number as NSNumber:
-            return number.int64Value
+            return normalizeEpochMilliseconds(number.int64Value)
         case let string as String:
             let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return nil }
-            return Int64(trimmed)
+            guard let parsed = Int64(trimmed) else { return nil }
+            return normalizeEpochMilliseconds(parsed)
         default:
             return nil
         }
+    }
+
+    static func epochMilliseconds(from value: AnyCodable?) -> Int64? {
+        epochMilliseconds(from: value?.value)
+    }
+
+    static func epochSeconds(from value: Any?) -> Int64? {
+        epochMilliseconds(from: value).map { $0 / 1000 }
     }
 
     static func epochSeconds(from value: AnyCodable?) -> Int64? {
@@ -1206,12 +1224,22 @@ enum PayloadTimeParser {
     }
 
     static func date(from value: Any?) -> Date? {
-        guard let seconds = epochSeconds(from: value) else { return nil }
-        return Date(timeIntervalSince1970: TimeInterval(seconds))
+        guard let milliseconds = epochMilliseconds(from: value) else { return nil }
+        return Date(timeIntervalSince1970: TimeInterval(milliseconds) / 1000.0)
     }
 
     static func date(from value: AnyCodable?) -> Date? {
         date(from: value?.value)
+    }
+}
+
+private extension Int64 {
+    func saturatingMultiplication(by rhs: Int64) -> Int64 {
+        let (result, overflow) = multipliedReportingOverflow(by: rhs)
+        if !overflow {
+            return result
+        }
+        return (self > 0) == (rhs > 0) ? .max : .min
     }
 }
 

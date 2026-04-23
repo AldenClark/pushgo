@@ -514,18 +514,8 @@ final class EntityProjectionViewModel {
     }
 
     private func epochSeconds(payload: Any?) -> TimeInterval? {
-        switch payload {
-        case let int as Int:
-            return TimeInterval(int)
-        case let int64 as Int64:
-            return TimeInterval(int64)
-        case let number as NSNumber:
-            return number.doubleValue
-        case let text as String:
-            return TimeInterval(text.trimmingCharacters(in: .whitespacesAndNewlines))
-        default:
-            return nil
-        }
+        guard let seconds = PayloadTimeParser.epochSeconds(from: payload) else { return nil }
+        return TimeInterval(seconds)
     }
 
     private func nonEmpty(_ value: String?) -> String? {

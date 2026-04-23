@@ -12,6 +12,7 @@ struct MessageDetailScreen: View {
     @State private var showDeleteConfirmation = false
     @State private var isShowingRuntimeAlert = false
     @State private var previewingImage: ImagePreview?
+    @State private var isTextSelectionEnabled = false
     @State private var didLoad: Bool = false
     private let onDelete: (() -> Void)?
     private let shouldDismissOnDelete: Bool
@@ -58,6 +59,17 @@ struct MessageDetailScreen: View {
                 await viewModel.ensureLoaded()
                 await viewModel.markAsReadIfNeeded()
             }
+            Task { @MainActor in
+                // Wait for the initial detail layout transition to settle before
+                // enabling Textual selection to avoid per-frame update warnings.
+                guard !isTextSelectionEnabled else { return }
+                await Task.yield()
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                isTextSelectionEnabled = true
+            }
+        }
+        .onDisappear {
+            isTextSelectionEnabled = false
         }
         .onChange(of: viewModel.alertMessage) { _, newValue in
             isShowingRuntimeAlert = newValue != nil
@@ -115,7 +127,7 @@ struct MessageDetailScreen: View {
                                     foreground: .primary
                                 )
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .compatTextSelectionEnabled()
+                                .compatTextSelectionEnabled(isTextSelectionEnabled)
                                 encryptionBadge(for: message)
                             }
 
@@ -147,7 +159,7 @@ struct MessageDetailScreen: View {
                         foreground: .primary
                     )
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .compatTextSelectionEnabled()
+                        .compatTextSelectionEnabled(isTextSelectionEnabled)
 
                     if let url = message.url,
                        let safeOpenURL = URLSanitizer.sanitizeExternalOpenURL(url)
@@ -485,18 +497,32 @@ private struct ChannelTagView: View {
 
 private extension View {
     @ViewBuilder
-    func compatTextSelectionEnabled() -> some View {
-#if canImport(Textual)
-        self
-            .textual.textSelection(.enabled)
-#else
-        textSelection(.enabled)
-#endif
+    func compatTextSelectionEnabled(_ enabled: Bool) -> some View {
+        modifier(DeferredTextSelectionEnabledModifier(enabled: enabled))
     }
 }
 
 private extension Date {
     func pushgoDetailTimestamp() -> String {
         formatted(date: .complete, time: .standard)
+    }
+}
+
+private struct DeferredTextSelectionEnabledModifier: ViewModifier {
+    let enabled: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if enabled {
+#if canImport(Textual)
+            content
+                .textual.textSelection(.enabled)
+#else
+            content
+                .textSelection(.enabled)
+#endif
+        } else {
+            content
+        }
     }
 }

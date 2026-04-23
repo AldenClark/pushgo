@@ -166,8 +166,8 @@ enum WatchStandaloneLightQuantizer {
 
     private static func payloadDate(_ raw: String?) -> Date? {
         guard let text = nonEmpty(raw) else { return nil }
-        if let seconds = Double(text) {
-            return Date(timeIntervalSince1970: seconds)
+        if let seconds = PayloadTimeParser.epochSeconds(from: text) {
+            return Date(timeIntervalSince1970: TimeInterval(seconds))
         }
         let formatter = ISO8601DateFormatter()
         return formatter.date(from: text)

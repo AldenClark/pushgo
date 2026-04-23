@@ -286,18 +286,7 @@ struct NotificationPayloadSemantics {
     }
 
     private static func epochSeconds(from value: Any?) -> Int64? {
-        switch value {
-        case let int as Int:
-            return Int64(int)
-        case let int64 as Int64:
-            return int64
-        case let number as NSNumber:
-            return number.int64Value
-        case let string as String:
-            return Int64(string.trimmingCharacters(in: .whitespacesAndNewlines))
-        default:
-            return nil
-        }
+        PayloadTimeParser.epochSeconds(from: value)
     }
 
     private static func hasNonEmptyValue(_ value: Any?) -> Bool {
