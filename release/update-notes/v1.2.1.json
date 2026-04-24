@@ -1,0 +1,10 @@
+{
+  "en": "PushGo 1.2.1 includes all Apple-side improvements accumulated after 1.2.0.\nImproved overall reliability and behavior consistency across iOS, macOS, and watchOS.\nImproved markdown and remote image rendering stability in shared Apple UI surfaces.",
+  "de": "PushGo 1.2.1 enthalt alle Apple-seitigen Verbesserungen, die seit 1.2.0 zusammengekommen sind.\nDie allgemeine Zuverlassigkeit und Verhaltenskonsistenz auf iOS, macOS und watchOS wurden verbessert.\nDie Stabilitat der Markdown- und Remote-Bilddarstellung in gemeinsamen Apple-UI-Bereichen wurde verbessert.",
+  "es": "PushGo 1.2.1 incluye todas las mejoras del lado de Apple acumuladas desde la version 1.2.0.\nSe mejoro la fiabilidad general y la consistencia de comportamiento en iOS, macOS y watchOS.\nSe mejoro la estabilidad del renderizado de Markdown e imagenes remotas en las superficies de UI compartidas de Apple.",
+  "fr": "PushGo 1.2.1 inclut toutes les ameliorations cote Apple accumulees depuis la version 1.2.0.\nLa fiabilite globale et la coherence du comportement sur iOS, macOS et watchOS ont ete ameliorees.\nLa stabilite du rendu Markdown et des images distantes dans les surfaces UI Apple partagees a ete amelioree.",
+  "ja": "PushGo 1.2.1 には、1.2.0 以降に蓄積した Apple 側の改善をすべて含みます。\niOS・macOS・watchOS 全体で、信頼性と動作の一貫性を改善しました。\n共有 Apple UI 画面での Markdown とリモート画像の描画安定性を改善しました。",
+  "ko": "PushGo 1.2.1에는 1.2.0 이후 누적된 Apple 측 개선 사항이 모두 포함됩니다.\niOS, macOS, watchOS 전반에서 전반적인 안정성과 동작 일관성을 개선했습니다.\n공유 Apple UI 화면에서 Markdown 및 원격 이미지 렌더링 안정성을 개선했습니다.",
+  "zh-CN": "PushGo 1.2.1 包含了自 1.2.0 以来 Apple 侧累计的全部改进。\niOS、macOS、watchOS 的整体稳定性与行为一致性已提升。\n共享 Apple UI 界面的 Markdown 与远程图片渲染稳定性已提升。",
+  "zh-TW": "PushGo 1.2.1 包含自 1.2.0 以來 Apple 側累積的全部改進。\niOS、macOS、watchOS 的整體穩定性與行為一致性已提升。\n共享 Apple UI 介面的 Markdown 與遠端圖片渲染穩定性已提升。"
+}

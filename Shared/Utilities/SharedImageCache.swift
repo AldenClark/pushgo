@@ -36,36 +36,28 @@ enum SharedImageCache {
         let memoryEnabled: Bool
     }
 
-    private final class MetadataBox: NSObject {
-        let value: ImageAssetMetadata
-
-        init(_ value: ImageAssetMetadata) {
-            self.value = value
-        }
-    }
-
-    private final class MetadataSnapshotCache: @unchecked Sendable {
-        private let cache = NSCache<NSURL, MetadataBox>()
+    private actor MetadataSnapshotCache {
+        private var entries: [NSURL: ImageAssetMetadata] = [:]
 
         func metadata(for key: NSURL) -> ImageAssetMetadata? {
-            cache.object(forKey: key)?.value
+            entries[key]
         }
 
         func set(_ metadata: ImageAssetMetadata, for key: NSURL) {
-            cache.setObject(MetadataBox(metadata), forKey: key)
+            entries[key] = metadata
         }
 
         func remove(for key: NSURL) {
-            cache.removeObject(forKey: key)
+            entries.removeValue(forKey: key)
         }
 
         func removeAll() {
-            cache.removeAllObjects()
+            entries.removeAll(keepingCapacity: false)
         }
     }
 
     #if canImport(SQLite3)
-    private final class MetadataSnapshotStoreReader: @unchecked Sendable {
+    private final class MetadataSnapshotStoreReader {
         private let lock = NSLock()
         private var database: OpaquePointer?
 
@@ -307,9 +299,6 @@ enum SharedImageCache {
     private static let inflight = InflightRequests()
     private static let metadataStore = ImageAssetMetadataStore.shared
     private static let metadataSnapshots = MetadataSnapshotCache()
-    #if canImport(SQLite3)
-    private static let metadataSnapshotStoreReader = MetadataSnapshotStoreReader()
-    #endif
 
     static func cachedData(for url: URL, rendition: Rendition = .original) async -> Data? {
         guard URLSanitizer.isAllowedRemoteURL(url) else { return nil }
@@ -367,7 +356,7 @@ enum SharedImageCache {
                     }
                     if let metadata = Self.extractMetadata(from: data, url: url, response: response) {
                         await metadataStore.upsert(metadata)
-                        cacheMetadataSnapshot(metadata)
+                        await metadataSnapshots.set(metadata, for: metadataCacheKeyURL(for: url))
                     }
                     await store(data: data, for: url, rendition: .original)
                     return data
@@ -399,7 +388,7 @@ enum SharedImageCache {
     static func purge(urls: [URL]) async {
         let renditions = Rendition.allCases
         for url in urls {
-            metadataSnapshots.remove(for: metadataCacheKeyURL(for: url))
+            await metadataSnapshots.remove(for: metadataCacheKeyURL(for: url))
             for rendition in renditions {
                 let cacheKey = cacheKeyURL(for: url, rendition: rendition)
                 if profile.memoryEnabled {
@@ -415,38 +404,38 @@ enum SharedImageCache {
         if profile.memoryEnabled {
             await memory.removeAll()
         }
-        metadataSnapshots.removeAll()
+        await metadataSnapshots.removeAll()
         await metadataStore.purgeAll()
         await disk.purgeAll()
     }
 
     static func metadata(for url: URL) async -> ImageAssetMetadata? {
-        if let cached = metadataSnapshot(for: url) {
+        let key = metadataCacheKeyURL(for: url)
+        if let cached = await metadataSnapshots.metadata(for: key) {
             return cached
         }
-        let metadata = await metadataStore.metadata(for: url)
-        if let metadata {
-            cacheMetadataSnapshot(metadata)
+        guard let persisted = await metadataStore.metadata(for: url) else {
+            return nil
         }
-        return metadata
+        await metadataSnapshots.set(persisted, for: key)
+        return persisted
     }
 
     static func metadataSnapshot(for url: URL) -> ImageAssetMetadata? {
         let key = metadataCacheKeyURL(for: url)
-        if let cached = metadataSnapshots.metadata(for: key) {
-            return cached
-        }
         #if canImport(SQLite3)
-        if let persisted = metadataSnapshotStoreReader.metadata(for: url) {
-            metadataSnapshots.set(persisted, for: key)
+        if let persisted = MetadataSnapshotStoreReader().metadata(for: url) {
+            Task {
+                await metadataSnapshots.set(persisted, for: key)
+            }
             return persisted
         }
         #endif
         if let fileURL = cachedFileURL(for: url, rendition: .original),
            let metadata = extractMetadata(fromFileAt: fileURL, originalURL: url)
         {
-            metadataSnapshots.set(metadata, for: key)
             Task {
+                await metadataSnapshots.set(metadata, for: key)
                 await metadataStore.upsert(metadata)
             }
             return metadata
@@ -459,7 +448,7 @@ enum SharedImageCache {
         rendition: Rendition = .original
     ) async -> ImageAssetMetadata? {
         if let existing = await metadataStore.metadata(for: url) {
-            cacheMetadataSnapshot(existing)
+            await metadataSnapshots.set(existing, for: metadataCacheKeyURL(for: url))
             return existing
         }
         guard let data = await cachedData(for: url, rendition: rendition) else {
@@ -469,7 +458,7 @@ enum SharedImageCache {
             return nil
         }
         await metadataStore.upsert(metadata)
-        cacheMetadataSnapshot(metadata)
+        await metadataSnapshots.set(metadata, for: metadataCacheKeyURL(for: url))
         return metadata
     }
 
@@ -490,12 +479,16 @@ enum SharedImageCache {
             )
         } catch {
             if let existing = await metadataStore.metadata(for: url) {
-                cacheMetadataSnapshot(existing)
+                await metadataSnapshots.set(existing, for: metadataCacheKeyURL(for: url))
                 return existing
             }
             return nil
         }
-        return await metadataStore.metadata(for: url)
+        if let existing = await metadataStore.metadata(for: url) {
+            await metadataSnapshots.set(existing, for: metadataCacheKeyURL(for: url))
+            return existing
+        }
+        return nil
     }
 
     static func preheatMetadata(
@@ -584,11 +577,6 @@ enum SharedImageCache {
 
     private static func metadataCacheKeyURL(for url: URL) -> NSURL {
         cacheKeyURL(for: url, rendition: .original)
-    }
-
-    private static func cacheMetadataSnapshot(_ metadata: ImageAssetMetadata) {
-        guard let url = URL(string: metadata.url) else { return }
-        metadataSnapshots.set(metadata, for: metadataCacheKeyURL(for: url))
     }
 
     private static func fileURL(for url: URL, rendition: Rendition) -> URL? {

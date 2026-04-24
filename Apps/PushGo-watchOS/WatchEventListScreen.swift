@@ -115,6 +115,12 @@ private struct WatchLightEventRow: View {
                 if let severity = event.severity, !severity.isEmpty {
                     Label(severity, systemImage: "exclamationmark.triangle")
                 }
+                if let decryptText = watchDecryptionStateText(event.decryptionState) {
+                    WatchEntityStateBadge(
+                        text: decryptText,
+                        tone: watchDecryptionStateTone(event.decryptionState)
+                    )
+                }
                 Text(watchDateText(event.updatedAt))
             }
             .font(.caption2)

@@ -371,9 +371,22 @@ enum NotificationPersistenceCoordinator {
                 content.userInfo["body"] = body
                 applied = true
             }
+            if let url = (object["url"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                !url.isEmpty
+            {
+                content.userInfo["url"] = url
+                applied = true
+            }
             if let images = normalizedImages(from: object["images"]), !images.isEmpty {
                 content.userInfo["images"] = images
                 applied = true
+            }
+            for key in ["event_profile_json", "event_attrs_json", "thing_profile_json", "thing_attrs_json"] {
+                if let value = normalizedJSONObjectString(from: object[key]) {
+                    content.userInfo[key] = value
+                    applied = true
+                }
             }
             return applied
         } catch {
@@ -397,6 +410,27 @@ enum NotificationPersistenceCoordinator {
             return values
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
+        }
+        return nil
+    }
+
+    private static func normalizedJSONObjectString(from raw: Any?) -> String? {
+        if let object = raw as? [String: Any],
+           JSONSerialization.isValidJSONObject(object),
+           let data = try? JSONSerialization.data(withJSONObject: object),
+           let text = String(data: data, encoding: .utf8)
+        {
+            return text
+        }
+        if let text = (raw as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !text.isEmpty,
+           let data = text.data(using: .utf8),
+           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           JSONSerialization.isValidJSONObject(object),
+           let normalized = try? JSONSerialization.data(withJSONObject: object)
+        {
+            return String(data: normalized, encoding: .utf8)
         }
         return nil
     }

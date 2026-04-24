@@ -23,6 +23,7 @@ struct EventDetailScreen: View {
 }
 
 private struct EventDetailPanel: View {
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     let event: EventProjection
@@ -107,6 +108,24 @@ private struct EventDetailPanel: View {
                             Text(String(format: localizationManager.localized("Object %@"), thingId))
                                 .lineLimit(1)
                         }
+                        if let channelId = event.channelId?.trimmingCharacters(in: .whitespacesAndNewlines),
+                           !channelId.isEmpty
+                        {
+                            EntityMetaChip(
+                                systemImage: "bubble.left.and.bubble.right",
+                                text: environment.channelDisplayName(for: channelId) ?? channelId
+                            )
+                        }
+                        if let descriptor = entityDecryptionBadgeDescriptor(
+                            state: event.decryptionState,
+                            localizationManager: localizationManager
+                        ) {
+                            EntityMetaChip(
+                                systemImage: descriptor.icon,
+                                text: descriptor.text,
+                                color: descriptor.tone.foreground
+                            )
+                        }
                     }
                     .font(.caption)
                     .foregroundStyle(Color.appTextSecondary)
@@ -178,20 +197,23 @@ private struct EventAttachmentImageGrid: View {
     var body: some View {
         LazyVGrid(columns: columns, spacing: 8) {
             ForEach(urls, id: \.absoluteString) { url in
-                Button {
-                    onTap(url)
-                } label: {
-                    RemoteImageView(url: url, rendition: .listThumbnail) { image in
+                RemoteImageView(url: url, rendition: .listThumbnail) { image in
+                    Button {
+                        onTap(url)
+                    } label: {
                         image
                             .resizable()
                             .scaledToFill()
-                    } placeholder: {
-                        Rectangle().fill(EntityVisualTokens.secondarySurface)
+                            .frame(height: 84)
+                            .clipShape(RoundedRectangle(cornerRadius: EntityVisualTokens.radiusSmall, style: .continuous))
                     }
-                    .frame(height: 84)
-                    .clipShape(RoundedRectangle(cornerRadius: EntityVisualTokens.radiusSmall, style: .continuous))
+                    .buttonStyle(.plain)
+                } placeholder: {
+                    Rectangle()
+                        .fill(EntityVisualTokens.secondarySurface)
+                        .frame(height: 84)
+                        .clipShape(RoundedRectangle(cornerRadius: EntityVisualTokens.radiusSmall, style: .continuous))
                 }
-                .buttonStyle(.plain)
             }
         }
     }
@@ -262,6 +284,16 @@ private struct EventTimelineRow: View {
                     if !point.tags.isEmpty {
                         Text(point.tags.joined(separator: " · "))
                             .lineLimit(1)
+                    }
+                    if let descriptor = entityDecryptionBadgeDescriptor(
+                        state: point.decryptionState,
+                        localizationManager: localizationManager
+                    ) {
+                        EntityMetaChip(
+                            systemImage: descriptor.icon,
+                            text: descriptor.text,
+                            color: descriptor.tone.foreground
+                        )
                     }
                 }
                 .font(.caption)

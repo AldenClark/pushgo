@@ -32,6 +32,7 @@ struct WatchLightEvent: Codable, Hashable, Identifiable, Sendable {
     let summary: String?
     let state: String?
     let severity: String?
+    let decryptionState: String?
     let imageURL: URL?
     let updatedAt: Date
 
@@ -43,6 +44,7 @@ struct WatchLightThing: Codable, Hashable, Identifiable, Sendable {
     let title: String
     let summary: String?
     let attrsJSON: String?
+    let decryptionState: String?
     let imageURL: URL?
     let updatedAt: Date
 

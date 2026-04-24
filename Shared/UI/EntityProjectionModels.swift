@@ -13,6 +13,7 @@ struct EventTimelinePoint: Identifiable, Hashable {
     let state: String?
     let thingId: String?
     let channelId: String?
+    let decryptionState: PushMessage.DecryptionState?
     let imageURL: URL?
     let imageURLs: [URL]
     let metadata: [String: String]
@@ -31,6 +32,7 @@ struct EventProjection: Identifiable, Hashable {
     let state: String?
     let thingId: String?
     let channelId: String?
+    let decryptionState: PushMessage.DecryptionState?
     let imageURL: URL?
     let imageURLs: [URL]
     let attrsJSON: String?
@@ -86,6 +88,7 @@ struct ThingProjection: Identifiable, Hashable {
     let createdAt: Date?
     let deletedAt: Date?
     let channelId: String?
+    let decryptionState: PushMessage.DecryptionState?
     let locationType: String?
     let locationValue: String?
     let externalIDs: [String: String]
@@ -99,4 +102,3 @@ struct ThingProjection: Identifiable, Hashable {
     let relatedMessages: [ThingRelatedMessage]
     let relatedUpdates: [ThingRelatedUpdate]
 }
-

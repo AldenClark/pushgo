@@ -33,6 +33,12 @@ struct WatchEventDetailScreen: View {
                                     .font(.caption2)
                                     .foregroundStyle(Color.appTextSecondary)
                             }
+                            if let decryptText = watchDecryptionStateText(event.decryptionState) {
+                                WatchEntityStateBadge(
+                                    text: decryptText,
+                                    tone: watchDecryptionStateTone(event.decryptionState)
+                                )
+                            }
                         }
                         Text("Last updated: \(watchDateText(event.updatedAt))")
                             .font(.caption2)
@@ -43,23 +49,23 @@ struct WatchEventDetailScreen: View {
 
                 if let imageURL = event.imageURL {
                     Section("Image") {
-                        Button {
-                            previewImageItem = WatchEventImagePreviewItem(url: imageURL)
-                        } label: {
-                            AsyncImage(url: imageURL) { phase in
-                                switch phase {
-                                case let .success(image):
+                        AsyncImage(url: imageURL) { phase in
+                            switch phase {
+                            case let .success(image):
+                                Button {
+                                    previewImageItem = WatchEventImagePreviewItem(url: imageURL)
+                                } label: {
                                     image
                                         .resizable()
                                         .scaledToFit()
-                                default:
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .fill(Color.appSurfaceSunken)
-                                        .frame(height: 90)
                                 }
+                                .buttonStyle(.plain)
+                            default:
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(Color.appSurfaceSunken)
+                                    .frame(height: 90)
                             }
                         }
-                        .buttonStyle(.plain)
                     }
                 }
             } else {

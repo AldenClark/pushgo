@@ -11,7 +11,13 @@ Policy:
 ## [Unreleased]
 
 ### Improved
-- Improved overall reliability and behavior consistency across iOS, macOS, and watchOS in this beta cycle.
+- Ongoing Apple platform improvements in progress for the next release line.
+
+## [v1.2.1]
+
+### Improved
+- Includes all Apple-side updates accumulated after `v1.2.0`.
+- Improved overall reliability and behavior consistency across iOS, macOS, and watchOS.
 - Improved markdown and remote image rendering stability in shared Apple UI surfaces.
 
 ## [v1.2.0]

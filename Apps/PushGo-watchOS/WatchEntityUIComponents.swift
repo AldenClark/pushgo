@@ -170,6 +170,36 @@ func normalizedWatchEventStatus(_ status: String?) -> String? {
     return trimmed.isEmpty ? nil : trimmed
 }
 
+func watchDecryptionStateText(_ raw: String?) -> String? {
+    let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    guard !trimmed.isEmpty else { return nil }
+    switch PushMessage.DecryptionState.from(raw: trimmed) {
+    case .decryptOk:
+        return "Decrypted"
+    case .decryptFailed:
+        return "Decrypt Failed"
+    case .notConfigured:
+        return "Encrypted (No Key)"
+    case .algMismatch:
+        return "Encrypted (Alg)"
+    case .none:
+        return trimmed
+    }
+}
+
+func watchDecryptionStateTone(_ raw: String?) -> WatchSemanticTone {
+    switch PushMessage.DecryptionState.from(raw: raw) {
+    case .decryptOk:
+        return .info
+    case .decryptFailed:
+        return .warning
+    case .notConfigured, .algMismatch:
+        return .neutral
+    case .none:
+        return .neutral
+    }
+}
+
 func localizedDefaultWatchCreatedEventStatus() -> String {
     LocalizationManager.localizedSync("watch_event_status_created")
 }

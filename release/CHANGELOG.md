@@ -13,10 +13,18 @@ PushGo policy:
 ## [Unreleased]
 
 ### Changed
-- Bumped Apple marketing version to `1.3.0-beta.1`.
-- Bumped Apple build number by `+1` (`CURRENT_PROJECT_VERSION: 74 -> 75`).
-- Synced Apple display version to `v1.3.0-beta.1` across release targets.
-- Added versioned update note source file: `release/update-notes/v1.3.0-beta.1.json`.
+- Prepared next Apple development iteration after `v1.2.1`.
+
+## [v1.2.1] - 2026-04-24
+
+### Changed
+- Finalized Apple release display version to `v1.2.1` across release targets.
+- Bumped Apple build number by `+1` for release packaging (`CURRENT_PROJECT_VERSION: 75 -> 76`).
+- Added versioned release note source file: `release/update-notes/v1.2.1.json`.
+
+### Improved
+- Improved overall reliability and behavior consistency across iOS, macOS, and watchOS.
+- Improved markdown and remote image rendering stability in shared Apple UI surfaces.
 
 ## [v1.2.0] - 2026-04-20
 

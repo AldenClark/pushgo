@@ -439,6 +439,7 @@ struct WatchConnectivityModelTests {
                 summary: "Node above threshold",
                 state: "OPEN",
                 severity: "critical",
+                decryptionState: nil,
                 imageURL: URL(string: "https://example.com/evt-1.png"),
                 updatedAt: Date(timeIntervalSince1970: 1_732_000_101)
             )
@@ -449,6 +450,7 @@ struct WatchConnectivityModelTests {
                 title: "Router",
                 summary: "Core router",
                 attrsJSON: #"{"role":"edge"}"#,
+                decryptionState: nil,
                 imageURL: URL(string: "https://example.com/thing-1.png"),
                 updatedAt: Date(timeIntervalSince1970: 1_732_000_102)
             )

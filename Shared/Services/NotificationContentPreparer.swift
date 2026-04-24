@@ -371,26 +371,40 @@ final class NotificationContentPreparer {
             guard let jsonText = String(data: decrypted, encoding: .utf8) else {
                 return CipherDecryptResult(status: .failure, body: nil)
             }
+            guard let data = jsonText.data(using: .utf8),
+                  let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else {
+                return CipherDecryptResult(status: .failure, body: nil)
+            }
 
-            let payload = try JSONDecoder().decode(CiphertextPayload.self, from: Data(jsonText.utf8))
             var applied = false
             var decryptedBody: String?
 
-            if let title = payload.title?.trimmedNonEmpty {
+            if let title = (object["title"] as? String)?.trimmedNonEmpty {
                 content.title = title
                 content.userInfo["title"] = title
                 applied = true
             }
-            if let body = payload.body?.trimmedNonEmpty {
+            if let body = (object["body"] as? String)?.trimmedNonEmpty {
                 content.userInfo["body"] = body
                 content.body = body
                 decryptedBody = body
                 applied = true
             }
-            let decodedImages = payload.normalizedImages
+            if let url = (object["url"] as? String)?.trimmedNonEmpty {
+                content.userInfo["url"] = url
+                applied = true
+            }
+            let decodedImages = Self.normalizedImages(from: object["images"])
             if !decodedImages.isEmpty {
                 content.userInfo["images"] = decodedImages
                 applied = true
+            }
+            for key in ["event_profile_json", "event_attrs_json", "thing_profile_json", "thing_attrs_json"] {
+                if let value = Self.normalizedJSONObjectString(from: object[key]) {
+                    content.userInfo[key] = value
+                    applied = true
+                }
             }
 
             return CipherDecryptResult(
@@ -444,61 +458,44 @@ final class NotificationContentPreparer {
         }
     }
 
+    private static func normalizedImages(from raw: Any?) -> [String] {
+        if let values = raw as? [String] {
+            return values.compactMap { $0.trimmedNonEmpty }
+        }
+        if let text = (raw as? String)?.trimmedNonEmpty,
+           let data = text.data(using: .utf8),
+           let decoded = try? JSONSerialization.jsonObject(with: data) as? [Any]
+        {
+            return decoded.compactMap { ($0 as? String)?.trimmedNonEmpty }
+        }
+        return []
+    }
+
+    private static func normalizedJSONObjectString(from raw: Any?) -> String? {
+        if let object = raw as? [String: Any],
+           JSONSerialization.isValidJSONObject(object),
+           let data = try? JSONSerialization.data(withJSONObject: object),
+           let text = String(data: data, encoding: .utf8)
+        {
+            return text
+        }
+        if let text = (raw as? String)?.trimmedNonEmpty,
+           let data = text.data(using: .utf8),
+           let decoded = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           JSONSerialization.isValidJSONObject(decoded),
+           let normalized = try? JSONSerialization.data(withJSONObject: decoded)
+        {
+            return String(data: normalized, encoding: .utf8)
+        }
+        return nil
+    }
+
     private func loadKeyMaterial() async throws -> ServerConfig.NotificationKeyMaterial? {
 #if os(watchOS)
         return try await watchProvisioningStore?.loadProvisioningServerConfig()?.notificationKeyMaterial
 #else
         return try keychainConfigStore.loadServerConfig()?.notificationKeyMaterial
 #endif
-    }
-}
-
-private struct CiphertextPayload: Decodable {
-    let title: String?
-    let body: String?
-    let images: [String]
-
-    var normalizedImages: [String] {
-        var resolved: [String] = []
-        for value in images {
-            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
-            if !resolved.contains(trimmed) {
-                resolved.append(trimmed)
-            }
-        }
-        return resolved
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case title
-        case body
-        case images
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        title = try container.decodeIfPresent(String.self, forKey: .title)
-        body = try container.decodeIfPresent(String.self, forKey: .body)
-        images = Self.decodeImages(container: container)
-    }
-
-    private static func decodeImages(container: KeyedDecodingContainer<CodingKeys>) -> [String] {
-        if let values = try? container.decode([String].self, forKey: .images) {
-            return values
-        }
-        guard let raw = try? container.decode(String.self, forKey: .images) else {
-            return []
-        }
-        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty,
-              let data = text.data(using: .utf8),
-              let decoded = try? JSONSerialization.jsonObject(with: data),
-              let array = decoded as? [String]
-        else {
-            return []
-        }
-        return array
     }
 }
 

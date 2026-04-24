@@ -1559,9 +1559,22 @@ final class AppEnvironment {
                 payload["body"] = body
                 applied = true
             }
+            if let url = (object["url"] as? String)?
+                .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
+                !url.isEmpty
+            {
+                payload["url"] = url
+                applied = true
+            }
             if let images = normalizedImages(from: object["images"]), !images.isEmpty {
                 payload["images"] = images
                 applied = true
+            }
+            for key in ["event_profile_json", "event_attrs_json", "thing_profile_json", "thing_attrs_json"] {
+                if let value = normalizedJSONObjectString(from: object[key]) {
+                    payload[key] = value
+                    applied = true
+                }
             }
             return applied ? .success : .none
         } catch {
@@ -1585,6 +1598,27 @@ final class AppEnvironment {
             return values
                 .map { $0.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
+        }
+        return nil
+    }
+
+    private func normalizedJSONObjectString(from raw: Any?) -> String? {
+        if let object = raw as? [String: Any],
+           JSONSerialization.isValidJSONObject(object),
+           let data = try? JSONSerialization.data(withJSONObject: object),
+           let text = String(data: data, encoding: .utf8)
+        {
+            return text
+        }
+        if let text = (raw as? String)?
+            .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
+           !text.isEmpty,
+           let data = text.data(using: .utf8),
+           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           JSONSerialization.isValidJSONObject(object),
+           let normalized = try? JSONSerialization.data(withJSONObject: object)
+        {
+            return String(data: normalized, encoding: .utf8)
         }
         return nil
     }

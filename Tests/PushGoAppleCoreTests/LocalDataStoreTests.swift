@@ -487,6 +487,7 @@ struct LocalDataStoreTests {
                         summary: nil,
                         state: "OPEN",
                         severity: "high",
+                        decryptionState: nil,
                         imageURL: nil,
                         updatedAt: Date(timeIntervalSince1970: 11)
                     )
@@ -499,6 +500,7 @@ struct LocalDataStoreTests {
                         title: "Existing thing",
                         summary: nil,
                         attrsJSON: nil,
+                        decryptionState: nil,
                         imageURL: nil,
                         updatedAt: Date(timeIntervalSince1970: 12)
                     )
@@ -539,6 +541,7 @@ struct LocalDataStoreTests {
                             summary: "Summary",
                             state: "OPEN",
                             severity: "critical",
+                            decryptionState: nil,
                             imageURL: nil,
                             updatedAt: Date(timeIntervalSince1970: 2)
                         ),
@@ -549,6 +552,7 @@ struct LocalDataStoreTests {
                             title: "Thing 1",
                             summary: "Thing summary",
                             attrsJSON: "{\"role\":\"db\"}",
+                            decryptionState: nil,
                             imageURL: nil,
                             updatedAt: Date(timeIntervalSince1970: 3)
                         ),
@@ -605,6 +609,102 @@ struct LocalDataStoreTests {
             #expect(databaseURL.pathExtension == "db")
             #expect(fileManager.fileExists(atPath: databaseURL.path))
             #expect(!fileManager.fileExists(atPath: legacyStoreURL.path))
+        }
+    }
+
+    @Test
+    func localDataStoreMigratesLegacyVersionedDatabaseArtifactsToStableFilenames() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            let databaseDirectory = root
+                .appendingPathComponent("app-groups", isDirectory: true)
+                .appendingPathComponent(appGroupIdentifier, isDirectory: true)
+                .appendingPathComponent("Database", isDirectory: true)
+            try FileManager.default.createDirectory(at: databaseDirectory, withIntermediateDirectories: true)
+
+            let legacyMainURL = databaseDirectory.appendingPathComponent("pushgo-v9.db")
+            let legacyIndexURL = databaseDirectory.appendingPathComponent("pushgo.index.v9.sqlite")
+
+            let legacyMainQueue = try DatabaseQueue(path: legacyMainURL.path)
+            try await legacyMainQueue.write { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS migration_probe (
+                        id TEXT PRIMARY KEY NOT NULL
+                    );
+                    INSERT OR REPLACE INTO migration_probe(id) VALUES ('legacy-main-ok');
+                    """)
+            }
+
+            let legacyIndexQueue = try DatabaseQueue(path: legacyIndexURL.path)
+            try await legacyIndexQueue.write { db in
+                try db.execute(sql: """
+                    CREATE VIRTUAL TABLE IF NOT EXISTS message_search USING fts5(
+                        id UNINDEXED,
+                        title,
+                        body,
+                        channel_id,
+                        received_at UNINDEXED,
+                        tokenize = 'unicode61'
+                    );
+                    """)
+            }
+
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            _ = try await store.loadMessages()
+
+            let currentMainURL = databaseDirectory.appendingPathComponent(AppConstants.databaseStoreFilename)
+            let currentIndexURL = databaseDirectory.appendingPathComponent(AppConstants.messageIndexDatabaseFilename)
+
+            #expect(FileManager.default.fileExists(atPath: currentMainURL.path))
+            #expect(FileManager.default.fileExists(atPath: currentIndexURL.path))
+            #expect(!FileManager.default.fileExists(atPath: legacyMainURL.path))
+            #expect(!FileManager.default.fileExists(atPath: legacyIndexURL.path))
+
+            let migratedQueue = try DatabaseQueue(path: currentMainURL.path)
+            let probeCount = try await migratedQueue.read { db in
+                try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM migration_probe WHERE id = 'legacy-main-ok';"
+                ) ?? 0
+            }
+            #expect(probeCount == 1)
+        }
+    }
+
+    @Test
+    func localDataStoreMigratesLegacyArtifactsWhenStableFilenameExistsAsZeroBytePlaceholder() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            let databaseDirectory = root
+                .appendingPathComponent("app-groups", isDirectory: true)
+                .appendingPathComponent(appGroupIdentifier, isDirectory: true)
+                .appendingPathComponent("Database", isDirectory: true)
+            try FileManager.default.createDirectory(at: databaseDirectory, withIntermediateDirectories: true)
+
+            let placeholderURL = databaseDirectory.appendingPathComponent(AppConstants.databaseStoreFilename)
+            FileManager.default.createFile(atPath: placeholderURL.path, contents: Data())
+
+            let legacyMainURL = databaseDirectory.appendingPathComponent("pushgo-v9.db")
+            let legacyMainQueue = try DatabaseQueue(path: legacyMainURL.path)
+            try await legacyMainQueue.write { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS migration_probe (
+                        id TEXT PRIMARY KEY NOT NULL
+                    );
+                    INSERT OR REPLACE INTO migration_probe(id) VALUES ('legacy-overwrite-zero-byte-ok');
+                    """)
+            }
+
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            _ = try await store.loadMessages()
+
+            let migratedQueue = try DatabaseQueue(path: placeholderURL.path)
+            let probeCount = try await migratedQueue.read { db in
+                try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM migration_probe WHERE id = 'legacy-overwrite-zero-byte-ok';"
+                ) ?? 0
+            }
+            #expect(probeCount == 1)
+            #expect(!FileManager.default.fileExists(atPath: legacyMainURL.path))
         }
     }
 

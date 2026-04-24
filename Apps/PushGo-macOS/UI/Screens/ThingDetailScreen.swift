@@ -23,6 +23,7 @@ struct ThingDetailScreen: View {
 }
 
 private struct ThingDetailPanel: View {
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
     private enum Tab: String, CaseIterable, Identifiable {
         case events
         case messages
@@ -224,19 +225,39 @@ private struct ThingDetailPanel: View {
     private var basicInfoSection: some View {
         VStack(alignment: .leading, spacing: EntityVisualTokens.stackSpacing) {
             HStack(alignment: .center, spacing: EntityVisualTokens.stackSpacing) {
-                Button {
-                    if let primaryImageURL {
-                        previewImageItem = ThingImagePreviewItem(url: primaryImageURL)
+                if let primaryImageURL {
+                    RemoteImageView(url: primaryImageURL, rendition: .listThumbnail) { image in
+                        Button {
+                            previewImageItem = ThingImagePreviewItem(url: primaryImageURL)
+                        } label: {
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 88, height: 88)
+                                .clipShape(
+                                    RoundedRectangle(
+                                        cornerRadius: EntityVisualTokens.radiusSmall,
+                                        style: .continuous
+                                    )
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    } placeholder: {
+                        EntityThumbnail(
+                            url: nil,
+                            size: 88,
+                            placeholderSystemImage: "cube.box",
+                            showsBorder: false
+                        )
                     }
-                } label: {
+                } else {
                     EntityThumbnail(
-                        url: primaryImageURL,
+                        url: nil,
                         size: 88,
                         placeholderSystemImage: "cube.box",
                         showsBorder: false
                     )
                 }
-                .buttonStyle(.plain)
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(thing.title)
@@ -305,6 +326,29 @@ private struct ThingDetailPanel: View {
                     .lineLimit(1)
             }
             .font(.caption)
+            .foregroundStyle(Color.appTextSecondary)
+
+            HStack(spacing: 8) {
+                if let channelId = thing.channelId?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !channelId.isEmpty
+                {
+                    EntityMetaChip(
+                        systemImage: "bubble.left.and.bubble.right",
+                        text: environment.channelDisplayName(for: channelId) ?? channelId
+                    )
+                }
+                if let descriptor = entityDecryptionBadgeDescriptor(
+                    state: thing.decryptionState,
+                    localizationManager: localizationManager
+                ) {
+                    EntityMetaChip(
+                        systemImage: descriptor.icon,
+                        text: descriptor.text,
+                        color: descriptor.tone.foreground
+                    )
+                }
+            }
+            .font(.caption2)
             .foregroundStyle(Color.appTextSecondary)
 
             if let locationSummary {
@@ -409,21 +453,33 @@ private struct ThingAttachmentImageStrip: View {
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
                 ForEach(urls, id: \.absoluteString) { url in
-                    Button {
-                        onTap(url)
-                    } label: {
-                        RemoteImageView(url: url, rendition: .listThumbnail) { image in
+                    RemoteImageView(url: url, rendition: .listThumbnail) { image in
+                        Button {
+                            onTap(url)
+                        } label: {
                             image
                                 .resizable()
                                 .scaledToFill()
-                        } placeholder: {
-                            Rectangle()
-                                .fill(EntityVisualTokens.secondarySurface)
+                                .frame(width: 88, height: 88)
+                                .clipShape(
+                                    RoundedRectangle(
+                                        cornerRadius: EntityVisualTokens.radiusSmall,
+                                        style: .continuous
+                                    )
+                                )
                         }
-                        .frame(width: 88, height: 88)
-                        .clipShape(RoundedRectangle(cornerRadius: EntityVisualTokens.radiusSmall, style: .continuous))
+                        .buttonStyle(.plain)
+                    } placeholder: {
+                        Rectangle()
+                            .fill(EntityVisualTokens.secondarySurface)
+                            .frame(width: 88, height: 88)
+                            .clipShape(
+                                RoundedRectangle(
+                                    cornerRadius: EntityVisualTokens.radiusSmall,
+                                    style: .continuous
+                                )
+                            )
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }

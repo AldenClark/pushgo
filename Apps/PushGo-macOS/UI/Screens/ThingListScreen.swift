@@ -130,6 +130,9 @@ struct ThingListScreen: View {
 }
 
 private struct ThingListRow: View {
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
+    @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
+
     private enum Layout {
         static let primaryImageSize: CGFloat = 46
         static let attachmentImageSize: CGFloat = 42
@@ -215,6 +218,29 @@ private struct ThingListRow: View {
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+
+            HStack(spacing: 8) {
+                if let channelId = thing.channelId?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !channelId.isEmpty
+                {
+                    EntityMetaChip(
+                        systemImage: "bubble.left.and.bubble.right",
+                        text: environment.channelDisplayName(for: channelId) ?? channelId
+                    )
+                }
+                if let descriptor = entityDecryptionBadgeDescriptor(
+                    state: thing.decryptionState,
+                    localizationManager: localizationManager
+                ) {
+                    EntityMetaChip(
+                        systemImage: descriptor.icon,
+                        text: descriptor.text,
+                        color: descriptor.tone.foreground
+                    )
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(Color.appTextSecondary)
 
             if !previewImageAttachments.isEmpty {
                 GeometryReader { proxy in

@@ -25,6 +25,12 @@ struct WatchThingDetailScreen: View {
                                     .font(.caption)
                                     .foregroundStyle(Color.appTextSecondary)
                             }
+                            if let decryptText = watchDecryptionStateText(thing.decryptionState) {
+                                WatchEntityStateBadge(
+                                    text: decryptText,
+                                    tone: watchDecryptionStateTone(thing.decryptionState)
+                                )
+                            }
                             Text(watchDateText(thing.updatedAt))
                                 .font(.caption2)
                                 .foregroundStyle(Color.appTextSecondary)

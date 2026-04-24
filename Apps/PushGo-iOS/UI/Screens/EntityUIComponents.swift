@@ -453,6 +453,46 @@ func eventSeveritySymbol(_ severity: String?) -> String? {
     eventSeveritySymbol(normalizedEventSeverity(severity))
 }
 
+struct EntityDecryptionBadgeDescriptor {
+    let icon: String
+    let text: String
+    let tone: AppSemanticTone
+}
+
+@MainActor
+func entityDecryptionBadgeDescriptor(
+    state: PushMessage.DecryptionState?,
+    localizationManager: LocalizationManager
+) -> EntityDecryptionBadgeDescriptor? {
+    guard let state else { return nil }
+    switch state {
+    case .decryptOk:
+        return EntityDecryptionBadgeDescriptor(
+            icon: "lock.open.fill",
+            text: localizationManager.localized("decrypted"),
+            tone: .info
+        )
+    case .decryptFailed:
+        return EntityDecryptionBadgeDescriptor(
+            icon: "lock.slash",
+            text: localizationManager.localized("decryption_failed_the_original_text_has_been_displayed"),
+            tone: .danger
+        )
+    case .notConfigured:
+        return EntityDecryptionBadgeDescriptor(
+            icon: "lock.fill",
+            text: "Encrypted (Not Configured)",
+            tone: .warning
+        )
+    case .algMismatch:
+        return EntityDecryptionBadgeDescriptor(
+            icon: "lock.fill",
+            text: "Encrypted (Alg Mismatch)",
+            tone: .warning
+        )
+    }
+}
+
 func normalizedEventState(_ state: String?) -> String {
     eventLifecycleState(from: state).rawValue
 }

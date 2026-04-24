@@ -109,9 +109,17 @@ private struct WatchLightThingRow: View {
                         .lineLimit(2)
                 }
 
-                Text(watchDateText(thing.updatedAt))
-                    .font(.caption2)
-                    .foregroundStyle(Color.appTextSecondary)
+                HStack(spacing: 8) {
+                    if let decryptText = watchDecryptionStateText(thing.decryptionState) {
+                        WatchEntityStateBadge(
+                            text: decryptText,
+                            tone: watchDecryptionStateTone(thing.decryptionState)
+                        )
+                    }
+                    Text(watchDateText(thing.updatedAt))
+                        .font(.caption2)
+                        .foregroundStyle(Color.appTextSecondary)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -213,9 +213,18 @@ enum AppConstants {
     static let appGroupIdentifier = "group.ethan.pushgo.messages"
     static let serverConfigFilename = "server_config.json"
     static let messagesFilename = "messages.json"
-    // No backward-compatibility for local persistence artifacts.
+    // Schema version is independent from on-disk filename.
     static let databaseVersion = "v9"
-    static let databaseStoreFilename = "pushgo-\(databaseVersion).db"
+    static let databaseStoreFilename = "pushgo.db"
+    static let messageIndexDatabaseFilename = "pushgo.index.sqlite"
+    static let legacyDatabaseStoreFilenames = [
+        "pushgo-v9.db",
+    ]
+    static let legacyMessageIndexDatabaseFilenames = [
+        "pushgo.index.v9.sqlite",
+        "pushgo.search.v9.sqlite",
+        "pushgo.metadata.v9.sqlite",
+    ]
     private static let productionServerAddress = "https://gateway.pushgo.cn"
     static let messageSyncNotificationName = "io.ethan.pushgo.message-sync"
     static let copyToastNotificationName = "io.ethan.pushgo.copy-toast"
@@ -246,6 +255,87 @@ enum AppConstants {
             return automationURL
         }
         return fileManager.containerURL(forSecurityApplicationGroupIdentifier: identifier)
+    }
+
+    static func migrateLegacyDatabaseArtifacts(
+        fileManager: FileManager = .default,
+        appGroupIdentifier: String = appGroupIdentifier
+    ) throws {
+        guard let root = appGroupContainerURL(
+            fileManager: fileManager,
+            identifier: appGroupIdentifier
+        ) else {
+            throw NSError(
+                domain: "io.ethan.pushgo.app-group",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Missing app group container: \(appGroupIdentifier)"]
+            )
+        }
+        let databaseDirectory = root.appendingPathComponent("Database", isDirectory: true)
+        if !fileManager.fileExists(atPath: databaseDirectory.path) {
+            try fileManager.createDirectory(at: databaseDirectory, withIntermediateDirectories: true)
+        }
+
+        try migrateSQLiteFileFamily(
+            fileManager: fileManager,
+            directory: databaseDirectory,
+            legacyFilenames: legacyDatabaseStoreFilenames,
+            targetFilename: databaseStoreFilename
+        )
+        try migrateSQLiteFileFamily(
+            fileManager: fileManager,
+            directory: databaseDirectory,
+            legacyFilenames: legacyMessageIndexDatabaseFilenames,
+            targetFilename: messageIndexDatabaseFilename
+        )
+    }
+
+    private static func migrateSQLiteFileFamily(
+        fileManager: FileManager,
+        directory: URL,
+        legacyFilenames: [String],
+        targetFilename: String
+    ) throws {
+        let targetBaseURL = directory.appendingPathComponent(targetFilename)
+        if fileManager.fileExists(atPath: targetBaseURL.path) {
+            let targetSize = (try? fileManager.attributesOfItem(atPath: targetBaseURL.path)[.size] as? NSNumber)?
+                .int64Value ?? 0
+            if targetSize > 0 {
+                return
+            }
+            try? fileManager.removeItem(at: targetBaseURL)
+        }
+        guard let sourceFilename = legacyFilenames.first(where: {
+            fileManager.fileExists(atPath: directory.appendingPathComponent($0).path)
+        }) else {
+            return
+        }
+
+        let suffixes = ["", "-wal", "-shm", "-journal"]
+        for suffix in suffixes {
+            let sourceURL = directory.appendingPathComponent(sourceFilename + suffix)
+            guard fileManager.fileExists(atPath: sourceURL.path) else { continue }
+            let targetURL = directory.appendingPathComponent(targetFilename + suffix)
+            guard !fileManager.fileExists(atPath: targetURL.path) else { continue }
+            try migrateSingleFile(
+                fileManager: fileManager,
+                sourceURL: sourceURL,
+                targetURL: targetURL
+            )
+        }
+    }
+
+    private static func migrateSingleFile(
+        fileManager: FileManager,
+        sourceURL: URL,
+        targetURL: URL
+    ) throws {
+        do {
+            try fileManager.moveItem(at: sourceURL, to: targetURL)
+        } catch {
+            try fileManager.copyItem(at: sourceURL, to: targetURL)
+            try? fileManager.removeItem(at: sourceURL)
+        }
     }
 
     static func sharedUserDefaults(

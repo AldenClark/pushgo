@@ -298,6 +298,43 @@ private func canonicalizedMessageForPersistence(_ message: PushMessage) -> PushM
 }
 
 actor LocalDataStore {
+    private struct StorageProbeSnapshot: Codable, Sendable {
+        let probeVersion: Int
+        let generatedAtEpochMs: Int64
+        let generatedAtISO8601: String
+        let source: String
+        let bundleIdentifier: String
+        let processName: String
+        let processIdentifier: Int32
+        let appGroupIdentifier: String
+        let automationActive: Bool
+        let automationStorageRootPath: String?
+        let resolvedAppGroupURL: String?
+        let diagnosticFileURL: String?
+        let databaseDirectoryURL: String?
+        let databaseFileURL: String?
+        let databaseFileExists: Bool
+        let databaseWalExists: Bool
+        let databaseShmExists: Bool
+        let databaseSnapshotFileURL: String?
+        let databaseSnapshotWalURL: String?
+        let databaseSnapshotShmURL: String?
+        let databaseSnapshotFileExists: Bool
+        let databaseSnapshotWalExists: Bool
+        let databaseSnapshotShmExists: Bool
+        let searchIndexFileURL: String?
+        let metadataIndexFileURL: String?
+        let storageMode: String
+        let storageReason: String?
+        let schemaVersion: String
+        let databaseStoreFilename: String
+    }
+
+    private static let storageProbeDirectoryName = "storage-diagnostics"
+    private static let storageProbeFilename = "local_store_probe.json"
+    private static let storageSnapshotFilename = "local_store_snapshot.db"
+    private static let storageSnapshotWalFilename = "local_store_snapshot.db-wal"
+    private static let storageSnapshotShmFilename = "local_store_snapshot.db-shm"
     struct StorageState: Sendable, Equatable {
         enum Mode: Sendable {
             case persistent
@@ -330,6 +367,10 @@ actor LocalDataStore {
         let resolvedBackend: GRDBStore?
         let resolvedStorageState: StorageState
         do {
+            try AppConstants.migrateLegacyDatabaseArtifacts(
+                fileManager: fileManager,
+                appGroupIdentifier: appGroupIdentifier
+            )
             let directory = try GRDBStore.databaseDirectory(
                 fileManager: fileManager,
                 appGroupIdentifier: appGroupIdentifier
@@ -352,6 +393,126 @@ actor LocalDataStore {
         metadataIndex = try? MessageMetadataIndex(
             appGroupIdentifier: appGroupIdentifier
         )
+        Self.writeStorageProbe(
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier,
+            storageState: resolvedStorageState,
+            searchIndexReady: searchIndex != nil,
+            metadataIndexReady: metadataIndex != nil
+        )
+    }
+
+    private static func writeStorageProbe(
+        fileManager: FileManager,
+        appGroupIdentifier: String,
+        storageState: StorageState,
+        searchIndexReady: Bool,
+        metadataIndexReady: Bool
+    ) {
+        guard let appGroupURL = AppConstants.appGroupContainerURL(
+            fileManager: fileManager,
+            identifier: appGroupIdentifier
+        ) else {
+            return
+        }
+
+        let appSupportURL = appGroupURL
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Application Support", isDirectory: true)
+        let diagnosticsURL = appSupportURL.appendingPathComponent(
+            storageProbeDirectoryName,
+            isDirectory: true
+        )
+        let diagnosticFileURL = diagnosticsURL.appendingPathComponent(storageProbeFilename)
+
+        let databaseDirectoryURL = appGroupURL.appendingPathComponent("Database", isDirectory: true)
+        let databaseFileURL = databaseDirectoryURL.appendingPathComponent(
+            AppConstants.databaseStoreFilename
+        )
+        let walURL = URL(fileURLWithPath: databaseFileURL.path + "-wal")
+        let shmURL = URL(fileURLWithPath: databaseFileURL.path + "-shm")
+        let snapshotFileURL = diagnosticsURL.appendingPathComponent(storageSnapshotFilename)
+        let snapshotWalURL = diagnosticsURL.appendingPathComponent(storageSnapshotWalFilename)
+        let snapshotShmURL = diagnosticsURL.appendingPathComponent(storageSnapshotShmFilename)
+        let snapshotResult = copySQLiteArtifactsForDiagnostics(
+            fileManager: fileManager,
+            sourceBaseURL: databaseFileURL,
+            destinationBaseURL: snapshotFileURL
+        )
+
+        let searchIndexFileURL = searchIndexReady
+            ? databaseDirectoryURL
+                .appendingPathComponent(AppConstants.messageIndexDatabaseFilename)
+            : nil
+        let metadataIndexFileURL = metadataIndexReady
+            ? databaseDirectoryURL
+                .appendingPathComponent(AppConstants.messageIndexDatabaseFilename)
+            : nil
+
+        let now = Date()
+        let probe = StorageProbeSnapshot(
+            probeVersion: 1,
+            generatedAtEpochMs: Int64((now.timeIntervalSince1970 * 1_000).rounded()),
+            generatedAtISO8601: ISO8601DateFormatter().string(from: now),
+            source: "LocalDataStore.init",
+            bundleIdentifier: Bundle.main.bundleIdentifier ?? "",
+            processName: ProcessInfo.processInfo.processName,
+            processIdentifier: ProcessInfo.processInfo.processIdentifier,
+            appGroupIdentifier: appGroupIdentifier,
+            automationActive: PushGoAutomationContext.isActive,
+            automationStorageRootPath: PushGoAutomationContext.storageRootURL?.path,
+            resolvedAppGroupURL: appGroupURL.path,
+            diagnosticFileURL: diagnosticFileURL.path,
+            databaseDirectoryURL: databaseDirectoryURL.path,
+            databaseFileURL: databaseFileURL.path,
+            databaseFileExists: fileManager.fileExists(atPath: databaseFileURL.path),
+            databaseWalExists: fileManager.fileExists(atPath: walURL.path),
+            databaseShmExists: fileManager.fileExists(atPath: shmURL.path),
+            databaseSnapshotFileURL: snapshotFileURL.path,
+            databaseSnapshotWalURL: snapshotWalURL.path,
+            databaseSnapshotShmURL: snapshotShmURL.path,
+            databaseSnapshotFileExists: snapshotResult.databaseCopied,
+            databaseSnapshotWalExists: snapshotResult.walCopied,
+            databaseSnapshotShmExists: snapshotResult.shmCopied,
+            searchIndexFileURL: searchIndexFileURL?.path,
+            metadataIndexFileURL: metadataIndexFileURL?.path,
+            storageMode: storageState.mode == .persistent ? "persistent" : "unavailable",
+            storageReason: storageState.reason,
+            schemaVersion: AppConstants.databaseVersion,
+            databaseStoreFilename: AppConstants.databaseStoreFilename
+        )
+
+        guard let data = try? JSONEncoder().encode(probe) else { return }
+        try? fileManager.createDirectory(at: diagnosticsURL, withIntermediateDirectories: true)
+        try? data.write(to: diagnosticFileURL, options: .atomic)
+    }
+
+    private static func copySQLiteArtifactsForDiagnostics(
+        fileManager: FileManager,
+        sourceBaseURL: URL,
+        destinationBaseURL: URL
+    ) -> (databaseCopied: Bool, walCopied: Bool, shmCopied: Bool) {
+        @inline(__always)
+        func copyIfPresent(source: URL, destination: URL) -> Bool {
+            guard fileManager.fileExists(atPath: source.path) else { return false }
+            try? fileManager.removeItem(at: destination)
+            do {
+                try fileManager.copyItem(at: source, to: destination)
+                return true
+            } catch {
+                return false
+            }
+        }
+
+        let sourceWalURL = URL(fileURLWithPath: sourceBaseURL.path + "-wal")
+        let sourceShmURL = URL(fileURLWithPath: sourceBaseURL.path + "-shm")
+        let destinationWalURL = URL(fileURLWithPath: destinationBaseURL.path + "-wal")
+        let destinationShmURL = URL(fileURLWithPath: destinationBaseURL.path + "-shm")
+
+        let databaseCopied = copyIfPresent(source: sourceBaseURL, destination: destinationBaseURL)
+        let walCopied = copyIfPresent(source: sourceWalURL, destination: destinationWalURL)
+        let shmCopied = copyIfPresent(source: sourceShmURL, destination: destinationShmURL)
+        return (databaseCopied, walCopied, shmCopied)
     }
 
     private var storeUnavailableError: AppError {
@@ -376,10 +537,8 @@ actor LocalDataStore {
         )
         let targets = [
             AppConstants.databaseStoreFilename,
-            "pushgo.index.\(AppConstants.databaseVersion).sqlite",
-            "pushgo.search.\(AppConstants.databaseVersion).sqlite",
-            "pushgo.metadata.\(AppConstants.databaseVersion).sqlite",
-        ]
+            AppConstants.messageIndexDatabaseFilename,
+        ] + AppConstants.legacyDatabaseStoreFilenames + AppConstants.legacyMessageIndexDatabaseFilenames
         for filename in targets {
             let baseURL = directory.appendingPathComponent(filename)
             try Self.removeSQLiteArtifacts(fileManager: fileManager, baseURL: baseURL)
@@ -2150,6 +2309,7 @@ private struct GRDBWatchLightEventRecord {
     let summary: String?
     let state: String?
     let severity: String?
+    let decryptionState: String?
     let imageURL: String?
     let updatedAt: Date
 
@@ -2159,6 +2319,7 @@ private struct GRDBWatchLightEventRecord {
         summary = row["summary"]
         state = row["state"]
         severity = row["severity"]
+        decryptionState = row["decryption_state"]
         imageURL = row["image_url"]
         let updatedAtEpoch: Double = row["updated_at"]
         updatedAt = GRDBStore.dateFromStoredEpoch(updatedAtEpoch)
@@ -2171,6 +2332,7 @@ private struct GRDBWatchLightEventRecord {
             summary: summary,
             state: state,
             severity: severity,
+            decryptionState: decryptionState,
             imageURL: imageURL.flatMap { URLSanitizer.resolveHTTPSURL(from: $0) },
             updatedAt: updatedAt
         )
@@ -2182,6 +2344,7 @@ private struct GRDBWatchLightThingRecord {
     let title: String
     let summary: String?
     let attrsJSON: String?
+    let decryptionState: String?
     let imageURL: String?
     let updatedAt: Date
 
@@ -2190,6 +2353,7 @@ private struct GRDBWatchLightThingRecord {
         title = row["title"]
         summary = row["summary"]
         attrsJSON = row["attrs_json"]
+        decryptionState = row["decryption_state"]
         imageURL = row["image_url"]
         let updatedAtEpoch: Double = row["updated_at"]
         updatedAt = GRDBStore.dateFromStoredEpoch(updatedAtEpoch)
@@ -2201,6 +2365,7 @@ private struct GRDBWatchLightThingRecord {
             title: title,
             summary: summary,
             attrsJSON: attrsJSON,
+            decryptionState: decryptionState,
             imageURL: imageURL.flatMap { URLSanitizer.resolveHTTPSURL(from: $0) },
             updatedAt: updatedAt
         )
@@ -2403,6 +2568,7 @@ private actor GRDBStore {
                     summary TEXT,
                     state TEXT,
                     severity TEXT,
+                    decryption_state TEXT,
                     image_url TEXT,
                     updated_at REAL NOT NULL,
                     CHECK (length(trim(event_id)) > 0)
@@ -2416,6 +2582,7 @@ private actor GRDBStore {
                     title TEXT NOT NULL,
                     summary TEXT,
                     attrs_json TEXT,
+                    decryption_state TEXT,
                     image_url TEXT,
                     updated_at REAL NOT NULL,
                     CHECK (length(trim(thing_id)) > 0)
@@ -2683,6 +2850,7 @@ private actor GRDBStore {
                     summary TEXT,
                     state TEXT,
                     severity TEXT,
+                    decryption_state TEXT,
                     image_url TEXT,
                     updated_at REAL NOT NULL,
                     CHECK (length(trim(event_id)) > 0)
@@ -2696,6 +2864,7 @@ private actor GRDBStore {
                     title TEXT NOT NULL,
                     summary TEXT,
                     attrs_json TEXT,
+                    decryption_state TEXT,
                     image_url TEXT,
                     updated_at REAL NOT NULL,
                     CHECK (length(trim(thing_id)) > 0)
@@ -2838,6 +3007,22 @@ private actor GRDBStore {
                         arguments: [threshold]
                     )
                 }
+            }
+        }
+        migrator.registerMigration("v13_watch_light_decryption_state_columns") { db in
+            let watchEventColumns = Set(
+                try Row.fetchAll(db, sql: "PRAGMA table_info(watch_light_events);")
+                    .compactMap { $0["name"] as String? }
+            )
+            if !watchEventColumns.contains("decryption_state") {
+                try db.execute(sql: "ALTER TABLE watch_light_events ADD COLUMN decryption_state TEXT;")
+            }
+            let watchThingColumns = Set(
+                try Row.fetchAll(db, sql: "PRAGMA table_info(watch_light_things);")
+                    .compactMap { $0["name"] as String? }
+            )
+            if !watchThingColumns.contains("decryption_state") {
+                try db.execute(sql: "ALTER TABLE watch_light_things ADD COLUMN decryption_state TEXT;")
             }
         }
         return migrator
@@ -4176,13 +4361,14 @@ private actor GRDBStore {
         try db.execute(
             sql: """
                 INSERT INTO watch_light_events (
-                    event_id, title, summary, state, severity, image_url, updated_at
+                    event_id, title, summary, state, severity, decryption_state, image_url, updated_at
                 ) VALUES (
                     \(Self.sqlQuoted(event.eventId)),
                     \(Self.sqlQuoted(event.title)),
                     \(Self.sqlOptionalText(event.summary)),
                     \(Self.sqlOptionalText(event.state)),
                     \(Self.sqlOptionalText(event.severity)),
+                    \(Self.sqlOptionalText(event.decryptionState)),
                     \(Self.sqlOptionalText(event.imageURL?.absoluteString)),
                     \(Self.storedEpoch(event.updatedAt))
                 )
@@ -4191,6 +4377,7 @@ private actor GRDBStore {
                     summary = excluded.summary,
                     state = excluded.state,
                     severity = excluded.severity,
+                    decryption_state = excluded.decryption_state,
                     image_url = excluded.image_url,
                     updated_at = excluded.updated_at;
                 """
@@ -4201,12 +4388,13 @@ private actor GRDBStore {
         try db.execute(
             sql: """
                 INSERT INTO watch_light_things (
-                    thing_id, title, summary, attrs_json, image_url, updated_at
+                    thing_id, title, summary, attrs_json, decryption_state, image_url, updated_at
                 ) VALUES (
                     \(Self.sqlQuoted(thing.thingId)),
                     \(Self.sqlQuoted(thing.title)),
                     \(Self.sqlOptionalText(thing.summary)),
                     \(Self.sqlOptionalText(thing.attrsJSON)),
+                    \(Self.sqlOptionalText(thing.decryptionState)),
                     \(Self.sqlOptionalText(thing.imageURL?.absoluteString)),
                     \(Self.storedEpoch(thing.updatedAt))
                 )
@@ -4214,6 +4402,7 @@ private actor GRDBStore {
                     title = excluded.title,
                     summary = excluded.summary,
                     attrs_json = excluded.attrs_json,
+                    decryption_state = excluded.decryption_state,
                     image_url = excluded.image_url,
                     updated_at = excluded.updated_at;
                 """

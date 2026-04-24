@@ -36,6 +36,7 @@ enum WatchStandaloneLightQuantizer {
                     summary: nonEmpty(payload["body"]),
                     state: nonEmpty(payload["event_state"]),
                     severity: nonEmpty(payload["severity"]),
+                    decryptionState: nonEmpty(payload["decryption_state"]),
                     imageURL: sanitizedURL(payload["image"]),
                     updatedAt: payloadDate(payload["sent_at"]) ?? Date()
                 )
@@ -50,6 +51,7 @@ enum WatchStandaloneLightQuantizer {
                     title: nonEmpty(payload["title"]) ?? thingId,
                     summary: nonEmpty(payload["body"]),
                     attrsJSON: nonEmpty(payload["thing_attrs_json"]),
+                    decryptionState: nonEmpty(payload["decryption_state"]),
                     imageURL: sanitizedURL(payload["image"]),
                     updatedAt: payloadDate(payload["observed_at"] ?? payload["sent_at"]) ?? Date()
                 )

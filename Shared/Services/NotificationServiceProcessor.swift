@@ -28,6 +28,10 @@ final class NotificationServiceProcessor {
         guard !Task.isCancelled else { return content }
         let persistenceFailed = (content.userInfo["_persist_failed"] as? String) == "1"
         guard !persistenceFailed else { return content }
+        await deduplicateEntityNotificationsIfNeeded(
+            currentRequestIdentifier: request.identifier,
+            payload: content.userInfo
+        )
         return await contentPreparer.enrichMediaIfNeeded(content)
     }
 
@@ -173,5 +177,71 @@ final class NotificationServiceProcessor {
         #else
         return "apple"
         #endif
+    }
+
+    private func deduplicateEntityNotificationsIfNeeded(
+        currentRequestIdentifier: String,
+        payload: [AnyHashable: Any]
+    ) async {
+        guard Self.shouldDeduplicateEntityNotification(payload: payload),
+              let deliveryId = Self.normalizedPayloadString(payload["delivery_id"])
+        else {
+            return
+        }
+
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            UNUserNotificationCenter.current().getDeliveredNotifications { delivered in
+                let deliveredDuplicates = delivered.compactMap { notification -> String? in
+                    guard notification.request.identifier != currentRequestIdentifier else { return nil }
+                    guard Self.shouldDeduplicateEntityNotification(
+                        payload: notification.request.content.userInfo
+                    ) else {
+                        return nil
+                    }
+                    let candidateDeliveryId = Self.normalizedPayloadString(
+                        notification.request.content.userInfo["delivery_id"]
+                    )
+                    return candidateDeliveryId == deliveryId ? notification.request.identifier : nil
+                }
+                if !deliveredDuplicates.isEmpty {
+                    UNUserNotificationCenter.current().removeDeliveredNotifications(
+                        withIdentifiers: deliveredDuplicates
+                    )
+                }
+
+                UNUserNotificationCenter.current().getPendingNotificationRequests { pending in
+                    let pendingDuplicates = pending.compactMap { request -> String? in
+                        guard request.identifier != currentRequestIdentifier else { return nil }
+                        guard Self.shouldDeduplicateEntityNotification(
+                            payload: request.content.userInfo
+                        ) else {
+                            return nil
+                        }
+                        let candidateDeliveryId = Self.normalizedPayloadString(
+                            request.content.userInfo["delivery_id"]
+                        )
+                        return candidateDeliveryId == deliveryId ? request.identifier : nil
+                    }
+                    if !pendingDuplicates.isEmpty {
+                        UNUserNotificationCenter.current().removePendingNotificationRequests(
+                            withIdentifiers: pendingDuplicates
+                        )
+                    }
+                    continuation.resume()
+                }
+            }
+        }
+    }
+
+    private static func shouldDeduplicateEntityNotification(payload: [AnyHashable: Any]) -> Bool {
+        guard let entityType = normalizedPayloadString(payload["entity_type"])?.lowercased() else {
+            return false
+        }
+        return entityType == "event" || entityType == "thing"
+    }
+
+    private static func normalizedPayloadString(_ value: Any?) -> String? {
+        let trimmed = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

@@ -266,26 +266,48 @@ struct MessageDetailScreen: View {
         if imageURLs.count == 1, let imageURL = imageURLs.first {
             GeometryReader { proxy in
                 let maxWidth = min(proxy.size.width, Layout.singleImageMaxWidth)
-                Button {
-                    previewingImage = ImagePreview(url: imageURL)
-                } label: {
-                    RemoteImageView(url: imageURL) { image in
+                RemoteImageView(url: imageURL, rendition: .original) { image in
+                    Button {
+                        previewingImage = ImagePreview(url: imageURL)
+                    } label: {
                         image
                             .resizable()
                             .scaledToFill()
-                    } placeholder: {
-                        RoundedRectangle(cornerRadius: EntityVisualTokens.radiusMedium, style: .continuous)
-                            .fill(EntityVisualTokens.subtleFill)
+                            .frame(width: maxWidth, height: Layout.singleImageHeight)
+                            .clipShape(
+                                RoundedRectangle(
+                                    cornerRadius: EntityVisualTokens.radiusMedium,
+                                    style: .continuous
+                                )
+                            )
+                            .overlay(
+                                RoundedRectangle(
+                                    cornerRadius: EntityVisualTokens.radiusMedium,
+                                    style: .continuous
+                                )
+                                .stroke(EntityVisualTokens.subtleStroke, lineWidth: 0.8),
+                            )
                     }
-                    .frame(width: maxWidth, height: Layout.singleImageHeight)
-                    .clipShape(RoundedRectangle(cornerRadius: EntityVisualTokens.radiusMedium, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: EntityVisualTokens.radiusMedium, style: .continuous)
+                    .buttonStyle(.appPlain)
+                    .accessibilityLabel(LocalizedStringKey("image_attachment"))
+                } placeholder: {
+                    RoundedRectangle(cornerRadius: EntityVisualTokens.radiusMedium, style: .continuous)
+                        .fill(EntityVisualTokens.subtleFill)
+                        .frame(width: maxWidth, height: Layout.singleImageHeight)
+                        .clipShape(
+                            RoundedRectangle(
+                                cornerRadius: EntityVisualTokens.radiusMedium,
+                                style: .continuous
+                            )
+                        )
+                        .overlay(
+                            RoundedRectangle(
+                                cornerRadius: EntityVisualTokens.radiusMedium,
+                                style: .continuous
+                            )
                             .stroke(EntityVisualTokens.subtleStroke, lineWidth: 0.8),
-                    )
+                        )
                 }
-                .buttonStyle(.appPlain)
-                .accessibilityLabel(LocalizedStringKey("image_attachment"))
                 .frame(maxWidth: .infinity, alignment: .center)
             }
             .frame(height: Layout.singleImageHeight)
@@ -293,28 +315,48 @@ struct MessageDetailScreen: View {
             ScrollView(.horizontal) {
                 HStack(spacing: 10) {
                     ForEach(imageURLs, id: \.absoluteString) { imageURL in
-                        Button {
-                            previewingImage = ImagePreview(url: imageURL)
-                        } label: {
-                            RemoteImageView(url: imageURL, rendition: .listThumbnail) { image in
+                        RemoteImageView(url: imageURL, rendition: .listThumbnail) { image in
+                            Button {
+                                previewingImage = ImagePreview(url: imageURL)
+                            } label: {
                                 image
                                     .resizable()
                                     .scaledToFill()
-                            } placeholder: {
-                                RoundedRectangle(cornerRadius: Layout.thumbnailCornerRadius, style: .continuous)
-                                    .fill(EntityVisualTokens.subtleFill)
+                                    .frame(width: Layout.thumbnailSize, height: Layout.thumbnailSize)
+                                    .clipShape(
+                                        RoundedRectangle(
+                                            cornerRadius: Layout.thumbnailCornerRadius,
+                                            style: .continuous
+                                        )
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(
+                                            cornerRadius: Layout.thumbnailCornerRadius,
+                                            style: .continuous
+                                        )
+                                        .stroke(EntityVisualTokens.subtleStroke, lineWidth: 0.8),
+                                    )
                             }
-                            .frame(width: Layout.thumbnailSize, height: Layout.thumbnailSize)
-                            .clipShape(
-                                RoundedRectangle(cornerRadius: Layout.thumbnailCornerRadius, style: .continuous)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: Layout.thumbnailCornerRadius, style: .continuous)
+                            .buttonStyle(.appPlain)
+                            .accessibilityLabel(LocalizedStringKey("image_attachment"))
+                        } placeholder: {
+                            RoundedRectangle(cornerRadius: Layout.thumbnailCornerRadius, style: .continuous)
+                                .fill(EntityVisualTokens.subtleFill)
+                                .frame(width: Layout.thumbnailSize, height: Layout.thumbnailSize)
+                                .clipShape(
+                                    RoundedRectangle(
+                                        cornerRadius: Layout.thumbnailCornerRadius,
+                                        style: .continuous
+                                    )
+                                )
+                                .overlay(
+                                    RoundedRectangle(
+                                        cornerRadius: Layout.thumbnailCornerRadius,
+                                        style: .continuous
+                                    )
                                     .stroke(EntityVisualTokens.subtleStroke, lineWidth: 0.8),
-                            )
+                                )
                         }
-                        .buttonStyle(.appPlain)
-                        .accessibilityLabel(LocalizedStringKey("image_attachment"))
                     }
                 }
             }

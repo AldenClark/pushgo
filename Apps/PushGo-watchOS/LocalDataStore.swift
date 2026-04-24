@@ -112,6 +112,10 @@ actor LocalDataStore {
         decoder.dateDecodingStrategy = .iso8601
 
         do {
+            try AppConstants.migrateLegacyDatabaseArtifacts(
+                fileManager: fileManager,
+                appGroupIdentifier: appGroupIdentifier
+            )
             sqliteStore = try WatchLocalSQLiteStore(
                 fileManager: fileManager,
                 appGroupIdentifier: appGroupIdentifier
@@ -765,7 +769,7 @@ private final class WatchLocalSQLiteStore {
     }
 
     func loadWatchLightEvents() throws -> [WatchLightEvent] {
-        let statement = try prepare("SELECT event_id, title, summary, state, severity, image_url, updated_at FROM watch_light_events ORDER BY updated_at DESC, event_id DESC;")
+        let statement = try prepare("SELECT event_id, title, summary, state, severity, decryption_state, image_url, updated_at FROM watch_light_events ORDER BY updated_at DESC, event_id DESC;")
         defer { sqlite3_finalize(statement) }
         var items: [WatchLightEvent] = []
         while sqlite3_step(statement) == SQLITE_ROW {
@@ -777,14 +781,14 @@ private final class WatchLocalSQLiteStore {
     func loadWatchLightEvent(eventId: String) throws -> WatchLightEvent? {
         let normalized = eventId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return nil }
-        let statement = try prepare("SELECT event_id, title, summary, state, severity, image_url, updated_at FROM watch_light_events WHERE event_id = ? LIMIT 1;")
+        let statement = try prepare("SELECT event_id, title, summary, state, severity, decryption_state, image_url, updated_at FROM watch_light_events WHERE event_id = ? LIMIT 1;")
         defer { sqlite3_finalize(statement) }
         try bindText(statement, index: 1, value: normalized)
         return sqlite3_step(statement) == SQLITE_ROW ? Self.decodeWatchLightEvent(statement) : nil
     }
 
     func loadWatchLightThings() throws -> [WatchLightThing] {
-        let statement = try prepare("SELECT thing_id, title, summary, attrs_json, image_url, updated_at FROM watch_light_things ORDER BY updated_at DESC, thing_id DESC;")
+        let statement = try prepare("SELECT thing_id, title, summary, attrs_json, decryption_state, image_url, updated_at FROM watch_light_things ORDER BY updated_at DESC, thing_id DESC;")
         defer { sqlite3_finalize(statement) }
         var items: [WatchLightThing] = []
         while sqlite3_step(statement) == SQLITE_ROW {
@@ -796,7 +800,7 @@ private final class WatchLocalSQLiteStore {
     func loadWatchLightThing(thingId: String) throws -> WatchLightThing? {
         let normalized = thingId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return nil }
-        let statement = try prepare("SELECT thing_id, title, summary, attrs_json, image_url, updated_at FROM watch_light_things WHERE thing_id = ? LIMIT 1;")
+        let statement = try prepare("SELECT thing_id, title, summary, attrs_json, decryption_state, image_url, updated_at FROM watch_light_things WHERE thing_id = ? LIMIT 1;")
         defer { sqlite3_finalize(statement) }
         try bindText(statement, index: 1, value: normalized)
         return sqlite3_step(statement) == SQLITE_ROW ? Self.decodeWatchLightThing(statement) : nil
@@ -938,27 +942,29 @@ private final class WatchLocalSQLiteStore {
     }
 
     private func upsertWatchLightEvent(_ event: WatchLightEvent) throws {
-        let statement = try prepare("INSERT INTO watch_light_events (event_id, title, summary, state, severity, image_url, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(event_id) DO UPDATE SET title = excluded.title, summary = excluded.summary, state = excluded.state, severity = excluded.severity, image_url = excluded.image_url, updated_at = excluded.updated_at;")
+        let statement = try prepare("INSERT INTO watch_light_events (event_id, title, summary, state, severity, decryption_state, image_url, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(event_id) DO UPDATE SET title = excluded.title, summary = excluded.summary, state = excluded.state, severity = excluded.severity, decryption_state = excluded.decryption_state, image_url = excluded.image_url, updated_at = excluded.updated_at;")
         defer { sqlite3_finalize(statement) }
         try bindText(statement, index: 1, value: event.eventId)
         try bindText(statement, index: 2, value: event.title)
         try bindText(statement, index: 3, value: event.summary)
         try bindText(statement, index: 4, value: event.state)
         try bindText(statement, index: 5, value: event.severity)
-        try bindText(statement, index: 6, value: event.imageURL?.absoluteString)
-        sqlite3_bind_double(statement, 7, event.updatedAt.timeIntervalSince1970)
+        try bindText(statement, index: 6, value: event.decryptionState)
+        try bindText(statement, index: 7, value: event.imageURL?.absoluteString)
+        sqlite3_bind_double(statement, 8, event.updatedAt.timeIntervalSince1970)
         try stepDone(statement)
     }
 
     private func upsertWatchLightThing(_ thing: WatchLightThing) throws {
-        let statement = try prepare("INSERT INTO watch_light_things (thing_id, title, summary, attrs_json, image_url, updated_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(thing_id) DO UPDATE SET title = excluded.title, summary = excluded.summary, attrs_json = excluded.attrs_json, image_url = excluded.image_url, updated_at = excluded.updated_at;")
+        let statement = try prepare("INSERT INTO watch_light_things (thing_id, title, summary, attrs_json, decryption_state, image_url, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(thing_id) DO UPDATE SET title = excluded.title, summary = excluded.summary, attrs_json = excluded.attrs_json, decryption_state = excluded.decryption_state, image_url = excluded.image_url, updated_at = excluded.updated_at;")
         defer { sqlite3_finalize(statement) }
         try bindText(statement, index: 1, value: thing.thingId)
         try bindText(statement, index: 2, value: thing.title)
         try bindText(statement, index: 3, value: thing.summary)
         try bindText(statement, index: 4, value: thing.attrsJSON)
-        try bindText(statement, index: 5, value: thing.imageURL?.absoluteString)
-        sqlite3_bind_double(statement, 6, thing.updatedAt.timeIntervalSince1970)
+        try bindText(statement, index: 5, value: thing.decryptionState)
+        try bindText(statement, index: 6, value: thing.imageURL?.absoluteString)
+        sqlite3_bind_double(statement, 7, thing.updatedAt.timeIntervalSince1970)
         try stepDone(statement)
     }
 
@@ -1035,8 +1041,9 @@ private final class WatchLocalSQLiteStore {
             summary: columnText(statement, index: 2),
             state: columnText(statement, index: 3),
             severity: columnText(statement, index: 4),
-            imageURL: columnText(statement, index: 5).flatMap(URL.init(string:)),
-            updatedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 6))
+            decryptionState: columnText(statement, index: 5),
+            imageURL: columnText(statement, index: 6).flatMap(URL.init(string:)),
+            updatedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 7))
         )
     }
 
@@ -1046,8 +1053,9 @@ private final class WatchLocalSQLiteStore {
             title: columnText(statement, index: 1) ?? "",
             summary: columnText(statement, index: 2),
             attrsJSON: columnText(statement, index: 3),
-            imageURL: columnText(statement, index: 4).flatMap(URL.init(string:)),
-            updatedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 5))
+            decryptionState: columnText(statement, index: 4),
+            imageURL: columnText(statement, index: 5).flatMap(URL.init(string:)),
+            updatedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 6))
         )
     }
 
@@ -1089,6 +1097,7 @@ private final class WatchLocalSQLiteStore {
                 summary TEXT,
                 state TEXT,
                 severity TEXT,
+                decryption_state TEXT,
                 image_url TEXT,
                 updated_at REAL NOT NULL
             );
@@ -1103,6 +1112,7 @@ private final class WatchLocalSQLiteStore {
                 title TEXT NOT NULL,
                 summary TEXT,
                 attrs_json TEXT,
+                decryption_state TEXT,
                 image_url TEXT,
                 updated_at REAL NOT NULL
             );
@@ -1145,6 +1155,18 @@ private final class WatchLocalSQLiteStore {
         try ensureColumn("watch_provisioning_applied_at", type: "REAL", db: db)
         try ensureColumn("watch_provisioning_mode_raw_value", type: "TEXT", db: db)
         try ensureColumn("watch_provisioning_source_control_generation", type: "INTEGER", db: db)
+        try ensureTableColumn(
+            table: "watch_light_events",
+            column: "decryption_state",
+            type: "TEXT",
+            db: db
+        )
+        try ensureTableColumn(
+            table: "watch_light_things",
+            column: "decryption_state",
+            type: "TEXT",
+            db: db
+        )
     }
 
     private static func ensureColumn(_ name: String, type: String, db: OpaquePointer) throws {
@@ -1159,6 +1181,26 @@ private final class WatchLocalSQLiteStore {
         }
         if !exists {
             try execute("ALTER TABLE app_settings ADD COLUMN \(name) \(type);", db: db)
+        }
+    }
+
+    private static func ensureTableColumn(
+        table: String,
+        column: String,
+        type: String,
+        db: OpaquePointer
+    ) throws {
+        let statement = try prepare("PRAGMA table_info(\(table));", db: db)
+        defer { sqlite3_finalize(statement) }
+        var exists = false
+        while sqlite3_step(statement) == SQLITE_ROW {
+            if columnText(statement, index: 1) == column {
+                exists = true
+                break
+            }
+        }
+        if !exists {
+            try execute("ALTER TABLE \(table) ADD COLUMN \(column) \(type);", db: db)
         }
     }
 

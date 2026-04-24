@@ -31,6 +31,10 @@ actor MessageSearchIndex {
         fileManager: FileManager = .default,
         appGroupIdentifier: String = AppConstants.appGroupIdentifier,
     ) throws {
+        try AppConstants.migrateLegacyDatabaseArtifacts(
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier
+        )
         let base = try MessageSearchIndex.databaseDirectory(
             fileManager: fileManager,
             appGroupIdentifier: appGroupIdentifier
@@ -210,7 +214,7 @@ actor MessageSearchIndex {
     }
 
     fileprivate static var indexDatabaseFilename: String {
-        "pushgo.index.\(AppConstants.databaseVersion).sqlite"
+        AppConstants.messageIndexDatabaseFilename
     }
 }
 
@@ -232,6 +236,10 @@ actor MessageMetadataIndex {
         fileManager: FileManager = .default,
         appGroupIdentifier: String = AppConstants.appGroupIdentifier,
     ) throws {
+        try AppConstants.migrateLegacyDatabaseArtifacts(
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier
+        )
         let base = try MessageMetadataIndex.databaseDirectory(
             fileManager: fileManager,
             appGroupIdentifier: appGroupIdentifier

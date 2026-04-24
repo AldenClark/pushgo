@@ -20,6 +20,10 @@ actor WatchLightNotificationStore {
     ) throws {
         decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
+        try AppConstants.migrateLegacyDatabaseArtifacts(
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier
+        )
 
         let storeURL = try Self.storeURL(
             fileManager: fileManager,

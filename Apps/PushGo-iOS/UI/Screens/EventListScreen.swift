@@ -495,6 +495,9 @@ private enum EventListTopMetrics {
 }
 
 struct EventListRow: View {
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
+    @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
+
     let event: EventProjection
 
     private var severity: EventSeverity? {
@@ -571,6 +574,24 @@ struct EventListRow: View {
                     Label(String(thingId.prefix(20)), systemImage: "cube")
                         .font(.caption2)
                         .foregroundStyle(Color.appTextSecondary)
+                }
+                if let channelId = event.channelId?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !channelId.isEmpty
+                {
+                    EntityMetaChip(
+                        systemImage: "bubble.left.and.bubble.right",
+                        text: environment.channelDisplayName(for: channelId) ?? channelId
+                    )
+                }
+                if let descriptor = entityDecryptionBadgeDescriptor(
+                    state: event.decryptionState,
+                    localizationManager: localizationManager
+                ) {
+                    EntityMetaChip(
+                        systemImage: descriptor.icon,
+                        text: descriptor.text,
+                        color: descriptor.tone.foreground
+                    )
                 }
             }
 
