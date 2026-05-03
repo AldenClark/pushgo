@@ -29,7 +29,8 @@
       "body": "Event summary",
       "event_state": "OPEN",
       "severity": "critical",
-      "event_profile_json": "{\"title\":\"Fixture event\",\"description\":\"Event summary\",\"severity\":\"critical\",\"image\":\"https://example.com/event.png\"}",
+      "description": "Event summary",
+      "image": "https://example.com/event.png",
       "sent_at": "4102444901"
     },
     "expected": {
@@ -47,8 +48,9 @@
       "thing_id": "thing-fixture-001",
       "entity_id": "thing-fixture-001",
       "title": "Fixture thing",
-      "thing_profile_json": "{\"title\":\"Fixture thing\",\"description\":\"Thing summary\",\"image\":\"https://example.com/thing.png\"}",
-      "thing_attrs_json": "{\"mode\":\"auto\",\"status\":\"ok\"}",
+      "description": "Thing summary",
+      "image": "https://example.com/thing.png",
+      "attrs": "{\"mode\":\"auto\",\"status\":\"ok\"}",
       "observed_at": "4102444902"
     },
     "expected": {

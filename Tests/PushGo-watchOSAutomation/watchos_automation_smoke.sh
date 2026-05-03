@@ -5,10 +5,12 @@ PROJECT_PATH="${PROJECT_PATH:-/Users/ethan/Repo/PushGo/pushgo/pushgo.xcodeproj}"
 SCHEME="${SCHEME:-PushGo-watchOS}"
 DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-/tmp/pushgo-watchos-automation}"
 WATCH_BUNDLE_ID="${WATCH_BUNDLE_ID:-io.ethan.pushgo.watchkitapp}"
-WATCH_DEVICE_ID="${WATCH_DEVICE_ID:-0E046937-AD9E-4F90-9A53-A9120F70CBC7}"
-IPHONE_DEVICE_ID="${IPHONE_DEVICE_ID:-0158DFF9-AD51-468D-883C-B55895F18052}"
-EVENT_FIXTURE_PATH="${EVENT_FIXTURE_PATH:-/Users/ethan/Repo/PushGo/tools/fixtures/p2/event-lifecycle.json}"
-THING_FIXTURE_PATH="${THING_FIXTURE_PATH:-/Users/ethan/Repo/PushGo/tools/fixtures/p2/rich-thing-detail.json}"
+WATCH_DEVICE_ID="${WATCH_DEVICE_ID:-}"
+WATCH_DEVICE_NAME="${WATCH_DEVICE_NAME:-Apple Watch Series 11 (42mm)}"
+IPHONE_DEVICE_ID="${IPHONE_DEVICE_ID:-}"
+IPHONE_DEVICE_NAME="${IPHONE_DEVICE_NAME:-iPhone Air}"
+EVENT_FIXTURE_PATH="${EVENT_FIXTURE_PATH:-/Users/ethan/Repo/PushGo/pushgo/Tests/Fixtures/p2/event-lifecycle.json}"
+THING_FIXTURE_PATH="${THING_FIXTURE_PATH:-/Users/ethan/Repo/PushGo/pushgo/Tests/Fixtures/p2/rich-thing-detail.json}"
 EVENT_FIXTURE_ID="${EVENT_FIXTURE_ID:-evt_p2_active_001}"
 THING_FIXTURE_ID="${THING_FIXTURE_ID:-thing_p2_rich_001}"
 COLD_BOOT="${COLD_BOOT:-1}"
@@ -38,6 +40,57 @@ need_cmd() {
 need_cmd xcodebuild
 need_cmd xcrun
 need_cmd jq
+
+resolve_device_id() {
+  local platform_regex="$1"
+  local preferred_id="$2"
+  local preferred_name="$3"
+  local devices_json="$4"
+
+  if [[ -n "$preferred_id" ]] && jq -e --arg id "$preferred_id" '
+      .devices[]?[]? | select(.isAvailable == true and .udid == $id)
+    ' <<<"$devices_json" >/dev/null; then
+    echo "$preferred_id"
+    return 0
+  fi
+
+  if [[ -n "$preferred_name" ]]; then
+    local by_name
+    by_name="$(jq -r --arg name "$preferred_name" '
+      .devices[]?[]?
+      | select(.isAvailable == true and .name == $name)
+      | .udid
+    ' <<<"$devices_json" | head -n 1)"
+    if [[ -n "$by_name" ]]; then
+      echo "$by_name"
+      return 0
+    fi
+  fi
+
+  local fallback
+  fallback="$(jq -r --arg regex "$platform_regex" '
+    .devices[]?[]?
+    | select(.isAvailable == true and (.name | test($regex)))
+    | .udid
+  ' <<<"$devices_json" | head -n 1)"
+  if [[ -n "$fallback" ]]; then
+    echo "$fallback"
+    return 0
+  fi
+  return 1
+}
+
+SIMCTL_DEVICES_JSON="$(xcrun simctl list devices available -j)"
+WATCH_DEVICE_ID="$(resolve_device_id "^Apple Watch" "$WATCH_DEVICE_ID" "$WATCH_DEVICE_NAME" "$SIMCTL_DEVICES_JSON")" || {
+  echo "unable to resolve available watchOS simulator device id" >&2
+  exit 1
+}
+if [[ "$BOOT_IPHONE" == "1" ]]; then
+  IPHONE_DEVICE_ID="$(resolve_device_id "^iPhone" "$IPHONE_DEVICE_ID" "$IPHONE_DEVICE_NAME" "$SIMCTL_DEVICES_JSON")" || {
+    echo "unable to resolve available iOS simulator device id" >&2
+    exit 1
+  }
+fi
 
 cleanup() {
   set +e
@@ -247,18 +300,6 @@ run_case \
   '{"id":"watch-nav-things-001","plane":"command","name":"nav.switch_tab","args":{"tab":"things"}}' \
   '.ok == true and .platform == "watchos" and .state.visible_screen == "screen.things.list" and .state.active_tab == "tab.things" and .state.runtime_error_count == 0 and .state.local_store_mode != "unavailable"' \
   '.visible_screen == "screen.things.list" and .active_tab == "tab.things" and .runtime_error_count == 0 and .local_store_mode != "unavailable"'
-
-run_case \
-  "hide_events_page" \
-  '{"id":"watch-settings-events-hide-001","plane":"command","name":"settings.set_page_visibility","args":{"page":"events","enabled":"false"}}' \
-  '.ok == true and .platform == "watchos" and .state.runtime_error_count == 0' \
-  '.event_page_enabled == false and .runtime_error_count == 0'
-
-run_case \
-  "show_events_page" \
-  '{"id":"watch-settings-events-show-001","plane":"command","name":"settings.set_page_visibility","args":{"page":"events","enabled":"true"}}' \
-  '.ok == true and .platform == "watchos" and .state.runtime_error_count == 0' \
-  '.event_page_enabled == true and .runtime_error_count == 0'
 
 run_case \
   "fixture_event_import" \

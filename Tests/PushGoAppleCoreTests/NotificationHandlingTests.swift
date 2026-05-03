@@ -92,6 +92,12 @@ struct NotificationHandlingTests {
         )
         #expect(
             NotificationHandling.providerIngressAckDeliveryId(
+                for: directIngress,
+                outcome: .duplicate
+            ) == nil
+        )
+        #expect(
+            NotificationHandling.providerIngressAckDeliveryId(
                 for: pulledIngress,
                 outcome: .duplicate
             ) == nil
@@ -302,7 +308,8 @@ struct NotificationHandlingTests {
             "entity_type": "thing",
             "thing_id": "thing-profile-001",
             "entity_id": "thing-profile-001",
-            "thing_profile_json": #"{"title":"Battery Sensor","description":"Workshop sensor needs calibration"}"#,
+            "title": "Battery Sensor",
+            "description": "Workshop sensor needs calibration",
             "decryption_state": "decryptFailed",
         ]
 
@@ -478,7 +485,7 @@ struct NotificationHandlingTests {
                 "entity_type": "event",
                 "entity_id": "evt-title-fallback-001",
                 "event_id": "evt-title-fallback-001",
-                "event_profile_json": #"{"title":"Profile fallback title","message":"profile body"}"#,
+                "message": "profile body",
                 "severity": "critical",
             ]
             let request = UNNotificationRequest(
@@ -500,6 +507,55 @@ struct NotificationHandlingTests {
             #expect(stored.title == "Stored event title from DB")
             #expect(stored.body == "profile body")
             #expect(stored.rawPayload["title"]?.value as? String == "Stored event title from DB")
+        }
+    }
+
+    @Test
+    func persistIfNeededFallsBackToStoredThingTitleWhenTitleIsNotExplicit() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let seededThing = makeEntityRecord(
+                messageId: "thing-title-fallback-seed-001",
+                notificationRequestId: "req-thing-title-fallback-seed-001",
+                title: "Stored thing title from DB",
+                body: "seed body",
+                rawPayload: [
+                    "entity_type": "thing",
+                    "entity_id": "thing-title-fallback-001",
+                    "thing_id": "thing-title-fallback-001",
+                    "projection_destination": "thing_head",
+                ]
+            )
+            try await store.saveEntityRecords([seededThing])
+
+            let content = UNMutableNotificationContent()
+            content.title = ""
+            content.body = "fallback thing body from content"
+            content.userInfo = [
+                "message_id": "msg-thing-title-fallback-001",
+                "entity_type": "thing",
+                "entity_id": "thing-title-fallback-001",
+                "thing_id": "thing-title-fallback-001",
+                "attrs": "{\"temperature\":\"24\"}",
+                "severity": "normal",
+            ]
+            let request = UNNotificationRequest(
+                identifier: "req-thing-title-fallback-001",
+                content: content,
+                trigger: nil
+            )
+
+            let outcome = await NotificationPersistenceCoordinator.persistIfNeeded(
+                request: request,
+                content: content,
+                dataStore: store
+            )
+
+            guard case let .persistedMain(stored) = outcome else {
+                Issue.record("Expected thing payload to persist with stored title fallback.")
+                return
+            }
+            #expect(stored.title == "Stored thing title from DB")
+            #expect(stored.rawPayload["title"]?.value as? String == "Stored thing title from DB")
         }
     }
 
@@ -533,6 +589,166 @@ struct NotificationHandlingTests {
     }
 
     @Test
+    func persistRemotePayloadIfNeededAcceptsWideFieldMatrixWithoutFailure() async {
+        await withIsolatedLocalDataStore { store, _ in
+            var failedCases: [String] = []
+            var rejectedCases: [String] = []
+
+            for slot in 0..<18 {
+                let payload = makeNSECoveragePayload(slot: slot)
+                let requestIdentifier = "nse-matrix-\(slot)"
+                let outcome = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
+                    payload,
+                    requestIdentifier: requestIdentifier,
+                    dataStore: store
+                )
+
+                switch outcome {
+                case .failed:
+                    failedCases.append(requestIdentifier)
+                case .rejected:
+                    rejectedCases.append(requestIdentifier)
+                case .persistedMain, .persistedPending, .duplicate:
+                    break
+                }
+            }
+
+            #expect(
+                failedCases.isEmpty,
+                "persistRemotePayloadIfNeeded should not fail for coverage payloads: \(failedCases)"
+            )
+            #expect(
+                rejectedCases.isEmpty,
+                "persistRemotePayloadIfNeeded should not reject valid coverage payloads: \(rejectedCases)"
+            )
+        }
+    }
+
+    @Test
+    func persistPreparedContentIfNeededHandlesConcurrentIngressWithoutFailure() async {
+        await withIsolatedLocalDataStore { store, _ in
+            let outcomes = await withTaskGroup(
+                of: (String, NotificationPersistenceOutcome).self,
+                returning: [(String, NotificationPersistenceOutcome)].self
+            ) { group in
+                for slot in 0..<40 {
+                    group.addTask {
+                        let messageId = "nse-concurrent-msg-\(slot)"
+                        let requestId = "nse-concurrent-req-\(slot)"
+                        let content = UNMutableNotificationContent()
+                        content.title = "NSE Concurrent \(slot)"
+                        content.body = "Concurrent body \(slot)"
+                        content.userInfo = [
+                            "message_id": messageId,
+                            "entity_type": "message",
+                            "entity_id": messageId,
+                            "delivery_id": requestId,
+                            "decryption_state": "decryptOk",
+                            "metadata": "{\"suite\":\"nse-concurrency\",\"slot\":\(slot)}",
+                        ]
+                        let outcome =
+                            await NotificationPersistenceCoordinator.persistPreparedContentIfNeeded(
+                                content: content,
+                                requestIdentifier: requestId,
+                                fallbackRequestIdentifier: requestId,
+                                dataStore: store
+                            )
+                        return (requestId, outcome)
+                    }
+                }
+
+                var aggregated: [(String, NotificationPersistenceOutcome)] = []
+                for await item in group {
+                    aggregated.append(item)
+                }
+                return aggregated
+            }
+
+            let failed = outcomes.compactMap { entry -> String? in
+                guard case .failed = entry.1 else { return nil }
+                return entry.0
+            }
+            let rejected = outcomes.compactMap { entry -> String? in
+                guard case .rejected = entry.1 else { return nil }
+                return entry.0
+            }
+
+            #expect(failed.isEmpty, "concurrent NSE persistence should not fail: \(failed)")
+            #expect(rejected.isEmpty, "concurrent NSE persistence should not reject: \(rejected)")
+        }
+    }
+
+    @Test
+    func persistRemotePayloadIfNeededWithConcurrentLocalStoreInitializersDoesNotFail() async {
+        await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let results = await withTaskGroup(
+                of: (slot: Int, available: Bool, outcome: NotificationPersistenceOutcome).self,
+                returning: [(slot: Int, available: Bool, outcome: NotificationPersistenceOutcome)].self
+            ) { group in
+                for slot in 0..<40 {
+                    group.addTask {
+                        let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+                        let available: Bool
+                        switch store.storageState.mode {
+                        case .persistent:
+                            available = true
+                        case .unavailable:
+                            available = false
+                        }
+                        let payload: [AnyHashable: Any] = [
+                            "message_id": "nse-store-init-msg-\(slot)",
+                            "entity_type": "message",
+                            "entity_id": "nse-store-init-msg-\(slot)",
+                            "delivery_id": "nse-store-init-delivery-\(slot)",
+                            "title": "Store Init \(slot)",
+                            "body": "Store init body \(slot)",
+                            "metadata": "{\"suite\":\"nse-store-init\",\"slot\":\(slot)}",
+                            "decryption_state": "decryptOk",
+                        ]
+                        let outcome = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
+                            payload,
+                            requestIdentifier: "nse-store-init-delivery-\(slot)",
+                            dataStore: store
+                        )
+                        return (slot: slot, available: available, outcome: outcome)
+                    }
+                }
+
+                var aggregated: [(slot: Int, available: Bool, outcome: NotificationPersistenceOutcome)] = []
+                for await item in group {
+                    aggregated.append(item)
+                }
+                return aggregated
+            }
+
+            let unavailableSlots = results.compactMap { result -> Int? in
+                result.available ? nil : result.slot
+            }
+            let failedSlots = results.compactMap { result -> Int? in
+                guard case .failed = result.outcome else { return nil }
+                return result.slot
+            }
+            let rejectedSlots = results.compactMap { result -> Int? in
+                guard case .rejected = result.outcome else { return nil }
+                return result.slot
+            }
+
+            #expect(
+                unavailableSlots.isEmpty,
+                "LocalDataStore should stay available under concurrent initialization: \(unavailableSlots)"
+            )
+            #expect(
+                failedSlots.isEmpty,
+                "concurrent LocalDataStore initialization should not fail persistence: \(failedSlots)"
+            )
+            #expect(
+                rejectedSlots.isEmpty,
+                "concurrent LocalDataStore initialization should not reject valid payloads: \(rejectedSlots)"
+            )
+        }
+    }
+
+    @Test
     func normalizeRemoteNotificationTracksExplicitTitleSignal() {
         let explicitPayload: [AnyHashable: Any] = [
             "entity_type": "event",
@@ -545,7 +761,7 @@ struct NotificationHandlingTests {
             "entity_type": "event",
             "entity_id": "evt-fallback-title-001",
             "event_id": "evt-fallback-title-001",
-            "event_profile_json": #"{"title":"Profile fallback title","message":"fallback body"}"#,
+            "message": "fallback body",
         ]
 
         let explicit = NotificationHandling.normalizeRemoteNotification(explicitPayload)
@@ -554,7 +770,29 @@ struct NotificationHandlingTests {
         #expect(explicit?.hasExplicitTitle == true)
         #expect(explicit?.title == "Explicit event title")
         #expect(fallback?.hasExplicitTitle == false)
-        #expect(fallback?.title == "Profile fallback title")
+        #expect(fallback?.title == "push_type_event evt-fallback-title-001")
+    }
+
+    @Test
+    func normalizeRemoteNotificationUsesDeterministicEntityFallbackBodyWithoutDatabase() {
+        let eventPayload: [AnyHashable: Any] = [
+            "entity_type": "event",
+            "entity_id": "evt-fallback-body-001",
+            "event_id": "evt-fallback-body-001",
+        ]
+        let thingPayload: [AnyHashable: Any] = [
+            "entity_type": "thing",
+            "entity_id": "thing-fallback-body-001",
+            "thing_id": "thing-fallback-body-001",
+        ]
+
+        let normalizedEvent = NotificationHandling.normalizeRemoteNotification(eventPayload)
+        let normalizedThing = NotificationHandling.normalizeRemoteNotification(thingPayload)
+
+        #expect(normalizedEvent?.title == "push_type_event evt-fallback-body-001")
+        #expect(normalizedEvent?.body == NotificationPayloadSemantics.gatewayFallbackEventBody)
+        #expect(normalizedThing?.title == "push_type_thing thing-fallback-body-001")
+        #expect(normalizedThing?.body == NotificationPayloadSemantics.gatewayFallbackThingBody)
     }
 
     @Test
@@ -654,5 +892,64 @@ struct NotificationHandlingTests {
                 result[item.key] = AnyCodable(item.value)
             }
         )
+    }
+}
+
+private func makeNSECoveragePayload(slot: Int) -> [AnyHashable: Any] {
+    let entityKind = slot % 3
+    let runStamp = "nse-matrix-\(slot)"
+    let basePayload: [AnyHashable: Any] = [
+        "title": "NSE Matrix Title \(slot)",
+        "body": String(repeating: "segment-\(slot)-", count: (slot % 4) + 8),
+        "url": "https://enc.pushgo.dev/nse/\(slot)",
+        "images": [
+            "https://img.cdn1.vip/i/69b57f804c59b_1773502336.webp",
+            "https://img.cdn1.vip/i/69a021729fde1_1772102002.jpeg",
+        ],
+        "tags": ["suite:nse", "slot:\(slot)", "entity:\(entityKind)"],
+        "metadata":
+            "{\"suite\":\"nse-matrix\",\"slot\":\(slot),\"trace\":\"\(runStamp)\",\"source\":\"notification-service\"}",
+        "decryption_state": "decryptOk",
+        "delivery_id": "nse-delivery-\(slot)",
+        "channel_id": "WW4PETB9DXWWKZ92WS434350DC",
+    ]
+
+    switch entityKind {
+    case 0:
+        var messagePayload = basePayload
+        let messageId = "nse-msg-\(slot)"
+        messagePayload["message_id"] = messageId
+        messagePayload["entity_type"] = "message"
+        messagePayload["entity_id"] = messageId
+        return messagePayload
+    case 1:
+        var eventPayload = basePayload
+        let eventId = "nse-evt-\(slot)"
+        eventPayload["event_id"] = eventId
+        eventPayload["entity_type"] = "event"
+        eventPayload["entity_id"] = eventId
+        eventPayload["event_state"] = slot % 2 == 0 ? "open" : "closed"
+        eventPayload["status"] = slot % 2 == 0 ? "open" : "closed"
+        eventPayload["message"] = "event-message-\(slot)"
+        eventPayload["started_at"] = 1_777_170_000_000 + slot * 1000
+        eventPayload["ended_at"] = 1_777_170_500_000 + slot * 1000
+        eventPayload["attrs"] =
+            "{\"operator\":\"nse-test\",\"revision\":\(slot),\"phase\":\"event\"}"
+        return eventPayload
+    default:
+        var thingPayload = basePayload
+        let thingId = "nse-thing-\(slot)"
+        thingPayload["thing_id"] = thingId
+        thingPayload["entity_type"] = "thing"
+        thingPayload["entity_id"] = thingId
+        thingPayload["state"] = slot % 2 == 0 ? "active" : "archived"
+        thingPayload["primary_image"] = "https://img.cdn1.vip/i/69b57f34abd6a_1773502260.webp"
+        thingPayload["external_ids"] = "{\"serial\":\"nse-\(slot)\",\"asset\":\"asset-\(slot)\"}"
+        thingPayload["location_type"] = slot % 2 == 0 ? "geo" : "logical"
+        thingPayload["location_value"] =
+            slot % 2 == 0 ? "31.2304,121.4737" : "region-\(slot)/rack-\(slot)"
+        thingPayload["attrs"] =
+            "{\"firmware\":\"nse-\(slot)\",\"temperature\":\(20 + slot),\"online\":true}"
+        return thingPayload
     }
 }

@@ -170,7 +170,7 @@ struct LocalDataStoreTests {
     func watchPublicationDigestColumnsMigrateIntoExistingAppSettingsTable() async throws {
         try await withIsolatedAutomationStorage { root, appGroupIdentifier in
             let databaseURL = root
-                .appendingPathComponent("app-groups", isDirectory: true)
+                .appendingPathComponent("app-local", isDirectory: true)
                 .appendingPathComponent(appGroupIdentifier, isDirectory: true)
                 .appendingPathComponent("Database", isDirectory: true)
                 .appendingPathComponent(AppConstants.databaseStoreFilename)
@@ -616,7 +616,7 @@ struct LocalDataStoreTests {
     func localDataStoreMigratesLegacyVersionedDatabaseArtifactsToStableFilenames() async throws {
         try await withIsolatedAutomationStorage { root, appGroupIdentifier in
             let databaseDirectory = root
-                .appendingPathComponent("app-groups", isDirectory: true)
+                .appendingPathComponent("app-local", isDirectory: true)
                 .appendingPathComponent(appGroupIdentifier, isDirectory: true)
                 .appendingPathComponent("Database", isDirectory: true)
             try FileManager.default.createDirectory(at: databaseDirectory, withIntermediateDirectories: true)
@@ -671,10 +671,587 @@ struct LocalDataStoreTests {
     }
 
     @Test
+    func localDataStoreMigratesWildcardLocalVersionedDatabaseArtifactsToStableFilenames() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            let databaseDirectory = root
+                .appendingPathComponent("app-local", isDirectory: true)
+                .appendingPathComponent(appGroupIdentifier, isDirectory: true)
+                .appendingPathComponent("Database", isDirectory: true)
+            try FileManager.default.createDirectory(at: databaseDirectory, withIntermediateDirectories: true)
+
+            let legacyMainURL = databaseDirectory.appendingPathComponent("pushgo-v11.db")
+            let legacyMainQueue = try DatabaseQueue(path: legacyMainURL.path)
+            try await legacyMainQueue.write { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS migration_probe (
+                        id TEXT PRIMARY KEY NOT NULL
+                    );
+                    INSERT OR REPLACE INTO migration_probe(id) VALUES ('legacy-main-v11-ok');
+                    """)
+            }
+
+            let legacyIndexURL = databaseDirectory.appendingPathComponent("pushgo.search.v11.sqlite")
+            let legacyIndexQueue = try DatabaseQueue(path: legacyIndexURL.path)
+            try await legacyIndexQueue.write { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS migration_index_probe (
+                        id TEXT PRIMARY KEY NOT NULL
+                    );
+                    INSERT OR REPLACE INTO migration_index_probe(id) VALUES ('legacy-index-v11-ok');
+                    """)
+            }
+
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            _ = try await store.loadMessages()
+
+            let currentMainURL = databaseDirectory.appendingPathComponent(AppConstants.databaseStoreFilename)
+            let currentIndexURL = databaseDirectory.appendingPathComponent(AppConstants.messageIndexDatabaseFilename)
+
+            #expect(FileManager.default.fileExists(atPath: currentMainURL.path))
+            #expect(FileManager.default.fileExists(atPath: currentIndexURL.path))
+            #expect(!FileManager.default.fileExists(atPath: legacyMainURL.path))
+            #expect(!FileManager.default.fileExists(atPath: legacyIndexURL.path))
+
+            let migratedMainQueue = try DatabaseQueue(path: currentMainURL.path)
+            let mainProbeCount = try await migratedMainQueue.read { db in
+                try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM migration_probe WHERE id = 'legacy-main-v11-ok';"
+                ) ?? 0
+            }
+            #expect(mainProbeCount == 1)
+
+            let migratedIndexQueue = try DatabaseQueue(path: currentIndexURL.path)
+            let indexProbeCount = try await migratedIndexQueue.read { db in
+                try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM migration_index_probe WHERE id = 'legacy-index-v11-ok';"
+                ) ?? 0
+            }
+            #expect(indexProbeCount == 1)
+        }
+    }
+
+    @Test
+    func localDataStoreMigratesSharedAppGroupDatabaseIntoAppLocalDirectory() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            let sharedDatabaseDirectory = root
+                .appendingPathComponent("app-groups", isDirectory: true)
+                .appendingPathComponent(appGroupIdentifier, isDirectory: true)
+                .appendingPathComponent("Database", isDirectory: true)
+            try FileManager.default.createDirectory(at: sharedDatabaseDirectory, withIntermediateDirectories: true)
+
+            let sharedMainURL = sharedDatabaseDirectory.appendingPathComponent(AppConstants.databaseStoreFilename)
+            let sharedQueue = try DatabaseQueue(path: sharedMainURL.path)
+            try await sharedQueue.write { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS migration_probe (
+                        id TEXT PRIMARY KEY NOT NULL
+                    );
+                    INSERT OR REPLACE INTO migration_probe(id) VALUES ('shared-main-ok');
+                    """)
+            }
+
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            _ = try await store.loadMessages()
+
+            let appLocalDatabaseDirectory = root
+                .appendingPathComponent("app-local", isDirectory: true)
+                .appendingPathComponent(appGroupIdentifier, isDirectory: true)
+                .appendingPathComponent("Database", isDirectory: true)
+            let appLocalMainURL = appLocalDatabaseDirectory.appendingPathComponent(AppConstants.databaseStoreFilename)
+
+            #expect(FileManager.default.fileExists(atPath: appLocalMainURL.path))
+            #expect(FileManager.default.fileExists(atPath: sharedMainURL.path))
+
+            let migratedQueue = try DatabaseQueue(path: appLocalMainURL.path)
+            let probeCount = try await migratedQueue.read { db in
+                try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM migration_probe WHERE id = 'shared-main-ok';"
+                ) ?? 0
+            }
+            #expect(probeCount == 1)
+        }
+    }
+
+    @Test
+    func localDataStoreMigratesVersion121SharedStableDatabaseAndIndexIntoAppLocalDirectory() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            let sharedDatabaseDirectory = root
+                .appendingPathComponent("app-groups", isDirectory: true)
+                .appendingPathComponent(appGroupIdentifier, isDirectory: true)
+                .appendingPathComponent("Database", isDirectory: true)
+            try FileManager.default.createDirectory(at: sharedDatabaseDirectory, withIntermediateDirectories: true)
+
+            let sharedMainURL = sharedDatabaseDirectory.appendingPathComponent(AppConstants.databaseStoreFilename)
+            let sharedMainQueue = try DatabaseQueue(path: sharedMainURL.path)
+            try await sharedMainQueue.write { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS migration_probe (
+                        id TEXT PRIMARY KEY NOT NULL
+                    );
+                    INSERT OR REPLACE INTO migration_probe(id) VALUES ('version-121-shared-main');
+                    """)
+            }
+
+            let sharedIndexURL = sharedDatabaseDirectory.appendingPathComponent(
+                AppConstants.messageIndexDatabaseFilename
+            )
+            let sharedIndexQueue = try DatabaseQueue(path: sharedIndexURL.path)
+            try await sharedIndexQueue.write { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS migration_index_probe (
+                        id TEXT PRIMARY KEY NOT NULL
+                    );
+                    INSERT OR REPLACE INTO migration_index_probe(id) VALUES ('version-121-shared-index');
+                    """)
+            }
+
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            _ = try await store.loadMessages()
+
+            let appLocalDatabaseDirectory = root
+                .appendingPathComponent("app-local", isDirectory: true)
+                .appendingPathComponent(appGroupIdentifier, isDirectory: true)
+                .appendingPathComponent("Database", isDirectory: true)
+            let appLocalMainURL = appLocalDatabaseDirectory.appendingPathComponent(AppConstants.databaseStoreFilename)
+            let appLocalIndexURL = appLocalDatabaseDirectory.appendingPathComponent(
+                AppConstants.messageIndexDatabaseFilename
+            )
+
+            #expect(FileManager.default.fileExists(atPath: appLocalMainURL.path))
+            #expect(FileManager.default.fileExists(atPath: appLocalIndexURL.path))
+            #expect(FileManager.default.fileExists(atPath: sharedMainURL.path))
+            #expect(FileManager.default.fileExists(atPath: sharedIndexURL.path))
+
+            let migratedMainQueue = try DatabaseQueue(path: appLocalMainURL.path)
+            let mainProbeCount = try await migratedMainQueue.read { db in
+                try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM migration_probe WHERE id = 'version-121-shared-main';"
+                ) ?? 0
+            }
+            #expect(mainProbeCount == 1)
+
+            let migratedIndexQueue = try DatabaseQueue(path: appLocalIndexURL.path)
+            let indexProbeCount = try await migratedIndexQueue.read { db in
+                try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM migration_index_probe WHERE id = 'version-121-shared-index';"
+                ) ?? 0
+            }
+            #expect(indexProbeCount == 1)
+        }
+    }
+
+    @Test
+    func localDataStoreMigratesHighestSharedVersionedDatabaseIntoAppLocalDirectory() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            let sharedDatabaseDirectory = root
+                .appendingPathComponent("app-groups", isDirectory: true)
+                .appendingPathComponent(appGroupIdentifier, isDirectory: true)
+                .appendingPathComponent("Database", isDirectory: true)
+            try FileManager.default.createDirectory(at: sharedDatabaseDirectory, withIntermediateDirectories: true)
+
+            let legacyV10URL = sharedDatabaseDirectory.appendingPathComponent("pushgo-v10.db")
+            let legacyV11URL = sharedDatabaseDirectory.appendingPathComponent("pushgo-v11.db")
+
+            let v10Queue = try DatabaseQueue(path: legacyV10URL.path)
+            try await v10Queue.write { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS migration_probe (
+                        id TEXT PRIMARY KEY NOT NULL
+                    );
+                    INSERT OR REPLACE INTO migration_probe(id) VALUES ('legacy-v10');
+                    """)
+            }
+
+            let v11Queue = try DatabaseQueue(path: legacyV11URL.path)
+            try await v11Queue.write { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS migration_probe (
+                        id TEXT PRIMARY KEY NOT NULL
+                    );
+                    INSERT OR REPLACE INTO migration_probe(id) VALUES ('legacy-v11');
+                    """)
+            }
+
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            _ = try await store.loadMessages()
+
+            let appLocalDatabaseDirectory = root
+                .appendingPathComponent("app-local", isDirectory: true)
+                .appendingPathComponent(appGroupIdentifier, isDirectory: true)
+                .appendingPathComponent("Database", isDirectory: true)
+            let appLocalMainURL = appLocalDatabaseDirectory.appendingPathComponent(AppConstants.databaseStoreFilename)
+
+            #expect(FileManager.default.fileExists(atPath: appLocalMainURL.path))
+
+            let migratedQueue = try DatabaseQueue(path: appLocalMainURL.path)
+            let v11Count = try await migratedQueue.read { db in
+                try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM migration_probe WHERE id = 'legacy-v11';"
+                ) ?? 0
+            }
+            let v10Count = try await migratedQueue.read { db in
+                try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM migration_probe WHERE id = 'legacy-v10';"
+                ) ?? 0
+            }
+
+            #expect(v11Count == 1)
+            #expect(v10Count == 0)
+        }
+    }
+
+    @Test
+    func localDataStorePrefersSharedStableDatabaseOverLegacyVersionedDatabase() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            let sharedDatabaseDirectory = root
+                .appendingPathComponent("app-groups", isDirectory: true)
+                .appendingPathComponent(appGroupIdentifier, isDirectory: true)
+                .appendingPathComponent("Database", isDirectory: true)
+            try FileManager.default.createDirectory(at: sharedDatabaseDirectory, withIntermediateDirectories: true)
+
+            let sharedStableURL = sharedDatabaseDirectory.appendingPathComponent(AppConstants.databaseStoreFilename)
+            let sharedLegacyURL = sharedDatabaseDirectory.appendingPathComponent("pushgo-v99.db")
+
+            let stableQueue = try DatabaseQueue(path: sharedStableURL.path)
+            try await stableQueue.write { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS migration_probe (
+                        id TEXT PRIMARY KEY NOT NULL
+                    );
+                    INSERT OR REPLACE INTO migration_probe(id) VALUES ('shared-stable');
+                    """)
+            }
+
+            let legacyQueue = try DatabaseQueue(path: sharedLegacyURL.path)
+            try await legacyQueue.write { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS migration_probe (
+                        id TEXT PRIMARY KEY NOT NULL
+                    );
+                    INSERT OR REPLACE INTO migration_probe(id) VALUES ('shared-legacy');
+                    """)
+            }
+
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            _ = try await store.loadMessages()
+
+            let appLocalDatabaseDirectory = root
+                .appendingPathComponent("app-local", isDirectory: true)
+                .appendingPathComponent(appGroupIdentifier, isDirectory: true)
+                .appendingPathComponent("Database", isDirectory: true)
+            let appLocalMainURL = appLocalDatabaseDirectory.appendingPathComponent(AppConstants.databaseStoreFilename)
+
+            let migratedQueue = try DatabaseQueue(path: appLocalMainURL.path)
+            let stableCount = try await migratedQueue.read { db in
+                try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM migration_probe WHERE id = 'shared-stable';"
+                ) ?? 0
+            }
+            let legacyCount = try await migratedQueue.read { db in
+                try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM migration_probe WHERE id = 'shared-legacy';"
+                ) ?? 0
+            }
+
+            #expect(stableCount == 1)
+            #expect(legacyCount == 0)
+        }
+    }
+
+    @Test
+    func localDataStoreMigratesSharedLegacyIndexDatabaseFromWildcardVersion() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            let sharedDatabaseDirectory = root
+                .appendingPathComponent("app-groups", isDirectory: true)
+                .appendingPathComponent(appGroupIdentifier, isDirectory: true)
+                .appendingPathComponent("Database", isDirectory: true)
+            try FileManager.default.createDirectory(at: sharedDatabaseDirectory, withIntermediateDirectories: true)
+
+            let sharedMainURL = sharedDatabaseDirectory.appendingPathComponent(AppConstants.databaseStoreFilename)
+            let sharedMainQueue = try DatabaseQueue(path: sharedMainURL.path)
+            try await sharedMainQueue.write { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS migration_probe (
+                        id TEXT PRIMARY KEY NOT NULL
+                    );
+                    INSERT OR REPLACE INTO migration_probe(id) VALUES ('shared-main-for-index');
+                    """)
+            }
+
+            let sharedLegacyIndexURL = sharedDatabaseDirectory.appendingPathComponent("pushgo.search.v12.sqlite")
+            let legacyIndexQueue = try DatabaseQueue(path: sharedLegacyIndexURL.path)
+            try await legacyIndexQueue.write { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS migration_index_probe (
+                        id TEXT PRIMARY KEY NOT NULL
+                    );
+                    INSERT OR REPLACE INTO migration_index_probe(id) VALUES ('index-v12');
+                    """)
+            }
+
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            _ = try await store.loadMessages()
+
+            let appLocalDatabaseDirectory = root
+                .appendingPathComponent("app-local", isDirectory: true)
+                .appendingPathComponent(appGroupIdentifier, isDirectory: true)
+                .appendingPathComponent("Database", isDirectory: true)
+            let appLocalIndexURL = appLocalDatabaseDirectory.appendingPathComponent(
+                AppConstants.messageIndexDatabaseFilename
+            )
+
+            #expect(FileManager.default.fileExists(atPath: appLocalIndexURL.path))
+
+            let migratedIndexQueue = try DatabaseQueue(path: appLocalIndexURL.path)
+            let probeCount = try await migratedIndexQueue.read { db in
+                try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM migration_index_probe WHERE id = 'index-v12';"
+                ) ?? 0
+            }
+            #expect(probeCount == 1)
+        }
+    }
+
+    @Test
+    func localDataStoreMigratesSharedLegacyMetadataIndexDatabaseFromWildcardVersion() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            let sharedDatabaseDirectory = root
+                .appendingPathComponent("app-groups", isDirectory: true)
+                .appendingPathComponent(appGroupIdentifier, isDirectory: true)
+                .appendingPathComponent("Database", isDirectory: true)
+            try FileManager.default.createDirectory(at: sharedDatabaseDirectory, withIntermediateDirectories: true)
+
+            let sharedMainURL = sharedDatabaseDirectory.appendingPathComponent(AppConstants.databaseStoreFilename)
+            let sharedMainQueue = try DatabaseQueue(path: sharedMainURL.path)
+            try await sharedMainQueue.write { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS migration_probe (
+                        id TEXT PRIMARY KEY NOT NULL
+                    );
+                    INSERT OR REPLACE INTO migration_probe(id) VALUES ('shared-main-for-metadata-index');
+                    """)
+            }
+
+            let sharedLegacyIndexURL = sharedDatabaseDirectory.appendingPathComponent("pushgo.metadata.v13.sqlite")
+            let legacyIndexQueue = try DatabaseQueue(path: sharedLegacyIndexURL.path)
+            try await legacyIndexQueue.write { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS migration_index_probe (
+                        id TEXT PRIMARY KEY NOT NULL
+                    );
+                    INSERT OR REPLACE INTO migration_index_probe(id) VALUES ('metadata-index-v13');
+                    """)
+            }
+
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            _ = try await store.loadMessages()
+
+            let appLocalDatabaseDirectory = root
+                .appendingPathComponent("app-local", isDirectory: true)
+                .appendingPathComponent(appGroupIdentifier, isDirectory: true)
+                .appendingPathComponent("Database", isDirectory: true)
+            let appLocalIndexURL = appLocalDatabaseDirectory.appendingPathComponent(
+                AppConstants.messageIndexDatabaseFilename
+            )
+
+            #expect(FileManager.default.fileExists(atPath: appLocalIndexURL.path))
+
+            let migratedIndexQueue = try DatabaseQueue(path: appLocalIndexURL.path)
+            let probeCount = try await migratedIndexQueue.read { db in
+                try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM migration_index_probe WHERE id = 'metadata-index-v13';"
+                ) ?? 0
+            }
+            #expect(probeCount == 1)
+        }
+    }
+
+    @Test
+    func localDataStorePrefersSharedStableIndexDatabaseOverLegacyVersionedIndexDatabase() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            let sharedDatabaseDirectory = root
+                .appendingPathComponent("app-groups", isDirectory: true)
+                .appendingPathComponent(appGroupIdentifier, isDirectory: true)
+                .appendingPathComponent("Database", isDirectory: true)
+            try FileManager.default.createDirectory(at: sharedDatabaseDirectory, withIntermediateDirectories: true)
+
+            let sharedMainURL = sharedDatabaseDirectory.appendingPathComponent(AppConstants.databaseStoreFilename)
+            let sharedMainQueue = try DatabaseQueue(path: sharedMainURL.path)
+            try await sharedMainQueue.write { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS migration_probe (
+                        id TEXT PRIMARY KEY NOT NULL
+                    );
+                    INSERT OR REPLACE INTO migration_probe(id) VALUES ('shared-main-for-stable-index');
+                    """)
+            }
+
+            let stableIndexURL = sharedDatabaseDirectory.appendingPathComponent(
+                AppConstants.messageIndexDatabaseFilename
+            )
+            let stableIndexQueue = try DatabaseQueue(path: stableIndexURL.path)
+            try await stableIndexQueue.write { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS migration_index_probe (
+                        id TEXT PRIMARY KEY NOT NULL
+                    );
+                    INSERT OR REPLACE INTO migration_index_probe(id) VALUES ('shared-index-stable');
+                    """)
+            }
+
+            let legacyIndexURL = sharedDatabaseDirectory.appendingPathComponent("pushgo.search.v88.sqlite")
+            let legacyIndexQueue = try DatabaseQueue(path: legacyIndexURL.path)
+            try await legacyIndexQueue.write { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS migration_index_probe (
+                        id TEXT PRIMARY KEY NOT NULL
+                    );
+                    INSERT OR REPLACE INTO migration_index_probe(id) VALUES ('shared-index-legacy');
+                    """)
+            }
+
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            _ = try await store.loadMessages()
+
+            let appLocalDatabaseDirectory = root
+                .appendingPathComponent("app-local", isDirectory: true)
+                .appendingPathComponent(appGroupIdentifier, isDirectory: true)
+                .appendingPathComponent("Database", isDirectory: true)
+            let appLocalIndexURL = appLocalDatabaseDirectory.appendingPathComponent(
+                AppConstants.messageIndexDatabaseFilename
+            )
+
+            let migratedIndexQueue = try DatabaseQueue(path: appLocalIndexURL.path)
+            let stableCount = try await migratedIndexQueue.read { db in
+                try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM migration_index_probe WHERE id = 'shared-index-stable';"
+                ) ?? 0
+            }
+            let legacyCount = try await migratedIndexQueue.read { db in
+                try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM migration_index_probe WHERE id = 'shared-index-legacy';"
+                ) ?? 0
+            }
+
+            #expect(stableCount == 1)
+            #expect(legacyCount == 0)
+        }
+    }
+
+    @Test
+    func appLocalDatabaseMigrationCopiesSQLiteSidecarFilesFromSharedDatabaseDirectory() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            let sharedDatabaseDirectory = root
+                .appendingPathComponent("app-groups", isDirectory: true)
+                .appendingPathComponent(appGroupIdentifier, isDirectory: true)
+                .appendingPathComponent("Database", isDirectory: true)
+            try FileManager.default.createDirectory(at: sharedDatabaseDirectory, withIntermediateDirectories: true)
+
+            let sharedMainURL = sharedDatabaseDirectory.appendingPathComponent(AppConstants.databaseStoreFilename)
+            let sharedQueue = try DatabaseQueue(path: sharedMainURL.path)
+            try await sharedQueue.write { db in
+                try db.execute(sql: """
+                    CREATE TABLE IF NOT EXISTS migration_probe (
+                        id TEXT PRIMARY KEY NOT NULL
+                    );
+                    INSERT OR REPLACE INTO migration_probe(id) VALUES ('shared-main-with-sidecars');
+                    """)
+            }
+            let sharedWalURL = URL(fileURLWithPath: sharedMainURL.path + "-wal")
+            let sharedShmURL = URL(fileURLWithPath: sharedMainURL.path + "-shm")
+            FileManager.default.createFile(
+                atPath: sharedWalURL.path,
+                contents: Data("wal-sidecar".utf8)
+            )
+            FileManager.default.createFile(
+                atPath: sharedShmURL.path,
+                contents: Data("shm-sidecar".utf8)
+            )
+
+            let appLocalDirectory = try AppConstants.appLocalDatabaseDirectory(
+                fileManager: .default,
+                appGroupIdentifier: appGroupIdentifier
+            )
+            let appLocalMainURL = appLocalDirectory.appendingPathComponent(AppConstants.databaseStoreFilename)
+            let appLocalWalURL = URL(fileURLWithPath: appLocalMainURL.path + "-wal")
+            let appLocalShmURL = URL(fileURLWithPath: appLocalMainURL.path + "-shm")
+
+            #expect(FileManager.default.fileExists(atPath: appLocalMainURL.path))
+            #expect(FileManager.default.fileExists(atPath: appLocalWalURL.path))
+            #expect(FileManager.default.fileExists(atPath: appLocalShmURL.path))
+            #expect((try? Data(contentsOf: appLocalWalURL)) == Data("wal-sidecar".utf8))
+            #expect((try? Data(contentsOf: appLocalShmURL)) == Data("shm-sidecar".utf8))
+        }
+    }
+
+    @Test
+    func localDataStoreRetriesAfterTransientBootstrapFailure() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            let appGroupRoot = root
+                .appendingPathComponent("app-local", isDirectory: true)
+                .appendingPathComponent(appGroupIdentifier, isDirectory: true)
+            try FileManager.default.createDirectory(at: appGroupRoot, withIntermediateDirectories: true)
+
+            let databasePathBlocker = appGroupRoot.appendingPathComponent("Database", isDirectory: false)
+            let blockerWritten = FileManager.default.createFile(
+                atPath: databasePathBlocker.path,
+                contents: Data("blocker".utf8)
+            )
+            #expect(blockerWritten)
+
+            let firstAttempt = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            switch firstAttempt.storageState.mode {
+            case .persistent:
+                Issue.record("Expected first attempt to fail while Database path is blocked by a file.")
+            case .unavailable:
+                break
+            }
+
+            try FileManager.default.removeItem(at: databasePathBlocker)
+
+            let recoveredStore = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            switch recoveredStore.storageState.mode {
+            case .persistent:
+                break
+            case .unavailable:
+                Issue.record("Expected LocalDataStore to recover after transient bootstrap blocker is removed.")
+                return
+            }
+
+            let probe = makeMessage(
+                messageId: "msg-bootstrap-retry-001",
+                notificationRequestId: "req-bootstrap-retry-001",
+                title: "bootstrap retry title",
+                body: "bootstrap retry body"
+            )
+            let outcome = try await recoveredStore.persistNotificationMessageIfNeeded(probe)
+            guard case .persisted = outcome else {
+                Issue.record("Recovered LocalDataStore should persist payloads after retry.")
+                return
+            }
+            let persisted = try await recoveredStore.loadMessage(notificationRequestId: "req-bootstrap-retry-001")
+            #expect(persisted != nil)
+        }
+    }
+
+    @Test
     func localDataStoreMigratesLegacyArtifactsWhenStableFilenameExistsAsZeroBytePlaceholder() async throws {
         try await withIsolatedAutomationStorage { root, appGroupIdentifier in
             let databaseDirectory = root
-                .appendingPathComponent("app-groups", isDirectory: true)
+                .appendingPathComponent("app-local", isDirectory: true)
                 .appendingPathComponent(appGroupIdentifier, isDirectory: true)
                 .appendingPathComponent("Database", isDirectory: true)
             try FileManager.default.createDirectory(at: databaseDirectory, withIntermediateDirectories: true)
@@ -1113,6 +1690,122 @@ struct LocalDataStoreTests {
             #expect(try await store.loadMessages(filter: .all, channel: canonicalChannel).isEmpty)
             #expect(try await store.loadEventMessagesForProjection().isEmpty)
             #expect(try await store.loadThingMessagesForProjection().isEmpty)
+        }
+    }
+
+    @Test
+    func notificationContextSnapshotRebuildsAfterDeleteMessageById() async throws {
+        try await withIsolatedLocalDataStore { store, appGroupIdentifier in
+            let eventId = "evt-snapshot-delete-id-001"
+            let eventRecord = makeMessage(
+                messageId: "msg-snapshot-delete-id-001",
+                notificationRequestId: "req-snapshot-delete-id-001",
+                title: "Snapshot event by id",
+                body: "Snapshot event body",
+                rawPayload: [
+                    "entity_type": "event",
+                    "entity_id": eventId,
+                    "event_id": eventId,
+                    "projection_destination": "event_head",
+                    "channel_id": "snapshot-tests",
+                ]
+            )
+
+            try await store.saveEntityRecords([eventRecord])
+
+            let beforeDelete = NotificationContextSnapshotStore.load(
+                fileManager: .default,
+                appGroupIdentifier: appGroupIdentifier
+            )
+            #expect(beforeDelete?.events[eventId] != nil)
+
+            guard let persisted = try await store.loadMessage(
+                notificationRequestId: "req-snapshot-delete-id-001"
+            ) else {
+                Issue.record("Expected persisted entity record before delete by id.")
+                return
+            }
+            try await store.deleteMessage(id: persisted.id)
+
+            let afterDelete = NotificationContextSnapshotStore.load(
+                fileManager: .default,
+                appGroupIdentifier: appGroupIdentifier
+            )
+            #expect(afterDelete?.events[eventId] == nil)
+        }
+    }
+
+    @Test
+    func notificationContextSnapshotRebuildsAfterDeleteMessageByNotificationRequestId() async throws {
+        try await withIsolatedLocalDataStore { store, appGroupIdentifier in
+            let thingId = "thing-snapshot-delete-req-001"
+            let thingRecord = makeMessage(
+                messageId: "msg-snapshot-delete-req-001",
+                notificationRequestId: "req-snapshot-delete-req-001",
+                title: "Snapshot thing by request",
+                body: "Snapshot thing body",
+                rawPayload: [
+                    "entity_type": "thing",
+                    "entity_id": thingId,
+                    "thing_id": thingId,
+                    "projection_destination": "thing_head",
+                    "channel_id": "snapshot-tests",
+                ]
+            )
+
+            try await store.saveEntityRecords([thingRecord])
+
+            let beforeDelete = NotificationContextSnapshotStore.load(
+                fileManager: .default,
+                appGroupIdentifier: appGroupIdentifier
+            )
+            #expect(beforeDelete?.things[thingId] != nil)
+
+            try await store.deleteMessage(notificationRequestId: "req-snapshot-delete-req-001")
+
+            let afterDelete = NotificationContextSnapshotStore.load(
+                fileManager: .default,
+                appGroupIdentifier: appGroupIdentifier
+            )
+            #expect(afterDelete?.things[thingId] == nil)
+        }
+    }
+
+    @Test
+    func deleteAllMessagesClearsNotificationContextSnapshotFile() async throws {
+        try await withIsolatedLocalDataStore { store, appGroupIdentifier in
+            let eventId = "evt-snapshot-clear-001"
+            let eventRecord = makeMessage(
+                messageId: "msg-snapshot-clear-001",
+                notificationRequestId: "req-snapshot-clear-001",
+                title: "Snapshot clear",
+                body: "Snapshot clear body",
+                rawPayload: [
+                    "entity_type": "event",
+                    "entity_id": eventId,
+                    "event_id": eventId,
+                    "projection_destination": "event_head",
+                    "channel_id": "snapshot-tests",
+                ]
+            )
+            try await store.saveEntityRecords([eventRecord])
+
+            guard let snapshotURL = NotificationContextSnapshotStore.snapshotFileURL(
+                appGroupIdentifier: appGroupIdentifier
+            ) else {
+                Issue.record("Expected notification context snapshot file URL.")
+                return
+            }
+            #expect(FileManager.default.fileExists(atPath: snapshotURL.path))
+
+            try await store.deleteAllMessages()
+
+            #expect(FileManager.default.fileExists(atPath: snapshotURL.path) == false)
+            let cleared = NotificationContextSnapshotStore.load(
+                fileManager: .default,
+                appGroupIdentifier: appGroupIdentifier
+            )
+            #expect(cleared == nil)
         }
     }
 

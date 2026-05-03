@@ -10,5 +10,9 @@
 	<array>
 		<string>group.ethan.pushgo.messages</string>
 	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)io.ethan.pushgo.shared</string>
+	</array>
 </dict>
 </plist>

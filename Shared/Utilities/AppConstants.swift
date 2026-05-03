@@ -227,7 +227,9 @@ enum AppConstants {
     ]
     private static let productionServerAddress = "https://gateway.pushgo.cn"
     static let messageSyncNotificationName = "io.ethan.pushgo.message-sync"
+    static let notificationIngressChangedNotificationName = "io.ethan.pushgo.notification-ingress-changed"
     static let copyToastNotificationName = "io.ethan.pushgo.copy-toast"
+    static let watchProvisioningServerConfigDefaultsKey = "io.ethan.pushgo.watch.provisioning.server_config.v1"
     static let notificationDefaultCategoryIdentifier = "PUSHGO_DEFAULT"
     static let notificationEntityReminderCategoryIdentifier = "PUSHGO_ENTITY_REMINDER"
     static let maxStoredMessages = 100_000
@@ -257,6 +259,67 @@ enum AppConstants {
         return fileManager.containerURL(forSecurityApplicationGroupIdentifier: identifier)
     }
 
+    static func appLocalContainerURL(
+        fileManager: FileManager = .default,
+        appGroupIdentifier: String = appGroupIdentifier
+    ) -> URL? {
+        if let automationRoot = PushGoAutomationContext.storageRootURL {
+            return automationRoot
+                .appendingPathComponent("app-local", isDirectory: true)
+                .appendingPathComponent(appGroupIdentifier, isDirectory: true)
+        }
+        return fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    }
+
+    static func appLocalDatabaseDirectory(
+        fileManager: FileManager = .default,
+        appGroupIdentifier: String = appGroupIdentifier
+    ) throws -> URL {
+        guard let appLocalRoot = appLocalContainerURL(
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier
+        ) else {
+            throw NSError(
+                domain: "io.ethan.pushgo.app-local",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Missing app local container."]
+            )
+        }
+
+        if !fileManager.fileExists(atPath: appLocalRoot.path) {
+            try fileManager.createDirectory(at: appLocalRoot, withIntermediateDirectories: true)
+        }
+        let databaseDirectory = appLocalRoot.appendingPathComponent("Database", isDirectory: true)
+        if !fileManager.fileExists(atPath: databaseDirectory.path) {
+            try fileManager.createDirectory(at: databaseDirectory, withIntermediateDirectories: true)
+        }
+
+        try migrateSQLiteFileFamily(
+            fileManager: fileManager,
+            directory: databaseDirectory,
+            legacyFilenames: legacyDatabaseStoreMigrationFilenames(
+                fileManager: fileManager,
+                directory: databaseDirectory
+            ),
+            targetFilename: databaseStoreFilename
+        )
+        try migrateSQLiteFileFamily(
+            fileManager: fileManager,
+            directory: databaseDirectory,
+            legacyFilenames: legacyMessageIndexDatabaseMigrationFilenames(
+                fileManager: fileManager,
+                directory: databaseDirectory
+            ),
+            targetFilename: messageIndexDatabaseFilename
+        )
+        try migrateSharedDatabaseArtifactsIntoAppLocal(
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier,
+            targetDirectory: databaseDirectory
+        )
+        return databaseDirectory
+    }
+
     static func migrateLegacyDatabaseArtifacts(
         fileManager: FileManager = .default,
         appGroupIdentifier: String = appGroupIdentifier
@@ -279,13 +342,19 @@ enum AppConstants {
         try migrateSQLiteFileFamily(
             fileManager: fileManager,
             directory: databaseDirectory,
-            legacyFilenames: legacyDatabaseStoreFilenames,
+            legacyFilenames: legacyDatabaseStoreMigrationFilenames(
+                fileManager: fileManager,
+                directory: databaseDirectory
+            ),
             targetFilename: databaseStoreFilename
         )
         try migrateSQLiteFileFamily(
             fileManager: fileManager,
             directory: databaseDirectory,
-            legacyFilenames: legacyMessageIndexDatabaseFilenames,
+            legacyFilenames: legacyMessageIndexDatabaseMigrationFilenames(
+                fileManager: fileManager,
+                directory: databaseDirectory
+            ),
             targetFilename: messageIndexDatabaseFilename
         )
     }
@@ -336,6 +405,247 @@ enum AppConstants {
             try fileManager.copyItem(at: sourceURL, to: targetURL)
             try? fileManager.removeItem(at: sourceURL)
         }
+    }
+
+    private static func migrateSharedDatabaseArtifactsIntoAppLocal(
+        fileManager: FileManager,
+        appGroupIdentifier: String,
+        targetDirectory: URL
+    ) throws {
+        guard let sharedRoot = appGroupContainerURL(
+            fileManager: fileManager,
+            identifier: appGroupIdentifier
+        ) else {
+            return
+        }
+        let sharedDatabaseDirectory = sharedRoot.appendingPathComponent("Database", isDirectory: true)
+        guard fileManager.fileExists(atPath: sharedDatabaseDirectory.path) else {
+            return
+        }
+
+        try migrateSQLiteFileFamilyBetweenDirectories(
+            fileManager: fileManager,
+            sourceDirectory: sharedDatabaseDirectory,
+            targetDirectory: targetDirectory,
+            sourceCandidates: databaseStoreSourceCandidates(
+                fileManager: fileManager,
+                sourceDirectory: sharedDatabaseDirectory
+            ),
+            targetFilename: databaseStoreFilename
+        )
+        try migrateSQLiteFileFamilyBetweenDirectories(
+            fileManager: fileManager,
+            sourceDirectory: sharedDatabaseDirectory,
+            targetDirectory: targetDirectory,
+            sourceCandidates: messageIndexDatabaseSourceCandidates(
+                fileManager: fileManager,
+                sourceDirectory: sharedDatabaseDirectory
+            ),
+            targetFilename: messageIndexDatabaseFilename
+        )
+    }
+
+    private static func migrateSQLiteFileFamilyBetweenDirectories(
+        fileManager: FileManager,
+        sourceDirectory: URL,
+        targetDirectory: URL,
+        sourceCandidates: [String],
+        targetFilename: String
+    ) throws {
+        let targetBaseURL = targetDirectory.appendingPathComponent(targetFilename)
+        if fileManager.fileExists(atPath: targetBaseURL.path) {
+            let targetSize = (try? fileManager.attributesOfItem(atPath: targetBaseURL.path)[.size] as? NSNumber)?
+                .int64Value ?? 0
+            if targetSize > 0 {
+                return
+            }
+            try? fileManager.removeItem(at: targetBaseURL)
+        }
+
+        let sourceFilename = preferredSQLiteSourceFilename(
+            fileManager: fileManager,
+            directory: sourceDirectory,
+            candidates: sourceCandidates
+        )
+        guard let sourceFilename else { return }
+
+        let suffixes = ["", "-wal", "-shm", "-journal"]
+        for suffix in suffixes {
+            let sourceURL = sourceDirectory.appendingPathComponent(sourceFilename + suffix)
+            guard fileManager.fileExists(atPath: sourceURL.path) else { continue }
+            let targetURL = targetDirectory.appendingPathComponent(targetFilename + suffix)
+            guard !fileManager.fileExists(atPath: targetURL.path) else { continue }
+            try copySingleFile(
+                fileManager: fileManager,
+                sourceURL: sourceURL,
+                targetURL: targetURL
+            )
+        }
+    }
+
+    private static func copySingleFile(
+        fileManager: FileManager,
+        sourceURL: URL,
+        targetURL: URL
+    ) throws {
+        do {
+            try fileManager.copyItem(at: sourceURL, to: targetURL)
+        } catch {
+            if fileManager.fileExists(atPath: targetURL.path) {
+                return
+            }
+            throw error
+        }
+    }
+
+    private static func preferredSQLiteSourceFilename(
+        fileManager: FileManager,
+        directory: URL,
+        candidates: [String]
+    ) -> String? {
+        var fallback: String?
+        for candidate in candidates {
+            let candidateURL = directory.appendingPathComponent(candidate)
+            guard fileManager.fileExists(atPath: candidateURL.path) else { continue }
+            fallback = fallback ?? candidate
+            let size = (try? fileManager.attributesOfItem(atPath: candidateURL.path)[.size] as? NSNumber)?
+                .int64Value ?? 0
+            if size > 0 {
+                return candidate
+            }
+        }
+        return fallback
+    }
+
+    private static func databaseStoreSourceCandidates(
+        fileManager: FileManager,
+        sourceDirectory: URL
+    ) -> [String] {
+        deduplicatedFilenames(
+            [databaseStoreFilename] + legacyDatabaseStoreMigrationFilenames(
+                fileManager: fileManager,
+                directory: sourceDirectory
+            )
+        )
+    }
+
+    private static func messageIndexDatabaseSourceCandidates(
+        fileManager: FileManager,
+        sourceDirectory: URL
+    ) -> [String] {
+        deduplicatedFilenames(
+            [messageIndexDatabaseFilename] + legacyMessageIndexDatabaseMigrationFilenames(
+                fileManager: fileManager,
+                directory: sourceDirectory
+            )
+        )
+    }
+
+    private static func legacyDatabaseStoreMigrationFilenames(
+        fileManager: FileManager,
+        directory: URL
+    ) -> [String] {
+        deduplicatedFilenames(
+            legacyDatabaseStoreFilenames + discoveredLegacyDatabaseStoreFilenames(
+                fileManager: fileManager,
+                directory: directory
+            )
+        )
+    }
+
+    private static func legacyMessageIndexDatabaseMigrationFilenames(
+        fileManager: FileManager,
+        directory: URL
+    ) -> [String] {
+        deduplicatedFilenames(
+            legacyMessageIndexDatabaseFilenames + discoveredLegacyMessageIndexDatabaseFilenames(
+                fileManager: fileManager,
+                directory: directory
+            )
+        )
+    }
+
+    private static func discoveredLegacyDatabaseStoreFilenames(
+        fileManager: FileManager,
+        directory: URL
+    ) -> [String] {
+        directoryFilenames(fileManager: fileManager, directory: directory)
+            .compactMap { filename -> (name: String, version: Int)? in
+                guard let version = legacyDatabaseVersion(from: filename) else { return nil }
+                return (name: filename, version: version)
+            }
+            .sorted {
+                if $0.version == $1.version {
+                    return $0.name < $1.name
+                }
+                return $0.version > $1.version
+            }
+            .map(\.name)
+    }
+
+    private static func discoveredLegacyMessageIndexDatabaseFilenames(
+        fileManager: FileManager,
+        directory: URL
+    ) -> [String] {
+        directoryFilenames(fileManager: fileManager, directory: directory)
+            .compactMap { filename -> (name: String, version: Int)? in
+                guard let version = legacyMessageIndexVersion(from: filename) else { return nil }
+                return (name: filename, version: version)
+            }
+            .sorted {
+                if $0.version == $1.version {
+                    return $0.name < $1.name
+                }
+                return $0.version > $1.version
+            }
+            .map(\.name)
+    }
+
+    private static func directoryFilenames(
+        fileManager: FileManager,
+        directory: URL
+    ) -> [String] {
+        guard let entries = try? fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+        return entries.map(\.lastPathComponent)
+    }
+
+    private static func legacyDatabaseVersion(from filename: String) -> Int? {
+        guard filename.hasPrefix("pushgo-v"), filename.hasSuffix(".db") else { return nil }
+        let start = filename.index(filename.startIndex, offsetBy: "pushgo-v".count)
+        let end = filename.index(filename.endIndex, offsetBy: -".db".count)
+        let number = String(filename[start..<end])
+        return Int(number)
+    }
+
+    private static func legacyMessageIndexVersion(from filename: String) -> Int? {
+        guard filename.hasSuffix(".sqlite") else { return nil }
+        let prefixes = [
+            "pushgo.index.v",
+            "pushgo.search.v",
+            "pushgo.metadata.v",
+        ]
+        guard let prefix = prefixes.first(where: { filename.hasPrefix($0) }) else { return nil }
+        let start = filename.index(filename.startIndex, offsetBy: prefix.count)
+        let end = filename.index(filename.endIndex, offsetBy: -".sqlite".count)
+        let number = String(filename[start..<end])
+        return Int(number)
+    }
+
+    private static func deduplicatedFilenames(_ filenames: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        result.reserveCapacity(filenames.count)
+        for name in filenames where !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            guard seen.insert(name).inserted else { continue }
+            result.append(name)
+        }
+        return result
     }
 
     static func sharedUserDefaults(

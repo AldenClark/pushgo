@@ -1,8 +1,10 @@
 import Foundation
+import os
 import Security
 
 enum KeychainStoreError: LocalizedError, Equatable {
     case unexpectedData
+    case missingAccessGroup(String)
     case osStatus(Int32)
 
     var statusCode: Int32? {
@@ -16,6 +18,8 @@ enum KeychainStoreError: LocalizedError, Equatable {
         switch self {
         case .unexpectedData:
             return LocalizationProvider.localized("keychain_unexpected_data")
+        case let .missingAccessGroup(suffix):
+            return "Keychain access group is not configured for \(suffix)."
         case let .osStatus(status):
             return LocalizationProvider.localized("keychain_operation_failed_placeholder", status)
         }
@@ -31,11 +35,18 @@ struct KeychainStore {
     let service: String
     let accessGroup: String?
     let synchronizable: Bool?
+    let usesDataProtectionKeychain: Bool
 
-    init(service: String, accessGroup: String? = nil, synchronizable: Bool? = nil) {
+    init(
+        service: String,
+        accessGroup: String? = nil,
+        synchronizable: Bool? = nil,
+        usesDataProtectionKeychain: Bool = true
+    ) {
         self.service = service
         self.accessGroup = accessGroup
         self.synchronizable = synchronizable
+        self.usesDataProtectionKeychain = usesDataProtectionKeychain
     }
 
     func read(account: String) throws -> Data? {
@@ -61,12 +72,11 @@ struct KeychainStore {
         if let accessGroup {
             query[kSecAttrAccessGroup] = accessGroup
         }
-        if let synchronizable {
-            if synchronizable {
-                query[kSecAttrSynchronizable] = kSecAttrSynchronizableAny
-            } else {
-                query[kSecAttrSynchronizable] = kCFBooleanFalse
-            }
+        if usesDataProtectionKeychain {
+            query[kSecUseDataProtectionKeychain] = kCFBooleanTrue
+        }
+        if synchronizable == true {
+            query[kSecAttrSynchronizable] = kSecAttrSynchronizableAny
         }
 
         var item: CFTypeRef?
@@ -93,6 +103,17 @@ struct KeychainStore {
             return
         }
 
+        if accessGroup != nil {
+            do {
+                try add(account: account, data: data)
+                return
+            } catch let error as KeychainStoreError {
+                guard error.statusCode == errSecDuplicateItem else {
+                    throw error
+                }
+            }
+        }
+
         var query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
@@ -101,8 +122,11 @@ struct KeychainStore {
         if let accessGroup {
             query[kSecAttrAccessGroup] = accessGroup
         }
-        if let synchronizable {
-            query[kSecAttrSynchronizable] = synchronizable ? kCFBooleanTrue : kCFBooleanFalse
+        if usesDataProtectionKeychain {
+            query[kSecUseDataProtectionKeychain] = kCFBooleanTrue
+        }
+        if synchronizable == true {
+            query[kSecAttrSynchronizable] = kCFBooleanTrue
         }
 
         let attributes: [CFString: Any] = [
@@ -126,6 +150,42 @@ struct KeychainStore {
         }
     }
 
+    func add(account: String, data: Data) throws {
+        if let itemURL = automationItemURL(account: account) {
+            if FileManager.default.fileExists(atPath: itemURL.path) {
+                throw KeychainStoreError.osStatus(errSecDuplicateItem)
+            }
+            let directory = itemURL.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let stored = AutomationStoredItem(account: account, dataBase64: data.base64EncodedString())
+            let encoded = try JSONEncoder().encode(stored)
+            try encoded.write(to: itemURL, options: [.atomic])
+            return
+        }
+
+        var addQuery: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrService: service,
+            kSecAttrAccount: account,
+            kSecValueData: data,
+            kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlock,
+        ]
+        if let accessGroup {
+            addQuery[kSecAttrAccessGroup] = accessGroup
+        }
+        if usesDataProtectionKeychain {
+            addQuery[kSecUseDataProtectionKeychain] = kCFBooleanTrue
+        }
+        if synchronizable == true {
+            addQuery[kSecAttrSynchronizable] = kCFBooleanTrue
+        }
+
+        let status = SecItemAdd(addQuery as CFDictionary, nil)
+        guard status == errSecSuccess else {
+            throw KeychainStoreError.osStatus(status)
+        }
+    }
+
     func delete(account: String) throws {
         if let itemURL = automationItemURL(account: account) {
             if FileManager.default.fileExists(atPath: itemURL.path) {
@@ -142,8 +202,11 @@ struct KeychainStore {
         if let accessGroup {
             query[kSecAttrAccessGroup] = accessGroup
         }
-        if let synchronizable {
-            query[kSecAttrSynchronizable] = synchronizable ? kCFBooleanTrue : kCFBooleanFalse
+        if usesDataProtectionKeychain {
+            query[kSecUseDataProtectionKeychain] = kCFBooleanTrue
+        }
+        if synchronizable == true {
+            query[kSecAttrSynchronizable] = kSecAttrSynchronizableAny
         }
         let status = SecItemDelete(query as CFDictionary)
         if status == errSecSuccess || status == errSecItemNotFound {
@@ -175,13 +238,15 @@ struct KeychainStore {
             kSecAttrService: service,
             kSecMatchLimit: kSecMatchLimitAll,
             kSecReturnAttributes: true,
-            kSecReturnData: true,
         ]
         if let accessGroup {
             query[kSecAttrAccessGroup] = accessGroup
         }
-        if let synchronizable {
-            query[kSecAttrSynchronizable] = synchronizable ? kCFBooleanTrue : kCFBooleanFalse
+        if usesDataProtectionKeychain {
+            query[kSecUseDataProtectionKeychain] = kCFBooleanTrue
+        }
+        if synchronizable == true {
+            query[kSecAttrSynchronizable] = kSecAttrSynchronizableAny
         }
 
         var item: CFTypeRef?
@@ -197,23 +262,68 @@ struct KeychainStore {
             throw KeychainStoreError.unexpectedData
         }
 
-        return rawItems.compactMap { entry in
-            guard let account = entry[kSecAttrAccount] as? String,
-                  let data = entry[kSecValueData] as? Data
-            else { return nil }
+        return try rawItems.compactMap { entry in
+            guard let account = entry[kSecAttrAccount] as? String else {
+                return nil
+            }
+            guard let data = try read(account: account) else {
+                return nil
+            }
             return (account: account, data: data)
         }
     }
 
+    static func sharedAccessGroup(matchingSuffix suffix: String) -> String? {
+        accessGroup(matchingSuffix: suffix)
+    }
+
     static func accessGroup(matchingSuffix suffix: String) -> String? {
-        if let value = Bundle.main.object(forInfoDictionaryKey: "PushGoKeychainAccessGroup") as? String,
-           value.hasSuffix(suffix) {
-            return value
+        var candidates: [String] = []
+        if let value = Bundle.main.object(forInfoDictionaryKey: "PushGoKeychainAccessGroup") as? String {
+            candidates.append(value)
         }
         if let values = Bundle.main.object(forInfoDictionaryKey: "PushGoKeychainAccessGroups") as? [String] {
-            return values.first { $0.hasSuffix(suffix) }
+            candidates.append(contentsOf: values)
+        }
+
+        for candidate in candidates {
+            if let resolved = resolveAccessGroupCandidate(
+                candidate,
+                matchingSuffix: suffix
+            ) {
+                return resolved
+            }
+        }
+
+        guard let prefix = appIdentifierPrefix() else {
+            return nil
+        }
+        return prefix + suffix
+    }
+
+    private static func resolveAccessGroupCandidate(
+        _ candidate: String,
+        matchingSuffix suffix: String
+    ) -> String? {
+        let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if trimmed.hasSuffix(suffix) {
+            if let prefix = appIdentifierPrefix() {
+                return trimmed.replacingOccurrences(of: "$(AppIdentifierPrefix)", with: prefix)
+            }
+            return trimmed
         }
         return nil
+    }
+
+    private static func appIdentifierPrefix() -> String? {
+        let rawPrefix = Bundle.main.object(forInfoDictionaryKey: "AppIdentifierPrefix") as? String
+        let trimmedPrefix = rawPrefix?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmedPrefix.isEmpty else { return nil }
+        if trimmedPrefix.hasSuffix(".") {
+            return trimmedPrefix
+        }
+        return "\(trimmedPrefix)."
     }
 
     private var automationServiceDirectoryURL: URL? {
@@ -236,6 +346,220 @@ struct KeychainStore {
     }
 }
 
+enum KeychainSharedAccessMigration {
+    private struct DiagnosticRecord: Codable {
+        let timestampISO8601: String
+        let phase: String
+        let service: String?
+        let account: String?
+        let statusCode: Int32?
+        let error: String?
+    }
+
+    private static let accessGroupSuffix = "io.ethan.pushgo.shared"
+    private static let diagnosticsFilename = "keychain_shared_access_migration.jsonl"
+    private static let sharedServices = [
+        "io.ethan.pushgo.device.config",
+        "io.ethan.pushgo.provider.device-key",
+        "io.ethan.pushgo.push-token",
+        "io.ethan.pushgo.channel.subscriptions",
+    ]
+    private static let removedServices = [
+        "io.ethan.pushgo.server-tokens",
+    ]
+    private static let didAttemptMigration = OSAllocatedUnfairLock(initialState: false)
+
+    // Must be called from app-owned startup paths only. NSE paths may read legacy
+    // 1.2.1 items as fallback, but must not mutate Keychain layout.
+    static func migrateLegacyItemsToSharedAccessGroup() {
+        guard PushGoAutomationContext.keychainDirectoryURL == nil else {
+            return
+        }
+        let shouldRun = didAttemptMigration.withLock { didAttempt in
+            guard !didAttempt else { return false }
+            didAttempt = true
+            return true
+        }
+        guard shouldRun else { return }
+        guard let sharedAccessGroup = KeychainStore.sharedAccessGroup(
+            matchingSuffix: accessGroupSuffix
+        ) else {
+            recordDiagnostic(
+                phase: "shared_access_group_unavailable",
+                service: nil,
+                account: nil,
+                error: nil
+            )
+            return
+        }
+
+        for service in sharedServices {
+            migrateService(service, sharedAccessGroup: sharedAccessGroup)
+        }
+        for service in removedServices {
+            removeService(service, accessGroup: nil)
+            removeService(service, accessGroup: sharedAccessGroup)
+        }
+    }
+
+    private static func migrateService(
+        _ service: String,
+        sharedAccessGroup: String
+    ) {
+        let legacyStore = KeychainStore(
+            service: service,
+            accessGroup: nil,
+            synchronizable: false,
+            usesDataProtectionKeychain: false
+        )
+        let sharedStore = KeychainStore(
+            service: service,
+            accessGroup: sharedAccessGroup,
+            synchronizable: false
+        )
+
+        let legacyItems: [(account: String, data: Data)]
+        do {
+            legacyItems = try legacyStore.readAll()
+        } catch {
+            recordDiagnostic(
+                phase: "legacy_read_failed",
+                service: service,
+                account: nil,
+                error: error
+            )
+            return
+        }
+        guard !legacyItems.isEmpty else {
+            return
+        }
+
+        for item in legacyItems {
+            do {
+                if try sharedStore.read(account: item.account) != nil {
+                    recordDiagnostic(
+                        phase: "legacy_preserved_after_existing_shared_item",
+                        service: service,
+                        account: item.account,
+                        error: nil
+                    )
+                    continue
+                }
+
+                do {
+                    try sharedStore.add(account: item.account, data: item.data)
+                } catch let error as KeychainStoreError where error.statusCode == errSecDuplicateItem {
+                    recordDiagnostic(
+                        phase: "shared_duplicate_preserved_legacy",
+                        service: service,
+                        account: item.account,
+                        error: error
+                    )
+                }
+
+                guard try sharedStore.read(account: item.account) != nil else {
+                    recordDiagnostic(
+                        phase: "shared_verify_failed",
+                        service: service,
+                        account: item.account,
+                        error: nil
+                    )
+                    continue
+                }
+
+                recordDiagnostic(
+                    phase: "migrated_to_shared_access_group_preserved_legacy",
+                    service: service,
+                    account: item.account,
+                    error: nil
+                )
+            } catch {
+                recordDiagnostic(
+                    phase: "migration_failed",
+                    service: service,
+                    account: item.account,
+                    error: error
+                )
+            }
+        }
+    }
+
+    private static func removeService(
+        _ service: String,
+        accessGroup: String?
+    ) {
+        let store = KeychainStore(
+            service: service,
+            accessGroup: accessGroup,
+            synchronizable: false,
+            usesDataProtectionKeychain: accessGroup != nil
+        )
+        guard let items = try? store.readAll() else { return }
+        for item in items {
+            do {
+                try store.delete(account: item.account)
+                recordDiagnostic(
+                    phase: "removed_deprecated_service_item",
+                    service: service,
+                    account: item.account,
+                    error: nil
+                )
+            } catch {
+                recordDiagnostic(
+                    phase: "deprecated_service_item_remove_failed",
+                    service: service,
+                    account: item.account,
+                    error: error
+                )
+            }
+        }
+    }
+
+    private static func recordDiagnostic(
+        phase: String,
+        service: String?,
+        account: String?,
+        error: Error?
+    ) {
+        let statusCode = (error as? KeychainStoreError)?.statusCode
+        let record = DiagnosticRecord(
+            timestampISO8601: ISO8601DateFormatter().string(from: Date()),
+            phase: phase,
+            service: service,
+            account: account,
+            statusCode: statusCode,
+            error: error.map { String(describing: $0) }
+        )
+        guard let appGroupURL = AppConstants.appGroupContainerURL(
+            fileManager: .default,
+            identifier: AppConstants.appGroupIdentifier
+        ) else {
+            return
+        }
+        let diagnosticsURL = appGroupURL
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Application Support", isDirectory: true)
+            .appendingPathComponent("storage-diagnostics", isDirectory: true)
+        let fileURL = diagnosticsURL.appendingPathComponent(diagnosticsFilename)
+        do {
+            try FileManager.default.createDirectory(at: diagnosticsURL, withIntermediateDirectories: true)
+            let data = try JSONEncoder().encode(record)
+            if FileManager.default.fileExists(atPath: fileURL.path),
+               let handle = try? FileHandle(forWritingTo: fileURL)
+            {
+                try handle.seekToEnd()
+                try handle.write(contentsOf: data)
+                try handle.write(contentsOf: Data([0x0A]))
+                try handle.close()
+            } else {
+                var output = data
+                output.append(0x0A)
+                try output.write(to: fileURL, options: [.atomic])
+            }
+        } catch {}
+    }
+}
+
 struct ManualKeyPreferences: Codable, Hashable {
     var encoding: String?
 }
@@ -247,15 +571,25 @@ struct LocalKeychainConfigStore {
     private static let accessGroupSuffix = "io.ethan.pushgo.shared"
 
     private let keychain: KeychainStore
+    private let legacyKeychain: KeychainStore?
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
     init() {
+        let sharedAccessGroup = KeychainStore.accessGroup(matchingSuffix: Self.accessGroupSuffix)
         keychain = KeychainStore(
             service: Self.service,
-            accessGroup: KeychainStore.accessGroup(matchingSuffix: Self.accessGroupSuffix),
+            accessGroup: sharedAccessGroup,
             synchronizable: false
         )
+        legacyKeychain = sharedAccessGroup == nil
+            ? nil
+            : KeychainStore(
+                service: Self.service,
+                accessGroup: nil,
+                synchronizable: false,
+                usesDataProtectionKeychain: false
+            )
         encoder = JSONEncoder()
         decoder = JSONDecoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -263,7 +597,7 @@ struct LocalKeychainConfigStore {
     }
 
     func loadServerConfig() throws -> ServerConfig? {
-        guard let data = try keychain.read(account: Self.serverConfigAccount) else {
+        guard let data = try readSharedOrLegacy(account: Self.serverConfigAccount) else {
             return nil
         }
         return try decoder.decode(ServerConfig.self, from: data)
@@ -272,6 +606,7 @@ struct LocalKeychainConfigStore {
     func saveServerConfig(_ config: ServerConfig?) throws {
         guard let config else {
             try keychain.delete(account: Self.serverConfigAccount)
+            try? legacyKeychain?.delete(account: Self.serverConfigAccount)
             return
         }
         let data = try encoder.encode(config)
@@ -279,7 +614,7 @@ struct LocalKeychainConfigStore {
     }
 
     func loadManualKeyPreferences() throws -> ManualKeyPreferences {
-        guard let data = try keychain.read(account: Self.manualKeyPrefsAccount) else {
+        guard let data = try readSharedOrLegacy(account: Self.manualKeyPrefsAccount) else {
             return ManualKeyPreferences(encoding: nil)
         }
         return try decoder.decode(ManualKeyPreferences.self, from: data)
@@ -289,53 +624,270 @@ struct LocalKeychainConfigStore {
         let hasValue = preferences.encoding != nil
         guard hasValue else {
             try keychain.delete(account: Self.manualKeyPrefsAccount)
+            try? legacyKeychain?.delete(account: Self.manualKeyPrefsAccount)
             return
         }
         let data = try encoder.encode(preferences)
         try keychain.write(account: Self.manualKeyPrefsAccount, data: data)
     }
+
+    private func readSharedOrLegacy(account: String) throws -> Data? {
+        if let data = try keychain.read(account: account) {
+            return data
+        }
+        return try legacyKeychain?.read(account: account)
+    }
 }
 
 struct ProviderDeviceKeyStore {
+    struct LoadResult: Equatable {
+        let platform: String
+        let account: String
+        let accessGroup: String?
+        let deviceKey: String?
+        let error: KeychainStoreError?
+    }
+
+    struct SaveResult: Equatable {
+        let platform: String
+        let account: String
+        let accessGroup: String?
+        let didPersist: Bool
+        let error: KeychainStoreError?
+    }
+
     private static let service = "io.ethan.pushgo.provider.device-key"
     private static let accountPrefix = "provider.device_key."
     private static let accessGroupSuffix = "io.ethan.pushgo.shared"
 
     private let keychain: KeychainStore
+    private let legacyKeychain: KeychainStore?
 
     init() {
+        let sharedAccessGroup = KeychainStore.accessGroup(matchingSuffix: Self.accessGroupSuffix)
         keychain = KeychainStore(
             service: Self.service,
-            accessGroup: KeychainStore.accessGroup(matchingSuffix: Self.accessGroupSuffix),
+            accessGroup: sharedAccessGroup,
             synchronizable: false
         )
+        legacyKeychain = sharedAccessGroup == nil
+            ? nil
+            : KeychainStore(
+                service: Self.service,
+                accessGroup: nil,
+                synchronizable: false,
+                usesDataProtectionKeychain: false
+            )
     }
 
     func load(platform: String) -> String? {
-        let account = accountName(platform: platform)
-        guard let data = try? keychain.read(account: account),
-              let value = String(data: data, encoding: .utf8)
-        else {
-            return nil
-        }
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
+        loadResult(platform: platform).deviceKey
     }
 
-    func save(deviceKey: String?, platform: String) {
+    func loadResult(platform: String) -> LoadResult {
+        let account = accountName(platform: platform)
+        if keychain.accessGroup == nil, PushGoAutomationContext.keychainDirectoryURL == nil {
+            return LoadResult(
+                platform: platform,
+                account: account,
+                accessGroup: nil,
+                deviceKey: nil,
+                error: .missingAccessGroup(Self.accessGroupSuffix)
+            )
+        }
+        do {
+            guard let data = try keychain.read(account: account) else {
+                if let legacyResult = loadLegacyDeviceKey(account: account, platform: platform) {
+                    return legacyResult
+                }
+                return LoadResult(
+                    platform: platform,
+                    account: account,
+                    accessGroup: keychain.accessGroup,
+                    deviceKey: nil,
+                    error: nil
+                )
+            }
+            guard let value = String(data: data, encoding: .utf8) else {
+                return LoadResult(
+                    platform: platform,
+                    account: account,
+                    accessGroup: keychain.accessGroup,
+                    deviceKey: nil,
+                    error: .unexpectedData
+                )
+            }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return LoadResult(
+                platform: platform,
+                account: account,
+                accessGroup: keychain.accessGroup,
+                deviceKey: trimmed.isEmpty ? nil : trimmed,
+                error: nil
+            )
+        } catch let error as KeychainStoreError {
+            if let legacyResult = loadLegacyDeviceKey(account: account, platform: platform) {
+                return legacyResult
+            }
+            return LoadResult(
+                platform: platform,
+                account: account,
+                accessGroup: keychain.accessGroup,
+                deviceKey: nil,
+                error: error
+            )
+        } catch {
+            if let legacyResult = loadLegacyDeviceKey(account: account, platform: platform) {
+                return legacyResult
+            }
+            return LoadResult(
+                platform: platform,
+                account: account,
+                accessGroup: keychain.accessGroup,
+                deviceKey: nil,
+                error: .unexpectedData
+            )
+        }
+    }
+
+    @discardableResult
+    func save(deviceKey: String?, platform: String) -> SaveResult {
         let account = accountName(platform: platform)
         let trimmed = deviceKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !trimmed.isEmpty else {
-            try? keychain.delete(account: account)
-            return
+            do {
+                try keychain.delete(account: account)
+                try? legacyKeychain?.delete(account: account)
+                return SaveResult(
+                    platform: platform,
+                    account: account,
+                    accessGroup: keychain.accessGroup,
+                    didPersist: false,
+                    error: nil
+                )
+            } catch let error as KeychainStoreError {
+                return SaveResult(
+                    platform: platform,
+                    account: account,
+                    accessGroup: keychain.accessGroup,
+                    didPersist: false,
+                    error: error
+                )
+            } catch {
+                return SaveResult(
+                    platform: platform,
+                    account: account,
+                    accessGroup: keychain.accessGroup,
+                    didPersist: false,
+                    error: .unexpectedData
+                )
+            }
         }
-        guard let data = trimmed.data(using: .utf8) else { return }
-        try? keychain.write(account: account, data: data)
+        if keychain.accessGroup == nil, PushGoAutomationContext.keychainDirectoryURL == nil {
+            return SaveResult(
+                platform: platform,
+                account: account,
+                accessGroup: nil,
+                didPersist: false,
+                error: .missingAccessGroup(Self.accessGroupSuffix)
+            )
+        }
+        guard let data = trimmed.data(using: .utf8) else {
+            return SaveResult(
+                platform: platform,
+                account: account,
+                accessGroup: keychain.accessGroup,
+                didPersist: false,
+                error: .unexpectedData
+            )
+        }
+        do {
+            try keychain.write(account: account, data: data)
+            guard try keychain.read(account: account) == data else {
+                return SaveResult(
+                    platform: platform,
+                    account: account,
+                    accessGroup: keychain.accessGroup,
+                    didPersist: false,
+                    error: .unexpectedData
+                )
+            }
+            return SaveResult(
+                platform: platform,
+                account: account,
+                accessGroup: keychain.accessGroup,
+                didPersist: true,
+                error: nil
+            )
+        } catch let error as KeychainStoreError {
+            return SaveResult(
+                platform: platform,
+                account: account,
+                accessGroup: keychain.accessGroup,
+                didPersist: false,
+                error: error
+            )
+        } catch {
+            return SaveResult(
+                platform: platform,
+                account: account,
+                accessGroup: keychain.accessGroup,
+                didPersist: false,
+                error: .unexpectedData
+            )
+        }
+    }
+
+    static func accountName(for platform: String) -> String {
+        let normalized = platform.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return Self.accountPrefix + normalized
     }
 
     private func accountName(platform: String) -> String {
-        let normalized = platform.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return Self.accountPrefix + normalized
+        Self.accountName(for: platform)
+    }
+
+    private func loadLegacyDeviceKey(account: String, platform: String) -> LoadResult? {
+        guard let legacyKeychain else { return nil }
+        do {
+            guard let data = try legacyKeychain.read(account: account) else {
+                return nil
+            }
+            guard let value = String(data: data, encoding: .utf8) else {
+                return LoadResult(
+                    platform: platform,
+                    account: account,
+                    accessGroup: legacyKeychain.accessGroup,
+                    deviceKey: nil,
+                    error: .unexpectedData
+                )
+            }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            return LoadResult(
+                platform: platform,
+                account: account,
+                accessGroup: legacyKeychain.accessGroup,
+                deviceKey: trimmed,
+                error: nil
+            )
+        } catch let error as KeychainStoreError {
+            return LoadResult(
+                platform: platform,
+                account: account,
+                accessGroup: legacyKeychain.accessGroup,
+                deviceKey: nil,
+                error: error
+            )
+        } catch {
+            return LoadResult(
+                platform: platform,
+                account: account,
+                accessGroup: legacyKeychain.accessGroup,
+                deviceKey: nil,
+                error: .unexpectedData
+            )
+        }
     }
 }
 
@@ -497,52 +1049,5 @@ struct ChannelSubscriptionStore {
 
     private func normalizeGatewayKey(_ gatewayKey: String) -> String {
         gatewayKey.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-}
-
-struct ServerTokenStore {
-    private static let service = "io.ethan.pushgo.server-tokens"
-    private static let tokenAccount = "server.token"
-    private static let keyMaterialAccount = "server.notificationKeyMaterial"
-
-    private let keychain: KeychainStore
-    private let encoder: JSONEncoder
-    private let decoder: JSONDecoder
-
-    init() {
-        keychain = KeychainStore(service: Self.service)
-        encoder = JSONEncoder()
-        decoder = JSONDecoder()
-        encoder.dateEncodingStrategy = .iso8601
-        decoder.dateDecodingStrategy = .iso8601
-    }
-
-    func loadToken() throws -> String? {
-        guard let data = try keychain.read(account: Self.tokenAccount) else { return nil }
-        return String(data: data, encoding: .utf8)
-    }
-
-    func saveToken(_ token: String?) throws {
-        let trimmed = token?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !trimmed.isEmpty else {
-            try keychain.delete(account: Self.tokenAccount)
-            return
-        }
-        let data = Data(trimmed.utf8)
-        try keychain.write(account: Self.tokenAccount, data: data)
-    }
-
-    func loadNotificationKeyMaterial() throws -> ServerConfig.NotificationKeyMaterial? {
-        guard let data = try keychain.read(account: Self.keyMaterialAccount) else { return nil }
-        return try decoder.decode(ServerConfig.NotificationKeyMaterial.self, from: data)
-    }
-
-    func saveNotificationKeyMaterial(_ material: ServerConfig.NotificationKeyMaterial?) throws {
-        guard let material, material.isConfigured else {
-            try keychain.delete(account: Self.keyMaterialAccount)
-            return
-        }
-        let data = try encoder.encode(material)
-        try keychain.write(account: Self.keyMaterialAccount, data: data)
     }
 }

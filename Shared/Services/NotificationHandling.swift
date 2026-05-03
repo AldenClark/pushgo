@@ -43,6 +43,7 @@ enum NotificationPersistenceOutcome {
     case failed
 }
 
+#if !NSE_NO_DATABASE
 enum NotificationPersistenceCoordinator {
     static func persistRemotePayloadIfNeeded(
         _ payload: [AnyHashable: Any],
@@ -144,8 +145,10 @@ enum NotificationPersistenceCoordinator {
         var resolvedTitle = title
         var resolvedRawPayload = rawPayload
         if !hasExplicitTitle,
-           let eventId = eventIdentifierForTitleFallback(from: resolvedRawPayload),
-           let storedTitle = await resolveStoredEventTitle(eventId: eventId, dataStore: dataStore)
+           let storedTitle = await resolveStoredEntityTitle(
+               from: resolvedRawPayload,
+               dataStore: dataStore
+           )
         {
             resolvedTitle = storedTitle
             resolvedRawPayload["title"] = AnyCodable(storedTitle)
@@ -182,28 +185,48 @@ enum NotificationPersistenceCoordinator {
         }
     }
 
-    private static func resolveStoredEventTitle(
-        eventId: String,
+    private static func resolveStoredEntityTitle(
+        from payload: [String: AnyCodable],
         dataStore: LocalDataStore
     ) async -> String? {
-        let normalizedEventId = eventId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedEventId.isEmpty else { return nil }
-        let messages = try? await dataStore.loadEventMessagesForProjection(eventId: normalizedEventId)
-        return messages?
-            .lazy
-            .map { $0.title.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .first(where: { !$0.isEmpty })
-    }
+        let entityType = payloadText(payload, keys: ["entity_type"])?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
 
-    private static func eventIdentifierForTitleFallback(
-        from payload: [String: AnyCodable]
-    ) -> String? {
-        let entityType = payloadText(payload, keys: ["entity_type"])?.lowercased()
-        let eventId = payloadText(payload, keys: ["event_id"])
-        guard eventId != nil else { return nil }
-        if entityType == nil || entityType == "event" {
-            return eventId
+        if entityType == "thing",
+           let thingId = payloadText(payload, keys: ["thing_id", "entity_id"])
+        {
+            let normalizedThingId = thingId.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalizedThingId.isEmpty else { return nil }
+            let messages = try? await dataStore.loadThingMessagesForProjection(thingId: normalizedThingId)
+            return messages?
+                .lazy
+                .map { $0.title.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .first(where: { !$0.isEmpty })
         }
+
+        if entityType == "event" || (entityType == nil && payloadText(payload, keys: ["event_id"]) != nil),
+           let eventId = payloadText(payload, keys: ["event_id", "entity_id"])
+        {
+            let normalizedEventId = eventId.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalizedEventId.isEmpty else { return nil }
+            let messages = try? await dataStore.loadEventMessagesForProjection(eventId: normalizedEventId)
+            return messages?
+                .lazy
+                .map { $0.title.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .first(where: { !$0.isEmpty })
+        }
+
+        if let messageId = payloadText(payload, keys: ["message_id"]) {
+            let normalizedMessageId = messageId.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalizedMessageId.isEmpty else { return nil }
+            let message = try? await dataStore.loadMessage(messageId: normalizedMessageId)
+            let title = message?.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let title, !title.isEmpty {
+                return title
+            }
+        }
+
         return nil
     }
 
@@ -382,11 +405,90 @@ enum NotificationPersistenceCoordinator {
                 content.userInfo["images"] = images
                 applied = true
             }
-            for key in ["event_profile_json", "event_attrs_json", "thing_profile_json", "thing_attrs_json"] {
-                if let value = normalizedJSONObjectString(from: object[key]) {
-                    content.userInfo[key] = value
-                    applied = true
-                }
+            if let tags = normalizedJSONArrayString(from: object["tags"]) {
+                content.userInfo["tags"] = tags
+                applied = true
+            }
+            if let metadata = normalizedJSONObjectString(from: object["metadata"]) {
+                content.userInfo["metadata"] = metadata
+                applied = true
+            }
+            if let description = (object["description"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                !description.isEmpty
+            {
+                content.userInfo["description"] = description
+                applied = true
+            }
+            if let status = (object["status"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                !status.isEmpty
+            {
+                content.userInfo["status"] = status
+                applied = true
+            }
+            if let message = (object["message"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                !message.isEmpty
+            {
+                content.userInfo["message"] = message
+                applied = true
+            }
+            if let attrs = normalizedJSONObjectString(from: object["attrs"]) {
+                content.userInfo["attrs"] = attrs
+                applied = true
+            }
+            if let startedAt = normalizedInt64(from: object["started_at"]) {
+                content.userInfo["started_at"] = startedAt
+                applied = true
+            }
+            if let endedAt = normalizedInt64(from: object["ended_at"]) {
+                content.userInfo["ended_at"] = endedAt
+                applied = true
+            }
+            if let primaryImage = (object["primary_image"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                !primaryImage.isEmpty
+            {
+                content.userInfo["primary_image"] = primaryImage
+                applied = true
+            }
+            if let state = (object["state"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                !state.isEmpty
+            {
+                content.userInfo["state"] = state
+                applied = true
+            }
+            if let createdAt = normalizedInt64(from: object["created_at"]) {
+                content.userInfo["created_at"] = createdAt
+                applied = true
+            }
+            if let deletedAt = normalizedInt64(from: object["deleted_at"]) {
+                content.userInfo["deleted_at"] = deletedAt
+                applied = true
+            }
+            if let externalIds = normalizedJSONObjectString(from: object["external_ids"]) {
+                content.userInfo["external_ids"] = externalIds
+                applied = true
+            }
+            if let locationType = (object["location_type"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                !locationType.isEmpty
+            {
+                content.userInfo["location_type"] = locationType
+                applied = true
+            }
+            if let locationValue = (object["location_value"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                !locationValue.isEmpty
+            {
+                content.userInfo["location_value"] = locationValue
+                applied = true
+            }
+            if let location = normalizedJSONObjectString(from: object["location"]) {
+                content.userInfo["location"] = location
+                applied = true
             }
             return applied
         } catch {
@@ -435,6 +537,62 @@ enum NotificationPersistenceCoordinator {
         return nil
     }
 
+    private static func normalizedJSONArrayString(from raw: Any?) -> String? {
+        var values: [String] = []
+        if let array = raw as? [Any] {
+            values = array.compactMap { value in
+                guard let text = (value as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                    !text.isEmpty
+                else {
+                    return nil
+                }
+                return text
+            }
+        } else if let text = (raw as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !text.isEmpty,
+            let data = text.data(using: .utf8),
+            let decoded = try? JSONSerialization.jsonObject(with: data) as? [Any]
+        {
+            values = decoded.compactMap { value in
+                guard let text = (value as? String)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                    !text.isEmpty
+                else {
+                    return nil
+                }
+                return text
+            }
+        }
+        var deduped: [String] = []
+        for value in values where !deduped.contains(value) {
+            deduped.append(value)
+        }
+        guard !deduped.isEmpty,
+              let data = try? JSONSerialization.data(withJSONObject: deduped),
+              let text = String(data: data, encoding: .utf8)
+        else {
+            return nil
+        }
+        return text
+    }
+
+    private static func normalizedInt64(from raw: Any?) -> Int64? {
+        switch raw {
+        case let value as Int64:
+            return value
+        case let value as Int:
+            return Int64(value)
+        case let value as NSNumber:
+            return value.int64Value
+        case let value as String:
+            return Int64(value.trimmingCharacters(in: .whitespacesAndNewlines))
+        default:
+            return nil
+        }
+    }
+
     private struct InlineCipherEnvelope {
         let ciphertext: Data
         let tag: Data
@@ -474,6 +632,7 @@ enum NotificationPersistenceCoordinator {
     }
 }
 #endif
+#endif
 
 enum NotificationHandling {
 #if !os(watchOS)
@@ -496,7 +655,7 @@ enum NotificationHandling {
         NotificationPayloadSemantics.shouldPresentUserAlert(from: payload)
     }
 
-#if !os(watchOS)
+#if !os(watchOS) && !NSE_NO_DATABASE
     static func foregroundPresentationDecision(
         persistenceOutcome: NotificationPersistenceOutcome,
         payload: [AnyHashable: Any]
@@ -525,8 +684,10 @@ enum NotificationHandling {
     static func normalizeRemoteNotification(
         _ userInfo: [AnyHashable: Any]
     ) -> NormalizedRemoteNotification? {
+        let contextSnapshot = NotificationContextSnapshotStore.load()
         guard let normalized = NotificationPayloadSemantics.normalizeRemoteNotification(
             userInfo,
+            contextSnapshot: contextSnapshot,
             localizeTypeLabel: { entityType in
                 entityType == "event"
                     ? LocalizationProvider.localized("push_type_event")
@@ -589,11 +750,18 @@ enum NotificationHandling {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let messageId = (sanitized["message_id"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        let contextSnapshot = NotificationContextSnapshotStore.load()
+        let snapshotFallback = fallbackDisplayFromContextSnapshot(
+            payload: sanitized,
+            snapshot: contextSnapshot
+        )
         let title = (sanitized["title"] as? String)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedTitle: String
         if let title, !title.isEmpty {
             normalizedTitle = title
+        } else if let snapshotTitle = snapshotFallback.title {
+            normalizedTitle = snapshotTitle
         } else {
             normalizedTitle = "收到消息"
         }
@@ -602,6 +770,8 @@ enum NotificationHandling {
         let normalizedBody: String
         if let body, !body.isEmpty {
             normalizedBody = body
+        } else if let snapshotBody = snapshotFallback.body {
+            normalizedBody = snapshotBody
         } else {
             normalizedBody = "消息已收到，等待解密。"
         }
@@ -631,11 +801,46 @@ enum NotificationHandling {
         )
     }
 
+    private static func fallbackDisplayFromContextSnapshot(
+        payload: [String: Any],
+        snapshot: NotificationContextSnapshot?
+    ) -> (title: String?, body: String?) {
+        func trimmedNonEmpty(_ value: String?) -> String? {
+            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmed.isEmpty ? nil : trimmed
+        }
+
+        guard let snapshot else { return (nil, nil) }
+        let entityType = ((payload["entity_type"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased())
+        if entityType == "event" {
+            let eventId = normalizedPayloadString(payload["event_id"])
+                ?? normalizedPayloadString(payload["entity_id"])
+            let context = snapshot.eventContext(eventId: eventId)
+            return (
+                trimmedNonEmpty(context?.title),
+                trimmedNonEmpty(context?.body) ?? trimmedNonEmpty(context?.state)
+            )
+        }
+        if entityType == "thing" {
+            let thingId = normalizedPayloadString(payload["thing_id"])
+                ?? normalizedPayloadString(payload["entity_id"])
+            let context = snapshot.thingContext(thingId: thingId)
+            return (
+                trimmedNonEmpty(context?.title),
+                trimmedNonEmpty(context?.body) ?? trimmedNonEmpty(context?.state)
+            )
+        }
+        return (nil, nil)
+    }
+
     static func shouldSkipPersistence(for payload: [AnyHashable: Any]) -> Bool {
         let sanitized = UserInfoSanitizer.sanitize(payload)
         return normalizedPayloadBoolean(sanitized["_skip_persist"]) == true
     }
 
+#if !NSE_NO_DATABASE
     static func resolveNotificationIngress(
         from payload: [AnyHashable: Any],
         dataStore: LocalDataStore,
@@ -664,21 +869,22 @@ enum NotificationHandling {
             )
         }
     }
+#endif
 
     static func providerIngressRequestIdentifier(from payload: [AnyHashable: Any]) -> String? {
         let sanitized = UserInfoSanitizer.sanitize(payload)
         return normalizedPayloadString(sanitized["delivery_id"])
     }
 
-#if !os(watchOS)
+#if !os(watchOS) && !NSE_NO_DATABASE
     static func providerIngressAckDeliveryId(
         for ingress: NotificationIngressResolution,
         outcome: NotificationPersistenceOutcome
     ) -> String? {
         switch outcome {
-        case .duplicate, .persistedMain, .persistedPending:
+        case .persistedMain, .persistedPending:
             break
-        case .rejected, .failed:
+        case .duplicate, .rejected, .failed:
             return nil
         }
 
@@ -738,6 +944,7 @@ enum NotificationHandling {
         return deliveryId
     }
 
+#if !NSE_NO_DATABASE
     static func resolveProviderWakeup(
         from payload: [AnyHashable: Any],
         dataStore: LocalDataStore,
@@ -785,6 +992,7 @@ enum NotificationHandling {
 
         return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId)
     }
+#endif
 
     static func applyResolvedPayload(
         _ payload: [AnyHashable: Any],
@@ -842,6 +1050,7 @@ enum NotificationHandling {
         }
     }
 
+#if !NSE_NO_DATABASE
     private static func activeServerConfigsForWakeupIngress(
         dataStore: LocalDataStore,
         payload: [String: Any],
@@ -924,6 +1133,7 @@ enum NotificationHandling {
         return "apple"
         #endif
     }
+#endif
 
     private static func normalizedPayloadString(_ value: Any?) -> String? {
         let trimmed = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""

@@ -205,10 +205,7 @@ final class EntityProjectionViewModel {
                 guard isTopLevelEventProjection(message) else { return nil }
             }
             guard let eventId = normalizedID(message.eventId) else { return nil }
-            let profile = profileSnapshot(
-                from: payloadString(key: "event_profile_json", payload: message.rawPayload),
-                kind: .event
-            )
+            let profile = profileSnapshot(fromPayload: message.rawPayload, kind: .event)
             let title = profile?.title
                 ?? nonEmpty(message.title)
                 ?? eventId
@@ -235,7 +232,7 @@ final class EntityProjectionViewModel {
                 imageURL: profile?.imageURL,
                 imageURLs: profile?.imageURLs ?? [],
                 metadata: message.metadata,
-                attrsJSON: payloadString(key: "event_attrs_json", payload: message.rawPayload),
+                attrsJSON: payloadJSONText(key: "attrs", payload: message.rawPayload),
                 happenedAt: eventHappenedAt(for: message)
             )
             return (eventId, point)
@@ -283,21 +280,22 @@ final class EntityProjectionViewModel {
             var lastProfile: EntityProfileSnapshot?
 
             for entry in entries {
-                if let profileJSON = payloadString(key: "thing_profile_json", payload: entry.rawPayload) {
-                    lastProfile = profileSnapshot(from: profileJSON, kind: .thing) ?? lastProfile
+                if let profile = profileSnapshot(fromPayload: entry.rawPayload, kind: .thing) {
+                    lastProfile = profile
                 }
-                if let thingSnapshot = payloadJSONObject(key: "thing_attrs_json", payload: entry.rawPayload) {
-                    attrs = [:]
-                    for (key, value) in thingSnapshot where (value is NSNull) == false {
-                        attrs[key] = value
-                    }
-                }
-                if let eventPatch = payloadJSONObject(key: "event_attrs_json", payload: entry.rawPayload) {
-                    for (key, value) in eventPatch {
-                        if value is NSNull {
-                            attrs.removeValue(forKey: key)
-                        } else {
+                if let attrsObject = payloadJSONObject(key: "attrs", payload: entry.rawPayload) {
+                    if entry.entityType == "thing" {
+                        attrs = [:]
+                        for (key, value) in attrsObject where (value is NSNull) == false {
                             attrs[key] = value
+                        }
+                    } else {
+                        for (key, value) in attrsObject {
+                            if value is NSNull {
+                                attrs.removeValue(forKey: key)
+                            } else {
+                                attrs[key] = value
+                            }
                         }
                     }
                 }
@@ -316,10 +314,7 @@ final class EntityProjectionViewModel {
 
             let relatedUpdates = entries.compactMap { message -> ThingRelatedUpdate? in
                 guard message.entityType == "thing" else { return nil }
-                let profile = profileSnapshot(
-                    from: payloadString(key: "thing_profile_json", payload: message.rawPayload),
-                    kind: .thing
-                )
+                let profile = profileSnapshot(fromPayload: message.rawPayload, kind: .thing)
                 let operation = thingOperation(from: message, profile: profile)
                 let rawTitle = nonEmpty(message.title) ?? operation
                 let title = cleanedThingOperationTitle(rawTitle, operation: operation)
@@ -624,6 +619,9 @@ final class EntityProjectionViewModel {
         key: String,
         payload: [String: AnyCodable]
     ) -> [String: Any]? {
+        if let object = payload[key]?.value as? [String: Any] {
+            return object
+        }
         guard let text = payloadString(key: key, payload: payload),
               let data = text.data(using: .utf8),
               let value = try? JSONSerialization.jsonObject(with: data),
@@ -634,15 +632,38 @@ final class EntityProjectionViewModel {
         return object
     }
 
+    private func payloadJSONText(
+        key: String,
+        payload: [String: AnyCodable]
+    ) -> String? {
+        if let object = payloadJSONObject(key: key, payload: payload) {
+            return formattedJSON(object)
+        }
+        return payloadString(key: key, payload: payload)
+    }
+
     private func profileSnapshot(
-        from jsonText: String?,
+        fromPayload payload: [String: AnyCodable],
         kind: EntityProfileKind
     ) -> EntityProfileSnapshot? {
-        guard let jsonText = nonEmpty(jsonText),
-              let data = jsonText.data(using: .utf8),
-              let value = try? JSONSerialization.jsonObject(with: data),
-              let object = value as? [String: Any]
-        else {
+        var object: [String: Any] = [:]
+        for key in [
+            "title", "description", "status", "message", "severity", "tags", "started_at",
+            "ended_at", "created_at", "deleted_at", "state", "location_type", "location_value",
+            "location", "external_ids", "primary_image", "images"
+        ] {
+            if let value = payload[key]?.value {
+                object[key] = value
+            }
+        }
+        return profileSnapshot(from: object, kind: kind)
+    }
+
+    private func profileSnapshot(
+        from object: [String: Any],
+        kind: EntityProfileKind
+    ) -> EntityProfileSnapshot? {
+        if object.isEmpty {
             return nil
         }
 

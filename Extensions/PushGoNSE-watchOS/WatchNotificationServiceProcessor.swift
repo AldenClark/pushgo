@@ -42,6 +42,10 @@ private struct WatchPullResponse: Decodable {
     let items: [WatchPullItem]
 }
 
+private struct WatchAckResponse: Decodable {
+    let removed: Bool
+}
+
 private struct WatchPullItem: Decodable {
     let deliveryId: String
     let payload: [String: String]
@@ -56,10 +60,15 @@ private struct WatchPullItem: Decodable {
 final class WatchNotificationServiceProcessor {
     private let contentPreparer = NotificationContentPreparer()
     private let deviceKeyStore = ProviderDeviceKeyStore()
-    private let store: WatchLightNotificationStore?
+    private let notificationIngressInbox: NotificationIngressInbox
+    private let ackFailureStore: ProviderDeliveryAckFailureStore
 
-    init(store: WatchLightNotificationStore? = try? WatchLightNotificationStore()) {
-        self.store = store
+    init(
+        notificationIngressInbox: NotificationIngressInbox = .shared,
+        ackFailureStore: ProviderDeliveryAckFailureStore = .shared
+    ) {
+        self.notificationIngressInbox = notificationIngressInbox
+        self.ackFailureStore = ackFailureStore
     }
 
     func process(
@@ -69,13 +78,178 @@ final class WatchNotificationServiceProcessor {
         let ingress = await resolveIngress(from: request.content.userInfo)
         applyIngressPayloadIfNeeded(ingress, to: content)
         let content = await contentPreparer.prepare(content)
-        await persistIfNeeded(ingress: ingress, request: request, content: content)
-
-        if let store, let unreadCount = try? await store.unreadCount() {
-            content.badge = NSNumber(value: unreadCount)
+        await markAckPreparingIfNeeded(ingress: ingress)
+        let enqueued = await enqueueIngressInboxEntry(
+            for: request,
+            ingress: ingress,
+            content: content
+        )
+        if enqueued {
+            await markAckInboxDurableIfNeeded(ingress: ingress)
+            DarwinNotificationPoster.post(name: AppConstants.notificationIngressChangedNotificationName)
+            await ackIngressIfNeeded(ingress: ingress)
         }
 
         return content
+    }
+
+    @discardableResult
+    private func enqueueIngressInboxEntry(
+        for request: UNNotificationRequest,
+        ingress: WatchNotificationIngressResolution,
+        content: UNNotificationContent
+    ) async -> Bool {
+        let ingressRequestIdentifier: String?
+        switch ingress {
+        case let .direct(_, requestIdentifier):
+            ingressRequestIdentifier = requestIdentifier
+        case let .pulled(_, requestIdentifier):
+            ingressRequestIdentifier = requestIdentifier
+        case let .unresolvedWakeup(_, requestIdentifier):
+            ingressRequestIdentifier = requestIdentifier
+        }
+        let codablePayload = codablePayloadDictionary(from: content.userInfo)
+        return await notificationIngressInbox.enqueue(
+            codablePayload: codablePayload,
+            requestIdentifier: ingressRequestIdentifier ?? request.identifier,
+            source: "watch_nse"
+        )
+    }
+
+    private func ackIngressIfNeeded(
+        ingress: WatchNotificationIngressResolution
+    ) async {
+        let payload: [AnyHashable: Any]
+        let deliveryId: String?
+        switch ingress {
+        case let .direct(resolvedPayload, ingressRequestIdentifier):
+            payload = resolvedPayload
+            guard providerWakeupDeliveryId(from: UserInfoSanitizer.sanitize(resolvedPayload)) == nil else {
+                return
+            }
+            deliveryId = nonEmpty(ingressRequestIdentifier)
+                ?? nonEmpty(UserInfoSanitizer.sanitize(resolvedPayload)["delivery_id"] as? String)
+        case let .pulled(resolvedPayload, ingressRequestIdentifier):
+            payload = resolvedPayload
+            deliveryId = nonEmpty(ingressRequestIdentifier)
+        case .unresolvedWakeup:
+            return
+        }
+        let sanitized = UserInfoSanitizer.sanitize(payload)
+        guard let deliveryId else { return }
+        let candidates = await wakeupServerCandidates(from: sanitized)
+        guard let deviceKey = providerDeviceKey() else {
+            _ = await ackFailureStore.markInboxDurable(
+                deliveryId: deliveryId,
+                baseURL: candidates.first?.baseURL,
+                deviceKeyAccount: ProviderDeviceKeyStore.accountName(for: "watchos"),
+                source: "watch_nse_ack_unavailable",
+                retryAfter: Date().addingTimeInterval(30)
+            )
+            return
+        }
+        guard !candidates.isEmpty else {
+            _ = await ackFailureStore.markInboxDurable(
+                deliveryId: deliveryId,
+                baseURL: nil,
+                deviceKeyAccount: ProviderDeviceKeyStore.accountName(for: "watchos"),
+                source: "watch_nse_ack_unavailable",
+                retryAfter: Date().addingTimeInterval(30)
+            )
+            return
+        }
+        guard let lease = await ackFailureStore.acquireAckLease(
+            deliveryId: deliveryId,
+            owner: "watch.nse",
+            leaseDuration: 120
+        ) else {
+            return
+        }
+        for candidate in candidates {
+            do {
+                _ = try await ackMessage(
+                    baseURL: candidate.baseURL,
+                    token: candidate.token,
+                    deviceKey: deviceKey,
+                    deliveryId: deliveryId
+                )
+                await ackFailureStore.markCompleted(lease)
+                return
+            } catch {
+                continue
+            }
+        }
+        await ackFailureStore.markAckFailed(
+            lease,
+            source: "watch_nse_ack_failed",
+            retryAfter: Date().addingTimeInterval(30)
+        )
+    }
+
+    private func markAckPreparingIfNeeded(
+        ingress: WatchNotificationIngressResolution
+    ) async {
+        await markAckMarkerIfNeeded(ingress: ingress, stage: .preparing)
+    }
+
+    private func markAckInboxDurableIfNeeded(
+        ingress: WatchNotificationIngressResolution
+    ) async {
+        await markAckMarkerIfNeeded(ingress: ingress, stage: .inboxDurable)
+    }
+
+    private func markAckMarkerIfNeeded(
+        ingress: WatchNotificationIngressResolution,
+        stage: ProviderDeliveryAckFailureStore.Stage
+    ) async {
+        let payload: [AnyHashable: Any]
+        let deliveryId: String?
+        switch ingress {
+        case let .direct(resolvedPayload, ingressRequestIdentifier):
+            payload = resolvedPayload
+            guard providerWakeupDeliveryId(from: UserInfoSanitizer.sanitize(resolvedPayload)) == nil else {
+                return
+            }
+            deliveryId = nonEmpty(ingressRequestIdentifier)
+                ?? nonEmpty(UserInfoSanitizer.sanitize(resolvedPayload)["delivery_id"] as? String)
+        case let .pulled(resolvedPayload, ingressRequestIdentifier):
+            payload = resolvedPayload
+            deliveryId = nonEmpty(ingressRequestIdentifier)
+        case .unresolvedWakeup:
+            return
+        }
+        guard let deliveryId else { return }
+        let candidates = await wakeupServerCandidates(from: UserInfoSanitizer.sanitize(payload))
+        let account = ProviderDeviceKeyStore.accountName(for: "watchos")
+        switch stage {
+        case .preparing:
+            _ = await ackFailureStore.markPreparing(
+                deliveryId: deliveryId,
+                baseURL: candidates.first?.baseURL,
+                deviceKeyAccount: account,
+                source: "watch_nse_ack_preparing",
+                postNotification: false
+            )
+        case .inboxDurable:
+            _ = await ackFailureStore.markInboxDurable(
+                deliveryId: deliveryId,
+                baseURL: candidates.first?.baseURL,
+                deviceKeyAccount: account,
+                source: "watch_nse_inbox_durable",
+                postNotification: false
+            )
+        case .ackInFlight, .completed:
+            break
+        }
+    }
+
+    private func codablePayloadDictionary(
+        from payload: [AnyHashable: Any]
+    ) -> [String: AnyCodable] {
+        let sanitized = UserInfoSanitizer.sanitize(payload)
+        return sanitized.reduce(into: [String: AnyCodable]()) { result, item in
+            result[item.key] = AnyCodable(item.value)
+        }
     }
 
     private func resolveIngress(
@@ -142,48 +316,6 @@ final class WatchNotificationServiceProcessor {
         }
     }
 
-    private func persistIfNeeded(
-        ingress: WatchNotificationIngressResolution,
-        request: UNNotificationRequest,
-        content: UNNotificationContent
-    ) async {
-        guard let store else { return }
-
-        let title = content.title
-        let body = content.body
-        let fallbackRequestIdentifier = request.identifier
-
-        switch ingress {
-        case let .pulled(payload, requestIdentifier):
-            if let payload = quantizePayload(
-                payload,
-                titleOverride: title,
-                bodyOverride: body,
-                notificationRequestId: requestIdentifier
-            ) {
-                try? await store.upsert(payload)
-            }
-        case let .direct(payload, requestIdentifier):
-            guard !shouldSkipPersistence(for: payload) else { return }
-            if let payload = quantizePayload(
-                payload,
-                titleOverride: title,
-                bodyOverride: body,
-                notificationRequestId: requestIdentifier ?? fallbackRequestIdentifier
-            ) {
-                try? await store.upsert(payload)
-                await ackProviderIngressIfNeeded(
-                    ingress: ingress,
-                    requestIdentifier: requestIdentifier
-                )
-            }
-        case let .unresolvedWakeup(payload, requestIdentifier):
-            _ = payload
-            _ = requestIdentifier
-            _ = fallbackRequestIdentifier
-        }
-    }
-
     private func applyResolvedPayload(
         _ payload: [AnyHashable: Any],
         to content: UNMutableNotificationContent
@@ -206,8 +338,10 @@ final class WatchNotificationServiceProcessor {
     private func normalizeDisplayPayload(
         _ payload: [AnyHashable: Any]
     ) -> NotificationPayloadSemantics.NormalizedPayload? {
-        NotificationPayloadSemantics.normalizeRemoteNotification(
+        let contextSnapshot = NotificationContextSnapshotStore.load()
+        return NotificationPayloadSemantics.normalizeRemoteNotification(
             payload,
+            contextSnapshot: contextSnapshot,
             localizeTypeLabel: { entityType in
                 switch entityType {
                 case "event":
@@ -269,50 +403,6 @@ final class WatchNotificationServiceProcessor {
         return (nil, nil)
     }
 
-    private func ackProviderIngressIfNeeded(
-        ingress: WatchNotificationIngressResolution,
-        requestIdentifier: String?
-    ) async {
-        guard let store else { return }
-        guard let config = (try? await store.loadProvisioningServerConfig())?.normalized() else { return }
-        let deviceKey = providerDeviceKey() ?? ""
-        guard !deviceKey.isEmpty else { return }
-        let deliveryId: String?
-        switch ingress {
-        case let .direct(payload, _):
-            if providerWakeupDeliveryId(from: UserInfoSanitizer.sanitize(payload)) != nil {
-                return
-            }
-            deliveryId = requestIdentifier ?? directRequestIdentifier(from: UserInfoSanitizer.sanitize(payload))
-        case .pulled:
-            return
-        case .unresolvedWakeup:
-            return
-        }
-        guard let normalizedDeliveryId = nonEmpty(deliveryId) else { return }
-        try? await ackMessage(
-            baseURL: config.baseURL,
-            token: config.token,
-            deviceKey: deviceKey,
-            deliveryId: normalizedDeliveryId
-        )
-    }
-
-    private func quantizePayload(
-        _ payload: [AnyHashable: Any],
-        titleOverride: String?,
-        bodyOverride: String?,
-        notificationRequestId: String?
-    ) -> WatchLightPayload? {
-        WatchStandaloneLightQuantizer.quantizePayload(
-            WatchStandaloneLightQuantizer.stringifyPayload(payload),
-            titleOverride: titleOverride,
-            bodyOverride: bodyOverride,
-            urlOverride: nil,
-            notificationRequestId: notificationRequestId
-        )
-    }
-
     private func wakeupServerCandidates(from payload: [String: Any]) async -> [WatchWakeupServerCandidate] {
         var candidates: [WatchWakeupServerCandidate] = []
         var dedupe = Set<String>()
@@ -327,13 +417,27 @@ final class WatchNotificationServiceProcessor {
             appendCandidate(baseURL: payloadServerURL, token: nil)
         }
 
-        if let store,
-           let config = (try? await store.loadProvisioningServerConfig())?.normalized()
-        {
-            appendCandidate(baseURL: config.baseURL, token: config.token)
+        if let sharedConfig = sharedProvisioningServerConfig() {
+            appendCandidate(baseURL: sharedConfig.baseURL, token: sharedConfig.token)
+        }
+
+        if let defaultServerURL = AppConstants.defaultServerURL {
+            appendCandidate(
+                baseURL: defaultServerURL,
+                token: AppConstants.defaultGatewayToken
+            )
         }
 
         return candidates
+    }
+
+    private func sharedProvisioningServerConfig() -> ServerConfig? {
+        guard let data = AppConstants.sharedUserDefaults()
+            .data(forKey: AppConstants.watchProvisioningServerConfigDefaultsKey)
+        else {
+            return nil
+        }
+        return try? JSONDecoder().decode(ServerConfig.self, from: data).normalized()
     }
 
     private func providerDeviceKey() -> String? {
@@ -390,7 +494,7 @@ final class WatchNotificationServiceProcessor {
         token: String?,
         deviceKey: String,
         deliveryId: String
-    ) async throws {
+    ) async throws -> Bool {
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw WatchWakeupResolutionError.invalidServerURL
         }
@@ -414,12 +518,18 @@ final class WatchNotificationServiceProcessor {
             )
         )
 
-        let (_, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200 ..< 300).contains(httpResponse.statusCode)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw WatchWakeupResolutionError.invalidResponse
+        }
+        let envelope = try JSONDecoder().decode(WatchPullEnvelope<WatchAckResponse>.self, from: data)
+        guard (200 ..< 300).contains(httpResponse.statusCode),
+              envelope.success,
+              let payload = envelope.data
         else {
             throw WatchWakeupResolutionError.pullRejected
         }
+        return payload.removed
     }
 
     private func providerWakeupDeliveryId(from payload: [String: Any]) -> String? {
@@ -463,11 +573,6 @@ final class WatchNotificationServiceProcessor {
             return nil
         }
         return url
-    }
-
-    private func shouldSkipPersistence(for payload: [AnyHashable: Any]) -> Bool {
-        let sanitized = UserInfoSanitizer.sanitize(payload)
-        return normalizedBoolean(sanitized["_skip_persist"]) == true
     }
 
     private func nonEmpty(_ raw: String?) -> String? {

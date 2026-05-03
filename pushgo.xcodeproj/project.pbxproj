@@ -11,7 +11,6 @@
 		03DC253E48CA6B70EEF1B336 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 3949F99E0D1C96080BD96181 /* Sparkle */; };
 		0637F07C839C0C2D397AB069 /* NotificationServiceProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25CF4B72C6499CEADC594FC9 /* NotificationServiceProcessor.swift */; };
 		07C9B74592F74D57BA86DC45 /* MessageDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9015282D012D481CA0B5DEE7 /* MessageDetailViewModel.swift */; };
-		0AB64B4D52C546C3964A4A7C /* MessageSearchIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0775D9BD1040ADA2E6126B /* MessageSearchIndex.swift */; };
 		0AC200002F90000100C0FFEE /* NotificationContentPreparer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AC200102F90000100C0FFEE /* NotificationContentPreparer.swift */; };
 		0AC200012F90000100C0FFEE /* WatchNotificationServiceProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AC200112F90000100C0FFEE /* WatchNotificationServiceProcessor.swift */; };
 		0AC200022F90000100C0FFEE /* WatchLightNotificationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AC200122F90000100C0FFEE /* WatchLightNotificationStore.swift */; };
@@ -29,7 +28,6 @@
 		2B986C78E6B4496CBE7B2B02 /* LiquidGlassEffect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B3E6B01F1EF4D8FA6446875 /* LiquidGlassEffect.swift */; };
 		321F02FC2537D0D7B6F824AE /* NotificationServiceExtensionWatch.appex in Embed Watch Extensions */ = {isa = PBXBuildFile; fileRef = DE35C72B5C899D0FCCBAF070 /* NotificationServiceExtensionWatch.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		32A8981C86EB3B8F6ADBA485 /* AnyCodable.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C282EF2359D00AD1834 /* AnyCodable.swift */; };
-		396B5824604CF29524F1D361 /* MessageSearchIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE0775D9BD1040ADA2E6126B /* MessageSearchIndex.swift */; };
 		3BFC69EF8C9B3D182B771E0E /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2E2EF2359D00AD1834 /* KeychainStore.swift */; };
 		436523C368454668836A3C38 /* MessageSearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7357BF59973E4BB4BBD5C2CC /* MessageSearchViewModel.swift */; };
 		457FB44314B7060E66E9D464 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82C9A591E410A5C90A91A022 /* NotificationService.swift */; };
@@ -51,6 +49,27 @@
 		65F43DA819F3DB0B9D12AE54 /* AnyCodable.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C282EF2359D00AD1834 /* AnyCodable.swift */; };
 		66DA6DAD09A94C5AB57BCB21 /* AppFormControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86F995116FFE4856B0C30372 /* AppFormControls.swift */; };
 		6A4744330FF5443C3E79BAC6 /* NotificationHandling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ADFF5A76CA49E94408B363E /* NotificationHandling.swift */; };
+		F1B2C3D4E5F60718293A4B61 /* NotificationIngressInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1B2C3D4E5F60718293A4B5C /* NotificationIngressInbox.swift */; };
+		F1B2C3D4E5F60718293A4B62 /* NotificationIngressInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1B2C3D4E5F60718293A4B5C /* NotificationIngressInbox.swift */; };
+		F1B2C3D4E5F60718293A4B63 /* NotificationIngressInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1B2C3D4E5F60718293A4B5C /* NotificationIngressInbox.swift */; };
+		F1B2C3D4E5F60718293A4B64 /* NotificationIngressInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1B2C3D4E5F60718293A4B5C /* NotificationIngressInbox.swift */; };
+		F1B2C3D4E5F60718293A4B65 /* NotificationIngressInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1B2C3D4E5F60718293A4B5C /* NotificationIngressInbox.swift */; };
+		F1B2C3D4E5F60718293A4B66 /* NotificationIngressInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1B2C3D4E5F60718293A4B5C /* NotificationIngressInbox.swift */; };
+			F4B2C3D4E5F60718293A4B61 /* ProviderDeliveryAckFailureStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B2C3D4E5F60718293A4B5C /* ProviderDeliveryAckFailureStore.swift */; };
+			F4B2C3D4E5F60718293A4B62 /* ProviderDeliveryAckFailureStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B2C3D4E5F60718293A4B5C /* ProviderDeliveryAckFailureStore.swift */; };
+		F4B2C3D4E5F60718293A4B63 /* ProviderDeliveryAckFailureStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B2C3D4E5F60718293A4B5C /* ProviderDeliveryAckFailureStore.swift */; };
+		F4B2C3D4E5F60718293A4B64 /* ProviderDeliveryAckFailureStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B2C3D4E5F60718293A4B5C /* ProviderDeliveryAckFailureStore.swift */; };
+			F4B2C3D4E5F60718293A4B65 /* ProviderDeliveryAckFailureStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B2C3D4E5F60718293A4B5C /* ProviderDeliveryAckFailureStore.swift */; };
+			F4B2C3D4E5F60718293A4B66 /* ProviderDeliveryAckFailureStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B2C3D4E5F60718293A4B5C /* ProviderDeliveryAckFailureStore.swift */; };
+			F6B2C3D4E5F60718293A4B61 /* ProviderIngressCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6B2C3D4E5F60718293A4B5C /* ProviderIngressCoordinator.swift */; };
+			F6B2C3D4E5F60718293A4B62 /* ProviderIngressCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6B2C3D4E5F60718293A4B5C /* ProviderIngressCoordinator.swift */; };
+			F6B2C3D4E5F60718293A4B66 /* ProviderIngressCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6B2C3D4E5F60718293A4B5C /* ProviderIngressCoordinator.swift */; };
+		F2B2C3D4E5F60718293A4B61 /* NotificationContextSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B2C3D4E5F60718293A4B5C /* NotificationContextSnapshot.swift */; };
+		F2B2C3D4E5F60718293A4B62 /* NotificationContextSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B2C3D4E5F60718293A4B5C /* NotificationContextSnapshot.swift */; };
+		F2B2C3D4E5F60718293A4B63 /* NotificationContextSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B2C3D4E5F60718293A4B5C /* NotificationContextSnapshot.swift */; };
+		F2B2C3D4E5F60718293A4B64 /* NotificationContextSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B2C3D4E5F60718293A4B5C /* NotificationContextSnapshot.swift */; };
+		F2B2C3D4E5F60718293A4B65 /* NotificationContextSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B2C3D4E5F60718293A4B5C /* NotificationContextSnapshot.swift */; };
+		F2B2C3D4E5F60718293A4B66 /* NotificationContextSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B2C3D4E5F60718293A4B5C /* NotificationContextSnapshot.swift */; };
 		6B632AA574864D54BB58B2BD /* PushMessageSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36B8C43824CA496F9D0EDDC7 /* PushMessageSummary.swift */; };
 		6D2F01C44A114051A8C20752 /* ToastView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40915CA9B3604BF1991DC27A /* ToastView.swift */; };
 		719988127D194612AFC29EC2 /* PushMessageSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36B8C43824CA496F9D0EDDC7 /* PushMessageSummary.swift */; };
@@ -108,14 +127,11 @@
 		AA8E2C9F2EF2359D00AD1834 /* BadgeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C242EF2359D00AD1834 /* BadgeManager.swift */; };
 		AAA6F04C8F1BA6004768B932 /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2A2EF2359D00AD1834 /* AppConstants.swift */; };
 		AAC02D3B2F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0034 /* GRDB */; };
-		AAC02D3C2F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0037 /* GRDB */; };
-		AAC02D3F2F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0038 /* GRDB */; };
 		AAC02D402F682C3900A179C3 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0035 /* GRDB */; };
 		AAE0B0B12F6A000100C0FFEE /* AppConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2A2EF2359D00AD1834 /* AppConstants.swift */; };
 		AAE0B0B22F6A000100C0FFEE /* ServerConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1F2EF2359D00AD1834 /* ServerConfig.swift */; };
 		AAE0B0B32F6A000100C0FFEE /* PushMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1E2EF2359D00AD1834 /* PushMessage.swift */; };
 		AAE0B0B42F6A000100C0FFEE /* UserInfoSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C362EF2359D00AD1834 /* UserInfoSanitizer.swift */; };
-		AAE0B0B52F6A000100C0FFEE /* LocalDataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C222EF2359D00AD1834 /* LocalDataStore.swift */; };
 		AAE0B0B62F6A000100C0FFEE /* SharedImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C352EF2359D00AD1834 /* SharedImageCache.swift */; };
 		AAE0B0B72F6A000100C0FFEE /* AnyCodable.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C282EF2359D00AD1834 /* AnyCodable.swift */; };
 		AAE0B0B82F6A000100C0FFEE /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1C2EF2359D00AD1834 /* AppError.swift */; };
@@ -183,7 +199,6 @@
 		C9F7E726998368ADAA5295EA /* ServerConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1F2EF2359D00AD1834 /* ServerConfig.swift */; };
 		CAE45C474E77474FBD0A94AE /* RemoteImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2955959BFE8246FEB0B03EDA /* RemoteImageView.swift */; };
 		CEAF7737211A4518B56C2730 /* MessageListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5F7201AE9644B8F9A6A4BD8 /* MessageListViewModel.swift */; };
-		D236376962B4225163DB0E47 /* LocalDataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C222EF2359D00AD1834 /* LocalDataStore.swift */; };
 		D80B500FD9AD4C54B7A7F003 /* SharedImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C352EF2359D00AD1834 /* SharedImageCache.swift */; };
 		DCF33C971B121AABEEEE708F /* PushMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1E2EF2359D00AD1834 /* PushMessage.swift */; };
 		E75A2C6D9F284EE9ADB39B99 /* MessageDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9015282D012D481CA0B5DEE7 /* MessageDetailViewModel.swift */; };
@@ -339,6 +354,10 @@
 		4145756AA5A340C3AC329C64 /* PushGoMarkdownView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushGoMarkdownView.swift; sourceTree = "<group>"; };
 		4D54A0FAE6A44ADDB88F3B98 /* PlatformColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformColor.swift; sourceTree = "<group>"; };
 		6ADFF5A76CA49E94408B363E /* NotificationHandling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationHandling.swift; sourceTree = "<group>"; };
+			F1B2C3D4E5F60718293A4B5C /* NotificationIngressInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationIngressInbox.swift; sourceTree = "<group>"; };
+			F4B2C3D4E5F60718293A4B5C /* ProviderDeliveryAckFailureStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderDeliveryAckFailureStore.swift; sourceTree = "<group>"; };
+			F6B2C3D4E5F60718293A4B5C /* ProviderIngressCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderIngressCoordinator.swift; sourceTree = "<group>"; };
+			F2B2C3D4E5F60718293A4B5C /* NotificationContextSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationContextSnapshot.swift; sourceTree = "<group>"; };
 		702354665CA14943EFB6ED7D /* pushgowatch NotificationServiceExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "pushgowatch NotificationServiceExtension.entitlements"; sourceTree = "<group>"; };
 		7357BF59973E4BB4BBD5C2CC /* MessageSearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageSearchViewModel.swift; sourceTree = "<group>"; };
 		735E34FAF86E4F5A8F14A966 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -598,7 +617,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AAC02D3C2F682C3900A179C3 /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -606,7 +624,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AAC02D3F2F682C3900A179C3 /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -740,8 +757,11 @@
 				AA8E2C262EF2359D00AD1834 /* PushRegistrationService.swift */,
 				0AC200102F90000100C0FFEE /* NotificationContentPreparer.swift */,
 				25CF4B72C6499CEADC594FC9 /* NotificationServiceProcessor.swift */,
-				6ADFF5A76CA49E94408B363E /* NotificationHandling.swift */,
-			);
+					6ADFF5A76CA49E94408B363E /* NotificationHandling.swift */,
+					F1B2C3D4E5F60718293A4B5C /* NotificationIngressInbox.swift */,
+					F4B2C3D4E5F60718293A4B5C /* ProviderDeliveryAckFailureStore.swift */,
+					F6B2C3D4E5F60718293A4B5C /* ProviderIngressCoordinator.swift */,
+				);
 			path = Services;
 			sourceTree = "<group>";
 		};
@@ -757,6 +777,7 @@
 				AA8E2C312EF2359D00AD1834 /* LocalizationProvider.swift */,
 				C1D2E3F40102030405060702 /* ManualNotificationKeyValidator.swift */,
 				C1D2E3F40102030405060701 /* NotificationPayloadSemantics.swift */,
+				F2B2C3D4E5F60718293A4B5C /* NotificationContextSnapshot.swift */,
 				C1D2E3F40102030405060704 /* ProjectionSemantics.swift */,
 				AA8E2C322EF2359D00AD1834 /* PushGoMarkdownCore.swift */,
 				AA8E2C332EF2359D00AD1834 /* PushGoNotificationNames.swift */,
@@ -895,7 +916,6 @@
 			);
 			name = "PushGoNSE-iOS";
 			packageProductDependencies = (
-				A0AA00012F70000100AA0037 /* GRDB */,
 			);
 			productName = NotificationServiceExtension;
 			productReference = AA49A19C2EE3E46C00C1EBF2 /* NotificationServiceExtension.appex */;
@@ -918,7 +938,6 @@
 			);
 			name = "PushGoNSE-macOS";
 			packageProductDependencies = (
-				A0AA00012F70000100AA0038 /* GRDB */,
 			);
 			productName = PushgoNotificationServiceExtension;
 			productReference = AACFE15B2F28511200701BB4 /* PushgoNotificationServiceExtension.appex */;
@@ -1161,11 +1180,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				457FB44314B7060E66E9D464 /* NotificationService.swift in Sources */,
+				F1B2C3D4E5F60718293A4B65 /* NotificationIngressInbox.swift in Sources */,
+				F4B2C3D4E5F60718293A4B65 /* ProviderDeliveryAckFailureStore.swift in Sources */,
 				0AC200012F90000100C0FFEE /* WatchNotificationServiceProcessor.swift in Sources */,
 				0AC200022F90000100C0FFEE /* WatchLightNotificationStore.swift in Sources */,
 				0AC200032F90000100C0FFEE /* WatchStandaloneLightQuantizer.swift in Sources */,
 				0AC200002F90000100C0FFEE /* NotificationContentPreparer.swift in Sources */,
 				C1D2E3F40102030405060851 /* NotificationPayloadSemantics.swift in Sources */,
+				F2B2C3D4E5F60718293A4B65 /* NotificationContextSnapshot.swift in Sources */,
 				8BE8D5A5AFDD413593953B18 /* PushGoMarkdownCore.swift in Sources */,
 				AAA6F04C8F1BA6004768B932 /* AppConstants.swift in Sources */,
 				32A8981C86EB3B8F6ADBA485 /* AnyCodable.swift in Sources */,
@@ -1181,9 +1203,13 @@
 		AA240E4D2EF1BEA400F812DA /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (
-				6A4744330FF5443C3E79BAC6 /* NotificationHandling.swift in Sources */,
-				C1D2E3F40102030405060811 /* NotificationPayloadSemantics.swift in Sources */,
+				files = (
+					F1B2C3D4E5F60718293A4B61 /* NotificationIngressInbox.swift in Sources */,
+					F4B2C3D4E5F60718293A4B61 /* ProviderDeliveryAckFailureStore.swift in Sources */,
+					F6B2C3D4E5F60718293A4B61 /* ProviderIngressCoordinator.swift in Sources */,
+					6A4744330FF5443C3E79BAC6 /* NotificationHandling.swift in Sources */,
+					C1D2E3F40102030405060811 /* NotificationPayloadSemantics.swift in Sources */,
+					F2B2C3D4E5F60718293A4B61 /* NotificationContextSnapshot.swift in Sources */,
 				C1D2E3F40102030405060812 /* ManualNotificationKeyValidator.swift in Sources */,
 				C1D2E3F40102030405060813 /* SearchQuerySemantics.swift in Sources */,
 				C1D2E3F40102030405060814 /* ProjectionSemantics.swift in Sources */,
@@ -1235,9 +1261,13 @@
 		AA49A1862EE3E31500C1EBF2 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (
-				278EDCDB13F0B883D94FC08A /* NotificationHandling.swift in Sources */,
-				C1D2E3F40102030405060801 /* NotificationPayloadSemantics.swift in Sources */,
+				files = (
+					F1B2C3D4E5F60718293A4B62 /* NotificationIngressInbox.swift in Sources */,
+					F4B2C3D4E5F60718293A4B62 /* ProviderDeliveryAckFailureStore.swift in Sources */,
+					F6B2C3D4E5F60718293A4B62 /* ProviderIngressCoordinator.swift in Sources */,
+					278EDCDB13F0B883D94FC08A /* NotificationHandling.swift in Sources */,
+					C1D2E3F40102030405060801 /* NotificationPayloadSemantics.swift in Sources */,
+					F2B2C3D4E5F60718293A4B62 /* NotificationContextSnapshot.swift in Sources */,
 				C1D2E3F40102030405060802 /* ManualNotificationKeyValidator.swift in Sources */,
 				C1D2E3F40102030405060803 /* SearchQuerySemantics.swift in Sources */,
 				C1D2E3F40102030405060804 /* ProjectionSemantics.swift in Sources */,
@@ -1289,11 +1319,14 @@
 		AA49A1982EE3E46C00C1EBF2 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (
-				0637F07C839C0C2D397AB069 /* NotificationServiceProcessor.swift in Sources */,
-				0AC200042F90000100C0FFEE /* NotificationContentPreparer.swift in Sources */,
+				files = (
+					F1B2C3D4E5F60718293A4B63 /* NotificationIngressInbox.swift in Sources */,
+					F4B2C3D4E5F60718293A4B63 /* ProviderDeliveryAckFailureStore.swift in Sources */,
+					0637F07C839C0C2D397AB069 /* NotificationServiceProcessor.swift in Sources */,
+					0AC200042F90000100C0FFEE /* NotificationContentPreparer.swift in Sources */,
 				A1E2D3C4B5A6978877665544 /* NotificationHandling.swift in Sources */,
 				C1D2E3F40102030405060821 /* NotificationPayloadSemantics.swift in Sources */,
+				F2B2C3D4E5F60718293A4B63 /* NotificationContextSnapshot.swift in Sources */,
 				C1D2E3F40102030405060822 /* ManualNotificationKeyValidator.swift in Sources */,
 				C1D2E3F40102030405060823 /* SearchQuerySemantics.swift in Sources */,
 				C1D2E3F40102030405060824 /* ProjectionSemantics.swift in Sources */,
@@ -1307,12 +1340,10 @@
 				AAE0B0B32F6A000100C0FFEE /* PushMessage.swift in Sources */,
 				EFD9BB707D214FEC819105B4 /* PushMessageSummary.swift in Sources */,
 				AAE0B0B42F6A000100C0FFEE /* UserInfoSanitizer.swift in Sources */,
-				AAE0B0B52F6A000100C0FFEE /* LocalDataStore.swift in Sources */,
-				FEE1000C2F80000100C0FFEE /* ChannelSubscriptionService.swift in Sources */,
-				C0A1B2C3D4E5F60718293A5E /* SwiftDataModels.swift in Sources */,
-				0AB64B4D52C546C3964A4A7C /* MessageSearchIndex.swift in Sources */,
-				AAE0B0B62F6A000100C0FFEE /* SharedImageCache.swift in Sources */,
-				F1A0C4A13B2E4F7E9D1C2B3A /* KeychainStore.swift in Sources */,
+					FEE1000C2F80000100C0FFEE /* ChannelSubscriptionService.swift in Sources */,
+					C0A1B2C3D4E5F60718293A5E /* SwiftDataModels.swift in Sources */,
+					AAE0B0B62F6A000100C0FFEE /* SharedImageCache.swift in Sources */,
+					F1A0C4A13B2E4F7E9D1C2B3A /* KeychainStore.swift in Sources */,
 				FEE100062F80000100C0FFEE /* WatchLightModels.swift in Sources */,
 				FEE100072F80000100C0FFEE /* WatchLightQuantizer.swift in Sources */,
 			);
@@ -1321,11 +1352,14 @@
 		AACFE1572F28511200701BB4 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (
-				54A6F2A3A28360343812D0B3 /* NotificationServiceProcessor.swift in Sources */,
-				0AC200052F90000100C0FFEE /* NotificationContentPreparer.swift in Sources */,
+				files = (
+					F1B2C3D4E5F60718293A4B64 /* NotificationIngressInbox.swift in Sources */,
+					F4B2C3D4E5F60718293A4B64 /* ProviderDeliveryAckFailureStore.swift in Sources */,
+					54A6F2A3A28360343812D0B3 /* NotificationServiceProcessor.swift in Sources */,
+					0AC200052F90000100C0FFEE /* NotificationContentPreparer.swift in Sources */,
 				A1E2D3C4B5A6978877665545 /* NotificationHandling.swift in Sources */,
 				C1D2E3F40102030405060831 /* NotificationPayloadSemantics.swift in Sources */,
+				F2B2C3D4E5F60718293A4B64 /* NotificationContextSnapshot.swift in Sources */,
 				C1D2E3F40102030405060832 /* ManualNotificationKeyValidator.swift in Sources */,
 				C1D2E3F40102030405060833 /* SearchQuerySemantics.swift in Sources */,
 				C1D2E3F40102030405060834 /* ProjectionSemantics.swift in Sources */,
@@ -1339,12 +1373,10 @@
 				DCF33C971B121AABEEEE708F /* PushMessage.swift in Sources */,
 				F4A576A17767CA76088BD0AF /* PushMessageSummary.swift in Sources */,
 				ACD50E96683A0EBE5AF671D6 /* UserInfoSanitizer.swift in Sources */,
-				D236376962B4225163DB0E47 /* LocalDataStore.swift in Sources */,
-				FEE1000D2F80000100C0FFEE /* ChannelSubscriptionService.swift in Sources */,
-				5C17E6647F8876BCE0F0F47B /* SwiftDataModels.swift in Sources */,
-				396B5824604CF29524F1D361 /* MessageSearchIndex.swift in Sources */,
-				622F64CE0545F54BBF5C9995 /* SharedImageCache.swift in Sources */,
-				FE2C0ABFC6BCA89762F248D1 /* KeychainStore.swift in Sources */,
+					FEE1000D2F80000100C0FFEE /* ChannelSubscriptionService.swift in Sources */,
+					5C17E6647F8876BCE0F0F47B /* SwiftDataModels.swift in Sources */,
+					622F64CE0545F54BBF5C9995 /* SharedImageCache.swift in Sources */,
+					FE2C0ABFC6BCA89762F248D1 /* KeychainStore.swift in Sources */,
 				FEE100082F80000100C0FFEE /* WatchLightModels.swift in Sources */,
 				FEE100092F80000100C0FFEE /* WatchLightQuantizer.swift in Sources */,
 			);
@@ -1354,8 +1386,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F3B4C5D6E7F80910A1B2C3D4 /* NotificationHandling.swift in Sources */,
+					F1B2C3D4E5F60718293A4B66 /* NotificationIngressInbox.swift in Sources */,
+					F4B2C3D4E5F60718293A4B66 /* ProviderDeliveryAckFailureStore.swift in Sources */,
+					F6B2C3D4E5F60718293A4B66 /* ProviderIngressCoordinator.swift in Sources */,
+					F3B4C5D6E7F80910A1B2C3D4 /* NotificationHandling.swift in Sources */,
 				C1D2E3F40102030405060841 /* NotificationPayloadSemantics.swift in Sources */,
+				F2B2C3D4E5F60718293A4B66 /* NotificationContextSnapshot.swift in Sources */,
 				C1D2E3F40102030405060842 /* ManualNotificationKeyValidator.swift in Sources */,
 				C1D2E3F40102030405060843 /* SearchQuerySemantics.swift in Sources */,
 				C1D2E3F40102030405060844 /* ProjectionSemantics.swift in Sources */,
@@ -1921,10 +1957,11 @@
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+					SUPPORTS_MACCATALYST = NO;
+					SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+					SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+					SWIFT_ACTIVE_COMPILATION_CONDITIONS = "NSE_NO_DATABASE $(inherited)";
+					SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -1963,10 +2000,11 @@
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+					SUPPORTS_MACCATALYST = NO;
+					SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+					SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+					SWIFT_ACTIVE_COMPILATION_CONDITIONS = "NSE_NO_DATABASE $(inherited)";
+					SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -2022,10 +2060,11 @@
 				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
 				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
 				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
-				SDKROOT = macosx;
-				SKIP_INSTALL = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+					SDKROOT = macosx;
+					SKIP_INSTALL = YES;
+					STRING_CATALOG_GENERATE_SYMBOLS = YES;
+					SWIFT_ACTIVE_COMPILATION_CONDITIONS = "NSE_NO_DATABASE $(inherited)";
+					SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -2079,10 +2118,11 @@
 				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
 				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
 				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = NO;
-				SDKROOT = macosx;
-				SKIP_INSTALL = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+					SDKROOT = macosx;
+					SKIP_INSTALL = YES;
+					STRING_CATALOG_GENERATE_SYMBOLS = YES;
+					SWIFT_ACTIVE_COMPILATION_CONDITIONS = "NSE_NO_DATABASE $(inherited)";
+					SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -2616,16 +2656,6 @@
 			productName = GRDB;
 		};
 		A0AA00012F70000100AA0035 /* GRDB */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A0AA00012F70000100AA0033 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
-			productName = GRDB;
-		};
-		A0AA00012F70000100AA0037 /* GRDB */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A0AA00012F70000100AA0033 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
-			productName = GRDB;
-		};
-		A0AA00012F70000100AA0038 /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A0AA00012F70000100AA0033 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
 			productName = GRDB;

@@ -3,9 +3,13 @@ import Testing
 @testable import PushGoAppleCore
 
 struct NotificationPayloadSemanticsTests {
-    private func normalize(_ payload: [AnyHashable: Any]) -> NotificationPayloadSemantics.NormalizedPayload? {
+    private func normalize(
+        _ payload: [AnyHashable: Any],
+        snapshot: NotificationContextSnapshot? = nil
+    ) -> NotificationPayloadSemantics.NormalizedPayload? {
         NotificationPayloadSemantics.normalizeRemoteNotification(
             payload,
+            contextSnapshot: snapshot,
             localizeTypeLabel: { $0 == "event" ? "Event" : "Thing" },
             localizeThingAttributeUpdateBody: { details in "Attribute update || \(details)" },
             localizeThingAttributePair: { name, value in "\(name): \(value)" }
@@ -18,7 +22,8 @@ struct NotificationPayloadSemanticsTests {
             "entity_type": "event",
             "event_id": "evt-001",
             "entity_id": "evt-001",
-            "event_profile_json": #"{"title":"Disk pressure","description":"node-9 is above threshold"}"#,
+            "title": "Disk pressure",
+            "description": "node-9 is above threshold",
             "body": "   ",
         ]
 
@@ -47,13 +52,46 @@ struct NotificationPayloadSemanticsTests {
     }
 
     @Test
+    func eventFallbackUsesSnapshotWhenPayloadOmitsReadableFields() {
+        let payload: [AnyHashable: Any] = [
+            "entity_type": "event",
+            "event_id": "evt-snapshot-001",
+            "entity_id": "evt-snapshot-001",
+        ]
+        let snapshot = NotificationContextSnapshot(
+            schemaVersion: NotificationContextSnapshot.schemaVersion,
+            generatedAtEpochMs: 1_742_000_000_000,
+            source: "tests",
+            events: [
+                "evt-snapshot-001": NotificationContextSnapshot.EventContext(
+                    eventId: "evt-snapshot-001",
+                    title: "Snapshot Event Title",
+                    body: "Snapshot Event Body",
+                    state: "open",
+                    channel: "infra",
+                    thingId: nil,
+                    messageId: "msg-snapshot-event",
+                    decryptionStateRaw: nil,
+                    updatedAtEpochMs: 1_742_000_000_000
+                ),
+            ],
+            things: [:]
+        )
+
+        let normalized = normalize(payload, snapshot: snapshot)
+
+        #expect(normalized?.title == "Snapshot Event Title")
+        #expect(normalized?.body == "Snapshot Event Body")
+    }
+
+    @Test
     func eventFallbackUsesProfileMessageWhenBodyIsMissing() {
         let payload: [AnyHashable: Any] = [
             "entity_type": "event",
             "event_id": "evt-message-001",
             "entity_id": "evt-message-001",
             "title": "CPU high",
-            "event_profile_json": #"{"message":"node-9 is above threshold"}"#,
+            "message": "node-9 is above threshold",
             "event_state": "open",
         ]
 
@@ -181,7 +219,7 @@ struct NotificationPayloadSemanticsTests {
             "entity_type": "thing",
             "thing_id": "thing-attr-001",
             "entity_id": "thing-attr-001",
-            "thing_attrs_json": #"{"Name":"New Fridge","Model":"X3880"}"#,
+            "attrs": #"{"Name":"New Fridge","Model":"X3880"}"#,
         ]
 
         let normalized = normalize(payload)
@@ -191,11 +229,47 @@ struct NotificationPayloadSemanticsTests {
     }
 
     @Test
+    func thingFallbackUsesSnapshotWhenPayloadIsSparse() {
+        let payload: [AnyHashable: Any] = [
+            "entity_type": "thing",
+            "thing_id": "thing-snapshot-001",
+            "entity_id": "thing-snapshot-001",
+        ]
+        let snapshot = NotificationContextSnapshot(
+            schemaVersion: NotificationContextSnapshot.schemaVersion,
+            generatedAtEpochMs: 1_742_000_000_000,
+            source: "tests",
+            events: [:],
+            things: [
+                "thing-snapshot-001": NotificationContextSnapshot.ThingContext(
+                    thingId: "thing-snapshot-001",
+                    title: "Snapshot Thing Title",
+                    body: "Snapshot Thing Body",
+                    state: "online",
+                    channel: "iot",
+                    eventId: "evt-parent-001",
+                    messageId: "msg-snapshot-thing",
+                    primaryImage: "https://example.com/thing.jpg",
+                    images: ["https://example.com/thing.jpg"],
+                    decryptionStateRaw: nil,
+                    updatedAtEpochMs: 1_742_000_000_000
+                ),
+            ]
+        )
+
+        let normalized = normalize(payload, snapshot: snapshot)
+
+        #expect(normalized?.title == "Snapshot Thing Title")
+        #expect(normalized?.body == "Snapshot Thing Body")
+    }
+
+    @Test
     func thingNormalizationBackfillsEntityIdentifiersFromThingId() {
         let payload: [AnyHashable: Any] = [
             "entity_type": "thing",
             "thing_id": "thing-backfill-001",
-            "thing_profile_json": #"{"title":"Router","description":"Backfill by thing_id"}"#,
+            "title": "Router",
+            "description": "Backfill by thing_id",
         ]
 
         let normalized = normalize(payload)

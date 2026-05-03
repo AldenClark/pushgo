@@ -20,10 +20,6 @@ actor WatchLightNotificationStore {
     ) throws {
         decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        try AppConstants.migrateLegacyDatabaseArtifacts(
-            fileManager: fileManager,
-            appGroupIdentifier: appGroupIdentifier
-        )
 
         let storeURL = try Self.storeURL(
             fileManager: fileManager,
@@ -399,16 +395,10 @@ actor WatchLightNotificationStore {
         appGroupIdentifier: String,
         filename: String
     ) throws -> URL {
-        guard let root = AppConstants.appGroupContainerURL(
+        let directory = try AppConstants.appLocalDatabaseDirectory(
             fileManager: fileManager,
-            identifier: appGroupIdentifier
-        ) else {
-            throw StoreError.missingAppGroup(appGroupIdentifier)
-        }
-        let directory = root.appendingPathComponent("Database", isDirectory: true)
-        if !fileManager.fileExists(atPath: directory.path) {
-            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        }
+            appGroupIdentifier: appGroupIdentifier
+        )
         return directory.appendingPathComponent(filename)
     }
 }

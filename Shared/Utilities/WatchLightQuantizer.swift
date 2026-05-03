@@ -151,7 +151,7 @@ enum WatchLightQuantizer {
                     thingId: thingId,
                     title: nonEmpty(payload["title"]) ?? thingId,
                     summary: nonEmpty(payload["body"]),
-                    attrsJSON: nonEmpty(payload["thing_attrs_json"]),
+                    attrsJSON: nonEmpty(payload["attrs"]),
                     decryptionState: nonEmpty(payload["decryption_state"]),
                     imageURL: sanitizedURL(payload["image"]),
                     updatedAt: payloadDate(payload["observed_at"] ?? payload["sent_at"]) ?? Date()
@@ -266,25 +266,27 @@ enum WatchLightQuantizer {
     private static func latestEventProfile(from messages: [PushMessage]) -> WatchLightProfile? {
         messages
             .sorted { eventUpdatedAt(for: $0) > eventUpdatedAt(for: $1) }
-            .compactMap { profile(from: stringValue("event_profile_json", in: $0.rawPayload)) }
+            .compactMap { profile(from: $0.rawPayload, kind: "event") }
             .first
     }
 
     private static func latestThingProfile(from messages: [PushMessage]) -> WatchLightProfile? {
         messages
             .sorted { thingUpdatedAt(for: $0) > thingUpdatedAt(for: $1) }
-            .compactMap { profile(from: stringValue("thing_profile_json", in: $0.rawPayload)) }
+            .compactMap { profile(from: $0.rawPayload, kind: "thing") }
             .first
     }
 
     private static func mergedThingAttributes(_ messages: [PushMessage]) -> String? {
         var attrs: [String: Any] = [:]
         for message in messages {
-            if let snapshot = jsonObject(from: stringValue("thing_attrs_json", in: message.rawPayload)) {
-                attrs = snapshot
+            guard let attrsObject = jsonObject(fromPayload: message.rawPayload, key: "attrs") else {
+                continue
             }
-            if let patch = jsonObject(from: stringValue("event_attrs_json", in: message.rawPayload)) {
-                for (key, value) in patch {
+            if normalizedEntityType(message.entityType) == "thing" {
+                attrs = attrsObject.filter { ($0.value is NSNull) == false }
+            } else {
+                for (key, value) in attrsObject {
                     if value is NSNull {
                         attrs.removeValue(forKey: key)
                     } else {
@@ -302,8 +304,17 @@ enum WatchLightQuantizer {
         return text
     }
 
-    private static func profile(from rawJSON: String?) -> WatchLightProfile? {
-        guard let object = jsonObject(from: rawJSON) else { return nil }
+    private static func profile(from payload: [String: AnyCodable], kind: String) -> WatchLightProfile? {
+        var object: [String: Any] = [:]
+        for key in ["title", "description", "severity", "image", "primary_image"] {
+            if let value = payload[key]?.value {
+                object[key] = value
+            }
+        }
+        if kind == "thing", object["image"] == nil {
+            object["image"] = payload["primary_image"]?.value
+        }
+        guard !object.isEmpty else { return nil }
         return WatchLightProfile(
             title: nonEmpty(object["title"] as? String),
             description: nonEmpty(object["description"] as? String),
@@ -321,6 +332,13 @@ enum WatchLightQuantizer {
             return nil
         }
         return map
+    }
+
+    private static func jsonObject(fromPayload payload: [String: AnyCodable], key: String) -> [String: Any]? {
+        if let map = payload[key]?.value as? [String: Any] {
+            return map
+        }
+        return jsonObject(from: stringValue(key, in: payload))
     }
 
     private static func payloadDate(_ raw: String?) -> Date? {

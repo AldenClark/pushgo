@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import os
 import UserNotifications
 
 struct MessagePageCursor: Hashable, Sendable {
@@ -298,6 +299,22 @@ private func canonicalizedMessageForPersistence(_ message: PushMessage) -> PushM
 }
 
 actor LocalDataStore {
+    private struct SharedResourcesKey: Hashable, Sendable {
+        let appGroupIdentifier: String
+        let containerPath: String
+    }
+
+    private struct SharedResources: Sendable {
+        let backend: GRDBStore?
+        let searchIndex: MessageSearchIndex?
+        let metadataIndex: MessageMetadataIndex?
+        let storageState: StorageState
+    }
+
+    private static let sharedResourcesCache = OSAllocatedUnfairLock<[SharedResourcesKey: SharedResources]>(
+        initialState: [:]
+    )
+
     private struct StorageProbeSnapshot: Codable, Sendable {
         let probeVersion: Int
         let generatedAtEpochMs: Int64
@@ -361,44 +378,109 @@ actor LocalDataStore {
         fileManager: FileManager = .default,
         appGroupIdentifier: String = AppConstants.appGroupIdentifier,
     ) {
+        KeychainSharedAccessMigration.migrateLegacyItemsToSharedAccessGroup()
         self.fileManager = fileManager
         self.appGroupIdentifier = appGroupIdentifier
 
-        let resolvedBackend: GRDBStore?
-        let resolvedStorageState: StorageState
-        do {
-            try AppConstants.migrateLegacyDatabaseArtifacts(
+        let sharedResources = Self.resolveSharedResources(
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier
+        )
+        backend = sharedResources.backend
+        storageState = sharedResources.storageState
+        searchIndex = sharedResources.searchIndex
+        metadataIndex = sharedResources.metadataIndex
+        Self.writeStorageProbe(
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier,
+            storageState: sharedResources.storageState,
+            searchIndexReady: searchIndex != nil,
+            metadataIndexReady: metadataIndex != nil
+        )
+    }
+
+    private static func resolveSharedResources(
+        fileManager: FileManager,
+        appGroupIdentifier: String
+    ) -> SharedResources {
+        guard let key = sharedResourcesKey(
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier
+        ) else {
+            return buildSharedResources(
                 fileManager: fileManager,
                 appGroupIdentifier: appGroupIdentifier
             )
+        }
+
+        return sharedResourcesCache.withLockUnchecked { cache in
+            if let cached = cache[key] {
+                return cached
+            }
+
+            let built = buildSharedResources(
+                fileManager: fileManager,
+                appGroupIdentifier: appGroupIdentifier
+            )
+            switch built.storageState.mode {
+            case .persistent:
+                cache[key] = built
+            case .unavailable:
+                // Keep unavailable results out of the shared cache so transient
+                // bootstrap failures can recover on the next initialization.
+                break
+            }
+            return built
+        }
+    }
+
+    private static func sharedResourcesKey(
+        fileManager: FileManager,
+        appGroupIdentifier: String
+    ) -> SharedResourcesKey? {
+        guard let container = AppConstants.appLocalContainerURL(
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier
+        ) else {
+            return nil
+        }
+        return SharedResourcesKey(
+            appGroupIdentifier: appGroupIdentifier,
+            containerPath: container.path
+        )
+    }
+
+    private static func buildSharedResources(
+        fileManager: FileManager,
+        appGroupIdentifier: String
+    ) -> SharedResources {
+        let resolvedBackend: GRDBStore?
+        let resolvedStorageState: StorageState
+        do {
             let directory = try GRDBStore.databaseDirectory(
                 fileManager: fileManager,
                 appGroupIdentifier: appGroupIdentifier
             )
             let storeURL = directory.appendingPathComponent(AppConstants.databaseStoreFilename)
-            resolvedBackend = try GRDBStore(
-                storeURL: storeURL
-            )
+            resolvedBackend = try GRDBStore(storeURL: storeURL)
             resolvedStorageState = StorageState(mode: .persistent, reason: nil)
         } catch {
             resolvedBackend = nil
             resolvedStorageState = StorageState(mode: .unavailable, reason: error.localizedDescription)
         }
-        backend = resolvedBackend
-        storageState = resolvedStorageState
 
-        searchIndex = try? MessageSearchIndex(
+        let resolvedSearchIndex = try? MessageSearchIndex(
             appGroupIdentifier: appGroupIdentifier
         )
-        metadataIndex = try? MessageMetadataIndex(
+        let resolvedMetadataIndex = try? MessageMetadataIndex(
             appGroupIdentifier: appGroupIdentifier
         )
-        Self.writeStorageProbe(
-            fileManager: fileManager,
-            appGroupIdentifier: appGroupIdentifier,
-            storageState: resolvedStorageState,
-            searchIndexReady: searchIndex != nil,
-            metadataIndexReady: metadataIndex != nil
+
+        return SharedResources(
+            backend: resolvedBackend,
+            searchIndex: resolvedSearchIndex,
+            metadataIndex: resolvedMetadataIndex,
+            storageState: resolvedStorageState
         )
     }
 
@@ -409,14 +491,23 @@ actor LocalDataStore {
         searchIndexReady: Bool,
         metadataIndexReady: Bool
     ) {
-        guard let appGroupURL = AppConstants.appGroupContainerURL(
+        guard let diagnosticsRootURL = AppConstants.appGroupContainerURL(
             fileManager: fileManager,
             identifier: appGroupIdentifier
         ) else {
             return
         }
+        let databaseDirectoryURL = try? GRDBStore.databaseDirectory(
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier
+        )
+        let databaseFileURL = databaseDirectoryURL?.appendingPathComponent(
+            AppConstants.databaseStoreFilename
+        )
+        let walURL = databaseFileURL.map { URL(fileURLWithPath: $0.path + "-wal") }
+        let shmURL = databaseFileURL.map { URL(fileURLWithPath: $0.path + "-shm") }
 
-        let appSupportURL = appGroupURL
+        let appSupportURL = diagnosticsRootURL
             .appendingPathComponent("Library", isDirectory: true)
             .appendingPathComponent("Application Support", isDirectory: true)
         let diagnosticsURL = appSupportURL.appendingPathComponent(
@@ -424,28 +515,26 @@ actor LocalDataStore {
             isDirectory: true
         )
         let diagnosticFileURL = diagnosticsURL.appendingPathComponent(storageProbeFilename)
-
-        let databaseDirectoryURL = appGroupURL.appendingPathComponent("Database", isDirectory: true)
-        let databaseFileURL = databaseDirectoryURL.appendingPathComponent(
-            AppConstants.databaseStoreFilename
-        )
-        let walURL = URL(fileURLWithPath: databaseFileURL.path + "-wal")
-        let shmURL = URL(fileURLWithPath: databaseFileURL.path + "-shm")
         let snapshotFileURL = diagnosticsURL.appendingPathComponent(storageSnapshotFilename)
         let snapshotWalURL = diagnosticsURL.appendingPathComponent(storageSnapshotWalFilename)
         let snapshotShmURL = diagnosticsURL.appendingPathComponent(storageSnapshotShmFilename)
-        let snapshotResult = copySQLiteArtifactsForDiagnostics(
-            fileManager: fileManager,
-            sourceBaseURL: databaseFileURL,
-            destinationBaseURL: snapshotFileURL
-        )
+        let snapshotResult: (databaseCopied: Bool, walCopied: Bool, shmCopied: Bool)
+        if let databaseFileURL {
+            snapshotResult = copySQLiteArtifactsForDiagnostics(
+                fileManager: fileManager,
+                sourceBaseURL: databaseFileURL,
+                destinationBaseURL: snapshotFileURL
+            )
+        } else {
+            snapshotResult = (databaseCopied: false, walCopied: false, shmCopied: false)
+        }
 
         let searchIndexFileURL = searchIndexReady
-            ? databaseDirectoryURL
+            ? databaseDirectoryURL?
                 .appendingPathComponent(AppConstants.messageIndexDatabaseFilename)
             : nil
         let metadataIndexFileURL = metadataIndexReady
-            ? databaseDirectoryURL
+            ? databaseDirectoryURL?
                 .appendingPathComponent(AppConstants.messageIndexDatabaseFilename)
             : nil
 
@@ -461,13 +550,13 @@ actor LocalDataStore {
             appGroupIdentifier: appGroupIdentifier,
             automationActive: PushGoAutomationContext.isActive,
             automationStorageRootPath: PushGoAutomationContext.storageRootURL?.path,
-            resolvedAppGroupURL: appGroupURL.path,
+            resolvedAppGroupURL: diagnosticsRootURL.path,
             diagnosticFileURL: diagnosticFileURL.path,
-            databaseDirectoryURL: databaseDirectoryURL.path,
-            databaseFileURL: databaseFileURL.path,
-            databaseFileExists: fileManager.fileExists(atPath: databaseFileURL.path),
-            databaseWalExists: fileManager.fileExists(atPath: walURL.path),
-            databaseShmExists: fileManager.fileExists(atPath: shmURL.path),
+            databaseDirectoryURL: databaseDirectoryURL?.path,
+            databaseFileURL: databaseFileURL?.path,
+            databaseFileExists: databaseFileURL.map { fileManager.fileExists(atPath: $0.path) } ?? false,
+            databaseWalExists: walURL.map { fileManager.fileExists(atPath: $0.path) } ?? false,
+            databaseShmExists: shmURL.map { fileManager.fileExists(atPath: $0.path) } ?? false,
             databaseSnapshotFileURL: snapshotFileURL.path,
             databaseSnapshotWalURL: snapshotWalURL.path,
             databaseSnapshotShmURL: snapshotShmURL.path,
@@ -1017,9 +1106,13 @@ actor LocalDataStore {
         return loadCanonicalDeviceKey(for: normalizedPlatform)
     }
 
-    func saveCachedDeviceKey(_ deviceKey: String?, for platform: String) async {
-        guard let normalizedPlatform = normalizedDevicePlatform(platform) else { return }
-        deviceKeyStore.save(deviceKey: deviceKey, platform: normalizedPlatform)
+    @discardableResult
+    func saveCachedDeviceKey(
+        _ deviceKey: String?,
+        for platform: String
+    ) async -> ProviderDeviceKeyStore.SaveResult? {
+        guard let normalizedPlatform = normalizedDevicePlatform(platform) else { return nil }
+        return deviceKeyStore.save(deviceKey: deviceKey, platform: normalizedPlatform)
     }
 
     func cachedDeviceKey(
@@ -1030,13 +1123,14 @@ actor LocalDataStore {
         return await cachedDeviceKey(for: platform)
     }
 
+    @discardableResult
     func saveCachedDeviceKey(
         _ deviceKey: String?,
         for platform: String,
         channelType: String
-    ) async {
+    ) async -> ProviderDeviceKeyStore.SaveResult? {
         _ = channelType
-        await saveCachedDeviceKey(deviceKey, for: platform)
+        return await saveCachedDeviceKey(deviceKey, for: platform)
     }
 
     private func normalizedDevicePlatform(_ platform: String) -> String? {
@@ -1191,12 +1285,29 @@ actor LocalDataStore {
 
     func loadWatchProvisioningServerConfig() async throws -> ServerConfig? {
         let backend = try requireBackend()
-        return try await backend.loadWatchProvisioningServerConfig()
+        if let persisted = try await backend.loadWatchProvisioningServerConfig()?.normalized() {
+            return persisted
+        }
+        guard let data = AppConstants.sharedUserDefaults(suiteName: appGroupIdentifier)
+            .data(forKey: AppConstants.watchProvisioningServerConfigDefaultsKey)
+        else {
+            return nil
+        }
+        return try? JSONDecoder().decode(ServerConfig.self, from: data).normalized()
     }
 
     func saveWatchProvisioningServerConfig(_ config: ServerConfig?) async throws {
         let backend = try requireBackend()
-        try await backend.saveWatchProvisioningServerConfig(config)
+        let normalized = config?.normalized()
+        try await backend.saveWatchProvisioningServerConfig(normalized)
+        let defaults = AppConstants.sharedUserDefaults(suiteName: appGroupIdentifier)
+        guard let normalized else {
+            defaults.removeObject(forKey: AppConstants.watchProvisioningServerConfigDefaultsKey)
+            return
+        }
+        if let data = try? JSONEncoder().encode(normalized) {
+            defaults.set(data, forKey: AppConstants.watchProvisioningServerConfigDefaultsKey)
+        }
     }
 
     func loadWatchProvisioningState() async -> WatchProvisioningState? {
@@ -1587,12 +1698,15 @@ actor LocalDataStore {
         let searchable = canonicalMessages.filter(isTopLevelMessage)
         await rebuildSearchIndex(with: searchable)
         await rebuildMetadataIndex(with: searchable)
+        await mergeNotificationContextSnapshot(with: canonicalMessages)
     }
 
     func saveEntityRecords(_ messages: [PushMessage]) async throws {
+        let canonicalMessages = messages.map(canonicalizedMessageForPersistence)
         try await performBackendWrite { backend in
-            try await backend.saveEntityRecords(messages)
+            try await backend.saveEntityRecords(canonicalMessages)
         }
+        await mergeNotificationContextSnapshot(with: canonicalMessages)
     }
 
     func saveMessage(_ message: PushMessage) async throws {
@@ -1603,6 +1717,7 @@ actor LocalDataStore {
         let searchable = isTopLevelMessage(canonicalMessage) ? [canonicalMessage] : []
         await rebuildSearchIndex(with: searchable)
         await rebuildMetadataIndex(with: searchable)
+        await mergeNotificationContextSnapshot(with: [canonicalMessage])
     }
 
     func persistNotificationMessageIfNeeded(
@@ -1623,6 +1738,13 @@ actor LocalDataStore {
         }()
         await rebuildSearchIndex(with: searchable)
         await rebuildMetadataIndex(with: searchable)
+        switch outcome {
+        case let .persisted(stored),
+             let .persistedPending(stored),
+             let .duplicateRequest(stored),
+             let .duplicateMessage(stored):
+            await mergeNotificationContextSnapshot(with: [stored])
+        }
         return outcome
     }
 
@@ -1635,6 +1757,7 @@ actor LocalDataStore {
         let searchable = canonicalMessages.filter(isTopLevelMessage)
         await rebuildSearchIndex(with: searchable)
         await rebuildMetadataIndex(with: searchable)
+        await mergeNotificationContextSnapshot(with: canonicalMessages)
     }
 
     func setMessageReadState(id: UUID, isRead: Bool) async throws {
@@ -1662,6 +1785,7 @@ actor LocalDataStore {
         if let metadataIndex {
             try? await metadataIndex.remove(id: id)
         }
+        await rebuildNotificationContextSnapshot()
     }
 
     func deleteMessage(notificationRequestId: String) async throws {
@@ -1680,37 +1804,54 @@ actor LocalDataStore {
             if let metadataIndex {
                 try? await metadataIndex.remove(id: deletedMessageId)
             }
+            await rebuildNotificationContextSnapshot()
         }
     }
 
     func deleteEventRecords(eventId: String) async throws -> Int {
         let normalized = eventId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return 0 }
-        return try await performBackendWrite { backend in
+        let deletedCount = try await performBackendWrite { backend in
             try await backend.deleteEventRecords(eventId: normalized)
         }
+        if deletedCount > 0 {
+            await rebuildNotificationContextSnapshot()
+        }
+        return deletedCount
     }
 
     func deleteEventRecords(channel: String?) async throws -> Int {
         let normalized = channel?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return try await performBackendWrite { backend in
+        let deletedCount = try await performBackendWrite { backend in
             try await backend.deleteEventRecords(channel: normalized)
         }
+        if deletedCount > 0 {
+            await rebuildNotificationContextSnapshot()
+        }
+        return deletedCount
     }
 
     func deleteThingRecords(thingId: String) async throws -> Int {
         let normalized = thingId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return 0 }
-        return try await performBackendWrite { backend in
+        let deletedCount = try await performBackendWrite { backend in
             try await backend.deleteThingRecords(thingId: normalized)
         }
+        if deletedCount > 0 {
+            await rebuildNotificationContextSnapshot()
+        }
+        return deletedCount
     }
 
     func deleteThingRecords(channel: String?) async throws -> Int {
         let normalized = channel?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return try await performBackendWrite { backend in
+        let deletedCount = try await performBackendWrite { backend in
             try await backend.deleteThingRecords(channel: normalized)
         }
+        if deletedCount > 0 {
+            await rebuildNotificationContextSnapshot()
+        }
+        return deletedCount
     }
 
     func deleteAllMessages() async throws {
@@ -1724,6 +1865,7 @@ actor LocalDataStore {
         if let metadataIndex {
             try? await metadataIndex.clear()
         }
+        clearNotificationContextSnapshot()
     }
 
     func deleteMessages(readState: Bool?, before cutoff: Date?) async throws -> Int {
@@ -1739,6 +1881,9 @@ actor LocalDataStore {
             if let metadataIndex {
                 try? await metadataIndex.clear()
             }
+            if total > 0 {
+                await rebuildNotificationContextSnapshot()
+            }
             return total
         }
 
@@ -1750,6 +1895,9 @@ actor LocalDataStore {
         }
         if let metadataIndex, !deletedIds.isEmpty {
             try? await metadataIndex.bulkRemove(ids: deletedIds)
+        }
+        if !deletedIds.isEmpty {
+            await rebuildNotificationContextSnapshot()
         }
         return deletedIds.count
     }
@@ -1764,6 +1912,9 @@ actor LocalDataStore {
         if let metadataIndex, !deletedIds.isEmpty {
             try? await metadataIndex.bulkRemove(ids: deletedIds)
         }
+        if !deletedIds.isEmpty {
+            await rebuildNotificationContextSnapshot()
+        }
         return deletedIds.count
     }
 
@@ -1776,6 +1927,9 @@ actor LocalDataStore {
         }
         if let metadataIndex, !deletedIds.isEmpty {
             try? await metadataIndex.bulkRemove(ids: deletedIds)
+        }
+        if !deletedIds.isEmpty {
+            await rebuildNotificationContextSnapshot()
         }
         return deletedIds.count
     }
@@ -1810,6 +1964,9 @@ actor LocalDataStore {
         if let metadataIndex, !deletedIds.isEmpty {
             try? await metadataIndex.bulkRemove(ids: deletedIds)
         }
+        if !deletedIds.isEmpty {
+            await rebuildNotificationContextSnapshot()
+        }
         return deletedIds.count
     }
 
@@ -1840,6 +1997,7 @@ actor LocalDataStore {
         if let metadataIndex {
             try? await metadataIndex.bulkRemove(ids: deletedIds)
         }
+        await rebuildNotificationContextSnapshot()
         return deletedIds.count
     }
     func warmCachesIfNeeded() async {
@@ -1848,6 +2006,98 @@ actor LocalDataStore {
         await backend.prepareStatsIfNeeded(progressive: true)
         await rebuildSearchIndexIfNeeded(batchSize: 200, yieldBetweenBatches: true)
         await rebuildMetadataIndexIfNeeded(batchSize: 200, yieldBetweenBatches: true)
+        await rebuildNotificationContextSnapshot()
+    }
+
+    private func mergeNotificationContextSnapshot(with messages: [PushMessage]) async {
+        guard !messages.isEmpty else { return }
+        let eventMessages = messages.filter { message in
+            normalizedEntityType(message) == "event" || message.eventId != nil
+        }
+        .map(makeNotificationContextProjectionInput(from:))
+        let thingMessages = messages.filter { message in
+            normalizedEntityType(message) == "thing" || message.thingId != nil
+        }
+        .map(makeNotificationContextProjectionInput(from:))
+        guard !eventMessages.isEmpty || !thingMessages.isEmpty else { return }
+
+        let existing = NotificationContextSnapshotStore.load(
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier
+        )
+        let snapshot = NotificationContextSnapshotProjector.merge(
+            existing: existing,
+            eventMessages: eventMessages,
+            thingMessages: thingMessages,
+            source: snapshotSourceIdentifier()
+        )
+        _ = NotificationContextSnapshotStore.write(
+            snapshot,
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier
+        )
+    }
+
+    private func rebuildNotificationContextSnapshot() async {
+        guard let backend else {
+            clearNotificationContextSnapshot()
+            return
+        }
+        let eventMessages = ((try? await backend.loadEventMessagesForProjection()) ?? [])
+            .map(makeNotificationContextProjectionInput(from:))
+        let thingMessages = ((try? await backend.loadThingMessagesForProjection()) ?? [])
+            .map(makeNotificationContextProjectionInput(from:))
+        if eventMessages.isEmpty, thingMessages.isEmpty {
+            clearNotificationContextSnapshot()
+            return
+        }
+        let snapshot = NotificationContextSnapshotProjector.rebuild(
+            eventMessages: eventMessages,
+            thingMessages: thingMessages,
+            source: snapshotSourceIdentifier()
+        )
+        _ = NotificationContextSnapshotStore.write(
+            snapshot,
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier
+        )
+    }
+
+    private func clearNotificationContextSnapshot() {
+        _ = NotificationContextSnapshotStore.clear(
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier
+        )
+    }
+
+    private func makeNotificationContextProjectionInput(
+        from message: PushMessage
+    ) -> NotificationContextProjectionInput {
+        NotificationContextProjectionInput(
+            eventId: message.eventId,
+            thingId: message.thingId,
+            entityId: message.entityId,
+            title: message.title,
+            body: message.body,
+            channel: message.channel,
+            messageId: message.messageId,
+            decryptionStateRaw: message.decryptionState?.rawValue,
+            eventState: message.eventState,
+            receivedAt: message.receivedAt,
+            rawPayload: message.rawPayload,
+            imageURLs: message.imageURLs
+        )
+    }
+
+    private func snapshotSourceIdentifier() -> String {
+        let processName = ProcessInfo.processInfo.processName
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let bundleIdentifier = Bundle.main.bundleIdentifier?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let bundleIdentifier, !bundleIdentifier.isEmpty {
+            return processName.isEmpty ? bundleIdentifier : "\(processName):\(bundleIdentifier)"
+        }
+        return processName.isEmpty ? "unknown" : processName
     }
 
     private func rebuildSearchIndex(with messages: [PushMessage]) async {
@@ -2399,6 +2649,7 @@ private struct GRDBWatchMirrorActionRecord {
 
 private actor GRDBStore {
     private static let maxCursorUUID = UUID(uuidString: "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF")!
+    private static let sqliteBusyTimeoutSeconds: TimeInterval = 5
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
     private let dbQueue: DatabaseQueue
@@ -2413,14 +2664,29 @@ private actor GRDBStore {
         self.decoder = decoder
 
         var configuration = Configuration()
+        configuration.busyMode = .timeout(Self.sqliteBusyTimeoutSeconds)
         configuration.prepareDatabase { db in
-            try db.execute(sql: "PRAGMA journal_mode = WAL;")
+            try db.execute(sql: "PRAGMA busy_timeout = 5000;")
+            try Self.applyJournalModeWALIfPossible(db)
             try db.execute(sql: "PRAGMA synchronous = NORMAL;")
             try db.execute(sql: "PRAGMA foreign_keys = ON;")
-            try db.execute(sql: "PRAGMA busy_timeout = 5000;")
         }
         dbQueue = try DatabaseQueue(path: storeURL.path, configuration: configuration)
         try Self.migrator.migrate(dbQueue)
+    }
+
+    private static func applyJournalModeWALIfPossible(_ db: Database) throws {
+        do {
+            try db.execute(sql: "PRAGMA journal_mode = WAL;")
+        } catch let error as DatabaseError where isTransientSQLiteLock(error) {
+            // Another connection may hold the lock while switching modes.
+            // Keep opening the database and rely on existing journal mode.
+            return
+        }
+    }
+
+    private static func isTransientSQLiteLock(_ error: DatabaseError) -> Bool {
+        error.resultCode == .SQLITE_BUSY || error.resultCode == .SQLITE_LOCKED
     }
 
     private static let migrator: DatabaseMigrator = {
@@ -3024,6 +3290,12 @@ private actor GRDBStore {
             if !watchThingColumns.contains("decryption_state") {
                 try db.execute(sql: "ALTER TABLE watch_light_things ADD COLUMN decryption_state TEXT;")
             }
+        }
+        migrator.registerMigration("v14_provider_delivery_ack_outbox") { db in
+            _ = db
+        }
+        migrator.registerMigration("v15_drop_provider_delivery_ack_outbox") { db in
+            try db.execute(sql: "DROP TABLE IF EXISTS provider_delivery_ack_outbox;")
         }
         return migrator
     }()
@@ -4910,7 +5182,8 @@ private actor GRDBStore {
         let normalized = notificationRequestId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return }
         try write { db in
-            try db.execute(sql: "DELETE FROM messages WHERE notification_request_id = \(Self.sqlQuoted(normalized));")
+            let whereClause = "notification_request_id = \(Self.sqlQuoted(normalized))"
+            try db.execute(sql: "DELETE FROM messages WHERE \(whereClause);")
         }
     }
 
@@ -5137,17 +5410,10 @@ private actor GRDBStore {
         fileManager: FileManager,
         appGroupIdentifier: String
     ) throws -> URL {
-        guard let url = AppConstants.appGroupContainerURL(
+        try AppConstants.appLocalDatabaseDirectory(
             fileManager: fileManager,
-            identifier: appGroupIdentifier
-        ) else {
-            throw AppError.missingAppGroup(appGroupIdentifier)
-        }
-        let directory = url.appendingPathComponent("Database", isDirectory: true)
-        if !fileManager.fileExists(atPath: directory.path) {
-            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        }
-        return directory
+            appGroupIdentifier: appGroupIdentifier
+        )
     }
 
     private static func storeURL(

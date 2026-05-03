@@ -39,16 +39,17 @@ final class NotificationPayloadSemanticsURLSafetyTests: XCTestCase {
         }
     }
 
-    func testNormalizeRemoteNotification_keepsThingProfileJSONUntouchedByIngressFilter() throws {
+    func testNormalizeRemoteNotification_keepsCanonicalThingFieldsUntouchedByIngressFilter() throws {
         let payload: [AnyHashable: Any] = [
             "entity_type": "thing",
             "thing_id": "thing-1",
             "entity_id": "thing-1",
             "title": "Object",
             "body": "updated",
-            "thing_profile_json": """
-            {"title":"Object","description":"[bad](javascript:alert(1))","message":"[ok](https://safe.example/m)","primary_image":"http://127.0.0.1/a.png","images":["https://cdn.example.com/a.png","http://localhost/b.png"]}
-            """,
+            "description": "[bad](javascript:alert(1))",
+            "message": "[ok](https://safe.example/m)",
+            "primary_image": "http://127.0.0.1/a.png",
+            "images": #"["https://cdn.example.com/a.png","http://localhost/b.png"]"#,
         ]
 
         let normalized = NotificationPayloadSemantics.normalizeRemoteNotification(
@@ -59,21 +60,11 @@ final class NotificationPayloadSemanticsURLSafetyTests: XCTestCase {
         )
         XCTAssertNotNil(normalized)
         guard let normalized else { return }
-        let profileRaw = normalized.rawPayload["thing_profile_json"] as? String
-        XCTAssertNotNil(profileRaw)
-        guard let profileRaw,
-              let data = profileRaw.data(using: .utf8),
-              let decoded = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else {
-            XCTFail("thing_profile_json should be valid json object")
-            return
-        }
-
-        XCTAssertEqual(decoded["description"] as? String, "[bad](javascript:alert(1))")
-        XCTAssertEqual(decoded["message"] as? String, "[ok](https://safe.example/m)")
-        XCTAssertEqual(decoded["primary_image"] as? String, "http://127.0.0.1/a.png")
-        let images = decoded["images"] as? [String]
-        XCTAssertEqual(images, ["https://cdn.example.com/a.png", "http://localhost/b.png"])
+        XCTAssertEqual(normalized.rawPayload["description"] as? String, "[bad](javascript:alert(1))")
+        XCTAssertEqual(normalized.rawPayload["message"] as? String, "[ok](https://safe.example/m)")
+        XCTAssertEqual(normalized.rawPayload["primary_image"] as? String, "http://127.0.0.1/a.png")
+        let images = normalized.rawPayload["images"] as? String
+        XCTAssertEqual(images, #"["https:\/\/cdn.example.com\/a.png"]"#)
     }
 
     func testNormalizeRemoteNotification_keepsCiphertextOnlyPayloadPersistable() {

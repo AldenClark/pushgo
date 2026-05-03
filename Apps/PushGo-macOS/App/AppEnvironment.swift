@@ -9,6 +9,11 @@ import AppKit
 @MainActor
 @Observable
 final class AppEnvironment {
+    private struct NotificationInboxIdentity {
+        let messageId: String?
+        let deliveryId: String?
+    }
+
     @MainActor
     static let shared = AppEnvironment()
 
@@ -23,17 +28,26 @@ final class AppEnvironment {
         }
     )
     @ObservationIgnored private var messageSyncObserver: DarwinNotificationObserver?
+    @ObservationIgnored private var notificationIngressObserver: DarwinNotificationObserver?
     @ObservationIgnored private var pendingCountsRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var pendingMessageListRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var bootstrapTask: Task<Void, Never>?
     @ObservationIgnored private var didBootstrap = false
     @ObservationIgnored private var providerRouteTask: Task<String, Error>?
     @ObservationIgnored private var providerRouteTaskKey: String?
+    @ObservationIgnored private var lastProviderRouteResultKey: String?
+    @ObservationIgnored private var lastProviderRouteDeviceKey: String?
+    @ObservationIgnored private var lastProviderRouteResolvedAt: Date = .distantPast
+    @ObservationIgnored private var subscriptionSyncTask: Task<Void, Error>?
+    @ObservationIgnored private var subscriptionSyncTaskKey: String?
+    @ObservationIgnored private var lastSubscriptionSyncKey: String?
+    @ObservationIgnored private var lastSubscriptionSyncAt: Date = .distantPast
 
     private var toastDismissTask: Task<Void, Never>?
     @ObservationIgnored private var pendingMessageListRefresh = false
     private(set) var isMainWindowVisible = true
     @ObservationIgnored private var lastWakeupRouteFingerprint: String?
+    @ObservationIgnored private let providerRouteResultReuseInterval: TimeInterval = 25
 
     private(set) var serverConfig: ServerConfig? = AppEnvironment.makeDefaultServerConfig()
     private(set) var totalMessageCount: Int = 0
@@ -57,6 +71,56 @@ final class AppEnvironment {
     @ObservationIgnored private let appUpdateManager: any AppUpdateManaging
 
     private let channelSubscriptionService = ChannelSubscriptionService()
+    private let notificationIngressInbox = NotificationIngressInbox.shared
+    private let ackFailureStore = ProviderDeliveryAckFailureStore.shared
+    @ObservationIgnored private lazy var providerIngressCoordinator = ProviderIngressCoordinator(
+        platformSuffix: "macos",
+        dataStore: dataStore,
+        channelSubscriptionService: channelSubscriptionService,
+        notificationIngressInbox: notificationIngressInbox,
+        ackMarkerStore: ackFailureStore,
+        hooks: ProviderIngressCoordinator.Hooks(
+            isEnabled: { true },
+            serverConfig: { [weak self] in self?.serverConfig },
+            cachedDeviceKey: { [weak self] in
+                guard let self else { return nil }
+                return await self.cachedProviderPullDeviceKey()
+            },
+            hasPersistedNotification: { [weak self] identity in
+                guard let self else { return false }
+                return await self.hasPersistedNotification(identity: NotificationInboxIdentity(
+                    messageId: identity.messageId,
+                    deliveryId: identity.deliveryId
+                ))
+            },
+            persistPayload: { [weak self] payload, requestIdentifier in
+                guard let self else { return .failed }
+                let dataStore = await MainActor.run { self.dataStore }
+                let outcome = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
+                    payload,
+                    requestIdentifier: requestIdentifier,
+                    dataStore: dataStore,
+                    beforeSave: { [weak self] message in
+                        await MainActor.run {
+                            self?.autoEnableDataPageIfNeeded(for: message)
+                        }
+                    }
+                )
+                return ProviderIngressPersistenceResult(outcome)
+            },
+            applyPersistenceResult: { [weak self] result in
+                switch result {
+                case .persisted, .duplicate:
+                    self?.scheduleCountsRefresh()
+                case .rejected, .failed:
+                    break
+                }
+            },
+            recordProviderError: { [weak self] error, source in
+                self?.showAutomationErrorToastIfNeeded(error, source: source)
+            }
+        )
+    )
     @ObservationIgnored private let localStoreFailureStreakThreshold = 3
     @ObservationIgnored private let localStoreFailureStreakKey = "pushgo.local_store.failure_streak"
     @ObservationIgnored private let localStoreFailureDefaults = AppConstants.sharedUserDefaults()
@@ -75,6 +139,14 @@ final class AppEnvironment {
             guard let self else { return }
             Task { @MainActor in
                 await self.reloadMessagesFromStore()
+            }
+        }
+        notificationIngressObserver = DarwinNotificationObserver(
+            name: AppConstants.notificationIngressChangedNotificationName
+        ) { [weak self] in
+            guard let self else { return }
+            Task { @MainActor in
+                await self.handleNotificationIngressChanged(reason: "darwin_notification")
             }
         }
         registerDefaultNotificationCategories()
@@ -100,8 +172,14 @@ final class AppEnvironment {
 
     private func performBootstrap() async {
         await loadPersistedState()
+        _ = await mergeNotificationIngressInbox(
+            reason: "bootstrap",
+            allowFallbackPull: true
+        )
+        await drainProviderDeliveryAckFailures(source: "provider.bootstrap.ack_failure.macos")
         Task(priority: .utility) { @MainActor in
             await preparePushInfrastructure()
+            _ = await syncProviderIngress(reason: "bootstrap_ready")
         }
         let store = dataStore
         Task(priority: .utility) {
@@ -724,16 +802,60 @@ final class AppEnvironment {
         let gatewayKey = config.gatewayKey
         let credentials = try await dataStore.activeChannelCredentials(gateway: gatewayKey)
         let token = try await ensureActivePushToken(serverConfig: config)
-        _ = try await ensureProviderRoute(config: config, providerToken: token)
+        let normalizedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedToken.isEmpty else {
+            throw AppError.unknown(localizationManager.localized("operation_failed"))
+        }
+        let syncKey = "\(gatewayKey)|\(normalizedToken)"
+        if let inFlightTask = subscriptionSyncTask,
+           subscriptionSyncTaskKey == syncKey
+        {
+            try await inFlightTask.value
+            return
+        }
+        if lastSubscriptionSyncKey == syncKey,
+           Date().timeIntervalSince(lastSubscriptionSyncAt) < 3
+        {
+            return
+        }
+
+        let task = Task<Void, Error> { @MainActor [weak self] in
+            guard let self else {
+                throw AppError.unknown("subscription sync context released")
+            }
+            try await self.performSubscriptionsSync(
+                config: config,
+                credentials: credentials,
+                providerToken: normalizedToken
+            )
+        }
+        subscriptionSyncTaskKey = syncKey
+        subscriptionSyncTask = task
+        defer {
+            if subscriptionSyncTaskKey == syncKey {
+                subscriptionSyncTaskKey = nil
+                subscriptionSyncTask = nil
+            }
+        }
+        try await task.value
+        lastSubscriptionSyncKey = syncKey
+        lastSubscriptionSyncAt = Date()
+    }
+
+    private func performSubscriptionsSync(
+        config: ServerConfig,
+        credentials: [(channelId: String, password: String)],
+        providerToken: String
+    ) async throws {
+        let gatewayKey = config.gatewayKey
         let channels = credentials.map {
             ChannelSubscriptionService.SyncItem(channelId: $0.channelId, password: $0.password)
         }
         guard !channels.isEmpty else {
             await refreshChannelSubscriptions()
-            await syncPrivateChannelState()
             return
         }
-        let deviceKey = try await ensureProviderRoute(config: config, providerToken: token)
+        let deviceKey = try await ensureProviderRoute(config: config, providerToken: providerToken)
 
         let payload = try await channelSubscriptionService.sync(
             baseURL: config.baseURL,
@@ -1129,10 +1251,11 @@ final class AppEnvironment {
             )
             let refreshedDeviceKey = registered.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
             if !refreshedDeviceKey.isEmpty {
-                await dataStore.saveCachedDeviceKey(
+                try await persistProviderDeviceKey(
                     refreshedDeviceKey,
-                    for: platform,
-                    channelType: "apns"
+                    platform: platform,
+                    channelType: "apns",
+                    source: "provider.device_key.subscribe_refresh"
                 )
             }
             let ensuredDeviceKey = try await ensureProviderRoute(config: config, providerToken: providerToken)
@@ -1322,7 +1445,6 @@ final class AppEnvironment {
                    !token.isEmpty
                 {
                     await syncProviderPullRoute(config: config, providerToken: token)
-                    _ = await syncProviderIngress(reason: "token_update")
                 }
             } catch {
                 let message = (error as? AppError)?.errorDescription ?? error.localizedDescription
@@ -1348,7 +1470,6 @@ final class AppEnvironment {
             scheduleMessageListRefresh()
             flushPendingMessageListRefreshIfNeeded()
             Task { @MainActor in
-                _ = await syncProviderIngress(reason: "scene_active")
                 await refreshLaunchAtLoginStatus()
                 await refreshChannelSubscriptions()
                 await syncPrivateChannelState()
@@ -1454,6 +1575,13 @@ final class AppEnvironment {
             throw AppError.unknown(localizationManager.localized("operation_failed"))
         }
         let taskKey = "\(config.gatewayKey)|\(normalizedProviderToken)"
+        if lastProviderRouteResultKey == taskKey,
+           Date().timeIntervalSince(lastProviderRouteResolvedAt) < providerRouteResultReuseInterval,
+           let resolvedDeviceKey = lastProviderRouteDeviceKey?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !resolvedDeviceKey.isEmpty
+        {
+            return resolvedDeviceKey
+        }
         if providerRouteTaskKey == taskKey, let providerRouteTask {
             return try await providerRouteTask.value
         }
@@ -1462,40 +1590,41 @@ final class AppEnvironment {
             guard let self else {
                 throw AppError.unknown("provider route context released")
             }
-        let platform = platformIdentifier()
-        let cachedApnsKey = await dataStore.cachedDeviceKey(
-            for: platform,
-            channelType: "apns"
-        )?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let registered = try await channelSubscriptionService.registerDevice(
-            baseURL: config.baseURL,
-            token: config.token,
-            platform: platform,
-            existingDeviceKey: cachedApnsKey?.isEmpty == false ? cachedApnsKey : nil
-        )
-        let bootstrapDeviceKey = registered.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !bootstrapDeviceKey.isEmpty else {
-            throw AppError.unknown(localizationManager.localized("operation_failed"))
-        }
-        let route = try await channelSubscriptionService.upsertDeviceChannel(
-            baseURL: config.baseURL,
-            token: config.token,
-            deviceKey: bootstrapDeviceKey,
-            platform: platform,
-            channelType: "apns",
+            let platform = platformIdentifier()
+            let cachedApnsKey = await dataStore.cachedDeviceKey(
+                for: platform,
+                channelType: "apns"
+            )?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let registered = try await channelSubscriptionService.registerDevice(
+                baseURL: config.baseURL,
+                token: config.token,
+                platform: platform,
+                existingDeviceKey: cachedApnsKey?.isEmpty == false ? cachedApnsKey : nil
+            )
+            let bootstrapDeviceKey = registered.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !bootstrapDeviceKey.isEmpty else {
+                throw AppError.unknown(localizationManager.localized("operation_failed"))
+            }
+            let route = try await channelSubscriptionService.upsertDeviceChannel(
+                baseURL: config.baseURL,
+                token: config.token,
+                deviceKey: bootstrapDeviceKey,
+                platform: platform,
+                channelType: "apns",
                 providerToken: normalizedProviderToken
-        )
-        let resolvedDeviceKey = route.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !resolvedDeviceKey.isEmpty else {
-            throw AppError.unknown(localizationManager.localized("operation_failed"))
-        }
-        await dataStore.saveCachedDeviceKey(
-            resolvedDeviceKey,
-            for: platform,
-            channelType: "apns"
-        )
-        refreshAutomationStateIfNeeded()
-        return resolvedDeviceKey
+            )
+            let resolvedDeviceKey = route.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !resolvedDeviceKey.isEmpty else {
+                throw AppError.unknown(localizationManager.localized("operation_failed"))
+            }
+            try await persistProviderDeviceKey(
+                resolvedDeviceKey,
+                platform: platform,
+                channelType: "apns",
+                source: "provider.device_key.route"
+            )
+            refreshAutomationStateIfNeeded()
+            return resolvedDeviceKey
         }
 
         providerRouteTaskKey = taskKey
@@ -1506,7 +1635,76 @@ final class AppEnvironment {
                 providerRouteTask = nil
             }
         }
-        return try await task.value
+        let resolvedDeviceKey = try await task.value
+        lastProviderRouteResultKey = taskKey
+        lastProviderRouteDeviceKey = resolvedDeviceKey
+        lastProviderRouteResolvedAt = Date()
+        return resolvedDeviceKey
+    }
+
+    private func persistProviderDeviceKey(
+        _ deviceKey: String,
+        platform: String,
+        channelType: String? = nil,
+        source: String
+    ) async throws {
+        let result: ProviderDeviceKeyStore.SaveResult?
+        if let channelType {
+            result = await dataStore.saveCachedDeviceKey(
+                deviceKey,
+                for: platform,
+                channelType: channelType
+            )
+        } else {
+            result = await dataStore.saveCachedDeviceKey(deviceKey, for: platform)
+        }
+        try requireProviderDeviceKeyPersistence(result, source: source)
+    }
+
+    private func requireProviderDeviceKeyPersistence(
+        _ result: ProviderDeviceKeyStore.SaveResult?,
+        source: String
+    ) throws {
+        guard let result else {
+            let message = "provider_device_key_save_failed platform=invalid"
+            recordAutomationRuntimeMessage(
+                message,
+                source: source,
+                category: "keychain",
+                code: "E_PROVIDER_DEVICE_KEY_SAVE_FAILED"
+            )
+            throw AppError.unknown(localizationManager.localized("operation_failed"))
+        }
+        guard result.error == nil, result.didPersist else {
+            recordAutomationRuntimeMessage(
+                Self.deviceKeySaveErrorDescription(result),
+                source: source,
+                category: "keychain",
+                code: "E_PROVIDER_DEVICE_KEY_SAVE_FAILED"
+            )
+            throw result.error ?? AppError.unknown(localizationManager.localized("operation_failed"))
+        }
+    }
+
+    private static func deviceKeySaveErrorDescription(
+        _ result: ProviderDeviceKeyStore.SaveResult
+    ) -> String {
+        var parts = [
+            "provider_device_key_save_failed",
+            "platform=\(result.platform)",
+            "account=\(result.account)",
+            "access_group=\(result.accessGroup ?? "nil")",
+        ]
+        if let status = result.error?.statusCode {
+            parts.append("status=\(status)")
+        } else if result.error == .unexpectedData {
+            parts.append("error=unexpected_data")
+        } else if let error = result.error {
+            parts.append("error=\(error.localizedDescription)")
+        } else {
+            parts.append("error=not_persisted")
+        }
+        return parts.joined(separator: " ")
     }
 
     private func schedulePreviousGatewayDeviceCleanup(
@@ -1538,6 +1736,12 @@ final class AppEnvironment {
     }
 
     private func cachedProviderPullDeviceKey() async -> String? {
+        if Date().timeIntervalSince(lastProviderRouteResolvedAt) < providerRouteResultReuseInterval,
+           let recentDeviceKey = lastProviderRouteDeviceKey?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !recentDeviceKey.isEmpty
+        {
+            return recentDeviceKey
+        }
         let platform = platformIdentifier()
         let deviceKey = await dataStore.cachedDeviceKey(for: platform)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1552,13 +1756,27 @@ final class AppEnvironment {
         return trimmed
     }
 
-    private func shouldAckProviderDelivery(for outcome: NotificationPersistenceOutcome) -> Bool {
-        switch outcome {
-        case .duplicate, .persistedMain, .persistedPending:
-            return true
-        case .rejected, .failed:
-            return false
-        }
+    private func notificationInboxIdentity(from payload: [AnyHashable: Any]) -> NotificationInboxIdentity {
+        let sanitized = UserInfoSanitizer.sanitize(payload)
+        let messageId = NotificationHandling.extractMessageId(from: sanitized)
+        let deliveryId = providerIngressDeliveryId(from: sanitized)
+        return NotificationInboxIdentity(messageId: messageId, deliveryId: deliveryId)
+    }
+
+    private func hasPersistedNotification(identity: NotificationInboxIdentity) async -> Bool {
+        do {
+            if let messageId = identity.messageId,
+               try await dataStore.loadMessage(messageId: messageId) != nil
+            {
+                return true
+            }
+            if let deliveryId = identity.deliveryId,
+               try await dataStore.loadMessage(deliveryId: deliveryId) != nil
+            {
+                return true
+            }
+        } catch {}
+        return false
     }
 
     private func applyNotificationPersistenceOutcome(
@@ -1576,89 +1794,47 @@ final class AppEnvironment {
         }
     }
 
-    private func ackProviderDeliveryIfNeeded(
-        from payload: [AnyHashable: Any],
-        outcome: NotificationPersistenceOutcome,
-        source: String
-    ) {
-        guard shouldAckProviderDelivery(for: outcome) else { return }
-        guard NotificationHandling.providerWakeupPullDeliveryId(from: payload) == nil else { return }
-        guard let deliveryId = providerIngressDeliveryId(from: payload) else { return }
-        guard let config = serverConfig else { return }
-        Task { [weak self] in
-            guard let self else { return }
-            guard let deviceKey = await self.cachedProviderPullDeviceKey() else { return }
-            do {
-                _ = try await self.channelSubscriptionService.ackMessage(
-                    baseURL: config.baseURL,
-                    token: config.token,
-                    deviceKey: deviceKey,
-                    deliveryId: deliveryId
-                )
-            } catch {
-                self.showAutomationErrorToastIfNeeded(error, source: source)
-            }
-        }
+    private func handleNotificationIngressChanged(reason: String) async {
+        _ = await mergeNotificationIngressInbox(
+            reason: reason,
+            allowFallbackPull: false
+        )
+    }
+
+    private func drainProviderDeliveryAckFailures(source: String) async {
+        await providerIngressCoordinator.drainAckMarkers(source: source)
+    }
+
+    @discardableResult
+    func mergeNotificationIngressInbox(
+        reason: String,
+        allowFallbackPull: Bool,
+        limit: Int = 256
+    ) async -> Int {
+        await providerIngressCoordinator.mergeInbox(
+            reason: reason,
+            allowFallbackPull: allowFallbackPull,
+            limit: limit
+        )
     }
 
     @discardableResult
     func syncProviderIngress(
         deliveryId: String? = nil,
-        reason: String
+        reason: String,
+        skipInboxMerge: Bool = false
     ) async -> Int {
-        guard let config = serverConfig else { return 0 }
-        var deviceKey = await cachedProviderPullDeviceKey()
-        if deviceKey == nil,
-           let token = await dataStore.cachedPushToken(for: platformIdentifier())?
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-           !token.isEmpty
-        {
-            await syncProviderPullRoute(config: config, providerToken: token)
-            deviceKey = await cachedProviderPullDeviceKey()
-        }
-        guard let deviceKey else { return 0 }
-        do {
-            let items = try await channelSubscriptionService.pullMessages(
-                baseURL: config.baseURL,
-                token: config.token,
-                deviceKey: deviceKey,
-                deliveryId: deliveryId
-            )
-            guard !items.isEmpty else { return 0 }
-            var applied = 0
-            for item in items {
-                let payload: [AnyHashable: Any] = item.payload.reduce(into: [:]) { result, element in
-                    result[element.key] = element.value
-                }
-                let outcome = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
-                    payload,
-                    requestIdentifier: item.deliveryId,
-                    dataStore: dataStore,
-                    beforeSave: { [weak self] message in
-                        guard let self else { return }
-                        await self.autoEnableDataPageIfNeeded(for: message)
-                    }
-                )
-                applyNotificationPersistenceOutcome(outcome)
-                if shouldAckProviderDelivery(for: outcome) {
-                    applied += 1
-                }
-            }
-            return applied
-        } catch {
-            showAutomationErrorToastIfNeeded(
-                error,
-                source: "provider.ingress.\(reason)"
-            )
-            return 0
-        }
+        await providerIngressCoordinator.syncProviderIngress(
+            deliveryId: deliveryId,
+            reason: reason,
+            skipInboxMerge: skipInboxMerge
+        )
     }
 
     @discardableResult
     func persistRemotePayloadIfNeeded(
         _ payload: [AnyHashable: Any],
-        requestIdentifier: String? = nil,
-        ackSource: String? = nil
+        requestIdentifier: String? = nil
     ) async -> NotificationPersistenceOutcome {
         let outcome = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
             payload,
@@ -1669,21 +1845,20 @@ final class AppEnvironment {
                 await self.autoEnableDataPageIfNeeded(for: message)
             }
         )
-        if let ackSource {
-            ackProviderDeliveryIfNeeded(
-                from: payload,
-                outcome: outcome,
-                source: ackSource
-            )
-        }
         applyNotificationPersistenceOutcome(outcome)
         return outcome
     }
 
     @discardableResult
     func persistNotificationIfNeeded(_ notification: UNNotification) async -> NotificationPersistenceOutcome {
+        let notificationPayload = UserInfoSanitizer.sanitize(notification.request.content.userInfo)
+        let identity = notificationInboxIdentity(from: notificationPayload)
+        if await hasPersistedNotification(identity: identity) {
+            return .duplicate
+        }
+
         let ingress = await NotificationHandling.resolveNotificationIngress(
-            from: notification.request.content.userInfo,
+            from: notificationPayload,
             dataStore: dataStore,
             fallbackServerConfig: serverConfig,
             channelSubscriptionService: channelSubscriptionService
@@ -1697,11 +1872,27 @@ final class AppEnvironment {
             )
             return outcome
         case let .unresolvedWakeup(payload, requestIdentifier):
-            _ = payload
-            _ = requestIdentifier
-            outcome = .rejected
+            let unresolvedDeliveryId = requestIdentifier
+                ?? NotificationHandling.providerWakeupPullDeliveryId(from: payload)
+            if let unresolvedDeliveryId {
+                let pulled = await syncProviderIngress(
+                    deliveryId: unresolvedDeliveryId,
+                    reason: "delegate_unresolved_wakeup",
+                    skipInboxMerge: true
+                )
+                if pulled > 0 {
+                    let resolvedIdentity = NotificationInboxIdentity(
+                        messageId: identity.messageId,
+                        deliveryId: identity.deliveryId ?? unresolvedDeliveryId
+                    )
+                    outcome = await hasPersistedNotification(identity: resolvedIdentity) ? .duplicate : .rejected
+                } else {
+                    outcome = .rejected
+                }
+            } else {
+                outcome = .rejected
+            }
         case let .direct(_, requestIdentifier):
-            let directPayload = notification.request.content.userInfo
             outcome = await NotificationPersistenceCoordinator.persistPreparedContentIfNeeded(
                 content: notification.request.content,
                 requestIdentifier: requestIdentifier,
@@ -1711,11 +1902,6 @@ final class AppEnvironment {
                     guard let self else { return }
                     await self.autoEnableDataPageIfNeeded(for: message)
                 }
-            )
-            ackProviderDeliveryIfNeeded(
-                from: directPayload,
-                outcome: outcome,
-                source: "provider.direct.ack.macos"
             )
         }
         applyNotificationPersistenceOutcome(outcome)

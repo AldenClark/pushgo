@@ -60,6 +60,7 @@ struct NotificationPayloadSemantics {
 
     static func normalizeRemoteNotification(
         _ userInfo: [AnyHashable: Any],
+        contextSnapshot: NotificationContextSnapshot? = nil,
         localizeTypeLabel: (String) -> String,
         localizeThingAttributeUpdateBody: (String) -> String,
         localizeThingAttributePair: (String, String) -> String
@@ -91,37 +92,40 @@ struct NotificationPayloadSemantics {
             let thingAttributes = entityType == "thing"
                 ? parseThingAttributesSnapshot(payload: sanitized)
                 : nil
+            let eventContext = entityType == "event"
+                ? contextSnapshot?.eventContext(
+                    eventId: stringValue(forKeys: ["event_id", "entity_id"], in: sanitized)
+                )
+                : nil
+            let thingContext = entityType == "thing"
+                ? contextSnapshot?.thingContext(
+                    thingId: stringValue(forKeys: ["thing_id", "entity_id"], in: sanitized)
+                )
+                : nil
 
             if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                if entityType == "thing" {
-                    title = thingAttributes?.thingName ?? profile?.title ?? title
-                } else {
-                    title = profile?.title ?? title
-                }
-            }
-            if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                let fallbackId = stringValue(
-                    forKeys: entityType == "event" ? ["event_id"] : ["thing_id"],
-                    in: sanitized
-                ) ?? "unknown"
-                title = "\(localizeTypeLabel(entityType)) \(fallbackId)"
+                title = resolvedEntityFallbackTitle(
+                    entityType: entityType,
+                    payload: sanitized,
+                    profile: profile,
+                    thingAttributes: thingAttributes,
+                    eventContext: eventContext,
+                    thingContext: thingContext,
+                    localizeTypeLabel: localizeTypeLabel
+                )
             }
 
             if body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                body = profile?.message ?? body
-            }
-            if body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, entityType == "thing" {
-                body = formatThingAttributeUpdateBody(
-                    snapshot: thingAttributes,
+                body = resolvedEntityFallbackBody(
+                    entityType: entityType,
+                    payload: sanitized,
+                    profile: profile,
+                    thingAttributes: thingAttributes,
+                    eventContext: eventContext,
+                    thingContext: thingContext,
                     localizeThingAttributeUpdateBody: localizeThingAttributeUpdateBody,
                     localizeThingAttributePair: localizeThingAttributePair
                 ) ?? body
-            }
-            if body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                body = profile?.description ?? body
-            }
-            if body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, entityType == "event" {
-                body = stringValue(forKeys: ["event_state"], in: sanitized) ?? ""
             }
         }
         body = URLSanitizer.rewriteVisibleURLsInMarkdown(body)
@@ -331,18 +335,19 @@ struct NotificationPayloadSemantics {
         entityType: String,
         payload: [String: Any]
     ) -> ProfileSnapshot? {
-        let key = entityType == "event" ? "event_profile_json" : "thing_profile_json"
-        guard let raw = payload[key] as? String,
-              let data = raw.data(using: .utf8),
-              let decoded = try? JSONSerialization.jsonObject(with: data),
-              let object = decoded as? [String: Any]
-        else {
+        guard entityType == "event" || entityType == "thing" else {
+            return nil
+        }
+        let title = stringValue(forKeys: ["title"], in: payload)
+        let description = stringValue(forKeys: ["description"], in: payload)
+        let message = stringValue(forKeys: ["message"], in: payload)
+        if title == nil, description == nil, message == nil {
             return nil
         }
         return ProfileSnapshot(
-            title: nonEmptyString(object["title"]),
-            description: nonEmptyString(object["description"]),
-            message: nonEmptyString(object["message"])
+            title: title,
+            description: description,
+            message: message
         )
     }
 
@@ -380,11 +385,16 @@ struct NotificationPayloadSemantics {
     private static func parseThingAttributesSnapshot(
         payload: [String: Any]
     ) -> ThingAttributesSnapshot? {
-        guard let raw = payload["thing_attrs_json"] as? String,
-              let data = raw.data(using: .utf8),
-              let decoded = try? JSONSerialization.jsonObject(with: data),
-              let object = decoded as? [String: Any]
-        else {
+        let object: [String: Any]
+        if let inline = payload["attrs"] as? [String: Any] {
+            object = inline
+        } else if let raw = payload["attrs"] as? String,
+                  let data = raw.data(using: .utf8),
+                  let decoded = try? JSONSerialization.jsonObject(with: data),
+                  let parsed = decoded as? [String: Any]
+        {
+            object = parsed
+        } else {
             return nil
         }
 
@@ -468,6 +478,115 @@ struct NotificationPayloadSemantics {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard let details, !details.isEmpty else { return nil }
         return localizeThingAttributeUpdateBody(details)
+    }
+
+    private static func resolvedEntityFallbackTitle(
+        entityType: String,
+        payload: [String: Any],
+        profile: ProfileSnapshot?,
+        thingAttributes: ThingAttributesSnapshot?,
+        eventContext: NotificationContextSnapshot.EventContext?,
+        thingContext: NotificationContextSnapshot.ThingContext?,
+        localizeTypeLabel: (String) -> String
+    ) -> String {
+        if entityType == "thing",
+           let thingName = thingAttributes?.thingName,
+           !thingName.isEmpty
+        {
+            return thingName
+        }
+        if let title = profile?.title, !title.isEmpty {
+            return title
+        }
+        if entityType == "event",
+           let title = eventContext?.title,
+           !title.isEmpty
+        {
+            return title
+        }
+        if entityType == "thing",
+           let title = thingContext?.title,
+           !title.isEmpty
+        {
+            return title
+        }
+        let fallbackId = stringValue(
+            forKeys: entityType == "event" ? ["event_id", "entity_id"] : ["thing_id", "entity_id"],
+            in: payload
+        ) ?? "unknown"
+        return "\(localizeTypeLabel(entityType)) \(fallbackId)"
+    }
+
+    private static func resolvedEntityFallbackBody(
+        entityType: String,
+        payload: [String: Any],
+        profile: ProfileSnapshot?,
+        thingAttributes: ThingAttributesSnapshot?,
+        eventContext: NotificationContextSnapshot.EventContext?,
+        thingContext: NotificationContextSnapshot.ThingContext?,
+        localizeThingAttributeUpdateBody: (String) -> String,
+        localizeThingAttributePair: (String, String) -> String
+    ) -> String? {
+        if let message = profile?.message, !message.isEmpty {
+            return message
+        }
+        if entityType == "thing",
+           let formatted = formatThingAttributeUpdateBody(
+               snapshot: thingAttributes,
+               localizeThingAttributeUpdateBody: localizeThingAttributeUpdateBody,
+               localizeThingAttributePair: localizeThingAttributePair
+           ),
+           !formatted.isEmpty
+        {
+            return formatted
+        }
+        if let description = profile?.description, !description.isEmpty {
+            return description
+        }
+        if entityType == "event",
+           let eventState = stringValue(forKeys: ["event_state", "status"], in: payload),
+           !eventState.isEmpty
+        {
+            return eventState
+        }
+        if entityType == "thing",
+           let thingState = stringValue(forKeys: ["state", "status"], in: payload),
+           !thingState.isEmpty
+        {
+            return thingState
+        }
+        if entityType == "event",
+           let eventBody = eventContext?.body,
+           !eventBody.isEmpty
+        {
+            return eventBody
+        }
+        if entityType == "event",
+           let eventState = eventContext?.state,
+           !eventState.isEmpty
+        {
+            return eventState
+        }
+        if entityType == "thing",
+           let thingBody = thingContext?.body,
+           !thingBody.isEmpty
+        {
+            return thingBody
+        }
+        if entityType == "thing",
+           let thingState = thingContext?.state,
+           !thingState.isEmpty
+        {
+            return thingState
+        }
+        switch entityType {
+        case "event":
+            return gatewayFallbackEventBody
+        case "thing":
+            return gatewayFallbackThingBody
+        default:
+            return nil
+        }
     }
 
     private static func nonEmptyString(_ value: Any?) -> String? {

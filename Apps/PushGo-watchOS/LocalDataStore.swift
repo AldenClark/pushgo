@@ -107,15 +107,12 @@ actor LocalDataStore {
         fileManager: FileManager = .default,
         appGroupIdentifier: String = AppConstants.appGroupIdentifier
     ) {
+        KeychainSharedAccessMigration.migrateLegacyItemsToSharedAccessGroup()
         defaults = AppConstants.sharedUserDefaults(suiteName: appGroupIdentifier)
         encoder.dateEncodingStrategy = .iso8601
         decoder.dateDecodingStrategy = .iso8601
 
         do {
-            try AppConstants.migrateLegacyDatabaseArtifacts(
-                fileManager: fileManager,
-                appGroupIdentifier: appGroupIdentifier
-            )
             sqliteStore = try WatchLocalSQLiteStore(
                 fileManager: fileManager,
                 appGroupIdentifier: appGroupIdentifier
@@ -300,7 +297,11 @@ actor LocalDataStore {
         deviceKeyStore.load(platform: platform)
     }
 
-    func saveCachedDeviceKey(_ deviceKey: String?, for platform: String) async {
+    @discardableResult
+    func saveCachedDeviceKey(
+        _ deviceKey: String?,
+        for platform: String
+    ) async -> ProviderDeviceKeyStore.SaveResult {
         deviceKeyStore.save(deviceKey: deviceKey, platform: platform)
     }
 
@@ -1218,16 +1219,10 @@ private final class WatchLocalSQLiteStore {
         appGroupIdentifier: String,
         filename: String
     ) throws -> URL {
-        guard let url = AppConstants.appGroupContainerURL(
+        let directory = try AppConstants.appLocalDatabaseDirectory(
             fileManager: fileManager,
-            identifier: appGroupIdentifier
-        ) else {
-            throw AppError.missingAppGroup(appGroupIdentifier)
-        }
-        let directory = url.appendingPathComponent("Database", isDirectory: true)
-        if !fileManager.fileExists(atPath: directory.path) {
-            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        }
+            appGroupIdentifier: appGroupIdentifier
+        )
         return directory.appendingPathComponent(filename)
     }
 }

@@ -1,4 +1,22 @@
 import XCTest
+import os
+
+private enum PushGoIOSUITestRuntimeRoots {
+    private static let roots = OSAllocatedUnfairLock<[URL]>(initialState: [])
+
+    static func append(_ root: URL) {
+        roots.withLock { roots in
+            roots.append(root)
+        }
+    }
+
+    static func consumeAll() -> [URL] {
+        roots.withLock { roots in
+            defer { roots.removeAll() }
+            return roots
+        }
+    }
+}
 
 @MainActor
 final class PushGo_iOSUITests: XCTestCase {
@@ -59,8 +77,6 @@ final class PushGo_iOSUITests: XCTestCase {
     private let thingFixturePath = fixturePath("rich-thing-detail.json")
     private let thingFixtureId = "thing_p2_rich_001"
     private let messageSeedFixturePath = fixturePath("seed-split.json")
-    private var runtimeRoots: [URL] = []
-
     private static func fixturePath(_ filename: String) -> String {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -77,10 +93,9 @@ final class PushGo_iOSUITests: XCTestCase {
 
     override func tearDownWithError() throws {
         let fileManager = FileManager.default
-        for runtimeRoot in runtimeRoots {
+        for runtimeRoot in PushGoIOSUITestRuntimeRoots.consumeAll() {
             try? fileManager.removeItem(at: runtimeRoot)
         }
-        runtimeRoots.removeAll()
     }
 
     func testLaunchesIntoMessageList() {
@@ -454,7 +469,7 @@ final class PushGo_iOSUITests: XCTestCase {
         let app = XCUIApplication()
         let resolvedRuntimeRoot = runtimeRoot ?? makeRuntimeRoot()
         try? FileManager.default.createDirectory(at: resolvedRuntimeRoot, withIntermediateDirectories: true)
-        runtimeRoots.append(resolvedRuntimeRoot)
+        PushGoIOSUITestRuntimeRoots.append(resolvedRuntimeRoot)
 
         let responseURL = resolvedRuntimeRoot.appendingPathComponent("automation-response.json")
         let stateURL = resolvedRuntimeRoot.appendingPathComponent("automation-state.json")

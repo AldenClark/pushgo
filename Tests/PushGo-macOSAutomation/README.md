@@ -25,8 +25,9 @@ It is designed as a stable complement to `PushGo-macOSUITests`.
 ```
 
 The script defaults to non-interactive signing mode (`NO_INTERACTIVE_SIGNING=1`) to reduce system password/2FA prompts.
-Automation runtime also defaults to `PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS=0` so smoke runs are not blocked by clipboard/system cross-app permission alerts.
-Bridge files default to `/tmp/pushgo-macos-automation-bridge` (`PUSHGO_AUTOMATION_MACOS_BRIDGE_ROOT`) to avoid Group Containers permission stalls in unattended runs.
+Automation runtime defaults to `PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS=0` so smoke runs are not blocked by clipboard/system cross-app permission alerts.
+Smoke cases are executed through the app's built-in startup automation protocol (`PUSHGO_AUTOMATION_REQUEST` + response/state/events files), without external helper scripts.
+Fixture defaults now point to `pushgo/Tests/Fixtures/p2` inside this repository.
 
 ## Pass Criteria
 

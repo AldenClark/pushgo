@@ -8,6 +8,14 @@ import WatchKit
 @MainActor
 @Observable
 final class AppEnvironment {
+    private struct NotificationInboxIdentity {
+        let messageId: String?
+        let deliveryId: String?
+        let requestIdentifier: String?
+        let entityType: String?
+        let entityId: String?
+    }
+
     @MainActor
     static let shared = AppEnvironment()
 
@@ -15,6 +23,7 @@ final class AppEnvironment {
     let pushRegistrationService: PushRegistrationService
     let localizationManager: LocalizationManager
     @ObservationIgnored private var messageSyncObserver: DarwinNotificationObserver?
+    @ObservationIgnored private var notificationIngressObserver: DarwinNotificationObserver?
     @ObservationIgnored private var pendingMessageListRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var bootstrapTask: Task<Void, Never>?
     @ObservationIgnored private var didBootstrap = false
@@ -50,6 +59,53 @@ final class AppEnvironment {
     private var isSceneActive = false
 
     private let channelSubscriptionService = ChannelSubscriptionService()
+    private let notificationIngressInbox = NotificationIngressInbox.shared
+    private let ackFailureStore = ProviderDeliveryAckFailureStore.shared
+    @ObservationIgnored private lazy var providerIngressCoordinator = ProviderIngressCoordinator(
+        platformSuffix: "watchos",
+        dataStore: dataStore,
+        channelSubscriptionService: channelSubscriptionService,
+        notificationIngressInbox: notificationIngressInbox,
+        ackMarkerStore: ackFailureStore,
+        hooks: ProviderIngressCoordinator.Hooks(
+            isEnabled: { [weak self] in self?.isStandaloneMode == true },
+            serverConfig: { [weak self] in self?.serverConfig },
+            cachedDeviceKey: { [weak self] in
+                guard let self else { return nil }
+                let deviceKey = await self.dataStore.cachedDeviceKey(for: self.platformIdentifier())?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return deviceKey?.isEmpty == false ? deviceKey : nil
+            },
+            hasPersistedNotification: { [weak self] identity in
+                guard let self else { return false }
+                return await self.hasPersistedNotification(identity: NotificationInboxIdentity(
+                    messageId: identity.messageId,
+                    deliveryId: identity.deliveryId,
+                    requestIdentifier: identity.requestIdentifier,
+                    entityType: identity.entityType,
+                    entityId: identity.entityId
+                ))
+            },
+            persistPayload: { [weak self] payload, requestIdentifier in
+                guard let self else { return .failed }
+                let persisted = await self.persistStandaloneResolvedPayload(
+                    payload,
+                    requestIdentifier: requestIdentifier,
+                    fallbackRequestIdentifier: requestIdentifier,
+                    fallbackTitle: "",
+                    fallbackBody: ""
+                )
+                return persisted ? .persisted : .failed
+            },
+            applyPersistenceResult: { [weak self] result in
+                guard case .persisted = result else { return }
+                self?.scheduleMessageListRefresh()
+            },
+            recordProviderError: { [weak self] error, source in
+                self?.recordAutomationRuntimeError(error, source: source, category: "provider")
+            }
+        )
+    )
 
     private init(
         dataStore: LocalDataStore = LocalDataStore(),
@@ -63,6 +119,17 @@ final class AppEnvironment {
             guard let self else { return }
             Task { @MainActor in
                 await self.refreshWatchLightCountsAndNotify()
+            }
+        }
+        notificationIngressObserver = DarwinNotificationObserver(
+            name: AppConstants.notificationIngressChangedNotificationName
+        ) { [weak self] in
+            guard let self else { return }
+            Task { @MainActor in
+                _ = await self.mergeNotificationIngressInbox(
+                    reason: "darwin_notification",
+                    allowFallbackPull: false
+                )
             }
         }
         registerDefaultNotificationCategories()
@@ -89,6 +156,11 @@ final class AppEnvironment {
     private func performBootstrap() async {
         WatchSessionBridge.shared.activateIfNeeded()
         await loadPersistedState()
+        _ = await mergeNotificationIngressInbox(
+            reason: "bootstrap",
+            allowFallbackPull: true
+        )
+        await drainProviderDeliveryAckFailures(source: "provider.bootstrap.ack_failure.watchos")
         publishCurrentEffectiveModeStatus(noop: false)
         let store = dataStore
         Task(priority: .utility) {
@@ -919,6 +991,13 @@ final class AppEnvironment {
             syncBadgeWithUnreadCount()
             scheduleMessageListRefresh()
             flushPendingMessageListRefreshIfNeeded()
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                _ = await self.mergeNotificationIngressInbox(
+                    reason: "scene_active",
+                    allowFallbackPull: false
+                )
+            }
             if isStandaloneMode {
                 requestStandaloneRuntimeReconcile(reason: "scene_phase_active", presentDeniedPrompt: true)
             }
@@ -1013,6 +1092,10 @@ final class AppEnvironment {
                 providerToken: token
             )
             updateStandaloneReadiness(true, failureReason: nil)
+            _ = await syncStandaloneProviderIngress(
+                deliveryId: nil,
+                reason: "\(reason)_ready"
+            )
         } catch {
             recordAutomationRuntimeError(error, source: "watch.reconcile_standalone_runtime.\(reason)")
             if !standaloneReady {
@@ -1570,11 +1653,90 @@ final class AppEnvironment {
                 payload["images"] = images
                 applied = true
             }
-            for key in ["event_profile_json", "event_attrs_json", "thing_profile_json", "thing_attrs_json"] {
-                if let value = normalizedJSONObjectString(from: object[key]) {
-                    payload[key] = value
-                    applied = true
-                }
+            if let tags = normalizedJSONArrayString(from: object["tags"]) {
+                payload["tags"] = tags
+                applied = true
+            }
+            if let metadata = normalizedJSONObjectString(from: object["metadata"]) {
+                payload["metadata"] = metadata
+                applied = true
+            }
+            if let description = (object["description"] as? String)?
+                .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
+                !description.isEmpty
+            {
+                payload["description"] = description
+                applied = true
+            }
+            if let status = (object["status"] as? String)?
+                .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
+                !status.isEmpty
+            {
+                payload["status"] = status
+                applied = true
+            }
+            if let message = (object["message"] as? String)?
+                .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
+                !message.isEmpty
+            {
+                payload["message"] = message
+                applied = true
+            }
+            if let attrs = normalizedJSONObjectString(from: object["attrs"]) {
+                payload["attrs"] = attrs
+                applied = true
+            }
+            if let startedAt = normalizedInt64(from: object["started_at"]) {
+                payload["started_at"] = startedAt
+                applied = true
+            }
+            if let endedAt = normalizedInt64(from: object["ended_at"]) {
+                payload["ended_at"] = endedAt
+                applied = true
+            }
+            if let primaryImage = (object["primary_image"] as? String)?
+                .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
+                !primaryImage.isEmpty
+            {
+                payload["primary_image"] = primaryImage
+                applied = true
+            }
+            if let state = (object["state"] as? String)?
+                .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
+                !state.isEmpty
+            {
+                payload["state"] = state
+                applied = true
+            }
+            if let createdAt = normalizedInt64(from: object["created_at"]) {
+                payload["created_at"] = createdAt
+                applied = true
+            }
+            if let deletedAt = normalizedInt64(from: object["deleted_at"]) {
+                payload["deleted_at"] = deletedAt
+                applied = true
+            }
+            if let externalIds = normalizedJSONObjectString(from: object["external_ids"]) {
+                payload["external_ids"] = externalIds
+                applied = true
+            }
+            if let locationType = (object["location_type"] as? String)?
+                .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
+                !locationType.isEmpty
+            {
+                payload["location_type"] = locationType
+                applied = true
+            }
+            if let locationValue = (object["location_value"] as? String)?
+                .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
+                !locationValue.isEmpty
+            {
+                payload["location_value"] = locationValue
+                applied = true
+            }
+            if let location = normalizedJSONObjectString(from: object["location"]) {
+                payload["location"] = location
+                applied = true
             }
             return applied ? .success : .none
         } catch {
@@ -1623,6 +1785,62 @@ final class AppEnvironment {
         return nil
     }
 
+    private func normalizedJSONArrayString(from raw: Any?) -> String? {
+        var values: [String] = []
+        if let array = raw as? [Any] {
+            values = array.compactMap { value in
+                guard let text = (value as? String)?
+                    .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
+                    !text.isEmpty
+                else {
+                    return nil
+                }
+                return text
+            }
+        } else if let text = (raw as? String)?
+            .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
+            !text.isEmpty,
+            let data = text.data(using: .utf8),
+            let decoded = try? JSONSerialization.jsonObject(with: data) as? [Any]
+        {
+            values = decoded.compactMap { value in
+                guard let text = (value as? String)?
+                    .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
+                    !text.isEmpty
+                else {
+                    return nil
+                }
+                return text
+            }
+        }
+        var deduped: [String] = []
+        for value in values where !deduped.contains(value) {
+            deduped.append(value)
+        }
+        guard !deduped.isEmpty,
+              let data = try? JSONSerialization.data(withJSONObject: deduped),
+              let text = String(data: data, encoding: .utf8)
+        else {
+            return nil
+        }
+        return text
+    }
+
+    private func normalizedInt64(from raw: Any?) -> Int64? {
+        switch raw {
+        case let value as Int64:
+            return value
+        case let value as Int:
+            return Int64(value)
+        case let value as NSNumber:
+            return value.int64Value
+        case let value as String:
+            return Int64(value.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines))
+        default:
+            return nil
+        }
+    }
+
     private func resolvedStandaloneDisplayOverride(
         from payload: [AnyHashable: Any],
         fallbackTitle: String,
@@ -1645,11 +1863,12 @@ final class AppEnvironment {
     private func ackStandaloneProviderIngressIfNeeded(
         ingress: NotificationIngressResolution,
         source: String
-    ) {
-        guard let config = serverConfig else { return }
+    ) async {
+        let payload: [AnyHashable: Any]
         let deliveryId: String?
         switch ingress {
-        case let .direct(payload, requestIdentifier):
+        case let .direct(resolvedPayload, requestIdentifier):
+            payload = resolvedPayload
             if NotificationHandling.providerWakeupPullDeliveryId(from: payload) != nil {
                 return
             }
@@ -1661,23 +1880,128 @@ final class AppEnvironment {
         }
         let normalizedDeliveryId = deliveryId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !normalizedDeliveryId.isEmpty else { return }
-        Task { [weak self] in
-            guard let self else { return }
-            let platform = self.platformIdentifier()
-            let deviceKey = await self.dataStore.cachedDeviceKey(for: platform)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            guard !deviceKey.isEmpty else { return }
-            do {
-                _ = try await self.channelSubscriptionService.ackMessage(
-                    baseURL: config.baseURL,
-                    token: config.token,
-                    deviceKey: deviceKey,
-                    deliveryId: normalizedDeliveryId
-                )
-            } catch {
-                self.recordAutomationRuntimeError(error, source: source, category: "provider")
+        await providerIngressCoordinator.ackDirectDeliveryIfNeeded(
+            payload: payload,
+            result: .persisted,
+            source: source,
+            fallbackDeliveryId: normalizedDeliveryId
+        )
+    }
+
+    private func drainProviderDeliveryAckFailures(source: String) async {
+        await providerIngressCoordinator.drainAckMarkers(source: source)
+    }
+
+    private func providerIngressDeliveryId(from payload: [AnyHashable: Any]) -> String? {
+        let sanitized = UserInfoSanitizer.sanitize(payload)
+        let trimmed = (sanitized["delivery_id"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
+
+    private func notificationInboxIdentity(
+        from payload: [AnyHashable: Any],
+        fallbackRequestIdentifier: String?
+    ) -> NotificationInboxIdentity {
+        let messageId = NotificationHandling.extractMessageId(from: payload)
+        let deliveryId = providerIngressDeliveryId(from: payload)
+        let requestIdentifier = fallbackRequestIdentifier?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let entityTarget = NotificationHandling.entityOpenTargetComponents(from: payload)
+        return NotificationInboxIdentity(
+            messageId: messageId,
+            deliveryId: deliveryId,
+            requestIdentifier: requestIdentifier?.isEmpty == true ? nil : requestIdentifier,
+            entityType: entityTarget?.entityType,
+            entityId: entityTarget?.entityId
+        )
+    }
+
+    private func hasPersistedNotification(identity: NotificationInboxIdentity) async -> Bool {
+        do {
+            if let messageId = identity.messageId,
+               try await dataStore.loadWatchLightMessage(messageId: messageId) != nil
+            {
+                return true
             }
+            if let requestIdentifier = identity.requestIdentifier,
+               try await dataStore.loadWatchLightMessage(notificationRequestId: requestIdentifier) != nil
+            {
+                return true
+            }
+            if let deliveryId = identity.deliveryId,
+               try await dataStore.loadWatchLightMessage(notificationRequestId: deliveryId) != nil
+            {
+                return true
+            }
+            if identity.entityType == "event",
+               let entityId = identity.entityId,
+               try await dataStore.loadWatchLightEvent(eventId: entityId) != nil
+            {
+                return true
+            }
+            if identity.entityType == "thing",
+               let entityId = identity.entityId,
+               try await dataStore.loadWatchLightThing(thingId: entityId) != nil
+            {
+                return true
+            }
+        } catch {
+            recordAutomationRuntimeError(error, source: "watch.inbox.identity_check", category: "storage")
         }
+        return false
+    }
+
+    private func persistStandaloneResolvedPayload(
+        _ payload: [AnyHashable: Any],
+        requestIdentifier: String?,
+        fallbackRequestIdentifier: String?,
+        fallbackTitle: String,
+        fallbackBody: String
+    ) async -> Bool {
+        let prepared = await prepareStandalonePayloadForPersistence(
+            payload,
+            fallbackTitle: fallbackTitle,
+            fallbackBody: fallbackBody
+        )
+        let display = resolvedStandaloneDisplayOverride(
+            from: prepared.payload,
+            fallbackTitle: prepared.fallbackTitle,
+            fallbackBody: prepared.fallbackBody
+        )
+        return await persistStandaloneLightPayload(
+            WatchLightQuantizer.stringifyPayload(prepared.payload),
+            titleOverride: display.title,
+            bodyOverride: display.body,
+            urlOverride: nil,
+            notificationRequestId: requestIdentifier ?? fallbackRequestIdentifier
+        )
+    }
+
+    @discardableResult
+    func mergeNotificationIngressInbox(
+        reason: String,
+        allowFallbackPull: Bool,
+        limit: Int = 256
+    ) async -> Int {
+        await providerIngressCoordinator.mergeInbox(
+            reason: reason,
+            allowFallbackPull: allowFallbackPull,
+            limit: limit
+        )
+    }
+
+    @discardableResult
+    private func syncStandaloneProviderIngress(
+        deliveryId: String?,
+        reason: String
+    ) async -> Int {
+        await providerIngressCoordinator.syncProviderIngress(
+            deliveryId: deliveryId,
+            reason: reason,
+            skipInboxMerge: true
+        )
     }
 
     @discardableResult
@@ -1694,54 +2018,38 @@ final class AppEnvironment {
         let fallbackRequestIdentifier = notification.request.identifier
         switch ingress {
         case let .pulled(payload, requestIdentifier):
-            let prepared = await prepareStandalonePayloadForPersistence(
+            let persisted = await persistStandaloneResolvedPayload(
                 payload,
+                requestIdentifier: requestIdentifier,
+                fallbackRequestIdentifier: fallbackRequestIdentifier,
                 fallbackTitle: title,
                 fallbackBody: body
-            )
-            let display = resolvedStandaloneDisplayOverride(
-                from: prepared.payload,
-                fallbackTitle: prepared.fallbackTitle,
-                fallbackBody: prepared.fallbackBody
-            )
-            let persisted = await persistStandaloneLightPayload(
-                WatchLightQuantizer.stringifyPayload(prepared.payload),
-                titleOverride: display.title,
-                bodyOverride: display.body,
-                urlOverride: nil,
-                notificationRequestId: requestIdentifier
             )
             return persisted
         case let .direct(payload, requestIdentifier):
-            let prepared = await prepareStandalonePayloadForPersistence(
+            let persisted = await persistStandaloneResolvedPayload(
                 payload,
+                requestIdentifier: requestIdentifier,
+                fallbackRequestIdentifier: fallbackRequestIdentifier,
                 fallbackTitle: title,
                 fallbackBody: body
             )
-            let display = resolvedStandaloneDisplayOverride(
-                from: prepared.payload,
-                fallbackTitle: prepared.fallbackTitle,
-                fallbackBody: prepared.fallbackBody
-            )
-            let persisted = await persistStandaloneLightPayload(
-                WatchLightQuantizer.stringifyPayload(prepared.payload),
-                titleOverride: display.title,
-                bodyOverride: display.body,
-                urlOverride: nil,
-                notificationRequestId: requestIdentifier ?? fallbackRequestIdentifier
-            )
             if persisted {
-                ackStandaloneProviderIngressIfNeeded(
+                await ackStandaloneProviderIngressIfNeeded(
                     ingress: ingress,
                     source: "provider.direct.ack.watchos"
                 )
             }
             return persisted
         case let .unresolvedWakeup(payload, requestIdentifier):
-            _ = payload
-            _ = requestIdentifier
-            _ = fallbackRequestIdentifier
-            return true
+            let unresolvedDeliveryId = requestIdentifier
+                ?? NotificationHandling.providerWakeupPullDeliveryId(from: payload)
+            guard let unresolvedDeliveryId else { return true }
+            let pulled = await syncStandaloneProviderIngress(
+                deliveryId: unresolvedDeliveryId,
+                reason: "delegate_unresolved_wakeup"
+            )
+            return pulled > 0
         }
     }
     func handleNotificationOpen(notificationRequestId: String) async {

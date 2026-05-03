@@ -11,8 +11,6 @@ This matrix uses the built-in `WatchAutomation` command/response/state/event fil
 | --- | --- |
 | `nav_events` | `nav.switch_tab` routes to `screen.events.list` / `tab.events` |
 | `nav_things` | `nav.switch_tab` routes to `screen.things.list` / `tab.things` |
-| `hide_events_page` | settings boundary command (`settings.set_page_visibility`) toggles `event_page_enabled=false` |
-| `show_events_page` | settings boundary round-trip toggles `event_page_enabled=true` |
 | `fixture_event_import` | fixture import path validates event ingestion (`event_count >= 1`) |
 | `fixture_thing_import` | fixture import path validates thing projection ingestion (`thing_count >= 1`) |
 | `entity_open_event` | shared-runtime fixture + `entity.open` validates event detail state and target `entity.opened` event |
@@ -34,6 +32,7 @@ Serial full Apple pipeline entry:
 默认仅启动 watch 模拟器（`BOOT_IPHONE=0`）；只有需要联动时才开启 iPhone（`BOOT_IPHONE=1`）。
 每个 case 默认最多重试 2 次（`CASE_RETRY_COUNT=2`），响应/状态等待默认 25 秒（`RESPONSE_TIMEOUT_SECONDS=25`）。
 默认启用非交互签名参数（`NO_INTERACTIVE_SIGNING=1`）以减少系统密码/二次验证弹窗。
+设备选择支持自动解析：优先使用 `WATCH_DEVICE_ID`/`IPHONE_DEVICE_ID`，找不到时按 `WATCH_DEVICE_NAME`/`IPHONE_DEVICE_NAME`，再回退到首个可用设备。
 Apple automation 环境默认设置 `PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS=0`，避免跨 App 数据访问弹窗阻塞。
 
 ## Pass Criteria

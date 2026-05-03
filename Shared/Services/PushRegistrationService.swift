@@ -142,6 +142,11 @@ import UserNotifications
         }
 
         func handleDeviceToken(_ deviceToken: Data) {
+            if let automationProviderToken {
+                apnsToken = automationProviderToken
+                resolveWaiters(with: .success(automationProviderToken))
+                return
+            }
             let token = PushRegistrationSemantics.hexEncodedToken(deviceToken)
             apnsToken = token
             resolveWaiters(with: .success(token))

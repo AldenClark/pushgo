@@ -8,7 +8,7 @@ final class MessageStateCoordinator {
 
     init(
         dataStore: LocalDataStore,
-        refreshCountsAndNotify: @escaping () async -> Void,
+        refreshCountsAndNotify: @escaping () async -> Void
     ) {
         self.dataStore = dataStore
         self.refreshCountsAndNotify = refreshCountsAndNotify

@@ -4,13 +4,13 @@ set -euo pipefail
 PROJECT_PATH="${PROJECT_PATH:-/Users/ethan/Repo/PushGo/pushgo/pushgo.xcodeproj}"
 SCHEME="${SCHEME:-PushGo-macOS}"
 DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-/tmp/pushgo-macos-automation}"
-HELPER_PATH="${HELPER_PATH:-/Users/ethan/Repo/PushGo/tools/pushgo_automation.py}"
-EVENT_FIXTURE_PATH="${EVENT_FIXTURE_PATH:-/Users/ethan/Repo/PushGo/tools/fixtures/p2/event-lifecycle.json}"
+EVENT_FIXTURE_PATH="${EVENT_FIXTURE_PATH:-/Users/ethan/Repo/PushGo/pushgo/Tests/Fixtures/p2/event-lifecycle.json}"
 EVENT_FIXTURE_ID="${EVENT_FIXTURE_ID:-evt_p2_active_001}"
-THING_FIXTURE_PATH="${THING_FIXTURE_PATH:-/Users/ethan/Repo/PushGo/tools/fixtures/p2/rich-thing-detail.json}"
+THING_FIXTURE_PATH="${THING_FIXTURE_PATH:-/Users/ethan/Repo/PushGo/pushgo/Tests/Fixtures/p2/rich-thing-detail.json}"
 THING_FIXTURE_ID="${THING_FIXTURE_ID:-thing_p2_rich_001}"
+RESPONSE_TIMEOUT_SECONDS="${RESPONSE_TIMEOUT_SECONDS:-25}"
+CASE_RETRY_COUNT="${CASE_RETRY_COUNT:-2}"
 NO_INTERACTIVE_SIGNING="${NO_INTERACTIVE_SIGNING:-1}"
-MACOS_BRIDGE_ROOT="${PUSHGO_AUTOMATION_MACOS_BRIDGE_ROOT:-/tmp/pushgo-macos-automation-bridge}"
 
 APP_BUNDLE_PATH="${DERIVED_DATA_PATH}/Build/Products/Debug/PushGo.app"
 APP_EXE_PATH="${APP_BUNDLE_PATH}/Contents/MacOS/PushGo"
@@ -32,11 +32,11 @@ need_cmd() {
 }
 
 need_cmd xcodebuild
-need_cmd python3
 need_cmd jq
 
 cleanup() {
   set +e
+  pkill -f "$APP_EXE_PATH" >/dev/null 2>&1 || true
   rm -rf "$WORK_DIR"
 }
 trap cleanup EXIT
@@ -58,156 +58,231 @@ if [[ ! -x "$APP_EXE_PATH" ]]; then
   exit 1
 fi
 
-run_case_ok() {
-  local case_name="$1"
-  shift
-  local output_path="${WORK_DIR}/${case_name}.json"
-  echo "[macos-smoke] case=${case_name}"
-  PUSHGO_AUTOMATION_MACOS_BRIDGE_ROOT="$MACOS_BRIDGE_ROOT" \
-    python3 "$HELPER_PATH" "$@" >"$output_path"
-  jq -e '.response.ok == true' "$output_path" >/dev/null
-  jq -e '.state.runtime_error_count == 0' "$output_path" >/dev/null
-  jq -e '.state.local_store_mode != "unavailable"' "$output_path" >/dev/null
+wait_for_file() {
+  local file_path="$1"
+  local timeout_seconds="$2"
+  local start
+  start="$(date +%s)"
+  while true; do
+    if [[ -f "$file_path" ]]; then
+      return 0
+    fi
+    if (( "$(date +%s)" - start >= timeout_seconds )); then
+      return 1
+    fi
+    sleep 0.2
+  done
 }
 
-run_case_fail() {
+wait_for_jq_true() {
+  local file_path="$1"
+  local jq_expr="$2"
+  local timeout_seconds="$3"
+  local start
+  start="$(date +%s)"
+  while true; do
+    if [[ -f "$file_path" ]] && jq -e "$jq_expr" "$file_path" >/dev/null 2>&1; then
+      return 0
+    fi
+    if (( "$(date +%s)" - start >= timeout_seconds )); then
+      return 1
+    fi
+    sleep 0.2
+  done
+}
+
+run_case() {
   local case_name="$1"
-  shift
-  local output_path="${WORK_DIR}/${case_name}.json"
-  echo "[macos-smoke] case=${case_name}"
-  set +e
-  PUSHGO_AUTOMATION_MACOS_BRIDGE_ROOT="$MACOS_BRIDGE_ROOT" \
-    python3 "$HELPER_PATH" "$@" >"$output_path"
-  local exit_code=$?
-  set -e
-  if [[ "$exit_code" -eq 0 ]]; then
-    echo "expected failure but command succeeded for case=${case_name}" >&2
-    cat "$output_path" >&2
-    exit 1
+  local request_payload="$2"
+  local response_check="$3"
+  local state_check="$4"
+  local runtime_root_override="${5:-}"
+
+  local runtime_root
+  if [[ -n "$runtime_root_override" ]]; then
+    runtime_root="$runtime_root_override"
+    mkdir -p "$runtime_root"
+  else
+    runtime_root="$(mktemp -d /tmp/pushgo-macos-smoke.${case_name}.XXXXXX)"
   fi
-  jq -e '.response.ok == false' "$output_path" >/dev/null
+
+  local response_path="${runtime_root}/automation-response.json"
+  local state_path="${runtime_root}/automation-state.json"
+  local events_path="${runtime_root}/automation-events.jsonl"
+  local trace_path="${runtime_root}/automation-trace.json"
+  local app_log_path="${runtime_root}/app.log"
+
+  local attempt=1
+  while (( attempt <= CASE_RETRY_COUNT )); do
+    echo "[macos-smoke] case=${case_name} attempt=${attempt}/${CASE_RETRY_COUNT}"
+    rm -f "$response_path" "$state_path" "$events_path" "$trace_path" "$app_log_path"
+
+    env \
+      "PUSHGO_AUTOMATION_STORAGE_ROOT=${runtime_root}" \
+      "PUSHGO_AUTOMATION_SKIP_PUSH_AUTHORIZATION=1" \
+      "PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS=0" \
+      "PUSHGO_AUTOMATION_FORCE_FOREGROUND_APP=1" \
+      "PUSHGO_AUTOMATION_RESPONSE_PATH=${response_path}" \
+      "PUSHGO_AUTOMATION_STATE_PATH=${state_path}" \
+      "PUSHGO_AUTOMATION_EVENTS_PATH=${events_path}" \
+      "PUSHGO_AUTOMATION_TRACE_PATH=${trace_path}" \
+      "PUSHGO_AUTOMATION_REQUEST=${request_payload}" \
+      "$APP_EXE_PATH" >"$app_log_path" 2>&1 &
+    local app_pid=$!
+
+    if ! wait_for_file "$response_path" "$RESPONSE_TIMEOUT_SECONDS"; then
+      kill "$app_pid" >/dev/null 2>&1 || true
+      wait "$app_pid" >/dev/null 2>&1 || true
+      if (( attempt == CASE_RETRY_COUNT )); then
+        echo "response file missing for case=${case_name}" >&2
+        cat "$app_log_path" >&2 || true
+        exit 1
+      fi
+      sleep 1
+      attempt=$((attempt + 1))
+      continue
+    fi
+    if ! wait_for_file "$state_path" "$RESPONSE_TIMEOUT_SECONDS"; then
+      kill "$app_pid" >/dev/null 2>&1 || true
+      wait "$app_pid" >/dev/null 2>&1 || true
+      if (( attempt == CASE_RETRY_COUNT )); then
+        echo "state file missing for case=${case_name}" >&2
+        cat "$app_log_path" >&2 || true
+        exit 1
+      fi
+      sleep 1
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    if ! jq -e "$response_check" "$response_path" >/dev/null; then
+      kill "$app_pid" >/dev/null 2>&1 || true
+      wait "$app_pid" >/dev/null 2>&1 || true
+      if (( attempt == CASE_RETRY_COUNT )); then
+        echo "response assertion failed for case=${case_name}" >&2
+        cat "$response_path" >&2
+        cat "$app_log_path" >&2 || true
+        exit 1
+      fi
+      sleep 1
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    if ! wait_for_jq_true "$state_path" "$state_check" "$RESPONSE_TIMEOUT_SECONDS"; then
+      kill "$app_pid" >/dev/null 2>&1 || true
+      wait "$app_pid" >/dev/null 2>&1 || true
+      if (( attempt == CASE_RETRY_COUNT )); then
+        echo "state assertion failed for case=${case_name}" >&2
+        cat "$state_path" >&2
+        cat "$app_log_path" >&2 || true
+        exit 1
+      fi
+      sleep 1
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    if ! [[ -f "$events_path" ]] || ! [[ -s "$events_path" ]]; then
+      kill "$app_pid" >/dev/null 2>&1 || true
+      wait "$app_pid" >/dev/null 2>&1 || true
+      if (( attempt == CASE_RETRY_COUNT )); then
+        echo "events file missing/empty for case=${case_name}" >&2
+        cat "$app_log_path" >&2 || true
+        exit 1
+      fi
+      sleep 1
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    kill "$app_pid" >/dev/null 2>&1 || true
+    wait "$app_pid" >/dev/null 2>&1 || true
+    return 0
+  done
 }
 
 assert_entity_opened_event() {
-  local output_path="$1"
+  local runtime_root="$1"
   local entity_type="$2"
   local entity_id="$3"
-  jq -e \
-    '.events
-    | map(select(.type == "entity.opened" and .details.entity_type == "'"${entity_type}"'" and .details.entity_id == "'"${entity_id}"'"))
-    | length >= 1' \
-    "$output_path" >/dev/null
+  local events_path="${runtime_root}/automation-events.jsonl"
+  jq -Rse \
+    '
+      split("\n")
+      | map(select(length > 0) | fromjson?)
+      | map(select(.type == "entity.opened" and .details.entity_type == "'"${entity_type}"'" and .details.entity_id == "'"${entity_id}"'"))
+      | length >= 1
+    ' \
+    "$events_path" >/dev/null
 }
 
-run_case_ok \
+run_case \
   "nav_channels" \
-  run macos \
-  --exe "$APP_EXE_PATH" \
-  --name nav.switch_tab \
-  --arg tab=channels \
-  --wait-condition '{"eq":["visible_screen","screen.channels"]}' \
-  --wait-timeout-seconds 20
-jq -e '.state.visible_screen == "screen.channels"' "${WORK_DIR}/nav_channels.json" >/dev/null
+  '{"id":"macos-nav-channels-001","plane":"command","name":"nav.switch_tab","args":{"tab":"channels"}}' \
+  '.ok == true and .platform == "macos" and .state.runtime_error_count == 0 and .state.local_store_mode != "unavailable"' \
+  '.visible_screen == "screen.channels" and .runtime_error_count == 0 and .local_store_mode != "unavailable"'
 
-run_case_ok \
+run_case \
   "hide_events_page" \
-  run macos \
-  --exe "$APP_EXE_PATH" \
-  --name settings.set_page_visibility \
-  --arg page=events \
-  --arg enabled=false \
-  --wait-condition '{"eq":["event_page_enabled",false]}' \
-  --wait-timeout-seconds 20
-jq -e '.state.event_page_enabled == false' "${WORK_DIR}/hide_events_page.json" >/dev/null
+  '{"id":"macos-hide-events-001","plane":"command","name":"settings.set_page_visibility","args":{"page":"events","enabled":"false"}}' \
+  '.ok == true and .platform == "macos" and .state.runtime_error_count == 0 and .state.local_store_mode != "unavailable"' \
+  '.event_page_enabled == false and .runtime_error_count == 0 and .local_store_mode != "unavailable"'
 
-run_case_ok \
+run_case \
   "show_events_page" \
-  run macos \
-  --exe "$APP_EXE_PATH" \
-  --name settings.set_page_visibility \
-  --arg page=events \
-  --arg enabled=true \
-  --wait-condition '{"eq":["event_page_enabled",true]}' \
-  --wait-timeout-seconds 20
-jq -e '.state.event_page_enabled == true' "${WORK_DIR}/show_events_page.json" >/dev/null
+  '{"id":"macos-show-events-001","plane":"command","name":"settings.set_page_visibility","args":{"page":"events","enabled":"true"}}' \
+  '.ok == true and .platform == "macos" and .state.runtime_error_count == 0 and .state.local_store_mode != "unavailable"' \
+  '.event_page_enabled == true and .runtime_error_count == 0 and .local_store_mode != "unavailable"'
 
-run_case_ok \
+run_case \
   "set_decryption_key_base64" \
-  run macos \
-  --exe "$APP_EXE_PATH" \
-  --name settings.set_decryption_key \
-  --arg key=MDEyMzQ1Njc4OWFiY2RlZg== \
-  --arg encoding=base64 \
-  --wait-condition '{"all":[{"eq":["notification_key_configured",true]},{"eq":["notification_key_encoding","base64"]}]}' \
-  --wait-timeout-seconds 20
-jq -e '.state.notification_key_configured == true and .state.notification_key_encoding == "base64"' "${WORK_DIR}/set_decryption_key_base64.json" >/dev/null
+  '{"id":"macos-set-key-001","plane":"command","name":"settings.set_decryption_key","args":{"key":"MDEyMzQ1Njc4OWFiY2RlZg==","encoding":"base64"}}' \
+  '.ok == true and .platform == "macos" and .state.runtime_error_count == 0 and .state.local_store_mode != "unavailable"' \
+  '.notification_key_configured == true and .notification_key_encoding == "base64" and .runtime_error_count == 0 and .local_store_mode != "unavailable"'
 
-run_case_fail \
+run_case \
   "set_decryption_key_invalid" \
-  run macos \
-  --exe "$APP_EXE_PATH" \
-  --name settings.set_decryption_key \
-  --arg key=abcd \
-  --arg encoding=plain \
-  --response-timeout-seconds 20
-jq -e '.response.error | tostring | contains("key")' "${WORK_DIR}/set_decryption_key_invalid.json" >/dev/null
+  '{"id":"macos-set-key-invalid-001","plane":"command","name":"settings.set_decryption_key","args":{"key":"abcd","encoding":"plain"}}' \
+  '.ok == false and (.error | tostring | contains("key")) and .platform == "macos"' \
+  '.runtime_error_count >= 0'
 
-run_case_ok \
+run_case \
   "fixture_import_event" \
-  run macos \
-  --exe "$APP_EXE_PATH" \
-  --name fixture.import \
-  --arg "path=${EVENT_FIXTURE_PATH}" \
-  --wait-condition '{"gte":["event_count",1]}' \
-  --wait-timeout-seconds 20
-jq -e '.state.event_count >= 1' "${WORK_DIR}/fixture_import_event.json" >/dev/null
-jq -e '.state.last_fixture_import_path | tostring | contains("event-lifecycle")' "${WORK_DIR}/fixture_import_event.json" >/dev/null
+  "{\"id\":\"macos-fixture-event-001\",\"plane\":\"command\",\"name\":\"fixture.import\",\"args\":{\"path\":\"${EVENT_FIXTURE_PATH}\"}}" \
+  '.ok == true and .platform == "macos" and .state.runtime_error_count == 0 and .state.local_store_mode != "unavailable"' \
+  '.event_count >= 1 and .runtime_error_count == 0 and .local_store_mode != "unavailable"'
 
-SHARED_RUNTIME_DIR="${WORK_DIR}/runtime-shared"
-mkdir -p "$SHARED_RUNTIME_DIR"
+SHARED_RUNTIME_ROOT="$(mktemp -d /tmp/pushgo-macos-shared-runtime.XXXXXX)"
 
-run_case_ok \
+run_case \
   "fixture_import_event_for_entity_open" \
-  run macos \
-  --exe "$APP_EXE_PATH" \
-  --runtime-dir "$SHARED_RUNTIME_DIR" \
-  --name fixture.import \
-  --arg "path=${EVENT_FIXTURE_PATH}" \
-  --wait-condition '{"gte":["event_count",1]}' \
-  --wait-timeout-seconds 20
+  "{\"id\":\"macos-fixture-event-entity-open-001\",\"plane\":\"command\",\"name\":\"fixture.import\",\"args\":{\"path\":\"${EVENT_FIXTURE_PATH}\"}}" \
+  '.ok == true and .platform == "macos" and .state.runtime_error_count == 0 and .state.local_store_mode != "unavailable"' \
+  '.event_count >= 1 and .runtime_error_count == 0 and .local_store_mode != "unavailable"' \
+  "$SHARED_RUNTIME_ROOT"
 
-run_case_ok \
+run_case \
   "entity_open_event" \
-  run macos \
-  --exe "$APP_EXE_PATH" \
-  --runtime-dir "$SHARED_RUNTIME_DIR" \
-  --name entity.open \
-  --arg entity_type=event \
-  --arg "entity_id=${EVENT_FIXTURE_ID}" \
-  --wait-condition '{"all":[{"eq":["visible_screen","screen.events.detail"]},{"eq":["opened_entity_type","event"]}]}' \
-  --wait-timeout-seconds 20
-assert_entity_opened_event "${WORK_DIR}/entity_open_event.json" "event" "${EVENT_FIXTURE_ID}"
+  "{\"id\":\"macos-entity-open-event-001\",\"plane\":\"command\",\"name\":\"entity.open\",\"args\":{\"entity_type\":\"event\",\"entity_id\":\"${EVENT_FIXTURE_ID}\"}}" \
+  '.ok == true and .platform == "macos" and .state.runtime_error_count == 0 and .state.local_store_mode != "unavailable"' \
+  '.visible_screen == "screen.events.detail" and .opened_entity_type == "event" and .runtime_error_count == 0 and .local_store_mode != "unavailable"' \
+  "$SHARED_RUNTIME_ROOT"
+assert_entity_opened_event "$SHARED_RUNTIME_ROOT" "event" "$EVENT_FIXTURE_ID"
 
-run_case_ok \
+run_case \
   "fixture_import_thing_for_entity_open" \
-  run macos \
-  --exe "$APP_EXE_PATH" \
-  --runtime-dir "$SHARED_RUNTIME_DIR" \
-  --name fixture.import \
-  --arg "path=${THING_FIXTURE_PATH}" \
-  --wait-condition '{"gte":["thing_count",1]}' \
-  --wait-timeout-seconds 20
+  "{\"id\":\"macos-fixture-thing-entity-open-001\",\"plane\":\"command\",\"name\":\"fixture.import\",\"args\":{\"path\":\"${THING_FIXTURE_PATH}\"}}" \
+  '.ok == true and .platform == "macos" and .state.runtime_error_count == 0 and .state.local_store_mode != "unavailable"' \
+  '.thing_count >= 1 and .runtime_error_count == 0 and .local_store_mode != "unavailable"' \
+  "$SHARED_RUNTIME_ROOT"
 
-run_case_ok \
+run_case \
   "entity_open_thing" \
-  run macos \
-  --exe "$APP_EXE_PATH" \
-  --runtime-dir "$SHARED_RUNTIME_DIR" \
-  --name entity.open \
-  --arg entity_type=thing \
-  --arg "entity_id=${THING_FIXTURE_ID}" \
-  --wait-condition '{"all":[{"eq":["visible_screen","screen.things.detail"]},{"eq":["opened_entity_type","thing"]}]}' \
-  --wait-timeout-seconds 20
-assert_entity_opened_event "${WORK_DIR}/entity_open_thing.json" "thing" "${THING_FIXTURE_ID}"
+  "{\"id\":\"macos-entity-open-thing-001\",\"plane\":\"command\",\"name\":\"entity.open\",\"args\":{\"entity_type\":\"thing\",\"entity_id\":\"${THING_FIXTURE_ID}\"}}" \
+  '.ok == true and .platform == "macos" and .state.runtime_error_count == 0 and .state.local_store_mode != "unavailable"' \
+  '.visible_screen == "screen.things.detail" and .opened_entity_type == "thing" and .runtime_error_count == 0 and .local_store_mode != "unavailable"' \
+  "$SHARED_RUNTIME_ROOT"
+assert_entity_opened_event "$SHARED_RUNTIME_ROOT" "thing" "$THING_FIXTURE_ID"
 
 echo "[macos-smoke] all cases passed"

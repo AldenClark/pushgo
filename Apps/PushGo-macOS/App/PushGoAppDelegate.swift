@@ -213,8 +213,15 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency 
         )
         switch ingress {
         case let .unresolvedWakeup(resolvedPayload, requestIdentifier):
-            _ = resolvedPayload
-            _ = requestIdentifier
+            let unresolvedDeliveryId = requestIdentifier
+                ?? NotificationHandling.providerWakeupPullDeliveryId(from: resolvedPayload)
+            if let unresolvedDeliveryId {
+                _ = await AppEnvironment.shared.syncProviderIngress(
+                    deliveryId: unresolvedDeliveryId,
+                    reason: "did_receive_remote_notification_unresolved",
+                    skipInboxMerge: true
+                )
+            }
         case let .pulled(resolvedPayload, requestIdentifier):
             _ = await AppEnvironment.shared.persistRemotePayloadIfNeeded(
                 resolvedPayload,
@@ -223,8 +230,7 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency 
         case let .direct(resolvedPayload, requestIdentifier):
             _ = await AppEnvironment.shared.persistRemotePayloadIfNeeded(
                 resolvedPayload,
-                requestIdentifier: requestIdentifier,
-                ackSource: "provider.direct.ack.macos"
+                requestIdentifier: requestIdentifier
             )
         }
     }

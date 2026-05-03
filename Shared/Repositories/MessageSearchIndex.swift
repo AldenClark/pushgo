@@ -8,11 +8,26 @@ private enum MessageIndexDatabase {
         var configuration = Configuration()
         configuration.busyMode = .timeout(busyTimeoutSeconds)
         configuration.prepareDatabase { db in
-            try db.execute(sql: "PRAGMA journal_mode=WAL;")
+            try db.execute(sql: "PRAGMA busy_timeout = 5000;")
+            try applyJournalModeWALIfPossible(db)
             try db.execute(sql: "PRAGMA synchronous=NORMAL;")
             try db.execute(sql: "PRAGMA temp_store=MEMORY;")
         }
         return try DatabaseQueue(path: url.path, configuration: configuration)
+    }
+
+    private static func applyJournalModeWALIfPossible(_ db: Database) throws {
+        do {
+            try db.execute(sql: "PRAGMA journal_mode=WAL;")
+        } catch let error as DatabaseError where isTransientSQLiteLock(error) {
+            // Another connection may be holding a short lock while opening.
+            // Proceed with the current mode and avoid failing store initialization.
+            return
+        }
+    }
+
+    private static func isTransientSQLiteLock(_ error: DatabaseError) -> Bool {
+        error.resultCode == .SQLITE_BUSY || error.resultCode == .SQLITE_LOCKED
     }
 }
 
@@ -31,10 +46,6 @@ actor MessageSearchIndex {
         fileManager: FileManager = .default,
         appGroupIdentifier: String = AppConstants.appGroupIdentifier,
     ) throws {
-        try AppConstants.migrateLegacyDatabaseArtifacts(
-            fileManager: fileManager,
-            appGroupIdentifier: appGroupIdentifier
-        )
         let base = try MessageSearchIndex.databaseDirectory(
             fileManager: fileManager,
             appGroupIdentifier: appGroupIdentifier
@@ -200,17 +211,10 @@ actor MessageSearchIndex {
         fileManager: FileManager,
         appGroupIdentifier: String,
     ) throws -> URL {
-        guard let base = AppConstants.appGroupContainerURL(
+        try AppConstants.appLocalDatabaseDirectory(
             fileManager: fileManager,
-            identifier: appGroupIdentifier
-        ) else {
-            throw AppError.missingAppGroup(appGroupIdentifier)
-        }
-        let directory = base.appendingPathComponent("Database", isDirectory: true)
-        if !fileManager.fileExists(atPath: directory.path) {
-            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        }
-        return directory
+            appGroupIdentifier: appGroupIdentifier
+        )
     }
 
     fileprivate static var indexDatabaseFilename: String {
@@ -236,10 +240,6 @@ actor MessageMetadataIndex {
         fileManager: FileManager = .default,
         appGroupIdentifier: String = AppConstants.appGroupIdentifier,
     ) throws {
-        try AppConstants.migrateLegacyDatabaseArtifacts(
-            fileManager: fileManager,
-            appGroupIdentifier: appGroupIdentifier
-        )
         let base = try MessageMetadataIndex.databaseDirectory(
             fileManager: fileManager,
             appGroupIdentifier: appGroupIdentifier
@@ -352,16 +352,9 @@ actor MessageMetadataIndex {
         fileManager: FileManager,
         appGroupIdentifier: String,
     ) throws -> URL {
-        guard let base = AppConstants.appGroupContainerURL(
+        try AppConstants.appLocalDatabaseDirectory(
             fileManager: fileManager,
-            identifier: appGroupIdentifier
-        ) else {
-            throw AppError.missingAppGroup(appGroupIdentifier)
-        }
-        let directory = base.appendingPathComponent("Database", isDirectory: true)
-        if !fileManager.fileExists(atPath: directory.path) {
-            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        }
-        return directory
+            appGroupIdentifier: appGroupIdentifier
+        )
     }
 }

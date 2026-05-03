@@ -30,7 +30,6 @@ Every stage writes logs to `/tmp/pushgo-apple-automation-logs`.
 - `RUN_IOS_UI=0` skip iOS UI tests
 - `NO_INTERACTIVE_SIGNING=1` (default) use non-interactive signing flags to reduce password/2FA prompts
 - `LOG_ROOT=/custom/path` override log output directory
-- `PUSHGO_AUTOMATION_MACOS_BRIDGE_ROOT=/tmp/pushgo-macos-automation-bridge` override macOS automation bridge root
 
 Apple automation sessions also default to `PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS=0` to suppress clipboard/system cross-app permission prompts during unattended runs.  
 Set `PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS=1` only when validating copy/open-external integrations.

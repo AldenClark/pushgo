@@ -400,11 +400,69 @@ final class NotificationContentPreparer {
                 content.userInfo["images"] = decodedImages
                 applied = true
             }
-            for key in ["event_profile_json", "event_attrs_json", "thing_profile_json", "thing_attrs_json"] {
-                if let value = Self.normalizedJSONObjectString(from: object[key]) {
-                    content.userInfo[key] = value
-                    applied = true
-                }
+            if let tags = Self.normalizedJSONArrayString(from: object["tags"]) {
+                content.userInfo["tags"] = tags
+                applied = true
+            }
+            if let metadata = Self.normalizedJSONObjectString(from: object["metadata"]) {
+                content.userInfo["metadata"] = metadata
+                applied = true
+            }
+            if let description = (object["description"] as? String)?.trimmedNonEmpty {
+                content.userInfo["description"] = description
+                applied = true
+            }
+            if let status = (object["status"] as? String)?.trimmedNonEmpty {
+                content.userInfo["status"] = status
+                applied = true
+            }
+            if let message = (object["message"] as? String)?.trimmedNonEmpty {
+                content.userInfo["message"] = message
+                applied = true
+            }
+            if let attrs = Self.normalizedJSONObjectString(from: object["attrs"]) {
+                content.userInfo["attrs"] = attrs
+                applied = true
+            }
+            if let startedAt = Self.normalizedInt64(from: object["started_at"]) {
+                content.userInfo["started_at"] = startedAt
+                applied = true
+            }
+            if let endedAt = Self.normalizedInt64(from: object["ended_at"]) {
+                content.userInfo["ended_at"] = endedAt
+                applied = true
+            }
+            if let primaryImage = (object["primary_image"] as? String)?.trimmedNonEmpty {
+                content.userInfo["primary_image"] = primaryImage
+                applied = true
+            }
+            if let state = (object["state"] as? String)?.trimmedNonEmpty {
+                content.userInfo["state"] = state
+                applied = true
+            }
+            if let createdAt = Self.normalizedInt64(from: object["created_at"]) {
+                content.userInfo["created_at"] = createdAt
+                applied = true
+            }
+            if let deletedAt = Self.normalizedInt64(from: object["deleted_at"]) {
+                content.userInfo["deleted_at"] = deletedAt
+                applied = true
+            }
+            if let externalIds = Self.normalizedJSONObjectString(from: object["external_ids"]) {
+                content.userInfo["external_ids"] = externalIds
+                applied = true
+            }
+            if let locationType = (object["location_type"] as? String)?.trimmedNonEmpty {
+                content.userInfo["location_type"] = locationType
+                applied = true
+            }
+            if let locationValue = (object["location_value"] as? String)?.trimmedNonEmpty {
+                content.userInfo["location_value"] = locationValue
+                applied = true
+            }
+            if let location = Self.normalizedJSONObjectString(from: object["location"]) {
+                content.userInfo["location"] = location
+                applied = true
             }
 
             return CipherDecryptResult(
@@ -490,9 +548,74 @@ final class NotificationContentPreparer {
         return nil
     }
 
+    private static func normalizedJSONArrayString(from raw: Any?) -> String? {
+        var values: [String] = []
+        if let array = raw as? [Any] {
+            values = array.compactMap { value in
+                guard let text = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !text.isEmpty
+                else {
+                    return nil
+                }
+                return text
+            }
+        } else if let text = (raw as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !text.isEmpty,
+                  let data = text.data(using: .utf8),
+                  let decoded = try? JSONSerialization.jsonObject(with: data) as? [Any]
+        {
+            values = decoded.compactMap { value in
+                guard let text = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !text.isEmpty
+                else {
+                    return nil
+                }
+                return text
+            }
+        }
+        var deduped: [String] = []
+        for value in values where !deduped.contains(value) {
+            deduped.append(value)
+        }
+        guard !deduped.isEmpty,
+              let data = try? JSONSerialization.data(withJSONObject: deduped),
+              let json = String(data: data, encoding: .utf8)
+        else {
+            return nil
+        }
+        return json
+    }
+
+    private static func normalizedInt64(from raw: Any?) -> Int64? {
+        switch raw {
+        case let value as Int64:
+            return value
+        case let value as Int:
+            return Int64(value)
+        case let value as NSNumber:
+            return value.int64Value
+        case let value as String:
+            return Int64(value.trimmingCharacters(in: .whitespacesAndNewlines))
+        default:
+            return nil
+        }
+    }
+
     private func loadKeyMaterial() async throws -> ServerConfig.NotificationKeyMaterial? {
 #if os(watchOS)
-        return try await watchProvisioningStore?.loadProvisioningServerConfig()?.notificationKeyMaterial
+        if let material = try await watchProvisioningStore?
+            .loadProvisioningServerConfig()?
+            .notificationKeyMaterial
+        {
+            return material
+        }
+        guard let data = AppConstants.sharedUserDefaults()
+            .data(forKey: AppConstants.watchProvisioningServerConfigDefaultsKey)
+        else {
+            return nil
+        }
+        return (try? JSONDecoder().decode(ServerConfig.self, from: data).normalized())?
+            .notificationKeyMaterial
 #else
         return try keychainConfigStore.loadServerConfig()?.notificationKeyMaterial
 #endif

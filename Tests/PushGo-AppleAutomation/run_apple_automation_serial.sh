@@ -17,7 +17,6 @@ RUN_MACOS_SMOKE="${RUN_MACOS_SMOKE:-1}"
 RUN_WATCHOS_SMOKE="${RUN_WATCHOS_SMOKE:-1}"
 RUN_IOS_UI="${RUN_IOS_UI:-1}"
 NO_INTERACTIVE_SIGNING="${NO_INTERACTIVE_SIGNING:-1}"
-PUSHGO_AUTOMATION_MACOS_BRIDGE_ROOT="${PUSHGO_AUTOMATION_MACOS_BRIDGE_ROOT:-/tmp/pushgo-macos-automation-bridge}"
 
 LOG_ROOT="${LOG_ROOT:-/tmp/pushgo-apple-automation-logs}"
 mkdir -p "$LOG_ROOT"
@@ -115,7 +114,6 @@ run_macos_smoke_tests() {
   run_step \
     "macos_smoke" \
     env NO_INTERACTIVE_SIGNING="$NO_INTERACTIVE_SIGNING" \
-      PUSHGO_AUTOMATION_MACOS_BRIDGE_ROOT="$PUSHGO_AUTOMATION_MACOS_BRIDGE_ROOT" \
       bash "$MACOS_SMOKE_SCRIPT"
   shutdown_simulators
 }

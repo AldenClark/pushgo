@@ -82,6 +82,28 @@ struct PushRegistrationServiceTests {
     }
 
     @Test
+    func handleDeviceTokenKeepsAutomationProviderTokenStable() async throws {
+        let service = PushRegistrationService.testing(
+            automationProviderToken: "automation-token",
+            bypassPushAuthorizationPrompt: true,
+            bootstrapStateOverride: .init(
+                authorizationState: .authorized,
+                apnsToken: nil
+            )
+        )
+
+        let pending = Task { @MainActor in
+            try await service.awaitToken(timeout: 2)
+        }
+
+        await Task.yield()
+        service.handleDeviceToken(Data([0xde, 0xad, 0xbe, 0xef]))
+
+        #expect(try await pending.value == "automation-token")
+        #expect(service.apnsToken == "automation-token")
+    }
+
+    @Test
     func handleRegistrationErrorRejectsPendingWaitersAndMarksDenied() async {
         let service = PushRegistrationService.testing(
             bootstrapStateOverride: .init(
