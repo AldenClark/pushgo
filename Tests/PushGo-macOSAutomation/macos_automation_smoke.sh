@@ -8,6 +8,12 @@ EVENT_FIXTURE_PATH="${EVENT_FIXTURE_PATH:-/Users/ethan/Repo/PushGo/pushgo/Tests/
 EVENT_FIXTURE_ID="${EVENT_FIXTURE_ID:-evt_p2_active_001}"
 THING_FIXTURE_PATH="${THING_FIXTURE_PATH:-/Users/ethan/Repo/PushGo/pushgo/Tests/Fixtures/p2/rich-thing-detail.json}"
 THING_FIXTURE_ID="${THING_FIXTURE_ID:-thing_p2_rich_001}"
+MESSAGE_SEED_FIXTURE_PATH="${MESSAGE_SEED_FIXTURE_PATH:-/Users/ethan/Repo/PushGo/pushgo/Tests/Fixtures/p2/seed-split.json}"
+ENTITY_RECORD_FIXTURE_PATH="${ENTITY_RECORD_FIXTURE_PATH:-/Users/ethan/Repo/PushGo/pushgo/Tests/Fixtures/p2/seed-entity-records.json}"
+SUBSCRIPTION_FIXTURE_PATH="${SUBSCRIPTION_FIXTURE_PATH:-/Users/ethan/Repo/PushGo/pushgo/Tests/Fixtures/p2/seed-subscriptions.json}"
+SEED_MESSAGE_ID="${SEED_MESSAGE_ID:-msg_p2_seed_001}"
+SERVER_BASE_URL="${SERVER_BASE_URL:-https://gateway.pushgo.app}"
+SERVER_TOKEN="${SERVER_TOKEN:-test-token-123}"
 RESPONSE_TIMEOUT_SECONDS="${RESPONSE_TIMEOUT_SECONDS:-25}"
 CASE_RETRY_COUNT="${CASE_RETRY_COUNT:-2}"
 NO_INTERACTIVE_SIGNING="${NO_INTERACTIVE_SIGNING:-1}"
@@ -253,7 +259,26 @@ run_case \
   '.ok == true and .platform == "macos" and .state.runtime_error_count == 0 and .state.local_store_mode != "unavailable"' \
   '.event_count >= 1 and .runtime_error_count == 0 and .local_store_mode != "unavailable"'
 
+run_case \
+  "fixture_seed_messages" \
+  "{\"id\":\"macos-fixture-seed-messages-001\",\"plane\":\"command\",\"name\":\"fixture.seed_messages\",\"args\":{\"path\":\"${MESSAGE_SEED_FIXTURE_PATH}\"}}" \
+  '.ok == true and .platform == "macos" and .state.runtime_error_count == 0 and .state.local_store_mode != "unavailable"' \
+  '.last_fixture_import_message_count == 1 and .total_message_count >= 1 and .runtime_error_count == 0 and .local_store_mode != "unavailable"'
+
+run_case \
+  "fixture_seed_entity_records" \
+  "{\"id\":\"macos-fixture-seed-entities-001\",\"plane\":\"command\",\"name\":\"fixture.seed_entity_records\",\"args\":{\"path\":\"${ENTITY_RECORD_FIXTURE_PATH}\"}}" \
+  '.ok == true and .platform == "macos" and .state.runtime_error_count == 0 and .state.local_store_mode != "unavailable"' \
+  '.last_fixture_import_entity_record_count == 2 and .event_count >= 1 and .thing_count >= 1 and .runtime_error_count == 0 and .local_store_mode != "unavailable"'
+
+run_case \
+  "fixture_seed_subscriptions" \
+  "{\"id\":\"macos-fixture-seed-subscriptions-001\",\"plane\":\"command\",\"name\":\"fixture.seed_subscriptions\",\"args\":{\"path\":\"${SUBSCRIPTION_FIXTURE_PATH}\"}}" \
+  '.ok == true and .platform == "macos" and .state.runtime_error_count == 0 and .state.local_store_mode != "unavailable"' \
+  '.last_fixture_import_subscription_count == 2 and .runtime_error_count == 0 and .local_store_mode != "unavailable"'
+
 SHARED_RUNTIME_ROOT="$(mktemp -d /tmp/pushgo-macos-shared-runtime.XXXXXX)"
+SHARED_MESSAGE_RUNTIME_ROOT="$(mktemp -d /tmp/pushgo-macos-message-runtime.XXXXXX)"
 
 run_case \
   "fixture_import_event_for_entity_open" \
@@ -284,5 +309,46 @@ run_case \
   '.visible_screen == "screen.things.detail" and .opened_entity_type == "thing" and .runtime_error_count == 0 and .local_store_mode != "unavailable"' \
   "$SHARED_RUNTIME_ROOT"
 assert_entity_opened_event "$SHARED_RUNTIME_ROOT" "thing" "$THING_FIXTURE_ID"
+
+run_case \
+  "fixture_seed_messages_for_notification_commands" \
+  "{\"id\":\"macos-fixture-seed-message-open-001\",\"plane\":\"command\",\"name\":\"fixture.seed_messages\",\"args\":{\"path\":\"${MESSAGE_SEED_FIXTURE_PATH}\"}}" \
+  '.ok == true and .platform == "macos" and .state.runtime_error_count == 0 and .state.local_store_mode != "unavailable"' \
+  '.last_fixture_import_message_count == 1 and .total_message_count >= 1 and .runtime_error_count == 0 and .local_store_mode != "unavailable"' \
+  "$SHARED_MESSAGE_RUNTIME_ROOT"
+
+run_case \
+  "message_open" \
+  "{\"id\":\"macos-message-open-001\",\"plane\":\"command\",\"name\":\"message.open\",\"args\":{\"message_id\":\"${SEED_MESSAGE_ID}\"}}" \
+  '.ok == true and .platform == "macos" and .state.runtime_error_count == 0 and .state.local_store_mode != "unavailable"' \
+  ".visible_screen == \"screen.message.detail\" and .opened_message_id == \"${SEED_MESSAGE_ID}\" and .runtime_error_count == 0 and .local_store_mode != \"unavailable\"" \
+  "$SHARED_MESSAGE_RUNTIME_ROOT"
+
+run_case \
+  "notification_open" \
+  "{\"id\":\"macos-notification-open-001\",\"plane\":\"command\",\"name\":\"notification.open\",\"args\":{\"message_id\":\"${SEED_MESSAGE_ID}\"}}" \
+  '.ok == true and .platform == "macos" and .state.runtime_error_count == 0 and .state.local_store_mode != "unavailable"' \
+  ".visible_screen == \"screen.message.detail\" and .opened_message_id == \"${SEED_MESSAGE_ID}\" and .runtime_error_count == 0 and .local_store_mode != \"unavailable\"" \
+  "$SHARED_MESSAGE_RUNTIME_ROOT"
+
+run_case \
+  "notification_mark_read" \
+  "{\"id\":\"macos-notification-mark-read-001\",\"plane\":\"command\",\"name\":\"notification.mark_read\",\"args\":{\"message_id\":\"${SEED_MESSAGE_ID}\"}}" \
+  '.ok == true and .platform == "macos" and .state.runtime_error_count == 0 and .state.local_store_mode != "unavailable"' \
+  ".last_notification_action == \"mark_read\" and .last_notification_target == \"${SEED_MESSAGE_ID}\" and .unread_message_count == 0 and .runtime_error_count == 0 and .local_store_mode != \"unavailable\"" \
+  "$SHARED_MESSAGE_RUNTIME_ROOT"
+
+run_case \
+  "notification_delete" \
+  "{\"id\":\"macos-notification-delete-001\",\"plane\":\"command\",\"name\":\"notification.delete\",\"args\":{\"message_id\":\"${SEED_MESSAGE_ID}\"}}" \
+  '.ok == true and .platform == "macos" and .state.runtime_error_count == 0 and .state.local_store_mode != "unavailable"' \
+  ".last_notification_action == \"delete\" and .last_notification_target == \"${SEED_MESSAGE_ID}\" and .total_message_count == 0 and .runtime_error_count == 0 and .local_store_mode != \"unavailable\"" \
+  "$SHARED_MESSAGE_RUNTIME_ROOT"
+
+run_case \
+  "gateway_set_server" \
+  "{\"id\":\"macos-gateway-set-server-001\",\"plane\":\"command\",\"name\":\"gateway.set_server\",\"args\":{\"base_url\":\"${SERVER_BASE_URL}\",\"token\":\"${SERVER_TOKEN}\"}}" \
+  ".ok == true and .platform == \"macos\" and .state.gateway_base_url == \"${SERVER_BASE_URL}\" and .state.gateway_token_present == true and .state.runtime_error_count == 0 and .state.local_store_mode != \"unavailable\"" \
+  ".gateway_base_url == \"${SERVER_BASE_URL}\" and .gateway_token_present == true and .runtime_error_count == 0 and .local_store_mode != \"unavailable\""
 
 echo "[macos-smoke] all cases passed"

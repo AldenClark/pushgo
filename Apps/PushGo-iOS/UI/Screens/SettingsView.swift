@@ -8,6 +8,7 @@ struct SettingsView: View {
     private let openDecryptionOnAppear: Bool
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openURL) private var openURL
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @State private var viewModel = SettingsViewModel()
     @State private var activeSheet: SettingsSheet?
@@ -233,6 +234,60 @@ struct SettingsView: View {
             }
             .buttonStyle(.appPlain)
             .accessibilityIdentifier("action.settings.open_decryption")
+            .listRowInsets(rowInsets)
+            .listRowBackground(Color.clear)
+
+            Button {
+                openURL(AppConstants.documentationURL(.gettingStarted))
+            } label: {
+                SettingsActionRow(
+                    iconName: "sparkles",
+                    title: "open_getting_started_docs",
+                    detail: "open_getting_started_docs_detail",
+                ) {
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.appTextSecondary)
+                }
+            }
+            .buttonStyle(.appPlain)
+            .accessibilityIdentifier("action.settings.open_getting_started_docs")
+            .listRowInsets(rowInsets)
+            .listRowBackground(Color.clear)
+
+            Button {
+                openURL(AppConstants.documentationURL(.messageAPI))
+            } label: {
+                SettingsActionRow(
+                    iconName: "book",
+                    title: "open_developer_api_docs",
+                    detail: "open_developer_api_docs_detail",
+                ) {
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.appTextSecondary)
+                }
+            }
+            .buttonStyle(.appPlain)
+            .accessibilityIdentifier("action.settings.open_developer_api_docs")
+            .listRowInsets(rowInsets)
+            .listRowBackground(Color.clear)
+
+            Button {
+                openURL(AppConstants.documentationURL(.e2ee))
+            } label: {
+                SettingsActionRow(
+                    iconName: "lock.doc",
+                    title: "open_e2ee_docs",
+                    detail: "open_e2ee_docs_detail",
+                ) {
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.appTextSecondary)
+                }
+            }
+            .buttonStyle(.appPlain)
+            .accessibilityIdentifier("action.settings.open_e2ee_docs")
             .listRowInsets(rowInsets)
             .listRowBackground(Color.clear)
 

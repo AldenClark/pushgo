@@ -4,7 +4,7 @@ struct ThingSplitScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
-    @Bindable var viewModel: EntityProjectionViewModel
+    let viewModel: EntityProjectionViewModel
     @Binding var selection: String?
     var openThingId: String? = nil
     var onOpenThingHandled: (() -> Void)? = nil
@@ -59,12 +59,6 @@ struct ThingSplitScreen: View {
         }
         .onChange(of: openThingId) { _, _ in
             syncSelection()
-        }
-        .onChange(of: environment.messageStoreRevision) { _, _ in
-            Task { @MainActor in
-                await viewModel.reload()
-                syncSelection()
-            }
         }
         .onChange(of: selection) { _, id in
             guard !isBatchMode else { return }

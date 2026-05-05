@@ -6,7 +6,7 @@ struct MessageListScreen: View {
     @Environment(MessageSearchViewModel.self) private var searchViewModel: MessageSearchViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @Bindable var viewModel: MessageListViewModel
+    let viewModel: MessageListViewModel
     @Binding var selection: UUID?
     @Binding var batchSelection: Set<UUID>
     @Binding var isBatchMode: Bool
@@ -25,20 +25,18 @@ struct MessageListScreen: View {
         let baseView = Group {
             if !viewModel.hasLoadedOnce {
                 Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if isShowingSearchResults {
-                if isBatchMode {
-                    searchResultsBatchList
-                } else {
-                    searchResultsList
-                }
-            } else if viewModel.filteredMessages.isEmpty {
-                emptyState
             } else {
-                if isBatchMode {
-                    messagesBatchList
-                } else {
-                    messagesList
+                ZStack {
+                    activeListView
+                        .opacity(showsEmptyState ? 0.001 : 1)
+                        .allowsHitTesting(!showsEmptyState)
+                        .accessibilityHidden(showsEmptyState)
+
+                    if showsEmptyState {
+                        emptyState
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .task {
@@ -51,6 +49,29 @@ struct MessageListScreen: View {
 
     private var isShowingSearchResults: Bool {
         searchViewModel.hasSearched
+    }
+
+    @ViewBuilder
+    private var activeListView: some View {
+        if isShowingSearchResults {
+            if isBatchMode {
+                searchResultsBatchList
+            } else {
+                searchResultsList
+            }
+        } else if isBatchMode {
+            messagesBatchList
+        } else {
+            messagesList
+        }
+    }
+
+    private var showsEmptyState: Bool {
+        !isShowingSearchResults && viewModel.filteredMessages.isEmpty
+    }
+
+    private var showsUnreadFilterEmptyState: Bool {
+        showsEmptyState && viewModel.isUnreadOnlyFilterActive && viewModel.totalMessageCount > 0
     }
 
     private var messagesList: some View {
@@ -88,6 +109,9 @@ struct MessageListScreen: View {
             }
             .onChange(of: viewModel.filteredMessagesIdentityRevision) { _, _ in
                 scrollToSelectionIfNeeded(proxy)
+            }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                unreadFilterRefreshHint
             }
         }
     }
@@ -238,28 +262,18 @@ struct MessageListScreen: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 24) {
-            VStack(spacing: 12) {
-                Image(systemName: "tray")
-                    .font(.largeTitle)
-                    .foregroundStyle(Color.appTextSecondary)
-                    .accessibilityHidden(true)
-                Text(localizationManager.localized("no_messages_yet"))
-                    .font(.headline)
-                Text(localizationManager.localized(
-                    "you_can_use_the_pushgo_cli_or_other_integration_tools_to_send_a_test_push_to_the_current_device"
-                ))
-                .font(.subheadline)
-                .foregroundStyle(Color.appTextSecondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 420)
+        Group {
+            if showsUnreadFilterEmptyState {
+                EntityEmptyView(
+                    iconName: "tray",
+                    title: localizationManager.localized("placeholder_no_unread_messages"),
+                    subtitle: localizationManager.localized("message_unread_filter_empty_hint"),
+                    subtitleMaxWidth: 420
+                )
+            } else {
+                EntityOnboardingEmptyView(kind: .messages)
             }
-            .frame(maxWidth: .infinity)
-            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .padding(.top, 48)
-        .padding(.horizontal, 24)
     }
 
     private var searchPlaceholderRow: some View {
@@ -286,5 +300,26 @@ struct MessageListScreen: View {
             }
         }
         pendingScrollTarget = nil
+    }
+
+    @ViewBuilder
+    private var unreadFilterRefreshHint: some View {
+        if !isShowingSearchResults, viewModel.shouldShowUnreadSessionRefreshHint {
+            Text(
+                localizationManager.localized(
+                    "message_unread_filter_refresh_hint_placeholder",
+                    viewModel.unreadSessionRetainedReadCount
+                )
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(.thinMaterial)
+            .overlay(alignment: .bottom) {
+                Divider()
+            }
+        }
     }
 }

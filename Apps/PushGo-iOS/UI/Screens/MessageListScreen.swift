@@ -7,12 +7,11 @@ struct MessageListScreen: View {
     @Environment(MessageSearchViewModel.self) private var searchViewModel: MessageSearchViewModel
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Bindable private var viewModel: MessageListViewModel
+    private let viewModel: MessageListViewModel
     @State private var selectedMessage: PushMessageSummary?
     @State private var selectedMessageIDs: Set<UUID> = []
     @State private var isBatchModeActive = false
     @State private var showBatchDeleteConfirmation = false
-    @State private var pendingMessageStoreRefresh = false
     private let onSelect: ((PushMessageSummary) -> Void)?
     private let autoSelectFirstMessage: Bool
     private let useNavigationContainer: Bool
@@ -29,7 +28,7 @@ struct MessageListScreen: View {
         scrollToUnreadToken: Int = 0,
         scrollToTopToken: Int = 0,
     ) {
-        _viewModel = Bindable(viewModel)
+        self.viewModel = viewModel
         self.onSelect = onSelect
         self.autoSelectFirstMessage = autoSelectFirstMessage
         self.useNavigationContainer = useNavigationContainer
@@ -89,7 +88,6 @@ struct MessageListScreen: View {
             .onChange(of: isBatchMode) { _, active in
                 if active {
                     selectedMessage = nil
-                    pendingMessageStoreRefresh = false
                 } else {
                     selectedMessageIDs.removeAll()
                     openPendingMessageIfNeeded()
@@ -117,16 +115,12 @@ struct MessageListScreen: View {
             .refreshable {
                 await handlePullToRefresh()
             }
-            .onChange(of: environment.messageStoreRevision) { _, _ in
-                handleMessageStoreRevisionChange()
-            }
             .onChange(of: selectedMessage) { _, newValue in
 #if DEBUG
                 publishAutomationState()
 #endif
-                guard newValue == nil, pendingMessageStoreRefresh else { return }
-                pendingMessageStoreRefresh = false
-                handleMessageStoreRevisionChange()
+                guard let newValue, !newValue.isRead else { return }
+                Task { await viewModel.markRead(newValue, isRead: true) }
             }
             .onAppear {
                 configureNavigationAppearance()
@@ -179,10 +173,18 @@ struct MessageListScreen: View {
         if !viewModel.hasLoadedOnce {
             Color.clear
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if viewModel.filteredMessages.isEmpty && !isShowingSearchResults {
-            emptyState
         } else {
-            messageList
+            ZStack {
+                messageList
+                    .opacity(showsEmptyState ? 0.001 : 1)
+                    .allowsHitTesting(!showsEmptyState)
+                    .accessibilityHidden(showsEmptyState)
+
+                if showsEmptyState {
+                    emptyState
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -191,6 +193,14 @@ struct MessageListScreen: View {
     }
 
     private var hasMessages: Bool { viewModel.totalMessageCount > 0 }
+
+    private var showsEmptyState: Bool {
+        viewModel.filteredMessages.isEmpty && !isShowingSearchResults
+    }
+
+    private var showsUnreadFilterEmptyState: Bool {
+        showsEmptyState && viewModel.isUnreadOnlyFilterActive && hasMessages
+    }
 
     private var hasVisibleMessageRows: Bool {
         if isShowingSearchResults {
@@ -210,7 +220,11 @@ struct MessageListScreen: View {
 
     private func handlePullToRefresh() async {
         _ = await environment.syncProviderIngress(reason: "messages_pull_to_refresh")
-        await viewModel.refresh()
+        if viewModel.isUnreadOnlyFilterActive {
+            await viewModel.reconcileUnreadFilterSession()
+        } else {
+            await viewModel.refresh()
+        }
         searchViewModel.refreshMessagesIfNeeded()
     }
 
@@ -253,6 +267,9 @@ struct MessageListScreen: View {
                         }
                     }
                 } else {
+                    if shouldShowUnreadFilterRefreshHint {
+                        unreadFilterRefreshHintRow
+                    }
                     ForEach(viewModel.filteredMessages.indices, id: \.self) { index in
                         let message = viewModel.filteredMessages[index]
                         messageRow(for: message, at: index)
@@ -274,7 +291,7 @@ struct MessageListScreen: View {
                     }
                 }
             }
-            .modifier(MessageListSearchableModifier(searchViewModel: searchViewModel, enabled: hasMessages && !isBatchMode))
+            .modifier(MessageListSearchableModifier(searchViewModel: searchViewModel, enabled: hasMessages && !isBatchMode && !showsUnreadFilterEmptyState))
             .modifier(
                 ScrollObserverModifier(enabled: true) { topOffset, pullDistance in
                     _ = pullDistance
@@ -294,6 +311,9 @@ struct MessageListScreen: View {
             }
             .onChange(of: viewModel.filteredMessagesIdentityRevision) { _, _ in
                 scrollToPendingMessageIfNeeded(proxy)
+            }
+            .onChange(of: viewModel.selectedFilter) { _, _ in
+                scrollToTopIfNeeded(proxy)
             }
             .onChange(of: scrollToUnreadToken) { _, _ in
                 scrollToNearestUnreadIfNeeded(proxy)
@@ -315,9 +335,6 @@ struct MessageListScreen: View {
                     .contentShape(Rectangle())
             } else {
                 Button {
-                    if !message.isRead {
-                        Task { await viewModel.markRead(message, isRead: true) }
-                    }
                     handleSelect(message)
                 } label: {
                     MessageRowView(message: message)
@@ -374,32 +391,21 @@ struct MessageListScreen: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 24) {
-            VStack(spacing: 12) {
-                Image(systemName: "tray")
-                    .font(.largeTitle)
-                    .foregroundStyle(Color.appTextSecondary)
-                    .accessibilityHidden(true)
-                Text(localizationManager.localized("no_messages_yet"))
-                    .font(.headline)
-                Text(localizationManager
-                    .localized(
-                        "you_can_use_the_pushgo_cli_or_other_integration_tools_to_send_a_test_push_to_the_current_device",
-                    ))
-                    .font(.subheadline)
-                    .foregroundStyle(Color.appTextSecondary)
+        Group {
+            if showsUnreadFilterEmptyState {
+                EntityEmptyView(
+                    iconName: "tray",
+                    title: localizationManager.localized("placeholder_no_unread_messages"),
+                    subtitle: localizationManager.localized("message_unread_filter_empty_hint"),
+                    subtitleMaxWidth: 420
+                )
+            } else {
+                EntityOnboardingEmptyView(
+                    kind: .messages,
+                    subtitleMaxWidth: 420
+                )
             }
-            .frame(maxWidth: .infinity)
-            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .padding(.top, 48)
-        .padding(.horizontal, 24)
-    }
-
-    private func resetSearchState() {
-        guard searchViewModel.hasSearched || !searchViewModel.query.isEmpty else { return }
-        searchViewModel.updateQuery("")
     }
 
     private func configureNavigationAppearance() {
@@ -480,7 +486,7 @@ private struct MessageListScrollDismissModifier: ViewModifier {
 }
 
 private struct MessageListSearchableModifier: ViewModifier {
-    @Bindable var searchViewModel: MessageSearchViewModel
+    let searchViewModel: MessageSearchViewModel
     let enabled: Bool
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @State private var searchFieldText: String = ""
@@ -536,30 +542,6 @@ private extension View {
 }
 
 private extension MessageListScreen {
-    var shouldDeferMessageStoreRefresh: Bool {
-        onSelect == nil && selectedMessage != nil
-    }
-
-    func handleMessageStoreRevisionChange() {
-        guard !shouldDeferMessageStoreRefresh else {
-            pendingMessageStoreRefresh = true
-            return
-        }
-
-        Task {
-            await viewModel.refresh()
-            applyDefaultSelectionIfNeeded()
-        }
-        if viewModel.totalMessageCount == 0 {
-            resetSearchState()
-        } else {
-            searchViewModel.refreshMessagesIfNeeded()
-        }
-        if environment.pendingMessageToOpen != nil {
-            openPendingMessageIfNeeded()
-        }
-    }
-
     private func resolvedChannelDisplayName(for channel: MessageChannelKey?) -> String? {
         guard let channel else { return nil }
         if channel.rawChannelValue == "" {
@@ -581,11 +563,11 @@ private extension MessageListScreen {
         ToolbarItemGroup(placement: .primaryAction) {
             if !isBatchMode {
                 Button {
-                    toggleSortMode()
+                    viewModel.toggleUnreadOnlyFilter()
                 } label: {
-                    Image(systemName: isUnreadFirstSortEnabled ? "arrow.up.arrow.down.circle.fill" : "arrow.up.arrow.down.circle")
+                    Image(systemName: viewModel.isUnreadOnlyFilterActive ? "line.2.horizontal.decrease.circle.fill" : "line.2.horizontal.decrease.circle")
                 }
-                .accessibilityLabel(localizationManager.localized("message_sort"))
+                .accessibilityLabel(localizationManager.localized("message_show_unread_only"))
 
                 Menu {
                     channelFilterMenuContent
@@ -652,10 +634,6 @@ private extension MessageListScreen {
         }
     }
 
-    private var isUnreadFirstSortEnabled: Bool {
-        viewModel.sortMode == .unreadFirst
-    }
-
     private var isFilterMenuHighlighted: Bool {
         viewModel.selectedChannel != nil
     }
@@ -670,12 +648,6 @@ private extension MessageListScreen {
             }
             Text(title)
         }
-    }
-
-    private func toggleSortMode() {
-        let nextMode: MessageListSortMode = isUnreadFirstSortEnabled ? .timeDescending : .unreadFirst
-        viewModel.setSortMode(nextMode)
-        searchViewModel.setSortMode(nextMode)
     }
 
     private func handleSelect(_ message: PushMessageSummary) {
@@ -773,8 +745,31 @@ private extension MessageListScreen {
         for message in unreadMessages {
             await viewModel.markRead(message, isRead: true)
         }
-        await viewModel.refresh()
-        searchViewModel.refreshMessagesIfNeeded()
         selectedMessageIDs.removeAll()
+    }
+
+    @ViewBuilder
+    private var unreadFilterRefreshHintRow: some View {
+        Text(
+            localizationManager.localized(
+                "message_unread_filter_refresh_hint_placeholder",
+                viewModel.unreadSessionRetainedReadCount
+            )
+        )
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .listRowInsets(EdgeInsets())
+        .listRowBackground(
+            Rectangle().fill(.thinMaterial)
+        )
+        .listRowSeparator(.visible, edges: .bottom)
+        .listRowSeparator(.hidden, edges: .top)
+    }
+
+    private var shouldShowUnreadFilterRefreshHint: Bool {
+        !isShowingSearchResults && viewModel.shouldShowUnreadSessionRefreshHint
     }
 }

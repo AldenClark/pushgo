@@ -1,0 +1,42 @@
+{
+  "entity_records": [
+    {
+      "id": "00000000-0000-0000-0000-00000000c001",
+      "message_id": "msg_p2_entity_event_001",
+      "title": "P2 Seed Event Projection",
+      "body": "Seeded event projection for fixture.seed_entity_records.",
+      "channel_id": "p2",
+      "is_read": false,
+      "received_at": "2026-03-01T10:03:00Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_p2_seed_001",
+        "event_id": "evt_p2_seed_001",
+        "event_state": "active",
+        "event_title": "P2 Seed Event Projection",
+        "event_message": "Seeded event projection for fixture.seed_entity_records.",
+        "projection_destination": "event_head"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "00000000-0000-0000-0000-00000000c002",
+      "message_id": "msg_p2_entity_thing_001",
+      "title": "P2 Seed Thing Projection",
+      "body": "Seeded thing projection for fixture.seed_entity_records.",
+      "channel_id": "p2",
+      "is_read": false,
+      "received_at": "2026-03-01T10:04:00Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_p2_seed_001",
+        "thing_id": "thing_p2_seed_001",
+        "thing_title": "P2 Seed Thing Projection",
+        "thing_summary": "Seeded thing projection for fixture.seed_entity_records.",
+        "attrs": "{\"region\":\"cn-bj\",\"owner\":\"automation\"}",
+        "projection_destination": "thing_head"
+      },
+      "status": "normal"
+    }
+  ]
+}

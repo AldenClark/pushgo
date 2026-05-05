@@ -16,23 +16,6 @@ final class AppEnvironment {
         var id: String { rawValue }
     }
 
-    enum WatchModeSwitchRequestResult: Equatable {
-        case applied
-        case timedOut
-    }
-
-    private struct WatchControlSemanticState: Equatable {
-        let mode: WatchMode
-        let mirrorSnapshotGeneration: Int64
-        let standaloneProvisioningGeneration: Int64
-        let pendingMirrorActionAckGeneration: Int64
-    }
-
-    private struct NotificationInboxIdentity {
-        let messageId: String?
-        let deliveryId: String?
-    }
-
     @MainActor
     static let shared = AppEnvironment()
 
@@ -49,130 +32,177 @@ final class AppEnvironment {
     @ObservationIgnored private var messageSyncObserver: DarwinNotificationObserver?
     @ObservationIgnored private var notificationIngressObserver: DarwinNotificationObserver?
     @ObservationIgnored private var pendingCountsRefreshTask: Task<Void, Never>?
-    @ObservationIgnored private var pendingMessageListRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var bootstrapTask: Task<Void, Never>?
     @ObservationIgnored private var didBootstrap = false
-    @ObservationIgnored private var providerRouteTask: Task<String, Error>?
-    @ObservationIgnored private var providerRouteTaskKey: String?
-    @ObservationIgnored private var lastProviderRouteResultKey: String?
-    @ObservationIgnored private var lastProviderRouteDeviceKey: String?
-    @ObservationIgnored private var lastProviderRouteResolvedAt: Date = .distantPast
 
     private var toastDismissTask: Task<Void, Never>?
-    @ObservationIgnored private var pendingMessageListRefresh = false
-    @ObservationIgnored private var isMainWindowVisible = true
-    @ObservationIgnored private var lastWakeupRouteFingerprint: String?
-    @ObservationIgnored private var pendingWatchMirrorSnapshotTask: Task<Void, Never>?
-    @ObservationIgnored private var pendingWatchProvisioningTask: Task<Void, Never>?
-    @ObservationIgnored private var pendingWatchMirrorSnapshotAckRetryTask: Task<Void, Never>?
-    @ObservationIgnored private var pendingWatchStandaloneProvisioningAckRetryTask: Task<Void, Never>?
-    @ObservationIgnored private var pendingWatchModeReplayTask: Task<Void, Never>?
-    @ObservationIgnored private let watchSyncDebounceDelay: TimeInterval = 0.5
-    @ObservationIgnored private let watchMirrorSnapshotAckRetryDelay: TimeInterval = 5
-    @ObservationIgnored private let watchMirrorSnapshotAckRetryAttempts = 6
-    @ObservationIgnored private let watchStandaloneProvisioningAckRetryDelay: TimeInterval = 5
-    @ObservationIgnored private let watchStandaloneProvisioningAckRetryAttempts = 6
-    @ObservationIgnored private let watchModeReplayDelay: TimeInterval = 2
-    @ObservationIgnored private let watchModeReplayAttempts = 5
-    @ObservationIgnored private let watchModeConfirmationTimeout: TimeInterval = 12
-    @ObservationIgnored private let providerRouteResultReuseInterval: TimeInterval = 25
-    @ObservationIgnored private var watchControlGeneration: Int64 = 0
-    @ObservationIgnored private var watchMirrorSnapshotGeneration: Int64 = 0
-    @ObservationIgnored private var watchStandaloneProvisioningGeneration: Int64 = 0
-    @ObservationIgnored private var watchMirrorActionAckGeneration: Int64 = 0
-    @ObservationIgnored private var lastConfirmedWatchModeControlGeneration: Int64 = 0
-    @ObservationIgnored private var lastObservedWatchModeControlGeneration: Int64 = 0
-    @ObservationIgnored private var lastObservedWatchStandaloneReadinessReportedAt = Date.distantPast
-    @ObservationIgnored private var lastPublishedWatchControlSemanticState: WatchControlSemanticState?
-    @ObservationIgnored private var lastPublishedWatchMirrorSnapshotDigest: String?
-    @ObservationIgnored private var lastPublishedWatchStandaloneProvisioningDigest: String?
-    @ObservationIgnored private var lastWatchMirrorSnapshotAck: WatchMirrorSnapshotAck?
-    @ObservationIgnored private var lastWatchMirrorSnapshotNack: WatchMirrorSnapshotNack?
-    @ObservationIgnored private var lastWatchStandaloneProvisioningAck: WatchStandaloneProvisioningAck?
-    @ObservationIgnored private var lastWatchStandaloneProvisioningNack: WatchStandaloneProvisioningNack?
 
     private(set) var serverConfig: ServerConfig? = AppEnvironment.makeDefaultServerConfig()
     private(set) var totalMessageCount: Int = 0
     private(set) var unreadMessageCount: Int = 0
     private(set) var messageStoreRevision: UUID = UUID()
     private(set) var toastMessage: ToastMessage?
-    private(set) var localStoreRecoveryState: LocalStoreRecoveryState?
+    var localStoreRecoveryState: LocalStoreRecoveryState? { localStoreRecoveryController.localStoreRecoveryState }
     private(set) var shouldPresentNotificationPermissionAlert: Bool = false
-    var pendingMessageToOpen: UUID?
-    var pendingEventToOpen: String?
-    var pendingThingToOpen: String?
-    private(set) var isMessagePageEnabled: Bool = true
-    private(set) var isEventPageEnabled: Bool = true
-    private(set) var isThingPageEnabled: Bool = true
-    private(set) var activeMainTab: MainTab = .messages
-    private(set) var isMessageListAtTop: Bool = false
-    private(set) var isEventListAtTop: Bool = false
-    private(set) var isThingListAtTop: Bool = false
-    private(set) var watchMode: WatchMode = .mirror
-    private(set) var effectiveWatchMode: WatchMode = .mirror
-    private(set) var standaloneReady = false
-    private(set) var watchModeSwitchStatus: WatchModeSwitchStatus = .idle
-    private(set) var isWatchCompanionAvailable: Bool = false
+    var pendingMessageToOpen: UUID? {
+        get { notificationOpenController.pendingMessageToOpen }
+        set { notificationOpenController.pendingMessageToOpen = newValue }
+    }
+    var pendingEventToOpen: String? {
+        get { notificationOpenController.pendingEventToOpen }
+        set { notificationOpenController.pendingEventToOpen = newValue }
+    }
+    var pendingThingToOpen: String? {
+        get { notificationOpenController.pendingThingToOpen }
+        set { notificationOpenController.pendingThingToOpen = newValue }
+    }
+    var isMessagePageEnabled: Bool { dataPageVisibilityController.isMessagePageEnabled }
+    var isEventPageEnabled: Bool { dataPageVisibilityController.isEventPageEnabled }
+    var isThingPageEnabled: Bool { dataPageVisibilityController.isThingPageEnabled }
+    var activeMainTab: MainTab { navigationState.activeMainTab }
+    var isMessageListAtTop: Bool { navigationState.isMessageListAtTop }
+    var isEventListAtTop: Bool { navigationState.isEventListAtTop }
+    var isThingListAtTop: Bool { navigationState.isThingListAtTop }
     var pendingSettingsPresentation: SettingsPresentationRequest?
-    private(set) var channelSubscriptions: [ChannelSubscription] = []
-    private var channelSubscriptionLookup: [String: ChannelSubscription] = [:]
-    private var isSceneActive = false
-
+    var channelSubscriptions: [ChannelSubscription] { channelSyncController.channelSubscriptions }
     private let channelSubscriptionService = ChannelSubscriptionService()
-    private let notificationIngressInbox = NotificationIngressInbox.shared
-    private let ackFailureStore = ProviderDeliveryAckFailureStore.shared
-    @ObservationIgnored private lazy var providerIngressCoordinator = ProviderIngressCoordinator(
-        platformSuffix: "ios",
-        dataStore: dataStore,
-        channelSubscriptionService: channelSubscriptionService,
-        notificationIngressInbox: notificationIngressInbox,
-        ackMarkerStore: ackFailureStore,
-        hooks: ProviderIngressCoordinator.Hooks(
-            isEnabled: { true },
-            serverConfig: { [weak self] in self?.serverConfig },
-            cachedDeviceKey: { [weak self] in
-                guard let self else { return nil }
-                return await self.cachedProviderPullDeviceKey()
-            },
-            hasPersistedNotification: { [weak self] identity in
-                guard let self else { return false }
-                return await self.hasPersistedNotification(identity: NotificationInboxIdentity(
-                    messageId: identity.messageId,
-                    deliveryId: identity.deliveryId
-                ))
-            },
-            persistPayload: { [weak self] payload, requestIdentifier in
-                guard let self else { return .failed }
-                let dataStore = await MainActor.run { self.dataStore }
-                let outcome = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
-                    payload,
-                    requestIdentifier: requestIdentifier,
-                    dataStore: dataStore,
-                    beforeSave: { [weak self] message in
-                        await MainActor.run {
-                            self?.autoEnableDataPageIfNeeded(for: message)
-                        }
-                    }
-                )
-                return ProviderIngressPersistenceResult(outcome)
-            },
-            applyPersistenceResult: { [weak self] result in
-                switch result {
-                case .persisted, .duplicate:
-                    self?.scheduleCountsRefresh()
-                case .rejected, .failed:
-                    break
-                }
-            },
-            recordProviderError: { [weak self] error, source in
-                self?.recordAutomationRuntimeError(error, source: source, category: "provider")
-            }
-        )
-    )
     private let networkPermissionChecker = NetworkPermissionChecker()
     @ObservationIgnored private let localStoreFailureStreakThreshold = 3
     @ObservationIgnored private let localStoreFailureStreakKey = "pushgo.local_store.failure_streak"
     @ObservationIgnored private let localStoreFailureDefaults = AppConstants.sharedUserDefaults()
+    // Keep AppEnvironment as the composition root. Feature-specific behavior
+    // should extend the dedicated controllers below instead of growing new
+    // state machines in this type.
+    @ObservationIgnored private(set) lazy var providerRouteController = ProviderRouteController(
+        dataStore: dataStore,
+        channelSubscriptionService: channelSubscriptionService,
+        localizationManager: localizationManager,
+        refreshAutomationState: { [weak self] in
+            self?.refreshAutomationStateIfNeeded()
+        },
+        runtimeMessageRecorder: { [weak self] message, source, category, code in
+            self?.recordAutomationRuntimeMessage(
+                message,
+                source: source,
+                category: category,
+                code: code
+            )
+        }
+    )
+    @ObservationIgnored private(set) lazy var watchSyncController = WatchSyncController(
+        dataStore: dataStore,
+        messageStateCoordinatorProvider: { [weak self] in
+            self?.messageStateCoordinator
+        },
+        serverConfigProvider: { [weak self] in
+            self?.serverConfig
+        },
+        runtimeErrorRecorder: { [weak self] error, source in
+            self?.recordAutomationRuntimeError(error, source: source, category: "watch")
+        },
+        runtimeMessageRecorder: { [weak self] message, source in
+            self?.recordAutomationRuntimeMessage(message, source: source, category: "watch")
+        }
+    )
+    @ObservationIgnored private(set) lazy var notificationIngressController = NotificationIngressController(
+        dataStore: dataStore,
+        channelSubscriptionService: channelSubscriptionService,
+        serverConfigProvider: { [weak self] in
+            self?.serverConfig
+        },
+        cachedDeviceKeyProvider: { [weak self] in
+            guard let self else { return nil }
+            return await self.providerRouteController.cachedProviderPullDeviceKey()
+        },
+        beforePersistMessage: { [weak self] message in
+            await MainActor.run {
+                self?.autoEnableDataPageIfNeeded(for: message)
+            }
+        },
+        scheduleCountsRefresh: { [weak self] in
+            self?.scheduleCountsRefresh()
+        },
+        recordProviderError: { [weak self] error, source in
+            self?.recordAutomationRuntimeError(error, source: source, category: "provider")
+        }
+    )
+    @ObservationIgnored private(set) lazy var notificationOpenController = NotificationOpenController(
+        dataStore: dataStore,
+        localizationManager: localizationManager,
+        messageStateCoordinatorProvider: { [weak self] in
+            self?.messageStateCoordinator
+        },
+        refreshCountsAndNotify: { [weak self] in
+            await self?.refreshMessageCountsAndNotify()
+        },
+        removeDeliveredNotificationIfNeeded: { [weak self] message in
+            self?.removeDeliveredNotificationIfNeeded(for: message)
+        },
+        autoEnableDataPage: { [weak self] entityType in
+            self?.autoEnableDataPage(for: entityType)
+        },
+        showToast: { [weak self] message in
+            self?.showToast(message: message)
+        }
+    )
+    @ObservationIgnored private(set) lazy var navigationState = AppNavigationState()
+    @ObservationIgnored private(set) lazy var channelSyncController = ChannelSyncController(
+        dataStore: dataStore,
+        pushRegistrationService: pushRegistrationService,
+        channelSubscriptionService: channelSubscriptionService,
+        providerRouteController: providerRouteController,
+        localizationManager: localizationManager,
+        serverConfigProvider: { [weak self] in
+            self?.serverConfig
+        },
+        requestWatchStandaloneProvisioningSync: { [weak self] immediate in
+            self?.requestWatchStandaloneProvisioningSync(immediate: immediate)
+        },
+        recordRuntimeError: { [weak self] error, source in
+            self?.recordAutomationRuntimeError(error, source: source)
+        },
+        showToast: { [weak self] message in
+            self?.showToast(message: message)
+        }
+    )
+    @ObservationIgnored private(set) lazy var dataPageVisibilityController = DataPageVisibilityController(
+        dataStore: dataStore
+    )
+    @ObservationIgnored private(set) lazy var channelSubscriptionController = ChannelSubscriptionController(
+        dataStore: dataStore,
+        channelSubscriptionService: channelSubscriptionService,
+        providerRouteController: providerRouteController,
+        channelSyncController: channelSyncController,
+        localizationManager: localizationManager,
+        serverConfigProvider: { [weak self] in
+            self?.serverConfig
+        },
+        messageStateCoordinatorProvider: { [weak self] in
+            self?.messageStateCoordinator
+        },
+        refreshMessageCountsAndNotify: { [weak self] in
+            await self?.refreshMessageCountsAndNotify()
+        }
+    )
+    @ObservationIgnored private(set) lazy var localStoreRecoveryController = LocalStoreRecoveryController(
+        dataStore: dataStore,
+        localizationManager: localizationManager,
+        failureStreakThreshold: localStoreFailureStreakThreshold,
+        failureStreakKey: localStoreFailureStreakKey,
+        failureDefaults: localStoreFailureDefaults,
+        showToast: { [weak self] message in
+            self?.showToast(message: message)
+        },
+        terminate: {
+            Darwin.exit(0)
+        }
+    )
+
+    var watchMode: WatchMode { watchSyncController.watchMode }
+    var effectiveWatchMode: WatchMode { watchSyncController.effectiveWatchMode }
+    var standaloneReady: Bool { watchSyncController.standaloneReady }
+    var watchModeSwitchStatus: WatchModeSwitchStatus { watchSyncController.watchModeSwitchStatus }
+    var isWatchCompanionAvailable: Bool { watchSyncController.isWatchCompanionAvailable }
 
     private init(
         dataStore: LocalDataStore = LocalDataStore(),
@@ -193,7 +223,9 @@ final class AppEnvironment {
         ) { [weak self] in
             guard let self else { return }
             Task { @MainActor in
-                await self.handleNotificationIngressChanged(reason: "darwin_notification")
+                await self.notificationIngressController.handleNotificationIngressChanged(
+                    reason: "darwin_notification"
+                )
             }
         }
         registerDefaultNotificationCategories()
@@ -244,10 +276,6 @@ final class AppEnvironment {
         )
     }
 
-    private func nextWatchGeneration() -> Int64 {
-        Int64((Date().timeIntervalSince1970 * 1_000_000).rounded())
-    }
-
     private func registerDefaultNotificationCategories() {
         let category = UNNotificationCategory(
             identifier: AppConstants.notificationDefaultCategoryIdentifier,
@@ -276,7 +304,7 @@ final class AppEnvironment {
         serverConfig = normalized
         await refreshChannelSubscriptions(syncWatch: false)
         requestWatchStandaloneProvisioningSync(immediate: true)
-        schedulePreviousGatewayDeviceCleanup(
+        providerRouteController.schedulePreviousGatewayDeviceCleanup(
             previousConfig: previousConfig,
             previousDeviceKey: previousDeviceKey,
             nextConfig: normalized
@@ -319,232 +347,37 @@ final class AppEnvironment {
     }
 
     func refreshChannelSubscriptions(syncWatch: Bool = true, immediateStandalone: Bool = false) async {
-        guard let gatewayKey = serverConfig?.gatewayKey else {
-            await MainActor.run {
-                channelSubscriptions = []
-                channelSubscriptionLookup = [:]
-            }
-            if syncWatch {
-                requestWatchStandaloneProvisioningSync(immediate: immediateStandalone)
-            }
-            return
-        }
-
-        do {
-            let active = try await dataStore.loadChannelSubscriptions(
-                gateway: gatewayKey,
-                includeDeleted: false
-            )
-            let all = try await dataStore.loadChannelSubscriptions(
-                gateway: gatewayKey,
-                includeDeleted: true
-            )
-            await MainActor.run {
-                channelSubscriptions = active
-                channelSubscriptionLookup = Dictionary(uniqueKeysWithValues: all.map { ($0.channelId, $0) })
-            }
-            if syncWatch {
-                requestWatchStandaloneProvisioningSync(immediate: immediateStandalone)
-            }
-        } catch {
-            await MainActor.run {
-                channelSubscriptions = []
-                channelSubscriptionLookup = [:]
-            }
-            if syncWatch {
-                requestWatchStandaloneProvisioningSync(immediate: immediateStandalone)
-            }
-        }
-        await syncPrivateChannelState()
+        await channelSyncController.refreshChannelSubscriptions(
+            syncWatch: syncWatch,
+            immediateStandalone: immediateStandalone
+        )
     }
 
     func channelDisplayName(for channelId: String?) -> String? {
-        let trimmed = channelId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !trimmed.isEmpty else { return nil }
-        if let match = channelSubscriptionLookup[trimmed] {
-            return match.displayName
-        }
-        return trimmed
+        channelSyncController.channelDisplayName(for: channelId)
     }
 
     func channelExists(channelId: String) async throws -> ChannelSubscriptionService.ExistsPayload {
-        guard let config = serverConfig else { throw AppError.noServer }
-        let normalized = try ChannelIdValidator.normalize(channelId)
-        return try await channelSubscriptionService.channelExists(
-            baseURL: config.baseURL,
-            token: config.token,
-            channelId: normalized
-        )
+        try await channelSubscriptionController.channelExists(channelId: channelId)
     }
 
     func createChannel(alias: String, password: String) async throws -> ChannelSubscriptionService.SubscribePayload {
-        let normalizedAlias = try ChannelNameValidator.normalize(alias)
-        return try await subscribeChannel(channelId: nil, alias: normalizedAlias, password: password)
+        try await channelSubscriptionController.createChannel(alias: alias, password: password)
     }
 
     func subscribeChannel(channelId: String, password: String) async throws -> ChannelSubscriptionService.SubscribePayload {
-        let normalizedId = try ChannelIdValidator.normalize(channelId)
-        return try await subscribeChannel(channelId: normalizedId, alias: nil, password: password)
-    }
-
-    private func subscribeChannel(
-        channelId: String?,
-        alias: String?,
-        password: String
-    ) async throws -> ChannelSubscriptionService.SubscribePayload {
-        guard let config = serverConfig else { throw AppError.noServer }
-        let gatewayKey = config.gatewayKey
-        let validatedPassword = try ChannelPasswordValidator.validate(password)
-        let token = try await ensureActivePushToken(serverConfig: config)
-        let payload = try await subscribeWithDeviceKeyRecovery(
-            config: config,
-            providerToken: token,
-            channelId: channelId,
-            alias: alias,
-            password: validatedPassword
-        )
-
-        guard payload.subscribed else {
-            throw AppError.unknown(localizationManager.localized("operation_failed"))
-        }
-
-        let displayName = payload.channelName.isEmpty ? payload.channelId : payload.channelName
-        _ = try await dataStore.upsertChannelSubscription(
-            gateway: gatewayKey,
-            channelId: payload.channelId,
-            displayName: displayName,
-            password: validatedPassword,
-            lastSyncedAt: Date()
-        )
-        await refreshChannelSubscriptions()
-        return payload
-    }
-
-    private func subscribeWithDeviceKeyRecovery(
-        config: ServerConfig,
-        providerToken: String,
-        channelId: String?,
-        alias: String?,
-        password: String
-    ) async throws -> ChannelSubscriptionService.SubscribePayload {
-        let platform = platformIdentifier()
-        let initialDeviceKey = try await ensureProviderRoute(config: config, providerToken: providerToken)
-        do {
-            return try await channelSubscriptionService.subscribe(
-                baseURL: config.baseURL,
-                token: config.token,
-                deviceKey: initialDeviceKey,
-                channelId: channelId,
-                channelName: alias,
-                password: password
-            )
-        } catch {
-            guard isDeviceKeyNotFoundError(error) else {
-                throw error
-            }
-            let registered = try await channelSubscriptionService.registerDevice(
-                baseURL: config.baseURL,
-                token: config.token,
-                platform: platform,
-                existingDeviceKey: initialDeviceKey
-            )
-            let refreshedDeviceKey = registered.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !refreshedDeviceKey.isEmpty {
-                try await persistProviderDeviceKey(
-                    refreshedDeviceKey,
-                    platform: platform,
-                    channelType: "apns",
-                    source: "provider.device_key.subscribe_refresh"
-                )
-            }
-            let ensuredDeviceKey = try await ensureProviderRoute(config: config, providerToken: providerToken)
-            return try await channelSubscriptionService.subscribe(
-                baseURL: config.baseURL,
-                token: config.token,
-                deviceKey: ensuredDeviceKey,
-                channelId: channelId,
-                channelName: alias,
-                password: password
-            )
-        }
-    }
-
-    private func isDeviceKeyNotFoundError(_ error: Error) -> Bool {
-        let text = error.localizedDescription.lowercased()
-        return text.contains("device_key_not_found")
-            || text.contains("device_key not found")
-            || text.contains("device key not found")
+        try await channelSubscriptionController.subscribeChannel(channelId: channelId, password: password)
     }
 
     func renameChannel(channelId: String, alias: String) async throws {
-        guard let config = serverConfig else { throw AppError.noServer }
-        let gatewayKey = config.gatewayKey
-        let normalizedId = try ChannelIdValidator.normalize(channelId)
-        let normalizedAlias = try ChannelNameValidator.normalize(alias)
-        guard let password = await dataStore.channelPassword(gateway: gatewayKey, for: normalizedId) else {
-            throw AppError.unknown(localizationManager.localized("channel_password_missing"))
-        }
-
-        let payload = try await channelSubscriptionService.renameChannel(
-            baseURL: config.baseURL,
-            token: config.token,
-            channelId: normalizedId,
-            channelName: normalizedAlias,
-            password: password
-        )
-
-        try await dataStore.updateChannelDisplayName(
-            gateway: gatewayKey,
-            channelId: payload.channelId,
-            displayName: payload.channelName
-        )
-        await refreshChannelSubscriptions()
+        try await channelSubscriptionController.renameChannel(channelId: channelId, alias: alias)
     }
 
     func unsubscribeChannel(channelId: String, deleteLocalMessages: Bool) async throws -> Int {
-        guard let config = serverConfig else { throw AppError.noServer }
-        let gatewayKey = config.gatewayKey
-        let normalized = try ChannelIdValidator.normalize(channelId)
-        let token = try await ensureActivePushToken(serverConfig: config)
-        let deviceKey = try await ensureProviderRoute(config: config, providerToken: token)
-
-        _ = try await channelSubscriptionService.unsubscribe(
-            baseURL: config.baseURL,
-            token: config.token,
-            deviceKey: deviceKey,
-            channelId: normalized
+        try await channelSubscriptionController.unsubscribeChannel(
+            channelId: channelId,
+            deleteLocalMessages: deleteLocalMessages
         )
-
-        try await dataStore.softDeleteChannelSubscription(gateway: gatewayKey, channelId: normalized)
-        await refreshChannelSubscriptions()
-
-        guard deleteLocalMessages else { return 0 }
-        let eventImageURLs = try await dataStore
-            .loadEventMessagesForProjection()
-            .filter { channelMatches($0.channel, normalizedChannel: normalized) }
-            .flatMap(\.imageURLs)
-        let thingImageURLs = try await dataStore
-            .loadThingMessagesForProjection()
-            .filter { channelMatches($0.channel, normalizedChannel: normalized) }
-            .flatMap(\.imageURLs)
-        let removedMessages = try await messageStateCoordinator.deleteMessages(channel: normalized, readState: nil)
-        let removedEvents = try await dataStore.deleteEventRecords(channel: normalized)
-        let removedThings = try await dataStore.deleteThingRecords(channel: normalized)
-        let remainingMessages = try await dataStore.loadMessages(filter: .all, channel: normalized)
-        let remainingEvents = try await dataStore
-            .loadEventMessagesForProjection()
-            .filter { channelMatches($0.channel, normalizedChannel: normalized) }
-        let remainingThings = try await dataStore
-            .loadThingMessagesForProjection()
-            .filter { channelMatches($0.channel, normalizedChannel: normalized) }
-        if !remainingMessages.isEmpty || !remainingEvents.isEmpty || !remainingThings.isEmpty {
-            throw AppError.localStore(
-                "channel cleanup incomplete messages=\(remainingMessages.count) events=\(remainingEvents.count) things=\(remainingThings.count)"
-            )
-        }
-        await SharedImageCache.purge(urls: eventImageURLs + thingImageURLs)
-        await refreshMessageCountsAndNotify()
-        return removedMessages + removedEvents + removedThings
     }
 
     func closeEvent(
@@ -628,32 +461,7 @@ final class AppEnvironment {
     }
 
     func handlePushTokenUpdate() {
-        Task { @MainActor in
-            do {
-                if let latestToken = try? await pushRegistrationService.awaitToken() {
-                    if let config = serverConfig {
-                        await persistPushTokenAndRotateRoute(config: config, token: latestToken)
-                    } else {
-                        await dataStore.saveCachedPushToken(latestToken, for: platformIdentifier())
-                    }
-                }
-                if serverConfig != nil {
-                    try await syncSubscriptionsIfNeeded()
-                }
-                if let config = serverConfig,
-                   let token = await dataStore.cachedPushToken(for: platformIdentifier())?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !token.isEmpty
-                {
-                    await syncProviderPullRoute(config: config, providerToken: token)
-                }
-            } catch {
-                let message = (error as? AppError)?.errorDescription ?? error.localizedDescription
-                showToast(message: localizationManager.localized(
-                    "unable_to_sync_channels_placeholder",
-                    message
-                ))
-            }
-        }
+        channelSyncController.handlePushTokenUpdate()
     }
 
     func updateWatchPushToken(_ token: String) async {
@@ -678,21 +486,10 @@ final class AppEnvironment {
     }
 
     private func scheduleMessageListRefresh() {
-        guard canRefreshMessageList else {
-            pendingMessageListRefresh = true
-            return
-        }
-        pendingMessageListRefreshTask?.cancel()
-        pendingMessageListRefreshTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            messageStoreRevision = UUID()
-            pendingMessageListRefresh = false
-        }
+        messageStoreRevision = UUID()
     }
 
     func publishStoreRefreshForAutomation() {
-        pendingMessageListRefreshTask?.cancel()
-        pendingMessageListRefresh = false
         messageStoreRevision = UUID()
     }
 
@@ -901,18 +698,12 @@ final class AppEnvironment {
         }
     }
 
-    struct LocalStoreRecoveryState: Equatable {
-        let title: String
-        let message: String
-        let canRebuild: Bool
-    }
-
     private func announceAccessibility(_ message: String) {
         UIAccessibility.post(notification: .announcement, argument: message)
     }
 
     func dismissLocalStoreRecovery() {
-        localStoreRecoveryState = nil
+        localStoreRecoveryController.dismissLocalStoreRecovery()
     }
 
     var isLocalStoreRecoveryAlertPresented: Bool {
@@ -949,69 +740,11 @@ final class AppEnvironment {
     }
 
     func terminateForLocalStoreFailure() {
-        Darwin.exit(0)
+        localStoreRecoveryController.terminateForLocalStoreFailure()
     }
 
     func rebuildLocalStoreForRecoveryAndTerminate() {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            do {
-                try await dataStore.rebuildPersistentStoresForRecovery()
-                clearLocalStoreFailureStreak()
-                terminateForLocalStoreFailure()
-            } catch {
-                showToast(message: localizationManager.localized(
-                    "initialization_failed_placeholder",
-                    error.localizedDescription
-                ))
-            }
-        }
-    }
-
-    private func incrementLocalStoreFailureStreak() -> Int {
-        let next = localStoreFailureDefaults.integer(forKey: localStoreFailureStreakKey) + 1
-        localStoreFailureDefaults.set(next, forKey: localStoreFailureStreakKey)
-        return next
-    }
-
-    private func clearLocalStoreFailureStreak() {
-        localStoreFailureDefaults.removeObject(forKey: localStoreFailureStreakKey)
-    }
-
-    private func isLikelyLocalStoreLockContention(reason: String?) -> Bool {
-        guard let reason else { return false }
-        let lowered = reason.lowercased()
-        return lowered.contains("database is locked")
-            || lowered.contains("database is busy")
-            || lowered.contains("sqlite_busy")
-            || lowered.contains("sqlite_locked")
-            || lowered.contains("lock contention")
-            || lowered.contains("locked")
-    }
-
-    private func handleLocalStoreUnavailable(_ state: LocalDataStore.StorageState) {
-        let streak = incrementLocalStoreFailureStreak()
-        let canRebuild = streak >= localStoreFailureStreakThreshold
-        var lines: [String] = [
-            localizationManager.localized("local_store_unavailable"),
-            "请点击“退出应用”并重新打开。",
-        ]
-        if let reason = state.reason?.trimmingCharacters(in: .whitespacesAndNewlines), !reason.isEmpty {
-            lines.append(reason)
-            if isLikelyLocalStoreLockContention(reason: reason) {
-                lines.append("检测到可能的数据库锁占用，请先彻底退出所有 PushGo 进程/扩展后重试。")
-            }
-        }
-        if canRebuild {
-            lines.append("该错误已连续出现多次，请上报日志；也可以选择“重建数据库并退出”。")
-        } else {
-            lines.append("若问题反复出现，请上报错误日志。")
-        }
-        localStoreRecoveryState = LocalStoreRecoveryState(
-            title: localizationManager.localized("local_store_unavailable"),
-            message: lines.joined(separator: "\n"),
-            canRebuild: canRebuild
-        )
+        localStoreRecoveryController.rebuildLocalStoreForRecoveryAndTerminate()
     }
 
     func refreshPushAuthorization(
@@ -1060,113 +793,15 @@ final class AppEnvironment {
     }
 
     private func syncSubscriptionsOnLaunch() async {
-        guard serverConfig != nil else { return }
-        do {
-            try await syncSubscriptionsIfNeeded()
-        } catch let appError as AppError {
-            recordAutomationRuntimeError(appError, source: "channel.sync.launch")
-            showToast(message: appError.errorDescription ?? localizationManager
-                .localized("unable_to_sync_channels"))
-        } catch {
-            recordAutomationRuntimeError(error, source: "channel.sync.launch")
-            showToast(message: localizationManager.localized(
-                "unable_to_sync_channels_placeholder",
-                error.localizedDescription,
-            ))
-        }
+        await channelSyncController.syncSubscriptionsOnLaunch()
     }
 
     func syncSubscriptionsOnChannelListEntry() async {
-        guard serverConfig != nil else {
-            await refreshChannelSubscriptions()
-            return
-        }
-        do {
-            try await syncSubscriptionsIfNeeded()
-        } catch let appError as AppError {
-            recordAutomationRuntimeError(appError, source: "channel.sync.entry")
-            showToast(message: appError.errorDescription ?? localizationManager
-                .localized("unable_to_sync_channels"))
-        } catch {
-            recordAutomationRuntimeError(error, source: "channel.sync.entry")
-            showToast(message: localizationManager.localized(
-                "unable_to_sync_channels_placeholder",
-                error.localizedDescription,
-            ))
-        }
-    }
-
-    private func ensureActivePushToken(serverConfig: ServerConfig) async throws -> String {
-        let token = try await pushRegistrationService.awaitToken()
-        await persistPushTokenAndRotateRoute(config: serverConfig, token: token)
-        return token
+        await channelSyncController.syncSubscriptionsOnChannelListEntry()
     }
 
     func syncSubscriptionsIfNeeded() async throws {
-        guard let config = serverConfig else { throw AppError.noServer }
-        let gatewayKey = config.gatewayKey
-
-        let credentials = try await dataStore.activeChannelCredentials(gateway: gatewayKey)
-        let token = try await ensureActivePushToken(serverConfig: config)
-        guard !credentials.isEmpty else {
-            await refreshChannelSubscriptions()
-            return
-        }
-        let deviceKey = try await ensureProviderRoute(config: config, providerToken: token)
-        let channels = credentials.map {
-            ChannelSubscriptionService.SyncItem(channelId: $0.channelId, password: $0.password)
-        }
-
-        let payload = try await channelSubscriptionService.sync(
-            baseURL: config.baseURL,
-            token: config.token,
-            deviceKey: deviceKey,
-            channels: channels
-        )
-
-        let syncedAt = Date()
-        var staleChannels: [String] = []
-        var passwordMismatchChannels: [String] = []
-        for result in payload.channels {
-            if result.subscribed {
-                try? await dataStore.updateChannelDisplayName(
-                    gateway: gatewayKey,
-                    channelId: result.channelId,
-                    displayName: result.channelName ?? result.channelId
-                )
-                try? await dataStore.updateChannelLastSynced(
-                    gateway: gatewayKey,
-                    channelId: result.channelId,
-                    date: syncedAt
-                )
-            } else {
-                switch result.errorCode {
-                case "channel_not_found":
-                    staleChannels.append(result.channelId)
-                case "password_mismatch":
-                    passwordMismatchChannels.append(result.channelId)
-                default:
-                    break
-                }
-            }
-        }
-        for channelId in staleChannels + passwordMismatchChannels {
-            try? await dataStore.softDeleteChannelSubscription(
-                gateway: gatewayKey,
-                channelId: channelId
-            )
-        }
-        if !passwordMismatchChannels.isEmpty {
-            let limited = Array(passwordMismatchChannels.prefix(3))
-            let suffix = passwordMismatchChannels.count > 3 ? "..." : ""
-            showToast(
-                message: localizationManager.localized(
-                    "channel_password_mismatch_removed",
-                    "\(limited.joined(separator: ", "))\(suffix)"
-                )
-            )
-        }
-        await refreshChannelSubscriptions()
+        try await channelSyncController.syncSubscriptionsIfNeeded()
     }
 
     func updateNotificationMaterial(_ material: ServerConfig.NotificationKeyMaterial) async {
@@ -1210,90 +845,23 @@ final class AppEnvironment {
     }
 
     func setMessagePageEnabled(_ isEnabled: Bool) {
-        updateDataPageVisibility(messageEnabled: isEnabled)
+        dataPageVisibilityController.setMessagePageEnabled(isEnabled)
     }
 
     func setEventPageEnabled(_ isEnabled: Bool) {
-        updateDataPageVisibility(eventEnabled: isEnabled)
+        dataPageVisibilityController.setEventPageEnabled(isEnabled)
     }
 
     func setThingPageEnabled(_ isEnabled: Bool) {
-        updateDataPageVisibility(thingEnabled: isEnabled)
-    }
-
-    private func updateDataPageVisibility(
-        messageEnabled: Bool? = nil,
-        eventEnabled: Bool? = nil,
-        thingEnabled: Bool? = nil
-    ) {
-        var next = DataPageVisibilitySnapshot(
-            messageEnabled: isMessagePageEnabled,
-            eventEnabled: isEventPageEnabled,
-            thingEnabled: isThingPageEnabled
-        )
-        if let messageEnabled {
-            next.messageEnabled = messageEnabled
-        }
-        if let eventEnabled {
-            next.eventEnabled = eventEnabled
-        }
-        if let thingEnabled {
-            next.thingEnabled = thingEnabled
-        }
-        applyDataPageVisibility(next, persist: true)
-    }
-
-    private func applyDataPageVisibility(
-        _ visibility: DataPageVisibilitySnapshot,
-        persist: Bool
-    ) {
-        let changed = isMessagePageEnabled != visibility.messageEnabled
-            || isEventPageEnabled != visibility.eventEnabled
-            || isThingPageEnabled != visibility.thingEnabled
-        guard changed else { return }
-        isMessagePageEnabled = visibility.messageEnabled
-        isEventPageEnabled = visibility.eventEnabled
-        isThingPageEnabled = visibility.thingEnabled
-        if persist {
-            let store = self.dataStore
-            Task(priority: .utility) {
-                await store.saveDataPageVisibility(visibility)
-            }
-        }
-    }
-
-    private func loadDataPageVisibility() async {
-        let visibility = await dataStore.loadDataPageVisibility()
-        applyDataPageVisibility(visibility, persist: false)
+        dataPageVisibilityController.setThingPageEnabled(isEnabled)
     }
 
     private func autoEnableDataPageIfNeeded(for message: PushMessage) {
-        let normalized = message.entityType
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-        switch normalized {
-        case "event", "thing":
-            autoEnableDataPage(for: normalized)
-        default:
-            autoEnableDataPage(for: "message")
-        }
+        dataPageVisibilityController.autoEnableDataPageIfNeeded(for: message)
     }
 
     private func autoEnableDataPage(for entityType: String) {
-        switch entityType {
-        case "event":
-            if !isEventPageEnabled {
-                updateDataPageVisibility(eventEnabled: true)
-            }
-        case "thing":
-            if !isThingPageEnabled {
-                updateDataPageVisibility(thingEnabled: true)
-            }
-        default:
-            if !isMessagePageEnabled {
-                updateDataPageVisibility(messageEnabled: true)
-            }
-        }
+        dataPageVisibilityController.autoEnableDataPage(for: entityType)
     }
 
     private func loadPersistedState() async {
@@ -1307,10 +875,10 @@ final class AppEnvironment {
                 category: "storage",
                 code: "E_LOCAL_STORE_UNAVAILABLE"
             )
-            handleLocalStoreUnavailable(storeState)
+            localStoreRecoveryController.handleLocalStoreUnavailable(storeState)
             return
         case .persistent:
-            clearLocalStoreFailureStreak()
+            localStoreRecoveryController.clearFailureStreak()
             break
         }
         do {
@@ -1334,32 +902,8 @@ final class AppEnvironment {
                 ))
             }
         }
-        if await WatchTokenReceiver.shared.consumeForcedReconfigureFlag() {
-            await resetWatchConnectivityStateForMigration()
-        }
-        let persistedWatchPublicationState = await dataStore.loadWatchPublicationState()
-        let persistedWatchModeControlState = await dataStore.loadWatchModeControlState()
-        watchControlGeneration = persistedWatchPublicationState.syncGenerations.controlGeneration
-        watchMirrorSnapshotGeneration = persistedWatchPublicationState.syncGenerations.mirrorSnapshotGeneration
-        watchStandaloneProvisioningGeneration = persistedWatchPublicationState.syncGenerations.standaloneProvisioningGeneration
-        watchMirrorActionAckGeneration = persistedWatchPublicationState.syncGenerations.mirrorActionAckGeneration
-        lastPublishedWatchMirrorSnapshotDigest = persistedWatchPublicationState.mirrorSnapshotContentDigest
-        lastPublishedWatchStandaloneProvisioningDigest = persistedWatchPublicationState.standaloneProvisioningContentDigest
-        watchMode = persistedWatchModeControlState.desiredMode
-        effectiveWatchMode = persistedWatchModeControlState.effectiveMode
-        standaloneReady = persistedWatchModeControlState.standaloneReady
-        watchModeSwitchStatus = persistedWatchModeControlState.switchStatus
-        lastConfirmedWatchModeControlGeneration = persistedWatchModeControlState.lastConfirmedControlGeneration
-        lastObservedWatchModeControlGeneration = persistedWatchModeControlState.lastObservedReportedGeneration
-        isWatchCompanionAvailable = WatchTokenReceiver.shared.refreshCompanionAvailability()
-        if watchMode == .standalone, !isWatchCompanionAvailable {
-            watchMode = .mirror
-            effectiveWatchMode = .mirror
-            standaloneReady = false
-            watchModeSwitchStatus = .idle
-            await persistWatchModeControlState()
-        }
-        await loadDataPageVisibility()
+        await watchSyncController.loadPersistedState()
+        await dataPageVisibilityController.loadPersistedState()
 
         do {
             let counts = try await dataStore.messageCounts()
@@ -1380,26 +924,16 @@ final class AppEnvironment {
             showToast(message: localizationManager.localized("initialization_failed_placeholder", mergedReasons))
         }
         await refreshChannelSubscriptions(syncWatch: false)
-        await publishWatchControlContext()
-        if watchMode == .standalone {
-            requestWatchStandaloneProvisioningSync(immediate: true)
-        }
-        requestWatchMirrorSnapshotSync(immediate: watchMode == .standalone)
-        scheduleWatchModeReplayIfNeeded(reason: "bootstrap", immediate: true)
+        await watchSyncController.completeBootstrapSync()
         requestNetworkPermissionOnLaunch()
     }
 
     func setWatchMode(_ mode: WatchMode) async {
-        await applyDesiredWatchMode(mode, switchStatus: mode == effectiveWatchMode ? .confirmed : .switching)
+        await watchSyncController.setWatchMode(mode)
     }
 
     func requestWatchModeChangeApplied(_ mode: WatchMode) async throws -> WatchModeSwitchRequestResult {
-        await applyDesiredWatchMode(mode, switchStatus: mode == effectiveWatchMode ? .confirmed : .switching)
-        guard watchMode != effectiveWatchMode else { return .applied }
-        return try await awaitWatchModeConfirmation(
-            expectedMode: mode,
-            controlGeneration: watchControlGeneration
-        )
+        try await watchSyncController.requestWatchModeChangeApplied(mode)
     }
 
     func requestWatchModeChangeConfirmed(_ mode: WatchMode) async throws {
@@ -1409,642 +943,56 @@ final class AppEnvironment {
         }
     }
 
-    private func applyDesiredWatchMode(
-        _ mode: WatchMode,
-        switchStatus: WatchModeSwitchStatus
-    ) async {
-        let desiredChanged = watchMode != mode
-        watchMode = mode
-        standaloneReady = false
-        watchModeSwitchStatus = switchStatus
-        if mode != .mirror {
-            cancelWatchMirrorSnapshotAckRetry()
-        } else {
-            cancelWatchStandaloneProvisioningAckRetry()
-        }
-        cancelWatchModeReplay()
-        if desiredChanged || watchControlGeneration == 0 {
-            watchControlGeneration = nextWatchGeneration()
-        }
-        await persistWatchModeControlState()
-        await publishWatchControlContext(force: true)
-        if mode == .standalone {
-            requestWatchStandaloneProvisioningSync(immediate: true)
-        }
-        requestWatchMirrorSnapshotSync(immediate: true)
-        scheduleWatchModeReplayIfNeeded(reason: "mode_change", immediate: false)
-    }
-
     func handleWatchSessionStateDidChange() async {
-        let latestAvailability = WatchTokenReceiver.shared.refreshCompanionAvailability()
-        let availabilityChanged = latestAvailability != isWatchCompanionAvailable
-        isWatchCompanionAvailable = latestAvailability
-        if !isWatchCompanionAvailable {
-            cancelWatchMirrorSnapshotAckRetry()
-            cancelWatchStandaloneProvisioningAckRetry()
-            cancelWatchModeReplay()
-        }
-        if watchMode == .standalone, !isWatchCompanionAvailable {
-            effectiveWatchMode = .mirror
-            standaloneReady = false
-            watchModeSwitchStatus = .idle
-            await setWatchMode(.mirror)
-            return
-        }
-        if availabilityChanged {
-            await publishWatchControlContext(force: true)
-            if watchMode == .standalone {
-                requestWatchStandaloneProvisioningSync(immediate: true)
-            }
-            requestWatchMirrorSnapshotSync(immediate: true)
-            scheduleWatchModeReplayIfNeeded(reason: "session_state_changed", immediate: true)
-        } else {
-            WatchTokenReceiver.shared.replayLatestManifestIfPossible()
-            scheduleWatchModeReplayIfNeeded(reason: "session_state_refresh", immediate: true)
-        }
+        await watchSyncController.handleWatchSessionStateDidChange()
     }
 
     func refreshWatchCompanionAvailability() async {
-        let latestAvailability = WatchTokenReceiver.shared.refreshCompanionAvailability()
-        guard latestAvailability != isWatchCompanionAvailable else { return }
-        isWatchCompanionAvailable = latestAvailability
-        if watchMode == .standalone, !latestAvailability {
-            effectiveWatchMode = .mirror
-            standaloneReady = false
-            watchModeSwitchStatus = .idle
-            await setWatchMode(.mirror)
-            return
-        }
-        scheduleWatchModeReplayIfNeeded(reason: "refresh_companion_availability", immediate: true)
+        await watchSyncController.refreshWatchCompanionAvailability()
     }
 
     private func resetWatchConnectivityStateForMigration() async {
-        pendingWatchMirrorSnapshotTask?.cancel()
-        pendingWatchProvisioningTask?.cancel()
-        cancelWatchMirrorSnapshotAckRetry()
-        cancelWatchStandaloneProvisioningAckRetry()
-        cancelWatchModeReplay()
-        watchMode = .mirror
-        effectiveWatchMode = .mirror
-        standaloneReady = false
-        watchModeSwitchStatus = .idle
-        watchControlGeneration = 0
-        watchMirrorSnapshotGeneration = 0
-        watchStandaloneProvisioningGeneration = 0
-        watchMirrorActionAckGeneration = 0
-        lastConfirmedWatchModeControlGeneration = 0
-        lastObservedWatchModeControlGeneration = 0
-        lastPublishedWatchControlSemanticState = nil
-        lastPublishedWatchMirrorSnapshotDigest = nil
-        lastPublishedWatchStandaloneProvisioningDigest = nil
-        lastWatchMirrorSnapshotAck = nil
-        lastWatchMirrorSnapshotNack = nil
-        lastWatchStandaloneProvisioningAck = nil
-        lastWatchStandaloneProvisioningNack = nil
-        await persistWatchModeControlState()
-        await dataStore.saveWatchPublicationState(.empty)
+        await watchSyncController.resetWatchConnectivityStateForMigration()
     }
 
     func handleWatchLatestManifestRequested() async {
-        switch watchMode {
-        case .mirror:
-            if watchMirrorSnapshotGeneration == 0 {
-                requestWatchMirrorSnapshotSync(immediate: true)
-            } else {
-                WatchTokenReceiver.shared.replayLatestManifestIfPossible()
-            }
-        case .standalone:
-            if watchStandaloneProvisioningGeneration == 0 {
-                requestWatchStandaloneProvisioningSync(immediate: true)
-            } else {
-                WatchTokenReceiver.shared.replayLatestManifestIfPossible()
-            }
-        }
+        await watchSyncController.handleWatchLatestManifestRequested()
     }
 
     func handleWatchStandaloneProvisioningAck(_ ack: WatchStandaloneProvisioningAck) async {
-        if ack.generation == watchStandaloneProvisioningGeneration,
-           let expectedDigest = lastPublishedWatchStandaloneProvisioningDigest,
-           !ack.contentDigest.isEmpty,
-           ack.contentDigest != expectedDigest
-        {
-            return
-        }
-        lastWatchStandaloneProvisioningAck = ack
-        if ack.generation >= watchStandaloneProvisioningGeneration {
-            cancelWatchStandaloneProvisioningAckRetry()
-        }
+        await watchSyncController.handleWatchStandaloneProvisioningAck(ack)
     }
 
     func handleWatchMirrorSnapshotAck(_ ack: WatchMirrorSnapshotAck) async {
-        if ack.generation == watchMirrorSnapshotGeneration,
-           let expectedDigest = lastPublishedWatchMirrorSnapshotDigest,
-           !ack.contentDigest.isEmpty,
-           ack.contentDigest != expectedDigest
-        {
-            return
-        }
-        lastWatchMirrorSnapshotAck = ack
-        if ack.generation >= watchMirrorSnapshotGeneration {
-            cancelWatchMirrorSnapshotAckRetry()
-        }
+        await watchSyncController.handleWatchMirrorSnapshotAck(ack)
     }
 
     func handleWatchEffectiveModeStatus(_ status: WatchEffectiveModeStatus) async {
-        guard status.sourceControlGeneration >= lastObservedWatchModeControlGeneration else { return }
-        lastObservedWatchModeControlGeneration = status.sourceControlGeneration
-        effectiveWatchMode = status.effectiveMode
-
-        if status.status == .failed,
-           status.sourceControlGeneration >= watchControlGeneration
-        {
-            watchModeSwitchStatus = .failed
-            cancelWatchModeReplay()
-            await persistWatchModeControlState()
-            return
-        }
-
-        if status.effectiveMode == watchMode,
-           status.status == .applied,
-           status.sourceControlGeneration >= watchControlGeneration
-        {
-            lastConfirmedWatchModeControlGeneration = status.sourceControlGeneration
-            watchModeSwitchStatus = .confirmed
-            cancelWatchModeReplay()
-            if watchMode == .mirror {
-                standaloneReady = false
-                requestWatchMirrorSnapshotSync(immediate: true)
-            } else {
-                requestWatchStandaloneProvisioningSync(immediate: true)
-                requestWatchMirrorSnapshotSync(immediate: true)
-            }
-            await persistWatchModeControlState()
-            return
-        }
-
-        if watchMode != effectiveWatchMode {
-            if watchModeSwitchStatus != .failed,
-               watchModeSwitchStatus != .timedOut {
-                watchModeSwitchStatus = .switching
-            }
-            await persistWatchModeControlState()
-            scheduleWatchModeReplayIfNeeded(reason: "effective_mode_mismatch", immediate: true)
-            return
-        }
-
-        if watchMode == effectiveWatchMode,
-           status.sourceControlGeneration < watchControlGeneration,
-           (watchModeSwitchStatus == .switching || watchModeSwitchStatus == .timedOut)
-        {
-            await persistWatchModeControlState()
-            scheduleWatchModeReplayIfNeeded(reason: "stale_mode_generation", immediate: true)
-            return
-        }
-
-        if watchModeSwitchStatus != .confirmed,
-           watchModeSwitchStatus != .timedOut
-        {
-            watchModeSwitchStatus = .idle
-        }
-        await persistWatchModeControlState()
+        await watchSyncController.handleWatchEffectiveModeStatus(status)
     }
 
     func handleWatchStandaloneReadinessStatus(_ status: WatchStandaloneReadinessStatus) async {
-        guard status.sourceControlGeneration >= watchControlGeneration else { return }
-        guard status.reportedAt >= lastObservedWatchStandaloneReadinessReportedAt else { return }
-        lastObservedWatchStandaloneReadinessReportedAt = status.reportedAt
-
-        let nextReady = status.effectiveMode == .standalone && status.standaloneReady
-        guard standaloneReady != nextReady || effectiveWatchMode != status.effectiveMode else {
-            return
-        }
-
-        effectiveWatchMode = status.effectiveMode
-        standaloneReady = nextReady
-
-        if watchMode == .standalone {
-            requestWatchMirrorSnapshotSync(immediate: !standaloneReady)
-        }
-
-        await persistWatchModeControlState()
+        await watchSyncController.handleWatchStandaloneReadinessStatus(status)
     }
 
     func handleWatchMirrorSnapshotNack(_ nack: WatchMirrorSnapshotNack) async {
-        lastWatchMirrorSnapshotNack = nack
-        guard watchMode == .mirror, isWatchCompanionAvailable else { return }
-        guard nack.generation >= watchMirrorSnapshotGeneration else { return }
-        WatchTokenReceiver.shared.replayLatestManifestIfPossible()
+        await watchSyncController.handleWatchMirrorSnapshotNack(nack)
     }
 
     func handleWatchStandaloneProvisioningNack(_ nack: WatchStandaloneProvisioningNack) async {
-        lastWatchStandaloneProvisioningNack = nack
-        guard watchMode == .standalone, isWatchCompanionAvailable else { return }
-        guard nack.generation >= watchStandaloneProvisioningGeneration else { return }
-        await publishWatchControlContext()
-        requestWatchStandaloneProvisioningSync(immediate: true)
-    }
-
-    private var needsWatchModeReplay: Bool {
-        guard isWatchCompanionAvailable else { return false }
-        if watchMode != effectiveWatchMode {
-            return true
-        }
-        return lastConfirmedWatchModeControlGeneration < watchControlGeneration
-            && (watchModeSwitchStatus == .switching || watchModeSwitchStatus == .timedOut)
-    }
-
-    private func scheduleWatchModeReplayIfNeeded(
-        reason: String,
-        immediate: Bool
-    ) {
-        guard needsWatchModeReplay else {
-            cancelWatchModeReplay()
-            return
-        }
-        if let task = pendingWatchModeReplayTask, !task.isCancelled {
-            if immediate {
-                cancelWatchModeReplay()
-            } else {
-                return
-            }
-        }
-        let delay = watchModeReplayDelay
-        let attempts = watchModeReplayAttempts
-        pendingWatchModeReplayTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            for attempt in 0..<attempts {
-                if !immediate || attempt > 0 {
-                    do {
-                        try await Task.sleep(for: .seconds(delay))
-                    } catch {
-                        return
-                    }
-                }
-                guard self.isWatchCompanionAvailable,
-                      self.needsWatchModeReplay
-                else {
-                    self.cancelWatchModeReplay()
-                    return
-                }
-                await self.publishWatchControlContext(force: true)
-                WatchTokenReceiver.shared.replayLatestManifestIfPossible()
-            }
-            guard self.needsWatchModeReplay else {
-                self.cancelWatchModeReplay()
-                return
-            }
-            self.watchModeSwitchStatus = .failed
-            await self.persistWatchModeControlState()
-            self.cancelWatchModeReplay()
-            self.recordAutomationRuntimeMessage(
-                "watch mode replay exhausted reason=\(reason)",
-                source: "watch.mode_replay",
-                category: "watch"
-            )
-        }
-    }
-
-    private func cancelWatchModeReplay() {
-        pendingWatchModeReplayTask?.cancel()
-        pendingWatchModeReplayTask = nil
-    }
-
-    private func awaitWatchModeConfirmation(
-        expectedMode: WatchMode,
-        controlGeneration: Int64
-    ) async throws -> WatchModeSwitchRequestResult {
-        let deadline = Date().addingTimeInterval(watchModeConfirmationTimeout)
-        while Date() < deadline {
-            if watchModeSwitchStatus == .confirmed,
-               effectiveWatchMode == expectedMode,
-               lastConfirmedWatchModeControlGeneration >= controlGeneration
-            {
-                return .applied
-            }
-            if watchModeSwitchStatus == .failed,
-               watchControlGeneration == controlGeneration
-            {
-                throw AppError.saveConfig(reason: "Apple Watch mode switch failed.")
-            }
-            try? await Task.sleep(for: .milliseconds(200))
-        }
-        watchModeSwitchStatus = .timedOut
-        await persistWatchModeControlState()
-        return .timedOut
-    }
-
-    private func currentWatchPublicationState() -> WatchPublicationState {
-        WatchPublicationState(
-            syncGenerations: WatchSyncGenerationState(
-                controlGeneration: watchControlGeneration,
-                mirrorSnapshotGeneration: watchMirrorSnapshotGeneration,
-                standaloneProvisioningGeneration: watchStandaloneProvisioningGeneration,
-                mirrorActionAckGeneration: watchMirrorActionAckGeneration
-            ),
-            mirrorSnapshotContentDigest: lastPublishedWatchMirrorSnapshotDigest,
-            standaloneProvisioningContentDigest: lastPublishedWatchStandaloneProvisioningDigest
-        )
-    }
-
-    private func currentWatchModeControlState() -> WatchModeControlPersistenceState {
-        WatchModeControlPersistenceState(
-            desiredMode: watchMode,
-            effectiveMode: effectiveWatchMode,
-            standaloneReady: standaloneReady,
-            switchStatus: watchModeSwitchStatus,
-            lastConfirmedControlGeneration: lastConfirmedWatchModeControlGeneration,
-            lastObservedReportedGeneration: lastObservedWatchModeControlGeneration
-        )
-    }
-
-    private func persistWatchPublicationState() async {
-        await dataStore.saveWatchPublicationState(currentWatchPublicationState())
-    }
-
-    private func persistWatchModeControlState() async {
-        await dataStore.saveWatchModeControlState(currentWatchModeControlState())
-    }
-
-    private func publishWatchControlContext(force: Bool = false) async {
-        let semanticState = WatchControlSemanticState(
-            mode: watchMode,
-            mirrorSnapshotGeneration: watchMirrorSnapshotGeneration,
-            standaloneProvisioningGeneration: watchStandaloneProvisioningGeneration,
-            pendingMirrorActionAckGeneration: watchMirrorActionAckGeneration
-        )
-        guard force || semanticState != lastPublishedWatchControlSemanticState else { return }
-        let context = WatchControlContext(
-            mode: watchMode,
-            controlGeneration: watchControlGeneration,
-            mirrorSnapshotGeneration: watchMirrorSnapshotGeneration,
-            standaloneProvisioningGeneration: watchStandaloneProvisioningGeneration,
-            pendingMirrorActionAckGeneration: watchMirrorActionAckGeneration
-        )
-        lastPublishedWatchControlSemanticState = semanticState
-        await persistWatchPublicationState()
-        await persistWatchModeControlState()
-        WatchTokenReceiver.shared.publishControlContext(context)
-    }
-
-    private func requestWatchMirrorSnapshotSync(immediate: Bool = false) {
-        guard isWatchCompanionAvailable,
-              (watchMode == .mirror || !standaloneReady)
-        else {
-            pendingWatchMirrorSnapshotTask?.cancel()
-            return
-        }
-        pendingWatchMirrorSnapshotTask?.cancel()
-        if immediate {
-            pendingWatchMirrorSnapshotTask = Task { @MainActor [weak self] in
-                await self?.publishWatchMirrorSnapshot()
-            }
-            return
-        }
-        let delay = watchSyncDebounceDelay
-        pendingWatchMirrorSnapshotTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(delay))
-            await self?.publishWatchMirrorSnapshot()
-        }
-    }
-
-    private func requestWatchStandaloneProvisioningSync(immediate: Bool) {
-        guard watchMode == .standalone, isWatchCompanionAvailable else { return }
-        pendingWatchProvisioningTask?.cancel()
-        if immediate {
-            pendingWatchProvisioningTask = Task { @MainActor [weak self] in
-                await self?.publishWatchStandaloneProvisioning()
-            }
-            return
-        }
-        let delay = watchSyncDebounceDelay
-        pendingWatchProvisioningTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(delay))
-            await self?.publishWatchStandaloneProvisioning()
-        }
-    }
-
-    private func publishWatchMirrorSnapshot() async {
-        do {
-            let messages = try await dataStore.loadMessages()
-            let eventMessages = try await dataStore.loadEventMessagesForProjection()
-            let thingMessages = try await loadAllThingProjectionMessages()
-            let generation = nextWatchGeneration()
-            watchMirrorSnapshotGeneration = generation
-            let snapshot = WatchLightQuantizer.buildMirrorSnapshot(
-                messages: messages,
-                eventMessages: eventMessages,
-                thingMessages: thingMessages,
-                generation: generation
-            )
-            lastPublishedWatchMirrorSnapshotDigest = snapshot.contentDigest
-            WatchTokenReceiver.shared.sendMirrorSnapshot(snapshot)
-            await publishWatchControlContext()
-            scheduleWatchMirrorSnapshotAckRetry(for: generation)
-        } catch {
-            recordAutomationRuntimeError(error, source: "watch.publish_mirror_snapshot")
-        }
-    }
-
-    private func scheduleWatchMirrorSnapshotAckRetry(for generation: Int64) {
-        cancelWatchMirrorSnapshotAckRetry()
-        guard watchMode == .mirror, isWatchCompanionAvailable else { return }
-        let attempts = watchMirrorSnapshotAckRetryAttempts
-        let delay = watchMirrorSnapshotAckRetryDelay
-        pendingWatchMirrorSnapshotAckRetryTask = Task { @MainActor [weak self] in
-            for _ in 0..<attempts {
-                do {
-                    try await Task.sleep(for: .seconds(delay))
-                } catch {
-                    return
-                }
-                guard let self else { return }
-                guard self.watchMode == .mirror,
-                      self.isWatchCompanionAvailable,
-                      self.watchMirrorSnapshotGeneration == generation
-                else {
-                    return
-                }
-                if self.lastWatchMirrorSnapshotAck?.generation == generation {
-                    self.cancelWatchMirrorSnapshotAckRetry()
-                    return
-                }
-                WatchTokenReceiver.shared.replayLatestManifestIfPossible()
-            }
-        }
-    }
-
-    private func cancelWatchMirrorSnapshotAckRetry() {
-        pendingWatchMirrorSnapshotAckRetryTask?.cancel()
-        pendingWatchMirrorSnapshotAckRetryTask = nil
-    }
-
-    private func loadAllThingProjectionMessages() async throws -> [PushMessage] {
-        let pageSize = 2000
-        var cursor: EntityProjectionPageCursor?
-        var accumulated: [PushMessage] = []
-        while true {
-            let page = try await dataStore.loadThingMessagesForProjectionPage(
-                before: cursor,
-                limit: pageSize
-            )
-            guard !page.isEmpty else { break }
-            accumulated.append(contentsOf: page)
-            cursor = page.last.map { EntityProjectionPageCursor(receivedAt: $0.receivedAt, id: $0.id) }
-            if page.count < pageSize {
-                break
-            }
-        }
-        return accumulated
-    }
-
-    private func publishWatchStandaloneProvisioning() async {
-        let sortedChannels = await currentStandaloneProvisioningChannels()
-        let contentDigest = WatchStandaloneProvisioningSnapshot.contentDigest(
-            serverConfig: serverConfig,
-            notificationKeyMaterial: serverConfig?.notificationKeyMaterial,
-            channels: sortedChannels
-        )
-        let shouldReuseGeneration =
-            watchStandaloneProvisioningGeneration > 0 &&
-            lastPublishedWatchStandaloneProvisioningDigest == contentDigest
-        let generation = shouldReuseGeneration ? watchStandaloneProvisioningGeneration : nextWatchGeneration()
-        watchStandaloneProvisioningGeneration = generation
-        let snapshot = WatchStandaloneProvisioningSnapshot(
-            generation: generation,
-            mode: .standalone,
-            serverConfig: serverConfig,
-            notificationKeyMaterial: serverConfig?.notificationKeyMaterial,
-            channels: sortedChannels,
-            contentDigest: contentDigest
-        )
-        lastPublishedWatchStandaloneProvisioningDigest = snapshot.contentDigest
-        WatchTokenReceiver.shared.sendStandaloneProvisioning(snapshot)
-        await persistWatchPublicationState()
-        await publishWatchControlContext()
-        scheduleWatchStandaloneProvisioningAckRetry(for: generation)
-    }
-
-    private func currentStandaloneProvisioningChannels() async -> [WatchStandaloneChannelCredential] {
-        let activeSubscriptions = (try? await dataStore.loadChannelSubscriptions(includeDeleted: false)) ?? []
-        let fallbackGateway = serverConfig?.gatewayKey ?? ""
-        let subscriptionsByGateway = Dictionary(
-            grouping: activeSubscriptions,
-            by: { subscription in
-                let normalizedGateway = subscription.gateway.trimmingCharacters(in: .whitespacesAndNewlines)
-                return normalizedGateway.isEmpty ? fallbackGateway : normalizedGateway
-            }
-        )
-        var channels: [WatchStandaloneChannelCredential] = []
-        for (gatewayKey, subscriptions) in subscriptionsByGateway {
-            let normalizedGateway = gatewayKey.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !normalizedGateway.isEmpty else { continue }
-            let displayNameByChannelId = Dictionary(
-                uniqueKeysWithValues: subscriptions.map { ($0.channelId, $0.displayName) }
-            )
-            let updatedAtByChannelId = Dictionary(
-                uniqueKeysWithValues: subscriptions.map { ($0.channelId, $0.updatedAt) }
-            )
-            let credentials = (try? await dataStore.activeChannelCredentials(gateway: normalizedGateway)) ?? []
-            channels.append(
-                contentsOf: credentials.compactMap { credential in
-                    let trimmedChannelId = credential.channelId.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let trimmedPassword = credential.password.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !trimmedChannelId.isEmpty, !trimmedPassword.isEmpty else { return nil }
-                    return WatchStandaloneChannelCredential(
-                        gateway: normalizedGateway,
-                        channelId: trimmedChannelId,
-                        displayName: displayNameByChannelId[trimmedChannelId] ?? trimmedChannelId,
-                        password: trimmedPassword,
-                        updatedAt: updatedAtByChannelId[trimmedChannelId] ?? Date.distantPast
-                    )
-                }
-            )
-        }
-        return channels.sorted {
-            if $0.gateway == $1.gateway {
-                return $0.channelId < $1.channelId
-            }
-            return $0.gateway < $1.gateway
-        }
-    }
-
-    private func scheduleWatchStandaloneProvisioningAckRetry(for generation: Int64) {
-        cancelWatchStandaloneProvisioningAckRetry()
-        guard watchMode == .standalone, isWatchCompanionAvailable else { return }
-        let attempts = watchStandaloneProvisioningAckRetryAttempts
-        let delay = watchStandaloneProvisioningAckRetryDelay
-        pendingWatchStandaloneProvisioningAckRetryTask = Task { @MainActor [weak self] in
-            for _ in 0..<attempts {
-                do {
-                    try await Task.sleep(for: .seconds(delay))
-                } catch {
-                    return
-                }
-                guard let self else { return }
-                guard self.watchMode == .standalone,
-                      self.isWatchCompanionAvailable,
-                      self.watchStandaloneProvisioningGeneration == generation
-                else {
-                    return
-                }
-                if self.lastWatchStandaloneProvisioningAck?.generation == generation {
-                    self.cancelWatchStandaloneProvisioningAckRetry()
-                    return
-                }
-                WatchTokenReceiver.shared.replayLatestManifestIfPossible()
-            }
-        }
-    }
-
-    private func cancelWatchStandaloneProvisioningAckRetry() {
-        pendingWatchStandaloneProvisioningAckRetryTask?.cancel()
-        pendingWatchStandaloneProvisioningAckRetryTask = nil
+        await watchSyncController.handleWatchStandaloneProvisioningNack(nack)
     }
 
     func applyWatchMirrorActionBatch(_ batch: WatchMirrorActionBatch) async {
-        guard batch.mode == .mirror else { return }
-        guard !batch.actions.isEmpty else { return }
-        var ackedActionIds: [String] = []
-        var handledActionIds: Set<String> = []
-        for action in batch.actions {
-            guard handledActionIds.insert(action.actionId).inserted else { continue }
-            let message = await resolveWatchMirrorActionTarget(messageIdentifier: action.messageId)
-            switch action.kind {
-            case .read:
-                if let message {
-                    _ = try? await messageStateCoordinator.markRead(messageId: message.id)
-                }
-                ackedActionIds.append(action.actionId)
-            case .delete:
-                if let message {
-                    try? await messageStateCoordinator.deleteMessage(messageId: message.id)
-                }
-                ackedActionIds.append(action.actionId)
-            }
-        }
-        guard !ackedActionIds.isEmpty else { return }
-        watchMirrorActionAckGeneration = nextWatchGeneration()
-        WatchTokenReceiver.shared.sendMirrorActionAck(
-            WatchMirrorActionAck(
-                ackGeneration: watchMirrorActionAckGeneration,
-                ackedActionIds: ackedActionIds
-            )
-        )
-        await publishWatchControlContext()
-        requestWatchMirrorSnapshotSync()
+        await watchSyncController.applyWatchMirrorActionBatch(batch)
     }
 
-    private func resolveWatchMirrorActionTarget(messageIdentifier: String) async -> PushMessage? {
-        if let message = try? await dataStore.loadMessage(messageId: messageIdentifier) {
-            return message
-        }
-        if let message = try? await dataStore.loadMessage(deliveryId: messageIdentifier) {
-            return message
-        }
-        if let message = try? await dataStore.loadMessage(notificationRequestId: messageIdentifier) {
-            return message
-        }
-        return nil
+    private func requestWatchMirrorSnapshotSync(immediate: Bool = false) {
+        watchSyncController.requestWatchMirrorSnapshotSync(immediate: immediate)
+    }
+
+    private func requestWatchStandaloneProvisioningSync(immediate: Bool) {
+        watchSyncController.requestWatchStandaloneProvisioningSync(immediate: immediate)
     }
 
     private func requestNetworkPermissionOnLaunch() {
@@ -2104,56 +1052,43 @@ final class AppEnvironment {
     func updateScenePhase(_ phase: ScenePhase) {
         switch phase {
         case .active:
-            isSceneActive = true
+            navigationState.setSceneActive(true)
             clearDeliveredSystemNotifications()
             syncBadgeWithUnreadCount()
             scheduleMessageListRefresh()
-            flushPendingMessageListRefreshIfNeeded()
             Task { @MainActor in
                 await refreshChannelSubscriptions()
-                await syncPrivateChannelState()
             }
         case .background, .inactive:
-            isSceneActive = false
+            navigationState.setSceneActive(false)
             Task {
                 await dataStore.flushWrites()
             }
             Task { @MainActor in
-                await syncPrivateChannelState()
+                await channelSyncController.refreshPrivateChannelRouteState()
             }
         @unknown default:
-            isSceneActive = false
-        }
-    }
-
-    func updateMainWindowVisibility(isVisible: Bool) {
-        guard isMainWindowVisible != isVisible else { return }
-        isMainWindowVisible = isVisible
-        if isVisible {
-            flushPendingMessageListRefreshIfNeeded()
+            navigationState.setSceneActive(false)
         }
     }
 
     func updateActiveTab(_ tab: MainTab) {
-        activeMainTab = tab
+        navigationState.updateActiveTab(tab)
         clearDeliveredSystemNotifications()
     }
 
     func updateMessageListPosition(isAtTop: Bool) {
-        guard isMessageListAtTop != isAtTop else { return }
-        isMessageListAtTop = isAtTop
+        navigationState.updateMessageListPosition(isAtTop: isAtTop)
         clearDeliveredSystemNotifications()
     }
 
     func updateEventListPosition(isAtTop: Bool) {
-        guard isEventListAtTop != isAtTop else { return }
-        isEventListAtTop = isAtTop
+        navigationState.updateEventListPosition(isAtTop: isAtTop)
         clearDeliveredSystemNotifications()
     }
 
     func updateThingListPosition(isAtTop: Bool) {
-        guard isThingListAtTop != isAtTop else { return }
-        isThingListAtTop = isAtTop
+        navigationState.updateThingListPosition(isAtTop: isAtTop)
         clearDeliveredSystemNotifications()
     }
 
@@ -2161,308 +1096,30 @@ final class AppEnvironment {
         guard let payload else {
             return true
         }
-        guard !shouldSuppressForegroundNotifications(for: payload) else {
+        guard !navigationState.shouldSuppressForegroundNotifications(for: payload) else {
             return false
         }
         return NotificationHandling.shouldPresentUserAlert(from: payload)
     }
 
-    private func syncPrivateChannelState() async {
-        guard let config = serverConfig else { return }
-        if let token = await dataStore.cachedPushToken(for: platformIdentifier())?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !token.isEmpty
-        {
-            await syncProviderPullRoute(config: config, providerToken: token)
-        }
-    }
-
     private func syncProviderPullRoute(config: ServerConfig, providerToken: String) async {
-        let normalizedToken = providerToken.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedToken.isEmpty else { return }
-        let platform = platformIdentifier()
-        let cachedDeviceKey = await dataStore.cachedDeviceKey(
-            for: platform,
-            channelType: "apns"
-        )?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let routeKey = cachedDeviceKey, !routeKey.isEmpty {
-            let fingerprint = "\(platform)|\(routeKey)|\(normalizedToken)"
-            guard lastWakeupRouteFingerprint != fingerprint else {
-                return
-            }
-        }
-        if let ensuredDeviceKey = try? await ensureProviderRoute(
-            config: config,
-            providerToken: normalizedToken
-        ) {
-            lastWakeupRouteFingerprint = "\(platform)|\(ensuredDeviceKey)|\(normalizedToken)"
-        }
+        await providerRouteController.syncProviderPullRoute(config: config, providerToken: providerToken)
     }
 
     private func persistPushTokenAndRotateRoute(config: ServerConfig, token: String) async {
-        let normalizedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedToken.isEmpty else { return }
-        let platform = platformIdentifier()
-        let previousRaw = await dataStore.cachedPushToken(for: platform)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let previousToken = (previousRaw?.isEmpty == false) ? previousRaw : nil
-        await dataStore.saveCachedPushToken(normalizedToken, for: platform)
-        guard let previousToken, previousToken != normalizedToken else {
-            return
-        }
-        guard (try? await ensureProviderRoute(config: config, providerToken: normalizedToken)) != nil else {
-            return
-        }
-        await retireProviderToken(config: config, providerToken: previousToken)
-    }
-
-    private func retireProviderToken(config: ServerConfig, providerToken: String) async {
-        let normalized = providerToken.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return }
-        let platform = platformIdentifier()
-        do {
-            try await channelSubscriptionService.retireProviderToken(
-                baseURL: config.baseURL,
-                token: config.token,
-                platform: platform,
-                providerToken: normalized
-            )
-        } catch {}
+        await providerRouteController.persistPushTokenAndRotateRoute(config: config, token: token)
     }
 
     private func ensureProviderRoute(config: ServerConfig, providerToken: String) async throws -> String {
-        let normalizedProviderToken = providerToken.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedProviderToken.isEmpty else {
-            throw AppError.unknown(localizationManager.localized("operation_failed"))
-        }
-        let taskKey = "\(config.gatewayKey)|\(normalizedProviderToken)"
-        if lastProviderRouteResultKey == taskKey,
-           Date().timeIntervalSince(lastProviderRouteResolvedAt) < providerRouteResultReuseInterval,
-           let resolvedDeviceKey = lastProviderRouteDeviceKey?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !resolvedDeviceKey.isEmpty
-        {
-            return resolvedDeviceKey
-        }
-        if providerRouteTaskKey == taskKey, let providerRouteTask {
-            return try await providerRouteTask.value
-        }
-
-        let task = Task<String, Error> { @MainActor [weak self] in
-            guard let self else {
-                throw AppError.unknown("provider route context released")
-            }
-            let platform = platformIdentifier()
-            let cachedApnsKey = await dataStore.cachedDeviceKey(
-                for: platform,
-                channelType: "apns"
-            )?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let registered = try await channelSubscriptionService.registerDevice(
-                baseURL: config.baseURL,
-                token: config.token,
-                platform: platform,
-                existingDeviceKey: cachedApnsKey?.isEmpty == false ? cachedApnsKey : nil
-            )
-            let bootstrapDeviceKey = registered.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !bootstrapDeviceKey.isEmpty else {
-                throw AppError.unknown(localizationManager.localized("operation_failed"))
-            }
-            let route = try await channelSubscriptionService.upsertDeviceChannel(
-                baseURL: config.baseURL,
-                token: config.token,
-                deviceKey: bootstrapDeviceKey,
-                platform: platform,
-                channelType: "apns",
-                providerToken: normalizedProviderToken
-            )
-            let resolvedDeviceKey = route.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !resolvedDeviceKey.isEmpty else {
-                throw AppError.unknown(localizationManager.localized("operation_failed"))
-            }
-            try await persistProviderDeviceKey(
-                resolvedDeviceKey,
-                platform: platform,
-                channelType: "apns",
-                source: "provider.device_key.route"
-            )
-            refreshAutomationStateIfNeeded()
-            return resolvedDeviceKey
-        }
-
-        providerRouteTaskKey = taskKey
-        providerRouteTask = task
-        defer {
-            if providerRouteTaskKey == taskKey {
-                providerRouteTaskKey = nil
-                providerRouteTask = nil
-            }
-        }
-        let resolvedDeviceKey = try await task.value
-        lastProviderRouteResultKey = taskKey
-        lastProviderRouteDeviceKey = resolvedDeviceKey
-        lastProviderRouteResolvedAt = Date()
-        return resolvedDeviceKey
-    }
-
-    private func persistProviderDeviceKey(
-        _ deviceKey: String,
-        platform: String,
-        channelType: String? = nil,
-        source: String
-    ) async throws {
-        let result: ProviderDeviceKeyStore.SaveResult?
-        if let channelType {
-            result = await dataStore.saveCachedDeviceKey(
-                deviceKey,
-                for: platform,
-                channelType: channelType
-            )
-        } else {
-            result = await dataStore.saveCachedDeviceKey(deviceKey, for: platform)
-        }
-        try requireProviderDeviceKeyPersistence(result, source: source)
-    }
-
-    private func requireProviderDeviceKeyPersistence(
-        _ result: ProviderDeviceKeyStore.SaveResult?,
-        source: String
-    ) throws {
-        guard let result else {
-            let message = "provider_device_key_save_failed platform=invalid"
-            recordAutomationRuntimeMessage(
-                message,
-                source: source,
-                category: "keychain",
-                code: "E_PROVIDER_DEVICE_KEY_SAVE_FAILED"
-            )
-            throw AppError.unknown(localizationManager.localized("operation_failed"))
-        }
-        guard result.error == nil, result.didPersist else {
-            recordAutomationRuntimeMessage(
-                Self.deviceKeySaveErrorDescription(result),
-                source: source,
-                category: "keychain",
-                code: "E_PROVIDER_DEVICE_KEY_SAVE_FAILED"
-            )
-            throw result.error ?? AppError.unknown(localizationManager.localized("operation_failed"))
-        }
-    }
-
-    private static func deviceKeySaveErrorDescription(
-        _ result: ProviderDeviceKeyStore.SaveResult
-    ) -> String {
-        var parts = [
-            "provider_device_key_save_failed",
-            "platform=\(result.platform)",
-            "account=\(result.account)",
-            "access_group=\(result.accessGroup ?? "nil")",
-        ]
-        if let status = result.error?.statusCode {
-            parts.append("status=\(status)")
-        } else if result.error == .unexpectedData {
-            parts.append("error=unexpected_data")
-        } else if let error = result.error {
-            parts.append("error=\(error.localizedDescription)")
-        } else {
-            parts.append("error=not_persisted")
-        }
-        return parts.joined(separator: " ")
-    }
-
-    private func schedulePreviousGatewayDeviceCleanup(
-        previousConfig: ServerConfig?,
-        previousDeviceKey: String?,
-        nextConfig: ServerConfig?
-    ) {
-        guard let previousConfig else { return }
-        let trimmedDeviceKey = previousDeviceKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !trimmedDeviceKey.isEmpty else { return }
-        guard gatewayIdentity(previousConfig) != gatewayIdentity(nextConfig) else { return }
-        let service = channelSubscriptionService
-        Task(priority: .utility) {
-            do {
-                try await service.deleteDeviceChannel(
-                    baseURL: previousConfig.baseURL,
-                    token: previousConfig.token,
-                    deviceKey: trimmedDeviceKey,
-                    channelType: "apns"
-                )
-            } catch {}
-        }
-    }
-
-    private func gatewayIdentity(_ config: ServerConfig?) -> String {
-        guard let config else { return "" }
-        let token = config.token?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return "\(config.baseURL.absoluteString)|\(token)"
-    }
-
-    private func cachedProviderPullDeviceKey() async -> String? {
-        if Date().timeIntervalSince(lastProviderRouteResolvedAt) < providerRouteResultReuseInterval,
-           let recentDeviceKey = lastProviderRouteDeviceKey?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !recentDeviceKey.isEmpty
-        {
-            return recentDeviceKey
-        }
-        let platform = platformIdentifier()
-        let deviceKey = await dataStore.cachedDeviceKey(for: platform)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return deviceKey?.isEmpty == false ? deviceKey : nil
-    }
-
-    private func providerIngressDeliveryId(from payload: [AnyHashable: Any]) -> String? {
-        let sanitized = UserInfoSanitizer.sanitize(payload)
-        let trimmed = (sanitized["delivery_id"] as? String)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !trimmed.isEmpty else { return nil }
-        return trimmed
-    }
-
-    private func notificationInboxIdentity(from payload: [AnyHashable: Any]) -> NotificationInboxIdentity {
-        let sanitized = UserInfoSanitizer.sanitize(payload)
-        let messageId = NotificationHandling.extractMessageId(from: sanitized)
-        let deliveryId = providerIngressDeliveryId(from: sanitized)
-        return NotificationInboxIdentity(messageId: messageId, deliveryId: deliveryId)
-    }
-
-    private func hasPersistedNotification(identity: NotificationInboxIdentity) async -> Bool {
-        do {
-            if let messageId = identity.messageId,
-               try await dataStore.loadMessage(messageId: messageId) != nil
-            {
-                return true
-            }
-            if let deliveryId = identity.deliveryId,
-               try await dataStore.loadMessage(deliveryId: deliveryId) != nil
-            {
-                return true
-            }
-        } catch {}
-        return false
-    }
-
-    private func applyNotificationPersistenceOutcome(
-        _ outcome: NotificationPersistenceOutcome
-    ) {
-        switch outcome {
-        case .duplicate:
-            scheduleCountsRefresh()
-        case .persistedMain:
-            scheduleCountsRefresh()
-        case .persistedPending:
-            scheduleCountsRefresh()
-        case .rejected, .failed:
-            break
-        }
+        try await providerRouteController.ensureProviderRoute(config: config, providerToken: providerToken)
     }
 
     private func handleNotificationIngressChanged(reason: String) async {
-        _ = await mergeNotificationIngressInbox(
-            reason: reason,
-            allowFallbackPull: false
-        )
+        await notificationIngressController.handleNotificationIngressChanged(reason: reason)
     }
 
     private func drainProviderDeliveryAckFailures(source: String) async {
-        await providerIngressCoordinator.drainAckMarkers(source: source)
+        await notificationIngressController.drainProviderDeliveryAckFailures(source: source)
     }
 
     @discardableResult
@@ -2471,7 +1128,7 @@ final class AppEnvironment {
         allowFallbackPull: Bool,
         limit: Int = 256
     ) async -> Int {
-        await providerIngressCoordinator.mergeInbox(
+        await notificationIngressController.mergeNotificationIngressInbox(
             reason: reason,
             allowFallbackPull: allowFallbackPull,
             limit: limit
@@ -2484,7 +1141,7 @@ final class AppEnvironment {
         reason: String,
         skipInboxMerge: Bool = false
     ) async -> Int {
-        await providerIngressCoordinator.syncProviderIngress(
+        await notificationIngressController.syncProviderIngress(
             deliveryId: deliveryId,
             reason: reason,
             skipInboxMerge: skipInboxMerge
@@ -2498,228 +1155,25 @@ final class AppEnvironment {
     }
     @discardableResult
     func persistNotificationIfNeeded(_ notification: UNNotification) async -> NotificationPersistenceOutcome {
-        let notificationPayload = UserInfoSanitizer.sanitize(notification.request.content.userInfo)
-        let identity = notificationInboxIdentity(from: notificationPayload)
-        if await hasPersistedNotification(identity: identity) {
-            return .duplicate
-        }
-
-        let ingress = await NotificationHandling.resolveNotificationIngress(
-            from: notificationPayload,
-            dataStore: dataStore,
-            fallbackServerConfig: serverConfig,
-            channelSubscriptionService: channelSubscriptionService
-        )
-        let outcome: NotificationPersistenceOutcome
-        switch ingress {
-        case let .pulled(payload, requestIdentifier):
-            outcome = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
-                payload,
-                requestIdentifier: requestIdentifier,
-                dataStore: dataStore,
-                beforeSave: { [weak self] message in
-                    guard let self else { return }
-                    await self.autoEnableDataPageIfNeeded(for: message)
-                }
-            )
-        case let .unresolvedWakeup(payload, requestIdentifier):
-            let unresolvedDeliveryId = requestIdentifier
-                ?? NotificationHandling.providerWakeupPullDeliveryId(from: payload)
-            if let unresolvedDeliveryId {
-                let pulled = await syncProviderIngress(
-                    deliveryId: unresolvedDeliveryId,
-                    reason: "delegate_unresolved_wakeup",
-                    skipInboxMerge: true
-                )
-                if pulled > 0 {
-                    let resolvedIdentity = NotificationInboxIdentity(
-                        messageId: identity.messageId,
-                        deliveryId: identity.deliveryId ?? unresolvedDeliveryId
-                    )
-                    outcome = await hasPersistedNotification(identity: resolvedIdentity) ? .duplicate : .rejected
-                } else {
-                    outcome = .rejected
-                }
-            } else {
-                outcome = .rejected
-            }
-        case let .direct(_, requestIdentifier):
-            outcome = await NotificationPersistenceCoordinator.persistPreparedContentIfNeeded(
-                content: notification.request.content,
-                requestIdentifier: requestIdentifier,
-                fallbackRequestIdentifier: notification.request.identifier,
-                dataStore: dataStore,
-                beforeSave: { [weak self] message in
-                    guard let self else { return }
-                    await self.autoEnableDataPageIfNeeded(for: message)
-                }
-            )
-        }
-        applyNotificationPersistenceOutcome(outcome)
-        return outcome
+        await notificationIngressController.persistNotificationIfNeeded(notification)
     }
 
     func handleNotificationOpen(notificationRequestId: String) async {
-        await handleNotificationOpenInternal(
-            notificationRequestId: notificationRequestId,
-            markAsReadInStore: true,
-            removeFromNotificationCenter: true
-        )
+        await notificationOpenController.handleNotificationOpen(notificationRequestId: notificationRequestId)
     }
 
     func handleNotificationOpen(messageId: String) async {
-        await handleNotificationOpenInternal(
-            messageId: messageId,
-            markAsReadInStore: true,
-            removeFromNotificationCenter: true
-        )
+        await notificationOpenController.handleNotificationOpen(messageId: messageId)
     }
 
     func handleNotificationOpen(entityType: String, entityId: String) async {
-        await handleEntityOpenTarget(
-            EntityOpenTarget(entityType: entityType, entityId: entityId)
-        )
+        await notificationOpenController.handleNotificationOpen(entityType: entityType, entityId: entityId)
     }
     func handleNotificationOpenFromCopy(notificationRequestId: String) async {
         await handleNotificationOpen(notificationRequestId: notificationRequestId)
     }
-    private func handleNotificationOpenInternal(
-        notificationRequestId: String,
-        markAsReadInStore: Bool,
-        removeFromNotificationCenter: Bool
-    ) async {
-        do {
-            if let target = try await dataStore.loadMessage(notificationRequestId: notificationRequestId) {
-                await handleNotificationOpenTarget(
-                    target,
-                    markAsReadInStore: markAsReadInStore,
-                    removeFromNotificationCenter: removeFromNotificationCenter
-                )
-                return
-            }
-            if let entityTarget = try await dataStore.loadEntityOpenTarget(notificationRequestId: notificationRequestId) {
-                await handleEntityOpenTarget(entityTarget)
-                return
-            }
-        } catch {
-            showToast(message: localizationManager.localized(
-                "sync_message_failed_placeholder",
-                error.localizedDescription
-            ))
-        }
-    }
-
-    private func handleNotificationOpenInternal(
-        messageId: String,
-        markAsReadInStore: Bool,
-        removeFromNotificationCenter: Bool
-    ) async {
-        do {
-            if let target = try await dataStore.loadMessage(messageId: messageId) {
-                await handleNotificationOpenTarget(
-                    target,
-                    markAsReadInStore: markAsReadInStore,
-                    removeFromNotificationCenter: removeFromNotificationCenter
-                )
-                return
-            }
-            if let entityTarget = try await dataStore.loadEntityOpenTarget(messageId: messageId) {
-                await handleEntityOpenTarget(entityTarget)
-                return
-            }
-        } catch {
-            showToast(message: localizationManager.localized(
-                "sync_message_failed_placeholder",
-                error.localizedDescription
-            ))
-        }
-    }
-
-    private func handleNotificationOpenTarget(
-        _ target: PushMessage,
-        markAsReadInStore: Bool,
-        removeFromNotificationCenter: Bool
-    ) async {
-        let targetId = target.id
-
-        if markAsReadInStore {
-            _ = try? await messageStateCoordinator.markRead(messageId: targetId)
-        } else {
-            await refreshMessageCountsAndNotify()
-            if removeFromNotificationCenter {
-                removeDeliveredNotificationIfNeeded(for: target)
-            }
-        }
-        autoEnableDataPage(for: "message")
-
-        pendingEventToOpen = nil
-        pendingThingToOpen = nil
-        pendingMessageToOpen = targetId
-    }
-
-    private func handleEntityOpenTarget(_ target: EntityOpenTarget) async {
-        pendingMessageToOpen = nil
-        if target.entityType == "event" {
-            autoEnableDataPage(for: "event")
-            pendingThingToOpen = nil
-            pendingEventToOpen = target.entityId
-        } else if target.entityType == "thing" {
-            autoEnableDataPage(for: "thing")
-            pendingEventToOpen = nil
-            pendingThingToOpen = target.entityId
-        }
-    }
 
     private func clearDeliveredSystemNotifications() {
-    }
-
-    private func shouldSuppressForegroundNotifications(for payload: [AnyHashable: Any]) -> Bool {
-        guard isSceneActive else { return false }
-        guard let entityType = foregroundNotificationEntityType(from: payload) else {
-            return false
-        }
-        switch (activeMainTab, entityType) {
-        case (.messages, "message"):
-            return isMessageListAtTop
-        case (.events, "event"):
-            return isEventListAtTop
-        case (.things, "thing"):
-            return isThingListAtTop
-        default:
-            return false
-        }
-    }
-
-    private func foregroundNotificationEntityType(
-        from payload: [AnyHashable: Any]
-    ) -> String? {
-        let raw = (payload["entity_type"] as? String)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-        switch raw {
-        case "message", "event", "thing":
-            return raw
-        default:
-            return nil
-        }
-    }
-
-    private func channelMatches(_ candidate: String?, normalizedChannel: String) -> Bool {
-        guard let candidate else { return false }
-        if let normalizedCandidate = try? ChannelIdValidator.normalize(candidate) {
-            return normalizedCandidate == normalizedChannel
-        }
-        return candidate.trimmingCharacters(in: .whitespacesAndNewlines) == normalizedChannel
-    }
-
-    private var canRefreshMessageList: Bool {
-        isSceneActive && isMainWindowVisible
-    }
-
-    private func flushPendingMessageListRefreshIfNeeded() {
-        guard pendingMessageListRefresh, canRefreshMessageList else { return }
-        messageStoreRevision = UUID()
-        pendingMessageListRefresh = false
     }
 
     private func postGatewayPayload(

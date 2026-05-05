@@ -6,6 +6,7 @@ import Observation
 struct SettingsView: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
+    @Environment(\.openURL) private var openURL
     @State private var viewModel = SettingsViewModel()
     @State private var macOverlay: MacOverlay?
     @State private var betaChannelEnabled: Bool = false
@@ -212,6 +213,54 @@ struct SettingsView: View {
                         }
                         .accessibilityIdentifier("toggle.settings.beta_channel")
                     }
+                    SettingsRowDivider()
+                    Button {
+                        openURL(AppConstants.documentationURL(.gettingStarted))
+                    } label: {
+                        SettingsActionRow(
+                            iconName: "sparkles",
+                            title: "open_getting_started_docs",
+                            detail: "open_getting_started_docs_detail",
+                        ) {
+                            Image(systemName: "arrow.up.right.square")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color.appTextSecondary)
+                        }
+                    }
+                    .buttonStyle(.appPlain)
+                    .accessibilityIdentifier("action.settings.open_getting_started_docs")
+                    SettingsRowDivider()
+                    Button {
+                        openURL(AppConstants.documentationURL(.messageAPI))
+                    } label: {
+                        SettingsActionRow(
+                            iconName: "book",
+                            title: "open_developer_api_docs",
+                            detail: "open_developer_api_docs_detail",
+                        ) {
+                            Image(systemName: "arrow.up.right.square")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color.appTextSecondary)
+                        }
+                    }
+                    .buttonStyle(.appPlain)
+                    .accessibilityIdentifier("action.settings.open_developer_api_docs")
+                    SettingsRowDivider()
+                    Button {
+                        openURL(AppConstants.documentationURL(.e2ee))
+                    } label: {
+                        SettingsActionRow(
+                            iconName: "lock.doc",
+                            title: "open_e2ee_docs",
+                            detail: "open_e2ee_docs_detail",
+                        ) {
+                            Image(systemName: "arrow.up.right.square")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color.appTextSecondary)
+                        }
+                    }
+                    .buttonStyle(.appPlain)
+                    .accessibilityIdentifier("action.settings.open_e2ee_docs")
                     SettingsRowDivider()
                     SettingsActionRow(
                         iconName: "info.circle",

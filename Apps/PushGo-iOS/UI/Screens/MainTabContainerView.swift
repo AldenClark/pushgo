@@ -17,6 +17,7 @@ struct MainTabContainerView: View {
     @State private var eventScrollToTopToken: Int = 0
     @State private var thingScrollToTopToken: Int = 0
     @State private var pendingMessageReselectTask: Task<Void, Never>?
+    @State private var dataRefreshTask: Task<Void, Never>?
 
     var body: some View {
         tabLayout
@@ -36,7 +37,7 @@ struct MainTabContainerView: View {
                 guard !didRefreshAuthorizationStatus else { return }
                 didRefreshAuthorizationStatus = true
                 await environment.pushRegistrationService.refreshAuthorizationStatus()
-                await entityViewModel.reload()
+                await refreshDataForStoreChange()
                 environment.updateActiveTab(selection)
                 if environment.pendingMessageToOpen != nil {
                     selection = .messages
@@ -89,11 +90,7 @@ struct MainTabContainerView: View {
                 environment.updateActiveTab(newValue)
             }
             .onChange(of: environment.messageStoreRevision) { _, _ in
-                Task { @MainActor in
-                    await messageListViewModel.refresh()
-                    await entityViewModel.reload()
-                    ensureSelectionIsVisible()
-                }
+                scheduleDataRefreshForStoreChange()
             }
             .onChange(of: visibleTabsSignature) { _, _ in
                 ensureSelectionIsVisible()
@@ -112,6 +109,21 @@ struct MainTabContainerView: View {
         ].joined(separator: "|")
     }
 #endif
+
+    @MainActor
+    private func refreshDataForStoreChange() async {
+        await messageListViewModel.refresh()
+        searchViewModel.refreshMessagesIfNeeded()
+        await entityViewModel.reload()
+        ensureSelectionIsVisible()
+    }
+
+    private func scheduleDataRefreshForStoreChange() {
+        dataRefreshTask?.cancel()
+        dataRefreshTask = Task { @MainActor in
+            await refreshDataForStoreChange()
+        }
+    }
 
     @ViewBuilder
     private var tabLayout: some View {
@@ -332,106 +344,3 @@ private enum TabBarTapKind {
     case double
 }
 #endif
-
-enum MainTab: Hashable, CaseIterable {
-    case messages
-    case events
-    case things
-    case channels
-
-    var title: String {
-        switch self {
-        case .messages:
-            "messages"
-        case .events:
-            "thing_detail_tab_events"
-        case .things:
-            "push_type_thing"
-        case .channels:
-            "channels"
-        }
-    }
-
-    @MainActor
-    func localizedTitle(using localizationManager: LocalizationManager) -> String {
-        localizationManager.localized(title)
-    }
-
-    var systemImageName: String {
-        switch self {
-        case .messages:
-            return "tray.full"
-        case .events:
-            return "waveform.path.ecg"
-        case .things:
-            return "cpu"
-        case .channels:
-            return "dot.radiowaves.left.and.right"
-        }
-    }
-
-    var accessibilityIdentifier: String {
-        switch self {
-        case .messages:
-            "messages"
-        case .events:
-            "events"
-        case .things:
-            "things"
-        case .channels:
-            "channels"
-        }
-    }
-
-#if DEBUG
-    init?(automationIdentifier: String) {
-        switch automationIdentifier {
-        case "messages":
-            self = .messages
-        case "events":
-            self = .events
-        case "things":
-            self = .things
-        case "channels":
-            self = .channels
-        default:
-            return nil
-        }
-    }
-
-    var automationIdentifier: String {
-        switch self {
-        case .messages:
-            return "messages"
-        case .events:
-            return "events"
-        case .things:
-            return "things"
-        case .channels:
-            return "channels"
-        }
-    }
-
-    var automationVisibleScreen: String {
-        switch self {
-        case .messages:
-            return "screen.messages.list"
-        case .events:
-            return "screen.events.list"
-        case .things:
-            return "screen.things.list"
-        case .channels:
-            return "screen.channels"
-        }
-    }
-
-    var automationPublishesFromRoot: Bool {
-        switch self {
-        case .channels:
-            return true
-        case .messages, .events, .things:
-            return false
-        }
-    }
-#endif
-}

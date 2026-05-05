@@ -1,11 +1,16 @@
 import SwiftUI
 
 struct EventListScreen: View {
+    private enum OverlayState {
+        case onboarding
+        case searchPlaceholder
+    }
+
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @Bindable var viewModel: EntityProjectionViewModel
+    let viewModel: EntityProjectionViewModel
     var openEventId: String? = nil
     var scrollToTopToken: Int = 0
     var onOpenEventHandled: (() -> Void)? = nil
@@ -18,88 +23,7 @@ struct EventListScreen: View {
 
     var body: some View {
         let filteredEventsSnapshot = filteredEvents
-        let baseContent = Group {
-            if viewModel.events.isEmpty {
-                EntityEmptyView(
-                    iconName: "bolt.horizontal.circle",
-                    title: localizationManager.localized("events_empty_title"),
-                    subtitle: localizationManager.localized("events_empty_hint")
-                )
-            } else if filteredEventsSnapshot.isEmpty {
-                MessageSearchPlaceholderView(
-                    imageName: "questionmark.circle",
-                    title: "no_matching_results",
-                    detailKey: "try_changing_a_keyword_or_clear_the_filter_conditions"
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.horizontal, 24)
-            } else {
-                ScrollViewReader { proxy in
-                    List(selection: batchSelectionBinding) {
-                        ForEach(filteredEventsSnapshot.indices, id: \.self) { index in
-                            let event = filteredEventsSnapshot[index]
-                            Group {
-                                if isBatchMode {
-                                    EventListRow(event: event)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                } else {
-                                    Button {
-                                        selectEvent(event)
-                                    } label: {
-                                        EventListRow(event: event)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .id(event.id)
-                            .accessibilityIdentifier("event.row.\(event.id)")
-                            .tag(event.id)
-                            .listRowInsets(EdgeInsets(
-                                top: EntityVisualTokens.listRowInsetVertical,
-                                leading: EntityVisualTokens.listRowInsetHorizontal,
-                                bottom: EntityVisualTokens.listRowInsetVertical,
-                                trailing: EntityVisualTokens.listRowInsetHorizontal
-                            ))
-                            .listRowBackground(
-                                EntitySelectionBackground(isSelected: isBatchMode ? selectedEventIds.contains(event.id) : selectedEvent?.id == event.id)
-                            )
-                            .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
-                            .listRowSeparator(index == filteredEventsSnapshot.count - 1 ? .hidden : .visible, edges: .bottom)
-                            .onAppear {
-                                guard index == filteredEventsSnapshot.count - 1 else { return }
-                                Task { await viewModel.loadMoreEvents() }
-                            }
-                        }
-                        if viewModel.isLoadingMoreEvents {
-                            HStack {
-                                Spacer()
-                                ProgressView()
-                                    .controlSize(.small)
-                                Spacer()
-                            }
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
-                        }
-                    }
-                    .listStyle(.plain)
-                    .modifier(
-                        EventListTopObserverModifier(enabled: true) { topOffset in
-                            updateEventListTopState(
-                                topOffset: topOffset,
-                                filteredEventsCount: filteredEventsSnapshot.count
-                            )
-                        }
-                    )
-                    .environment(\.editMode, isBatchMode ? .constant(.active) : .constant(.inactive))
-                    .scrollContentBackground(.hidden)
-                    .background(EntityVisualTokens.pageBackground)
-                    .onChange(of: scrollToTopToken) { _, _ in
-                        scrollToTopIfNeeded(proxy, filteredEvents: filteredEventsSnapshot)
-                    }
-                }
-            }
-        }
+        let baseContent = listContainer(filteredEvents: filteredEventsSnapshot)
         let content = applySearchIfNeeded(baseContent)
         .accessibilityIdentifier("screen.events.list")
         .refreshable {
@@ -143,13 +67,6 @@ struct EventListScreen: View {
             publishAutomationState()
 #endif
         }
-        .onChange(of: environment.messageStoreRevision) { _, _ in
-            Task { @MainActor in
-                await viewModel.reload()
-                syncSelectedEventSnapshot()
-                openEventIfNeeded()
-            }
-        }
         .onChange(of: selectedEvent?.id) { _, _ in
 #if DEBUG
             publishAutomationState()
@@ -176,6 +93,111 @@ struct EventListScreen: View {
             .accessibilityIdentifier("sheet.event.detail")
         }
         content
+    }
+
+    @ViewBuilder
+    private func listContainer(filteredEvents: [EventProjection]) -> some View {
+        let overlayState = overlayState(for: filteredEvents)
+        ZStack {
+            eventList(filteredEvents: filteredEvents)
+                .opacity(overlayState == nil ? 1 : 0.001)
+                .allowsHitTesting(overlayState == nil)
+                .accessibilityHidden(overlayState != nil)
+
+            switch overlayState {
+            case .onboarding:
+                EntityOnboardingEmptyView(kind: .events)
+            case .searchPlaceholder:
+                MessageSearchPlaceholderView(
+                    imageName: "questionmark.circle",
+                    title: "no_matching_results",
+                    detailKey: "try_changing_a_keyword_or_clear_the_filter_conditions"
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, 24)
+            case nil:
+                EmptyView()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func eventList(filteredEvents: [EventProjection]) -> some View {
+        ScrollViewReader { proxy in
+            List(selection: batchSelectionBinding) {
+                ForEach(filteredEvents.indices, id: \.self) { index in
+                    let event = filteredEvents[index]
+                    Group {
+                        if isBatchMode {
+                            EventListRow(event: event)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        } else {
+                            Button {
+                                selectEvent(event)
+                            } label: {
+                                EventListRow(event: event)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .id(event.id)
+                    .accessibilityIdentifier("event.row.\(event.id)")
+                    .tag(event.id)
+                    .listRowInsets(EdgeInsets(
+                        top: EntityVisualTokens.listRowInsetVertical,
+                        leading: EntityVisualTokens.listRowInsetHorizontal,
+                        bottom: EntityVisualTokens.listRowInsetVertical,
+                        trailing: EntityVisualTokens.listRowInsetHorizontal
+                    ))
+                    .listRowBackground(
+                        EntitySelectionBackground(isSelected: isBatchMode ? selectedEventIds.contains(event.id) : selectedEvent?.id == event.id)
+                    )
+                    .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
+                    .listRowSeparator(index == filteredEvents.count - 1 ? .hidden : .visible, edges: .bottom)
+                    .onAppear {
+                        guard index == filteredEvents.count - 1 else { return }
+                        Task { await viewModel.loadMoreEvents() }
+                    }
+                }
+                if viewModel.isLoadingMoreEvents {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                            .controlSize(.small)
+                        Spacer()
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                }
+            }
+            .listStyle(.plain)
+            .modifier(
+                EventListTopObserverModifier(enabled: true) { topOffset in
+                    updateEventListTopState(
+                        topOffset: topOffset,
+                        filteredEventsCount: filteredEvents.count
+                    )
+                }
+            )
+            .environment(\.editMode, isBatchMode ? .constant(.active) : .constant(.inactive))
+            .scrollContentBackground(.hidden)
+            .background(EntityVisualTokens.pageBackground)
+            .onChange(of: scrollToTopToken) { _, _ in
+                scrollToTopIfNeeded(proxy, filteredEvents: filteredEvents)
+            }
+        }
+    }
+
+    private func overlayState(for filteredEvents: [EventProjection]) -> OverlayState? {
+        if viewModel.events.isEmpty {
+            .onboarding
+        } else if filteredEvents.isEmpty {
+            .searchPlaceholder
+        } else {
+            nil
+        }
     }
 
 #if DEBUG

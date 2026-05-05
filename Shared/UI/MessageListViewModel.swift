@@ -46,6 +46,20 @@ struct MessageChannelSummary: Identifiable, Hashable {
 @MainActor
 @Observable
 final class MessageListViewModel {
+    private struct ReloadRequest {
+        let resetPaging: Bool
+        let clearBeforeLoading: Bool
+        let reconcileUnreadSession: Bool
+
+        func merged(with other: ReloadRequest) -> ReloadRequest {
+            ReloadRequest(
+                resetPaging: resetPaging || other.resetPaging,
+                clearBeforeLoading: clearBeforeLoading || other.clearBeforeLoading,
+                reconcileUnreadSession: reconcileUnreadSession || other.reconcileUnreadSession
+            )
+        }
+    }
+
     private(set) var filteredMessagesIdentityRevision: UInt64 = 0
     private(set) var filteredMessages: [PushMessageSummary] = [] {
         didSet {
@@ -60,6 +74,7 @@ final class MessageListViewModel {
     private(set) var hasLoadedOnce: Bool = false
     private(set) var totalMessageCount: Int = 0
     private(set) var unreadMessageCount: Int = 0
+    private(set) var unreadSessionRetainedReadCount: Int = 0
     private(set) var hasMorePages: Bool = false
     private(set) var isLoadingPage: Bool = false
     var error: AppError?
@@ -79,6 +94,9 @@ final class MessageListViewModel {
     @ObservationIgnored private var shouldLoadChannelSummaries = false
     @ObservationIgnored private var isRefreshingCountsAndChannels = false
     @ObservationIgnored private var pendingCountsAndChannels = false
+    @ObservationIgnored private var reloadTask: Task<Void, Never>?
+    @ObservationIgnored private var pendingReloadRequest: ReloadRequest?
+    @ObservationIgnored private var unreadFilterSession: UnreadFilterSessionState?
 
     private struct RefreshSnapshot {
         let messages: [PushMessageSummary]
@@ -93,17 +111,22 @@ final class MessageListViewModel {
             self.environment = AppEnvironment.shared
         }
         dataStore = self.environment.dataStore
-        Task { @MainActor in
-            await reloadFromStore(resetPaging: true, clearBeforeLoading: true)
-        }
     }
 
     func loadMessages() async {
-        await reloadFromStore(resetPaging: true, clearBeforeLoading: false)
+        await enqueueReload(resetPaging: true, clearBeforeLoading: false, reconcileUnreadSession: false)
     }
 
     func refresh() async {
-        await reloadFromStore(resetPaging: true, clearBeforeLoading: false)
+        await enqueueReload(resetPaging: true, clearBeforeLoading: false, reconcileUnreadSession: false)
+    }
+
+    func reconcileUnreadFilterSession() async {
+        guard isUnreadOnlyFilterActive else {
+            await refresh()
+            return
+        }
+        await enqueueReload(resetPaging: true, clearBeforeLoading: false, reconcileUnreadSession: true)
     }
 
     func enableChannelSummaries() {
@@ -115,9 +138,11 @@ final class MessageListViewModel {
     }
 
     func setFilter(_ filter: MessageFilter) {
+        guard selectedFilter != filter else { return }
         selectedFilter = filter
+        resetUnreadFilterSessionIfNeeded(for: filter)
         Task { @MainActor in
-            await reloadFromStore(resetPaging: true, clearBeforeLoading: false)
+            await enqueueReload(resetPaging: true, clearBeforeLoading: false, reconcileUnreadSession: false)
         }
     }
 
@@ -126,7 +151,7 @@ final class MessageListViewModel {
         self.sortMode = sortMode
         sortMode.persist()
         Task { @MainActor in
-            await reloadFromStore(resetPaging: true, clearBeforeLoading: false)
+            await enqueueReload(resetPaging: true, clearBeforeLoading: false, reconcileUnreadSession: false)
         }
     }
 
@@ -137,7 +162,7 @@ final class MessageListViewModel {
             selectedChannel = key
         }
         Task { @MainActor in
-            await reloadFromStore(resetPaging: true, clearBeforeLoading: false)
+            await enqueueReload(resetPaging: true, clearBeforeLoading: false, reconcileUnreadSession: false)
         }
     }
 
@@ -145,8 +170,20 @@ final class MessageListViewModel {
         guard selectedChannel != nil else { return }
         selectedChannel = nil
         Task { @MainActor in
-            await reloadFromStore(resetPaging: true, clearBeforeLoading: false)
+            await enqueueReload(resetPaging: true, clearBeforeLoading: false, reconcileUnreadSession: false)
         }
+    }
+
+    var isUnreadOnlyFilterActive: Bool {
+        selectedFilter == .unread
+    }
+
+    var shouldShowUnreadSessionRefreshHint: Bool {
+        isUnreadOnlyFilterActive && unreadSessionRetainedReadCount > 0
+    }
+
+    func toggleUnreadOnlyFilter() {
+        setFilter(isUnreadOnlyFilterActive ? .all : .unread)
     }
 
     func markRead(_ message: PushMessageSummary, isRead: Bool) async {
@@ -155,6 +192,7 @@ final class MessageListViewModel {
             _ = try await environment.messageStateCoordinator.markRead(messageId: message.id)
             if let index = filteredMessages.firstIndex(where: { $0.id == message.id }) {
                 filteredMessages[index].isRead = isRead
+                retainUnreadSessionMessageIfNeeded(filteredMessages[index])
             }
             await refreshCountsAndChannels()
         } catch let appError as AppError {
@@ -168,6 +206,7 @@ final class MessageListViewModel {
         do {
             try await environment.messageStateCoordinator.deleteMessage(messageId: message.id)
             filteredMessages.removeAll { $0.id == message.id }
+            forgetUnreadSessionMessageIfNeeded(messageId: message.id)
             await refreshCountsAndChannels()
         } catch let appError as AppError {
             self.error = appError
@@ -196,6 +235,7 @@ final class MessageListViewModel {
             guard changed > 0 else { return 0 }
             for index in filteredMessages.indices {
                 filteredMessages[index].isRead = true
+                retainUnreadSessionMessageIfNeeded(filteredMessages[index])
             }
             await refreshCountsAndChannels()
             return changed
@@ -265,7 +305,52 @@ final class MessageListViewModel {
         await loadNextPage()
     }
 
-    private func reloadFromStore(resetPaging: Bool, clearBeforeLoading: Bool) async {
+    private func enqueueReload(
+        resetPaging: Bool,
+        clearBeforeLoading: Bool,
+        reconcileUnreadSession: Bool
+    ) async {
+        let request = ReloadRequest(
+            resetPaging: resetPaging,
+            clearBeforeLoading: clearBeforeLoading,
+            reconcileUnreadSession: reconcileUnreadSession
+        )
+
+        if let reloadTask {
+            pendingReloadRequest = mergePendingReloadRequest(with: request)
+            await reloadTask.value
+            return
+        }
+
+        var nextRequest: ReloadRequest? = request
+        while let currentRequest = nextRequest {
+            pendingReloadRequest = nil
+            let task = Task { @MainActor in
+                await self.reloadFromStore(
+                    resetPaging: currentRequest.resetPaging,
+                    clearBeforeLoading: currentRequest.clearBeforeLoading,
+                    reconcileUnreadSession: currentRequest.reconcileUnreadSession
+                )
+            }
+            reloadTask = task
+            await task.value
+            reloadTask = nil
+            nextRequest = pendingReloadRequest
+        }
+    }
+
+    private func mergePendingReloadRequest(with request: ReloadRequest) -> ReloadRequest {
+        if let pendingReloadRequest {
+            return pendingReloadRequest.merged(with: request)
+        }
+        return request
+    }
+
+    private func reloadFromStore(
+        resetPaging: Bool,
+        clearBeforeLoading: Bool,
+        reconcileUnreadSession: Bool
+    ) async {
         if resetPaging {
             if clearBeforeLoading {
                 nextCursor = nil
@@ -273,18 +358,80 @@ final class MessageListViewModel {
                 hasMorePages = false
             }
             await refreshCountsAndChannels()
-            await refreshFirstPagesKeepingListStable()
+            if isUnreadOnlyFilterActive {
+                await refreshUnreadFilterSessionSnapshot(
+                    reconcile: reconcileUnreadSession || unreadFilterSession == nil
+                )
+            } else {
+                await refreshFirstPagesKeepingListStable()
+            }
             hasLoadedOnce = true
             return
         }
 
         await refreshCountsAndChannels()
-        await loadNextPage()
+        if isUnreadOnlyFilterActive {
+            await refreshUnreadFilterSessionSnapshot(reconcile: reconcileUnreadSession)
+        } else {
+            await loadNextPage()
+        }
         hasLoadedOnce = true
     }
 
+    private func refreshUnreadFilterSessionSnapshot(reconcile: Bool) async {
+        guard !isLoadingPage else {
+            pendingReloadRequest = mergePendingReloadRequest(
+                with: ReloadRequest(
+                    resetPaging: true,
+                    clearBeforeLoading: false,
+                    reconcileUnreadSession: reconcile
+                )
+            )
+            return
+        }
+        isLoadingPage = true
+        defer { isLoadingPage = false }
+
+        let targetCount = min(max(pageSize, filteredMessages.count), maxCachedMessages)
+        do {
+            let snapshot = try await loadRefreshSnapshot(targetCount: targetCount)
+            nextCursor = snapshot.nextCursor
+            hasMorePages = snapshot.hasMorePages
+
+            if reconcile || unreadFilterSession == nil {
+                filteredMessages = snapshot.messages
+                unreadFilterSession = UnreadFilterSessionState()
+                syncUnreadFilterSessionSummary()
+                return
+            }
+
+            if let unreadFilterSession {
+                filteredMessages = unreadFilterSession.mergedMessages(
+                    currentMessages: filteredMessages,
+                    liveUnreadMessages: snapshot.messages
+                )
+            } else {
+                filteredMessages = snapshot.messages
+            }
+            syncUnreadFilterSessionSummary()
+        } catch let appError as AppError {
+            self.error = appError
+        } catch {
+            self.error = AppError.unknown(error.localizedDescription)
+        }
+    }
+
     private func refreshFirstPagesKeepingListStable() async {
-        guard !isLoadingPage else { return }
+        guard !isLoadingPage else {
+            pendingReloadRequest = mergePendingReloadRequest(
+                with: ReloadRequest(
+                    resetPaging: true,
+                    clearBeforeLoading: false,
+                    reconcileUnreadSession: false
+                )
+            )
+            return
+        }
         isLoadingPage = true
         defer { isLoadingPage = false }
 
@@ -548,6 +695,34 @@ final class MessageListViewModel {
             .byServer(serverId)
         }
     }
+
+    private func resetUnreadFilterSessionIfNeeded(for filter: MessageFilter) {
+        if filter == .unread {
+            unreadFilterSession = UnreadFilterSessionState()
+        } else {
+            unreadFilterSession = nil
+        }
+        syncUnreadFilterSessionSummary()
+    }
+
+    private func retainUnreadSessionMessageIfNeeded(_ message: PushMessageSummary) {
+        guard isUnreadOnlyFilterActive, message.isRead else { return }
+        if unreadFilterSession == nil {
+            unreadFilterSession = UnreadFilterSessionState()
+        }
+        unreadFilterSession?.retain(message)
+        syncUnreadFilterSessionSummary()
+    }
+
+    private func forgetUnreadSessionMessageIfNeeded(messageId: UUID) {
+        unreadFilterSession?.forget(messageId: messageId)
+        syncUnreadFilterSessionSummary()
+    }
+
+    private func syncUnreadFilterSessionSummary() {
+        unreadSessionRetainedReadCount = unreadFilterSession?.retainedReadCount ?? 0
+    }
+
     private func resetStaleSelectionIfNeeded() -> Bool {
         false
     }

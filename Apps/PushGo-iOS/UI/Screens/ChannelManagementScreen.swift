@@ -95,10 +95,11 @@ struct ChannelManagementScreen: View {
     private var channelManagementScaffold: some View {
         Group {
             if environment.channelSubscriptions.isEmpty {
-                EntityEmptyView(
-                    iconName: "dot.radiowaves.left.and.right",
-                    title: localizationManager.localized("channels_empty"),
-                    subtitle: localizationManager.localized("channel_list_empty_hint")
+                EntityOnboardingEmptyView(
+                    kind: .channels,
+                    channelPrimaryAction: {
+                        presentChannelEntrySheet()
+                    }
                 )
                 .accessibilityIdentifier("state.channels.empty")
             } else {

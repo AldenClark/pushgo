@@ -15,12 +15,20 @@ This suite validates iOS startup automation, deep-page navigation, tab routing, 
 | `testImportedThingFixtureCanOpenThingDetail` | fixture import + thing detail deep page |
 | `testPushSettingsCanOpenDecryptionScreen` | settings decryption overlay command flow |
 | `testFixtureSeedMessagesRefreshesMessageList` | 消息写入后列表刷新链路（`fixture.seed_messages`） |
+| `testFixtureSeedEntityRecordsPublishesProjectionCounts` | 实体投影视图写入链路（`fixture.seed_entity_records`） |
+| `testFixtureSeedSubscriptionsPublishesImportState` | 频道订阅写入链路（`fixture.seed_subscriptions`）与 import bookkeeping 状态 |
 | `testSettingsPageVisibilityCommandCanHideEventPage` | settings mutation boundary (`event_page_enabled=false`) |
 | `testSettingsPageVisibilityCommandCanRoundTripEventPage` | settings开关前后态正确性（false -> true） |
 | `testSettingsSetDecryptionKeyRejectsInvalidLength` | invalid decryption key boundary (`ok=false`, `invalid key`) |
 | `testSettingsSetDecryptionKeyAcceptsBase64Key` | decryption key success path (`notification_key_configured=true`, `notification_key_encoding=base64`) |
 | `testEntityOpenPublishesEntityStateAndProjectionCounts` | entity.open正确性：状态命中detail页 + `entity.opened`事件包含目标`entity_id` |
+| `testMessageOpenPublishesMessageDetailState` | message.open 路由到消息详情并发布 opened message state |
+| `testNotificationOpenPublishesMessageDetailState` | notification.open 路由到消息详情 |
+| `testNotificationMarkReadCommandUpdatesUnreadState` | `notification.mark_read` 更新未读计数与动作事件 |
+| `testNotificationDeleteCommandUpdatesCounts` | `notification.delete` 删除消息并发布动作事件 |
+| `testGatewaySetServerCommandUpdatesConfigurationState` | `gateway.set_server` 更新 server config 与 settings.changed 事件 |
 | `testBaselineAutomationStateHasNoRuntimeErrors` | 启动基线正确性（`runtime_error_count == 0`） |
+| `testWatchSetModeMirrorCommandPublishesMirrorState` | `watch.set_mode` 成功应用 mirror 模式 |
 
 ## Run Command
 

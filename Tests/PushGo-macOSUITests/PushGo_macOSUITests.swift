@@ -7,22 +7,42 @@ final class PushGo_macOSUITests: XCTestCase {
     private struct AutomationState: Decodable {
         let activeTab: String?
         let visibleScreen: String?
+        let openedMessageId: String?
+        let unreadMessageCount: Int?
+        let totalMessageCount: Int?
         let openedEntityType: String?
         let openedEntityId: String?
         let eventPageEnabled: Bool?
         let eventCount: Int?
         let thingCount: Int?
+        let channelCount: Int?
+        let gatewayBaseURL: String?
+        let gatewayTokenPresent: Bool?
+        let lastNotificationAction: String?
+        let lastNotificationTarget: String?
+        let lastFixtureImportEntityRecordCount: Int?
+        let lastFixtureImportSubscriptionCount: Int?
         let runtimeErrorCount: Int?
         let localStoreMode: String?
 
         private enum CodingKeys: String, CodingKey {
             case activeTab = "active_tab"
             case visibleScreen = "visible_screen"
+            case openedMessageId = "opened_message_id"
+            case unreadMessageCount = "unread_message_count"
+            case totalMessageCount = "total_message_count"
             case openedEntityType = "opened_entity_type"
             case openedEntityId = "opened_entity_id"
             case eventPageEnabled = "event_page_enabled"
             case eventCount = "event_count"
             case thingCount = "thing_count"
+            case channelCount = "channel_count"
+            case gatewayBaseURL = "gateway_base_url"
+            case gatewayTokenPresent = "gateway_token_present"
+            case lastNotificationAction = "last_notification_action"
+            case lastNotificationTarget = "last_notification_target"
+            case lastFixtureImportEntityRecordCount = "last_fixture_import_entity_record_count"
+            case lastFixtureImportSubscriptionCount = "last_fixture_import_subscription_count"
             case runtimeErrorCount = "runtime_error_count"
             case localStoreMode = "local_store_mode"
         }
@@ -46,6 +66,10 @@ final class PushGo_macOSUITests: XCTestCase {
     private let eventFixtureId = "evt_p2_active_001"
     private let thingFixturePath = fixturePath("rich-thing-detail.json")
     private let thingFixtureId = "thing_p2_rich_001"
+    private let messageSeedFixturePath = fixturePath("seed-split.json")
+    private let entityRecordFixturePath = fixturePath("seed-entity-records.json")
+    private let subscriptionFixturePath = fixturePath("seed-subscriptions.json")
+    private let seedMessageId = "msg_p2_seed_001"
     private let crossAppPromptDismissButtons = ["Don’t Allow", "Don't Allow", "Not Now", "Later", "不允许", "以后"]
     private var runtimeRoots: [URL] = []
 
@@ -304,6 +328,88 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
+    func testFixtureSeedEntityRecordsPublishesProjectionCounts() {
+        let context = configuredApp(
+            requestName: "fixture.seed_entity_records",
+            args: ["path": entityRecordFixturePath]
+        )
+        launch(context)
+
+        guard automationArtifactsAvailable(in: context) else { return }
+        XCTAssertNotNil(
+            waitForAutomationState(
+                at: context.stateURL,
+                timeout: automationArtifactTimeout,
+                matching: {
+                    $0.lastFixtureImportEntityRecordCount == 2
+                        && ($0.eventCount ?? 0) >= 1
+                        && ($0.thingCount ?? 0) >= 1
+                }
+            )
+        )
+        XCTAssertTrue(
+            waitForAutomationResponse(
+                at: context.responseURL,
+                timeout: automationArtifactTimeout,
+                matching: { $0.ok }
+            ) != nil
+        )
+        XCTAssertNotNil(
+            waitForAutomationEvent(
+                at: context.eventsURL,
+                timeout: automationArtifactTimeout,
+                matching: { event in
+                    guard (event["type"] as? String) == "fixture.imported",
+                          let details = event["details"] as? [String: Any]
+                    else { return false }
+                    return (details["entity_record_count"] as? String) == "2"
+                }
+            )
+        )
+    }
+
+    @MainActor
+    func testFixtureSeedSubscriptionsPublishesImportState() {
+        let context = configuredApp(
+            requestName: "fixture.seed_subscriptions",
+            args: ["path": subscriptionFixturePath]
+        )
+        launch(context)
+
+        guard automationArtifactsAvailable(in: context) else { return }
+        XCTAssertNotNil(
+            waitForAutomationState(
+                at: context.stateURL,
+                timeout: automationArtifactTimeout,
+                matching: {
+                    $0.lastFixtureImportSubscriptionCount == 2
+                        && ($0.runtimeErrorCount ?? 0) == 0
+                        && $0.localStoreMode != "unavailable"
+                }
+            )
+        )
+        XCTAssertTrue(
+            waitForAutomationResponse(
+                at: context.responseURL,
+                timeout: automationArtifactTimeout,
+                matching: { $0.ok }
+            ) != nil
+        )
+        XCTAssertNotNil(
+            waitForAutomationEvent(
+                at: context.eventsURL,
+                timeout: automationArtifactTimeout,
+                matching: { event in
+                    guard (event["type"] as? String) == "fixture.imported",
+                          let details = event["details"] as? [String: Any]
+                    else { return false }
+                    return (details["subscription_count"] as? String) == "2"
+                }
+            )
+        )
+    }
+
+    @MainActor
     func testEntityOpenPublishesEntityStateAndProjectionCounts() {
         let eventContext = configuredApp(
             startupFixturePath: eventFixturePath,
@@ -369,6 +475,182 @@ final class PushGo_macOSUITests: XCTestCase {
                     else { return false }
                     return (details["entity_type"] as? String) == "thing"
                         && (details["entity_id"] as? String) == self.thingFixtureId
+                }
+            )
+        )
+    }
+
+    @MainActor
+    func testMessageOpenPublishesMessageDetailState() {
+        let context = configuredApp(
+            startupFixturePath: messageSeedFixturePath,
+            requestName: "message.open",
+            args: ["message_id": seedMessageId]
+        )
+        launch(context)
+
+        assertVisibleScreen("screen.message.detail", in: context)
+        guard automationArtifactsAvailable(in: context) else { return }
+        XCTAssertNotNil(
+            waitForAutomationState(
+                at: context.stateURL,
+                timeout: automationArtifactTimeout,
+                matching: {
+                    $0.visibleScreen == "screen.message.detail"
+                        && $0.openedMessageId == self.seedMessageId
+                }
+            )
+        )
+        XCTAssertNotNil(
+            waitForAutomationEvent(
+                at: context.eventsURL,
+                timeout: automationArtifactTimeout,
+                matching: { event in
+                    guard (event["type"] as? String) == "entity.opened",
+                          let details = event["details"] as? [String: Any]
+                    else { return false }
+                    return (details["entity_type"] as? String) == "message"
+                        && (details["entity_id"] as? String) == self.seedMessageId
+                }
+            )
+        )
+    }
+
+    @MainActor
+    func testNotificationOpenPublishesMessageDetailState() {
+        let context = configuredApp(
+            startupFixturePath: messageSeedFixturePath,
+            requestName: "notification.open",
+            args: ["message_id": seedMessageId]
+        )
+        launch(context)
+
+        assertVisibleScreen("screen.message.detail", in: context)
+        guard automationArtifactsAvailable(in: context) else { return }
+        XCTAssertNotNil(
+            waitForAutomationState(
+                at: context.stateURL,
+                timeout: automationArtifactTimeout,
+                matching: {
+                    $0.visibleScreen == "screen.message.detail"
+                        && $0.openedMessageId == self.seedMessageId
+                }
+            )
+        )
+        XCTAssertTrue(
+            waitForAutomationResponse(
+                at: context.responseURL,
+                timeout: automationArtifactTimeout,
+                matching: { $0.ok }
+            ) != nil
+        )
+    }
+
+    @MainActor
+    func testNotificationMarkReadCommandUpdatesUnreadState() {
+        let context = configuredApp(
+            startupFixturePath: messageSeedFixturePath,
+            requestName: "notification.mark_read",
+            args: ["message_id": seedMessageId]
+        )
+        launch(context)
+
+        guard automationArtifactsAvailable(in: context) else { return }
+        XCTAssertNotNil(
+            waitForAutomationState(
+                at: context.stateURL,
+                timeout: automationArtifactTimeout,
+                matching: {
+                    $0.unreadMessageCount == 0
+                        && $0.lastNotificationAction == "mark_read"
+                        && $0.lastNotificationTarget == self.seedMessageId
+                }
+            )
+        )
+        XCTAssertNotNil(
+            waitForAutomationEvent(
+                at: context.eventsURL,
+                timeout: automationArtifactTimeout,
+                matching: { event in
+                    guard (event["type"] as? String) == "notification.action",
+                          let details = event["details"] as? [String: Any]
+                    else { return false }
+                    return (details["action"] as? String) == "mark_read"
+                        && (details["target"] as? String) == self.seedMessageId
+                }
+            )
+        )
+    }
+
+    @MainActor
+    func testNotificationDeleteCommandUpdatesCounts() {
+        let context = configuredApp(
+            startupFixturePath: messageSeedFixturePath,
+            requestName: "notification.delete",
+            args: ["message_id": seedMessageId]
+        )
+        launch(context)
+
+        guard automationArtifactsAvailable(in: context) else { return }
+        XCTAssertNotNil(
+            waitForAutomationState(
+                at: context.stateURL,
+                timeout: automationArtifactTimeout,
+                matching: {
+                    $0.totalMessageCount == 0
+                        && $0.lastNotificationAction == "delete"
+                        && $0.lastNotificationTarget == self.seedMessageId
+                }
+            )
+        )
+        XCTAssertNotNil(
+            waitForAutomationEvent(
+                at: context.eventsURL,
+                timeout: automationArtifactTimeout,
+                matching: { event in
+                    guard (event["type"] as? String) == "notification.action",
+                          let details = event["details"] as? [String: Any]
+                    else { return false }
+                    return (details["action"] as? String) == "delete"
+                        && (details["target"] as? String) == self.seedMessageId
+                }
+            )
+        )
+    }
+
+    @MainActor
+    func testGatewaySetServerCommandUpdatesConfigurationState() {
+        let context = configuredApp(
+            requestName: "gateway.set_server",
+            args: [
+                "base_url": "https://pushgo.example.test",
+                "token": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            ]
+        )
+        launch(context)
+
+        guard automationArtifactsAvailable(in: context) else { return }
+        XCTAssertNotNil(
+            waitForAutomationState(
+                at: context.stateURL,
+                timeout: automationArtifactTimeout,
+                matching: {
+                    $0.gatewayBaseURL == "https://pushgo.example.test"
+                        && $0.gatewayTokenPresent == true
+                }
+            )
+        )
+        XCTAssertNotNil(
+            waitForAutomationEvent(
+                at: context.eventsURL,
+                timeout: automationArtifactTimeout,
+                matching: { event in
+                    guard (event["type"] as? String) == "settings.changed",
+                          let details = event["details"] as? [String: Any]
+                    else { return false }
+                    let changedKeys = (details["changed_keys"] as? String) ?? ""
+                    return changedKeys.contains("gateway_base_url")
+                        && (details["gateway_base_url"] as? String) == "https://pushgo.example.test"
                 }
             )
         )

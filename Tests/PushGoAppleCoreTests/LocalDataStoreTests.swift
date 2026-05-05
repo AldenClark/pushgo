@@ -1772,6 +1772,62 @@ struct LocalDataStoreTests {
     }
 
     @Test
+    func loadEntityOpenTargetResolvesEventProjectionByNotificationRequestId() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let eventId = "evt-open-target-001"
+            let eventRecord = makeMessage(
+                messageId: "msg-open-target-evt-001",
+                notificationRequestId: "req-open-target-evt-001",
+                title: "Open target event",
+                body: "Open target event body",
+                rawPayload: [
+                    "entity_type": "event",
+                    "entity_id": eventId,
+                    "event_id": eventId,
+                    "projection_destination": "event_head",
+                    "channel_id": "open-target-tests",
+                ]
+            )
+
+            try await store.saveEntityRecords([eventRecord])
+
+            let target = try await store.loadEntityOpenTarget(
+                notificationRequestId: "req-open-target-evt-001"
+            )
+
+            #expect(target == EntityOpenTarget(entityType: "event", entityId: eventId))
+        }
+    }
+
+    @Test
+    func loadEntityOpenTargetResolvesThingProjectionByMessageId() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let thingId = "thing-open-target-001"
+            let thingRecord = makeMessage(
+                messageId: "msg-open-target-thing-001",
+                notificationRequestId: "req-open-target-thing-001",
+                title: "Open target thing",
+                body: "Open target thing body",
+                rawPayload: [
+                    "entity_type": "thing",
+                    "entity_id": thingId,
+                    "thing_id": thingId,
+                    "projection_destination": "thing_head",
+                    "channel_id": "open-target-tests",
+                ]
+            )
+
+            try await store.saveEntityRecords([thingRecord])
+
+            let target = try await store.loadEntityOpenTarget(
+                messageId: "msg-open-target-thing-001"
+            )
+
+            #expect(target == EntityOpenTarget(entityType: "thing", entityId: thingId))
+        }
+    }
+
+    @Test
     func deleteAllMessagesClearsNotificationContextSnapshotFile() async throws {
         try await withIsolatedLocalDataStore { store, appGroupIdentifier in
             let eventId = "evt-snapshot-clear-001"

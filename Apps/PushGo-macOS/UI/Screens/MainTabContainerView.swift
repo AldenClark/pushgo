@@ -15,6 +15,7 @@ struct MainTabContainerView: View {
     @State private var selectedThingId: String?
 
     @State private var didRefreshAuthorizationStatus: Bool = false
+    @State private var dataRefreshTask: Task<Void, Never>?
 
     var body: some View {
         configuredRootView(splitViewContent)
@@ -36,7 +37,7 @@ struct MainTabContainerView: View {
                 guard !didRefreshAuthorizationStatus else { return }
                 didRefreshAuthorizationStatus = true
                 await environment.pushRegistrationService.refreshAuthorizationStatus()
-                await entityViewModel.reload()
+                await refreshDataForStoreChange()
                 environment.updateActiveTab(activeTab)
                 if environment.pendingEventToOpen != nil || environment.pendingThingToOpen != nil {
                     openPendingEntityIfNeeded()
@@ -93,10 +94,7 @@ struct MainTabContainerView: View {
             applySidebarSelection(previous: oldValue, current: newValue)
         }
         .onChange(of: environment.messageStoreRevision) { _, _ in
-            Task {
-                await entityViewModel.reload()
-                ensureSidebarSelectionIsVisible()
-            }
+            scheduleDataRefreshForStoreChange()
         }
         .onChange(of: visibleNavigationSignature) { _, _ in
             ensureSidebarSelectionIsVisible()
@@ -144,6 +142,21 @@ struct MainTabContainerView: View {
 
     private var activeTab: MainTab {
         sidebarSelection?.mainTab ?? .messages
+    }
+
+    @MainActor
+    private func refreshDataForStoreChange() async {
+        await messageListViewModel.refresh()
+        searchViewModel.refreshMessagesIfNeeded()
+        await entityViewModel.reload()
+        ensureSidebarSelectionIsVisible()
+    }
+
+    private func scheduleDataRefreshForStoreChange() {
+        dataRefreshTask?.cancel()
+        dataRefreshTask = Task { @MainActor in
+            await refreshDataForStoreChange()
+        }
     }
 
     @ViewBuilder
@@ -364,105 +377,6 @@ private struct SidebarUnreadBadge: View {
                 .accessibilityValue(Text(displayText))
         }
     }
-}
-
-enum MainTab: Hashable, CaseIterable {
-    case messages
-    case events
-    case things
-    case channels
-    case settings
-
-    var title: String {
-        switch self {
-        case .messages:
-            "messages"
-        case .events:
-            "push_type_event"
-        case .things:
-            "push_type_thing"
-        case .channels:
-            "channels"
-        case .settings:
-            "settings"
-        }
-    }
-
-    @MainActor
-    func localizedTitle(using localizationManager: LocalizationManager) -> String {
-        localizationManager.localized(title)
-    }
-
-    var systemImageName: String {
-        switch self {
-        case .messages:
-            "tray.full"
-        case .events:
-            "waveform.path.ecg"
-        case .things:
-            "cpu"
-        case .channels:
-            "dot.radiowaves.left.and.right"
-        case .settings:
-            "gearshape"
-        }
-    }
-
-    var accessibilityIdentifier: String {
-        switch self {
-        case .messages:
-            "messages"
-        case .events:
-            "events"
-        case .things:
-            "things"
-        case .channels:
-            "channels"
-        case .settings:
-            "settings"
-        }
-    }
-
-#if DEBUG
-    var automationIdentifier: String {
-        switch self {
-        case .messages:
-            return "messages"
-        case .events:
-            return "events"
-        case .things:
-            return "things"
-        case .channels:
-            return "channels"
-        case .settings:
-            return "settings"
-        }
-    }
-
-    var automationVisibleScreen: String {
-        switch self {
-        case .messages:
-            return "screen.messages.list"
-        case .events:
-            return "screen.events.list"
-        case .things:
-            return "screen.things.list"
-        case .channels:
-            return "screen.channels"
-        case .settings:
-            return "screen.settings"
-        }
-    }
-
-    var automationPublishesFromRoot: Bool {
-        switch self {
-        case .events, .things, .settings:
-            return false
-        case .messages, .channels:
-            return true
-        }
-    }
-#endif
 }
 
 enum SidebarSelection: Hashable {

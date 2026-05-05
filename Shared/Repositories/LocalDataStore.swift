@@ -43,6 +43,10 @@ enum MessageListSortMode: String, CaseIterable, Equatable, Hashable, Sendable {
         else {
             return .timeDescending
         }
+        if mode == .unreadFirst {
+            defaults.set(MessageListSortMode.timeDescending.rawValue, forKey: preferenceKey)
+            return .timeDescending
+        }
         return mode
     }
 

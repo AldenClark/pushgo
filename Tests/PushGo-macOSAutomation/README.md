@@ -15,8 +15,16 @@ It is designed as a stable complement to `PushGo-macOSUITests`.
 | `set_decryption_key_base64` | decryption key success path (`notification_key_configured=true`, `notification_key_encoding=base64`) |
 | `set_decryption_key_invalid` | invalid key path returns `ok=false` and key validation error |
 | `fixture_import_event` | fixture import command path validates event ingestion (`event_count >= 1`) |
+| `fixture_seed_messages` | `fixture.seed_messages` updates import bookkeeping and message counts |
+| `fixture_seed_entity_records` | `fixture.seed_entity_records` updates projection counts and import bookkeeping |
+| `fixture_seed_subscriptions` | `fixture.seed_subscriptions` updates import bookkeeping state without relying on UI-side subscription rendering timing |
 | `entity_open_event` | shared-runtime fixture + `entity.open` validates detail screen state and `entity.opened(entity_id=target)` event |
 | `entity_open_thing` | shared-runtime fixture + `entity.open` validates thing detail state and target `entity.opened` event |
+| `message_open` | shared-runtime seeded message opens to `screen.message.detail` and publishes `opened_message_id` |
+| `notification_open` | notification deep-open path resolves to message detail state |
+| `notification_mark_read` | notification mark-read command updates unread count and action bookkeeping |
+| `notification_delete` | notification delete command removes the seeded message and publishes action bookkeeping |
+| `gateway_set_server` | `gateway.set_server` updates gateway base URL and token-presence state |
 
 ## Run Command
 

@@ -4,7 +4,7 @@ struct MessageSplitScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
-    @Bindable var messageListViewModel: MessageListViewModel
+    let messageListViewModel: MessageListViewModel
     let searchViewModel: MessageSearchViewModel
     @Binding var selection: UUID?
     @Binding var selectedMessageSnapshot: PushMessage?
@@ -12,8 +12,6 @@ struct MessageSplitScreen: View {
     var onOpenMessageHandled: (() -> Void)? = nil
 
     @State private var pendingNotificationSelectionId: UUID?
-    @State private var ignoreMessageStoreRevisionsUntil: Date?
-    @State private var ignoreRevisionResetTask: Task<Void, Never>?
     @State private var didLoad: Bool = false
     @State private var isBatchMode: Bool = false
     @State private var batchSelection: Set<UUID> = []
@@ -72,10 +70,6 @@ struct MessageSplitScreen: View {
         }
         .onChange(of: openMessageId) { _, _ in
             openPendingMessageIfNeeded()
-        }
-        .onChange(of: environment.messageStoreRevision) { _, _ in
-            guard !shouldIgnoreMessageStoreRevision() else { return }
-            Task { await refreshMessagesForStoreChange() }
         }
     }
 
@@ -155,14 +149,16 @@ struct MessageSplitScreen: View {
     }
 
     @MainActor
-    private func refreshMessagesForStoreChange() async {
-        await refreshMessagesIfNeeded()
-    }
-
-    @MainActor
     private func handleProviderIngressPullRefresh() async {
         _ = await environment.syncProviderIngress(reason: "messages_pull_to_refresh")
-        await refreshMessagesIfNeeded()
+        if messageListViewModel.isUnreadOnlyFilterActive {
+            await messageListViewModel.reconcileUnreadFilterSession()
+            searchViewModel.refreshMessagesIfNeeded()
+            ensureMessagesSelectionIfNeeded()
+            await syncSelectedMessageSnapshot(for: selection, markRead: false)
+        } else {
+            await refreshMessagesIfNeeded()
+        }
     }
 
     private func ensureMessagesSelectionIfNeeded() {
@@ -247,9 +243,6 @@ struct MessageSplitScreen: View {
 
     private func markMessageReadIfNeeded(_ message: PushMessage, messageId: UUID) async {
         guard !message.isRead else { return }
-        await MainActor.run {
-            ignoreNextMessageStoreRevisions()
-        }
         await messageListViewModel.markRead(PushMessageSummary(message: message), isRead: true)
         await MainActor.run {
             guard selection == messageId else { return }
@@ -294,7 +287,6 @@ struct MessageSplitScreen: View {
     private func deleteSelectedMessage() {
         guard let message = selectedMessageSnapshot else { return }
         guard message.id == selection else { return }
-        ignoreNextMessageStoreRevisions(for: 1.2)
         Task {
             await messageListViewModel.delete(PushMessageSummary(message: message))
             await MainActor.run {
@@ -308,7 +300,6 @@ struct MessageSplitScreen: View {
     private func deleteSelectedMessages() {
         let ids = Array(batchSelection)
         guard !ids.isEmpty else { return }
-        ignoreNextMessageStoreRevisions(for: 1.2)
         Task {
             for messageId in ids {
                 try? await environment.messageStateCoordinator.deleteMessage(messageId: messageId)
@@ -317,7 +308,7 @@ struct MessageSplitScreen: View {
                 batchSelection.removeAll()
                 setBatchMode(false)
             }
-            await refreshMessagesForStoreChange()
+            await refreshMessagesIfNeeded()
         }
     }
 
@@ -345,7 +336,6 @@ struct MessageSplitScreen: View {
     private func markSelectedMessagesAsRead() {
         let unreadMessages = selectedBatchUnreadMessages
         guard !unreadMessages.isEmpty else { return }
-        ignoreNextMessageStoreRevisions(for: 1.2)
         Task {
             for message in unreadMessages {
                 await messageListViewModel.markRead(message, isRead: true)
@@ -354,27 +344,6 @@ struct MessageSplitScreen: View {
                 batchSelection.removeAll()
             }
         }
-    }
-
-    private func ignoreNextMessageStoreRevisions(for interval: TimeInterval = 0.7) {
-        ignoreMessageStoreRevisionsUntil = Date().addingTimeInterval(interval)
-        ignoreRevisionResetTask?.cancel()
-        ignoreRevisionResetTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(interval + 0.2))
-            guard let until = ignoreMessageStoreRevisionsUntil else { return }
-            if until <= Date() {
-                ignoreMessageStoreRevisionsUntil = nil
-            }
-        }
-    }
-
-    private func shouldIgnoreMessageStoreRevision() -> Bool {
-        guard let until = ignoreMessageStoreRevisionsUntil else { return false }
-        if until > Date() {
-            return true
-        }
-        ignoreMessageStoreRevisionsUntil = nil
-        return false
     }
 
     @ToolbarContentBuilder
@@ -408,12 +377,12 @@ struct MessageSplitScreen: View {
                 .disabled(batchSelection.isEmpty)
             } else {
                 Button {
-                    toggleSortMode()
+                    messageListViewModel.toggleUnreadOnlyFilter()
                 } label: {
-                    Image(systemName: isUnreadFirstSortEnabled ? "arrow.up.arrow.down.circle.fill" : "arrow.up.arrow.down.circle")
+                    Image(systemName: messageListViewModel.isUnreadOnlyFilterActive ? "line.2.horizontal.decrease.circle.fill" : "line.2.horizontal.decrease.circle")
                 }
-                .help(localizationManager.localized("message_sort"))
-                .accessibilityLabel(localizationManager.localized("message_sort"))
+                .help(localizationManager.localized("message_show_unread_only"))
+                .accessibilityLabel(localizationManager.localized("message_show_unread_only"))
 
                 Menu {
                     channelFilterMenuContent
@@ -457,10 +426,6 @@ struct MessageSplitScreen: View {
         }
     }
 
-    private var isUnreadFirstSortEnabled: Bool {
-        messageListViewModel.sortMode == .unreadFirst
-    }
-
     private var isFilterMenuHighlighted: Bool {
         messageListViewModel.selectedChannel != nil
     }
@@ -475,12 +440,6 @@ struct MessageSplitScreen: View {
             }
             Text(title)
         }
-    }
-
-    private func toggleSortMode() {
-        let nextMode: MessageListSortMode = isUnreadFirstSortEnabled ? .timeDescending : .unreadFirst
-        messageListViewModel.setSortMode(nextMode)
-        searchViewModel.setSortMode(nextMode)
     }
 
     private func resolvedChannelDisplayName(for channel: MessageChannelKey?) -> String? {

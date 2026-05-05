@@ -37,6 +37,7 @@ final class EntityProjectionViewModel {
     private var hydratedEventIDs = Set<String>()
     private var hydratedThingIDs = Set<String>()
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
+    @ObservationIgnored private var pendingReload = false
 
     private(set) var events: [EventProjection] = []
     private(set) var things: [ThingProjection] = []
@@ -53,9 +54,6 @@ final class EntityProjectionViewModel {
             self.environment = AppEnvironment.shared
         }
         dataStore = self.environment.dataStore
-        Task { @MainActor in
-            await reload()
-        }
     }
 
     var hasEventData: Bool { !events.isEmpty }
@@ -63,16 +61,20 @@ final class EntityProjectionViewModel {
 
     func reload() async {
         if let reloadTask {
+            pendingReload = true
             await reloadTask.value
             return
         }
 
-        let task = Task { @MainActor in
-            await self.performReload()
-        }
-        reloadTask = task
-        await task.value
-        reloadTask = nil
+        repeat {
+            pendingReload = false
+            let task = Task { @MainActor in
+                await self.performReload()
+            }
+            reloadTask = task
+            await task.value
+            reloadTask = nil
+        } while pendingReload
     }
 
     private func performReload() async {
@@ -155,7 +157,12 @@ final class EntityProjectionViewModel {
     }
 
     private func loadMoreEventsPage(reset: Bool) async throws {
-        if isLoadingMoreEvents { return }
+        if isLoadingMoreEvents {
+            if reset {
+                pendingReload = true
+            }
+            return
+        }
         if !reset, !hasMoreEvents { return }
         isLoadingMoreEvents = true
         defer { isLoadingMoreEvents = false }
@@ -176,7 +183,12 @@ final class EntityProjectionViewModel {
     }
 
     private func loadMoreThingsPage(reset: Bool) async throws {
-        if isLoadingMoreThings { return }
+        if isLoadingMoreThings {
+            if reset {
+                pendingReload = true
+            }
+            return
+        }
         if !reset, !hasMoreThings { return }
         isLoadingMoreThings = true
         defer { isLoadingMoreThings = false }

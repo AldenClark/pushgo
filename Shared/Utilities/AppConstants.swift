@@ -209,6 +209,32 @@ enum PushGoSystemInteraction {
 #endif
 }
 
+enum PushGoDocumentationPage {
+    case gettingStarted
+    case messageAPI
+    case eventAPI
+    case thingAPI
+    case e2ee
+    case selfHosting
+
+    var path: String {
+        switch self {
+        case .gettingStarted:
+            return "/guides/getting-started/"
+        case .messageAPI:
+            return "/reference/api-message/"
+        case .eventAPI:
+            return "/reference/api-event/"
+        case .thingAPI:
+            return "/reference/api-thing/"
+        case .e2ee:
+            return "/reference/e2ee/"
+        case .selfHosting:
+            return "/guides/self-hosting/"
+        }
+    }
+}
+
 enum AppConstants {
     static let appGroupIdentifier = "group.ethan.pushgo.messages"
     static let serverConfigFilename = "server_config.json"
@@ -247,6 +273,14 @@ enum AppConstants {
 
     static var defaultGatewayToken: String? {
         PushGoAutomationContext.gatewayToken
+    }
+
+    static func documentationURL(
+        _ page: PushGoDocumentationPage,
+        locale: Locale = .current
+    ) -> URL {
+        let localizedPrefix = locale.identifier.lowercased().hasPrefix("zh") ? "/zh" : ""
+        return URL(string: "https://pushgo.dev\(localizedPrefix)\(page.path)")!
     }
 
     static func appGroupContainerURL(

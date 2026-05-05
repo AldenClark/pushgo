@@ -422,4 +422,5 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency 
     private func isMainWindow(notificationWindow: NSWindow?) -> Bool {
         notificationWindow?.identifier?.rawValue == "PushGoMainWindow"
     }
+
 }

@@ -36,6 +36,55 @@ struct PushMessageSummary: Identifiable, Hashable, Sendable {
     }
 }
 
+struct UnreadFilterSessionState {
+    private(set) var retainedReadMessageIDs: Set<UUID> = []
+
+    var retainedReadCount: Int {
+        retainedReadMessageIDs.count
+    }
+
+    mutating func retain(_ message: PushMessageSummary) {
+        guard message.isRead else { return }
+        retainedReadMessageIDs.insert(message.id)
+    }
+
+    mutating func forget(messageId: UUID) {
+        retainedReadMessageIDs.remove(messageId)
+    }
+
+    mutating func reset() {
+        retainedReadMessageIDs.removeAll()
+    }
+
+    func mergedMessages(
+        currentMessages: [PushMessageSummary],
+        liveUnreadMessages: [PushMessageSummary]
+    ) -> [PushMessageSummary] {
+        var remainingLiveUnreadByID = Dictionary(
+            uniqueKeysWithValues: liveUnreadMessages.map { ($0.id, $0) }
+        )
+        var seenIDs = Set<UUID>()
+        var mergedCurrent: [PushMessageSummary] = []
+
+        for current in currentMessages {
+            if let live = remainingLiveUnreadByID.removeValue(forKey: current.id) {
+                mergedCurrent.append(live)
+                seenIDs.insert(live.id)
+                continue
+            }
+
+            guard retainedReadMessageIDs.contains(current.id) else { continue }
+            var retained = current
+            retained.isRead = true
+            mergedCurrent.append(retained)
+            seenIDs.insert(retained.id)
+        }
+
+        let insertedUnreadMessages = liveUnreadMessages.filter { !seenIDs.contains($0.id) }
+        return insertedUnreadMessages + mergedCurrent
+    }
+}
+
 extension PushMessageSummary {
     init(message: PushMessage) {
         self.init(

@@ -1,8 +1,6 @@
 import SwiftUI
 
 struct ThingListScreen: View {
-    @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
-
     private enum Layout {
         static let rowInsets = EdgeInsets(
             top: EntityVisualTokens.listRowInsetVertical,
@@ -20,104 +18,119 @@ struct ThingListScreen: View {
     var onReachEnd: (() -> Void)? = nil
 
     var body: some View {
-        Group {
+        ZStack {
+            activeListView
+                .opacity(things.isEmpty ? 0.001 : 1)
+                .allowsHitTesting(!things.isEmpty)
+                .accessibilityHidden(things.isEmpty)
+
             if things.isEmpty {
-                EntityEmptyView(
-                    iconName: "shippingbox",
-                    title: localizationManager.localized("things_empty_title"),
-                    subtitle: localizationManager.localized("things_empty_hint")
-                )
-            } else if isBatchMode {
-                List {
-                    ForEach(things.indices, id: \.self) { index in
-                        let thing = things[index]
-                        Button {
-                            toggleBatchSelection(thing.id)
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: batchSelection.contains(thing.id) ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(batchSelection.contains(thing.id) ? .accent : .secondary)
-                                ThingListRow(thing: thing)
-                            }
-                            .entityListRowTapTarget()
-                        }
-                        .buttonStyle(.plain)
-                        .id(thing.id)
-                        .accessibilityIdentifier("thing.row.\(thing.id)")
-                        .listRowInsets(Layout.rowInsets)
-                        .alignmentGuide(.listRowSeparatorLeading) { dimensions in
-                            dimensions[.leading]
-                        }
-                        .alignmentGuide(.listRowSeparatorTrailing) { dimensions in
-                            dimensions[.trailing] - Layout.rowInsets.trailing
-                        }
-                        .listRowBackground(EntitySelectionBackground(isSelected: batchSelection.contains(thing.id)))
-                        .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
-                        .listRowSeparator(index == things.count - 1 ? .hidden : .visible, edges: .bottom)
-                        .onAppear {
-                            guard index == things.count - 1 else { return }
-                            onReachEnd?()
-                        }
-                    }
-                    if isLoadingMore {
-                        HStack {
-                            Spacer()
-                            ProgressView()
-                                .controlSize(.small)
-                            Spacer()
-                        }
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                    }
-                }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-                .background(EntityVisualTokens.pageBackground)
-            } else {
-                List {
-                    ForEach(things.indices, id: \.self) { index in
-                        let thing = things[index]
-                        Button {
-                            selection = thing.id
-                        } label: {
-                            ThingListRow(thing: thing)
-                                .entityListRowTapTarget()
-                        }
-                        .buttonStyle(.plain)
-                        .id(thing.id)
-                        .accessibilityIdentifier("thing.row.\(thing.id)")
-                        .listRowInsets(Layout.rowInsets)
-                        .alignmentGuide(.listRowSeparatorLeading) { dimensions in
-                            dimensions[.leading]
-                        }
-                        .alignmentGuide(.listRowSeparatorTrailing) { dimensions in
-                            dimensions[.trailing] - Layout.rowInsets.trailing
-                        }
-                        .listRowBackground(EntitySelectionBackground(isSelected: selection == thing.id))
-                        .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
-                        .listRowSeparator(index == things.count - 1 ? .hidden : .visible, edges: .bottom)
-                        .onAppear {
-                            guard index == things.count - 1 else { return }
-                            onReachEnd?()
-                        }
-                    }
-                    if isLoadingMore {
-                        HStack {
-                            Spacer()
-                            ProgressView()
-                                .controlSize(.small)
-                            Spacer()
-                        }
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                    }
-                }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-                .background(EntityVisualTokens.pageBackground)
+                EntityOnboardingEmptyView(kind: .things)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityIdentifier("screen.things.list")
+    }
+
+    @ViewBuilder
+    private var activeListView: some View {
+        if isBatchMode {
+            thingBatchList
+        } else {
+            thingSelectionList
+        }
+    }
+
+    private var thingBatchList: some View {
+        List {
+            ForEach(things.indices, id: \.self) { index in
+                let thing = things[index]
+                Button {
+                    toggleBatchSelection(thing.id)
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: batchSelection.contains(thing.id) ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(batchSelection.contains(thing.id) ? .accent : .secondary)
+                        ThingListRow(thing: thing)
+                    }
+                    .entityListRowTapTarget()
+                }
+                .buttonStyle(.plain)
+                .id(thing.id)
+                .accessibilityIdentifier("thing.row.\(thing.id)")
+                .listRowInsets(Layout.rowInsets)
+                .alignmentGuide(.listRowSeparatorLeading) { dimensions in
+                    dimensions[.leading]
+                }
+                .alignmentGuide(.listRowSeparatorTrailing) { dimensions in
+                    dimensions[.trailing] - Layout.rowInsets.trailing
+                }
+                .listRowBackground(EntitySelectionBackground(isSelected: batchSelection.contains(thing.id)))
+                .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
+                .listRowSeparator(index == things.count - 1 ? .hidden : .visible, edges: .bottom)
+                .onAppear {
+                    guard index == things.count - 1 else { return }
+                    onReachEnd?()
+                }
+            }
+            if isLoadingMore {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                        .controlSize(.small)
+                    Spacer()
+                }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(EntityVisualTokens.pageBackground)
+    }
+
+    private var thingSelectionList: some View {
+        List {
+            ForEach(things.indices, id: \.self) { index in
+                let thing = things[index]
+                Button {
+                    selection = thing.id
+                } label: {
+                    ThingListRow(thing: thing)
+                        .entityListRowTapTarget()
+                }
+                .buttonStyle(.plain)
+                .id(thing.id)
+                .accessibilityIdentifier("thing.row.\(thing.id)")
+                .listRowInsets(Layout.rowInsets)
+                .alignmentGuide(.listRowSeparatorLeading) { dimensions in
+                    dimensions[.leading]
+                }
+                .alignmentGuide(.listRowSeparatorTrailing) { dimensions in
+                    dimensions[.trailing] - Layout.rowInsets.trailing
+                }
+                .listRowBackground(EntitySelectionBackground(isSelected: selection == thing.id))
+                .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
+                .listRowSeparator(index == things.count - 1 ? .hidden : .visible, edges: .bottom)
+                .onAppear {
+                    guard index == things.count - 1 else { return }
+                    onReachEnd?()
+                }
+            }
+            if isLoadingMore {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                        .controlSize(.small)
+                    Spacer()
+                }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(EntityVisualTokens.pageBackground)
     }
 
     private func toggleBatchSelection(_ thingId: String) {

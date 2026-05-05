@@ -1,11 +1,16 @@
 import SwiftUI
 
 struct ThingListScreen: View {
+    private enum OverlayState {
+        case onboarding
+        case searchPlaceholder
+    }
+
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @Bindable var viewModel: EntityProjectionViewModel
+    let viewModel: EntityProjectionViewModel
     var openThingId: String? = nil
     var scrollToTopToken: Int = 0
     var onOpenThingHandled: (() -> Void)? = nil
@@ -18,88 +23,7 @@ struct ThingListScreen: View {
 
     var body: some View {
         let filteredThingsSnapshot = filteredThings
-        let baseContent = Group {
-            if viewModel.things.isEmpty {
-                EntityEmptyView(
-                    iconName: "shippingbox",
-                    title: localizationManager.localized("things_empty_title"),
-                    subtitle: localizationManager.localized("things_empty_hint")
-                )
-            } else if filteredThingsSnapshot.isEmpty {
-                MessageSearchPlaceholderView(
-                    imageName: "questionmark.circle",
-                    title: "no_matching_results",
-                    detailKey: "try_changing_a_keyword_or_clear_the_filter_conditions"
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.horizontal, 24)
-            } else {
-                ScrollViewReader { proxy in
-                    List(selection: batchSelectionBinding) {
-                        ForEach(filteredThingsSnapshot.indices, id: \.self) { index in
-                            let thing = filteredThingsSnapshot[index]
-                            Group {
-                                if isBatchMode {
-                                    ThingListRow(thing: thing)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                } else {
-                                    Button {
-                                        selectThing(thing)
-                                    } label: {
-                                        ThingListRow(thing: thing)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .id(thing.id)
-                            .accessibilityIdentifier("thing.row.\(thing.id)")
-                            .tag(thing.id)
-                            .listRowInsets(EdgeInsets(
-                                top: EntityVisualTokens.listRowInsetVertical,
-                                leading: EntityVisualTokens.listRowInsetHorizontal,
-                                bottom: EntityVisualTokens.listRowInsetVertical,
-                                trailing: EntityVisualTokens.listRowInsetHorizontal
-                            ))
-                            .listRowBackground(
-                                EntitySelectionBackground(isSelected: isBatchMode ? selectedThingIds.contains(thing.id) : selectedThing?.id == thing.id)
-                            )
-                            .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
-                            .listRowSeparator(index == filteredThingsSnapshot.count - 1 ? .hidden : .visible, edges: .bottom)
-                            .onAppear {
-                                guard index == filteredThingsSnapshot.count - 1 else { return }
-                                Task { await viewModel.loadMoreThings() }
-                            }
-                        }
-                        if viewModel.isLoadingMoreThings {
-                            HStack {
-                                Spacer()
-                                ProgressView()
-                                    .controlSize(.small)
-                                Spacer()
-                            }
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
-                        }
-                    }
-                    .listStyle(.plain)
-                    .modifier(
-                        ThingListTopObserverModifier(enabled: true) { topOffset in
-                            updateThingListTopState(
-                                topOffset: topOffset,
-                                filteredThingsCount: filteredThingsSnapshot.count
-                            )
-                        }
-                    )
-                    .environment(\.editMode, isBatchMode ? .constant(.active) : .constant(.inactive))
-                    .scrollContentBackground(.hidden)
-                    .background(EntityVisualTokens.pageBackground)
-                    .onChange(of: scrollToTopToken) { _, _ in
-                        scrollToTopIfNeeded(proxy, filteredThings: filteredThingsSnapshot)
-                    }
-                }
-            }
-        }
+        let baseContent = listContainer(filteredThings: filteredThingsSnapshot)
         let content = applySearchIfNeeded(baseContent)
         .accessibilityIdentifier("screen.things.list")
         .refreshable {
@@ -143,13 +67,6 @@ struct ThingListScreen: View {
             publishAutomationState()
 #endif
         }
-        .onChange(of: environment.messageStoreRevision) { _, _ in
-            Task { @MainActor in
-                await viewModel.reload()
-                syncSelectedThingSnapshot()
-                openThingIfNeeded()
-            }
-        }
         .onChange(of: selectedThing?.id) { _, _ in
 #if DEBUG
             publishAutomationState()
@@ -170,6 +87,111 @@ struct ThingListScreen: View {
             .accessibilityIdentifier("sheet.thing.detail")
         }
         content
+    }
+
+    @ViewBuilder
+    private func listContainer(filteredThings: [ThingProjection]) -> some View {
+        let overlayState = overlayState(for: filteredThings)
+        ZStack {
+            thingList(filteredThings: filteredThings)
+                .opacity(overlayState == nil ? 1 : 0.001)
+                .allowsHitTesting(overlayState == nil)
+                .accessibilityHidden(overlayState != nil)
+
+            switch overlayState {
+            case .onboarding:
+                EntityOnboardingEmptyView(kind: .things)
+            case .searchPlaceholder:
+                MessageSearchPlaceholderView(
+                    imageName: "questionmark.circle",
+                    title: "no_matching_results",
+                    detailKey: "try_changing_a_keyword_or_clear_the_filter_conditions"
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, 24)
+            case nil:
+                EmptyView()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func thingList(filteredThings: [ThingProjection]) -> some View {
+        ScrollViewReader { proxy in
+            List(selection: batchSelectionBinding) {
+                ForEach(filteredThings.indices, id: \.self) { index in
+                    let thing = filteredThings[index]
+                    Group {
+                        if isBatchMode {
+                            ThingListRow(thing: thing)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        } else {
+                            Button {
+                                selectThing(thing)
+                            } label: {
+                                ThingListRow(thing: thing)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .id(thing.id)
+                    .accessibilityIdentifier("thing.row.\(thing.id)")
+                    .tag(thing.id)
+                    .listRowInsets(EdgeInsets(
+                        top: EntityVisualTokens.listRowInsetVertical,
+                        leading: EntityVisualTokens.listRowInsetHorizontal,
+                        bottom: EntityVisualTokens.listRowInsetVertical,
+                        trailing: EntityVisualTokens.listRowInsetHorizontal
+                    ))
+                    .listRowBackground(
+                        EntitySelectionBackground(isSelected: isBatchMode ? selectedThingIds.contains(thing.id) : selectedThing?.id == thing.id)
+                    )
+                    .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
+                    .listRowSeparator(index == filteredThings.count - 1 ? .hidden : .visible, edges: .bottom)
+                    .onAppear {
+                        guard index == filteredThings.count - 1 else { return }
+                        Task { await viewModel.loadMoreThings() }
+                    }
+                }
+                if viewModel.isLoadingMoreThings {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                            .controlSize(.small)
+                        Spacer()
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                }
+            }
+            .listStyle(.plain)
+            .modifier(
+                ThingListTopObserverModifier(enabled: true) { topOffset in
+                    updateThingListTopState(
+                        topOffset: topOffset,
+                        filteredThingsCount: filteredThings.count
+                    )
+                }
+            )
+            .environment(\.editMode, isBatchMode ? .constant(.active) : .constant(.inactive))
+            .scrollContentBackground(.hidden)
+            .background(EntityVisualTokens.pageBackground)
+            .onChange(of: scrollToTopToken) { _, _ in
+                scrollToTopIfNeeded(proxy, filteredThings: filteredThings)
+            }
+        }
+    }
+
+    private func overlayState(for filteredThings: [ThingProjection]) -> OverlayState? {
+        if viewModel.things.isEmpty {
+            .onboarding
+        } else if filteredThings.isEmpty {
+            .searchPlaceholder
+        } else {
+            nil
+        }
     }
 
 #if DEBUG

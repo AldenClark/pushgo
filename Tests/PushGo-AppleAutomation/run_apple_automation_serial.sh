@@ -96,7 +96,6 @@ run_macos_ui_tests() {
       -derivedDataPath "$MACOS_DERIVED_DATA" \
       ARCHS=arm64 \
       ONLY_ACTIVE_ARCH=YES \
-      "${XCODE_NO_SIGN_FLAGS[@]}" \
       test \
       -only-testing:PushGo-macOSUITests
 }

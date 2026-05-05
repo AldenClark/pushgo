@@ -231,10 +231,303 @@ struct EntityCodeBlock: View {
     }
 }
 
+struct EntityEmptyAction {
+    let title: String
+    let systemImage: String
+    let action: () -> Void
+}
+
+enum EntityOnboardingEmptyKind: Equatable {
+    case messages
+    case events
+    case things
+    case channels
+
+    var iconName: String {
+        switch self {
+        case .messages:
+            "paperplane.circle"
+        case .events:
+            "bolt.horizontal.circle"
+        case .things:
+            "shippingbox"
+        case .channels:
+            "dot.radiowaves.left.and.right"
+        }
+    }
+
+    var titleKey: String {
+        switch self {
+        case .messages:
+            "onboarding_messages_empty_title"
+        case .events:
+            "onboarding_events_empty_title"
+        case .things:
+            "onboarding_things_empty_title"
+        case .channels:
+            "onboarding_channels_empty_title"
+        }
+    }
+
+    var subtitleKey: String {
+        switch self {
+        case .messages:
+            "onboarding_messages_empty_subtitle"
+        case .events:
+            "onboarding_events_empty_subtitle"
+        case .things:
+            "onboarding_things_empty_subtitle"
+        case .channels:
+            "onboarding_channels_empty_subtitle"
+        }
+    }
+
+    var stepKeys: [String] {
+        switch self {
+        case .messages:
+            [
+                "onboarding_messages_step_channel",
+                "onboarding_messages_step_send",
+                "onboarding_messages_step_delivery",
+            ]
+        case .events:
+            [
+                "onboarding_events_step_channel",
+                "onboarding_events_step_create",
+                "onboarding_events_step_update",
+                "onboarding_events_step_close",
+            ]
+        case .things:
+            [
+                "onboarding_things_step_channel",
+                "onboarding_things_step_create",
+                "onboarding_things_step_update",
+                "onboarding_things_step_activity",
+            ]
+        case .channels:
+            []
+        }
+    }
+
+    var documentationPage: PushGoDocumentationPage? {
+        switch self {
+        case .messages:
+            .messageAPI
+        case .events:
+            .eventAPI
+        case .things:
+            .thingAPI
+        case .channels:
+            nil
+        }
+    }
+
+    var documentationTitleKey: String? {
+        switch self {
+        case .messages:
+            "open_message_api_docs"
+        case .events:
+            "open_event_api_docs"
+        case .things:
+            "open_thing_api_docs"
+        case .channels:
+            nil
+        }
+    }
+}
+
+struct EntityOnboardingEmptyView: View {
+    @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
+    @Environment(\.openURL) private var openURL
+
+    let kind: EntityOnboardingEmptyKind
+    var channelPrimaryAction: (() -> Void)?
+    var subtitleMaxWidth: CGFloat? = nil
+
+    var body: some View {
+        EntityEmptyView(
+            iconName: kind.iconName,
+            title: localizationManager.localized(kind.titleKey),
+            subtitle: localizationManager.localized(kind.subtitleKey),
+            guidanceSteps: kind.stepKeys.map { localizationManager.localized($0) },
+            primaryAction: primaryAction,
+            secondaryAction: secondaryAction,
+            subtitleMaxWidth: subtitleMaxWidth
+        )
+    }
+
+    private var primaryAction: EntityEmptyAction? {
+        if kind == .channels {
+            guard let channelPrimaryAction else { return nil }
+            return EntityEmptyAction(
+                title: localizationManager.localized("add_channel"),
+                systemImage: "plus.circle",
+                action: channelPrimaryAction
+            )
+        }
+
+        guard let page = kind.documentationPage, let titleKey = kind.documentationTitleKey else {
+            return nil
+        }
+        return EntityEmptyAction(
+            title: localizationManager.localized(titleKey),
+            systemImage: "book"
+        ) {
+            openURL(AppConstants.documentationURL(page))
+        }
+    }
+
+    private var secondaryAction: EntityEmptyAction {
+        EntityEmptyAction(
+            title: localizationManager.localized("open_getting_started_docs"),
+            systemImage: "arrow.up.right.square"
+        ) {
+            openURL(AppConstants.documentationURL(.gettingStarted))
+        }
+    }
+}
+
+private struct EntityEmptyStepper: View {
+    private enum Metrics {
+        static let textMaxWidth: CGFloat = 248
+    }
+
+    let iconName: String
+    let steps: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(steps.enumerated()), id: \.offset) { index, step in
+                EntityEmptyStepItem(
+                    systemImage: stepIcon(at: index),
+                    text: step,
+                    textMaxWidth: Metrics.textMaxWidth,
+                    isLast: index == steps.count - 1
+                )
+            }
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private func stepIcon(at index: Int) -> String {
+        let icons: [String]
+        if iconName.contains("paperplane") {
+            icons = ["dot.radiowaves.left.and.right", "paperplane", "tray"]
+        } else if iconName.contains("bolt") {
+            icons = ["plus.circle", "bolt.horizontal", "arrow.triangle.2.circlepath", "checkmark.circle"]
+        } else if iconName.contains("shippingbox") {
+            icons = ["dot.radiowaves.left.and.right", "shippingbox", "slider.horizontal.3", "bubble.left.and.bubble.right"]
+        } else {
+            icons = ["plus.circle", "lock.open", "curlybraces"]
+        }
+        return icons.indices.contains(index) ? icons[index] : "\(index + 1).circle"
+    }
+}
+
+private struct EntityEmptyStepItem: View {
+    let systemImage: String
+    let text: String
+    let textMaxWidth: CGFloat
+    let isLast: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(spacing: 0) {
+                Image(systemName: systemImage)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(Color.appAccentPrimary)
+                    .frame(width: 34, height: 34)
+                    .background(
+                        Circle()
+                            .fill(EntityVisualTokens.subtleFillSoft)
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(EntityVisualTokens.subtleStroke, lineWidth: 0.8)
+                    )
+                    .accessibilityHidden(true)
+                Rectangle()
+                    .fill(isLast ? Color.clear : EntityVisualTokens.subtleStroke)
+                    .frame(width: 1, height: 18)
+                    .accessibilityHidden(true)
+            }
+
+            Text(text)
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(Color.appTextPrimary)
+                .multilineTextAlignment(.leading)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: textMaxWidth, alignment: .leading)
+                .padding(.top, 7)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct EntityEmptyHero: View {
+    let iconName: String
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.appAccentPrimary.opacity(0.045))
+                .frame(width: 118, height: 118)
+                .offset(y: -2)
+
+            Path { path in
+                path.move(to: CGPoint(x: 20, y: 112))
+                path.addCurve(
+                    to: CGPoint(x: 94, y: 96),
+                    control1: CGPoint(x: 42, y: 130),
+                    control2: CGPoint(x: 42, y: 70)
+                )
+                path.addCurve(
+                    to: CGPoint(x: 150, y: 54),
+                    control1: CGPoint(x: 120, y: 112),
+                    control2: CGPoint(x: 126, y: 62)
+                )
+            }
+            .stroke(
+                Color.appAccentPrimary.opacity(0.18),
+                style: StrokeStyle(lineWidth: 2.4, lineCap: .round, dash: [7, 7])
+            )
+            .frame(width: 138, height: 108)
+            .offset(x: -8, y: 14)
+
+            Image(systemName: heroSymbolName)
+                .font(.system(size: isRadioWavesHero ? 50 : 48, weight: isRadioWavesHero ? .bold : .semibold))
+                .symbolRenderingMode(isRadioWavesHero ? .monochrome : .hierarchical)
+                .foregroundStyle(Color.appAccentPrimary)
+                .rotationEffect(heroSymbolName.contains("paperplane") ? .degrees(-10) : .degrees(0))
+                .shadow(color: Color.appAccentPrimary.opacity(0.1), radius: 10, y: 5)
+        }
+        .frame(width: 150, height: 118)
+        .accessibilityHidden(true)
+    }
+
+    private var heroSymbolName: String {
+        if iconName.contains("paperplane") { return "paperplane.fill" }
+        if iconName.contains("bolt") { return "bolt.horizontal.fill" }
+        if iconName.contains("shippingbox") { return "shippingbox.fill" }
+        if iconName.contains("dot.radiowaves") { return "dot.radiowaves.left.and.right" }
+        return iconName
+    }
+
+    private var isRadioWavesHero: Bool {
+        heroSymbolName.contains("dot.radiowaves")
+    }
+}
+
 struct EntityEmptyView: View {
     let iconName: String
     let title: String
     let subtitle: String
+    var guidanceSteps: [String] = []
+    var primaryAction: EntityEmptyAction?
+    var secondaryAction: EntityEmptyAction?
     var subtitleMaxWidth: CGFloat? = nil
     var fillsAvailableSpace: Bool = true
     var topPadding: CGFloat = 48
@@ -244,6 +537,9 @@ struct EntityEmptyView: View {
         iconName: String = "tray",
         title: String,
         subtitle: String,
+        guidanceSteps: [String] = [],
+        primaryAction: EntityEmptyAction? = nil,
+        secondaryAction: EntityEmptyAction? = nil,
         subtitleMaxWidth: CGFloat? = nil,
         fillsAvailableSpace: Bool = true,
         topPadding: CGFloat = 48,
@@ -252,6 +548,9 @@ struct EntityEmptyView: View {
         self.iconName = iconName
         self.title = title
         self.subtitle = subtitle
+        self.guidanceSteps = guidanceSteps
+        self.primaryAction = primaryAction
+        self.secondaryAction = secondaryAction
         self.subtitleMaxWidth = subtitleMaxWidth
         self.fillsAvailableSpace = fillsAvailableSpace
         self.topPadding = topPadding
@@ -259,18 +558,45 @@ struct EntityEmptyView: View {
     }
 
     var body: some View {
-        let textBlock = VStack(spacing: 12) {
-            Image(systemName: iconName)
-                .font(.largeTitle)
-                .foregroundStyle(Color.appTextSecondary)
-                .accessibilityHidden(true)
+        let textBlock = VStack(spacing: 18) {
+            EntityEmptyHero(iconName: iconName)
             Text(title)
-                .font(.headline)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(Color.appTextPrimary)
             Text(subtitle)
                 .font(.subheadline)
                 .foregroundStyle(Color.appTextSecondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: subtitleMaxWidth)
+            if !guidanceSteps.isEmpty {
+                EntityEmptyStepper(iconName: iconName, steps: guidanceSteps)
+                    .padding(.top, 14)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+            if primaryAction != nil || secondaryAction != nil {
+                HStack(spacing: 12) {
+                    if let primaryAction {
+                        Button {
+                            primaryAction.action()
+                        } label: {
+                            Label(primaryAction.title, systemImage: primaryAction.systemImage)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                    }
+                    if let secondaryAction {
+                        Button {
+                            secondaryAction.action()
+                        } label: {
+                            Label(secondaryAction.title, systemImage: secondaryAction.systemImage)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.top, 8)
+            }
         }
 
         Group {

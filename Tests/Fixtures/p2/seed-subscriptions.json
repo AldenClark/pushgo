@@ -1,0 +1,20 @@
+{
+  "channel_subscriptions": [
+    {
+      "gateway": "https://example.invalid",
+      "channel_id": "p2",
+      "display_name": "P2 Primary",
+      "password": "pw_primary",
+      "last_synced_at": "2026-03-01T10:05:00Z",
+      "updated_at": "2026-03-01T10:05:00Z"
+    },
+    {
+      "gateway": "https://example.invalid",
+      "channel_id": "p2-secondary",
+      "display_name": "P2 Secondary",
+      "password": "pw_secondary",
+      "last_synced_at": "2026-03-01T10:06:00Z",
+      "updated_at": "2026-03-01T10:06:00Z"
+    }
+  ]
+}

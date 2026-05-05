@@ -30,7 +30,6 @@ final class AppEnvironment {
     @ObservationIgnored private var messageSyncObserver: DarwinNotificationObserver?
     @ObservationIgnored private var notificationIngressObserver: DarwinNotificationObserver?
     @ObservationIgnored private var pendingCountsRefreshTask: Task<Void, Never>?
-    @ObservationIgnored private var pendingMessageListRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var bootstrapTask: Task<Void, Never>?
     @ObservationIgnored private var didBootstrap = false
     @ObservationIgnored private var providerRouteTask: Task<String, Error>?
@@ -44,7 +43,6 @@ final class AppEnvironment {
     @ObservationIgnored private var lastSubscriptionSyncAt: Date = .distantPast
 
     private var toastDismissTask: Task<Void, Never>?
-    @ObservationIgnored private var pendingMessageListRefresh = false
     private(set) var isMainWindowVisible = true
     @ObservationIgnored private var lastWakeupRouteFingerprint: String?
     @ObservationIgnored private let providerRouteResultReuseInterval: TimeInterval = 25
@@ -54,20 +52,28 @@ final class AppEnvironment {
     private(set) var unreadMessageCount: Int = 0
     private(set) var messageStoreRevision: UUID = UUID()
     private(set) var toastMessage: ToastMessage?
-    private(set) var localStoreRecoveryState: LocalStoreRecoveryState?
+    var localStoreRecoveryState: LocalStoreRecoveryState? { localStoreRecoveryController.localStoreRecoveryState }
     private(set) var shouldPresentNotificationPermissionAlert: Bool = false
-    var pendingMessageToOpen: UUID?
-    var pendingEventToOpen: String?
-    var pendingThingToOpen: String?
-    private(set) var isMessagePageEnabled: Bool = true
-    private(set) var isEventPageEnabled: Bool = true
-    private(set) var isThingPageEnabled: Bool = true
+    var pendingMessageToOpen: UUID? {
+        get { notificationOpenController.pendingMessageToOpen }
+        set { notificationOpenController.pendingMessageToOpen = newValue }
+    }
+    var pendingEventToOpen: String? {
+        get { notificationOpenController.pendingEventToOpen }
+        set { notificationOpenController.pendingEventToOpen = newValue }
+    }
+    var pendingThingToOpen: String? {
+        get { notificationOpenController.pendingThingToOpen }
+        set { notificationOpenController.pendingThingToOpen = newValue }
+    }
+    var isMessagePageEnabled: Bool { dataPageVisibilityController.isMessagePageEnabled }
+    var isEventPageEnabled: Bool { dataPageVisibilityController.isEventPageEnabled }
+    var isThingPageEnabled: Bool { dataPageVisibilityController.isThingPageEnabled }
     private(set) var launchAtLoginEnabled: Bool = false
     private(set) var betaChannelEnabled: Bool = false
-    private(set) var activeMainTab: MainTab = .messages
+    var activeMainTab: MainTab { navigationState.activeMainTab }
     private(set) var channelSubscriptions: [ChannelSubscription] = []
     private var channelSubscriptionLookup: [String: ChannelSubscription] = [:]
-    private var isSceneActive = false
     @ObservationIgnored private let appUpdateManager: any AppUpdateManaging
 
     private let channelSubscriptionService = ChannelSubscriptionService()
@@ -124,6 +130,45 @@ final class AppEnvironment {
     @ObservationIgnored private let localStoreFailureStreakThreshold = 3
     @ObservationIgnored private let localStoreFailureStreakKey = "pushgo.local_store.failure_streak"
     @ObservationIgnored private let localStoreFailureDefaults = AppConstants.sharedUserDefaults()
+    // Keep AppEnvironment as the composition root. Feature-specific behavior
+    // should extend the dedicated controllers below instead of growing new
+    // state machines in this type.
+    @ObservationIgnored private(set) lazy var navigationState = AppNavigationState()
+    @ObservationIgnored private(set) lazy var dataPageVisibilityController = DataPageVisibilityController(
+        dataStore: dataStore
+    )
+    @ObservationIgnored private(set) lazy var notificationOpenController = NotificationOpenController(
+        dataStore: dataStore,
+        localizationManager: localizationManager,
+        messageStateCoordinatorProvider: { [weak self] in
+            self?.messageStateCoordinator
+        },
+        refreshCountsAndNotify: { [weak self] in
+            await self?.refreshMessageCountsAndNotify()
+        },
+        removeDeliveredNotificationIfNeeded: { [weak self] message in
+            self?.removeDeliveredNotificationIfNeeded(for: message)
+        },
+        autoEnableDataPage: { [weak self] entityType in
+            self?.autoEnableDataPage(for: entityType)
+        },
+        showToast: { [weak self] message in
+            self?.showToast(message: message)
+        }
+    )
+    @ObservationIgnored private(set) lazy var localStoreRecoveryController = LocalStoreRecoveryController(
+        dataStore: dataStore,
+        localizationManager: localizationManager,
+        failureStreakThreshold: localStoreFailureStreakThreshold,
+        failureStreakKey: localStoreFailureStreakKey,
+        failureDefaults: localStoreFailureDefaults,
+        showToast: { [weak self] message in
+            self?.showToast(message: message)
+        },
+        terminate: {
+            NSApp.terminate(nil)
+        }
+    )
 
     private init(
         dataStore: LocalDataStore = LocalDataStore(),
@@ -351,21 +396,10 @@ final class AppEnvironment {
     }
 
     private func scheduleMessageListRefresh() {
-        guard canRefreshMessageList else {
-            pendingMessageListRefresh = true
-            return
-        }
-        pendingMessageListRefreshTask?.cancel()
-        pendingMessageListRefreshTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            messageStoreRevision = UUID()
-            pendingMessageListRefresh = false
-        }
+        messageStoreRevision = UUID()
     }
 
     func publishStoreRefreshForAutomation() {
-        pendingMessageListRefreshTask?.cancel()
-        pendingMessageListRefresh = false
         messageStoreRevision = UUID()
     }
 
@@ -595,12 +629,6 @@ final class AppEnvironment {
         }
     }
 
-    struct LocalStoreRecoveryState: Equatable {
-        let title: String
-        let message: String
-        let canRebuild: Bool
-    }
-
     private func announceAccessibility(_ message: String) {
         NSAccessibility.post(
             element: NSApplication.shared,
@@ -610,7 +638,7 @@ final class AppEnvironment {
     }
 
     func dismissLocalStoreRecovery() {
-        localStoreRecoveryState = nil
+        localStoreRecoveryController.dismissLocalStoreRecovery()
     }
 
     var isLocalStoreRecoveryAlertPresented: Bool {
@@ -649,69 +677,15 @@ final class AppEnvironment {
     }
 
     func terminateForLocalStoreFailure() {
-        NSApp.terminate(nil)
+        localStoreRecoveryController.terminateForLocalStoreFailure()
     }
 
     func rebuildLocalStoreForRecoveryAndTerminate() {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            do {
-                try await dataStore.rebuildPersistentStoresForRecovery()
-                clearLocalStoreFailureStreak()
-                terminateForLocalStoreFailure()
-            } catch {
-                showToast(message: localizationManager.localized(
-                    "initialization_failed_placeholder",
-                    error.localizedDescription
-                ))
-            }
-        }
-    }
-
-    private func incrementLocalStoreFailureStreak() -> Int {
-        let next = localStoreFailureDefaults.integer(forKey: localStoreFailureStreakKey) + 1
-        localStoreFailureDefaults.set(next, forKey: localStoreFailureStreakKey)
-        return next
-    }
-
-    private func clearLocalStoreFailureStreak() {
-        localStoreFailureDefaults.removeObject(forKey: localStoreFailureStreakKey)
-    }
-
-    private func isLikelyLocalStoreLockContention(reason: String?) -> Bool {
-        guard let reason else { return false }
-        let lowered = reason.lowercased()
-        return lowered.contains("database is locked")
-            || lowered.contains("database is busy")
-            || lowered.contains("sqlite_busy")
-            || lowered.contains("sqlite_locked")
-            || lowered.contains("lock contention")
-            || lowered.contains("locked")
+        localStoreRecoveryController.rebuildLocalStoreForRecoveryAndTerminate()
     }
 
     private func handleLocalStoreUnavailable(_ state: LocalDataStore.StorageState) {
-        let streak = incrementLocalStoreFailureStreak()
-        let canRebuild = streak >= localStoreFailureStreakThreshold
-        var lines: [String] = [
-            localizationManager.localized("local_store_unavailable"),
-            "请点击“退出应用”并重新打开。",
-        ]
-        if let reason = state.reason?.trimmingCharacters(in: .whitespacesAndNewlines), !reason.isEmpty {
-            lines.append(reason)
-            if isLikelyLocalStoreLockContention(reason: reason) {
-                lines.append("检测到可能的数据库锁占用，请先彻底退出所有 PushGo 进程/扩展后重试。")
-            }
-        }
-        if canRebuild {
-            lines.append("该错误已连续出现多次，请上报日志；也可以选择“重建数据库并退出”。")
-        } else {
-            lines.append("若问题反复出现，请上报错误日志。")
-        }
-        localStoreRecoveryState = LocalStoreRecoveryState(
-            title: localizationManager.localized("local_store_unavailable"),
-            message: lines.joined(separator: "\n"),
-            canRebuild: canRebuild
-        )
+        localStoreRecoveryController.handleLocalStoreUnavailable(state)
     }
 
     func refreshPushAuthorization(
@@ -951,90 +925,27 @@ final class AppEnvironment {
     }
 
     func setMessagePageEnabled(_ isEnabled: Bool) {
-        updateDataPageVisibility(messageEnabled: isEnabled)
+        dataPageVisibilityController.setMessagePageEnabled(isEnabled)
     }
 
     func setEventPageEnabled(_ isEnabled: Bool) {
-        updateDataPageVisibility(eventEnabled: isEnabled)
+        dataPageVisibilityController.setEventPageEnabled(isEnabled)
     }
 
     func setThingPageEnabled(_ isEnabled: Bool) {
-        updateDataPageVisibility(thingEnabled: isEnabled)
-    }
-
-    private func updateDataPageVisibility(
-        messageEnabled: Bool? = nil,
-        eventEnabled: Bool? = nil,
-        thingEnabled: Bool? = nil
-    ) {
-        var next = DataPageVisibilitySnapshot(
-            messageEnabled: isMessagePageEnabled,
-            eventEnabled: isEventPageEnabled,
-            thingEnabled: isThingPageEnabled
-        )
-        if let messageEnabled {
-            next.messageEnabled = messageEnabled
-        }
-        if let eventEnabled {
-            next.eventEnabled = eventEnabled
-        }
-        if let thingEnabled {
-            next.thingEnabled = thingEnabled
-        }
-        applyDataPageVisibility(next, persist: true)
-    }
-
-    private func applyDataPageVisibility(
-        _ visibility: DataPageVisibilitySnapshot,
-        persist: Bool
-    ) {
-        let changed = isMessagePageEnabled != visibility.messageEnabled
-            || isEventPageEnabled != visibility.eventEnabled
-            || isThingPageEnabled != visibility.thingEnabled
-        guard changed else { return }
-        isMessagePageEnabled = visibility.messageEnabled
-        isEventPageEnabled = visibility.eventEnabled
-        isThingPageEnabled = visibility.thingEnabled
-        if persist {
-            let store = self.dataStore
-            Task(priority: .utility) {
-                await store.saveDataPageVisibility(visibility)
-            }
-        }
+        dataPageVisibilityController.setThingPageEnabled(isEnabled)
     }
 
     private func loadDataPageVisibility() async {
-        let visibility = await dataStore.loadDataPageVisibility()
-        applyDataPageVisibility(visibility, persist: false)
+        await dataPageVisibilityController.loadPersistedState()
     }
 
     private func autoEnableDataPageIfNeeded(for message: PushMessage) {
-        let normalized = message.entityType
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-        switch normalized {
-        case "event", "thing":
-            autoEnableDataPage(for: normalized)
-        default:
-            autoEnableDataPage(for: "message")
-        }
+        dataPageVisibilityController.autoEnableDataPageIfNeeded(for: message)
     }
 
     private func autoEnableDataPage(for entityType: String) {
-        switch entityType {
-        case "event":
-            if !isEventPageEnabled {
-                updateDataPageVisibility(eventEnabled: true)
-            }
-        case "thing":
-            if !isThingPageEnabled {
-                updateDataPageVisibility(thingEnabled: true)
-            }
-        default:
-            if !isMessagePageEnabled {
-                updateDataPageVisibility(messageEnabled: true)
-            }
-        }
+        dataPageVisibilityController.autoEnableDataPage(for: entityType)
     }
 
     private func loadPersistedState() async {
@@ -1052,7 +963,7 @@ final class AppEnvironment {
             handleLocalStoreUnavailable(storeState)
             return
         case .persistent:
-            clearLocalStoreFailureStreak()
+            localStoreRecoveryController.clearFailureStreak()
             break
         }
         do {
@@ -1464,18 +1375,17 @@ final class AppEnvironment {
     func updateScenePhase(_ phase: ScenePhase) {
         switch phase {
         case .active:
-            isSceneActive = true
+            navigationState.setSceneActive(true)
             clearDeliveredSystemNotifications()
             syncBadgeWithUnreadCount()
             scheduleMessageListRefresh()
-            flushPendingMessageListRefreshIfNeeded()
             Task { @MainActor in
                 await refreshLaunchAtLoginStatus()
                 await refreshChannelSubscriptions()
                 await syncPrivateChannelState()
             }
         case .background, .inactive:
-            isSceneActive = false
+            navigationState.setSceneActive(false)
             Task {
                 await dataStore.flushWrites()
             }
@@ -1483,7 +1393,7 @@ final class AppEnvironment {
                 await syncPrivateChannelState()
             }
         @unknown default:
-            isSceneActive = false
+            navigationState.setSceneActive(false)
         }
     }
 
@@ -1499,13 +1409,10 @@ final class AppEnvironment {
     func updateMainWindowVisibility(isVisible: Bool) {
         guard isMainWindowVisible != isVisible else { return }
         isMainWindowVisible = isVisible
-        if isVisible {
-            flushPendingMessageListRefreshIfNeeded()
-        }
     }
 
     func updateActiveTab(_ tab: MainTab) {
-        activeMainTab = tab
+        navigationState.updateActiveTab(tab)
         clearDeliveredSystemNotifications()
     }
 
@@ -1908,114 +1815,19 @@ final class AppEnvironment {
         return outcome
     }
     func handleNotificationOpen(notificationRequestId: String) async {
-        await handleNotificationOpenInternal(
-            notificationRequestId: notificationRequestId,
-            markAsReadInStore: true,
-            removeFromNotificationCenter: true
-        )
+        await notificationOpenController.handleNotificationOpen(notificationRequestId: notificationRequestId)
     }
 
     func handleNotificationOpen(messageId: String) async {
-        await handleNotificationOpenInternal(
-            messageId: messageId,
-            markAsReadInStore: true,
-            removeFromNotificationCenter: true
-        )
+        await notificationOpenController.handleNotificationOpen(messageId: messageId)
     }
 
     func handleNotificationOpen(entityType: String, entityId: String) async {
-        await handleEntityOpenTarget(
-            EntityOpenTarget(entityType: entityType, entityId: entityId)
-        )
+        await notificationOpenController.handleNotificationOpen(entityType: entityType, entityId: entityId)
     }
+
     func handleNotificationOpenFromCopy(notificationRequestId: String) async {
-        await handleNotificationOpen(notificationRequestId: notificationRequestId)
-    }
-    private func handleNotificationOpenInternal(
-        notificationRequestId: String,
-        markAsReadInStore: Bool,
-        removeFromNotificationCenter: Bool
-    ) async {
-        do {
-            if let target = try await dataStore.loadMessage(notificationRequestId: notificationRequestId) {
-                await handleNotificationOpenTarget(
-                    target,
-                    markAsReadInStore: markAsReadInStore,
-                    removeFromNotificationCenter: removeFromNotificationCenter
-                )
-                return
-            }
-            if let entityTarget = try await dataStore.loadEntityOpenTarget(notificationRequestId: notificationRequestId) {
-                await handleEntityOpenTarget(entityTarget)
-                return
-            }
-        } catch {
-            showToast(message: localizationManager.localized(
-                "sync_message_failed_placeholder",
-                error.localizedDescription
-            ))
-        }
-    }
-
-    private func handleNotificationOpenInternal(
-        messageId: String,
-        markAsReadInStore: Bool,
-        removeFromNotificationCenter: Bool
-    ) async {
-        do {
-            if let target = try await dataStore.loadMessage(messageId: messageId) {
-                await handleNotificationOpenTarget(
-                    target,
-                    markAsReadInStore: markAsReadInStore,
-                    removeFromNotificationCenter: removeFromNotificationCenter
-                )
-                return
-            }
-            if let entityTarget = try await dataStore.loadEntityOpenTarget(messageId: messageId) {
-                await handleEntityOpenTarget(entityTarget)
-                return
-            }
-        } catch {
-            showToast(message: localizationManager.localized(
-                "sync_message_failed_placeholder",
-                error.localizedDescription
-            ))
-        }
-    }
-
-    private func handleNotificationOpenTarget(
-        _ target: PushMessage,
-        markAsReadInStore: Bool,
-        removeFromNotificationCenter: Bool
-    ) async {
-        let targetId = target.id
-
-        if markAsReadInStore {
-            _ = try? await messageStateCoordinator.markRead(messageId: targetId)
-        } else {
-            await refreshMessageCountsAndNotify()
-            if removeFromNotificationCenter {
-                removeDeliveredNotificationIfNeeded(for: target)
-            }
-        }
-        autoEnableDataPage(for: "message")
-
-        pendingEventToOpen = nil
-        pendingThingToOpen = nil
-        pendingMessageToOpen = targetId
-    }
-
-    private func handleEntityOpenTarget(_ target: EntityOpenTarget) async {
-        pendingMessageToOpen = nil
-        if target.entityType == "event" {
-            autoEnableDataPage(for: "event")
-            pendingThingToOpen = nil
-            pendingEventToOpen = target.entityId
-        } else if target.entityType == "thing" {
-            autoEnableDataPage(for: "thing")
-            pendingEventToOpen = nil
-            pendingThingToOpen = target.entityId
-        }
+        await notificationOpenController.handleNotificationOpen(notificationRequestId: notificationRequestId)
     }
 
     private func clearDeliveredSystemNotifications() {
@@ -2027,16 +1839,6 @@ final class AppEnvironment {
             return normalizedCandidate == normalizedChannel
         }
         return candidate.trimmingCharacters(in: .whitespacesAndNewlines) == normalizedChannel
-    }
-
-    private var canRefreshMessageList: Bool {
-        isMainWindowVisible
-    }
-
-    private func flushPendingMessageListRefreshIfNeeded() {
-        guard pendingMessageListRefresh, canRefreshMessageList else { return }
-        messageStoreRevision = UUID()
-        pendingMessageListRefresh = false
     }
 
     private func postGatewayPayload(
