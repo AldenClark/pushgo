@@ -24,6 +24,7 @@ let package = Package(
             ],
             path: "Shared",
             exclude: [
+                "Application/PendingLocalDeletionController.swift",
                 "Services/ChannelSubscriptionSyncStore.swift",
                 "Services/BadgeManager.swift",
                 "Services/NotificationContentPreparer.swift",
@@ -40,6 +41,7 @@ let package = Package(
                 "UI/MessageListViewModel.swift",
                 "UI/MessageSearchViewModel.swift",
                 "UI/PlatformColor.swift",
+                "UI/PendingLocalDeletionBar.swift",
                 "UI/PushGoMarkdownView.swift",
                 "UI/RemoteImageView.swift",
                 "UI/RootView.swift",

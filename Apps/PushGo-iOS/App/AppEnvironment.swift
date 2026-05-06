@@ -42,6 +42,7 @@ final class AppEnvironment {
     private(set) var unreadMessageCount: Int = 0
     private(set) var messageStoreRevision: UUID = UUID()
     private(set) var toastMessage: ToastMessage?
+    @ObservationIgnored let pendingLocalDeletionController = PendingLocalDeletionController()
     var localStoreRecoveryState: LocalStoreRecoveryState? { localStoreRecoveryController.localStoreRecoveryState }
     private(set) var shouldPresentNotificationPermissionAlert: Bool = false
     var pendingMessageToOpen: UUID? {
@@ -373,11 +374,12 @@ final class AppEnvironment {
         try await channelSubscriptionController.renameChannel(channelId: channelId, alias: alias)
     }
 
-    func unsubscribeChannel(channelId: String, deleteLocalMessages: Bool) async throws -> Int {
-        try await channelSubscriptionController.unsubscribeChannel(
-            channelId: channelId,
-            deleteLocalMessages: deleteLocalMessages
-        )
+    func unsubscribeChannel(channelId: String) async throws {
+        try await channelSubscriptionController.unsubscribeChannel(channelId: channelId)
+    }
+
+    func deleteLocalHistoryForChannel(channelId: String) async throws -> Int {
+        try await channelSubscriptionController.deleteLocalHistoryForChannel(channelId: channelId)
     }
 
     func closeEvent(
@@ -1061,6 +1063,9 @@ final class AppEnvironment {
             }
         case .background, .inactive:
             navigationState.setSceneActive(false)
+            Task { @MainActor in
+                await pendingLocalDeletionController.commitCurrentIfNeeded()
+            }
             Task {
                 await dataStore.flushWrites()
             }

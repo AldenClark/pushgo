@@ -2,17 +2,18 @@ import SwiftUI
 
 struct EventDetailScreen: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     private enum ConfirmationKind: String, Identifiable {
-        case delete
         case close
 
         var id: String { rawValue }
     }
 
     let event: EventProjection
-    var onDelete: (() -> Void)? = nil
+    var onCommitDelete: (@MainActor () async throws -> Void)? = nil
+    var onPrepareDelete: (() -> Void)? = nil
     var onCloseEvent: (() -> Void)? = nil
     @State private var activeConfirmation: ConfirmationKind?
 
@@ -27,15 +28,6 @@ struct EventDetailScreen: View {
         .accessibilityIdentifier("screen.events.detail")
         .alert(item: $activeConfirmation) { kind in
             switch kind {
-            case .delete:
-                Alert(
-                    title: Text(localizationManager.localized("are_you_sure_you_want_to_delete_this_message_once_deleted_it_cannot_be_recovered")),
-                    primaryButton: .destructive(Text(localizationManager.localized("delete"))) {
-                        onDelete?()
-                        dismiss()
-                    },
-                    secondaryButton: .cancel(Text(localizationManager.localized("cancel")))
-                )
             case .close:
                 Alert(
                     title: Text("\(localizationManager.localized("close")) \(localizationManager.localized("push_type_event"))?"),
@@ -61,9 +53,9 @@ struct EventDetailScreen: View {
                 .accessibilityLabel(localizationManager.localized("close"))
             }
 
-            if onDelete != nil {
+            if onCommitDelete != nil {
                 Button(role: .destructive) {
-                    activeConfirmation = .delete
+                    Task { await scheduleDeletion() }
                 } label: {
                     Image(systemName: "trash")
                 }
@@ -75,6 +67,34 @@ struct EventDetailScreen: View {
     private var canShowCloseAction: Bool {
         guard onCloseEvent != nil else { return false }
         return eventLifecycleState(from: event.state) != .closed
+    }
+
+    @MainActor
+    private func scheduleDeletion() async {
+        guard let onCommitDelete else { return }
+        let trimmedTitle = event.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let summary = trimmedTitle.isEmpty
+            ? localizationManager.localized("push_type_event")
+            : trimmedTitle
+        await environment.pendingLocalDeletionController.schedule(
+            summary: summary,
+            undoLabel: localizationManager.localized("cancel"),
+            scope: .init(
+                eventIDs: Set([event.id])
+            )
+        ) {
+            try await onCommitDelete()
+        } onCompletion: { [environment] result in
+            guard case let .failure(error) = result else { return }
+            environment.showToast(
+                message: error.localizedDescription,
+                style: .error,
+                duration: 2.5
+            )
+        }
+
+        onPrepareDelete?()
+        dismiss()
     }
 }
 

@@ -13,12 +13,16 @@
 		D1B100000000000000000004 /* LocalStoreRecoveryState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000004 /* LocalStoreRecoveryState.swift */; };
 		D1B100000000000000000005 /* MainTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000005 /* MainTab.swift */; };
 		D1B100000000000000000006 /* NotificationOpenController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000006 /* NotificationOpenController.swift */; };
+		D1B100000000000000000007 /* PendingLocalDeletionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000007 /* PendingLocalDeletionController.swift */; };
+		D1B100000000000000000008 /* PendingLocalDeletionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000008 /* PendingLocalDeletionBar.swift */; };
 		D1C100000000000000000001 /* AppNavigationState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000001 /* AppNavigationState.swift */; };
 		D1C100000000000000000002 /* DataPageVisibilityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000002 /* DataPageVisibilityController.swift */; };
 		D1C100000000000000000003 /* LocalStoreRecoveryController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000003 /* LocalStoreRecoveryController.swift */; };
 		D1C100000000000000000004 /* LocalStoreRecoveryState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000004 /* LocalStoreRecoveryState.swift */; };
 		D1C100000000000000000005 /* MainTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000005 /* MainTab.swift */; };
 		D1C100000000000000000006 /* NotificationOpenController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000006 /* NotificationOpenController.swift */; };
+		D1C100000000000000000007 /* PendingLocalDeletionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000007 /* PendingLocalDeletionController.swift */; };
+		D1C100000000000000000008 /* PendingLocalDeletionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000008 /* PendingLocalDeletionBar.swift */; };
 		02C1C7A566ABB8EBB1B08D92 /* PushMessageSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36B8C43824CA496F9D0EDDC7 /* PushMessageSummary.swift */; };
 		03DC253E48CA6B70EEF1B336 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 3949F99E0D1C96080BD96181 /* Sparkle */; };
 		0637F07C839C0C2D397AB069 /* NotificationServiceProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25CF4B72C6499CEADC594FC9 /* NotificationServiceProcessor.swift */; };
@@ -359,6 +363,8 @@
 		D1A100000000000000000004 /* LocalStoreRecoveryState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/Application/LocalStoreRecoveryState.swift"; sourceTree = SOURCE_ROOT; };
 		D1A100000000000000000005 /* MainTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/Application/MainTab.swift"; sourceTree = SOURCE_ROOT; };
 		D1A100000000000000000006 /* NotificationOpenController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/Application/NotificationOpenController.swift"; sourceTree = SOURCE_ROOT; };
+		D1A100000000000000000007 /* PendingLocalDeletionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/Application/PendingLocalDeletionController.swift"; sourceTree = SOURCE_ROOT; };
+		D1A100000000000000000008 /* PendingLocalDeletionBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/UI/PendingLocalDeletionBar.swift"; sourceTree = SOURCE_ROOT; };
 		0AC200102F90000100C0FFEE /* NotificationContentPreparer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationContentPreparer.swift; sourceTree = "<group>"; };
 		0AC200112F90000100C0FFEE /* WatchNotificationServiceProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchNotificationServiceProcessor.swift; sourceTree = "<group>"; };
 		0AC200122F90000100C0FFEE /* WatchLightNotificationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchLightNotificationStore.swift; sourceTree = "<group>"; };
@@ -676,6 +682,20 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		D1A200000000000000000001 /* Application */ = {
+			isa = PBXGroup;
+			children = (
+				D1A100000000000000000001 /* AppNavigationState.swift */,
+				D1A100000000000000000002 /* DataPageVisibilityController.swift */,
+				D1A100000000000000000003 /* LocalStoreRecoveryController.swift */,
+				D1A100000000000000000004 /* LocalStoreRecoveryState.swift */,
+				D1A100000000000000000005 /* MainTab.swift */,
+				D1A100000000000000000006 /* NotificationOpenController.swift */,
+				D1A100000000000000000007 /* PendingLocalDeletionController.swift */,
+			);
+			path = Application;
+			sourceTree = "<group>";
+		};
 		6043147E6DB742B8BA382131 /* UI */ = {
 			isa = PBXGroup;
 			children = (
@@ -685,6 +705,7 @@
 				85E1D5231456472CB97116B9 /* KeyboardDismiss.swift */,
 				3B3E6B01F1EF4D8FA6446875 /* LiquidGlassEffect.swift */,
 				4D54A0FAE6A44ADDB88F3B98 /* PlatformColor.swift */,
+				D1A100000000000000000008 /* PendingLocalDeletionBar.swift */,
 				4145756AA5A340C3AC329C64 /* PushGoMarkdownView.swift */,
 				2955959BFE8246FEB0B03EDA /* RemoteImageView.swift */,
 				40915CA9B3604BF1991DC27A /* ToastView.swift */,
@@ -811,6 +832,7 @@
 		AA8E2C4D2EF2359D00AD1834 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				D1A200000000000000000001 /* Application */,
 				AA8E2C202EF2359D00AD1834 /* Models */,
 				AA8E2C232EF2359D00AD1834 /* Repositories */,
 				AA8E2C272EF2359D00AD1834 /* Services */,
@@ -1228,6 +1250,8 @@
 				D1B100000000000000000004 /* LocalStoreRecoveryState.swift in Sources */,
 				D1B100000000000000000005 /* MainTab.swift in Sources */,
 				D1B100000000000000000006 /* NotificationOpenController.swift in Sources */,
+				D1B100000000000000000007 /* PendingLocalDeletionController.swift in Sources */,
+				D1B100000000000000000008 /* PendingLocalDeletionBar.swift in Sources */,
 				F1B2C3D4E5F60718293A4B61 /* NotificationIngressInbox.swift in Sources */,
 				F4B2C3D4E5F60718293A4B61 /* ProviderDeliveryAckFailureStore.swift in Sources */,
 				F6B2C3D4E5F60718293A4B61 /* ProviderIngressCoordinator.swift in Sources */,
@@ -1292,6 +1316,8 @@
 				D1C100000000000000000004 /* LocalStoreRecoveryState.swift in Sources */,
 				D1C100000000000000000005 /* MainTab.swift in Sources */,
 				D1C100000000000000000006 /* NotificationOpenController.swift in Sources */,
+				D1C100000000000000000007 /* PendingLocalDeletionController.swift in Sources */,
+				D1C100000000000000000008 /* PendingLocalDeletionBar.swift in Sources */,
 				F1B2C3D4E5F60718293A4B62 /* NotificationIngressInbox.swift in Sources */,
 				F4B2C3D4E5F60718293A4B62 /* ProviderDeliveryAckFailureStore.swift in Sources */,
 				F6B2C3D4E5F60718293A4B62 /* ProviderIngressCoordinator.swift in Sources */,

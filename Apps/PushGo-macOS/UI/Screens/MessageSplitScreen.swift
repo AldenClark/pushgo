@@ -71,6 +71,17 @@ struct MessageSplitScreen: View {
         .onChange(of: openMessageId) { _, _ in
             openPendingMessageIfNeeded()
         }
+        .onChange(of: environment.pendingLocalDeletionController.pendingDeletion) { _, _ in
+            if let selectedMessageSnapshot,
+               isPendingLocalDeletion(selectedMessageSnapshot.id, channelId: selectedMessageSnapshot.channel)
+            {
+                selection = nil
+                self.selectedMessageSnapshot = nil
+            }
+            let visibleIDs = Set((searchViewModel.hasSearched ? visibleSearchResults : visibleFilteredMessages).map(\.id))
+            batchSelection = batchSelection.intersection(visibleIDs)
+            ensureMessagesSelectionIfNeeded()
+        }
     }
 
     @ViewBuilder
@@ -93,6 +104,7 @@ struct MessageSplitScreen: View {
             )
             .navigationTitle(localizationManager.localized("messages"))
         }
+        .pendingLocalDeletionBarHost(environment: environment)
         .toolbar { messageListToolbarContent }
     }
 
@@ -109,7 +121,7 @@ struct MessageSplitScreen: View {
                 MessageDetailScreen(
                     messageId: displayedMessage.id,
                     message: displayedMessage,
-                    onDelete: {
+                    onPrepareDelete: {
                         if selection == displayedMessage.id {
                             selection = nil
                         }
@@ -117,6 +129,8 @@ struct MessageSplitScreen: View {
                     },
                     shouldDismissOnDelete: false,
                     useNavigationContainer: false,
+                    showsDeleteToolbarAction: false,
+                    showsPendingDeletionBar: false,
                 )
                 .id(displayedMessage.id)
             } else if let messageId = selection {
@@ -164,8 +178,8 @@ struct MessageSplitScreen: View {
     private func ensureMessagesSelectionIfNeeded() {
         guard let selection else { return }
 
-        let existsInMessages = messageListViewModel.filteredMessages.contains(where: { $0.id == selection })
-        let existsInSearch = searchViewModel.displayedResults.contains(where: { $0.id == selection })
+        let existsInMessages = visibleFilteredMessages.contains(where: { $0.id == selection })
+        let existsInSearch = visibleSearchResults.contains(where: { $0.id == selection })
 
         if pendingNotificationSelectionId == selection {
             if existsInMessages || existsInSearch {
@@ -257,9 +271,9 @@ struct MessageSplitScreen: View {
 
     private func currentMessageSelectionOrder() -> [UUID] {
         if searchViewModel.hasSearched {
-            return searchViewModel.displayedResults.map(\.id)
+            return visibleSearchResults.map(\.id)
         }
-        return messageListViewModel.filteredMessages.map(\.id)
+        return visibleFilteredMessages.map(\.id)
     }
 
     private func prefetchNeighborMessages(around messageId: UUID) async {
@@ -284,38 +298,72 @@ struct MessageSplitScreen: View {
         }
     }
 
-    private func deleteSelectedMessage() {
-        guard let message = selectedMessageSnapshot else { return }
-        guard message.id == selection else { return }
-        Task {
-            await messageListViewModel.delete(PushMessageSummary(message: message))
-            await MainActor.run {
-                selection = nil
-                selectedMessageSnapshot = nil
-                ensureMessagesSelectionIfNeeded()
-            }
-        }
+    private var visibleFilteredMessages: [PushMessageSummary] {
+        messageListViewModel.filteredMessages.filter { !isPendingLocalDeletion($0.id, channelId: $0.channel) }
     }
 
-    private func deleteSelectedMessages() {
-        let ids = Array(batchSelection)
-        guard !ids.isEmpty else { return }
-        Task {
-            for messageId in ids {
-                try? await environment.messageStateCoordinator.deleteMessage(messageId: messageId)
+    private var visibleSearchResults: [PushMessageSummary] {
+        searchViewModel.displayedResults.filter { !isPendingLocalDeletion($0.id, channelId: $0.channel) }
+    }
+
+    private func isPendingLocalDeletion(_ messageId: UUID, channelId: String?) -> Bool {
+        environment.pendingLocalDeletionController.suppressesMessage(id: messageId, channelId: channelId)
+    }
+
+    @MainActor
+    private func scheduleDeletion(for messages: [PushMessageSummary]) async {
+        let uniqueMessages = Array(
+            Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) }).values
+        )
+        guard !uniqueMessages.isEmpty else { return }
+
+        let summary: String = {
+            if uniqueMessages.count == 1,
+               let first = uniqueMessages.first
+            {
+                let title = first.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                return title.isEmpty ? localizationManager.localized("tab_messages") : title
             }
-            await MainActor.run {
-                batchSelection.removeAll()
-                setBatchMode(false)
+            return "\(uniqueMessages.count) × \(localizationManager.localized("tab_messages"))"
+        }()
+
+        let scope = PendingLocalDeletionController.Scope(
+            messageIDs: Set(uniqueMessages.map(\.id))
+        )
+
+        await environment.pendingLocalDeletionController.schedule(
+            summary: summary,
+            undoLabel: localizationManager.localized("cancel"),
+            scope: scope
+        ) { [environment] in
+            for message in uniqueMessages {
+                try await environment.messageStateCoordinator.deleteMessage(messageId: message.id)
             }
-            await refreshMessagesIfNeeded()
+        } onCompletion: { [environment] result in
+            guard case let .failure(error) = result else { return }
+            environment.showToast(
+                message: error.localizedDescription,
+                style: .error,
+                duration: 2.5
+            )
+        }
+
+        if let selectedMessageSnapshot,
+           scope.suppressesMessage(id: selectedMessageSnapshot.id, channelId: selectedMessageSnapshot.channel)
+        {
+            selection = nil
+            self.selectedMessageSnapshot = nil
+        }
+        batchSelection.subtract(scope.messageIDs)
+        if uniqueMessages.count > 1 {
+            setBatchMode(false)
         }
     }
 
     private var selectedBatchMessageSummaries: [PushMessageSummary] {
         let source: [PushMessageSummary] = searchViewModel.hasSearched
-            ? searchViewModel.displayedResults
-            : messageListViewModel.filteredMessages
+            ? visibleSearchResults
+            : visibleFilteredMessages
         return source.filter { batchSelection.contains($0.id) }
     }
 
@@ -368,7 +416,7 @@ struct MessageSplitScreen: View {
                 .disabled(selectedBatchUnreadMessages.isEmpty)
 
                 Button(role: .destructive) {
-                    deleteSelectedMessages()
+                    Task { await scheduleDeletion(for: selectedBatchMessageSummaries) }
                 } label: {
                     Image(systemName: "trash")
                 }
@@ -400,7 +448,9 @@ struct MessageSplitScreen: View {
     private var messageDetailToolbarContent: some ToolbarContent {
         ToolbarItem(placement: .secondaryAction) {
             Button(role: .destructive) {
-                deleteSelectedMessage()
+                if let message = selectedMessageSnapshot, message.id == selection {
+                    Task { await scheduleDeletion(for: [PushMessageSummary(message: message)]) }
+                }
             } label: {
                 Image(systemName: "trash")
             }

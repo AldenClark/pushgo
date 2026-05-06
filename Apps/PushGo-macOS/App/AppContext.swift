@@ -118,6 +118,7 @@ private struct ToastOverlayModifier: ViewModifier {
         var body: some View {
             ZStack(alignment: .bottom) {
                 content
+
                 if let toast = environment.toastMessage {
                     Button {
                         environment.dismissToast(id: toast.id)
@@ -129,7 +130,6 @@ private struct ToastOverlayModifier: ViewModifier {
                     .padding(.horizontal, 24)
                     .frame(maxWidth: .infinity)
                     .padding(.bottom, toastBottomPadding)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(999)
                 }
             }

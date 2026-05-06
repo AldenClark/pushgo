@@ -128,17 +128,35 @@ private struct ToastOverlayModifier: ViewModifier {
                     .accessibilityLabel(LocalizedStringKey("close"))
                     .padding(.horizontal, 24)
                     .frame(maxWidth: .infinity)
-                    .padding(.bottom, toastBottomPadding)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .padding(
+                        .bottom,
+                        toastBottomPadding
+                            + (environment.pendingLocalDeletionController.pendingDeletion == nil ? 0 : 52)
+                    )
                     .zIndex(999)
+                }
+
+                if environment.pendingLocalDeletionController.pendingDeletion != nil {
+                    PendingLocalDeletionBar(
+                        controller: environment.pendingLocalDeletionController
+                    )
+                    .padding(.horizontal, 12)
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, pendingDeletionBottomPadding)
+                    .zIndex(1000)
                 }
             }
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: environment.toastMessage)
+            .animation(
+                reduceMotion ? nil : .easeInOut(duration: 0.25),
+                value: environment.pendingLocalDeletionController.pendingDeletion
+            )
         }
     }
 }
 
-private let toastBottomPadding: CGFloat = 200
+private let toastBottomPadding: CGFloat = 112
+private let pendingDeletionBottomPadding: CGFloat = 54
 
 private struct BootstrapTaskModifier: ViewModifier {
     let perform: Bool

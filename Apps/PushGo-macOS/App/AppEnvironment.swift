@@ -52,6 +52,7 @@ final class AppEnvironment {
     private(set) var unreadMessageCount: Int = 0
     private(set) var messageStoreRevision: UUID = UUID()
     private(set) var toastMessage: ToastMessage?
+    @ObservationIgnored let pendingLocalDeletionController = PendingLocalDeletionController()
     var localStoreRecoveryState: LocalStoreRecoveryState? { localStoreRecoveryController.localStoreRecoveryState }
     private(set) var shouldPresentNotificationPermissionAlert: Bool = false
     var pendingMessageToOpen: UUID? {
@@ -1213,7 +1214,7 @@ final class AppEnvironment {
         await refreshChannelSubscriptions()
     }
 
-    func unsubscribeChannel(channelId: String, deleteLocalMessages: Bool) async throws -> Int {
+    func unsubscribeChannel(channelId: String) async throws {
         guard let config = serverConfig else { throw AppError.noServer }
         let gatewayKey = config.gatewayKey
         let normalized = try ChannelIdValidator.normalize(channelId)
@@ -1230,8 +1231,10 @@ final class AppEnvironment {
         try await dataStore.softDeleteChannelSubscription(gateway: gatewayKey, channelId: normalized)
         await refreshChannelSubscriptions()
         await syncPrivateChannelState()
+    }
 
-        guard deleteLocalMessages else { return 0 }
+    func deleteLocalHistoryForChannel(channelId: String) async throws -> Int {
+        let normalized = try ChannelIdValidator.normalize(channelId)
         let eventImageURLs = try await dataStore
             .loadEventMessagesForProjection()
             .filter { channelMatches($0.channel, normalizedChannel: normalized) }
@@ -1386,6 +1389,9 @@ final class AppEnvironment {
             }
         case .background, .inactive:
             navigationState.setSceneActive(false)
+            Task { @MainActor in
+                await pendingLocalDeletionController.commitCurrentIfNeeded()
+            }
             Task {
                 await dataStore.flushWrites()
             }

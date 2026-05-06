@@ -11,7 +11,6 @@ struct MessageListScreen: View {
     @State private var selectedMessage: PushMessageSummary?
     @State private var selectedMessageIDs: Set<UUID> = []
     @State private var isBatchModeActive = false
-    @State private var showBatchDeleteConfirmation = false
     private let onSelect: ((PushMessageSummary) -> Void)?
     private let autoSelectFirstMessage: Bool
     private let useNavigationContainer: Bool
@@ -93,6 +92,13 @@ struct MessageListScreen: View {
                     openPendingMessageIfNeeded()
                 }
             }
+            .onChange(of: environment.pendingLocalDeletionController.pendingDeletion) { _, _ in
+                if let selectedMessage, isPendingLocalDeletion(selectedMessage) {
+                    self.selectedMessage = nil
+                }
+                let visibleIDs = Set(displayedMessages.map(\.id))
+                selectedMessageIDs = selectedMessageIDs.intersection(visibleIDs)
+            }
     }
 
     @ViewBuilder
@@ -133,17 +139,6 @@ struct MessageListScreen: View {
             }
             .toolbar { toolbarContent }
             .toolbar(isBatchMode ? .hidden : .visible, for: .tabBar)
-            .alert(
-                localizationManager.localized("delete"),
-                isPresented: $showBatchDeleteConfirmation,
-            ) {
-                Button(localizationManager.localized("delete"), role: .destructive) {
-                    Task { await deleteSelectedMessages() }
-                }
-                Button(localizationManager.localized("cancel"), role: .cancel) {}
-            } message: {
-                Text(localizationManager.localized("batch_delete_selected_messages_confirm", selectedMessageIDs.count))
-            }
 
         if onSelect == nil {
             baseContent
@@ -195,7 +190,7 @@ struct MessageListScreen: View {
     private var hasMessages: Bool { viewModel.totalMessageCount > 0 }
 
     private var showsEmptyState: Bool {
-        viewModel.filteredMessages.isEmpty && !isShowingSearchResults
+        visibleFilteredMessages.isEmpty && !isShowingSearchResults
     }
 
     private var showsUnreadFilterEmptyState: Bool {
@@ -204,9 +199,9 @@ struct MessageListScreen: View {
 
     private var hasVisibleMessageRows: Bool {
         if isShowingSearchResults {
-            return !searchViewModel.displayedResults.isEmpty
+            return !visibleSearchResults.isEmpty
         }
-        return !viewModel.filteredMessages.isEmpty
+        return !visibleFilteredMessages.isEmpty
     }
 
     private var displayedChannelSummaries: [MessageChannelSummary] {
@@ -233,12 +228,12 @@ struct MessageListScreen: View {
         ScrollViewReader { proxy in
             List(selection: batchSelectionBinding) {
                 if isShowingSearchResults {
-                    if searchViewModel.displayedResults.isEmpty {
+                    if visibleSearchResults.isEmpty {
                         searchPlaceholderRow
                     } else {
                         Section {
-                            ForEach(searchViewModel.displayedResults.indices, id: \.self) { index in
-                                let message = searchViewModel.displayedResults[index]
+                            ForEach(visibleSearchResults.indices, id: \.self) { index in
+                                let message = visibleSearchResults[index]
                                 messageRow(for: message, at: index)
                                 .tag(message.id)
                                 .onAppear {
@@ -251,7 +246,7 @@ struct MessageListScreen: View {
                                 )
                                 .modifier(
                                     BottomSeparatorModifier(
-                                        hide: index == searchViewModel.displayedResults.count - 1,
+                                        hide: index == visibleSearchResults.count - 1,
                                     ),
                                 )
                             }
@@ -270,8 +265,8 @@ struct MessageListScreen: View {
                     if shouldShowUnreadFilterRefreshHint {
                         unreadFilterRefreshHintRow
                     }
-                    ForEach(viewModel.filteredMessages.indices, id: \.self) { index in
-                        let message = viewModel.filteredMessages[index]
+                    ForEach(visibleFilteredMessages.indices, id: \.self) { index in
+                        let message = visibleFilteredMessages[index]
                         messageRow(for: message, at: index)
                             .tag(message.id)
                             .id(message.id)
@@ -282,7 +277,7 @@ struct MessageListScreen: View {
                             )
                             .modifier(
                                 BottomSeparatorModifier(
-                                    hide: index == viewModel.filteredMessages.count - 1,
+                                    hide: index == visibleFilteredMessages.count - 1,
                                 ),
                             )
                             .onAppear {
@@ -379,7 +374,7 @@ struct MessageListScreen: View {
 
     private func deleteAction(for message: PushMessageSummary) -> some View {
         Button(role: .destructive) {
-            Task { await viewModel.delete(message) }
+            Task { await scheduleDeletion(for: [message]) }
         } label: {
             Label(localizationManager.localized("delete"), systemImage: "trash")
         }
@@ -590,7 +585,7 @@ private extension MessageListScreen {
                 Spacer()
 
                 Button(role: .destructive) {
-                    showBatchDeleteConfirmation = true
+                    Task { await scheduleDeletion(for: selectedBatchMessages) }
                 } label: {
                     Image(systemName: "trash")
                 }
@@ -616,6 +611,13 @@ private extension MessageListScreen {
         guard !selectedIds.isEmpty else { return [] }
         let currentMessages = isShowingSearchResults ? searchViewModel.displayedResults : viewModel.filteredMessages
         return currentMessages.filter { selectedIds.contains($0.id) && !$0.isRead }
+    }
+
+    private var selectedBatchMessages: [PushMessageSummary] {
+        let selectedIds = selectedMessageIDs
+        guard !selectedIds.isEmpty else { return [] }
+        let currentMessages = isShowingSearchResults ? searchViewModel.displayedResults : viewModel.filteredMessages
+        return currentMessages.filter { selectedIds.contains($0.id) }
     }
 
     @ViewBuilder
@@ -662,7 +664,7 @@ private extension MessageListScreen {
         Task { @MainActor in
             let maxAttempts = 20
             for attempt in 0..<maxAttempts {
-                if let summary = viewModel.filteredMessages.first(where: { $0.id == targetId }) {
+                if let summary = visibleFilteredMessages.first(where: { $0.id == targetId }) {
                     handleSelect(summary)
                     pendingScrollTarget = targetId
                     environment.pendingMessageToOpen = nil
@@ -685,7 +687,7 @@ private extension MessageListScreen {
 
     private func scrollToPendingMessageIfNeeded(_ proxy: ScrollViewProxy) {
         guard let targetId = pendingScrollTarget else { return }
-        guard viewModel.filteredMessages.contains(where: { $0.id == targetId }) else { return }
+        guard displayedMessages.contains(where: { $0.id == targetId }) else { return }
         scroll(proxy, to: targetId, anchor: .center)
         pendingScrollTarget = nil
     }
@@ -702,9 +704,9 @@ private extension MessageListScreen {
 
     private var displayedMessages: [PushMessageSummary] {
         if isShowingSearchResults {
-            return searchViewModel.displayedResults
+            return visibleSearchResults
         }
-        return viewModel.filteredMessages
+        return visibleFilteredMessages
     }
 
     private func scroll(_ proxy: ScrollViewProxy, to targetId: UUID, anchor: UnitPoint) {
@@ -721,22 +723,10 @@ private extension MessageListScreen {
         guard !isBatchMode else { return }
         guard autoSelectFirstMessage, let onSelect else { return }
         guard !isShowingSearchResults else { return }
-        guard let first = viewModel.filteredMessages.first else { return }
+        guard let first = visibleFilteredMessages.first else { return }
         guard lastAutoSelectedMessageId != first.id else { return }
         lastAutoSelectedMessageId = first.id
         onSelect(first)
-    }
-
-    private func deleteSelectedMessages() async {
-        let ids = selectedMessageIDs
-        guard !ids.isEmpty else { return }
-        for messageId in ids {
-            try? await environment.messageStateCoordinator.deleteMessage(messageId: messageId)
-        }
-        selectedMessageIDs.removeAll()
-        await viewModel.refresh()
-        searchViewModel.refreshMessagesIfNeeded()
-        isBatchModeActive = false
     }
 
     private func markSelectedMessagesAsRead() async {
@@ -771,5 +761,67 @@ private extension MessageListScreen {
 
     private var shouldShowUnreadFilterRefreshHint: Bool {
         !isShowingSearchResults && viewModel.shouldShowUnreadSessionRefreshHint
+    }
+
+    private var visibleFilteredMessages: [PushMessageSummary] {
+        viewModel.filteredMessages.filter { !isPendingLocalDeletion($0) }
+    }
+
+    private var visibleSearchResults: [PushMessageSummary] {
+        searchViewModel.displayedResults.filter { !isPendingLocalDeletion($0) }
+    }
+
+    private func isPendingLocalDeletion(_ message: PushMessageSummary) -> Bool {
+        environment.pendingLocalDeletionController.suppressesMessage(
+            id: message.id,
+            channelId: message.channel
+        )
+    }
+
+    @MainActor
+    private func scheduleDeletion(for messages: [PushMessageSummary]) async {
+        let uniqueMessages = Array(
+            Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) }).values
+        )
+        guard !uniqueMessages.isEmpty else { return }
+
+        let summary: String = {
+            if uniqueMessages.count == 1,
+               let first = uniqueMessages.first
+            {
+                let title = first.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                return title.isEmpty ? localizationManager.localized("tab_messages") : title
+            }
+            return "\(uniqueMessages.count) × \(localizationManager.localized("tab_messages"))"
+        }()
+
+        let scope = PendingLocalDeletionController.Scope(
+            messageIDs: Set(uniqueMessages.map(\.id))
+        )
+
+        await environment.pendingLocalDeletionController.schedule(
+            summary: summary,
+            undoLabel: localizationManager.localized("cancel"),
+            scope: scope
+        ) { [environment] in
+            for message in uniqueMessages {
+                try await environment.messageStateCoordinator.deleteMessage(messageId: message.id)
+            }
+        } onCompletion: { [environment] result in
+            guard case let .failure(error) = result else { return }
+            environment.showToast(
+                message: error.localizedDescription,
+                style: .error,
+                duration: 2.5
+            )
+        }
+
+        if let selectedMessage, scope.suppressesMessage(id: selectedMessage.id, channelId: selectedMessage.channel) {
+            self.selectedMessage = nil
+        }
+        selectedMessageIDs.subtract(scope.messageIDs)
+        if messages.count > 1 {
+            isBatchModeActive = false
+        }
     }
 }

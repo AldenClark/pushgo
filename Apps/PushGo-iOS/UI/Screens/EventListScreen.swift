@@ -16,7 +16,6 @@ struct EventListScreen: View {
     var onOpenEventHandled: (() -> Void)? = nil
     @State private var selectedEvent: EventProjection?
     @State private var selectedEventIds: Set<String> = []
-    @State private var showBatchDeleteConfirmation = false
     @State private var searchQuery: String = ""
     @State private var selectedChannelId: String?
     @State private var isBatchModeActive = false
@@ -36,17 +35,6 @@ struct EventListScreen: View {
         .navigationBarTitleDisplayMode(.large)
         .toolbar { toolbarContent }
         .toolbar(isBatchMode ? .hidden : .visible, for: .tabBar)
-        .alert(
-            localizationManager.localized("delete"),
-            isPresented: $showBatchDeleteConfirmation,
-        ) {
-            Button(localizationManager.localized("delete"), role: .destructive) {
-                Task { await deleteSelectedEvents() }
-            }
-            Button(localizationManager.localized("cancel"), role: .cancel) {}
-        } message: {
-            Text(localizationManager.localized("batch_delete_selected_events_confirm", selectedEventIds.count))
-        }
         .onAppear {
             environment.updateEventListPosition(isAtTop: true)
             openEventIfNeeded()
@@ -80,11 +68,21 @@ struct EventListScreen: View {
                 openEventIfNeeded()
             }
         }
+        .onChange(of: environment.pendingLocalDeletionController.pendingDeletion) { _, _ in
+            if let selectedEvent, isPendingLocalDeletion(selectedEvent) {
+                self.selectedEvent = nil
+            }
+            let visibleIDs = Set(filteredEvents.map(\.id))
+            selectedEventIds = selectedEventIds.intersection(visibleIDs)
+        }
         .sheet(item: $selectedEvent) { event in
             EventDetailScreen(
                 event: event,
-                onDelete: {
-                    Task { await deleteEvent(eventId: event.id) }
+                onCommitDelete: {
+                    try await viewModel.deleteEvent(eventId: event.id)
+                },
+                onPrepareDelete: {
+                    selectedEvent = nil
                 },
                 onCloseEvent: {
                     Task { await closeEvent(event: event) }
@@ -234,6 +232,7 @@ struct EventListScreen: View {
     private var filteredEvents: [EventProjection] {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let matched = viewModel.events.filter { event in
+            guard !isPendingLocalDeletion(event) else { return false }
             let channelMatched = selectedChannelId == nil || normalizedChannel(event.channelId) == selectedChannelId
             guard channelMatched else { return false }
             guard !query.isEmpty else { return true }
@@ -343,7 +342,7 @@ struct EventListScreen: View {
             ToolbarItemGroup(placement: .bottomBar) {
                 Spacer()
                 Button(role: .destructive) {
-                    showBatchDeleteConfirmation = true
+                    Task { await scheduleDeletion(for: selectedBatchEvents) }
                 } label: {
                     Image(systemName: "trash")
                 }
@@ -415,19 +414,6 @@ struct EventListScreen: View {
         }
     }
 
-    private func deleteEvent(eventId: String) async {
-        do {
-            try await viewModel.deleteEvent(eventId: eventId)
-            selectedEvent = nil
-        } catch {
-            environment.showToast(
-                message: "\(localizationManager.localized("operation_failed")): \(error.localizedDescription)",
-                style: .error,
-                duration: 2
-            )
-        }
-    }
-
     private func closeEvent(event: EventProjection) async {
         do {
             try await viewModel.closeEvent(event: event)
@@ -441,19 +427,65 @@ struct EventListScreen: View {
         }
     }
 
-    private func deleteSelectedEvents() async {
-        let ids = Array(selectedEventIds)
-        guard !ids.isEmpty else { return }
-        do {
-            _ = try await viewModel.deleteEvents(eventIds: ids)
-            selectedEventIds.removeAll()
-            isBatchModeActive = false
-        } catch {
+    private var selectedBatchEvents: [EventProjection] {
+        let selectedIds = selectedEventIds
+        guard !selectedIds.isEmpty else { return [] }
+        return filteredEvents.filter { selectedIds.contains($0.id) }
+    }
+
+    private func isPendingLocalDeletion(_ event: EventProjection) -> Bool {
+        environment.pendingLocalDeletionController.suppressesEvent(
+            id: event.id,
+            channelId: event.channelId
+        )
+    }
+
+    @MainActor
+    private func scheduleDeletion(for events: [EventProjection]) async {
+        let uniqueEvents = Array(
+            Dictionary(uniqueKeysWithValues: events.map { ($0.id, $0) }).values
+        )
+        guard !uniqueEvents.isEmpty else { return }
+
+        let summary: String = {
+            if uniqueEvents.count == 1,
+               let first = uniqueEvents.first
+            {
+                let title = first.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                return title.isEmpty ? localizationManager.localized("push_type_event") : title
+            }
+            return "\(uniqueEvents.count) × \(localizationManager.localized("push_type_event"))"
+        }()
+
+        let scope = PendingLocalDeletionController.Scope(
+            eventIDs: Set(uniqueEvents.map(\.id))
+        )
+
+        await environment.pendingLocalDeletionController.schedule(
+            summary: summary,
+            undoLabel: localizationManager.localized("cancel"),
+            scope: scope
+        ) {
+            if uniqueEvents.count == 1, let event = uniqueEvents.first {
+                try await viewModel.deleteEvent(eventId: event.id)
+            } else {
+                _ = try await viewModel.deleteEvents(eventIds: uniqueEvents.map(\.id))
+            }
+        } onCompletion: { [environment, localizationManager] result in
+            guard case let .failure(error) = result else { return }
             environment.showToast(
                 message: "\(localizationManager.localized("operation_failed")): \(error.localizedDescription)",
                 style: .error,
                 duration: 2
             )
+        }
+
+        if let selectedEvent, scope.suppressesEvent(id: selectedEvent.id, channelId: selectedEvent.channelId) {
+            self.selectedEvent = nil
+        }
+        selectedEventIds.subtract(scope.eventIDs)
+        if uniqueEvents.count > 1 {
+            isBatchModeActive = false
         }
     }
 

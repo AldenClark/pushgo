@@ -81,7 +81,7 @@ final class ChannelSubscriptionController {
         await channelSyncController.refreshChannelSubscriptions()
     }
 
-    func unsubscribeChannel(channelId: String, deleteLocalMessages: Bool) async throws -> Int {
+    func unsubscribeChannel(channelId: String) async throws {
         guard let config = serverConfigProvider() else { throw AppError.noServer }
         let gatewayKey = config.gatewayKey
         let normalized = try ChannelIdValidator.normalize(channelId)
@@ -100,8 +100,10 @@ final class ChannelSubscriptionController {
 
         try await dataStore.softDeleteChannelSubscription(gateway: gatewayKey, channelId: normalized)
         await channelSyncController.refreshChannelSubscriptions()
+    }
 
-        guard deleteLocalMessages else { return 0 }
+    func deleteLocalHistoryForChannel(channelId: String) async throws -> Int {
+        let normalized = try ChannelIdValidator.normalize(channelId)
         let eventImageURLs = try await dataStore
             .loadEventMessagesForProjection()
             .filter { Self.channelMatches($0.channel, normalizedChannel: normalized) }

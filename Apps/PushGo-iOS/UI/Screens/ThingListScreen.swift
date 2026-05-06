@@ -16,7 +16,6 @@ struct ThingListScreen: View {
     var onOpenThingHandled: (() -> Void)? = nil
     @State private var selectedThing: ThingProjection?
     @State private var selectedThingIds: Set<String> = []
-    @State private var showBatchDeleteConfirmation = false
     @State private var searchQuery: String = ""
     @State private var selectedChannelId: String?
     @State private var isBatchModeActive = false
@@ -36,17 +35,6 @@ struct ThingListScreen: View {
         .navigationBarTitleDisplayMode(.large)
         .toolbar { toolbarContent }
         .toolbar(isBatchMode ? .hidden : .visible, for: .tabBar)
-        .alert(
-            localizationManager.localized("delete"),
-            isPresented: $showBatchDeleteConfirmation,
-        ) {
-            Button(localizationManager.localized("delete"), role: .destructive) {
-                Task { await deleteSelectedThings() }
-            }
-            Button(localizationManager.localized("cancel"), role: .cancel) {}
-        } message: {
-            Text(localizationManager.localized("batch_delete_selected_things_confirm", selectedThingIds.count))
-        }
         .onAppear {
             environment.updateThingListPosition(isAtTop: true)
             openThingIfNeeded()
@@ -80,10 +68,23 @@ struct ThingListScreen: View {
                 openThingIfNeeded()
             }
         }
-        .sheet(item: $selectedThing) { thing in
-            ThingDetailScreen(thing: thing) {
-                Task { await deleteThing(thingId: thing.id) }
+        .onChange(of: environment.pendingLocalDeletionController.pendingDeletion) { _, _ in
+            if let selectedThing, isPendingLocalDeletion(selectedThing) {
+                self.selectedThing = nil
             }
+            let visibleIDs = Set(filteredThings.map(\.id))
+            selectedThingIds = selectedThingIds.intersection(visibleIDs)
+        }
+        .sheet(item: $selectedThing) { thing in
+            ThingDetailScreen(
+                thing: thing,
+                onCommitDelete: {
+                    try await viewModel.deleteThing(thingId: thing.id)
+                },
+                onPrepareDelete: {
+                    selectedThing = nil
+                }
+            )
             .accessibilityIdentifier("sheet.thing.detail")
         }
         content
@@ -228,6 +229,7 @@ struct ThingListScreen: View {
     private var filteredThings: [ThingProjection] {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let matched = viewModel.things.filter { thing in
+            guard !isPendingLocalDeletion(thing) else { return false }
             let channelMatched = selectedChannelId == nil || normalizedChannel(thing.channelId) == selectedChannelId
             guard channelMatched else { return false }
             guard !query.isEmpty else { return true }
@@ -335,7 +337,7 @@ struct ThingListScreen: View {
             ToolbarItemGroup(placement: .bottomBar) {
                 Spacer()
                 Button(role: .destructive) {
-                    showBatchDeleteConfirmation = true
+                    Task { await scheduleDeletion(for: selectedBatchThings) }
                 } label: {
                     Image(systemName: "trash")
                 }
@@ -407,34 +409,63 @@ struct ThingListScreen: View {
         }
     }
 
-    private func deleteThing(thingId: String) async {
-        do {
-            try await viewModel.deleteThing(thingId: thingId)
-            selectedThing = nil
-        } catch {
+    private var selectedBatchThings: [ThingProjection] {
+        let selectedIds = selectedThingIds
+        guard !selectedIds.isEmpty else { return [] }
+        return filteredThings.filter { selectedIds.contains($0.id) }
+    }
+
+    private func isPendingLocalDeletion(_ thing: ThingProjection) -> Bool {
+        environment.pendingLocalDeletionController.suppressesThing(
+            id: thing.id,
+            channelId: thing.channelId
+        )
+    }
+
+    @MainActor
+    private func scheduleDeletion(for things: [ThingProjection]) async {
+        let uniqueThings = Array(
+            Dictionary(uniqueKeysWithValues: things.map { ($0.id, $0) }).values
+        )
+        guard !uniqueThings.isEmpty else { return }
+
+        let summary: String = {
+            if uniqueThings.count == 1,
+               let first = uniqueThings.first
+            {
+                let title = first.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                return title.isEmpty ? localizationManager.localized("push_type_thing") : title
+            }
+            return "\(uniqueThings.count) × \(localizationManager.localized("push_type_thing"))"
+        }()
+
+        let scope = PendingLocalDeletionController.Scope(
+            thingIDs: Set(uniqueThings.map(\.id))
+        )
+
+        await environment.pendingLocalDeletionController.schedule(
+            summary: summary,
+            undoLabel: localizationManager.localized("cancel"),
+            scope: scope
+        ) {
+            for thing in uniqueThings {
+                try await viewModel.deleteThing(thingId: thing.id)
+            }
+        } onCompletion: { [environment, localizationManager] result in
+            guard case let .failure(error) = result else { return }
             environment.showToast(
                 message: "\(localizationManager.localized("operation_failed")): \(error.localizedDescription)",
                 style: .error,
                 duration: 2
             )
         }
-    }
 
-    private func deleteSelectedThings() async {
-        let ids = Array(selectedThingIds)
-        guard !ids.isEmpty else { return }
-        do {
-            for thingId in ids {
-                try await viewModel.deleteThing(thingId: thingId)
-            }
-            selectedThingIds.removeAll()
+        if let selectedThing, scope.suppressesThing(id: selectedThing.id, channelId: selectedThing.channelId) {
+            self.selectedThing = nil
+        }
+        selectedThingIds.subtract(scope.thingIDs)
+        if uniqueThings.count > 1 {
             isBatchModeActive = false
-        } catch {
-            environment.showToast(
-                message: "\(localizationManager.localized("operation_failed")): \(error.localizedDescription)",
-                style: .error,
-                duration: 2
-            )
         }
     }
 

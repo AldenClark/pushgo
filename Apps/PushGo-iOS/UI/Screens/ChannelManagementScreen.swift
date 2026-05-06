@@ -507,15 +507,28 @@ struct ChannelManagementScreen: View {
         pendingRename = nil
 
         do {
-            let removedCount = try await environment.unsubscribeChannel(
-                channelId: subscription.channelId,
-                deleteLocalMessages: deleteHistory
-            )
+            try await environment.unsubscribeChannel(channelId: subscription.channelId)
             if deleteHistory {
+                let summary = channelDeletionSummary(for: subscription)
+                let channelId = subscription.channelId
+                await environment.pendingLocalDeletionController.schedule(
+                    summary: summary,
+                    undoLabel: localizationManager.localized("cancel"),
+                    scope: .init(channelIDs: Set([channelId]))
+                ) {
+                    _ = try await environment.deleteLocalHistoryForChannel(channelId: channelId)
+                } onCompletion: { [environment, localizationManager] result in
+                    guard case let .failure(error) = result else { return }
+                    environment.showToast(
+                        message: "\(localizationManager.localized("operation_failed")): \(error.localizedDescription)",
+                        style: .error,
+                        duration: 2.5
+                    )
+                }
                 environment.showToast(
-                    message: localizationManager.localized("channel_unsubscribed_and_deleted", removedCount),
+                    message: localizationManager.localized("channel_unsubscribed"),
                     style: .success,
-                    duration: 1.8
+                    duration: 1.5
                 )
             } else {
                 environment.showToast(
@@ -532,6 +545,14 @@ struct ChannelManagementScreen: View {
                 duration: 2.5
             )
         }
+    }
+
+    private func channelDeletionSummary(for subscription: ChannelSubscription) -> String {
+        let displayName = subscription.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !displayName.isEmpty {
+            return displayName
+        }
+        return subscription.channelId.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     @MainActor

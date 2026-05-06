@@ -9,12 +9,12 @@ struct MessageDetailScreen: View {
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @State private var viewModel: MessageDetailViewModel
-    @State private var showDeleteConfirmation = false
     @State private var isShowingRuntimeAlert = false
     @State private var previewingImage: ImagePreview?
     @State private var isTextSelectionEnabled = true
     @State private var didLoad: Bool = false
-    private let onDelete: (() -> Void)?
+    private let onCommitDelete: (@MainActor () async throws -> Void)?
+    private let onPrepareDelete: (() -> Void)?
     private let shouldDismissOnDelete: Bool
     private let useNavigationContainer: Bool
 
@@ -28,7 +28,8 @@ struct MessageDetailScreen: View {
     init(
         messageId: UUID,
         message: PushMessage? = nil,
-        onDelete: (() -> Void)? = nil,
+        onCommitDelete: (@MainActor () async throws -> Void)? = nil,
+        onPrepareDelete: (() -> Void)? = nil,
         shouldDismissOnDelete: Bool = true,
         useNavigationContainer: Bool = true,
     ) {
@@ -36,7 +37,8 @@ struct MessageDetailScreen: View {
             messageId: messageId,
             initialMessage: message,
         ))
-        self.onDelete = onDelete
+        self.onCommitDelete = onCommitDelete
+        self.onPrepareDelete = onPrepareDelete
         self.shouldDismissOnDelete = shouldDismissOnDelete
         self.useNavigationContainer = useNavigationContainer
     }
@@ -183,23 +185,6 @@ struct MessageDetailScreen: View {
                 .contentShape(Rectangle())
             }
         }
-            .alert(isPresented: $showDeleteConfirmation) {
-                Alert(
-                    title: Text(localizationManager.localized(
-                        "are_you_sure_you_want_to_delete_this_message_once_deleted_it_cannot_be_recovered"
-                )),
-                primaryButton: .destructive(Text(localizationManager.localized("delete"))) {
-                    Task {
-                        await viewModel.deleteMessage()
-                        onDelete?()
-                        if shouldDismissOnDelete {
-                            dismiss()
-                        }
-                    }
-                },
-                secondaryButton: .cancel(Text(localizationManager.localized("cancel")))
-                )
-            }
         } else {
             if viewModel.isLoading {
                 ProgressView()
@@ -368,8 +353,8 @@ struct MessageDetailScreen: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
             Button(role: .destructive) {
-                if viewModel.message != nil {
-                    showDeleteConfirmation = true
+                if let message = viewModel.message {
+                    Task { await scheduleDeletion(for: message) }
                 }
             } label: {
                 Image(systemName: "trash")
@@ -377,6 +362,38 @@ struct MessageDetailScreen: View {
             .disabled(viewModel.message == nil)
             .accessibilityIdentifier("action.message.delete")
             .accessibilityLabel(localizationManager.localized("delete"))
+        }
+    }
+
+    @MainActor
+    private func scheduleDeletion(for message: PushMessage) async {
+        let trimmedTitle = message.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let summary = trimmedTitle.isEmpty
+            ? localizationManager.localized("tab_messages")
+            : trimmedTitle
+
+        await environment.pendingLocalDeletionController.schedule(
+            summary: summary,
+            undoLabel: localizationManager.localized("cancel"),
+            scope: .init(messageIDs: Set([message.id]))
+        ) { [environment, onCommitDelete] in
+            if let onCommitDelete {
+                try await onCommitDelete()
+            } else {
+                try await environment.messageStateCoordinator.deleteMessage(messageId: message.id)
+            }
+        } onCompletion: { [environment] result in
+            guard case let .failure(error) = result else { return }
+            environment.showToast(
+                message: error.localizedDescription,
+                style: .error,
+                duration: 2.5
+            )
+        }
+
+        onPrepareDelete?()
+        if shouldDismissOnDelete {
+            dismiss()
         }
     }
 

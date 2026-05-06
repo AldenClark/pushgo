@@ -2,11 +2,12 @@ import SwiftUI
 
 struct ThingDetailScreen: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     let thing: ThingProjection
-    var onDelete: (() -> Void)? = nil
-    @State private var showDeleteConfirmation = false
+    var onCommitDelete: (@MainActor () async throws -> Void)? = nil
+    var onPrepareDelete: (() -> Void)? = nil
 
     var body: some View {
         navigationContainer {
@@ -17,28 +18,47 @@ struct ThingDetailScreen: View {
         }
         .pushgoSheetSizing(.detail)
         .accessibilityIdentifier("screen.things.detail")
-        .alert(
-            localizationManager.localized("are_you_sure_you_want_to_delete_this_message_once_deleted_it_cannot_be_recovered"),
-            isPresented: $showDeleteConfirmation
-        ) {
-            Button(localizationManager.localized("delete"), role: .destructive) {
-                onDelete?()
-                dismiss()
-            }
-            Button(localizationManager.localized("cancel"), role: .cancel) {}
-        }
     }
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
-            Button(role: .destructive) {
-                showDeleteConfirmation = true
-            } label: {
-                Image(systemName: "trash")
+            if onCommitDelete != nil {
+                Button(role: .destructive) {
+                    Task { await scheduleDeletion() }
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .accessibilityLabel(localizationManager.localized("delete"))
             }
-            .accessibilityLabel(localizationManager.localized("delete"))
         }
+    }
+
+    @MainActor
+    private func scheduleDeletion() async {
+        guard let onCommitDelete else { return }
+        let trimmedTitle = thing.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let summary = trimmedTitle.isEmpty
+            ? localizationManager.localized("push_type_thing")
+            : trimmedTitle
+
+        await environment.pendingLocalDeletionController.schedule(
+            summary: summary,
+            undoLabel: localizationManager.localized("cancel"),
+            scope: .init(thingIDs: Set([thing.id]))
+        ) {
+            try await onCommitDelete()
+        } onCompletion: { [environment] result in
+            guard case let .failure(error) = result else { return }
+            environment.showToast(
+                message: error.localizedDescription,
+                style: .error,
+                duration: 2.5
+            )
+        }
+
+        onPrepareDelete?()
+        dismiss()
     }
 }
 

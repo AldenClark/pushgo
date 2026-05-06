@@ -9,14 +9,16 @@ struct MessageDetailScreen: View {
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @State private var viewModel: MessageDetailViewModel
-    @State private var showDeleteConfirmation = false
     @State private var isShowingRuntimeAlert = false
     @State private var previewingImage: ImagePreview?
     @State private var isTextSelectionEnabled = true
     @State private var didLoad: Bool = false
-    private let onDelete: (() -> Void)?
+    private let onCommitDelete: (@MainActor () async throws -> Void)?
+    private let onPrepareDelete: (() -> Void)?
     private let shouldDismissOnDelete: Bool
     private let useNavigationContainer: Bool
+    private let showsDeleteToolbarAction: Bool
+    private let showsPendingDeletionBar: Bool
 
     private enum Layout {
         static let singleImageHeight: CGFloat = 240
@@ -28,17 +30,23 @@ struct MessageDetailScreen: View {
     init(
         messageId: UUID,
         message: PushMessage? = nil,
-        onDelete: (() -> Void)? = nil,
+        onCommitDelete: (@MainActor () async throws -> Void)? = nil,
+        onPrepareDelete: (() -> Void)? = nil,
         shouldDismissOnDelete: Bool = true,
         useNavigationContainer: Bool = true,
+        showsDeleteToolbarAction: Bool = true,
+        showsPendingDeletionBar: Bool = true,
     ) {
         _viewModel = State(wrappedValue: MessageDetailViewModel(
             messageId: messageId,
             initialMessage: message,
         ))
-        self.onDelete = onDelete
+        self.onCommitDelete = onCommitDelete
+        self.onPrepareDelete = onPrepareDelete
         self.shouldDismissOnDelete = shouldDismissOnDelete
         self.useNavigationContainer = useNavigationContainer
+        self.showsDeleteToolbarAction = showsDeleteToolbarAction
+        self.showsPendingDeletionBar = showsPendingDeletionBar
     }
 
     var body: some View {
@@ -46,9 +54,11 @@ struct MessageDetailScreen: View {
             if useNavigationContainer {
                 navigationContainer {
                     detailContent
+                        .toolbar { toolbarContent }
                 }
             } else {
                 detailContent
+                    .toolbar { toolbarContent }
             }
         }
         .accessibilityIdentifier("screen.message.detail")
@@ -76,6 +86,10 @@ struct MessageDetailScreen: View {
         }
         .pushgoImagePreviewOverlay(previewItem: $previewingImage, imageURL: \.url)
         .background(detailBackgroundColor)
+        .modifier(PendingDeletionBarModifier(
+            environment: environment,
+            isEnabled: showsPendingDeletionBar
+        ))
 #if DEBUG
         .task(id: automationStateSignature) {
             PushGoAutomationRuntime.shared.publishState(
@@ -109,95 +123,82 @@ struct MessageDetailScreen: View {
                 let markdownWidthHint = max(proxy.size.width - (EntityVisualTokens.detailPaddingHorizontal * 2), 1)
                 ScrollView {
                     VStack(alignment: .leading, spacing: EntityVisualTokens.detailSectionSpacing) {
-                    HStack(alignment: .center, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack(alignment: .top, spacing: 8) {
-                                MarkdownRenderer(
-                                    text: message.title,
-                                    font: .title2.weight(.semibold),
-                                    foreground: .primary,
-                                    attachmentWidthHint: markdownWidthHint
-                                )
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .compatTextSelectionEnabled(isTextSelectionEnabled)
-                                encryptionBadge(for: message)
-                            }
-
-                            HStack(spacing: 8) {
-                                Text(message.receivedAt.pushgoDetailTimestamp())
-                                    .font(.subheadline)
-                                    .foregroundStyle(Color.appTextSecondary)
-                                if let channelName = environment.channelDisplayName(for: message.channel) {
-                                    ChannelTagView(text: channelName)
+                        HStack(alignment: .center, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(alignment: .top, spacing: 8) {
+                                    MarkdownRenderer(
+                                        text: message.title,
+                                        font: .title2.weight(.semibold),
+                                        foreground: .primary,
+                                        attachmentWidthHint: markdownWidthHint
+                                    )
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .compatTextSelectionEnabled(isTextSelectionEnabled)
+                                    encryptionBadge(for: message)
                                 }
-                                messageSeverityBadge(for: message.severity)
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack(spacing: 8) {
+                                        Text(message.receivedAt.pushgoDetailTimestamp())
+                                            .font(.subheadline)
+                                            .foregroundStyle(Color.appTextSecondary)
+                                        messageSeverityBadge(for: message.severity)
+                                    }
+                                    if let channelName = environment.channelDisplayName(for: message.channel) {
+                                        ChannelTagView(text: channelName)
+                                    }
+                                }
                             }
                         }
-                    }
-                    if !message.tags.isEmpty {
-                        messageTagChipRow(tags: message.tags)
-                    }
-                    if !message.metadata.isEmpty {
-                        metadataSection(items: message.metadata)
-                    }
-                    if !message.imageURLs.isEmpty {
-                        messageImagesSection(imageURLs: message.imageURLs)
-                    }
-                    criticalSeverityHint(for: message.severity)
-                    let resolvedBody = message.resolvedBody
-                    MarkdownRenderer(
-                        text: resolvedBody.rawText,
-                        font: .body,
-                        foreground: .primary,
-                        attachmentWidthHint: markdownWidthHint
-                    )
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .compatTextSelectionEnabled(isTextSelectionEnabled)
-
-                    if let url = message.url,
-                       let safeOpenURL = URLSanitizer.sanitizeExternalOpenURL(url)
-                    {
-                        HStack(spacing: 10) {
-                            Link(destination: safeOpenURL) {
-                                Label(localizationManager.localized("open_link"), systemImage: "link")
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .appButtonHeight()
+                        if !message.tags.isEmpty {
+                            messageTagChipRow(tags: message.tags)
+                        }
+                        if !message.metadata.isEmpty {
+                            metadataSection(items: message.metadata)
+                        }
+                        if !message.imageURLs.isEmpty {
+                            messageImagesSection(imageURLs: message.imageURLs)
+                        }
+                        criticalSeverityHint(for: message.severity)
+                        let resolvedBody = message.resolvedBody
+                        MarkdownRenderer(
+                            text: resolvedBody.rawText,
+                            font: .body,
+                            foreground: .primary,
+                            attachmentWidthHint: markdownWidthHint
+                        )
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .compatTextSelectionEnabled(isTextSelectionEnabled)
 
-                            Button {
-                                copyText(safeOpenURL.absoluteString, toastKey: "link_copied")
-                            } label: {
-                                Image(systemName: "doc.on.doc")
+                        if let url = message.url,
+                           let safeOpenURL = URLSanitizer.sanitizeExternalOpenURL(url)
+                        {
+                            HStack(spacing: 10) {
+                                Link(destination: safeOpenURL) {
+                                    Label(localizationManager.localized("open_link"), systemImage: "link")
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .appButtonHeight()
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                                Button {
+                                    copyText(safeOpenURL.absoluteString, toastKey: "link_copied")
+                                } label: {
+                                    Image(systemName: "doc.on.doc")
+                                }
+                                .buttonStyle(.bordered)
+                                .appButtonHeight()
+                                .accessibilityIdentifier("action.message.copy_link")
+                                .accessibilityLabel(localizationManager.localized("copy_content"))
                             }
-                            .buttonStyle(.bordered)
-                            .appButtonHeight()
-                            .accessibilityIdentifier("action.message.copy_link")
-                            .accessibilityLabel(localizationManager.localized("copy_content"))
                         }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, EntityVisualTokens.detailPaddingHorizontal)
                 .padding(.vertical, EntityVisualTokens.detailPaddingVertical)
-            }
-        }
-        .alert(isPresented: $showDeleteConfirmation) {
-                Alert(
-                    title: Text(localizationManager.localized(
-                        "are_you_sure_you_want_to_delete_this_message_once_deleted_it_cannot_be_recovered"
-                )),
-                primaryButton: .destructive(Text(localizationManager.localized("delete"))) {
-                    Task {
-                        await viewModel.deleteMessage()
-                        onDelete?()
-                        if shouldDismissOnDelete {
-                            dismiss()
-                        }
-                    }
-                },
-                secondaryButton: .cancel(Text(localizationManager.localized("cancel")))
-                )
+                .background(EntityVisualTokens.pageBackground)
+                .contentShape(Rectangle())
             }
         } else {
             if viewModel.isLoading {
@@ -208,6 +209,56 @@ struct MessageDetailScreen: View {
             } else {
                 Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        if showsDeleteToolbarAction {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button(role: .destructive) {
+                    if let message = viewModel.message {
+                        Task { await scheduleDeletion(for: message) }
+                    }
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .disabled(viewModel.message == nil)
+                .accessibilityIdentifier("action.message.delete")
+                .accessibilityLabel(localizationManager.localized("delete"))
+            }
+        }
+    }
+
+    @MainActor
+    private func scheduleDeletion(for message: PushMessage) async {
+        let trimmedTitle = message.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let summary = trimmedTitle.isEmpty
+            ? localizationManager.localized("tab_messages")
+            : trimmedTitle
+
+        await environment.pendingLocalDeletionController.schedule(
+            summary: summary,
+            undoLabel: localizationManager.localized("cancel"),
+            scope: .init(messageIDs: Set([message.id]))
+        ) { [environment, onCommitDelete] in
+            if let onCommitDelete {
+                try await onCommitDelete()
+            } else {
+                try await environment.messageStateCoordinator.deleteMessage(messageId: message.id)
+            }
+        } onCompletion: { [environment] result in
+            guard case let .failure(error) = result else { return }
+            environment.showToast(
+                message: error.localizedDescription,
+                style: .error,
+                duration: 2.5
+            )
+        }
+
+        onPrepareDelete?()
+        if shouldDismissOnDelete {
+            dismiss()
         }
     }
 
@@ -508,6 +559,19 @@ struct MessageDetailScreen: View {
             style: .success,
             duration: 1.2
         )
+    }
+}
+
+private struct PendingDeletionBarModifier: ViewModifier {
+    let environment: AppEnvironment
+    let isEnabled: Bool
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content.pendingLocalDeletionBarHost(environment: environment)
+        } else {
+            content
+        }
     }
 }
 
