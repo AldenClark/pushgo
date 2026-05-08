@@ -9,6 +9,7 @@ final class PushGoAppDelegate: NSObject, UIApplicationDelegate, @preconcurrency 
         didFinishLaunchingWithOptions _: [UIApplication.LaunchOptionsKey: Any]? = nil,
     ) -> Bool {
         PushGoAnimatedImageRuntime.bootstrapIfNeeded()
+        AppEnvironment.shared.beginProviderIngressBootstrapRecovery()
         UNUserNotificationCenter.current().delegate = self
         _ = AppEnvironment.shared
         WatchTokenReceiver.shared.activateIfNeeded()

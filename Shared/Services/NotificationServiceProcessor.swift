@@ -10,11 +10,13 @@ final class NotificationServiceProcessor {
     private static let sharedChannelSubscriptionService = ChannelSubscriptionService()
     private static let sharedNotificationIngressInbox = NotificationIngressInbox.shared
     private static let sharedAckFailureStore = ProviderDeliveryAckFailureStore.shared
+    private static let sharedWakeupPullClaimStore = ProviderWakeupPullClaimStore.shared
 
     private let contentPreparer: NotificationContentPreparer
     private let channelSubscriptionService: ChannelSubscriptionService
     private let notificationIngressInbox: NotificationIngressInbox
     private let ackFailureStore: ProviderDeliveryAckFailureStore
+    private let wakeupPullClaimStore: ProviderWakeupPullClaimStore
     private let localConfigStore: LocalKeychainConfigStore
     private let deviceKeyStore: ProviderDeviceKeyStore
 
@@ -22,6 +24,7 @@ final class NotificationServiceProcessor {
         channelSubscriptionService: ChannelSubscriptionService = NotificationServiceProcessor.sharedChannelSubscriptionService,
         notificationIngressInbox: NotificationIngressInbox = NotificationServiceProcessor.sharedNotificationIngressInbox,
         ackFailureStore: ProviderDeliveryAckFailureStore = NotificationServiceProcessor.sharedAckFailureStore,
+        wakeupPullClaimStore: ProviderWakeupPullClaimStore = NotificationServiceProcessor.sharedWakeupPullClaimStore,
         localConfigStore: LocalKeychainConfigStore = LocalKeychainConfigStore(),
         deviceKeyStore: ProviderDeviceKeyStore = ProviderDeviceKeyStore(),
         contentPreparer: NotificationContentPreparer = NotificationContentPreparer()
@@ -29,6 +32,7 @@ final class NotificationServiceProcessor {
         self.channelSubscriptionService = channelSubscriptionService
         self.notificationIngressInbox = notificationIngressInbox
         self.ackFailureStore = ackFailureStore
+        self.wakeupPullClaimStore = wakeupPullClaimStore
         self.localConfigStore = localConfigStore
         self.deviceKeyStore = deviceKeyStore
         self.contentPreparer = contentPreparer
@@ -38,14 +42,23 @@ final class NotificationServiceProcessor {
         request: UNNotificationRequest,
         content: UNMutableNotificationContent
     ) async -> UNNotificationContent {
-        let ingress = await resolveNotificationIngressWithoutDatabase(from: request.content.userInfo)
+        let sanitizedPayload = UserInfoSanitizer.sanitize(request.content.userInfo)
+        let ingress = await resolveNotificationIngressWithoutDatabase(from: sanitizedPayload)
+        let unresolvedReason: String?
+        if case .unresolvedWakeup = ingress {
+            unresolvedReason = unresolvedWakeupReasonWithoutDatabase(from: sanitizedPayload)
+        } else if case .claimedByPeer = ingress {
+            unresolvedReason = "peer_process_claimed_pull"
+        } else {
+            unresolvedReason = nil
+        }
         NSEPersistenceDiagnostics.record(
             phase: "ingress_resolved",
             requestIdentifier: request.identifier,
-            payload: request.content.userInfo,
+            payload: sanitizedPayload,
             ingressType: Self.ingressTypeName(ingress),
             outcome: nil,
-            error: nil
+            error: unresolvedReason
         )
         let content = await prepareContentForPersistence(content: content, ingress: ingress)
         await markAckPreparingIfNeeded(ingress)
@@ -87,8 +100,22 @@ final class NotificationServiceProcessor {
             requestIdentifier = ingressRequestIdentifier
         case let .pulled(_, ingressRequestIdentifier):
             requestIdentifier = ingressRequestIdentifier
+        case let .claimedByPeer(_, ingressRequestIdentifier):
+            requestIdentifier = ingressRequestIdentifier
         case let .unresolvedWakeup(_, ingressRequestIdentifier):
             requestIdentifier = ingressRequestIdentifier
+        }
+
+        if case .claimedByPeer = ingress {
+            NSEPersistenceDiagnostics.record(
+                phase: "inbox_skipped_peer_claim",
+                requestIdentifier: request.identifier,
+                payload: preparedContent.userInfo,
+                ingressType: Self.ingressTypeName(ingress),
+                outcome: nil,
+                error: nil
+            )
+            return false
         }
 
         let codablePayload = codablePayloadDictionary(from: preparedContent.userInfo)
@@ -124,6 +151,13 @@ final class NotificationServiceProcessor {
         switch ingress {
         case let .pulled(payload, _):
             NotificationHandling.applyResolvedPayload(payload, to: content)
+        case let .claimedByPeer(payload, _):
+            if let fallbackPayload = NotificationHandling.wakeupFallbackDisplayPayload(from: payload) {
+                NotificationHandling.applyResolvedPayload(fallbackPayload, to: content)
+            } else {
+                content.userInfo = UserInfoSanitizer.sanitize(payload)
+                applyUnresolvedWakeupNotice(to: content)
+            }
         case let .unresolvedWakeup(payload, _):
             if let fallbackPayload = NotificationHandling.wakeupFallbackDisplayPayload(from: payload) {
                 NotificationHandling.applyResolvedPayload(fallbackPayload, to: content)
@@ -155,9 +189,11 @@ final class NotificationServiceProcessor {
                 return
             }
             deliveryId = requestIdentifier ?? NotificationHandling.providerIngressRequestIdentifier(from: resolvedPayload)
-        case let .pulled(resolvedPayload, requestIdentifier):
-            payload = resolvedPayload
-            deliveryId = requestIdentifier
+        case .pulled:
+            // /messages/pull already consumes the pending delivery on gateway side.
+            return
+        case .claimedByPeer:
+            return
         case .unresolvedWakeup:
             return
         }
@@ -231,9 +267,11 @@ final class NotificationServiceProcessor {
                 return
             }
             deliveryId = requestIdentifier ?? NotificationHandling.providerIngressRequestIdentifier(from: resolvedPayload)
-        case let .pulled(resolvedPayload, requestIdentifier):
-            payload = resolvedPayload
-            deliveryId = requestIdentifier
+        case .pulled:
+            // Pull ingress must not create ack markers; the delivery is already acknowledged.
+            return
+        case .claimedByPeer:
+            return
         case .unresolvedWakeup:
             return
         }
@@ -282,6 +320,29 @@ final class NotificationServiceProcessor {
         else {
             return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId)
         }
+        let owner = "nse.\(nsePlatformIdentifier())"
+        let leaseDuration: TimeInterval = 30
+        let lease: ProviderWakeupPullClaimStore.ClaimLease
+        if let acquiredLease = await wakeupPullClaimStore.acquireLease(
+            deliveryId: deliveryId,
+            owner: owner,
+            leaseDuration: leaseDuration
+        ) {
+            lease = acquiredLease
+        } else if await wakeupPullClaimStore.waitForPeerCompletion(
+            deliveryId: deliveryId,
+            timeout: 1.5
+        ) {
+            return .claimedByPeer(payload: sanitized, requestIdentifier: deliveryId)
+        } else if let retryLease = await wakeupPullClaimStore.acquireLease(
+            deliveryId: deliveryId,
+            owner: owner,
+            leaseDuration: leaseDuration
+        ) {
+            lease = retryLease
+        } else {
+            return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId)
+        }
 
         for candidate in candidates {
             do {
@@ -295,6 +356,7 @@ final class NotificationServiceProcessor {
                 let pulledPayload: [AnyHashable: Any] = item.payload.reduce(into: [:]) { result, element in
                     result[element.key] = element.value
                 }
+                await wakeupPullClaimStore.markCompleted(lease)
                 return .pulled(
                     payload: UserInfoSanitizer.sanitize(pulledPayload),
                     requestIdentifier: Self.normalizedPayloadString(item.deliveryId) ?? deliveryId
@@ -304,6 +366,7 @@ final class NotificationServiceProcessor {
             }
         }
 
+        await wakeupPullClaimStore.releaseLease(lease)
         return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId)
     }
 
@@ -338,6 +401,10 @@ final class NotificationServiceProcessor {
             appendCandidate(baseURL: config.baseURL, token: config.token)
         }
 
+        if let config = WakeupIngressSharedState.loadServerConfig() {
+            appendCandidate(baseURL: config.baseURL, token: config.token)
+        }
+
         if let defaultServerURL = AppConstants.defaultServerURL {
             appendCandidate(baseURL: defaultServerURL, token: AppConstants.defaultGatewayToken)
         }
@@ -346,7 +413,34 @@ final class NotificationServiceProcessor {
     }
 
     private func providerDeviceKeyWithoutDatabase() -> ProviderDeviceKeyStore.LoadResult {
-        deviceKeyStore.loadResult(platform: nsePlatformIdentifier())
+        let platform = nsePlatformIdentifier()
+        let loadResult = deviceKeyStore.loadResult(platform: platform)
+        guard loadResult.deviceKey == nil,
+              let fallbackDeviceKey = WakeupIngressSharedState.loadDeviceKey(
+                  platform: platform
+              )
+        else {
+            return loadResult
+        }
+        return ProviderDeviceKeyStore.LoadResult(
+            platform: loadResult.platform,
+            account: loadResult.account,
+            accessGroup: loadResult.accessGroup,
+            deviceKey: fallbackDeviceKey,
+            error: nil
+        )
+    }
+
+    private func unresolvedWakeupReasonWithoutDatabase(from payload: [String: Any]) -> String {
+        let candidates = wakeupServerCandidatesWithoutDatabase(from: payload)
+        guard !candidates.isEmpty else {
+            return "missing_server_candidate"
+        }
+        let loadResult = providerDeviceKeyWithoutDatabase()
+        guard loadResult.deviceKey != nil else {
+            return Self.deviceKeyLoadErrorDescription(loadResult)
+        }
+        return "pull_failed_all_candidates"
     }
 
     private func nsePlatformIdentifier() -> String {
@@ -450,6 +544,8 @@ final class NotificationServiceProcessor {
             return "direct"
         case .pulled:
             return "pulled"
+        case .claimedByPeer:
+            return "claimedByPeerWakeup"
         case .unresolvedWakeup:
             return "unresolvedWakeup"
         }

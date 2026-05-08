@@ -193,34 +193,12 @@ struct ChannelManagementScreen: View {
         .disabled(isRemoving || isRenaming)
     }
 
-    private var isCreateDialogPasswordValid: Bool {
-        (try? ChannelPasswordValidator.validate(createChannelPassword)) != nil
-    }
-
-    private var isSubscribeDialogPasswordValid: Bool {
-        (try? ChannelPasswordValidator.validate(subscribeChannelPassword)) != nil
-    }
-
-    private var canSubmitCreateSheet: Bool {
-        !isCreateSubmitting
-        && !createChannelAlias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        && !createChannelPassword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        && isCreateDialogPasswordValid
-    }
-
-    private var canSubmitSubscribeSheet: Bool {
-        !isSubscribeSubmitting
-        && !subscribeChannelId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        && !subscribeChannelPassword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        && isSubscribeDialogPasswordValid
-    }
-
     private var canSubmitChannelEntry: Bool {
         switch channelEntryMode {
         case .create:
-            return canSubmitCreateSheet
+            return !isCreateSubmitting
         case .subscribe:
-            return canSubmitSubscribeSheet
+            return !isSubscribeSubmitting
         }
     }
 
@@ -296,10 +274,6 @@ struct ChannelManagementScreen: View {
                 .disabled(isCreateSubmitting)
             }
 
-            channelEntryPasswordHint(
-                isVisible: !createChannelPassword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    && !isCreateDialogPasswordValid
-            )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -320,6 +294,7 @@ struct ChannelManagementScreen: View {
                 .submitLabel(.next)
                 .disabled(isSubscribeSubmitting)
             }
+
             AppFormField(
                 titleText: localizationManager.localized("channel_password")
             ) {
@@ -338,23 +313,8 @@ struct ChannelManagementScreen: View {
                 .disabled(isSubscribeSubmitting)
             }
 
-            channelEntryPasswordHint(
-                isVisible: !subscribeChannelPassword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    && !isSubscribeDialogPasswordValid
-            )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func channelEntryPasswordHint(isVisible: Bool) -> some View {
-        Text(localizationManager.localized("channel_password_invalid_length"))
-            .font(.footnote)
-            .foregroundStyle(AppSemanticTone.danger.foreground)
-            .lineLimit(2)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(minHeight: 34, alignment: .topLeading)
-            .opacity(isVisible ? 1 : 0)
-            .accessibilityHidden(!isVisible)
     }
 
     private var channelEntryActionButtons: some View {
@@ -443,7 +403,7 @@ struct ChannelManagementScreen: View {
 
     @MainActor
     private func createChannelFromSheet() async {
-        guard canSubmitCreateSheet else { return }
+        guard !isCreateSubmitting else { return }
         isCreateSubmitting = true
         defer { isCreateSubmitting = false }
 
@@ -460,18 +420,13 @@ struct ChannelManagementScreen: View {
                 duration: 1.5
             )
         } catch {
-            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            environment.showToast(
-                message: message,
-                style: .error,
-                duration: 2.5
-            )
+            environment.showErrorToast(error, duration: 2.5)
         }
     }
 
     @MainActor
     private func subscribeChannelFromSheet() async {
-        guard canSubmitSubscribeSheet else { return }
+        guard !isSubscribeSubmitting else { return }
         isSubscribeSubmitting = true
         defer { isSubscribeSubmitting = false }
 
@@ -487,12 +442,7 @@ struct ChannelManagementScreen: View {
                 duration: 1.5
             )
         } catch {
-            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            environment.showToast(
-                message: message,
-                style: .error,
-                duration: 2.5
-            )
+            environment.showErrorToast(error, duration: 2.5)
         }
     }
 
@@ -517,11 +467,11 @@ struct ChannelManagementScreen: View {
                     scope: .init(channelIDs: Set([channelId]))
                 ) {
                     _ = try await environment.deleteLocalHistoryForChannel(channelId: channelId)
-                } onCompletion: { [environment, localizationManager] result in
+                } onCompletion: { [environment] result in
                     guard case let .failure(error) = result else { return }
-                    environment.showToast(
-                        message: "\(localizationManager.localized("operation_failed")): \(error.localizedDescription)",
-                        style: .error,
+                    environment.showErrorToast(
+                        error,
+                        fallbackMessage: localizationManager.localized("operation_failed"),
                         duration: 2.5
                     )
                 }
@@ -538,12 +488,7 @@ struct ChannelManagementScreen: View {
                 )
             }
         } catch {
-            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            environment.showToast(
-                message: message,
-                style: .error,
-                duration: 2.5
-            )
+            environment.showErrorToast(error, duration: 2.5)
         }
     }
 
@@ -581,12 +526,7 @@ struct ChannelManagementScreen: View {
                 duration: 1.5
             )
         } catch {
-            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            environment.showToast(
-                message: message,
-                style: .error,
-                duration: 2.5
-            )
+            environment.showErrorToast(error, duration: 2.5)
         }
     }
 

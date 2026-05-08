@@ -81,10 +81,12 @@ final class NotificationOpenController {
                 return
             }
         } catch {
-            showToast(localizationManager.localized(
-                "sync_message_failed_placeholder",
-                error.localizedDescription
-            ))
+            let wrapped = AppError.wrap(
+                error,
+                fallbackMessage: localizationManager.localized("operation_failed"),
+                code: "message_load_failed"
+            )
+            showToast(wrapped.errorDescription ?? localizationManager.localized("operation_failed"))
         }
     }
 
@@ -107,10 +109,12 @@ final class NotificationOpenController {
                 return
             }
         } catch {
-            showToast(localizationManager.localized(
-                "sync_message_failed_placeholder",
-                error.localizedDescription
-            ))
+            let wrapped = AppError.wrap(
+                error,
+                fallbackMessage: localizationManager.localized("operation_failed"),
+                code: "message_load_failed"
+            )
+            showToast(wrapped.errorDescription ?? localizationManager.localized("operation_failed"))
         }
     }
 

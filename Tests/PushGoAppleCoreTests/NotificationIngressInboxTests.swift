@@ -281,6 +281,103 @@ struct NotificationIngressInboxTests {
     }
 
     @Test
+    func providerWakeupPullClaimStoreAllowsOnlyOneActiveClaimPerDelivery() async throws {
+        await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let store = ProviderWakeupPullClaimStore(appGroupIdentifier: appGroupIdentifier)
+            let firstLease = await store.acquireLease(
+                deliveryId: " delivery-pull-claim-001 ",
+                owner: "nse.macos",
+                leaseDuration: 30
+            )
+            #expect(firstLease?.record.deliveryId == "delivery-pull-claim-001")
+
+            let secondLease = await store.acquireLease(
+                deliveryId: "delivery-pull-claim-001",
+                owner: "app.macos",
+                leaseDuration: 30
+            )
+            #expect(secondLease == nil)
+
+            if let firstLease {
+                await store.markCompleted(firstLease)
+            }
+
+            let completedLease = await store.acquireLease(
+                deliveryId: "delivery-pull-claim-001",
+                owner: "app.retry",
+                leaseDuration: 30
+            )
+            #expect(completedLease == nil)
+        }
+    }
+
+    @Test
+    func providerWakeupPullClaimStoreAllowsRetryAfterReleaseOrLeaseExpiry() async throws {
+        try await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let store = ProviderWakeupPullClaimStore(appGroupIdentifier: appGroupIdentifier)
+
+            let firstLease = try #require(
+                await store.acquireLease(
+                    deliveryId: "delivery-pull-claim-retry-001",
+                    owner: "nse.macos",
+                    leaseDuration: 30
+                )
+            )
+
+            await store.releaseLease(firstLease)
+            let retryLease = await store.acquireLease(
+                deliveryId: "delivery-pull-claim-retry-001",
+                owner: "app.macos",
+                leaseDuration: 30
+            )
+            #expect(retryLease != nil)
+
+            let expiredStore = ProviderWakeupPullClaimStore(appGroupIdentifier: appGroupIdentifier)
+            let leaseAtNow = try #require(
+                await expiredStore.acquireLease(
+                    deliveryId: "delivery-pull-claim-expiry-001",
+                    owner: "nse.expiry",
+                    leaseDuration: 5,
+                    now: Date(timeIntervalSince1970: 1_000)
+                )
+            )
+            #expect(leaseAtNow.record.state == .claimed)
+
+            let takeoverLease = await expiredStore.acquireLease(
+                deliveryId: "delivery-pull-claim-expiry-001",
+                owner: "app.expiry",
+                leaseDuration: 5,
+                now: Date(timeIntervalSince1970: 1_007)
+            )
+            #expect(takeoverLease != nil)
+        }
+    }
+
+    @Test
+    func providerWakeupPullClaimStoreWaitsForPeerCompletionBeforeGivingUp() async throws {
+        try await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let store = ProviderWakeupPullClaimStore(appGroupIdentifier: appGroupIdentifier)
+            let lease = try #require(
+                await store.acquireLease(
+                    deliveryId: "delivery-pull-claim-peer-001",
+                    owner: "app.peer",
+                    leaseDuration: 30
+                )
+            )
+
+            async let observedCompletion = store.waitForPeerCompletion(
+                deliveryId: "delivery-pull-claim-peer-001",
+                timeout: 1.0,
+                pollInterval: 0.02
+            )
+            try await Task.sleep(nanoseconds: 100_000_000)
+            await store.markCompleted(lease)
+
+            #expect(await observedCompletion == true)
+        }
+    }
+
+    @Test
     func notificationIngressInboxCoalescesProviderDeliveryEntries() async throws {
         await withIsolatedAutomationStorage { _, appGroupIdentifier in
             let inbox = NotificationIngressInbox(appGroupIdentifier: appGroupIdentifier)

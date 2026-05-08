@@ -163,4 +163,130 @@ struct ChannelSubscriptionServiceTests {
         let decoded = try JSONDecoder().decode(ChannelSubscriptionService.AckResponse.self, from: raw)
         #expect(decoded.removed)
     }
+
+    @Test
+    func decodeGatewayResponsePreservesStructuredProblem() throws {
+        let data = """
+        {
+          "success": false,
+          "error": "device_key not found",
+          "error_code": "device_key_not_found",
+          "problem": {
+            "code": "device_key_not_found",
+            "category": "not_found",
+            "status": 400,
+            "title": "Resource not found",
+            "detail": "device_key not found",
+            "localized_message": "当前设备注册已失效，请重试。",
+            "locale": "zh-CN",
+            "retryable": false
+          }
+        }
+        """.data(using: .utf8)!
+        let response = HTTPURLResponse(
+            url: URL(string: "https://pushgo.app/channel/device")!,
+            statusCode: 400,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+
+        #expect(throws: AppError.gateway(.init(
+            code: "device_key_not_found",
+            category: .notFound,
+            status: 400,
+            title: "Resource not found",
+            detail: "device_key not found",
+            localizedMessage: "当前设备注册已失效，请重试。",
+            locale: "zh-CN",
+            retryable: false,
+            requestId: nil
+        ))) {
+            _ = try ChannelSubscriptionService.decodeGatewayResponse(
+                ChannelSubscriptionService.EmptyPayload.self,
+                data: data,
+                response: response
+            )
+        }
+    }
+
+    @Test
+    func gatewayErrorExposesGatewayCodeMatcher() {
+        let error = AppError.gateway(
+            GatewayProblemPayload(
+                code: "device_key_not_found",
+                category: .notFound,
+                status: 400,
+                title: nil,
+                detail: "device_key not found",
+                localizedMessage: nil,
+                locale: nil,
+                retryable: false,
+                requestId: nil
+            )
+        )
+
+        #expect(error.gatewayCode == "device_key_not_found")
+        #expect(error.matchesGatewayCode("device_key_not_found"))
+    }
+
+    @Test
+    func gatewayErrorUsesSpecificChannelNotFoundMessageWithoutLocalizedPayload() {
+        let error = AppError.gateway(
+            GatewayProblemPayload(
+                code: "channel_not_found",
+                category: .notFound,
+                status: 404,
+                title: nil,
+                detail: "channel not found on gateway",
+                localizedMessage: nil,
+                locale: nil,
+                retryable: false,
+                requestId: nil
+            )
+        )
+
+        #expect(error.errorDescription == LocalizationProvider.localized("channel_not_found"))
+    }
+
+    @Test
+    func legacyGatewayDetailInfersChannelNotFoundCode() {
+        let error = ChannelSubscriptionService.buildGatewayError(
+            statusCode: 404,
+            legacyError: "channel not found on gateway",
+            errorCode: nil,
+            problem: nil
+        )
+
+        #expect(error.gatewayCode == "channel_not_found")
+        #expect(error.errorDescription == LocalizationProvider.localized("channel_not_found"))
+    }
+
+    @Test
+    func gatewayErrorPrefersLocalCodeMappingOverForeignLocalizedMessage() {
+        let error = AppError.gateway(
+            GatewayProblemPayload(
+                code: "password_mismatch",
+                category: .conflict,
+                status: 403,
+                title: nil,
+                detail: "invalid channel password",
+                localizedMessage: "The channel password is incorrect. Please verify it and try again.",
+                locale: "en",
+                retryable: false,
+                requestId: "req-001"
+            )
+        )
+
+        #expect(error.errorDescription == LocalizationProvider.localized("channel_password_incorrect"))
+    }
+
+    @Test
+    func gatewayAcceptLanguageNormalizesSimplifiedChineseForGateway() {
+        let header = ChannelSubscriptionService.buildGatewayAcceptLanguageValue(
+            preferredLanguages: ["zh-Hans-CN", "en-US"],
+            currentIdentifier: "en_US"
+        )
+
+        #expect(header == "zh-CN, zh-Hans-CN, en-US, en")
+    }
 }

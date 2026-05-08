@@ -3,12 +3,6 @@ import SwiftUI
 import UniformTypeIdentifiers
 import UIKit
 
-struct DeferredToast: Equatable {
-    let message: String
-    let style: AppEnvironment.ToastMessage.Style
-    let duration: TimeInterval
-}
-
 enum SettingsSheet: Identifiable {
     case manualKey
     case serverManagement

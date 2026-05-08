@@ -1,6 +1,6 @@
 import Foundation
 
-enum ChannelNameError: LocalizedError, Equatable {
+enum ChannelNameError: LocalizedError, Equatable, LocalProblemPayloadConvertible {
     case empty
     case tooLong(Int)
     case invalidCharacter(Character)
@@ -13,6 +13,32 @@ enum ChannelNameError: LocalizedError, Equatable {
             return LocalizationProvider.localized("channel_name_too_long", max)
         case let .invalidCharacter(char):
             return LocalizationProvider.localized("channel_name_invalid_character_placeholder", String(char))
+        }
+    }
+
+    var localProblemPayload: LocalProblemPayload {
+        switch self {
+        case .empty:
+            return LocalProblemPayload(
+                code: "channel_name_required",
+                category: .validation,
+                message: LocalizationProvider.localized("channel_name_required"),
+                detail: "channel name is required"
+            )
+        case let .tooLong(max):
+            return LocalProblemPayload(
+                code: "channel_name_too_long",
+                category: .validation,
+                message: LocalizationProvider.localized("channel_name_too_long", max),
+                detail: "channel name exceeds maximum length \(max)"
+            )
+        case let .invalidCharacter(char):
+            return LocalProblemPayload(
+                code: "channel_name_invalid_character",
+                category: .validation,
+                message: LocalizationProvider.localized("channel_name_invalid_character_placeholder", String(char)),
+                detail: "channel name contains invalid character \(String(char))"
+            )
         }
     }
 }
@@ -34,7 +60,7 @@ enum ChannelNameValidator {
     }
 }
 
-enum ChannelIdError: LocalizedError, Equatable {
+enum ChannelIdError: LocalizedError, Equatable, LocalProblemPayloadConvertible {
     case empty
     case invalid
 
@@ -44,6 +70,25 @@ enum ChannelIdError: LocalizedError, Equatable {
             return LocalizationProvider.localized("channel_id_required")
         case .invalid:
             return LocalizationProvider.localized("channel_id_invalid")
+        }
+    }
+
+    var localProblemPayload: LocalProblemPayload {
+        switch self {
+        case .empty:
+            return LocalProblemPayload(
+                code: "channel_id_required",
+                category: .validation,
+                message: LocalizationProvider.localized("channel_id_required"),
+                detail: "channel id is required"
+            )
+        case .invalid:
+            return LocalProblemPayload(
+                code: "invalid_channel_id",
+                category: .validation,
+                message: LocalizationProvider.localized("channel_id_invalid"),
+                detail: "channel id format is invalid"
+            )
         }
     }
 }

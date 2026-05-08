@@ -552,7 +552,7 @@ private struct PushgoImagePreviewOverlay: View {
             try data.write(to: destination, options: .atomic)
             showSaveSuccess()
         } catch {
-            showSaveFailure(reason: error.localizedDescription)
+            showSaveFailure(reason: environment.userFacingErrorMessage(error))
         }
     }
 

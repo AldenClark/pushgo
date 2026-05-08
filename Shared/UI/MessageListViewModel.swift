@@ -198,7 +198,11 @@ final class MessageListViewModel {
         } catch let appError as AppError {
             self.error = appError
         } catch {
-            self.error = AppError.unknown(error.localizedDescription)
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: LocalizationProvider.localized("operation_failed"),
+                code: "message_mark_read_failed"
+            )
         }
     }
 
@@ -211,7 +215,11 @@ final class MessageListViewModel {
         } catch let appError as AppError {
             self.error = appError
         } catch {
-            self.error = AppError.unknown(error.localizedDescription)
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: LocalizationProvider.localized("operation_failed"),
+                code: "message_delete_failed"
+            )
         }
     }
 
@@ -242,7 +250,11 @@ final class MessageListViewModel {
         } catch let appError as AppError {
             self.error = appError
         } catch {
-            self.error = AppError.unknown(error.localizedDescription)
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: LocalizationProvider.localized("operation_failed"),
+                code: "message_bulk_mark_read_failed"
+            )
         }
         return 0
     }
@@ -275,7 +287,11 @@ final class MessageListViewModel {
         } catch let appError as AppError {
             self.error = appError
         } catch {
-            self.error = AppError.unknown(error.localizedDescription)
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: LocalizationProvider.localized("operation_failed"),
+                code: "message_channel_cleanup_failed"
+            )
         }
         return 0
     }
@@ -294,7 +310,11 @@ final class MessageListViewModel {
         } catch let appError as AppError {
             self.error = appError
         } catch {
-            self.error = AppError.unknown(error.localizedDescription)
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: LocalizationProvider.localized("operation_failed"),
+                code: "message_read_cleanup_failed"
+            )
         }
         return 0
     }
@@ -417,7 +437,11 @@ final class MessageListViewModel {
         } catch let appError as AppError {
             self.error = appError
         } catch {
-            self.error = AppError.unknown(error.localizedDescription)
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: LocalizationProvider.localized("operation_failed"),
+                code: "message_reload_failed"
+            )
         }
     }
 
@@ -444,7 +468,11 @@ final class MessageListViewModel {
         } catch let appError as AppError {
             self.error = appError
         } catch {
-            self.error = AppError.unknown(error.localizedDescription)
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: LocalizationProvider.localized("operation_failed"),
+                code: "message_snapshot_refresh_failed"
+            )
         }
     }
 
@@ -517,7 +545,11 @@ final class MessageListViewModel {
         } catch let appError as AppError {
             self.error = appError
         } catch {
-            self.error = AppError.unknown(error.localizedDescription)
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: LocalizationProvider.localized("operation_failed"),
+                code: "message_page_load_failed"
+            )
         }
     }
 

@@ -109,7 +109,12 @@ final class SettingsViewModel {
         await environment.refreshWatchCompanionAvailability()
         if isEnabled, !environment.isWatchCompanionAvailable {
             refresh()
-            error = .saveConfig(reason: localizationManager.localized("watch_companion_not_available"))
+            error = .typedLocal(
+                code: "watch_companion_not_available",
+                category: .validation,
+                message: localizationManager.localized("watch_companion_not_available"),
+                detail: "watch companion unavailable when enabling standalone mode"
+            )
             return
         }
         isSwitchingWatchMode = true
@@ -127,7 +132,11 @@ final class SettingsViewModel {
             error = appError
         } catch let underlying {
             refresh()
-            error = .saveConfig(reason: underlying.localizedDescription)
+            error = AppError.wrap(
+                underlying,
+                fallbackMessage: localizationManager.localized("operation_failed"),
+                code: "watch_mode_change_failed"
+            )
         }
 #else
         _ = isEnabled
@@ -180,7 +189,12 @@ final class SettingsViewModel {
     func saveServerConfig() async {
         let trimmedAddress = gatewayInput.address.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedAddress.isEmpty else {
-            error = .saveConfig(reason: localizationManager.localized("server_address_required"))
+            error = .typedLocal(
+                code: "server_address_required",
+                category: .validation,
+                message: localizationManager.localized("server_address_required"),
+                detail: "server address is required"
+            )
             return
         }
         guard let url = validatedServerURL(from: trimmedAddress) else {
@@ -222,9 +236,13 @@ final class SettingsViewModel {
             successMessage = localizationManager.localized("server_configuration_saved")
             shouldDismissServerManagement = true
         } catch let appError as AppError {
-            self.error = .saveConfig(reason: appError.errorDescription ?? appError.code)
+            self.error = appError
         } catch let underlying {
-            self.error = .saveConfig(reason: underlying.localizedDescription)
+            self.error = AppError.wrap(
+                underlying,
+                fallbackMessage: localizationManager.localized("operation_failed"),
+                code: "server_config_save_failed"
+            )
         }
     }
 
@@ -248,7 +266,11 @@ final class SettingsViewModel {
         } catch let appError as AppError {
             self.error = appError
         } catch let underlying {
-            self.error = .unknown(underlying.localizedDescription)
+            self.error = AppError.wrap(
+                underlying,
+                fallbackMessage: localizationManager.localized("operation_failed"),
+                code: "notification_permission_request_failed"
+            )
         }
     }
 
@@ -283,15 +305,22 @@ final class SettingsViewModel {
                 encoding: encoding,
             )
         } catch let validation as ManualNotificationKeyValidationError {
-            self.error = .saveConfig(
-                reason: validation.errorDescription ?? localizationManager
+            self.error = AppError.wrap(
+                validation,
+                fallbackMessage: localizationManager
                     .localized("the_decryption_configuration_is_not_in_the_correct_format_please_check_your_input"),
+                code: "manual_notification_key_validation_failed",
+                category: .validation
             )
             return
         } catch {
-            self
-                .error = .saveConfig(reason: localizationManager
-                    .localized("key_format_verification_failed_please_try_again"))
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: localizationManager
+                    .localized("key_format_verification_failed_please_try_again"),
+                code: "manual_notification_key_verification_failed",
+                category: .validation
+            )
             return
         }
         isSaving = true
@@ -323,7 +352,11 @@ final class SettingsViewModel {
             _ = try await environment.messageStateCoordinator.deleteAllMessages()
             successMessage = localizationManager.localized("all_messages_cleared")
         } catch {
-            self.error = .saveConfig(reason: error.localizedDescription)
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: localizationManager.localized("operation_failed"),
+                code: "message_clear_all_failed"
+            )
         }
     }
 
@@ -406,7 +439,11 @@ final class SettingsViewModel {
                 successMessage = localizationManager.localized("messages_cleaned_placeholder", actionTitle)
             }
         } catch {
-            self.error = .saveConfig(reason: error.localizedDescription)
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: localizationManager.localized("operation_failed"),
+                code: "message_cleanup_failed"
+            )
         }
     }
 

@@ -5,6 +5,7 @@ import Observation
 @Observable
 final class DataPageVisibilityController {
     private let dataStore: LocalDataStore
+    @ObservationIgnored private var persistTask: Task<Void, Never>?
 
     private(set) var isMessagePageEnabled = true
     private(set) var isEventPageEnabled = true
@@ -95,7 +96,7 @@ final class DataPageVisibilityController {
         isThingPageEnabled = visibility.thingEnabled
         if persist {
             let store = dataStore
-            Task(priority: .utility) {
+            persistTask = store.enqueueTrackedWrite(after: persistTask) { store in
                 await store.saveDataPageVisibility(visibility)
             }
         }

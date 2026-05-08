@@ -62,7 +62,12 @@ final class ChannelSubscriptionController {
         let normalizedId = try ChannelIdValidator.normalize(channelId)
         let normalizedAlias = try ChannelNameValidator.normalize(alias)
         guard let password = await dataStore.channelPassword(gateway: gatewayKey, for: normalizedId) else {
-            throw AppError.unknown(localizationManager.localized("channel_password_missing"))
+            throw AppError.typedLocal(
+                code: "channel_password_missing",
+                category: .validation,
+                message: localizationManager.localized("channel_password_missing"),
+                detail: "missing stored password for channel rename"
+            )
         }
 
         let payload = try await channelSubscriptionService.renameChannel(
@@ -113,7 +118,12 @@ final class ChannelSubscriptionController {
             .filter { Self.channelMatches($0.channel, normalizedChannel: normalized) }
             .flatMap(\.imageURLs)
         guard let messageStateCoordinator = messageStateCoordinatorProvider() else {
-            throw AppError.unknown(localizationManager.localized("operation_failed"))
+            throw AppError.typedLocal(
+                code: "message_state_coordinator_unavailable",
+                category: .local,
+                message: localizationManager.localized("operation_failed"),
+                detail: "messageStateCoordinatorProvider returned nil during channel cleanup"
+            )
         }
         let removedMessages = try await messageStateCoordinator.deleteMessages(channel: normalized, readState: nil)
         let removedEvents = try await dataStore.deleteEventRecords(channel: normalized)
@@ -153,7 +163,12 @@ final class ChannelSubscriptionController {
         )
 
         guard payload.subscribed else {
-            throw AppError.unknown(localizationManager.localized("operation_failed"))
+            throw AppError.typedLocal(
+                code: "channel_subscribe_failed",
+                category: .internalError,
+                message: localizationManager.localized("operation_failed"),
+                detail: "gateway subscribe response returned subscribed=false"
+            )
         }
 
         let displayName = payload.channelName.isEmpty ? payload.channelId : payload.channelName
@@ -221,7 +236,17 @@ final class ChannelSubscriptionController {
     }
 
     private func isDeviceKeyNotFoundError(_ error: Error) -> Bool {
-        let text = error.localizedDescription.lowercased()
+        if let appError = error as? AppError,
+           appError.matchesGatewayCode("device_key_not_found")
+        {
+            return true
+        }
+        let text: String
+        if let appError = error as? AppError {
+            text = (appError.failureReason ?? appError.errorDescription ?? "").lowercased()
+        } else {
+            text = error.localizedDescription.lowercased()
+        }
         return text.contains("device_key_not_found")
             || text.contains("device_key not found")
             || text.contains("device key not found")

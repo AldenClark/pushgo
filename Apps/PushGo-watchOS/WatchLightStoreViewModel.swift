@@ -44,7 +44,15 @@ final class WatchLightStoreViewModel {
         } catch let appError as AppError {
             error = appError
         } catch {
-            self.error = AppError.unknown(error.localizedDescription)
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: environment.localizationManager.localized(
+                    "unable_to_read_local_data_placeholder",
+                    environment.localizationManager.localized("operation_failed")
+                ),
+                code: "watch_light_load_failed",
+                category: .local
+            )
         }
     }
 
@@ -72,7 +80,12 @@ final class WatchLightStoreViewModel {
         } catch let appError as AppError {
             error = appError
         } catch {
-            self.error = AppError.unknown(error.localizedDescription)
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: environment.localizationManager.localized("failed_to_save_message_status"),
+                code: "watch_light_mark_read_failed",
+                category: .local
+            )
         }
     }
 
@@ -88,7 +101,12 @@ final class WatchLightStoreViewModel {
         } catch let appError as AppError {
             error = appError
         } catch {
-            self.error = AppError.unknown(error.localizedDescription)
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: environment.localizationManager.localized("operation_failed"),
+                code: "watch_light_delete_failed",
+                category: .local
+            )
         }
     }
 }

@@ -20,12 +20,14 @@ struct NormalizedRemoteNotification {
 enum ProviderWakeupResolution {
     case notWakeup
     case pulled(payload: [AnyHashable: Any], requestIdentifier: String)
+    case claimedByPeer(payload: [AnyHashable: Any], requestIdentifier: String?)
     case unresolvedWakeup(payload: [AnyHashable: Any], requestIdentifier: String?)
 }
 
 enum NotificationIngressResolution {
     case direct(payload: [AnyHashable: Any], requestIdentifier: String?)
     case pulled(payload: [AnyHashable: Any], requestIdentifier: String)
+    case claimedByPeer(payload: [AnyHashable: Any], requestIdentifier: String?)
     case unresolvedWakeup(payload: [AnyHashable: Any], requestIdentifier: String?)
 }
 
@@ -862,6 +864,11 @@ enum NotificationHandling {
             )
         case let .pulled(resolvedPayload, requestIdentifier):
             return .pulled(payload: resolvedPayload, requestIdentifier: requestIdentifier)
+        case let .claimedByPeer(unresolvedPayload, requestIdentifier):
+            return .claimedByPeer(
+                payload: unresolvedPayload,
+                requestIdentifier: requestIdentifier
+            )
         case let .unresolvedWakeup(unresolvedPayload, requestIdentifier):
             return .unresolvedWakeup(
                 payload: unresolvedPayload,
@@ -895,6 +902,8 @@ enum NotificationHandling {
             }
             return requestIdentifier ?? providerIngressRequestIdentifier(from: payload)
         case .pulled:
+            return nil
+        case .claimedByPeer:
             return nil
         case .unresolvedWakeup:
             return nil
@@ -966,6 +975,30 @@ enum NotificationHandling {
         guard let deviceKey = await activeProviderDeviceKeyForWakeupIngress(dataStore: dataStore) else {
             return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId)
         }
+        let claimStore = ProviderWakeupPullClaimStore.shared
+        let owner = "app_wakeup_resolver"
+        let leaseDuration: TimeInterval = 30
+        let lease: ProviderWakeupPullClaimStore.ClaimLease
+        if let acquiredLease = await claimStore.acquireLease(
+            deliveryId: deliveryId,
+            owner: owner,
+            leaseDuration: leaseDuration
+        ) {
+            lease = acquiredLease
+        } else if await claimStore.waitForPeerCompletion(
+            deliveryId: deliveryId,
+            timeout: 1.5
+        ) {
+            return .claimedByPeer(payload: sanitized, requestIdentifier: deliveryId)
+        } else if let retryLease = await claimStore.acquireLease(
+            deliveryId: deliveryId,
+            owner: owner,
+            leaseDuration: leaseDuration
+        ) {
+            lease = retryLease
+        } else {
+            return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId)
+        }
 
         for candidate in candidates {
             do {
@@ -981,6 +1014,7 @@ enum NotificationHandling {
                 let pulledPayload: [AnyHashable: Any] = item.payload.reduce(into: [:]) { result, element in
                     result[element.key] = element.value
                 }
+                await claimStore.markCompleted(lease)
                 return .pulled(
                     payload: UserInfoSanitizer.sanitize(pulledPayload),
                     requestIdentifier: normalizedPayloadString(item.deliveryId) ?? deliveryId
@@ -990,6 +1024,7 @@ enum NotificationHandling {
             }
         }
 
+        await claimStore.releaseLease(lease)
         return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId)
     }
 #endif

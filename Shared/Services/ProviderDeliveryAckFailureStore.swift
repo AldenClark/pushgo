@@ -582,4 +582,342 @@ actor ProviderDeliveryAckFailureStore {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed
     }
+
+}
+
+actor ProviderWakeupPullClaimStore {
+    enum ClaimState: Equatable, Sendable {
+        case available
+        case claimed
+        case completed
+    }
+
+    enum State: String, Codable, Sendable {
+        case claimed
+        case completed
+    }
+
+    struct StoredClaim: Codable, Sendable {
+        let schemaVersion: Int
+        let deliveryId: String
+        let state: State
+        let owner: String?
+        let leaseUntilEpochMs: Int64?
+        let createdAtEpochMs: Int64
+        let updatedAtEpochMs: Int64
+    }
+
+    struct ClaimLease: Sendable {
+        let fileName: String
+        let fileURL: URL
+        let record: StoredClaim
+    }
+
+    static let shared = ProviderWakeupPullClaimStore()
+
+    private static let schemaVersion = 1
+    private static let fileExtension = "pullclaim"
+    private static let lockExtension = "lock"
+    private static let directoryName = "provider-wakeup-pull-claims"
+    private static let completedRetention: TimeInterval = 10 * 60
+    private static let mutationLockStaleAge: TimeInterval = 30
+
+    private let fileManager: FileManager
+    private let appGroupIdentifier: String
+    private let encoder: PropertyListEncoder
+    private let decoder: PropertyListDecoder
+
+    init(
+        fileManager: FileManager = .default,
+        appGroupIdentifier: String = AppConstants.appGroupIdentifier
+    ) {
+        self.fileManager = fileManager
+        self.appGroupIdentifier = appGroupIdentifier
+
+        let encoder = PropertyListEncoder()
+        encoder.outputFormat = .binary
+        self.encoder = encoder
+        decoder = PropertyListDecoder()
+    }
+
+    func acquireLease(
+        deliveryId: String,
+        owner: String,
+        leaseDuration: TimeInterval,
+        now: Date = Date()
+    ) async -> ClaimLease? {
+        guard let normalizedDeliveryId = normalizedText(deliveryId),
+              let normalizedOwner = normalizedText(owner),
+              let directoryURL = claimsDirectoryURL()
+        else {
+            return nil
+        }
+        guard await acquireMutationLock(
+            deliveryId: normalizedDeliveryId,
+            directoryURL: directoryURL,
+            now: now
+        ) else {
+            return nil
+        }
+        defer {
+            releaseMutationLock(deliveryId: normalizedDeliveryId, directoryURL: directoryURL)
+        }
+
+        let fileURL = directoryURL.appendingPathComponent(
+            Self.claimFileName(deliveryId: normalizedDeliveryId),
+            isDirectory: false
+        )
+        let nowEpochMs = Self.epochMilliseconds(now)
+        if let current = loadClaim(fileURL: fileURL) {
+            switch current.record.state {
+            case .completed:
+                if isCompletedClaimFresh(current.record, nowEpochMs: nowEpochMs) {
+                    return nil
+                }
+            case .claimed:
+                if let leaseUntilEpochMs = current.record.leaseUntilEpochMs,
+                   leaseUntilEpochMs > nowEpochMs
+                {
+                    return nil
+                }
+            }
+        }
+
+        let claim = StoredClaim(
+            schemaVersion: Self.schemaVersion,
+            deliveryId: normalizedDeliveryId,
+            state: .claimed,
+            owner: normalizedOwner,
+            leaseUntilEpochMs: Self.epochMilliseconds(now.addingTimeInterval(leaseDuration)),
+            createdAtEpochMs: loadClaim(fileURL: fileURL)?.record.createdAtEpochMs ?? nowEpochMs,
+            updatedAtEpochMs: nowEpochMs
+        )
+        guard write(claim, to: fileURL) else {
+            return nil
+        }
+        return ClaimLease(fileName: fileURL.lastPathComponent, fileURL: fileURL, record: claim)
+    }
+
+    func markCompleted(_ lease: ClaimLease, now: Date = Date()) async {
+        let deliveryId = lease.record.deliveryId
+        guard let directoryURL = claimsDirectoryURL() else { return }
+        guard await acquireMutationLock(deliveryId: deliveryId, directoryURL: directoryURL, now: now) else {
+            return
+        }
+        defer {
+            releaseMutationLock(deliveryId: deliveryId, directoryURL: directoryURL)
+        }
+        let fileURL = directoryURL.appendingPathComponent(
+            Self.claimFileName(deliveryId: deliveryId),
+            isDirectory: false
+        )
+        let completed = StoredClaim(
+            schemaVersion: Self.schemaVersion,
+            deliveryId: deliveryId,
+            state: .completed,
+            owner: normalizedText(lease.record.owner),
+            leaseUntilEpochMs: nil,
+            createdAtEpochMs: loadClaim(fileURL: fileURL)?.record.createdAtEpochMs ?? lease.record.createdAtEpochMs,
+            updatedAtEpochMs: Self.epochMilliseconds(now)
+        )
+        _ = write(completed, to: fileURL)
+    }
+
+    func releaseLease(_ lease: ClaimLease, now: Date = Date()) async {
+        let deliveryId = lease.record.deliveryId
+        guard let directoryURL = claimsDirectoryURL() else { return }
+        guard await acquireMutationLock(deliveryId: deliveryId, directoryURL: directoryURL, now: now) else {
+            return
+        }
+        defer {
+            releaseMutationLock(deliveryId: deliveryId, directoryURL: directoryURL)
+        }
+        let fileURL = directoryURL.appendingPathComponent(
+            Self.claimFileName(deliveryId: deliveryId),
+            isDirectory: false
+        )
+        try? fileManager.removeItem(at: fileURL)
+    }
+
+    func waitForPeerCompletion(
+        deliveryId: String,
+        timeout: TimeInterval,
+        pollInterval: TimeInterval = 0.05,
+        now: Date = Date()
+    ) async -> Bool {
+        guard let normalizedDeliveryId = normalizedText(deliveryId) else {
+            return false
+        }
+        let deadline = now.addingTimeInterval(timeout)
+        let sleepNanoseconds = UInt64(max(0.01, pollInterval) * 1_000_000_000)
+        var current = now
+        while current <= deadline {
+            switch claimState(deliveryId: normalizedDeliveryId, now: current) {
+            case .completed:
+                return true
+            case .claimed:
+                do {
+                    try await Task.sleep(nanoseconds: sleepNanoseconds)
+                } catch {
+                    return false
+                }
+                current = Date()
+            case .available:
+                return false
+            }
+        }
+        return claimState(deliveryId: normalizedDeliveryId, now: Date()) == .completed
+    }
+
+    private func claimsDirectoryURL() -> URL? {
+        guard let containerURL = AppConstants.appGroupContainerURL(
+            fileManager: fileManager,
+            identifier: appGroupIdentifier
+        ) else {
+            return nil
+        }
+        return containerURL
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Application Support", isDirectory: true)
+            .appendingPathComponent(Self.directoryName, isDirectory: true)
+    }
+
+    private func loadClaim(fileURL: URL) -> ClaimLease? {
+        guard let data = try? Data(contentsOf: fileURL),
+              let claim = try? decoder.decode(StoredClaim.self, from: data)
+        else {
+            return nil
+        }
+        return ClaimLease(fileName: fileURL.lastPathComponent, fileURL: fileURL, record: claim)
+    }
+
+    private func claimState(deliveryId: String, now: Date) -> ClaimState {
+        guard let directoryURL = claimsDirectoryURL() else {
+            return .available
+        }
+        let fileURL = directoryURL.appendingPathComponent(
+            Self.claimFileName(deliveryId: deliveryId),
+            isDirectory: false
+        )
+        guard let current = loadClaim(fileURL: fileURL) else {
+            return .available
+        }
+        let nowEpochMs = Self.epochMilliseconds(now)
+        switch current.record.state {
+        case .completed:
+            return isCompletedClaimFresh(current.record, nowEpochMs: nowEpochMs) ? .completed : .available
+        case .claimed:
+            if let leaseUntilEpochMs = current.record.leaseUntilEpochMs,
+               leaseUntilEpochMs > nowEpochMs
+            {
+                return .claimed
+            }
+            return .available
+        }
+    }
+
+    private func write(_ claim: StoredClaim, to fileURL: URL) -> Bool {
+        guard let data = try? encoder.encode(claim) else {
+            return false
+        }
+        let directoryURL = fileURL.deletingLastPathComponent()
+        let tempURL = directoryURL.appendingPathComponent(
+            ".\(fileURL.lastPathComponent).tmp-\(UUID().uuidString.lowercased())",
+            isDirectory: false
+        )
+        do {
+            try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+            try data.write(to: tempURL, options: [])
+            if fileManager.fileExists(atPath: fileURL.path) {
+                _ = try fileManager.replaceItemAt(
+                    fileURL,
+                    withItemAt: tempURL,
+                    backupItemName: nil,
+                    options: [.usingNewMetadataOnly]
+                )
+            } else {
+                try fileManager.moveItem(at: tempURL, to: fileURL)
+            }
+            return true
+        } catch {
+            try? fileManager.removeItem(at: tempURL)
+            return false
+        }
+    }
+
+    private func acquireMutationLock(
+        deliveryId: String,
+        directoryURL: URL,
+        now: Date
+    ) async -> Bool {
+        let lockURL = directoryURL.appendingPathComponent(
+            Self.lockFileName(deliveryId: deliveryId),
+            isDirectory: false
+        )
+
+        do {
+            try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        } catch {
+            return false
+        }
+
+        do {
+            try fileManager.createDirectory(at: lockURL, withIntermediateDirectories: false)
+            return true
+        } catch {
+            guard let attributes = try? fileManager.attributesOfItem(atPath: lockURL.path),
+                  let modifiedAt = attributes[.modificationDate] as? Date
+            else {
+                return false
+            }
+            guard now.timeIntervalSince(modifiedAt) >= Self.mutationLockStaleAge else {
+                return false
+            }
+            try? fileManager.removeItem(at: lockURL)
+            do {
+                try fileManager.createDirectory(at: lockURL, withIntermediateDirectories: false)
+                return true
+            } catch {
+                return false
+            }
+        }
+    }
+
+    private func releaseMutationLock(deliveryId: String, directoryURL: URL) {
+        let lockURL = directoryURL.appendingPathComponent(
+            Self.lockFileName(deliveryId: deliveryId),
+            isDirectory: false
+        )
+        try? fileManager.removeItem(at: lockURL)
+    }
+
+    private func isCompletedClaimFresh(_ record: StoredClaim, nowEpochMs: Int64) -> Bool {
+        nowEpochMs - record.updatedAtEpochMs < Int64((Self.completedRetention * 1_000).rounded())
+    }
+
+    private func normalizedText(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func claimFileName(deliveryId: String) -> String {
+        "\(filesystemComponent(deliveryId)).\(fileExtension)"
+    }
+
+    private static func lockFileName(deliveryId: String) -> String {
+        "\(filesystemComponent(deliveryId)).\(lockExtension)"
+    }
+
+    private static func filesystemComponent(_ value: String) -> String {
+        Data(value.utf8)
+            .base64EncodedString()
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "=", with: "")
+    }
+
+    private static func epochMilliseconds(_ date: Date) -> Int64 {
+        Int64((date.timeIntervalSince1970 * 1_000).rounded())
+    }
+
 }

@@ -15,8 +15,9 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency 
         PushGoAnimatedImageRuntime.bootstrapIfNeeded()
         NSApp.setActivationPolicy(.regular)
         activateForAutomationIfNeeded()
-        UNUserNotificationCenter.current().delegate = self
         let environment = AppEnvironment.shared
+        environment.beginProviderIngressBootstrapRecovery()
+        UNUserNotificationCenter.current().delegate = self
         bootstrapAutomationRuntimeIfNeeded()
         configureStatusItem()
 
@@ -212,7 +213,12 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency 
             channelSubscriptionService: channelSubscriptionService
         )
         switch ingress {
+        case .claimedByPeer:
+            return
         case let .unresolvedWakeup(resolvedPayload, requestIdentifier):
+            guard !AppEnvironment.shared.shouldDeferStartupWakeupPulls else {
+                return
+            }
             let unresolvedDeliveryId = requestIdentifier
                 ?? NotificationHandling.providerWakeupPullDeliveryId(from: resolvedPayload)
             if let unresolvedDeliveryId {

@@ -1865,6 +1865,31 @@ struct LocalDataStoreTests {
         }
     }
 
+    @Test
+    func cachedDeviceKeyFallsBackToSharedWakeupDefaultsWhenKeychainEntryIsMissing() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let saveResult = await store.saveCachedDeviceKey("device-key-defaults-001", for: "macos")
+            #expect(saveResult?.didPersist == true)
+
+            let keychainItemURL = automationKeychainItemURL(
+                root: root,
+                service: "io.ethan.pushgo.provider.device-key",
+                account: "provider.device_key.macos"
+            )
+            try FileManager.default.removeItem(at: keychainItemURL)
+
+            let reloaded = await store.cachedDeviceKey(for: "macos")
+            #expect(reloaded == "device-key-defaults-001")
+            #expect(
+                LocalDataStore.loadWakeupIngressDeviceKeyDefaults(
+                    platform: "macos",
+                    suiteName: appGroupIdentifier
+                ) == "device-key-defaults-001"
+            )
+        }
+    }
+
     private func makeMessage(
         messageId: String,
         notificationRequestId: String,
@@ -1885,5 +1910,25 @@ struct LocalDataStoreTests {
                 result[item.key] = AnyCodable(item.value)
             }
         )
+    }
+
+    private func automationKeychainItemURL(
+        root: URL,
+        service: String,
+        account: String
+    ) -> URL {
+        root
+            .appendingPathComponent("keychain", isDirectory: true)
+            .appendingPathComponent(automationFilesystemComponent(service), isDirectory: true)
+            .appendingPathComponent(automationFilesystemComponent(account), isDirectory: false)
+            .appendingPathExtension("json")
+    }
+
+    private func automationFilesystemComponent(_ value: String) -> String {
+        Data(value.utf8)
+            .base64EncodedString()
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "=", with: "")
     }
 }

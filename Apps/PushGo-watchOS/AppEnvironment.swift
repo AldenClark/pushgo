@@ -264,6 +264,28 @@ final class AppEnvironment {
         }
     }
 
+    func userFacingErrorMessage(
+        _ error: Error,
+        fallbackMessage: String? = nil
+    ) -> String {
+        let defaultMessage = fallbackMessage ?? localizationManager.localized("operation_failed")
+        let wrapped = AppError.wrap(error, fallbackMessage: defaultMessage)
+        return wrapped.errorDescription ?? defaultMessage
+    }
+
+    func showErrorToast(
+        _ error: Error,
+        fallbackMessage: String? = nil,
+        style: ToastMessage.Style = .error,
+        duration: TimeInterval = 3
+    ) {
+        showToast(
+            message: userFacingErrorMessage(error, fallbackMessage: fallbackMessage),
+            style: style,
+            duration: duration
+        )
+    }
+
     private func recordAutomationRuntimeError(
         _ error: Error,
         source: String,
@@ -374,10 +396,10 @@ final class AppEnvironment {
         do {
             try await updateServerConfig(config)
         } catch {
-            showToast(message: localizationManager.localized(
-                "failed_to_save_server_configuration_placeholder",
-                error.localizedDescription,
-            ))
+            showErrorToast(
+                error,
+                fallbackMessage: localizationManager.localized("failed_to_save_server_configuration")
+            )
         }
     }
 
@@ -1099,7 +1121,15 @@ final class AppEnvironment {
         } catch {
             recordAutomationRuntimeError(error, source: "watch.reconcile_standalone_runtime.\(reason)")
             if !standaloneReady {
-                updateStandaloneReadiness(false, failureReason: error.localizedDescription)
+                updateStandaloneReadiness(
+                    false,
+                    failureReason: AppError.wrap(
+                        error,
+                        fallbackMessage: localizationManager.localized("operation_failed"),
+                        code: "standalone_runtime_reconcile_failed",
+                        category: .local
+                    ).code.lowercased()
+                )
             }
         }
     }
@@ -1142,10 +1172,10 @@ final class AppEnvironment {
                 .localized("unable_to_obtain_apns_token"))
         } catch {
             recordAutomationRuntimeError(error, source: "push.authorization.refresh")
-            showToast(message: localizationManager.localized(
-                "unable_to_obtain_apns_token_placeholder",
-                error.localizedDescription,
-            ))
+            showErrorToast(
+                error,
+                fallbackMessage: localizationManager.localized("unable_to_obtain_apns_token")
+            )
         }
         return false
     }
@@ -1160,7 +1190,12 @@ final class AppEnvironment {
         await persistPushTokenAndRotateRoute(config: config, token: providerToken)
         await syncProviderPullRoute(config: config, providerToken: providerToken)
         guard let deviceKey = await ensureProviderDeviceKey(config: config, platform: platformIdentifier()) else {
-            throw AppError.saveConfig(reason: "unable to obtain device_key")
+            throw AppError.typedLocal(
+                code: "missing_device_key",
+                category: .notFound,
+                message: localizationManager.localized("operation_failed"),
+                detail: "unable to obtain device_key"
+            )
         }
 
         let payload = try await channelSubscriptionService.sync(
@@ -1188,7 +1223,7 @@ final class AppEnvironment {
                     date: syncedAt
                 )
             } else {
-                switch result.errorCode {
+                switch result.resolvedErrorCode?.lowercased() {
                 case "channel_not_found":
                     staleChannels.append(result.channelId)
                 case "password_mismatch":
@@ -1875,6 +1910,8 @@ final class AppEnvironment {
             deliveryId = requestIdentifier ?? NotificationHandling.providerIngressRequestIdentifier(from: payload)
         case .pulled:
             return
+        case .claimedByPeer:
+            return
         case .unresolvedWakeup:
             return
         }
@@ -2041,6 +2078,8 @@ final class AppEnvironment {
                 )
             }
             return persisted
+        case .claimedByPeer:
+            return true
         case let .unresolvedWakeup(payload, requestIdentifier):
             let unresolvedDeliveryId = requestIdentifier
                 ?? NotificationHandling.providerWakeupPullDeliveryId(from: payload)
@@ -2093,10 +2132,10 @@ final class AppEnvironment {
                 return
             }
         } catch {
-            showToast(message: localizationManager.localized(
-                "sync_message_failed_placeholder",
-                error.localizedDescription
-            ))
+            showErrorToast(
+                error,
+                fallbackMessage: localizationManager.localized("sync_message_failed")
+            )
         }
     }
 
@@ -2115,10 +2154,10 @@ final class AppEnvironment {
                 return
             }
         } catch {
-            showToast(message: localizationManager.localized(
-                "sync_message_failed_placeholder",
-                error.localizedDescription
-            ))
+            showErrorToast(
+                error,
+                fallbackMessage: localizationManager.localized("sync_message_failed")
+            )
         }
     }
 

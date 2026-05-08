@@ -72,6 +72,28 @@ struct ProviderIngressIdentity: Sendable, Equatable {
 }
 
 final class ProviderIngressCoordinator {
+    enum SyncOutcome {
+        case skipped
+        case succeeded(appliedCount: Int)
+        case failed
+
+        var appliedCount: Int {
+            switch self {
+            case .succeeded(let appliedCount):
+                return appliedCount
+            case .skipped, .failed:
+                return 0
+            }
+        }
+
+        var completedRequest: Bool {
+            if case .succeeded = self {
+                return true
+            }
+            return false
+        }
+    }
+
     struct Hooks {
         let isEnabled: @MainActor () -> Bool
         let serverConfig: @MainActor () -> ServerConfig?
@@ -87,6 +109,7 @@ final class ProviderIngressCoordinator {
     private let channelSubscriptionService: ChannelSubscriptionService
     private let notificationIngressInbox: NotificationIngressInbox
     private let ackMarkerStore: ProviderDeliveryAckFailureStore
+    private let wakeupPullClaimStore: ProviderWakeupPullClaimStore
     private let hooks: Hooks
     private var isDrainingAckMarkers = false
     private var isFullSyncInFlight = false
@@ -100,6 +123,7 @@ final class ProviderIngressCoordinator {
         channelSubscriptionService: ChannelSubscriptionService,
         notificationIngressInbox: NotificationIngressInbox,
         ackMarkerStore: ProviderDeliveryAckFailureStore,
+        wakeupPullClaimStore: ProviderWakeupPullClaimStore = .shared,
         hooks: Hooks
     ) {
         self.platformSuffix = platformSuffix
@@ -107,6 +131,7 @@ final class ProviderIngressCoordinator {
         self.channelSubscriptionService = channelSubscriptionService
         self.notificationIngressInbox = notificationIngressInbox
         self.ackMarkerStore = ackMarkerStore
+        self.wakeupPullClaimStore = wakeupPullClaimStore
         self.hooks = hooks
     }
 
@@ -176,6 +201,8 @@ final class ProviderIngressCoordinator {
                     applied += 1
                 }
                 shouldRemove = shouldRemoveInboxEntry(payload: resolvedPayload, result: result)
+            case .claimedByPeer:
+                shouldRemove = await hooks.hasPersistedNotification(identity)
             case let .unresolvedWakeup(unresolvedPayload, requestIdentifier):
                 guard allowFallbackPull else {
                     shouldRemove = false
@@ -216,13 +243,26 @@ final class ProviderIngressCoordinator {
         reason: String,
         skipInboxMerge: Bool = false
     ) async -> Int {
-        guard await hooks.isEnabled() else { return 0 }
+        let outcome = await syncProviderIngressOutcome(
+            deliveryId: deliveryId,
+            reason: reason,
+            skipInboxMerge: skipInboxMerge
+        )
+        return outcome.appliedCount
+    }
+
+    func syncProviderIngressOutcome(
+        deliveryId: String? = nil,
+        reason: String,
+        skipInboxMerge: Bool = false
+    ) async -> SyncOutcome {
+        guard await hooks.isEnabled() else { return .skipped }
         let normalizedDeliveryId = normalizedText(deliveryId)
         let shouldCoalesceFullSync = normalizedDeliveryId == nil && !bypassesRecentFullSyncCoalescing(reason: reason)
         if shouldCoalesceFullSync {
-            guard !isFullSyncInFlight else { return 0 }
+            guard !isFullSyncInFlight else { return .skipped }
             guard Date().timeIntervalSince(lastFullSyncAttemptAt) >= Self.recentFullSyncInterval else {
-                return 0
+                return .skipped
             }
             isFullSyncInFlight = true
             lastFullSyncAttemptAt = Date()
@@ -239,8 +279,19 @@ final class ProviderIngressCoordinator {
                 allowFallbackPull: false
             )
         }
-        guard let config = await hooks.serverConfig() else { return 0 }
-        guard let deviceKey = await hooks.cachedDeviceKey() else { return 0 }
+        guard let config = await hooks.serverConfig() else { return .skipped }
+        guard let deviceKey = await hooks.cachedDeviceKey() else { return .skipped }
+        var wakeupPullLease: ProviderWakeupPullClaimStore.ClaimLease?
+        if let normalizedDeliveryId {
+            guard let lease = await wakeupPullClaimStore.acquireLease(
+                deliveryId: normalizedDeliveryId,
+                owner: "app.sync.\(platformSuffix)",
+                leaseDuration: 30
+            ) else {
+                return .skipped
+            }
+            wakeupPullLease = lease
+        }
 
         do {
             let items = try await channelSubscriptionService.pullMessages(
@@ -249,7 +300,12 @@ final class ProviderIngressCoordinator {
                 deviceKey: deviceKey,
                 deliveryId: normalizedDeliveryId
             )
-            guard !items.isEmpty else { return 0 }
+            guard !items.isEmpty else {
+                if let wakeupPullLease {
+                    await wakeupPullClaimStore.releaseLease(wakeupPullLease)
+                }
+                return .succeeded(appliedCount: 0)
+            }
 
             var applied = 0
             for item in items {
@@ -265,11 +321,44 @@ final class ProviderIngressCoordinator {
                     await ackMarkerStore.markCompleted(deliveryId: item.deliveryId)
                 }
             }
-            return applied
+            if let wakeupPullLease {
+                await wakeupPullClaimStore.markCompleted(wakeupPullLease)
+            }
+            return .succeeded(appliedCount: applied)
         } catch {
+            if let wakeupPullLease {
+                await wakeupPullClaimStore.releaseLease(wakeupPullLease)
+            }
             await hooks.recordProviderError(error, "provider.ingress.\(reason)")
-            return 0
+            return .failed
         }
+    }
+
+    @discardableResult
+    func purgePendingUnresolvedWakeupEntries(limit: Int = 256) async -> Int {
+        guard await hooks.isEnabled() else { return 0 }
+        let pendingEntries = await notificationIngressInbox.pendingEntries(limit: limit)
+        guard !pendingEntries.isEmpty else { return 0 }
+
+        var removed = 0
+        for pendingEntry in pendingEntries {
+            let payload = pendingEntry.payload
+            guard NotificationHandling.providerWakeupPullDeliveryId(from: payload) != nil else {
+                continue
+            }
+            let identity = identity(
+                from: payload,
+                fallbackRequestIdentifier: pendingEntry.record.requestIdentifier
+            )
+            if await hooks.hasPersistedNotification(identity) {
+                await notificationIngressInbox.markCompleted(pendingEntry)
+                removed += 1
+                continue
+            }
+            await notificationIngressInbox.markCompleted(pendingEntry)
+            removed += 1
+        }
+        return removed
     }
 
     func ackDirectDeliveryIfNeeded(

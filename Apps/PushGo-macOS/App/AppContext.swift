@@ -1,5 +1,6 @@
 import Observation
 import SwiftUI
+import AppKit
 
 extension View {
     func withAppContext(
@@ -33,6 +34,12 @@ private struct DynamicLocaleWrapper<Content: View>: View {
             .environment(localizationManager)
             .environment(\.locale, localizationManager.swiftUILocale)
             .toastOverlay(environment: environment)
+            .task(id: environment.toastMessage) {
+                GlobalToastOverlayPresenter.shared.update(
+                    toast: environment.toastMessage,
+                    anchorWindow: NSApp.keyWindow ?? MainWindowController.shared.mainWindow ?? NSApp.mainWindow
+                )
+            }
 #if DEBUG
             .task {
                 #if !os(watchOS)
@@ -116,29 +123,151 @@ private struct ToastOverlayModifier: ViewModifier {
         }
 
         var body: some View {
-            ZStack(alignment: .bottom) {
-                content
-
-                if let toast = environment.toastMessage {
-                    Button {
-                        environment.dismissToast(id: toast.id)
-                    } label: {
-                        ToastView(toast: toast)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(LocalizedStringKey("close"))
-                    .padding(.horizontal, 24)
-                    .frame(maxWidth: .infinity)
-                    .padding(.bottom, toastBottomPadding)
-                    .zIndex(999)
-                }
-            }
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: environment.toastMessage)
+            content
         }
     }
 }
 
-private let toastBottomPadding: CGFloat = 120
+@MainActor
+private final class GlobalToastOverlayPresenter {
+    static let shared = GlobalToastOverlayPresenter()
+
+    private var panel: ToastOverlayPanel?
+    private var hostingView: NSHostingView<GlobalToastOverlayRoot>?
+    private weak var anchorWindow: NSWindow?
+    private var observerTokens: [NSObjectProtocol] = []
+
+    func update(
+        toast: AppEnvironment.ToastMessage?,
+        anchorWindow: NSWindow?
+    ) {
+        guard let toast else {
+            dismiss()
+            return
+        }
+        guard let anchorWindow else { return }
+
+        ensurePanel(attachedTo: anchorWindow)
+        hostingView?.rootView = GlobalToastOverlayRoot(toast: toast)
+        syncFrame(with: anchorWindow)
+        panel?.orderFront(nil)
+    }
+
+    private func dismiss() {
+        observerTokens.forEach(NotificationCenter.default.removeObserver)
+        observerTokens.removeAll()
+        if let panel, let parent = anchorWindow {
+            parent.removeChildWindow(panel)
+        }
+        panel?.orderOut(nil)
+        panel = nil
+        hostingView = nil
+        anchorWindow = nil
+    }
+
+    private func ensurePanel(attachedTo window: NSWindow) {
+        if anchorWindow !== window {
+            if let panel, let previous = anchorWindow {
+                previous.removeChildWindow(panel)
+            }
+            anchorWindow = window
+            installObservers(for: window)
+        }
+
+        if let panel {
+            if panel.parent !== window {
+                window.addChildWindow(panel, ordered: .above)
+            }
+            return
+        }
+
+        let panel = ToastOverlayPanel(
+            contentRect: window.frame,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        panel.hasShadow = false
+        panel.level = .statusBar
+        panel.ignoresMouseEvents = true
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+
+        let hostingView = NSHostingView(rootView: GlobalToastOverlayRoot(toast: nil))
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
+        panel.contentView = NSView(frame: panel.frame)
+        panel.contentView?.wantsLayer = true
+        panel.contentView?.layer?.backgroundColor = NSColor.clear.cgColor
+        panel.contentView?.addSubview(hostingView)
+        NSLayoutConstraint.activate([
+            hostingView.leadingAnchor.constraint(equalTo: panel.contentView!.leadingAnchor),
+            hostingView.trailingAnchor.constraint(equalTo: panel.contentView!.trailingAnchor),
+            hostingView.topAnchor.constraint(equalTo: panel.contentView!.topAnchor),
+            hostingView.bottomAnchor.constraint(equalTo: panel.contentView!.bottomAnchor),
+        ])
+
+        window.addChildWindow(panel, ordered: .above)
+        self.panel = panel
+        self.hostingView = hostingView
+    }
+
+    private func installObservers(for window: NSWindow) {
+        observerTokens.forEach(NotificationCenter.default.removeObserver)
+        observerTokens = [
+            NotificationCenter.default.addObserver(
+                forName: NSWindow.didResizeNotification,
+                object: window,
+                queue: .main
+            ) { [weak self] note in
+                guard let window = note.object as? NSWindow else { return }
+                Task { @MainActor in
+                    self?.syncFrame(with: window)
+                }
+            },
+            NotificationCenter.default.addObserver(
+                forName: NSWindow.didMoveNotification,
+                object: window,
+                queue: .main
+            ) { [weak self] note in
+                guard let window = note.object as? NSWindow else { return }
+                Task { @MainActor in
+                    self?.syncFrame(with: window)
+                }
+            },
+        ]
+    }
+
+    private func syncFrame(with window: NSWindow) {
+        panel?.setFrame(window.frame, display: true)
+    }
+}
+
+private final class ToastOverlayPanel: NSPanel {
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+}
+
+private struct GlobalToastOverlayRoot: View {
+    let toast: AppEnvironment.ToastMessage?
+
+    var body: some View {
+        ZStack {
+            Color.clear
+
+            if let toast {
+                VStack {
+                    Spacer(minLength: 0)
+                    ToastView(toast: toast)
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 120)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
 
 private struct BootstrapTaskModifier: ViewModifier {
     let perform: Bool

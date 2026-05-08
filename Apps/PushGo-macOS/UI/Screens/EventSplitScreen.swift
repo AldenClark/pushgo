@@ -260,9 +260,9 @@ struct EventSplitScreen: View {
                 try await viewModel.closeEvent(event: selectedEvent)
             } catch {
                 await MainActor.run {
-                    environment.showToast(
-                        message: "\(localizationManager.localized("operation_failed")): \(error.localizedDescription)",
-                        style: .error,
+                    environment.showErrorToast(
+                        error,
+                        fallbackMessage: localizationManager.localized("operation_failed"),
                         duration: 2
                     )
                 }
@@ -316,11 +316,11 @@ struct EventSplitScreen: View {
             } else {
                 _ = try await viewModel.deleteEvents(eventIds: uniqueEvents.map(\.id))
             }
-        } onCompletion: { [environment, localizationManager] result in
+        } onCompletion: { [environment] result in
             guard case let .failure(error) = result else { return }
-            environment.showToast(
-                message: "\(localizationManager.localized("operation_failed")): \(error.localizedDescription)",
-                style: .error,
+            environment.showErrorToast(
+                error,
+                fallbackMessage: localizationManager.localized("operation_failed"),
                 duration: 2
             )
         }

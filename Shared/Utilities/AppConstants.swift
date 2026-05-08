@@ -745,6 +745,72 @@ enum AppConstants {
 #endif
 }
 
+enum WakeupIngressSharedState {
+    static let serverConfigDefaultsKey = "io.ethan.pushgo.wakeup_ingress.server_config.v1"
+    private static let deviceKeyDefaultsPrefix = "io.ethan.pushgo.wakeup_ingress.device_key.v1."
+
+    static func loadServerConfig(
+        suiteName: String = AppConstants.appGroupIdentifier
+    ) -> ServerConfig? {
+        guard let data = AppConstants.sharedUserDefaults(suiteName: suiteName)
+            .data(forKey: serverConfigDefaultsKey)
+        else {
+            return nil
+        }
+        return try? JSONDecoder().decode(ServerConfig.self, from: data).normalized()
+    }
+
+    static func saveServerConfig(
+        _ config: ServerConfig?,
+        suiteName: String = AppConstants.appGroupIdentifier
+    ) {
+        let defaults = AppConstants.sharedUserDefaults(suiteName: suiteName)
+        guard let normalized = config?.normalized() else {
+            defaults.removeObject(forKey: serverConfigDefaultsKey)
+            return
+        }
+        if let data = try? JSONEncoder().encode(normalized) {
+            defaults.set(data, forKey: serverConfigDefaultsKey)
+        }
+    }
+
+    static func deviceKeyDefaultsKey(for platform: String) -> String {
+        deviceKeyDefaultsPrefix + platform
+    }
+
+    static func loadDeviceKey(
+        platform: String,
+        suiteName: String = AppConstants.appGroupIdentifier
+    ) -> String? {
+        let normalizedPlatform = platform.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !normalizedPlatform.isEmpty else { return nil }
+        let value = AppConstants.sharedUserDefaults(suiteName: suiteName)
+            .string(forKey: deviceKeyDefaultsKey(for: normalizedPlatform))?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let value, !value.isEmpty else { return nil }
+        return value
+    }
+
+    static func saveDeviceKey(
+        _ deviceKey: String?,
+        platform: String,
+        suiteName: String = AppConstants.appGroupIdentifier
+    ) {
+        let normalizedPlatform = platform.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !normalizedPlatform.isEmpty else { return }
+        let defaults = AppConstants.sharedUserDefaults(suiteName: suiteName)
+        let normalizedDeviceKey = deviceKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let key = deviceKeyDefaultsKey(for: normalizedPlatform)
+        if normalizedDeviceKey.isEmpty {
+            defaults.removeObject(forKey: key)
+        } else {
+            defaults.set(normalizedDeviceKey, forKey: key)
+        }
+    }
+}
+
 enum AppVersionDisplay {
     private static let displayVersionInfoKey = "PushGoDisplayVersion"
 

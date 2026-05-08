@@ -27,7 +27,7 @@ enum ManualNotificationKeyEncoding: String, CaseIterable, Identifiable {
     }
 }
 
-enum ManualNotificationKeyValidationError: LocalizedError {
+enum ManualNotificationKeyValidationError: LocalizedError, LocalProblemPayloadConvertible {
     case invalidBase64
     case invalidHex
     case invalidLength
@@ -40,6 +40,36 @@ enum ManualNotificationKeyValidationError: LocalizedError {
             return LocalizationProvider.localized("the_selected_format_is_not_a_valid_hex_please_check_your_input")
         case .invalidLength:
             return LocalizationProvider.localized("key_length_must_be_128_192_256_bits")
+        }
+    }
+
+    var localProblemPayload: LocalProblemPayload {
+        switch self {
+        case .invalidBase64:
+            return LocalProblemPayload(
+                code: "manual_notification_key_invalid_base64",
+                category: .validation,
+                message: LocalizationProvider.localized(
+                    "the_selected_format_is_not_valid_base64_please_check_your_input"
+                ),
+                detail: "manual notification key is not valid base64"
+            )
+        case .invalidHex:
+            return LocalProblemPayload(
+                code: "manual_notification_key_invalid_hex",
+                category: .validation,
+                message: LocalizationProvider.localized(
+                    "the_selected_format_is_not_a_valid_hex_please_check_your_input"
+                ),
+                detail: "manual notification key is not valid hex"
+            )
+        case .invalidLength:
+            return LocalProblemPayload(
+                code: "manual_notification_key_invalid_length",
+                category: .validation,
+                message: LocalizationProvider.localized("key_length_must_be_128_192_256_bits"),
+                detail: "manual notification key length must be 128/192/256 bits"
+            )
         }
     }
 }

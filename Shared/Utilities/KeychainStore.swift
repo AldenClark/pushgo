@@ -19,7 +19,7 @@ enum KeychainStoreError: LocalizedError, Equatable {
         case .unexpectedData:
             return LocalizationProvider.localized("keychain_unexpected_data")
         case let .missingAccessGroup(suffix):
-            return "Keychain access group is not configured for \(suffix)."
+            return LocalizationProvider.localized("keychain_access_group_missing_placeholder", suffix)
         case let .osStatus(status):
             return LocalizationProvider.localized("keychain_operation_failed_placeholder", status)
         }

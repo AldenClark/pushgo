@@ -451,11 +451,11 @@ struct ThingListScreen: View {
             for thing in uniqueThings {
                 try await viewModel.deleteThing(thingId: thing.id)
             }
-        } onCompletion: { [environment, localizationManager] result in
+        } onCompletion: { [environment] result in
             guard case let .failure(error) = result else { return }
-            environment.showToast(
-                message: "\(localizationManager.localized("operation_failed")): \(error.localizedDescription)",
-                style: .error,
+            environment.showErrorToast(
+                error,
+                fallbackMessage: localizationManager.localized("operation_failed"),
                 duration: 2
             )
         }

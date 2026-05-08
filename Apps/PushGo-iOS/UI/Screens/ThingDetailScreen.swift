@@ -50,11 +50,7 @@ struct ThingDetailScreen: View {
             try await onCommitDelete()
         } onCompletion: { [environment] result in
             guard case let .failure(error) = result else { return }
-            environment.showToast(
-                message: error.localizedDescription,
-                style: .error,
-                duration: 2.5
-            )
+            environment.showErrorToast(error, duration: 2.5)
         }
 
         onPrepareDelete?()

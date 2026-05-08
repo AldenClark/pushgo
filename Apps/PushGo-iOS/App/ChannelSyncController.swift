@@ -113,7 +113,11 @@ final class ChannelSyncController {
                     )
                 }
             } catch {
-                let message = (error as? AppError)?.errorDescription ?? error.localizedDescription
+                let message = AppError.wrap(
+                    error,
+                    fallbackMessage: localizationManager.localized("unable_to_sync_channels"),
+                    code: "subscription_sync_failed"
+                ).errorDescription ?? localizationManager.localized("unable_to_sync_channels")
                 showToast(localizationManager.localized(
                     "unable_to_sync_channels_placeholder",
                     message
@@ -131,9 +135,14 @@ final class ChannelSyncController {
             showToast(appError.errorDescription ?? localizationManager.localized("unable_to_sync_channels"))
         } catch {
             recordRuntimeError(error, "channel.sync.launch")
+            let message = AppError.wrap(
+                error,
+                fallbackMessage: localizationManager.localized("unable_to_sync_channels"),
+                code: "subscription_sync_failed"
+            ).errorDescription ?? localizationManager.localized("unable_to_sync_channels")
             showToast(localizationManager.localized(
                 "unable_to_sync_channels_placeholder",
-                error.localizedDescription
+                message
             ))
         }
     }
@@ -150,9 +159,14 @@ final class ChannelSyncController {
             showToast(appError.errorDescription ?? localizationManager.localized("unable_to_sync_channels"))
         } catch {
             recordRuntimeError(error, "channel.sync.entry")
+            let message = AppError.wrap(
+                error,
+                fallbackMessage: localizationManager.localized("unable_to_sync_channels"),
+                code: "subscription_sync_failed"
+            ).errorDescription ?? localizationManager.localized("unable_to_sync_channels")
             showToast(localizationManager.localized(
                 "unable_to_sync_channels_placeholder",
-                error.localizedDescription
+                message
             ))
         }
     }
@@ -208,7 +222,7 @@ final class ChannelSyncController {
                     date: syncedAt
                 )
             } else {
-                switch result.errorCode {
+                switch result.resolvedErrorCode?.lowercased() {
                 case "channel_not_found":
                     staleChannels.append(result.channelId)
                 case "password_mismatch":

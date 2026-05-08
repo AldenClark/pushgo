@@ -12,7 +12,6 @@ struct SettingsView: View {
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @State private var viewModel = SettingsViewModel()
     @State private var activeSheet: SettingsSheet?
-    @State private var deferredToast: DeferredToast?
     @State private var watchStandaloneToggleValue = false
     @State private var pendingWatchStandaloneToggleTarget: Bool?
     @State private var isPresentingWatchStandaloneConfirmation = false
@@ -76,9 +75,6 @@ struct SettingsView: View {
             )
             viewModel.error = nil
         }
-        .onChange(of: activeSheet) { _, _ in
-            flushDeferredToastIfNeeded()
-        }
 #if DEBUG
         .task(id: automationStateSignature) {
             PushGoAutomationRuntime.shared.publishState(
@@ -94,12 +90,10 @@ struct SettingsView: View {
                 ManualKeySettingsSheet(viewModel: viewModel)
                     .presentationDetents([.medium])
                     .presentationDragIndicator(.visible)
-                    .toastOverlay(environment: environment)
             case .serverManagement:
                 ServerManagementSheet(viewModel: viewModel)
                     .presentationDetents([.medium])
                     .presentationDragIndicator(.visible)
-                    .toastOverlay(environment: environment)
             }
         }
         .alert(
@@ -556,18 +550,7 @@ struct SettingsView: View {
         style: AppEnvironment.ToastMessage.Style,
         duration: TimeInterval
     ) {
-        if activeSheet != nil {
-            deferredToast = DeferredToast(message: message, style: style, duration: duration)
-            return
-        }
         environment.showToast(message: message, style: style, duration: duration)
-    }
-
-    @MainActor
-    private func flushDeferredToastIfNeeded() {
-        guard activeSheet == nil, let toast = deferredToast else { return }
-        deferredToast = nil
-        environment.showToast(message: toast.message, style: toast.style, duration: toast.duration)
     }
 
     private func statusText(for status: PushRegistrationService.AuthorizationState) -> LocalizedStringKey {

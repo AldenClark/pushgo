@@ -129,9 +129,9 @@ final class WatchNotificationServiceProcessor {
             }
             deliveryId = nonEmpty(ingressRequestIdentifier)
                 ?? nonEmpty(UserInfoSanitizer.sanitize(resolvedPayload)["delivery_id"] as? String)
-        case let .pulled(resolvedPayload, ingressRequestIdentifier):
-            payload = resolvedPayload
-            deliveryId = nonEmpty(ingressRequestIdentifier)
+        case .pulled:
+            // /messages/pull already removes the delivery server-side.
+            return
         case .unresolvedWakeup:
             return
         }
@@ -212,9 +212,9 @@ final class WatchNotificationServiceProcessor {
             }
             deliveryId = nonEmpty(ingressRequestIdentifier)
                 ?? nonEmpty(UserInfoSanitizer.sanitize(resolvedPayload)["delivery_id"] as? String)
-        case let .pulled(resolvedPayload, ingressRequestIdentifier):
-            payload = resolvedPayload
-            deliveryId = nonEmpty(ingressRequestIdentifier)
+        case .pulled:
+            // Pull ingress is already acknowledged and should not enter the watch ack backlog.
+            return
         case .unresolvedWakeup:
             return
         }

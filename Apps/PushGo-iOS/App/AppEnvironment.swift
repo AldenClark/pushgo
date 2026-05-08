@@ -34,6 +34,7 @@ final class AppEnvironment {
     @ObservationIgnored private var pendingCountsRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var bootstrapTask: Task<Void, Never>?
     @ObservationIgnored private var didBootstrap = false
+    @ObservationIgnored private var providerIngressBootstrapRecoveryInFlight = false
 
     private var toastDismissTask: Task<Void, Never>?
 
@@ -125,6 +126,9 @@ final class AppEnvironment {
         },
         recordProviderError: { [weak self] error, source in
             self?.recordAutomationRuntimeError(error, source: source, category: "provider")
+        },
+        shouldDeferStartupWakeupPulls: { [weak self] in
+            self?.shouldDeferStartupWakeupPulls ?? false
         }
     )
     @ObservationIgnored private(set) lazy var notificationOpenController = NotificationOpenController(
@@ -251,15 +255,26 @@ final class AppEnvironment {
     }
 
     private func performBootstrap() async {
+        beginProviderIngressBootstrapRecovery()
         await loadPersistedState()
         _ = await mergeNotificationIngressInbox(
             reason: "bootstrap",
-            allowFallbackPull: true
+            allowFallbackPull: false
         )
         await drainProviderDeliveryAckFailures(source: "provider.bootstrap.ack_failure.ios")
         Task(priority: .utility) { @MainActor in
+            defer {
+                finishProviderIngressBootstrapRecovery()
+            }
             await preparePushInfrastructure()
-            _ = await syncProviderIngress(reason: "bootstrap_ready")
+            let syncOutcome = await syncProviderIngressOutcome(reason: "bootstrap_ready")
+            _ = await mergeNotificationIngressInbox(
+                reason: "bootstrap_post_sync",
+                allowFallbackPull: false
+            )
+            if syncOutcome.completedRequest {
+                _ = await purgePendingUnresolvedWakeupEntries()
+            }
         }
         let store = dataStore
         Task(priority: .utility) {
@@ -324,7 +339,7 @@ final class AppEnvironment {
         } catch {
             showToast(message: localizationManager.localized(
                 "failed_to_save_message_placeholder",
-                error.localizedDescription,
+                userFacingErrorMessage(error),
             ))
         }
     }
@@ -395,7 +410,12 @@ final class AppEnvironment {
         let normalizedChannelId = try ChannelIdValidator.normalize(channelId)
         let normalizedEventId = eventId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedEventId.isEmpty else {
-            throw AppError.unknown("event_id required")
+            throw AppError.typedLocal(
+                code: "event_id_required",
+                category: .validation,
+                message: localizationManager.localized("operation_failed"),
+                detail: "event_id required"
+            )
         }
         let trimmedThingId = thingId?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedThingId = (trimmedThingId?.isEmpty == false) ? trimmedThingId : nil
@@ -435,7 +455,12 @@ final class AppEnvironment {
         }()
 
         guard let password = await dataStore.channelPassword(gateway: gatewayKey, for: normalizedChannelId) else {
-            throw AppError.unknown(localizationManager.localized("channel_password_missing"))
+            throw AppError.typedLocal(
+                code: "channel_password_missing",
+                category: .validation,
+                message: localizationManager.localized("channel_password_missing"),
+                detail: "channel password missing"
+            )
         }
 
         let endpointPath: String
@@ -587,7 +612,7 @@ final class AppEnvironment {
         } catch {
             showToast(message: localizationManager.localized(
                 "failed_to_save_message_status_placeholder",
-                error.localizedDescription,
+                userFacingErrorMessage(error),
             ))
         }
     }
@@ -627,6 +652,28 @@ final class AppEnvironment {
                 self?.dismissToast(id: toast.id)
             }
         }
+    }
+
+    func userFacingErrorMessage(
+        _ error: Error,
+        fallbackMessage: String? = nil
+    ) -> String {
+        let defaultMessage = fallbackMessage ?? localizationManager.localized("operation_failed")
+        let wrapped = AppError.wrap(error, fallbackMessage: defaultMessage)
+        return wrapped.errorDescription ?? defaultMessage
+    }
+
+    func showErrorToast(
+        _ error: Error,
+        fallbackMessage: String? = nil,
+        style: ToastMessage.Style = .error,
+        duration: TimeInterval = 3
+    ) {
+        showToast(
+            message: userFacingErrorMessage(error, fallbackMessage: fallbackMessage),
+            style: style,
+            duration: duration
+        )
     }
 
     private func recordAutomationRuntimeError(
@@ -789,7 +836,7 @@ final class AppEnvironment {
             recordAutomationRuntimeError(error, source: "push.authorization.refresh")
             showToast(message: localizationManager.localized(
                 "unable_to_obtain_apns_token_placeholder",
-                error.localizedDescription,
+                userFacingErrorMessage(error),
             ))
         }
     }
@@ -822,7 +869,7 @@ final class AppEnvironment {
         } catch {
             showToast(message: localizationManager.localized(
                 "failed_to_save_server_configuration_placeholder",
-                error.localizedDescription,
+                userFacingErrorMessage(error),
             ))
         }
     }
@@ -900,7 +947,7 @@ final class AppEnvironment {
                 recordAutomationRuntimeError(error, source: "storage.save_server_config", category: "storage")
                 bootstrapErrors.append(localizationManager.localized(
                     "failed_to_save_server_configuration_placeholder",
-                    error.localizedDescription
+                    userFacingErrorMessage(error)
                 ))
             }
         }
@@ -941,7 +988,12 @@ final class AppEnvironment {
     func requestWatchModeChangeConfirmed(_ mode: WatchMode) async throws {
         let result = try await requestWatchModeChangeApplied(mode)
         if result == .timedOut {
-            throw AppError.saveConfig(reason: "Apple Watch mode change was not confirmed. Please try again.")
+            throw AppError.typedLocal(
+                code: "watch_mode_change_not_confirmed",
+                category: .local,
+                message: localizationManager.localized("operation_failed"),
+                detail: "apple watch mode change was not confirmed"
+            )
         }
     }
 
@@ -1023,7 +1075,7 @@ final class AppEnvironment {
                 recordAutomationRuntimeError(error, source: "push.authorization.request", category: "permission")
                 showToast(message: localizationManager.localized(
                     "request_for_notification_permission_failed_placeholder",
-                    error.localizedDescription,
+                    userFacingErrorMessage(error),
                 ))
                 return
             }
@@ -1153,6 +1205,35 @@ final class AppEnvironment {
         )
     }
 
+    func syncProviderIngressOutcome(
+        deliveryId: String? = nil,
+        reason: String,
+        skipInboxMerge: Bool = false
+    ) async -> ProviderIngressCoordinator.SyncOutcome {
+        await notificationIngressController.syncProviderIngressOutcome(
+            deliveryId: deliveryId,
+            reason: reason,
+            skipInboxMerge: skipInboxMerge
+        )
+    }
+
+    @discardableResult
+    func purgePendingUnresolvedWakeupEntries(limit: Int = 256) async -> Int {
+        await notificationIngressController.purgePendingUnresolvedWakeupEntries(limit: limit)
+    }
+
+    func beginProviderIngressBootstrapRecovery() {
+        providerIngressBootstrapRecoveryInFlight = true
+    }
+
+    func finishProviderIngressBootstrapRecovery() {
+        providerIngressBootstrapRecoveryInFlight = false
+    }
+
+    var shouldDeferStartupWakeupPulls: Bool {
+        providerIngressBootstrapRecoveryInFlight
+    }
+
     func updateLaunchAtLogin(isEnabled: Bool) {
         Task { @MainActor in
             await dataStore.saveLaunchAtLoginPreference(isEnabled)
@@ -1205,33 +1286,15 @@ final class AppEnvironment {
         request.httpMethod = "POST"
         request.timeoutInterval = AppConstants.deviceRegistrationTimeout
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let token = config.token, !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
+        ChannelSubscriptionService.applyGatewayHeaders(&request, token: config.token)
         request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw AppError.serverUnreachable
-        }
-        if http.statusCode == 401 || http.statusCode == 403 {
-            throw AppError.authFailed
-        }
-        if !(200 ... 299).contains(http.statusCode) {
-            throw AppError.unknown("HTTP \(http.statusCode): request failed")
-        }
-
-        if let decoded = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
-            if let success = decoded["success"] as? Bool, success {
-                return
-            }
-            if let message = decoded["error"] as? String,
-               !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            {
-                throw AppError.unknown(message)
-            }
-        }
+        _ = try ChannelSubscriptionService.decodeGatewayResponse(
+            ChannelSubscriptionService.EmptyPayload.self,
+            data: data,
+            response: response
+        )
     }
 
     private func escapedGatewayPathComponent(_ raw: String) -> String {

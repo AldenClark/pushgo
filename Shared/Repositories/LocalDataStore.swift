@@ -376,7 +376,14 @@ actor LocalDataStore {
     private let localConfigStore = LocalKeychainConfigStore()
     private let pushTokenStore = PushTokenStore()
     private let deviceKeyStore = ProviderDeviceKeyStore()
-    private static let wakeupIngressConfigDefaultsKey = "io.ethan.pushgo.wakeup_ingress.server_config.v1"
+    private struct TrackedWriteTask: Sendable {
+        let id: UUID
+        let task: Task<Void, Never>
+    }
+
+    private static let trackedWriteTasks = OSAllocatedUnfairLock<[ObjectIdentifier: [TrackedWriteTask]]>(
+        initialState: [:]
+    )
 
     init(
         fileManager: FileManager = .default,
@@ -619,8 +626,41 @@ actor LocalDataStore {
         return backend
     }
 
+    nonisolated func enqueueTrackedWrite(
+        after predecessor: Task<Void, Never>? = nil,
+        operation: @Sendable @escaping (LocalDataStore) async -> Void
+    ) -> Task<Void, Never> {
+        let objectId = ObjectIdentifier(self)
+        let taskId = UUID()
+        let task = Task(priority: .utility) {
+            await predecessor?.value
+            await operation(self)
+            Self.trackedWriteTasks.withLockUnchecked { tasksByStore in
+                guard var tasks = tasksByStore[objectId] else { return }
+                tasks.removeAll { $0.id == taskId }
+                if tasks.isEmpty {
+                    tasksByStore.removeValue(forKey: objectId)
+                } else {
+                    tasksByStore[objectId] = tasks
+                }
+            }
+        }
+        Self.trackedWriteTasks.withLockUnchecked { tasksByStore in
+            var tasks = tasksByStore[objectId] ?? []
+            tasks.append(TrackedWriteTask(id: taskId, task: task))
+            tasksByStore[objectId] = tasks
+        }
+        return task
+    }
+
     func flushWrites() async {
-        // Durability-first mode: disable in-memory write buffering.
+        let objectId = ObjectIdentifier(self)
+        let tasks = Self.trackedWriteTasks.withLockUnchecked { tasksByStore in
+            tasksByStore[objectId] ?? []
+        }
+        for task in tasks {
+            await task.task.value
+        }
     }
 
     func rebuildPersistentStoresForRecovery() throws {
@@ -724,27 +764,22 @@ actor LocalDataStore {
 
     func loadServerConfig() async throws -> ServerConfig? {
         if let config = try? localConfigStore.loadServerConfig()?.normalized() {
+            Self.saveWakeupIngressServerConfigDefaults(
+                config,
+                suiteName: appGroupIdentifier
+            )
             return config
         }
-        guard let data = AppConstants.sharedUserDefaults(suiteName: appGroupIdentifier)
-            .data(forKey: Self.wakeupIngressConfigDefaultsKey)
-        else {
-            return nil
-        }
-        return try? JSONDecoder().decode(ServerConfig.self, from: data).normalized()
+        return Self.loadWakeupIngressServerConfigDefaults(suiteName: appGroupIdentifier)
     }
 
     func saveServerConfig(_ config: ServerConfig?) async throws {
         let normalized = config?.normalized()
         try localConfigStore.saveServerConfig(normalized)
-        let defaults = AppConstants.sharedUserDefaults(suiteName: appGroupIdentifier)
-        guard let normalized else {
-            defaults.removeObject(forKey: Self.wakeupIngressConfigDefaultsKey)
-            return
-        }
-        if let data = try? JSONEncoder().encode(normalized) {
-            defaults.set(data, forKey: Self.wakeupIngressConfigDefaultsKey)
-        }
+        Self.saveWakeupIngressServerConfigDefaults(
+            normalized,
+            suiteName: appGroupIdentifier
+        )
     }
 
     private func normalizeGatewayKey(_ gateway: String) -> String {
@@ -1107,7 +1142,18 @@ actor LocalDataStore {
         guard let normalizedPlatform = normalizedDevicePlatform(platform) else {
             return nil
         }
-        return loadCanonicalDeviceKey(for: normalizedPlatform)
+        if let deviceKey = loadCanonicalDeviceKey(for: normalizedPlatform) {
+            Self.saveWakeupIngressDeviceKeyDefaults(
+                deviceKey,
+                platform: normalizedPlatform,
+                suiteName: appGroupIdentifier
+            )
+            return deviceKey
+        }
+        return Self.loadWakeupIngressDeviceKeyDefaults(
+            platform: normalizedPlatform,
+            suiteName: appGroupIdentifier
+        )
     }
 
     @discardableResult
@@ -1116,7 +1162,13 @@ actor LocalDataStore {
         for platform: String
     ) async -> ProviderDeviceKeyStore.SaveResult? {
         guard let normalizedPlatform = normalizedDevicePlatform(platform) else { return nil }
-        return deviceKeyStore.save(deviceKey: deviceKey, platform: normalizedPlatform)
+        let result = deviceKeyStore.save(deviceKey: deviceKey, platform: normalizedPlatform)
+        Self.saveWakeupIngressDeviceKeyDefaults(
+            deviceKey,
+            platform: normalizedPlatform,
+            suiteName: appGroupIdentifier
+        )
+        return result
     }
 
     func cachedDeviceKey(
@@ -1145,6 +1197,42 @@ actor LocalDataStore {
 
     private func loadCanonicalDeviceKey(for normalizedPlatform: String) -> String? {
         deviceKeyStore.load(platform: normalizedPlatform)
+    }
+
+    static func loadWakeupIngressServerConfigDefaults(
+        suiteName: String = AppConstants.appGroupIdentifier
+    ) -> ServerConfig? {
+        WakeupIngressSharedState.loadServerConfig(suiteName: suiteName)
+    }
+
+    static func saveWakeupIngressServerConfigDefaults(
+        _ config: ServerConfig?,
+        suiteName: String = AppConstants.appGroupIdentifier
+    ) {
+        WakeupIngressSharedState.saveServerConfig(config, suiteName: suiteName)
+    }
+
+    static func wakeupIngressDeviceKeyDefaultsKey(for platform: String) -> String {
+        WakeupIngressSharedState.deviceKeyDefaultsKey(for: platform)
+    }
+
+    static func loadWakeupIngressDeviceKeyDefaults(
+        platform: String,
+        suiteName: String = AppConstants.appGroupIdentifier
+    ) -> String? {
+        WakeupIngressSharedState.loadDeviceKey(platform: platform, suiteName: suiteName)
+    }
+
+    static func saveWakeupIngressDeviceKeyDefaults(
+        _ deviceKey: String?,
+        platform: String,
+        suiteName: String = AppConstants.appGroupIdentifier
+    ) {
+        WakeupIngressSharedState.saveDeviceKey(
+            deviceKey,
+            platform: platform,
+            suiteName: suiteName
+        )
     }
 
     func loadManualKeyPreferences() async -> String? {

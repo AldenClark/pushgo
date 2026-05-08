@@ -8,6 +8,7 @@ final class NotificationIngressController {
     typealias BeforePersistMessage = @Sendable (PushMessage) async -> Void
     typealias CountsRefreshScheduler = @MainActor () -> Void
     typealias ProviderErrorRecorder = @MainActor (Error, String) -> Void
+    typealias StartupWakeupPullDeferPredicate = @MainActor () -> Bool
 
     private let dataStore: LocalDataStore
     private let channelSubscriptionService: ChannelSubscriptionService
@@ -16,6 +17,7 @@ final class NotificationIngressController {
     private let beforePersistMessage: BeforePersistMessage
     private let scheduleCountsRefresh: CountsRefreshScheduler
     private let recordProviderError: ProviderErrorRecorder
+    private let shouldDeferStartupWakeupPulls: StartupWakeupPullDeferPredicate
     private let notificationIngressInbox: NotificationIngressInbox
     private let ackFailureStore: ProviderDeliveryAckFailureStore
 
@@ -60,6 +62,7 @@ final class NotificationIngressController {
         beforePersistMessage: @escaping BeforePersistMessage,
         scheduleCountsRefresh: @escaping CountsRefreshScheduler,
         recordProviderError: @escaping ProviderErrorRecorder,
+        shouldDeferStartupWakeupPulls: @escaping StartupWakeupPullDeferPredicate = { false },
         notificationIngressInbox: NotificationIngressInbox = .shared,
         ackFailureStore: ProviderDeliveryAckFailureStore = .shared
     ) {
@@ -70,6 +73,7 @@ final class NotificationIngressController {
         self.beforePersistMessage = beforePersistMessage
         self.scheduleCountsRefresh = scheduleCountsRefresh
         self.recordProviderError = recordProviderError
+        self.shouldDeferStartupWakeupPulls = shouldDeferStartupWakeupPulls
         self.notificationIngressInbox = notificationIngressInbox
         self.ackFailureStore = ackFailureStore
     }
@@ -111,6 +115,23 @@ final class NotificationIngressController {
         )
     }
 
+    func syncProviderIngressOutcome(
+        deliveryId: String? = nil,
+        reason: String,
+        skipInboxMerge: Bool = false
+    ) async -> ProviderIngressCoordinator.SyncOutcome {
+        await providerIngressCoordinator.syncProviderIngressOutcome(
+            deliveryId: deliveryId,
+            reason: reason,
+            skipInboxMerge: skipInboxMerge
+        )
+    }
+
+    @discardableResult
+    func purgePendingUnresolvedWakeupEntries(limit: Int = 256) async -> Int {
+        await providerIngressCoordinator.purgePendingUnresolvedWakeupEntries(limit: limit)
+    }
+
     @discardableResult
     func persistNotificationIfNeeded(_ notification: UNNotification) async -> NotificationPersistenceOutcome {
         let notificationPayload = UserInfoSanitizer.sanitize(notification.request.content.userInfo)
@@ -134,7 +155,13 @@ final class NotificationIngressController {
                 dataStore: dataStore,
                 beforeSave: beforePersistMessage
             )
+        case .claimedByPeer:
+            outcome = await hasPersistedNotification(identity: identity) ? .duplicate : .rejected
         case let .unresolvedWakeup(payload, requestIdentifier):
+            if shouldDeferStartupWakeupPulls() {
+                outcome = .rejected
+                break
+            }
             let unresolvedDeliveryId = requestIdentifier
                 ?? NotificationHandling.providerWakeupPullDeliveryId(from: payload)
             if let unresolvedDeliveryId {

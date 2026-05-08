@@ -87,7 +87,11 @@ final class EntityProjectionViewModel {
         } catch let appError as AppError {
             self.error = appError
         } catch {
-            self.error = AppError.unknown(error.localizedDescription)
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: LocalizationProvider.localized("operation_failed"),
+                code: "entity_projection_reload_failed"
+            )
         }
     }
 
@@ -98,7 +102,11 @@ final class EntityProjectionViewModel {
         } catch let appError as AppError {
             self.error = appError
         } catch {
-            self.error = AppError.unknown(error.localizedDescription)
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: LocalizationProvider.localized("operation_failed"),
+                code: "entity_projection_load_more_events_failed"
+            )
         }
     }
 
@@ -109,7 +117,11 @@ final class EntityProjectionViewModel {
         } catch let appError as AppError {
             self.error = appError
         } catch {
-            self.error = AppError.unknown(error.localizedDescription)
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: LocalizationProvider.localized("operation_failed"),
+                code: "entity_projection_load_more_things_failed"
+            )
         }
     }
 
@@ -125,7 +137,11 @@ final class EntityProjectionViewModel {
         } catch let appError as AppError {
             self.error = appError
         } catch {
-            self.error = AppError.unknown(error.localizedDescription)
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: LocalizationProvider.localized("operation_failed"),
+                code: "entity_event_details_load_failed"
+            )
         }
     }
 
@@ -141,7 +157,11 @@ final class EntityProjectionViewModel {
         } catch let appError as AppError {
             self.error = appError
         } catch {
-            self.error = AppError.unknown(error.localizedDescription)
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: LocalizationProvider.localized("operation_failed"),
+                code: "entity_thing_details_load_failed"
+            )
         }
     }
 
@@ -878,7 +898,12 @@ final class EntityProjectionViewModel {
         let eventId = normalizedID(event.id) ?? ""
         guard !eventId.isEmpty else { return }
         guard let channelId = normalizedID(event.channelId), !channelId.isEmpty else {
-            throw AppError.unknown("event missing channel_id")
+            throw AppError.typedLocal(
+                code: "event_missing_channel_id",
+                category: .validation,
+                message: LocalizationProvider.localized("operation_failed"),
+                detail: "event missing channel_id"
+            )
         }
         try await environment.closeEvent(
             eventId: eventId,

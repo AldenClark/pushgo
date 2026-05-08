@@ -512,7 +512,12 @@ final class WatchSyncController {
             if watchModeSwitchStatus == .failed,
                watchControlGeneration == controlGeneration
             {
-                throw AppError.saveConfig(reason: "Apple Watch mode switch failed.")
+                throw AppError.typedLocal(
+                    code: "watch_mode_change_failed",
+                    category: .local,
+                    message: LocalizationProvider.localized("operation_failed"),
+                    detail: "apple watch mode switch failed"
+                )
             }
             try? await Task.sleep(for: .milliseconds(200))
         }

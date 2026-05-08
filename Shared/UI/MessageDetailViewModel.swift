@@ -65,7 +65,11 @@ final class MessageDetailViewModel {
                 revision: environment.messageStoreRevision
             )
         } catch {
-            alertMessage = error.localizedDescription
+            alertMessage = AppError.wrap(
+                error,
+                fallbackMessage: localizationManager.localized("operation_failed"),
+                code: "message_mark_read_failed"
+            ).errorDescription
         }
     }
 
@@ -83,7 +87,11 @@ final class MessageDetailViewModel {
             hasResolvedMessage = true
             MessageDetailSnapshotCache.shared.removeAll(for: message.id)
         } catch {
-            alertMessage = error.localizedDescription
+            alertMessage = AppError.wrap(
+                error,
+                fallbackMessage: localizationManager.localized("operation_failed"),
+                code: "message_delete_failed"
+            ).errorDescription
         }
     }
 

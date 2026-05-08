@@ -219,34 +219,12 @@ struct ChannelManagementView: View {
         .disabled(isRemoving || isRenaming)
     }
 
-    private var isCreatePasswordValid: Bool {
-        (try? ChannelPasswordValidator.validate(createChannelPassword)) != nil
-    }
-
-    private var isSubscribePasswordValid: Bool {
-        (try? ChannelPasswordValidator.validate(subscribeChannelPassword)) != nil
-    }
-
-    private var canSubmitCreateSheet: Bool {
-        !isCreateSubmitting
-        && !createChannelAlias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        && !createChannelPassword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        && isCreatePasswordValid
-    }
-
-    private var canSubmitSubscribeSheet: Bool {
-        !isSubscribeSubmitting
-        && !subscribeChannelId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        && !subscribeChannelPassword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        && isSubscribePasswordValid
-    }
-
     private var canSubmitChannelEntry: Bool {
         switch channelEntryMode {
         case .create:
-            return canSubmitCreateSheet
+            return !isCreateSubmitting
         case .subscribe:
-            return canSubmitSubscribeSheet
+            return !isSubscribeSubmitting
         }
     }
 
@@ -292,13 +270,6 @@ struct ChannelManagementView: View {
                 .autocorrectionDisabled(true)
             }
 
-            if !createChannelPassword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-               !isCreatePasswordValid
-            {
-                Text(localizationManager.localized("channel_password_invalid_length"))
-                    .font(.footnote)
-                    .foregroundStyle(AppSemanticTone.danger.foreground)
-            }
         case .subscribe:
             AppFormField(titleText: localizationManager.localized("channel_id")) {
                 TextField(
@@ -320,13 +291,6 @@ struct ChannelManagementView: View {
                 .autocorrectionDisabled(true)
             }
 
-            if !subscribeChannelPassword.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-               !isSubscribePasswordValid
-            {
-                Text(localizationManager.localized("channel_password_invalid_length"))
-                    .font(.footnote)
-                    .foregroundStyle(AppSemanticTone.danger.foreground)
-            }
         }
     }
 
@@ -416,7 +380,7 @@ struct ChannelManagementView: View {
 
     @MainActor
     private func createChannelFromSheet() async {
-        guard canSubmitCreateSheet else { return }
+        guard !isCreateSubmitting else { return }
         isCreateSubmitting = true
         defer { isCreateSubmitting = false }
 
@@ -433,18 +397,13 @@ struct ChannelManagementView: View {
                 duration: 1.5
             )
         } catch {
-            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            environment.showToast(
-                message: message,
-                style: .error,
-                duration: 2.5
-            )
+            environment.showErrorToast(error, duration: 2.5)
         }
     }
 
     @MainActor
     private func subscribeChannelFromSheet() async {
-        guard canSubmitSubscribeSheet else { return }
+        guard !isSubscribeSubmitting else { return }
         isSubscribeSubmitting = true
         defer { isSubscribeSubmitting = false }
 
@@ -460,12 +419,7 @@ struct ChannelManagementView: View {
                 duration: 1.5
             )
         } catch {
-            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            environment.showToast(
-                message: message,
-                style: .error,
-                duration: 2.5
-            )
+            environment.showErrorToast(error, duration: 2.5)
         }
     }
 
@@ -490,11 +444,11 @@ struct ChannelManagementView: View {
                     scope: .init(channelIDs: Set([channelId]))
                 ) {
                     _ = try await environment.deleteLocalHistoryForChannel(channelId: channelId)
-                } onCompletion: { [environment, localizationManager] result in
+                } onCompletion: { [environment] result in
                     guard case let .failure(error) = result else { return }
-                    environment.showToast(
-                        message: "\(localizationManager.localized("operation_failed")): \(error.localizedDescription)",
-                        style: .error,
+                    environment.showErrorToast(
+                        error,
+                        fallbackMessage: localizationManager.localized("operation_failed"),
                         duration: 2.5
                     )
                 }
@@ -511,12 +465,7 @@ struct ChannelManagementView: View {
                 )
             }
         } catch {
-            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            environment.showToast(
-                message: message,
-                style: .error,
-                duration: 2.5
-            )
+            environment.showErrorToast(error, duration: 2.5)
         }
     }
 
@@ -554,12 +503,7 @@ struct ChannelManagementView: View {
                 duration: 1.5
             )
         } catch {
-            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            environment.showToast(
-                message: message,
-                style: .error,
-                duration: 2.5
-            )
+            environment.showErrorToast(error, duration: 2.5)
         }
     }
 

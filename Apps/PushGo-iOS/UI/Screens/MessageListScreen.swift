@@ -809,11 +809,7 @@ private extension MessageListScreen {
             }
         } onCompletion: { [environment] result in
             guard case let .failure(error) = result else { return }
-            environment.showToast(
-                message: error.localizedDescription,
-                style: .error,
-                duration: 2.5
-            )
+            environment.showErrorToast(error, duration: 2.5)
         }
 
         if let selectedMessage, scope.suppressesMessage(id: selectedMessage.id, channelId: selectedMessage.channel) {

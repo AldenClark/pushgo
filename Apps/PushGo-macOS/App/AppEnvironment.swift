@@ -41,6 +41,7 @@ final class AppEnvironment {
     @ObservationIgnored private var subscriptionSyncTaskKey: String?
     @ObservationIgnored private var lastSubscriptionSyncKey: String?
     @ObservationIgnored private var lastSubscriptionSyncAt: Date = .distantPast
+    @ObservationIgnored private var providerIngressBootstrapRecoveryInFlight = false
 
     private var toastDismissTask: Task<Void, Never>?
     private(set) var isMainWindowVisible = true
@@ -217,15 +218,26 @@ final class AppEnvironment {
     }
 
     private func performBootstrap() async {
+        beginProviderIngressBootstrapRecovery()
         await loadPersistedState()
         _ = await mergeNotificationIngressInbox(
             reason: "bootstrap",
-            allowFallbackPull: true
+            allowFallbackPull: false
         )
         await drainProviderDeliveryAckFailures(source: "provider.bootstrap.ack_failure.macos")
         Task(priority: .utility) { @MainActor in
+            defer {
+                finishProviderIngressBootstrapRecovery()
+            }
             await preparePushInfrastructure()
-            _ = await syncProviderIngress(reason: "bootstrap_ready")
+            let syncOutcome = await syncProviderIngressOutcome(reason: "bootstrap_ready")
+            _ = await mergeNotificationIngressInbox(
+                reason: "bootstrap_post_sync",
+                allowFallbackPull: false
+            )
+            if syncOutcome.completedRequest {
+                _ = await purgePendingUnresolvedWakeupEntries()
+            }
         }
         let store = dataStore
         Task(priority: .utility) {
@@ -368,7 +380,7 @@ final class AppEnvironment {
         } catch {
             showToast(message: localizationManager.localized(
                 "failed_to_save_message_placeholder",
-                error.localizedDescription,
+                userFacingErrorMessage(error),
             ))
         }
     }
@@ -495,7 +507,7 @@ final class AppEnvironment {
         } catch {
             showToast(message: localizationManager.localized(
                 "failed_to_save_message_status_placeholder",
-                error.localizedDescription,
+                userFacingErrorMessage(error),
             ))
         }
     }
@@ -535,6 +547,28 @@ final class AppEnvironment {
                 self?.dismissToast(id: toast.id)
             }
         }
+    }
+
+    func userFacingErrorMessage(
+        _ error: Error,
+        fallbackMessage: String? = nil
+    ) -> String {
+        let defaultMessage = fallbackMessage ?? localizationManager.localized("operation_failed")
+        let wrapped = AppError.wrap(error, fallbackMessage: defaultMessage)
+        return wrapped.errorDescription ?? defaultMessage
+    }
+
+    func showErrorToast(
+        _ error: Error,
+        fallbackMessage: String? = nil,
+        style: ToastMessage.Style = .error,
+        duration: TimeInterval = 3
+    ) {
+        showToast(
+            message: userFacingErrorMessage(error, fallbackMessage: fallbackMessage),
+            style: style,
+            duration: duration
+        )
     }
 
     private func recordAutomationRuntimeError(
@@ -597,11 +631,9 @@ final class AppEnvironment {
             )
             return
         }
-        showToast(
-            message: localizationManager.localized(
-                "failed_to_save_message_status_placeholder",
-                error.localizedDescription
-            )
+        showErrorToast(
+            error,
+            fallbackMessage: localizationManager.localized("operation_failed")
         )
     }
 
@@ -729,7 +761,7 @@ final class AppEnvironment {
             recordAutomationRuntimeError(error, source: "push.authorization.refresh")
             showToast(message: localizationManager.localized(
                 "unable_to_obtain_apns_token_placeholder",
-                error.localizedDescription,
+                userFacingErrorMessage(error),
             ))
         }
     }
@@ -745,7 +777,7 @@ final class AppEnvironment {
             recordAutomationRuntimeError(error, source: "channel.sync.launch")
             showToast(message: localizationManager.localized(
                 "unable_to_sync_channels_placeholder",
-                error.localizedDescription,
+                userFacingErrorMessage(error),
             ))
         }
     }
@@ -761,7 +793,7 @@ final class AppEnvironment {
             recordAutomationRuntimeError(error, source: "channel.sync.entry")
             showToast(message: localizationManager.localized(
                 "unable_to_sync_channels_placeholder",
-                error.localizedDescription,
+                userFacingErrorMessage(error),
             ))
         }
     }
@@ -779,7 +811,12 @@ final class AppEnvironment {
         let token = try await ensureActivePushToken(serverConfig: config)
         let normalizedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedToken.isEmpty else {
-            throw AppError.unknown(localizationManager.localized("operation_failed"))
+            throw AppError.typedLocal(
+                code: "provider_token_missing",
+                category: .validation,
+                message: localizationManager.localized("operation_failed"),
+                detail: "provider token missing"
+            )
         }
         let syncKey = "\(gatewayKey)|\(normalizedToken)"
         if let inFlightTask = subscriptionSyncTask,
@@ -796,7 +833,12 @@ final class AppEnvironment {
 
         let task = Task<Void, Error> { @MainActor [weak self] in
             guard let self else {
-                throw AppError.unknown("subscription sync context released")
+                throw AppError.typedLocal(
+                    code: "subscription_sync_context_released",
+                    category: .internalError,
+                    message: LocalizationProvider.localized("operation_failed"),
+                    detail: "subscription sync context released"
+                )
             }
             try await self.performSubscriptionsSync(
                 config: config,
@@ -855,7 +897,7 @@ final class AppEnvironment {
                     date: syncedAt
                 )
             } else {
-                switch result.errorCode {
+                switch result.resolvedErrorCode?.lowercased() {
                 case "channel_not_found":
                     staleChannels.append(result.channelId)
                 case "password_mismatch":
@@ -901,7 +943,7 @@ final class AppEnvironment {
         } catch {
             showToast(message: localizationManager.localized(
                 "failed_to_save_server_configuration_placeholder",
-                error.localizedDescription,
+                userFacingErrorMessage(error),
             ))
         }
     }
@@ -984,7 +1026,7 @@ final class AppEnvironment {
                 recordAutomationRuntimeError(error, source: "storage.save_server_config", category: "storage")
                 bootstrapErrors.append(localizationManager.localized(
                     "failed_to_save_server_configuration_placeholder",
-                    error.localizedDescription
+                    userFacingErrorMessage(error)
                 ))
             }
         }
@@ -1022,7 +1064,7 @@ final class AppEnvironment {
                 recordAutomationRuntimeError(error, source: "push.authorization.request", category: "permission")
                 showToast(message: localizationManager.localized(
                     "request_for_notification_permission_failed_placeholder",
-                    error.localizedDescription,
+                    userFacingErrorMessage(error),
                 ))
                 return
             }
@@ -1117,7 +1159,12 @@ final class AppEnvironment {
         )
 
         guard payload.subscribed else {
-            throw AppError.unknown(localizationManager.localized("operation_failed"))
+            throw AppError.typedLocal(
+                code: "channel_subscribe_failed",
+                category: .internalError,
+                message: localizationManager.localized("operation_failed"),
+                detail: "channel subscribe failed"
+            )
         }
 
         let displayName = payload.channelName.isEmpty ? payload.channelId : payload.channelName
@@ -1183,7 +1230,17 @@ final class AppEnvironment {
     }
 
     private func isDeviceKeyNotFoundError(_ error: Error) -> Bool {
-        let text = error.localizedDescription.lowercased()
+        if let appError = error as? AppError,
+           appError.matchesGatewayCode("device_key_not_found")
+        {
+            return true
+        }
+        let text: String
+        if let appError = error as? AppError {
+            text = (appError.failureReason ?? appError.errorDescription ?? "").lowercased()
+        } else {
+            text = error.localizedDescription.lowercased()
+        }
         return text.contains("device_key_not_found")
             || text.contains("device_key not found")
             || text.contains("device key not found")
@@ -1195,7 +1252,12 @@ final class AppEnvironment {
         let normalizedId = try ChannelIdValidator.normalize(channelId)
         let normalizedAlias = try ChannelNameValidator.normalize(alias)
         guard let password = await dataStore.channelPassword(gateway: gatewayKey, for: normalizedId) else {
-            throw AppError.unknown(localizationManager.localized("channel_password_missing"))
+            throw AppError.typedLocal(
+                code: "channel_password_missing",
+                category: .validation,
+                message: localizationManager.localized("channel_password_missing"),
+                detail: "channel password missing"
+            )
         }
 
         let payload = try await channelSubscriptionService.renameChannel(
@@ -1276,7 +1338,12 @@ final class AppEnvironment {
         let normalizedChannelId = try ChannelIdValidator.normalize(channelId)
         let normalizedEventId = eventId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedEventId.isEmpty else {
-            throw AppError.unknown("event_id required")
+            throw AppError.typedLocal(
+                code: "event_id_required",
+                category: .validation,
+                message: localizationManager.localized("operation_failed"),
+                detail: "event_id required"
+            )
         }
         let trimmedThingId = thingId?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedThingId = (trimmedThingId?.isEmpty == false) ? trimmedThingId : nil
@@ -1316,7 +1383,12 @@ final class AppEnvironment {
         }()
 
         guard let password = await dataStore.channelPassword(gateway: gatewayKey, for: normalizedChannelId) else {
-            throw AppError.unknown(localizationManager.localized("channel_password_missing"))
+            throw AppError.typedLocal(
+                code: "channel_password_missing",
+                category: .validation,
+                message: localizationManager.localized("channel_password_missing"),
+                detail: "channel password missing"
+            )
         }
 
         let endpointPath: String
@@ -1361,10 +1433,9 @@ final class AppEnvironment {
                     await syncProviderPullRoute(config: config, providerToken: token)
                 }
             } catch {
-                let message = (error as? AppError)?.errorDescription ?? error.localizedDescription
                 showToast(message: localizationManager.localized(
                     "unable_to_sync_channels_placeholder",
-                    message
+                    userFacingErrorMessage(error)
                 ))
             }
             await syncPrivateChannelState()
@@ -1485,7 +1556,12 @@ final class AppEnvironment {
     private func ensureProviderRoute(config: ServerConfig, providerToken: String) async throws -> String {
         let normalizedProviderToken = providerToken.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedProviderToken.isEmpty else {
-            throw AppError.unknown(localizationManager.localized("operation_failed"))
+            throw AppError.typedLocal(
+                code: "provider_token_missing",
+                category: .validation,
+                message: localizationManager.localized("operation_failed"),
+                detail: "provider token missing"
+            )
         }
         let taskKey = "\(config.gatewayKey)|\(normalizedProviderToken)"
         if lastProviderRouteResultKey == taskKey,
@@ -1501,7 +1577,12 @@ final class AppEnvironment {
 
         let task = Task<String, Error> { @MainActor [weak self] in
             guard let self else {
-                throw AppError.unknown("provider route context released")
+                throw AppError.typedLocal(
+                    code: "provider_route_context_released",
+                    category: .internalError,
+                    message: LocalizationProvider.localized("operation_failed"),
+                    detail: "provider route context released"
+                )
             }
             let platform = platformIdentifier()
             let cachedApnsKey = await dataStore.cachedDeviceKey(
@@ -1516,7 +1597,12 @@ final class AppEnvironment {
             )
             let bootstrapDeviceKey = registered.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !bootstrapDeviceKey.isEmpty else {
-                throw AppError.unknown(localizationManager.localized("operation_failed"))
+                throw AppError.typedLocal(
+                    code: "gateway_response_missing_device_key",
+                    category: .internalError,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "gateway response missing device_key"
+                )
             }
             let route = try await channelSubscriptionService.upsertDeviceChannel(
                 baseURL: config.baseURL,
@@ -1528,7 +1614,12 @@ final class AppEnvironment {
             )
             let resolvedDeviceKey = route.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !resolvedDeviceKey.isEmpty else {
-                throw AppError.unknown(localizationManager.localized("operation_failed"))
+                throw AppError.typedLocal(
+                    code: "gateway_response_missing_device_key",
+                    category: .internalError,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "gateway response missing device_key"
+                )
             }
             try await persistProviderDeviceKey(
                 resolvedDeviceKey,
@@ -1586,7 +1677,12 @@ final class AppEnvironment {
                 category: "keychain",
                 code: "E_PROVIDER_DEVICE_KEY_SAVE_FAILED"
             )
-            throw AppError.unknown(localizationManager.localized("operation_failed"))
+            throw AppError.typedLocal(
+                code: "provider_device_key_save_failed",
+                category: .local,
+                message: localizationManager.localized("operation_failed"),
+                detail: "provider_device_key_save_failed platform=invalid"
+            )
         }
         guard result.error == nil, result.didPersist else {
             recordAutomationRuntimeMessage(
@@ -1595,7 +1691,12 @@ final class AppEnvironment {
                 category: "keychain",
                 code: "E_PROVIDER_DEVICE_KEY_SAVE_FAILED"
             )
-            throw result.error ?? AppError.unknown(localizationManager.localized("operation_failed"))
+            throw result.error ?? AppError.typedLocal(
+                code: "provider_device_key_save_failed",
+                category: .local,
+                message: localizationManager.localized("operation_failed"),
+                detail: "provider_device_key_save_failed"
+            )
         }
     }
 
@@ -1744,6 +1845,35 @@ final class AppEnvironment {
         )
     }
 
+    func syncProviderIngressOutcome(
+        deliveryId: String? = nil,
+        reason: String,
+        skipInboxMerge: Bool = false
+    ) async -> ProviderIngressCoordinator.SyncOutcome {
+        await providerIngressCoordinator.syncProviderIngressOutcome(
+            deliveryId: deliveryId,
+            reason: reason,
+            skipInboxMerge: skipInboxMerge
+        )
+    }
+
+    @discardableResult
+    func purgePendingUnresolvedWakeupEntries(limit: Int = 256) async -> Int {
+        await providerIngressCoordinator.purgePendingUnresolvedWakeupEntries(limit: limit)
+    }
+
+    func beginProviderIngressBootstrapRecovery() {
+        providerIngressBootstrapRecoveryInFlight = true
+    }
+
+    func finishProviderIngressBootstrapRecovery() {
+        providerIngressBootstrapRecoveryInFlight = false
+    }
+
+    var shouldDeferStartupWakeupPulls: Bool {
+        providerIngressBootstrapRecoveryInFlight
+    }
+
     @discardableResult
     func persistRemotePayloadIfNeeded(
         _ payload: [AnyHashable: Any],
@@ -1784,7 +1914,14 @@ final class AppEnvironment {
                 requestIdentifier: requestIdentifier
             )
             return outcome
+        case .claimedByPeer:
+            outcome = await hasPersistedNotification(identity: identity) ? .duplicate : .rejected
+            return outcome
         case let .unresolvedWakeup(payload, requestIdentifier):
+            if shouldDeferStartupWakeupPulls {
+                outcome = .rejected
+                break
+            }
             let unresolvedDeliveryId = requestIdentifier
                 ?? NotificationHandling.providerWakeupPullDeliveryId(from: payload)
             if let unresolvedDeliveryId {
@@ -1871,33 +2008,15 @@ final class AppEnvironment {
         request.httpMethod = "POST"
         request.timeoutInterval = AppConstants.deviceRegistrationTimeout
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let token = config.token, !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
+        ChannelSubscriptionService.applyGatewayHeaders(&request, token: config.token)
         request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw AppError.serverUnreachable
-        }
-        if http.statusCode == 401 || http.statusCode == 403 {
-            throw AppError.authFailed
-        }
-        if !(200 ... 299).contains(http.statusCode) {
-            throw AppError.unknown("HTTP \(http.statusCode): request failed")
-        }
-
-        if let decoded = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
-            if let success = decoded["success"] as? Bool, success {
-                return
-            }
-            if let message = decoded["error"] as? String,
-               !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            {
-                throw AppError.unknown(message)
-            }
-        }
+        _ = try ChannelSubscriptionService.decodeGatewayResponse(
+            ChannelSubscriptionService.EmptyPayload.self,
+            data: data,
+            response: response
+        )
     }
 
     private func escapedGatewayPathComponent(_ raw: String) -> String {

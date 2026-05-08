@@ -98,7 +98,12 @@ final class ProviderRouteController {
     func ensureProviderRoute(config: ServerConfig, providerToken: String) async throws -> String {
         let normalizedProviderToken = providerToken.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedProviderToken.isEmpty else {
-            throw AppError.unknown(localizationManager.localized("operation_failed"))
+            throw AppError.typedLocal(
+                code: "provider_token_missing",
+                category: .validation,
+                message: localizationManager.localized("operation_failed"),
+                detail: "provider token missing"
+            )
         }
         let taskKey = "\(config.gatewayKey)|\(normalizedProviderToken)"
         if lastProviderRouteResultKey == taskKey,
@@ -114,7 +119,12 @@ final class ProviderRouteController {
 
         let task = Task<String, Error> { @MainActor [weak self] in
             guard let self else {
-                throw AppError.unknown("provider route context released")
+                throw AppError.typedLocal(
+                    code: "provider_route_context_released",
+                    category: .internalError,
+                    message: LocalizationProvider.localized("operation_failed"),
+                    detail: "provider route context released"
+                )
             }
             let cachedApnsKey = await self.dataStore.cachedDeviceKey(
                 for: self.platform,
@@ -128,7 +138,12 @@ final class ProviderRouteController {
             )
             let bootstrapDeviceKey = registered.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !bootstrapDeviceKey.isEmpty else {
-                throw AppError.unknown(self.localizationManager.localized("operation_failed"))
+                throw AppError.typedLocal(
+                    code: "gateway_response_missing_device_key",
+                    category: .internalError,
+                    message: self.localizationManager.localized("operation_failed"),
+                    detail: "gateway response missing device_key"
+                )
             }
             let route = try await self.channelSubscriptionService.upsertDeviceChannel(
                 baseURL: config.baseURL,
@@ -140,7 +155,12 @@ final class ProviderRouteController {
             )
             let resolvedDeviceKey = route.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !resolvedDeviceKey.isEmpty else {
-                throw AppError.unknown(self.localizationManager.localized("operation_failed"))
+                throw AppError.typedLocal(
+                    code: "gateway_response_missing_device_key",
+                    category: .internalError,
+                    message: self.localizationManager.localized("operation_failed"),
+                    detail: "gateway response missing device_key"
+                )
             }
             try await self.persistProviderDeviceKey(
                 resolvedDeviceKey,
@@ -210,7 +230,12 @@ final class ProviderRouteController {
                 "keychain",
                 "E_PROVIDER_DEVICE_KEY_SAVE_FAILED"
             )
-            throw AppError.unknown(localizationManager.localized("operation_failed"))
+            throw AppError.typedLocal(
+                code: "provider_device_key_save_failed",
+                category: .local,
+                message: localizationManager.localized("operation_failed"),
+                detail: "provider_device_key_save_failed platform=invalid"
+            )
         }
         guard result.error == nil, result.didPersist else {
             runtimeMessageRecorder(
@@ -219,7 +244,12 @@ final class ProviderRouteController {
                 "keychain",
                 "E_PROVIDER_DEVICE_KEY_SAVE_FAILED"
             )
-            throw result.error ?? AppError.unknown(localizationManager.localized("operation_failed"))
+            throw result.error ?? AppError.typedLocal(
+                code: "provider_device_key_save_failed",
+                category: .local,
+                message: localizationManager.localized("operation_failed"),
+                detail: "provider_device_key_save_failed"
+            )
         }
     }
 
