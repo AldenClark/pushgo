@@ -1,0 +1,1592 @@
+{
+  "messages": [
+    {
+      "id": "c5b9f4a9-14a3-596d-bd1c-285026c7509d",
+      "message_id": "msg_thing_agent_support_triage_summary",
+      "title": "Support triage AI agent · Summary projection refreshed",
+      "body": "# Support triage AI agent object update\n> The object projection was refreshed after new signals arrived from several channels.\n\n## Snapshot\n- Current state: stable with human review enabled\n- Related events: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Monitoring channel: AI Agent Feedback\n\n## Attribute changes\n- auto-resolution confidence changed from 0.78 to 0.86\n- fallback rule changed from immediate handoff to sampled review\n\n## Next step\n- Keep the object on the screenshot fixture because it links operations, finance, home and agent scenarios in one realistic timeline.\n",
+      "channel_id": "ai-agent-feedback",
+      "is_read": false,
+      "received_at": "2026-05-08T04:58:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_agent_support_triage",
+        "thing_id": "thing_agent_support_triage",
+        "projection_destination": "thing_head",
+        "title": "Support triage AI agent · Summary projection refreshed",
+        "description": "Support triage AI agent。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "stable with human review enabled",
+        "message": "Summary projection refreshed: auto-resolution confidence changed from 0.78 to 0.86; fallback rule changed from immediate handoff to sampled review",
+        "severity": "medium",
+        "tags": [
+          "AI agent",
+          "ticket",
+          "handoff"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Snapshot": "stable with human review enabled",
+          "Attribute changes": [
+            "auto-resolution confidence changed from 0.78 to 0.86",
+            "fallback rule changed from immediate handoff to sampled review"
+          ],
+          "Related events": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Source": "AI Agent Feedback"
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Keep the object visible in the demo inbox and object detail screen.\",\"Audit note\":\"Object contains readable attribute changes and linked event identifiers.\",\"Related events\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "queue",
+          "value": "Enterprise support queue"
+        },
+        "external_ids": {
+          "object projection": "OBJ-THING_AGENT_SUPPORT_TRIAGE"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "c2b1cf9e-1615-5120-ba24-3767ed73e1c2",
+      "message_id": "msg_thing_event_auth_gateway_summary",
+      "title": "Customer login risk gateway · Summary projection refreshed",
+      "body": "# Customer login risk gateway object update\n> The object projection was refreshed after new signals arrived from several channels.\n\n## Snapshot\n- Current state: rate limited with clean traffic trend\n- Related events: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Monitoring channel: Event Monitoring\n\n## Attribute changes\n- failed login rate dropped from 11.8% to 2.4%\n- temporary challenge threshold changed from medium to strict\n\n## Next step\n- Keep the object on the screenshot fixture because it links operations, finance, home and agent scenarios in one realistic timeline.\n",
+      "channel_id": "event-monitoring",
+      "is_read": false,
+      "received_at": "2026-05-08T04:54:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_event_auth_gateway",
+        "thing_id": "thing_event_auth_gateway",
+        "projection_destination": "thing_head",
+        "title": "Customer login risk gateway · Summary projection refreshed",
+        "description": "Customer login risk gateway。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "rate limited with clean traffic trend",
+        "message": "Summary projection refreshed: failed login rate dropped from 11.8% to 2.4%; temporary challenge threshold changed from medium to strict",
+        "severity": "medium",
+        "tags": [
+          "login",
+          "risk control",
+          "customer trust"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Snapshot": "rate limited with clean traffic trend",
+          "Attribute changes": [
+            "failed login rate dropped from 11.8% to 2.4%",
+            "temporary challenge threshold changed from medium to strict"
+          ],
+          "Related events": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Source": "Event Monitoring"
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Keep the object visible in the demo inbox and object detail screen.\",\"Audit note\":\"Object contains readable attribute changes and linked event identifiers.\",\"Related events\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "service",
+          "value": "Customer account center"
+        },
+        "external_ids": {
+          "object projection": "OBJ-THING_EVENT_AUTH_GATEWAY"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "169b26fe-0292-5209-8ed5-2cd7eaa42048",
+      "message_id": "msg_thing_ops_cluster_sh1_summary",
+      "title": "Shanghai payment cluster · Summary projection refreshed",
+      "body": "# Shanghai payment cluster object update\n> The object projection was refreshed after new signals arrived from several channels.\n\n## Snapshot\n- Current state: healthy with elevated watch\n- Related events: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Monitoring channel: Operations Core\n\n## Attribute changes\n- P95 API latency dropped from 420 ms to 238 ms\n- read replica lag decreased from 18 s to 3 s\n\n## Next step\n- Keep the object on the screenshot fixture because it links operations, finance, home and agent scenarios in one realistic timeline.\n",
+      "channel_id": "ops-core",
+      "is_read": false,
+      "received_at": "2026-05-08T04:50:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_ops_cluster_sh1",
+        "thing_id": "thing_ops_cluster_sh1",
+        "projection_destination": "thing_head",
+        "title": "Shanghai payment cluster · Summary projection refreshed",
+        "description": "Shanghai payment cluster。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "healthy with elevated watch",
+        "message": "Summary projection refreshed: P95 API latency dropped from 420 ms to 238 ms; read replica lag decreased from 18 s to 3 s",
+        "severity": "medium",
+        "tags": [
+          "database",
+          "latency",
+          "read replica"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Snapshot": "healthy with elevated watch",
+          "Attribute changes": [
+            "P95 API latency dropped from 420 ms to 238 ms",
+            "read replica lag decreased from 18 s to 3 s"
+          ],
+          "Related events": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Source": "Operations Core"
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Keep the object visible in the demo inbox and object detail screen.\",\"Audit note\":\"Object contains readable attribute changes and linked event identifiers.\",\"Related events\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "region",
+          "value": "Shanghai region"
+        },
+        "external_ids": {
+          "object projection": "OBJ-THING_OPS_CLUSTER_SH1"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "d1aacece-ed7c-5e7b-908c-d22e466e7713",
+      "message_id": "msg_thing_finance_ap_queue_summary",
+      "title": "Accounts payable review queue · Summary projection refreshed",
+      "body": "# Accounts payable review queue object update\n> The object projection was refreshed after new signals arrived from several channels.\n\n## Snapshot\n- Current state: balanced and locked for duplicate review\n- Related events: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Monitoring channel: Finance Ledger\n\n## Attribute changes\n- duplicate invoice score rose from 0.41 to 0.93\n- approval policy changed from single review to dual review\n\n## Next step\n- Keep the object on the screenshot fixture because it links operations, finance, home and agent scenarios in one realistic timeline.\n",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-08T04:45:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_finance_ap_queue",
+        "thing_id": "thing_finance_ap_queue",
+        "projection_destination": "thing_head",
+        "title": "Accounts payable review queue · Summary projection refreshed",
+        "description": "Accounts payable review queue。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "balanced and locked for duplicate review",
+        "message": "Summary projection refreshed: duplicate invoice score rose from 0.41 to 0.93; approval policy changed from single review to dual review",
+        "severity": "medium",
+        "tags": [
+          "invoice",
+          "approval",
+          "cash flow"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Snapshot": "balanced and locked for duplicate review",
+          "Attribute changes": [
+            "duplicate invoice score rose from 0.41 to 0.93",
+            "approval policy changed from single review to dual review"
+          ],
+          "Related events": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Source": "Finance Ledger"
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Keep the object visible in the demo inbox and object detail screen.\",\"Audit note\":\"Object contains readable attribute changes and linked event identifiers.\",\"Related events\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "department",
+          "value": "Finance shared service center"
+        },
+        "external_ids": {
+          "object projection": "OBJ-THING_FINANCE_AP_QUEUE"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "baf1bada-8a71-5d0a-8dd6-9c6205cbb60d",
+      "message_id": "msg_thing_home_valve_kitchen_summary",
+      "title": "Kitchen water shutoff valve · Summary projection refreshed",
+      "body": "# Kitchen water shutoff valve object update\n> The object projection was refreshed after new signals arrived from several channels.\n\n## Snapshot\n- Current state: closed after leak protection\n- Related events: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Monitoring channel: Home Automation\n\n## Attribute changes\n- floor sensor humidity fell from 72% to 38%\n- valve command mode changed from automatic to supervised\n\n## Next step\n- Keep the object on the screenshot fixture because it links operations, finance, home and agent scenarios in one realistic timeline.\n",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-08T04:40:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_home_valve_kitchen",
+        "thing_id": "thing_home_valve_kitchen",
+        "projection_destination": "thing_head",
+        "title": "Kitchen water shutoff valve · Summary projection refreshed",
+        "description": "Kitchen water shutoff valve。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "closed after leak protection",
+        "message": "Summary projection refreshed: floor sensor humidity fell from 72% to 38%; valve command mode changed from automatic to supervised",
+        "severity": "medium",
+        "tags": [
+          "water sensor",
+          "kitchen",
+          "valve"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Snapshot": "closed after leak protection",
+          "Attribute changes": [
+            "floor sensor humidity fell from 72% to 38%",
+            "valve command mode changed from automatic to supervised"
+          ],
+          "Related events": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Source": "Home Automation"
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Keep the object visible in the demo inbox and object detail screen.\",\"Audit note\":\"Object contains readable attribute changes and linked event identifiers.\",\"Related events\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "room",
+          "value": "Kitchen sink cabinet"
+        },
+        "external_ids": {
+          "object projection": "OBJ-THING_HOME_VALVE_KITCHEN"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "f7f80222-6e1b-500d-9dbc-ea5e3f95419d",
+      "message_id": "msg_agent_ticket_resolved",
+      "title": "AI agent handoff quality review · Resolved",
+      "body": "# AI agent handoff quality review · Resolved\n> the support agent marked a billing ticket as solved but customer sentiment stayed negative\n\n## What changed\n- Human review confirmed the answer and the new guardrail reduced risky closures in the sample.\n- Resolution confidence was 0.86, while sentiment score remained below the escalation threshold.\n- The customer received a follow-up answer with the correct invoice reference.\n\n## Handling\n1. Sent the ticket to manual review and attached the model trace.\n2. Added a guardrail for billing replies when sentiment stays negative.\n3. Sample the next 50 billing tickets before restoring full automation.\n\n## Next step\n- Owner: Support automation lead\n- Expected time: next stable sample window\n",
+      "channel_id": "ai-agent-feedback",
+      "is_read": true,
+      "received_at": "2026-05-08T04:32:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_agent_ticket_001",
+        "event_id": "evt_agent_ticket_001",
+        "thing_id": "thing_agent_support_triage",
+        "projection_destination": "event_head",
+        "title": "AI agent handoff quality review · Resolved",
+        "description": "AI agent handoff quality review。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "Resolved",
+        "message": "Status update: Human review confirmed the answer and the new guardrail reduced risky closures in the sample.",
+        "severity": "medium",
+        "tags": [
+          "AI agent",
+          "ticket",
+          "handoff"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "What changed": [
+            "Human review confirmed the answer and the new guardrail reduced risky closures in the sample.",
+            "Resolution confidence was 0.86, while sentiment score remained below the escalation threshold."
+          ],
+          "Owner": "Support automation lead",
+          "Expected time": "next stable sample window",
+          "Related events": [
+            "evt_agent_ticket_001",
+            "thing_agent_support_triage"
+          ]
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Continue tracking until the owning object shows two stable samples.\",\"Audit note\":\"Times are ordered and suitable for iOS screenshot tests.\",\"Related events\":[\"evt_agent_ticket_001\",\"thing_agent_support_triage\"]}",
+        "location": {
+          "type": "queue",
+          "value": "Enterprise support queue"
+        },
+        "external_ids": {
+          "incident ticket": "INC-2026-0508-005"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "d960b923-4a0d-5c02-be79-55561efd76fa",
+      "message_id": "msg_agent_ticket_investigating",
+      "title": "AI agent handoff quality review · Investigating",
+      "body": "# AI agent handoff quality review · Investigating\n> the support agent marked a billing ticket as solved but customer sentiment stayed negative\n\n## What changed\n- One enterprise customer waited 14 minutes longer for a human confirmation.\n- Resolution confidence was 0.86, while sentiment score remained below the escalation threshold.\n- The customer received a follow-up answer with the correct invoice reference.\n\n## Handling\n1. Sent the ticket to manual review and attached the model trace.\n2. Added a guardrail for billing replies when sentiment stays negative.\n3. Sample the next 50 billing tickets before restoring full automation.\n\n## Next step\n- Owner: Support automation lead\n- Expected time: next stable sample window\n",
+      "channel_id": "ai-agent-feedback",
+      "is_read": false,
+      "received_at": "2026-05-08T04:06:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_agent_ticket_001",
+        "event_id": "evt_agent_ticket_001",
+        "thing_id": "thing_agent_support_triage",
+        "projection_destination": "event_head",
+        "title": "AI agent handoff quality review · Investigating",
+        "description": "AI agent handoff quality review。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "Investigating",
+        "message": "Status update: One enterprise customer waited 14 minutes longer for a human confirmation.",
+        "severity": "medium",
+        "tags": [
+          "AI agent",
+          "ticket",
+          "handoff"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "What changed": [
+            "One enterprise customer waited 14 minutes longer for a human confirmation.",
+            "Resolution confidence was 0.86, while sentiment score remained below the escalation threshold."
+          ],
+          "Owner": "Support automation lead",
+          "Expected time": "next stable sample window",
+          "Related events": [
+            "evt_agent_ticket_001",
+            "thing_agent_support_triage"
+          ]
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Continue tracking until the owning object shows two stable samples.\",\"Audit note\":\"Times are ordered and suitable for iOS screenshot tests.\",\"Related events\":[\"evt_agent_ticket_001\",\"thing_agent_support_triage\"]}",
+        "location": {
+          "type": "queue",
+          "value": "Enterprise support queue"
+        },
+        "external_ids": {
+          "incident ticket": "INC-2026-0508-005"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "df2a3ce9-4772-5588-8110-ced8bacd8b18",
+      "message_id": "msg_monitoring_login_resolved",
+      "title": "Unusual login retry pattern · Resolved",
+      "body": "# Unusual login retry pattern · Resolved\n> customer login retries clustered around three network ranges\n\n## What changed\n- The retry rate fell back to baseline and no new high-risk session appeared for 30 minutes.\n- Failed login rate rose to 11.8% and normalized after adaptive challenges were enabled.\n- No successful account takeover signal was found in the sample.\n\n## Handling\n1. Enabled stricter risk challenges for the affected ranges.\n2. Shared the timeline with customer trust for proactive support notes.\n3. Review whether the retry pattern matches a known credential stuffing list.\n\n## Next step\n- Owner: Trust operations\n- Expected time: next stable sample window\n",
+      "channel_id": "event-monitoring",
+      "is_read": true,
+      "received_at": "2026-05-08T03:56:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_monitoring_login_001",
+        "event_id": "evt_monitoring_login_001",
+        "thing_id": "thing_event_auth_gateway",
+        "projection_destination": "event_head",
+        "title": "Unusual login retry pattern · Resolved",
+        "description": "Unusual login retry pattern。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "Resolved",
+        "message": "Status update: The retry rate fell back to baseline and no new high-risk session appeared for 30 minutes.",
+        "severity": "critical",
+        "tags": [
+          "login",
+          "risk control",
+          "customer trust"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "What changed": [
+            "The retry rate fell back to baseline and no new high-risk session appeared for 30 minutes.",
+            "Failed login rate rose to 11.8% and normalized after adaptive challenges were enabled."
+          ],
+          "Owner": "Trust operations",
+          "Expected time": "next stable sample window",
+          "Related events": [
+            "evt_monitoring_login_001",
+            "thing_event_auth_gateway"
+          ]
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Continue tracking until the owning object shows two stable samples.\",\"Audit note\":\"Times are ordered and suitable for iOS screenshot tests.\",\"Related events\":[\"evt_monitoring_login_001\",\"thing_event_auth_gateway\"]}",
+        "location": {
+          "type": "service",
+          "value": "Customer account center"
+        },
+        "external_ids": {
+          "incident ticket": "INC-2026-0508-004"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "c648c42d-2a4a-516b-ae30-57ac31dd14a5",
+      "message_id": "msg_thing_agent_support_triage_policy",
+      "title": "Support triage AI agent · Review policy updated",
+      "body": "# Support triage AI agent object update\n> The object projection was refreshed after new signals arrived from several channels.\n\n## Snapshot\n- Current state: stable with human review enabled\n- Related events: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Monitoring channel: AI Agent Feedback\n\n## Attribute changes\n- auto-resolution confidence changed from 0.78 to 0.86\n- fallback rule changed from immediate handoff to sampled review\n\n## Next step\n- Keep the object on the screenshot fixture because it links operations, finance, home and agent scenarios in one realistic timeline.\n",
+      "channel_id": "ai-agent-feedback",
+      "is_read": false,
+      "received_at": "2026-05-08T03:50:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_agent_support_triage",
+        "thing_id": "thing_agent_support_triage",
+        "projection_destination": "thing_head",
+        "title": "Support triage AI agent · Review policy updated",
+        "description": "Support triage AI agent。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "stable with human review enabled",
+        "message": "Review policy updated: auto-resolution confidence changed from 0.78 to 0.86; fallback rule changed from immediate handoff to sampled review",
+        "severity": "medium",
+        "tags": [
+          "AI agent",
+          "ticket",
+          "handoff"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Snapshot": "stable with human review enabled",
+          "Attribute changes": [
+            "auto-resolution confidence changed from 0.78 to 0.86",
+            "fallback rule changed from immediate handoff to sampled review"
+          ],
+          "Related events": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Source": "AI Agent Feedback"
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Keep the object visible in the demo inbox and object detail screen.\",\"Audit note\":\"Object contains readable attribute changes and linked event identifiers.\",\"Related events\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "queue",
+          "value": "Enterprise support queue"
+        },
+        "external_ids": {
+          "object projection": "OBJ-THING_AGENT_SUPPORT_TRIAGE"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "54a22cb1-70df-58cf-b99f-b332e1e14f99",
+      "message_id": "msg_agent_ticket_detected",
+      "title": "AI agent handoff quality review · Detected",
+      "body": "# AI agent handoff quality review · Detected\n> the support agent marked a billing ticket as solved but customer sentiment stayed negative\n\n## What changed\n- One enterprise customer waited 14 minutes longer for a human confirmation.\n- Resolution confidence was 0.86, while sentiment score remained below the escalation threshold.\n- The customer received a follow-up answer with the correct invoice reference.\n\n## Handling\n1. Sent the ticket to manual review and attached the model trace.\n2. Added a guardrail for billing replies when sentiment stays negative.\n3. Sample the next 50 billing tickets before restoring full automation.\n\n## Next step\n- Owner: Support automation lead\n- Expected time: next stable sample window\n",
+      "channel_id": "ai-agent-feedback",
+      "is_read": false,
+      "received_at": "2026-05-08T03:44:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_agent_ticket_001",
+        "event_id": "evt_agent_ticket_001",
+        "thing_id": "thing_agent_support_triage",
+        "projection_destination": "event_head",
+        "title": "AI agent handoff quality review · Detected",
+        "description": "AI agent handoff quality review。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "Detected",
+        "message": "Status update: One enterprise customer waited 14 minutes longer for a human confirmation.",
+        "severity": "medium",
+        "tags": [
+          "AI agent",
+          "ticket",
+          "handoff"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "What changed": [
+            "One enterprise customer waited 14 minutes longer for a human confirmation.",
+            "Resolution confidence was 0.86, while sentiment score remained below the escalation threshold."
+          ],
+          "Owner": "Support automation lead",
+          "Expected time": "next stable sample window",
+          "Related events": [
+            "evt_agent_ticket_001",
+            "thing_agent_support_triage"
+          ]
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Continue tracking until the owning object shows two stable samples.\",\"Audit note\":\"Times are ordered and suitable for iOS screenshot tests.\",\"Related events\":[\"evt_agent_ticket_001\",\"thing_agent_support_triage\"]}",
+        "location": {
+          "type": "queue",
+          "value": "Enterprise support queue"
+        },
+        "external_ids": {
+          "incident ticket": "INC-2026-0508-005"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "413ec90c-32d6-571b-a6a1-9e414b2c0fc6",
+      "message_id": "msg_thing_event_auth_gateway_risk",
+      "title": "Customer login risk gateway · Risk threshold updated",
+      "body": "# Customer login risk gateway object update\n> The object projection was refreshed after new signals arrived from several channels.\n\n## Snapshot\n- Current state: rate limited with clean traffic trend\n- Related events: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Monitoring channel: Event Monitoring\n\n## Attribute changes\n- failed login rate dropped from 11.8% to 2.4%\n- temporary challenge threshold changed from medium to strict\n\n## Next step\n- Keep the object on the screenshot fixture because it links operations, finance, home and agent scenarios in one realistic timeline.\n",
+      "channel_id": "event-monitoring",
+      "is_read": false,
+      "received_at": "2026-05-08T03:33:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_event_auth_gateway",
+        "thing_id": "thing_event_auth_gateway",
+        "projection_destination": "thing_head",
+        "title": "Customer login risk gateway · Risk threshold updated",
+        "description": "Customer login risk gateway。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "rate limited with clean traffic trend",
+        "message": "Risk threshold updated: failed login rate dropped from 11.8% to 2.4%; temporary challenge threshold changed from medium to strict",
+        "severity": "medium",
+        "tags": [
+          "login",
+          "risk control",
+          "customer trust"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Snapshot": "rate limited with clean traffic trend",
+          "Attribute changes": [
+            "failed login rate dropped from 11.8% to 2.4%",
+            "temporary challenge threshold changed from medium to strict"
+          ],
+          "Related events": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Source": "Event Monitoring"
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Keep the object visible in the demo inbox and object detail screen.\",\"Audit note\":\"Object contains readable attribute changes and linked event identifiers.\",\"Related events\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "service",
+          "value": "Customer account center"
+        },
+        "external_ids": {
+          "object projection": "OBJ-THING_EVENT_AUTH_GATEWAY"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "fa9314eb-05f4-5561-934b-9ec4ea115e4f",
+      "message_id": "msg_monitoring_login_investigating",
+      "title": "Unusual login retry pattern · Investigating",
+      "body": "# Unusual login retry pattern · Investigating\n> customer login retries clustered around three network ranges\n\n## What changed\n- Password reset and account center pages saw brief extra friction.\n- Failed login rate rose to 11.8% and normalized after adaptive challenges were enabled.\n- No successful account takeover signal was found in the sample.\n\n## Handling\n1. Enabled stricter risk challenges for the affected ranges.\n2. Shared the timeline with customer trust for proactive support notes.\n3. Review whether the retry pattern matches a known credential stuffing list.\n\n## Next step\n- Owner: Trust operations\n- Expected time: next stable sample window\n",
+      "channel_id": "event-monitoring",
+      "is_read": false,
+      "received_at": "2026-05-08T03:28:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_monitoring_login_001",
+        "event_id": "evt_monitoring_login_001",
+        "thing_id": "thing_event_auth_gateway",
+        "projection_destination": "event_head",
+        "title": "Unusual login retry pattern · Investigating",
+        "description": "Unusual login retry pattern。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "Investigating",
+        "message": "Status update: Password reset and account center pages saw brief extra friction.",
+        "severity": "critical",
+        "tags": [
+          "login",
+          "risk control",
+          "customer trust"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "What changed": [
+            "Password reset and account center pages saw brief extra friction.",
+            "Failed login rate rose to 11.8% and normalized after adaptive challenges were enabled."
+          ],
+          "Owner": "Trust operations",
+          "Expected time": "next stable sample window",
+          "Related events": [
+            "evt_monitoring_login_001",
+            "thing_event_auth_gateway"
+          ]
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Continue tracking until the owning object shows two stable samples.\",\"Audit note\":\"Times are ordered and suitable for iOS screenshot tests.\",\"Related events\":[\"evt_monitoring_login_001\",\"thing_event_auth_gateway\"]}",
+        "location": {
+          "type": "service",
+          "value": "Customer account center"
+        },
+        "external_ids": {
+          "incident ticket": "INC-2026-0508-004"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "4d3c6ea1-cbb8-5fb0-9c7a-b3f67721ba96",
+      "message_id": "msg_monitoring_login_detected",
+      "title": "Unusual login retry pattern · Detected",
+      "body": "# Unusual login retry pattern · Detected\n> customer login retries clustered around three network ranges\n\n## What changed\n- Password reset and account center pages saw brief extra friction.\n- Failed login rate rose to 11.8% and normalized after adaptive challenges were enabled.\n- No successful account takeover signal was found in the sample.\n\n## Handling\n1. Enabled stricter risk challenges for the affected ranges.\n2. Shared the timeline with customer trust for proactive support notes.\n3. Review whether the retry pattern matches a known credential stuffing list.\n\n## Next step\n- Owner: Trust operations\n- Expected time: next stable sample window\n",
+      "channel_id": "event-monitoring",
+      "is_read": false,
+      "received_at": "2026-05-08T03:18:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_monitoring_login_001",
+        "event_id": "evt_monitoring_login_001",
+        "thing_id": "thing_event_auth_gateway",
+        "projection_destination": "event_head",
+        "title": "Unusual login retry pattern · Detected",
+        "description": "Unusual login retry pattern。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "Detected",
+        "message": "Status update: Password reset and account center pages saw brief extra friction.",
+        "severity": "critical",
+        "tags": [
+          "login",
+          "risk control",
+          "customer trust"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "What changed": [
+            "Password reset and account center pages saw brief extra friction.",
+            "Failed login rate rose to 11.8% and normalized after adaptive challenges were enabled."
+          ],
+          "Owner": "Trust operations",
+          "Expected time": "next stable sample window",
+          "Related events": [
+            "evt_monitoring_login_001",
+            "thing_event_auth_gateway"
+          ]
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Continue tracking until the owning object shows two stable samples.\",\"Audit note\":\"Times are ordered and suitable for iOS screenshot tests.\",\"Related events\":[\"evt_monitoring_login_001\",\"thing_event_auth_gateway\"]}",
+        "location": {
+          "type": "service",
+          "value": "Customer account center"
+        },
+        "external_ids": {
+          "incident ticket": "INC-2026-0508-004"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "0d5270d1-3ad0-54e5-9786-de50fad53482",
+      "message_id": "msg_ops_latency_resolved_003",
+      "title": "Payment API latency spike · Resolved",
+      "body": "# Payment API latency spike · Resolved\n> checkout requests in East China slowed for business users\n\n## What changed\n- Latency returned below the 300 ms target and the replica lag stayed under 5 s for 20 minutes.\n- The p95 latency peaked at 1.9 s, then started to fall after replica traffic was reduced.\n- No data loss was detected; three retries were automatically recovered.\n\n## Handling\n1. Pinned the slow query fingerprint and removed the newest read replica from rotation.\n2. Raised database connection pool telemetry to one-minute granularity.\n3. Keep the incident open until the next billing batch completes without retry growth.\n\n## Next step\n- Owner: SRE on call\n- Expected time: next stable sample window\n",
+      "channel_id": "ops-core",
+      "is_read": true,
+      "received_at": "2026-05-08T03:05:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_ops_latency_001",
+        "event_id": "evt_ops_latency_001",
+        "thing_id": "thing_ops_cluster_sh1",
+        "projection_destination": "event_head",
+        "title": "Payment API latency spike · Resolved",
+        "description": "Payment API latency spike。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "Resolved",
+        "message": "Status update: Latency returned below the 300 ms target and the replica lag stayed under 5 s for 20 minutes.",
+        "severity": "high",
+        "tags": [
+          "database",
+          "latency",
+          "read replica"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "What changed": [
+            "Latency returned below the 300 ms target and the replica lag stayed under 5 s for 20 minutes.",
+            "The p95 latency peaked at 1.9 s, then started to fall after replica traffic was reduced."
+          ],
+          "Owner": "SRE on call",
+          "Expected time": "next stable sample window",
+          "Related events": [
+            "evt_ops_latency_001",
+            "thing_ops_cluster_sh1"
+          ]
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Continue tracking until the owning object shows two stable samples.\",\"Audit note\":\"Times are ordered and suitable for iOS screenshot tests.\",\"Related events\":[\"evt_ops_latency_001\",\"thing_ops_cluster_sh1\"]}",
+        "location": {
+          "type": "region",
+          "value": "Shanghai region"
+        },
+        "external_ids": {
+          "incident ticket": "INC-2026-0508-001"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "6f9d3131-5a21-565a-80c5-681febe61712",
+      "message_id": "msg_thing_ops_cluster_sh1_capacity",
+      "title": "Shanghai payment cluster · Capacity signal updated",
+      "body": "# Shanghai payment cluster object update\n> The object projection was refreshed after new signals arrived from several channels.\n\n## Snapshot\n- Current state: healthy with elevated watch\n- Related events: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Monitoring channel: Operations Core\n\n## Attribute changes\n- P95 API latency dropped from 420 ms to 238 ms\n- read replica lag decreased from 18 s to 3 s\n\n## Next step\n- Keep the object on the screenshot fixture because it links operations, finance, home and agent scenarios in one realistic timeline.\n",
+      "channel_id": "ops-core",
+      "is_read": true,
+      "received_at": "2026-05-08T02:40:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_ops_cluster_sh1",
+        "thing_id": "thing_ops_cluster_sh1",
+        "projection_destination": "thing_head",
+        "title": "Shanghai payment cluster · Capacity signal updated",
+        "description": "Shanghai payment cluster。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "healthy with elevated watch",
+        "message": "Capacity signal updated: P95 API latency dropped from 420 ms to 238 ms; read replica lag decreased from 18 s to 3 s",
+        "severity": "low",
+        "tags": [
+          "database",
+          "latency",
+          "read replica"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Snapshot": "healthy with elevated watch",
+          "Attribute changes": [
+            "P95 API latency dropped from 420 ms to 238 ms",
+            "read replica lag decreased from 18 s to 3 s"
+          ],
+          "Related events": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Source": "Operations Core"
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Keep the object visible in the demo inbox and object detail screen.\",\"Audit note\":\"Object contains readable attribute changes and linked event identifiers.\",\"Related events\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "region",
+          "value": "Shanghai region"
+        },
+        "external_ids": {
+          "object projection": "OBJ-THING_OPS_CLUSTER_SH1"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "91b4bda8-f03f-5814-9424-0ade951cb3a8",
+      "message_id": "msg_ops_latency_investigating_002",
+      "title": "Payment API latency spike · Investigating",
+      "body": "# Payment API latency spike · Investigating\n> checkout requests in East China slowed for business users\n\n## What changed\n- Checkout confirmation was delayed for 3.8% of requests in the Shanghai region.\n- The p95 latency peaked at 1.9 s, then started to fall after replica traffic was reduced.\n- No data loss was detected; three retries were automatically recovered.\n\n## Handling\n1. Pinned the slow query fingerprint and removed the newest read replica from rotation.\n2. Raised database connection pool telemetry to one-minute granularity.\n3. Keep the incident open until the next billing batch completes without retry growth.\n\n## Next step\n- Owner: SRE on call\n- Expected time: next stable sample window\n",
+      "channel_id": "ops-core",
+      "is_read": false,
+      "received_at": "2026-05-08T02:24:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_ops_latency_001",
+        "event_id": "evt_ops_latency_001",
+        "thing_id": "thing_ops_cluster_sh1",
+        "projection_destination": "event_head",
+        "title": "Payment API latency spike · Investigating",
+        "description": "Payment API latency spike。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "Investigating",
+        "message": "Status update: Checkout confirmation was delayed for 3.8% of requests in the Shanghai region.",
+        "severity": "high",
+        "tags": [
+          "database",
+          "latency",
+          "read replica"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "What changed": [
+            "Checkout confirmation was delayed for 3.8% of requests in the Shanghai region.",
+            "The p95 latency peaked at 1.9 s, then started to fall after replica traffic was reduced."
+          ],
+          "Owner": "SRE on call",
+          "Expected time": "next stable sample window",
+          "Related events": [
+            "evt_ops_latency_001",
+            "thing_ops_cluster_sh1"
+          ]
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Continue tracking until the owning object shows two stable samples.\",\"Audit note\":\"Times are ordered and suitable for iOS screenshot tests.\",\"Related events\":[\"evt_ops_latency_001\",\"thing_ops_cluster_sh1\"]}",
+        "location": {
+          "type": "region",
+          "value": "Shanghai region"
+        },
+        "external_ids": {
+          "incident ticket": "INC-2026-0508-001"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "1f540fae-de64-52ed-aff8-2448f987e606",
+      "message_id": "msg_home_leak_resolved",
+      "title": "Kitchen leak sensor triggered · Resolved",
+      "body": "# Kitchen leak sensor triggered · Resolved\n> the floor sensor reported continuous moisture near the sink cabinet\n\n## What changed\n- The moisture curve stayed flat for 25 minutes and the valve was reopened in supervised mode.\n- Humidity fell from 72% to 38% after the valve closed and the ventilation fan started.\n- One household routine was paused; manual override remains available in the app.\n\n## Handling\n1. Validated that the sensor was not reporting a battery-low false positive.\n2. Kept the valve closed while the camera snapshot was reviewed.\n3. Ask the resident to check the cabinet joint before reopening the branch.\n\n## Next step\n- Owner: Home automation owner\n- Expected time: next stable sample window\n",
+      "channel_id": "home-automation",
+      "is_read": true,
+      "received_at": "2026-05-08T02:16:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_home_leak_001",
+        "event_id": "evt_home_leak_001",
+        "thing_id": "thing_home_valve_kitchen",
+        "projection_destination": "event_head",
+        "title": "Kitchen leak sensor triggered · Resolved",
+        "description": "Kitchen leak sensor triggered。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "Resolved",
+        "message": "Status update: The moisture curve stayed flat for 25 minutes and the valve was reopened in supervised mode.",
+        "severity": "medium",
+        "tags": [
+          "water sensor",
+          "kitchen",
+          "valve"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "What changed": [
+            "The moisture curve stayed flat for 25 minutes and the valve was reopened in supervised mode.",
+            "Humidity fell from 72% to 38% after the valve closed and the ventilation fan started."
+          ],
+          "Owner": "Home automation owner",
+          "Expected time": "next stable sample window",
+          "Related events": [
+            "evt_home_leak_001",
+            "thing_home_valve_kitchen"
+          ]
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Continue tracking until the owning object shows two stable samples.\",\"Audit note\":\"Times are ordered and suitable for iOS screenshot tests.\",\"Related events\":[\"evt_home_leak_001\",\"thing_home_valve_kitchen\"]}",
+        "location": {
+          "type": "room",
+          "value": "Kitchen sink cabinet"
+        },
+        "external_ids": {
+          "incident ticket": "INC-2026-0508-002"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "9d2f5705-6aa8-55b4-8ad3-f0be2119080c",
+      "message_id": "msg_ops_brief_001",
+      "title": "Payment API latency spike · Detected",
+      "body": "# Payment API latency spike · Detected\n> checkout requests in East China slowed for business users\n\n## What changed\n- Checkout confirmation was delayed for 3.8% of requests in the Shanghai region.\n- The p95 latency peaked at 1.9 s, then started to fall after replica traffic was reduced.\n- No data loss was detected; three retries were automatically recovered.\n\n## Handling\n1. Pinned the slow query fingerprint and removed the newest read replica from rotation.\n2. Raised database connection pool telemetry to one-minute granularity.\n3. Keep the incident open until the next billing batch completes without retry growth.\n\n## Next step\n- Owner: SRE on call\n- Expected time: next stable sample window\n",
+      "channel_id": "ops-core",
+      "is_read": false,
+      "received_at": "2026-05-08T02:10:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_ops_latency_001",
+        "event_id": "evt_ops_latency_001",
+        "thing_id": "thing_ops_cluster_sh1",
+        "projection_destination": "event_head",
+        "title": "Payment API latency spike · Detected",
+        "description": "Payment API latency spike。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "Detected",
+        "message": "Status update: Checkout confirmation was delayed for 3.8% of requests in the Shanghai region.",
+        "severity": "high",
+        "tags": [
+          "database",
+          "latency",
+          "read replica"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "What changed": [
+            "Checkout confirmation was delayed for 3.8% of requests in the Shanghai region.",
+            "The p95 latency peaked at 1.9 s, then started to fall after replica traffic was reduced."
+          ],
+          "Owner": "SRE on call",
+          "Expected time": "next stable sample window",
+          "Related events": [
+            "evt_ops_latency_001",
+            "thing_ops_cluster_sh1"
+          ]
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Continue tracking until the owning object shows two stable samples.\",\"Audit note\":\"Times are ordered and suitable for iOS screenshot tests.\",\"Related events\":[\"evt_ops_latency_001\",\"thing_ops_cluster_sh1\"]}",
+        "location": {
+          "type": "region",
+          "value": "Shanghai region"
+        },
+        "external_ids": {
+          "incident ticket": "INC-2026-0508-001"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "7e3cc18c-d99a-537e-8402-b24200f83a17",
+      "message_id": "msg_thing_finance_ap_queue_approval",
+      "title": "Accounts payable review queue · Approval route updated",
+      "body": "# Accounts payable review queue object update\n> The object projection was refreshed after new signals arrived from several channels.\n\n## Snapshot\n- Current state: balanced and locked for duplicate review\n- Related events: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Monitoring channel: Finance Ledger\n\n## Attribute changes\n- duplicate invoice score rose from 0.41 to 0.93\n- approval policy changed from single review to dual review\n\n## Next step\n- Keep the object on the screenshot fixture because it links operations, finance, home and agent scenarios in one realistic timeline.\n",
+      "channel_id": "finance-ledger",
+      "is_read": true,
+      "received_at": "2026-05-08T02:08:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_finance_ap_queue",
+        "thing_id": "thing_finance_ap_queue",
+        "projection_destination": "thing_head",
+        "title": "Accounts payable review queue · Approval route updated",
+        "description": "Accounts payable review queue。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "balanced and locked for duplicate review",
+        "message": "Approval route updated: duplicate invoice score rose from 0.41 to 0.93; approval policy changed from single review to dual review",
+        "severity": "low",
+        "tags": [
+          "invoice",
+          "approval",
+          "cash flow"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Snapshot": "balanced and locked for duplicate review",
+          "Attribute changes": [
+            "duplicate invoice score rose from 0.41 to 0.93",
+            "approval policy changed from single review to dual review"
+          ],
+          "Related events": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Source": "Finance Ledger"
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Keep the object visible in the demo inbox and object detail screen.\",\"Audit note\":\"Object contains readable attribute changes and linked event identifiers.\",\"Related events\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "department",
+          "value": "Finance shared service center"
+        },
+        "external_ids": {
+          "object projection": "OBJ-THING_FINANCE_AP_QUEUE"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "a577298b-8544-5f8f-b244-280e2798467b",
+      "message_id": "msg_finance_invoice_resolved",
+      "title": "Possible duplicate supplier invoice · Resolved",
+      "body": "# Possible duplicate supplier invoice · Resolved\n> two invoices for the same purchase order arrived through different approval paths\n\n## What changed\n- The second invoice was confirmed as a resubmission and the original payment schedule was restored.\n- The duplicate score reached 0.93 because amount, supplier tax number and delivery note matched.\n- The finance team can still release the valid invoice after secondary approval.\n\n## Handling\n1. Locked both invoice records and attached the supplier delivery note.\n2. Asked procurement to confirm which invoice number should remain active.\n3. Keep the cash-flow forecast marked as tentative until the hold is cleared.\n\n## Next step\n- Owner: Finance controller\n- Expected time: next stable sample window\n",
+      "channel_id": "finance-ledger",
+      "is_read": true,
+      "received_at": "2026-05-08T02:02:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_finance_invoice_001",
+        "event_id": "evt_finance_invoice_001",
+        "thing_id": "thing_finance_ap_queue",
+        "projection_destination": "event_head",
+        "title": "Possible duplicate supplier invoice · Resolved",
+        "description": "Possible duplicate supplier invoice。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "Resolved",
+        "message": "Status update: The second invoice was confirmed as a resubmission and the original payment schedule was restored.",
+        "severity": "high",
+        "tags": [
+          "invoice",
+          "approval",
+          "cash flow"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "What changed": [
+            "The second invoice was confirmed as a resubmission and the original payment schedule was restored.",
+            "The duplicate score reached 0.93 because amount, supplier tax number and delivery note matched."
+          ],
+          "Owner": "Finance controller",
+          "Expected time": "next stable sample window",
+          "Related events": [
+            "evt_finance_invoice_001",
+            "thing_finance_ap_queue"
+          ]
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Continue tracking until the owning object shows two stable samples.\",\"Audit note\":\"Times are ordered and suitable for iOS screenshot tests.\",\"Related events\":[\"evt_finance_invoice_001\",\"thing_finance_ap_queue\"]}",
+        "location": {
+          "type": "department",
+          "value": "Finance shared service center"
+        },
+        "external_ids": {
+          "incident ticket": "INC-2026-0508-003"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "1de1b115-748c-5a2e-af77-07e0d0f72411",
+      "message_id": "msg_thing_home_valve_kitchen_valve",
+      "title": "Kitchen water shutoff valve · Valve safety note updated",
+      "body": "# Kitchen water shutoff valve object update\n> The object projection was refreshed after new signals arrived from several channels.\n\n## Snapshot\n- Current state: closed after leak protection\n- Related events: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Monitoring channel: Home Automation\n\n## Attribute changes\n- floor sensor humidity fell from 72% to 38%\n- valve command mode changed from automatic to supervised\n\n## Next step\n- Keep the object on the screenshot fixture because it links operations, finance, home and agent scenarios in one realistic timeline.\n",
+      "channel_id": "home-automation",
+      "is_read": true,
+      "received_at": "2026-05-08T01:49:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_home_valve_kitchen",
+        "thing_id": "thing_home_valve_kitchen",
+        "projection_destination": "thing_head",
+        "title": "Kitchen water shutoff valve · Valve safety note updated",
+        "description": "Kitchen water shutoff valve。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "closed after leak protection",
+        "message": "Valve safety note updated: floor sensor humidity fell from 72% to 38%; valve command mode changed from automatic to supervised",
+        "severity": "low",
+        "tags": [
+          "water sensor",
+          "kitchen",
+          "valve"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Snapshot": "closed after leak protection",
+          "Attribute changes": [
+            "floor sensor humidity fell from 72% to 38%",
+            "valve command mode changed from automatic to supervised"
+          ],
+          "Related events": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Source": "Home Automation"
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Keep the object visible in the demo inbox and object detail screen.\",\"Audit note\":\"Object contains readable attribute changes and linked event identifiers.\",\"Related events\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "room",
+          "value": "Kitchen sink cabinet"
+        },
+        "external_ids": {
+          "object projection": "OBJ-THING_HOME_VALVE_KITCHEN"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "0a22fa8c-c9ed-54a4-a2c8-d5e1a7c5f1a6",
+      "message_id": "msg_home_leak_investigating",
+      "title": "Kitchen leak sensor triggered · Investigating",
+      "body": "# Kitchen leak sensor triggered · Investigating\n> the floor sensor reported continuous moisture near the sink cabinet\n\n## What changed\n- The smart valve closed the cold-water branch in 8 seconds and prevented spread beyond the cabinet.\n- Humidity fell from 72% to 38% after the valve closed and the ventilation fan started.\n- One household routine was paused; manual override remains available in the app.\n\n## Handling\n1. Validated that the sensor was not reporting a battery-low false positive.\n2. Kept the valve closed while the camera snapshot was reviewed.\n3. Ask the resident to check the cabinet joint before reopening the branch.\n\n## Next step\n- Owner: Home automation owner\n- Expected time: next stable sample window\n",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-08T01:42:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_home_leak_001",
+        "event_id": "evt_home_leak_001",
+        "thing_id": "thing_home_valve_kitchen",
+        "projection_destination": "event_head",
+        "title": "Kitchen leak sensor triggered · Investigating",
+        "description": "Kitchen leak sensor triggered。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "Investigating",
+        "message": "Status update: The smart valve closed the cold-water branch in 8 seconds and prevented spread beyond the cabinet.",
+        "severity": "medium",
+        "tags": [
+          "water sensor",
+          "kitchen",
+          "valve"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "What changed": [
+            "The smart valve closed the cold-water branch in 8 seconds and prevented spread beyond the cabinet.",
+            "Humidity fell from 72% to 38% after the valve closed and the ventilation fan started."
+          ],
+          "Owner": "Home automation owner",
+          "Expected time": "next stable sample window",
+          "Related events": [
+            "evt_home_leak_001",
+            "thing_home_valve_kitchen"
+          ]
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Continue tracking until the owning object shows two stable samples.\",\"Audit note\":\"Times are ordered and suitable for iOS screenshot tests.\",\"Related events\":[\"evt_home_leak_001\",\"thing_home_valve_kitchen\"]}",
+        "location": {
+          "type": "room",
+          "value": "Kitchen sink cabinet"
+        },
+        "external_ids": {
+          "incident ticket": "INC-2026-0508-002"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "e5c449ee-a745-5bbb-a92a-a7b968cc8d89",
+      "message_id": "msg_home_leak_detected",
+      "title": "Kitchen leak sensor triggered · Detected",
+      "body": "# Kitchen leak sensor triggered · Detected\n> the floor sensor reported continuous moisture near the sink cabinet\n\n## What changed\n- The smart valve closed the cold-water branch in 8 seconds and prevented spread beyond the cabinet.\n- Humidity fell from 72% to 38% after the valve closed and the ventilation fan started.\n- One household routine was paused; manual override remains available in the app.\n\n## Handling\n1. Validated that the sensor was not reporting a battery-low false positive.\n2. Kept the valve closed while the camera snapshot was reviewed.\n3. Ask the resident to check the cabinet joint before reopening the branch.\n\n## Next step\n- Owner: Home automation owner\n- Expected time: next stable sample window\n",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-08T01:35:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_home_leak_001",
+        "event_id": "evt_home_leak_001",
+        "thing_id": "thing_home_valve_kitchen",
+        "projection_destination": "event_head",
+        "title": "Kitchen leak sensor triggered · Detected",
+        "description": "Kitchen leak sensor triggered。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "Detected",
+        "message": "Status update: The smart valve closed the cold-water branch in 8 seconds and prevented spread beyond the cabinet.",
+        "severity": "medium",
+        "tags": [
+          "water sensor",
+          "kitchen",
+          "valve"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "What changed": [
+            "The smart valve closed the cold-water branch in 8 seconds and prevented spread beyond the cabinet.",
+            "Humidity fell from 72% to 38% after the valve closed and the ventilation fan started."
+          ],
+          "Owner": "Home automation owner",
+          "Expected time": "next stable sample window",
+          "Related events": [
+            "evt_home_leak_001",
+            "thing_home_valve_kitchen"
+          ]
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Continue tracking until the owning object shows two stable samples.\",\"Audit note\":\"Times are ordered and suitable for iOS screenshot tests.\",\"Related events\":[\"evt_home_leak_001\",\"thing_home_valve_kitchen\"]}",
+        "location": {
+          "type": "room",
+          "value": "Kitchen sink cabinet"
+        },
+        "external_ids": {
+          "incident ticket": "INC-2026-0508-002"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "4082f3b9-21bd-5dc6-859f-ffc85f947ce0",
+      "message_id": "msg_finance_invoice_investigating",
+      "title": "Possible duplicate supplier invoice · Investigating",
+      "body": "# Possible duplicate supplier invoice · Investigating\n> two invoices for the same purchase order arrived through different approval paths\n\n## What changed\n- A scheduled payment worth 18,420.00 CNY was held before bank submission.\n- The duplicate score reached 0.93 because amount, supplier tax number and delivery note matched.\n- The finance team can still release the valid invoice after secondary approval.\n\n## Handling\n1. Locked both invoice records and attached the supplier delivery note.\n2. Asked procurement to confirm which invoice number should remain active.\n3. Keep the cash-flow forecast marked as tentative until the hold is cleared.\n\n## Next step\n- Owner: Finance controller\n- Expected time: next stable sample window\n",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-08T01:20:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_finance_invoice_001",
+        "event_id": "evt_finance_invoice_001",
+        "thing_id": "thing_finance_ap_queue",
+        "projection_destination": "event_head",
+        "title": "Possible duplicate supplier invoice · Investigating",
+        "description": "Possible duplicate supplier invoice。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "Investigating",
+        "message": "Status update: A scheduled payment worth 18,420.00 CNY was held before bank submission.",
+        "severity": "high",
+        "tags": [
+          "invoice",
+          "approval",
+          "cash flow"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "What changed": [
+            "A scheduled payment worth 18,420.00 CNY was held before bank submission.",
+            "The duplicate score reached 0.93 because amount, supplier tax number and delivery note matched."
+          ],
+          "Owner": "Finance controller",
+          "Expected time": "next stable sample window",
+          "Related events": [
+            "evt_finance_invoice_001",
+            "thing_finance_ap_queue"
+          ]
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Continue tracking until the owning object shows two stable samples.\",\"Audit note\":\"Times are ordered and suitable for iOS screenshot tests.\",\"Related events\":[\"evt_finance_invoice_001\",\"thing_finance_ap_queue\"]}",
+        "location": {
+          "type": "department",
+          "value": "Finance shared service center"
+        },
+        "external_ids": {
+          "incident ticket": "INC-2026-0508-003"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "068e2f91-9fbb-5118-ab92-13d1278e713c",
+      "message_id": "msg_thing_agent_support_triage_sample",
+      "title": "Support triage AI agent · Sampling note updated",
+      "body": "# Support triage AI agent object update\n> The object projection was refreshed after new signals arrived from several channels.\n\n## Snapshot\n- Current state: stable with human review enabled\n- Related events: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Monitoring channel: AI Agent Feedback\n\n## Attribute changes\n- auto-resolution confidence changed from 0.78 to 0.86\n- fallback rule changed from immediate handoff to sampled review\n\n## Next step\n- Keep the object on the screenshot fixture because it links operations, finance, home and agent scenarios in one realistic timeline.\n",
+      "channel_id": "ai-agent-feedback",
+      "is_read": true,
+      "received_at": "2026-05-08T01:12:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_agent_support_triage",
+        "thing_id": "thing_agent_support_triage",
+        "projection_destination": "thing_head",
+        "title": "Support triage AI agent · Sampling note updated",
+        "description": "Support triage AI agent。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "stable with human review enabled",
+        "message": "Sampling note updated: auto-resolution confidence changed from 0.78 to 0.86; fallback rule changed from immediate handoff to sampled review",
+        "severity": "low",
+        "tags": [
+          "AI agent",
+          "ticket",
+          "handoff"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Snapshot": "stable with human review enabled",
+          "Attribute changes": [
+            "auto-resolution confidence changed from 0.78 to 0.86",
+            "fallback rule changed from immediate handoff to sampled review"
+          ],
+          "Related events": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Source": "AI Agent Feedback"
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Keep the object visible in the demo inbox and object detail screen.\",\"Audit note\":\"Object contains readable attribute changes and linked event identifiers.\",\"Related events\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "queue",
+          "value": "Enterprise support queue"
+        },
+        "external_ids": {
+          "object projection": "OBJ-THING_AGENT_SUPPORT_TRIAGE"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "19d67511-c269-5ed1-8efb-3a0f26f3af06",
+      "message_id": "msg_finance_invoice_detected",
+      "title": "Possible duplicate supplier invoice · Detected",
+      "body": "# Possible duplicate supplier invoice · Detected\n> two invoices for the same purchase order arrived through different approval paths\n\n## What changed\n- A scheduled payment worth 18,420.00 CNY was held before bank submission.\n- The duplicate score reached 0.93 because amount, supplier tax number and delivery note matched.\n- The finance team can still release the valid invoice after secondary approval.\n\n## Handling\n1. Locked both invoice records and attached the supplier delivery note.\n2. Asked procurement to confirm which invoice number should remain active.\n3. Keep the cash-flow forecast marked as tentative until the hold is cleared.\n\n## Next step\n- Owner: Finance controller\n- Expected time: next stable sample window\n",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-08T00:58:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_finance_invoice_001",
+        "event_id": "evt_finance_invoice_001",
+        "thing_id": "thing_finance_ap_queue",
+        "projection_destination": "event_head",
+        "title": "Possible duplicate supplier invoice · Detected",
+        "description": "Possible duplicate supplier invoice。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "Detected",
+        "message": "Status update: A scheduled payment worth 18,420.00 CNY was held before bank submission.",
+        "severity": "high",
+        "tags": [
+          "invoice",
+          "approval",
+          "cash flow"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "What changed": [
+            "A scheduled payment worth 18,420.00 CNY was held before bank submission.",
+            "The duplicate score reached 0.93 because amount, supplier tax number and delivery note matched."
+          ],
+          "Owner": "Finance controller",
+          "Expected time": "next stable sample window",
+          "Related events": [
+            "evt_finance_invoice_001",
+            "thing_finance_ap_queue"
+          ]
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Continue tracking until the owning object shows two stable samples.\",\"Audit note\":\"Times are ordered and suitable for iOS screenshot tests.\",\"Related events\":[\"evt_finance_invoice_001\",\"thing_finance_ap_queue\"]}",
+        "location": {
+          "type": "department",
+          "value": "Finance shared service center"
+        },
+        "external_ids": {
+          "incident ticket": "INC-2026-0508-003"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "903141fc-cb6b-55df-844a-f7e7120332fa",
+      "message_id": "msg_thing_event_auth_gateway_baseline",
+      "title": "Customer login risk gateway · Baseline comparison updated",
+      "body": "# Customer login risk gateway object update\n> The object projection was refreshed after new signals arrived from several channels.\n\n## Snapshot\n- Current state: rate limited with clean traffic trend\n- Related events: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Monitoring channel: Event Monitoring\n\n## Attribute changes\n- failed login rate dropped from 11.8% to 2.4%\n- temporary challenge threshold changed from medium to strict\n\n## Next step\n- Keep the object on the screenshot fixture because it links operations, finance, home and agent scenarios in one realistic timeline.\n",
+      "channel_id": "event-monitoring",
+      "is_read": true,
+      "received_at": "2026-05-08T00:52:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_event_auth_gateway",
+        "thing_id": "thing_event_auth_gateway",
+        "projection_destination": "thing_head",
+        "title": "Customer login risk gateway · Baseline comparison updated",
+        "description": "Customer login risk gateway。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "rate limited with clean traffic trend",
+        "message": "Baseline comparison updated: failed login rate dropped from 11.8% to 2.4%; temporary challenge threshold changed from medium to strict",
+        "severity": "low",
+        "tags": [
+          "login",
+          "risk control",
+          "customer trust"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Snapshot": "rate limited with clean traffic trend",
+          "Attribute changes": [
+            "failed login rate dropped from 11.8% to 2.4%",
+            "temporary challenge threshold changed from medium to strict"
+          ],
+          "Related events": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Source": "Event Monitoring"
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Keep the object visible in the demo inbox and object detail screen.\",\"Audit note\":\"Object contains readable attribute changes and linked event identifiers.\",\"Related events\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "service",
+          "value": "Customer account center"
+        },
+        "external_ids": {
+          "object projection": "OBJ-THING_EVENT_AUTH_GATEWAY"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "7ff57cc1-0d88-5c8c-8dd5-84a307d508d2",
+      "message_id": "msg_thing_ops_cluster_sh1_maintenance",
+      "title": "Shanghai payment cluster · Maintenance note added",
+      "body": "# Shanghai payment cluster object update\n> The object projection was refreshed after new signals arrived from several channels.\n\n## Snapshot\n- Current state: healthy with elevated watch\n- Related events: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Monitoring channel: Operations Core\n\n## Attribute changes\n- P95 API latency dropped from 420 ms to 238 ms\n- read replica lag decreased from 18 s to 3 s\n\n## Next step\n- Keep the object on the screenshot fixture because it links operations, finance, home and agent scenarios in one realistic timeline.\n",
+      "channel_id": "ops-core",
+      "is_read": true,
+      "received_at": "2026-05-07T23:48:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_ops_cluster_sh1",
+        "thing_id": "thing_ops_cluster_sh1",
+        "projection_destination": "thing_head",
+        "title": "Shanghai payment cluster · Maintenance note added",
+        "description": "Shanghai payment cluster。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "healthy with elevated watch",
+        "message": "Maintenance note added: P95 API latency dropped from 420 ms to 238 ms; read replica lag decreased from 18 s to 3 s",
+        "severity": "low",
+        "tags": [
+          "database",
+          "latency",
+          "read replica"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Snapshot": "healthy with elevated watch",
+          "Attribute changes": [
+            "P95 API latency dropped from 420 ms to 238 ms",
+            "read replica lag decreased from 18 s to 3 s"
+          ],
+          "Related events": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Source": "Operations Core"
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Keep the object visible in the demo inbox and object detail screen.\",\"Audit note\":\"Object contains readable attribute changes and linked event identifiers.\",\"Related events\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "region",
+          "value": "Shanghai region"
+        },
+        "external_ids": {
+          "object projection": "OBJ-THING_OPS_CLUSTER_SH1"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "82ef22f9-ad69-5058-91e2-318900c70ca9",
+      "message_id": "msg_thing_finance_ap_queue_cutoff",
+      "title": "Accounts payable review queue · Payment cutoff note updated",
+      "body": "# Accounts payable review queue object update\n> The object projection was refreshed after new signals arrived from several channels.\n\n## Snapshot\n- Current state: balanced and locked for duplicate review\n- Related events: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Monitoring channel: Finance Ledger\n\n## Attribute changes\n- duplicate invoice score rose from 0.41 to 0.93\n- approval policy changed from single review to dual review\n\n## Next step\n- Keep the object on the screenshot fixture because it links operations, finance, home and agent scenarios in one realistic timeline.\n",
+      "channel_id": "finance-ledger",
+      "is_read": true,
+      "received_at": "2026-05-07T23:32:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_finance_ap_queue",
+        "thing_id": "thing_finance_ap_queue",
+        "projection_destination": "thing_head",
+        "title": "Accounts payable review queue · Payment cutoff note updated",
+        "description": "Accounts payable review queue。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "balanced and locked for duplicate review",
+        "message": "Payment cutoff note updated: duplicate invoice score rose from 0.41 to 0.93; approval policy changed from single review to dual review",
+        "severity": "low",
+        "tags": [
+          "invoice",
+          "approval",
+          "cash flow"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Snapshot": "balanced and locked for duplicate review",
+          "Attribute changes": [
+            "duplicate invoice score rose from 0.41 to 0.93",
+            "approval policy changed from single review to dual review"
+          ],
+          "Related events": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Source": "Finance Ledger"
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Keep the object visible in the demo inbox and object detail screen.\",\"Audit note\":\"Object contains readable attribute changes and linked event identifiers.\",\"Related events\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "department",
+          "value": "Finance shared service center"
+        },
+        "external_ids": {
+          "object projection": "OBJ-THING_FINANCE_AP_QUEUE"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "4d4929eb-ae64-58cf-8f5a-24b01c58f139",
+      "message_id": "msg_thing_home_valve_kitchen_battery",
+      "title": "Kitchen water shutoff valve · Battery and sensor note updated",
+      "body": "# Kitchen water shutoff valve object update\n> The object projection was refreshed after new signals arrived from several channels.\n\n## Snapshot\n- Current state: closed after leak protection\n- Related events: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Monitoring channel: Home Automation\n\n## Attribute changes\n- floor sensor humidity fell from 72% to 38%\n- valve command mode changed from automatic to supervised\n\n## Next step\n- Keep the object on the screenshot fixture because it links operations, finance, home and agent scenarios in one realistic timeline.\n",
+      "channel_id": "home-automation",
+      "is_read": true,
+      "received_at": "2026-05-07T23:18:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_home_valve_kitchen",
+        "thing_id": "thing_home_valve_kitchen",
+        "projection_destination": "thing_head",
+        "title": "Kitchen water shutoff valve · Battery and sensor note updated",
+        "description": "Kitchen water shutoff valve。This record is generated as screenshot fixture data but follows a realistic production timeline.",
+        "status": "closed after leak protection",
+        "message": "Battery and sensor note updated: floor sensor humidity fell from 72% to 38%; valve command mode changed from automatic to supervised",
+        "severity": "low",
+        "tags": [
+          "water sensor",
+          "kitchen",
+          "valve"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Snapshot": "closed after leak protection",
+          "Attribute changes": [
+            "floor sensor humidity fell from 72% to 38%",
+            "valve command mode changed from automatic to supervised"
+          ],
+          "Related events": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Source": "Home Automation"
+        },
+        "metadata": "{\"Source\":\"PushGo fixture generator\",\"Projection version\":\"2026.05.08-1\",\"Recommended action\":\"Keep the object visible in the demo inbox and object detail screen.\",\"Audit note\":\"Object contains readable attribute changes and linked event identifiers.\",\"Related events\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "room",
+          "value": "Kitchen sink cabinet"
+        },
+        "external_ids": {
+          "object projection": "OBJ-THING_HOME_VALVE_KITCHEN"
+        }
+      },
+      "status": "normal"
+    }
+  ],
+  "channel_subscriptions": [
+    {
+      "channel_id": "ops-core",
+      "display_name": "Operations Core",
+      "password": "fixture-ops-core-2026",
+      "last_synced_at": "2026-05-08T04:25:00.000Z",
+      "updated_at": "2026-05-08T03:10:00.000Z"
+    },
+    {
+      "channel_id": "home-automation",
+      "display_name": "Home Automation",
+      "password": "fixture-home-automation-2026",
+      "last_synced_at": "2026-05-08T04:26:00.000Z",
+      "updated_at": "2026-05-08T03:11:00.000Z"
+    },
+    {
+      "channel_id": "finance-ledger",
+      "display_name": "Finance Ledger",
+      "password": "fixture-finance-ledger-2026",
+      "last_synced_at": "2026-05-08T04:27:00.000Z",
+      "updated_at": "2026-05-08T03:12:00.000Z"
+    },
+    {
+      "channel_id": "event-monitoring",
+      "display_name": "Event Monitoring",
+      "password": "fixture-event-monitoring-2026",
+      "last_synced_at": "2026-05-08T04:28:00.000Z",
+      "updated_at": "2026-05-08T03:13:00.000Z"
+    },
+    {
+      "channel_id": "ai-agent-feedback",
+      "display_name": "AI Agent Feedback",
+      "password": "fixture-ai-agent-feedback-2026",
+      "last_synced_at": "2026-05-08T04:29:00.000Z",
+      "updated_at": "2026-05-08T03:14:00.000Z"
+    },
+    {
+      "channel_id": "executive-brief",
+      "display_name": "Executive Brief",
+      "password": "fixture-executive-brief-2026",
+      "last_synced_at": "2026-05-08T04:30:00.000Z",
+      "updated_at": "2026-05-08T03:15:00.000Z"
+    },
+    {
+      "channel_id": "incident-command",
+      "display_name": "Incident Command",
+      "password": "fixture-incident-command-2026",
+      "last_synced_at": "2026-05-08T04:31:00.000Z",
+      "updated_at": "2026-05-08T03:16:00.000Z"
+    },
+    {
+      "channel_id": "customer-trust",
+      "display_name": "Customer Trust",
+      "password": "fixture-customer-trust-2026",
+      "last_synced_at": "2026-05-08T04:32:00.000Z",
+      "updated_at": "2026-05-08T03:17:00.000Z"
+    }
+  ]
+}

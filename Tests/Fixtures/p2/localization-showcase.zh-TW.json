@@ -1,0 +1,1592 @@
+{
+  "messages": [
+    {
+      "id": "0b5b0616-6024-533e-8b1d-87262adaf8ae",
+      "message_id": "msg_thing_agent_support_triage_summary",
+      "title": "客服分診 AI Agent · 彙總投影已刷新",
+      "body": "# 客服分診 AI Agent物件更新\n> 多個頻道出現新訊號後，物件投影已經刷新。\n\n## 目前快照\n- 目前狀態：穩定運行並開啟人工抽檢\n- 關聯事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監控頻道：AI Agent 回饋\n\n## 屬性變化\n- 自動解決信心值從 0.78 調整為 0.86\n- 兜底規則從立即轉人工切換為抽樣複核\n\n## 下一步\n- 繼續保留在截圖資料中，因為它能把維運、財務、家庭和 Agent 場景串到同一條真實時間線裡。\n",
+      "channel_id": "ai-agent-feedback",
+      "is_read": false,
+      "received_at": "2026-05-08T04:58:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_agent_support_triage",
+        "thing_id": "thing_agent_support_triage",
+        "projection_destination": "thing_head",
+        "title": "客服分診 AI Agent · 彙總投影已刷新",
+        "description": "客服分診 AI Agent。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "穩定運行並開啟人工抽檢",
+        "message": "彙總投影已刷新：自動解決信心值從 0.78 調整為 0.86；兜底規則從立即轉人工切換為抽樣複核",
+        "severity": "medium",
+        "tags": [
+          "AI Agent",
+          "工單",
+          "轉人工"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "目前快照": "穩定運行並開啟人工抽檢",
+          "屬性變化": [
+            "自動解決信心值從 0.78 調整為 0.86",
+            "兜底規則從立即轉人工切換為抽樣複核"
+          ],
+          "關聯事件": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "來源": "AI Agent 回饋"
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"在示範收件匣和物件詳情頁中保持可見。\",\"稽核備註\":\"物件包含可讀的屬性變化和關聯事件識別碼。\",\"關聯事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "佇列",
+          "value": "企業客戶支援佇列"
+        },
+        "external_ids": {
+          "物件投影": "OBJ-THING_AGENT_SUPPORT_TRIAGE"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "4d2f5da5-4dd0-5fe3-b62c-3d368805d811",
+      "message_id": "msg_thing_event_auth_gateway_summary",
+      "title": "客戶登入風險閘道 · 彙總投影已刷新",
+      "body": "# 客戶登入風險閘道物件更新\n> 多個頻道出現新訊號後，物件投影已經刷新。\n\n## 目前快照\n- 目前狀態：已限流且流量趨勢恢復乾淨\n- 關聯事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監控頻道：事件監控\n\n## 屬性變化\n- 登入失敗率從 11.8% 降至 2.4%\n- 臨時挑戰門檻從中等切換為嚴格\n\n## 下一步\n- 繼續保留在截圖資料中，因為它能把維運、財務、家庭和 Agent 場景串到同一條真實時間線裡。\n",
+      "channel_id": "event-monitoring",
+      "is_read": false,
+      "received_at": "2026-05-08T04:54:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_event_auth_gateway",
+        "thing_id": "thing_event_auth_gateway",
+        "projection_destination": "thing_head",
+        "title": "客戶登入風險閘道 · 彙總投影已刷新",
+        "description": "客戶登入風險閘道。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "已限流且流量趨勢恢復乾淨",
+        "message": "彙總投影已刷新：登入失敗率從 11.8% 降至 2.4%；臨時挑戰門檻從中等切換為嚴格",
+        "severity": "medium",
+        "tags": [
+          "登入",
+          "風控",
+          "客戶信任"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "目前快照": "已限流且流量趨勢恢復乾淨",
+          "屬性變化": [
+            "登入失敗率從 11.8% 降至 2.4%",
+            "臨時挑戰門檻從中等切換為嚴格"
+          ],
+          "關聯事件": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "來源": "事件監控"
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"在示範收件匣和物件詳情頁中保持可見。\",\"稽核備註\":\"物件包含可讀的屬性變化和關聯事件識別碼。\",\"關聯事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "服務",
+          "value": "客戶帳號中心"
+        },
+        "external_ids": {
+          "物件投影": "OBJ-THING_EVENT_AUTH_GATEWAY"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "be512eb5-fe09-513b-ac5f-9bc44f118c2f",
+      "message_id": "msg_thing_ops_cluster_sh1_summary",
+      "title": "上海支付叢集 · 彙總投影已刷新",
+      "body": "# 上海支付叢集物件更新\n> 多個頻道出現新訊號後，物件投影已經刷新。\n\n## 目前快照\n- 目前狀態：健康但保持重點觀察\n- 關聯事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監控頻道：維運核心\n\n## 屬性變化\n- API P95 延遲從 420 毫秒降至 238 毫秒\n- 唯讀副本延遲從 18 秒降至 3 秒\n\n## 下一步\n- 繼續保留在截圖資料中，因為它能把維運、財務、家庭和 Agent 場景串到同一條真實時間線裡。\n",
+      "channel_id": "ops-core",
+      "is_read": false,
+      "received_at": "2026-05-08T04:50:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_ops_cluster_sh1",
+        "thing_id": "thing_ops_cluster_sh1",
+        "projection_destination": "thing_head",
+        "title": "上海支付叢集 · 彙總投影已刷新",
+        "description": "上海支付叢集。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "健康但保持重點觀察",
+        "message": "彙總投影已刷新：API P95 延遲從 420 毫秒降至 238 毫秒；唯讀副本延遲從 18 秒降至 3 秒",
+        "severity": "medium",
+        "tags": [
+          "資料庫",
+          "延遲",
+          "唯讀副本"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "目前快照": "健康但保持重點觀察",
+          "屬性變化": [
+            "API P95 延遲從 420 毫秒降至 238 毫秒",
+            "唯讀副本延遲從 18 秒降至 3 秒"
+          ],
+          "關聯事件": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "來源": "維運核心"
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"在示範收件匣和物件詳情頁中保持可見。\",\"稽核備註\":\"物件包含可讀的屬性變化和關聯事件識別碼。\",\"關聯事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "區域",
+          "value": "上海區域"
+        },
+        "external_ids": {
+          "物件投影": "OBJ-THING_OPS_CLUSTER_SH1"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "87b3f2bb-39b7-5f8c-a61e-3807dde5c90a",
+      "message_id": "msg_thing_finance_ap_queue_summary",
+      "title": "應付帳款複核佇列 · 彙總投影已刷新",
+      "body": "# 應付帳款複核佇列物件更新\n> 多個頻道出現新訊號後，物件投影已經刷新。\n\n## 目前快照\n- 目前狀態：餘額已對齊並鎖定重複複核\n- 關聯事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監控頻道：財務台帳\n\n## 屬性變化\n- 重複發票評分從 0.41 升至 0.93\n- 核准策略從單人複核切換為雙人複核\n\n## 下一步\n- 繼續保留在截圖資料中，因為它能把維運、財務、家庭和 Agent 場景串到同一條真實時間線裡。\n",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-08T04:45:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_finance_ap_queue",
+        "thing_id": "thing_finance_ap_queue",
+        "projection_destination": "thing_head",
+        "title": "應付帳款複核佇列 · 彙總投影已刷新",
+        "description": "應付帳款複核佇列。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "餘額已對齊並鎖定重複複核",
+        "message": "彙總投影已刷新：重複發票評分從 0.41 升至 0.93；核准策略從單人複核切換為雙人複核",
+        "severity": "medium",
+        "tags": [
+          "發票",
+          "核准",
+          "現金流"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "目前快照": "餘額已對齊並鎖定重複複核",
+          "屬性變化": [
+            "重複發票評分從 0.41 升至 0.93",
+            "核准策略從單人複核切換為雙人複核"
+          ],
+          "關聯事件": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "來源": "財務台帳"
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"在示範收件匣和物件詳情頁中保持可見。\",\"稽核備註\":\"物件包含可讀的屬性變化和關聯事件識別碼。\",\"關聯事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "部門",
+          "value": "財務共享服務中心"
+        },
+        "external_ids": {
+          "物件投影": "OBJ-THING_FINANCE_AP_QUEUE"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "6ef35c4c-1345-5bf9-bfc1-623e451e8239",
+      "message_id": "msg_thing_home_valve_kitchen_summary",
+      "title": "廚房水路切斷閥 · 彙總投影已刷新",
+      "body": "# 廚房水路切斷閥物件更新\n> 多個頻道出現新訊號後，物件投影已經刷新。\n\n## 目前快照\n- 目前狀態：觸發漏水保護後保持關閉\n- 關聯事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監控頻道：智慧家庭\n\n## 屬性變化\n- 地面感測器濕度從 72% 降至 38%\n- 閥門控制模式從自動切換為監督模式\n\n## 下一步\n- 繼續保留在截圖資料中，因為它能把維運、財務、家庭和 Agent 場景串到同一條真實時間線裡。\n",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-08T04:40:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_home_valve_kitchen",
+        "thing_id": "thing_home_valve_kitchen",
+        "projection_destination": "thing_head",
+        "title": "廚房水路切斷閥 · 彙總投影已刷新",
+        "description": "廚房水路切斷閥。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "觸發漏水保護後保持關閉",
+        "message": "彙總投影已刷新：地面感測器濕度從 72% 降至 38%；閥門控制模式從自動切換為監督模式",
+        "severity": "medium",
+        "tags": [
+          "水浸感測器",
+          "廚房",
+          "閥門"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "目前快照": "觸發漏水保護後保持關閉",
+          "屬性變化": [
+            "地面感測器濕度從 72% 降至 38%",
+            "閥門控制模式從自動切換為監督模式"
+          ],
+          "關聯事件": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "來源": "智慧家庭"
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"在示範收件匣和物件詳情頁中保持可見。\",\"稽核備註\":\"物件包含可讀的屬性變化和關聯事件識別碼。\",\"關聯事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "房間",
+          "value": "廚房水槽櫃"
+        },
+        "external_ids": {
+          "物件投影": "OBJ-THING_HOME_VALVE_KITCHEN"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "74580d32-da93-5228-8e4f-7288203e2b2a",
+      "message_id": "msg_agent_ticket_resolved",
+      "title": "AI Agent 轉人工品質複核 · 已恢復",
+      "body": "# AI Agent 轉人工品質複核 · 已恢復\n> 客服 Agent 將帳單工單標記為已解決，但客戶情緒仍為負向\n\n## 變化情況\n- 人工複核確認答覆正確，新護欄降低了樣本中的風險關閉。\n- 解決信心值為 0.86，但情緒分低於升級門檻。\n- 客戶已收到包含正確發票引用的補充答覆。\n\n## 處置過程\n1. 將工單送入人工複核，並附上模型推理軌跡。\n2. 為負向情緒下的帳單回覆增加護欄。\n3. 恢復全自動前，對接下來的 50 個帳單工單進行抽樣檢查。\n\n## 下一步\n- 負責人：支援自動化負責人\n- 預計時間：下一個穩定採樣視窗\n",
+      "channel_id": "ai-agent-feedback",
+      "is_read": true,
+      "received_at": "2026-05-08T04:32:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_agent_ticket_001",
+        "event_id": "evt_agent_ticket_001",
+        "thing_id": "thing_agent_support_triage",
+        "projection_destination": "event_head",
+        "title": "AI Agent 轉人工品質複核 · 已恢復",
+        "description": "AI Agent 轉人工品質複核。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "已恢復",
+        "message": "狀態更新：人工複核確認答覆正確，新護欄降低了樣本中的風險關閉。",
+        "severity": "medium",
+        "tags": [
+          "AI Agent",
+          "工單",
+          "轉人工"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "變化情況": [
+            "人工複核確認答覆正確，新護欄降低了樣本中的風險關閉。",
+            "解決信心值為 0.86，但情緒分低於升級門檻。"
+          ],
+          "負責人": "支援自動化負責人",
+          "預計時間": "下一個穩定採樣視窗",
+          "關聯事件": [
+            "evt_agent_ticket_001",
+            "thing_agent_support_triage"
+          ]
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"繼續觀察，直到所屬物件連續出現兩次穩定採樣。\",\"稽核備註\":\"時間順序已整理，適用於 iOS 截圖測試。\",\"關聯事件\":[\"evt_agent_ticket_001\",\"thing_agent_support_triage\"]}",
+        "location": {
+          "type": "佇列",
+          "value": "企業客戶支援佇列"
+        },
+        "external_ids": {
+          "事故工單": "INC-2026-0508-005"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "1598d1fa-c7b2-594e-a3dd-5b4317ed2c19",
+      "message_id": "msg_agent_ticket_investigating",
+      "title": "AI Agent 轉人工品質複核 · 調查中",
+      "body": "# AI Agent 轉人工品質複核 · 調查中\n> 客服 Agent 將帳單工單標記為已解決，但客戶情緒仍為負向\n\n## 變化情況\n- 一位企業客戶多等待了 14 分鐘才獲得人工確認。\n- 解決信心值為 0.86，但情緒分低於升級門檻。\n- 客戶已收到包含正確發票引用的補充答覆。\n\n## 處置過程\n1. 將工單送入人工複核，並附上模型推理軌跡。\n2. 為負向情緒下的帳單回覆增加護欄。\n3. 恢復全自動前，對接下來的 50 個帳單工單進行抽樣檢查。\n\n## 下一步\n- 負責人：支援自動化負責人\n- 預計時間：下一個穩定採樣視窗\n",
+      "channel_id": "ai-agent-feedback",
+      "is_read": false,
+      "received_at": "2026-05-08T04:06:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_agent_ticket_001",
+        "event_id": "evt_agent_ticket_001",
+        "thing_id": "thing_agent_support_triage",
+        "projection_destination": "event_head",
+        "title": "AI Agent 轉人工品質複核 · 調查中",
+        "description": "AI Agent 轉人工品質複核。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "調查中",
+        "message": "狀態更新：一位企業客戶多等待了 14 分鐘才獲得人工確認。",
+        "severity": "medium",
+        "tags": [
+          "AI Agent",
+          "工單",
+          "轉人工"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "變化情況": [
+            "一位企業客戶多等待了 14 分鐘才獲得人工確認。",
+            "解決信心值為 0.86，但情緒分低於升級門檻。"
+          ],
+          "負責人": "支援自動化負責人",
+          "預計時間": "下一個穩定採樣視窗",
+          "關聯事件": [
+            "evt_agent_ticket_001",
+            "thing_agent_support_triage"
+          ]
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"繼續觀察，直到所屬物件連續出現兩次穩定採樣。\",\"稽核備註\":\"時間順序已整理，適用於 iOS 截圖測試。\",\"關聯事件\":[\"evt_agent_ticket_001\",\"thing_agent_support_triage\"]}",
+        "location": {
+          "type": "佇列",
+          "value": "企業客戶支援佇列"
+        },
+        "external_ids": {
+          "事故工單": "INC-2026-0508-005"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "7ad71ee0-7445-528a-b4e1-322c8549c2e0",
+      "message_id": "msg_monitoring_login_resolved",
+      "title": "異常登入重試模式 · 已恢復",
+      "body": "# 異常登入重試模式 · 已恢復\n> 客戶登入重試集中出現在三個網路區段\n\n## 變化情況\n- 重試率已回到基線，連續 30 分鐘沒有新的高風險工作階段。\n- 登入失敗率升至 11.8%，啟用自適應挑戰後恢復正常。\n- 抽樣中沒有發現成功帳號接管訊號。\n\n## 處置過程\n1. 對受影響網段啟用更嚴格的風險挑戰。\n2. 向客戶信任團隊共享時間線，用於提前準備說明。\n3. 複核該重試模式是否命中已知撞庫名單。\n\n## 下一步\n- 負責人：客戶信任營運\n- 預計時間：下一個穩定採樣視窗\n",
+      "channel_id": "event-monitoring",
+      "is_read": true,
+      "received_at": "2026-05-08T03:56:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_monitoring_login_001",
+        "event_id": "evt_monitoring_login_001",
+        "thing_id": "thing_event_auth_gateway",
+        "projection_destination": "event_head",
+        "title": "異常登入重試模式 · 已恢復",
+        "description": "異常登入重試模式。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "已恢復",
+        "message": "狀態更新：重試率已回到基線，連續 30 分鐘沒有新的高風險工作階段。",
+        "severity": "critical",
+        "tags": [
+          "登入",
+          "風控",
+          "客戶信任"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "變化情況": [
+            "重試率已回到基線，連續 30 分鐘沒有新的高風險工作階段。",
+            "登入失敗率升至 11.8%，啟用自適應挑戰後恢復正常。"
+          ],
+          "負責人": "客戶信任營運",
+          "預計時間": "下一個穩定採樣視窗",
+          "關聯事件": [
+            "evt_monitoring_login_001",
+            "thing_event_auth_gateway"
+          ]
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"繼續觀察，直到所屬物件連續出現兩次穩定採樣。\",\"稽核備註\":\"時間順序已整理，適用於 iOS 截圖測試。\",\"關聯事件\":[\"evt_monitoring_login_001\",\"thing_event_auth_gateway\"]}",
+        "location": {
+          "type": "服務",
+          "value": "客戶帳號中心"
+        },
+        "external_ids": {
+          "事故工單": "INC-2026-0508-004"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "e4bc340f-0fe2-5134-bec2-70d9a62ad6d4",
+      "message_id": "msg_thing_agent_support_triage_policy",
+      "title": "客服分診 AI Agent · 複核策略已更新",
+      "body": "# 客服分診 AI Agent物件更新\n> 多個頻道出現新訊號後，物件投影已經刷新。\n\n## 目前快照\n- 目前狀態：穩定運行並開啟人工抽檢\n- 關聯事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監控頻道：AI Agent 回饋\n\n## 屬性變化\n- 自動解決信心值從 0.78 調整為 0.86\n- 兜底規則從立即轉人工切換為抽樣複核\n\n## 下一步\n- 繼續保留在截圖資料中，因為它能把維運、財務、家庭和 Agent 場景串到同一條真實時間線裡。\n",
+      "channel_id": "ai-agent-feedback",
+      "is_read": false,
+      "received_at": "2026-05-08T03:50:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_agent_support_triage",
+        "thing_id": "thing_agent_support_triage",
+        "projection_destination": "thing_head",
+        "title": "客服分診 AI Agent · 複核策略已更新",
+        "description": "客服分診 AI Agent。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "穩定運行並開啟人工抽檢",
+        "message": "複核策略已更新：自動解決信心值從 0.78 調整為 0.86；兜底規則從立即轉人工切換為抽樣複核",
+        "severity": "medium",
+        "tags": [
+          "AI Agent",
+          "工單",
+          "轉人工"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "目前快照": "穩定運行並開啟人工抽檢",
+          "屬性變化": [
+            "自動解決信心值從 0.78 調整為 0.86",
+            "兜底規則從立即轉人工切換為抽樣複核"
+          ],
+          "關聯事件": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "來源": "AI Agent 回饋"
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"在示範收件匣和物件詳情頁中保持可見。\",\"稽核備註\":\"物件包含可讀的屬性變化和關聯事件識別碼。\",\"關聯事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "佇列",
+          "value": "企業客戶支援佇列"
+        },
+        "external_ids": {
+          "物件投影": "OBJ-THING_AGENT_SUPPORT_TRIAGE"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "22a5d304-824d-534e-9224-5b434f878009",
+      "message_id": "msg_agent_ticket_detected",
+      "title": "AI Agent 轉人工品質複核 · 已偵測",
+      "body": "# AI Agent 轉人工品質複核 · 已偵測\n> 客服 Agent 將帳單工單標記為已解決，但客戶情緒仍為負向\n\n## 變化情況\n- 一位企業客戶多等待了 14 分鐘才獲得人工確認。\n- 解決信心值為 0.86，但情緒分低於升級門檻。\n- 客戶已收到包含正確發票引用的補充答覆。\n\n## 處置過程\n1. 將工單送入人工複核，並附上模型推理軌跡。\n2. 為負向情緒下的帳單回覆增加護欄。\n3. 恢復全自動前，對接下來的 50 個帳單工單進行抽樣檢查。\n\n## 下一步\n- 負責人：支援自動化負責人\n- 預計時間：下一個穩定採樣視窗\n",
+      "channel_id": "ai-agent-feedback",
+      "is_read": false,
+      "received_at": "2026-05-08T03:44:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_agent_ticket_001",
+        "event_id": "evt_agent_ticket_001",
+        "thing_id": "thing_agent_support_triage",
+        "projection_destination": "event_head",
+        "title": "AI Agent 轉人工品質複核 · 已偵測",
+        "description": "AI Agent 轉人工品質複核。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "已偵測",
+        "message": "狀態更新：一位企業客戶多等待了 14 分鐘才獲得人工確認。",
+        "severity": "medium",
+        "tags": [
+          "AI Agent",
+          "工單",
+          "轉人工"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "變化情況": [
+            "一位企業客戶多等待了 14 分鐘才獲得人工確認。",
+            "解決信心值為 0.86，但情緒分低於升級門檻。"
+          ],
+          "負責人": "支援自動化負責人",
+          "預計時間": "下一個穩定採樣視窗",
+          "關聯事件": [
+            "evt_agent_ticket_001",
+            "thing_agent_support_triage"
+          ]
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"繼續觀察，直到所屬物件連續出現兩次穩定採樣。\",\"稽核備註\":\"時間順序已整理，適用於 iOS 截圖測試。\",\"關聯事件\":[\"evt_agent_ticket_001\",\"thing_agent_support_triage\"]}",
+        "location": {
+          "type": "佇列",
+          "value": "企業客戶支援佇列"
+        },
+        "external_ids": {
+          "事故工單": "INC-2026-0508-005"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "f424bf48-fb91-5733-809f-4f42e2986447",
+      "message_id": "msg_thing_event_auth_gateway_risk",
+      "title": "客戶登入風險閘道 · 風險門檻已更新",
+      "body": "# 客戶登入風險閘道物件更新\n> 多個頻道出現新訊號後，物件投影已經刷新。\n\n## 目前快照\n- 目前狀態：已限流且流量趨勢恢復乾淨\n- 關聯事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監控頻道：事件監控\n\n## 屬性變化\n- 登入失敗率從 11.8% 降至 2.4%\n- 臨時挑戰門檻從中等切換為嚴格\n\n## 下一步\n- 繼續保留在截圖資料中，因為它能把維運、財務、家庭和 Agent 場景串到同一條真實時間線裡。\n",
+      "channel_id": "event-monitoring",
+      "is_read": false,
+      "received_at": "2026-05-08T03:33:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_event_auth_gateway",
+        "thing_id": "thing_event_auth_gateway",
+        "projection_destination": "thing_head",
+        "title": "客戶登入風險閘道 · 風險門檻已更新",
+        "description": "客戶登入風險閘道。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "已限流且流量趨勢恢復乾淨",
+        "message": "風險門檻已更新：登入失敗率從 11.8% 降至 2.4%；臨時挑戰門檻從中等切換為嚴格",
+        "severity": "medium",
+        "tags": [
+          "登入",
+          "風控",
+          "客戶信任"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "目前快照": "已限流且流量趨勢恢復乾淨",
+          "屬性變化": [
+            "登入失敗率從 11.8% 降至 2.4%",
+            "臨時挑戰門檻從中等切換為嚴格"
+          ],
+          "關聯事件": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "來源": "事件監控"
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"在示範收件匣和物件詳情頁中保持可見。\",\"稽核備註\":\"物件包含可讀的屬性變化和關聯事件識別碼。\",\"關聯事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "服務",
+          "value": "客戶帳號中心"
+        },
+        "external_ids": {
+          "物件投影": "OBJ-THING_EVENT_AUTH_GATEWAY"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "19af677e-d0cb-51f2-838b-e92cbfc3b642",
+      "message_id": "msg_monitoring_login_investigating",
+      "title": "異常登入重試模式 · 調查中",
+      "body": "# 異常登入重試模式 · 調查中\n> 客戶登入重試集中出現在三個網路區段\n\n## 變化情況\n- 密碼重設和帳號中心頁面出現短暫額外驗證。\n- 登入失敗率升至 11.8%，啟用自適應挑戰後恢復正常。\n- 抽樣中沒有發現成功帳號接管訊號。\n\n## 處置過程\n1. 對受影響網段啟用更嚴格的風險挑戰。\n2. 向客戶信任團隊共享時間線，用於提前準備說明。\n3. 複核該重試模式是否命中已知撞庫名單。\n\n## 下一步\n- 負責人：客戶信任營運\n- 預計時間：下一個穩定採樣視窗\n",
+      "channel_id": "event-monitoring",
+      "is_read": false,
+      "received_at": "2026-05-08T03:28:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_monitoring_login_001",
+        "event_id": "evt_monitoring_login_001",
+        "thing_id": "thing_event_auth_gateway",
+        "projection_destination": "event_head",
+        "title": "異常登入重試模式 · 調查中",
+        "description": "異常登入重試模式。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "調查中",
+        "message": "狀態更新：密碼重設和帳號中心頁面出現短暫額外驗證。",
+        "severity": "critical",
+        "tags": [
+          "登入",
+          "風控",
+          "客戶信任"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "變化情況": [
+            "密碼重設和帳號中心頁面出現短暫額外驗證。",
+            "登入失敗率升至 11.8%，啟用自適應挑戰後恢復正常。"
+          ],
+          "負責人": "客戶信任營運",
+          "預計時間": "下一個穩定採樣視窗",
+          "關聯事件": [
+            "evt_monitoring_login_001",
+            "thing_event_auth_gateway"
+          ]
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"繼續觀察，直到所屬物件連續出現兩次穩定採樣。\",\"稽核備註\":\"時間順序已整理，適用於 iOS 截圖測試。\",\"關聯事件\":[\"evt_monitoring_login_001\",\"thing_event_auth_gateway\"]}",
+        "location": {
+          "type": "服務",
+          "value": "客戶帳號中心"
+        },
+        "external_ids": {
+          "事故工單": "INC-2026-0508-004"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "351b1c92-5dc0-56e9-ae93-99db0a8d1fa8",
+      "message_id": "msg_monitoring_login_detected",
+      "title": "異常登入重試模式 · 已偵測",
+      "body": "# 異常登入重試模式 · 已偵測\n> 客戶登入重試集中出現在三個網路區段\n\n## 變化情況\n- 密碼重設和帳號中心頁面出現短暫額外驗證。\n- 登入失敗率升至 11.8%，啟用自適應挑戰後恢復正常。\n- 抽樣中沒有發現成功帳號接管訊號。\n\n## 處置過程\n1. 對受影響網段啟用更嚴格的風險挑戰。\n2. 向客戶信任團隊共享時間線，用於提前準備說明。\n3. 複核該重試模式是否命中已知撞庫名單。\n\n## 下一步\n- 負責人：客戶信任營運\n- 預計時間：下一個穩定採樣視窗\n",
+      "channel_id": "event-monitoring",
+      "is_read": false,
+      "received_at": "2026-05-08T03:18:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_monitoring_login_001",
+        "event_id": "evt_monitoring_login_001",
+        "thing_id": "thing_event_auth_gateway",
+        "projection_destination": "event_head",
+        "title": "異常登入重試模式 · 已偵測",
+        "description": "異常登入重試模式。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "已偵測",
+        "message": "狀態更新：密碼重設和帳號中心頁面出現短暫額外驗證。",
+        "severity": "critical",
+        "tags": [
+          "登入",
+          "風控",
+          "客戶信任"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "變化情況": [
+            "密碼重設和帳號中心頁面出現短暫額外驗證。",
+            "登入失敗率升至 11.8%，啟用自適應挑戰後恢復正常。"
+          ],
+          "負責人": "客戶信任營運",
+          "預計時間": "下一個穩定採樣視窗",
+          "關聯事件": [
+            "evt_monitoring_login_001",
+            "thing_event_auth_gateway"
+          ]
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"繼續觀察，直到所屬物件連續出現兩次穩定採樣。\",\"稽核備註\":\"時間順序已整理，適用於 iOS 截圖測試。\",\"關聯事件\":[\"evt_monitoring_login_001\",\"thing_event_auth_gateway\"]}",
+        "location": {
+          "type": "服務",
+          "value": "客戶帳號中心"
+        },
+        "external_ids": {
+          "事故工單": "INC-2026-0508-004"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "92e84718-7d9e-5127-98cf-b700e1e96a84",
+      "message_id": "msg_ops_latency_resolved_003",
+      "title": "支付 API 延遲突增 · 已恢復",
+      "body": "# 支付 API 延遲突增 · 已恢復\n> 華東區域的結帳請求對企業使用者出現明顯變慢\n\n## 變化情況\n- 延遲已回到 300 毫秒目標以下，唯讀副本延遲連續 20 分鐘低於 5 秒。\n- P95 延遲最高達到 1.9 秒，下線唯讀副本流量後開始回落。\n- 未偵測到資料遺失，三次重試請求已自動恢復。\n\n## 處置過程\n1. 固定慢查詢指紋，並將最新唯讀副本從流量輪詢中摘除。\n2. 將資料庫連線池遙測提升到一分鐘粒度。\n3. 在下一批帳單任務無重試成長前，保持事件開啟。\n\n## 下一步\n- 負責人：值班 SRE\n- 預計時間：下一個穩定採樣視窗\n",
+      "channel_id": "ops-core",
+      "is_read": true,
+      "received_at": "2026-05-08T03:05:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_ops_latency_001",
+        "event_id": "evt_ops_latency_001",
+        "thing_id": "thing_ops_cluster_sh1",
+        "projection_destination": "event_head",
+        "title": "支付 API 延遲突增 · 已恢復",
+        "description": "支付 API 延遲突增。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "已恢復",
+        "message": "狀態更新：延遲已回到 300 毫秒目標以下，唯讀副本延遲連續 20 分鐘低於 5 秒。",
+        "severity": "high",
+        "tags": [
+          "資料庫",
+          "延遲",
+          "唯讀副本"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "變化情況": [
+            "延遲已回到 300 毫秒目標以下，唯讀副本延遲連續 20 分鐘低於 5 秒。",
+            "P95 延遲最高達到 1.9 秒，下線唯讀副本流量後開始回落。"
+          ],
+          "負責人": "值班 SRE",
+          "預計時間": "下一個穩定採樣視窗",
+          "關聯事件": [
+            "evt_ops_latency_001",
+            "thing_ops_cluster_sh1"
+          ]
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"繼續觀察，直到所屬物件連續出現兩次穩定採樣。\",\"稽核備註\":\"時間順序已整理，適用於 iOS 截圖測試。\",\"關聯事件\":[\"evt_ops_latency_001\",\"thing_ops_cluster_sh1\"]}",
+        "location": {
+          "type": "區域",
+          "value": "上海區域"
+        },
+        "external_ids": {
+          "事故工單": "INC-2026-0508-001"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "a157e42f-7a05-5109-89fd-059294882be4",
+      "message_id": "msg_thing_ops_cluster_sh1_capacity",
+      "title": "上海支付叢集 · 容量訊號已更新",
+      "body": "# 上海支付叢集物件更新\n> 多個頻道出現新訊號後，物件投影已經刷新。\n\n## 目前快照\n- 目前狀態：健康但保持重點觀察\n- 關聯事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監控頻道：維運核心\n\n## 屬性變化\n- API P95 延遲從 420 毫秒降至 238 毫秒\n- 唯讀副本延遲從 18 秒降至 3 秒\n\n## 下一步\n- 繼續保留在截圖資料中，因為它能把維運、財務、家庭和 Agent 場景串到同一條真實時間線裡。\n",
+      "channel_id": "ops-core",
+      "is_read": true,
+      "received_at": "2026-05-08T02:40:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_ops_cluster_sh1",
+        "thing_id": "thing_ops_cluster_sh1",
+        "projection_destination": "thing_head",
+        "title": "上海支付叢集 · 容量訊號已更新",
+        "description": "上海支付叢集。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "健康但保持重點觀察",
+        "message": "容量訊號已更新：API P95 延遲從 420 毫秒降至 238 毫秒；唯讀副本延遲從 18 秒降至 3 秒",
+        "severity": "low",
+        "tags": [
+          "資料庫",
+          "延遲",
+          "唯讀副本"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "目前快照": "健康但保持重點觀察",
+          "屬性變化": [
+            "API P95 延遲從 420 毫秒降至 238 毫秒",
+            "唯讀副本延遲從 18 秒降至 3 秒"
+          ],
+          "關聯事件": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "來源": "維運核心"
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"在示範收件匣和物件詳情頁中保持可見。\",\"稽核備註\":\"物件包含可讀的屬性變化和關聯事件識別碼。\",\"關聯事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "區域",
+          "value": "上海區域"
+        },
+        "external_ids": {
+          "物件投影": "OBJ-THING_OPS_CLUSTER_SH1"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "893abdb8-e082-5acc-9d08-451bebd725d8",
+      "message_id": "msg_ops_latency_investigating_002",
+      "title": "支付 API 延遲突增 · 調查中",
+      "body": "# 支付 API 延遲突增 · 調查中\n> 華東區域的結帳請求對企業使用者出現明顯變慢\n\n## 變化情況\n- 上海區域 3.8% 的結帳確認出現延遲。\n- P95 延遲最高達到 1.9 秒，下線唯讀副本流量後開始回落。\n- 未偵測到資料遺失，三次重試請求已自動恢復。\n\n## 處置過程\n1. 固定慢查詢指紋，並將最新唯讀副本從流量輪詢中摘除。\n2. 將資料庫連線池遙測提升到一分鐘粒度。\n3. 在下一批帳單任務無重試成長前，保持事件開啟。\n\n## 下一步\n- 負責人：值班 SRE\n- 預計時間：下一個穩定採樣視窗\n",
+      "channel_id": "ops-core",
+      "is_read": false,
+      "received_at": "2026-05-08T02:24:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_ops_latency_001",
+        "event_id": "evt_ops_latency_001",
+        "thing_id": "thing_ops_cluster_sh1",
+        "projection_destination": "event_head",
+        "title": "支付 API 延遲突增 · 調查中",
+        "description": "支付 API 延遲突增。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "調查中",
+        "message": "狀態更新：上海區域 3.8% 的結帳確認出現延遲。",
+        "severity": "high",
+        "tags": [
+          "資料庫",
+          "延遲",
+          "唯讀副本"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "變化情況": [
+            "上海區域 3.8% 的結帳確認出現延遲。",
+            "P95 延遲最高達到 1.9 秒，下線唯讀副本流量後開始回落。"
+          ],
+          "負責人": "值班 SRE",
+          "預計時間": "下一個穩定採樣視窗",
+          "關聯事件": [
+            "evt_ops_latency_001",
+            "thing_ops_cluster_sh1"
+          ]
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"繼續觀察，直到所屬物件連續出現兩次穩定採樣。\",\"稽核備註\":\"時間順序已整理，適用於 iOS 截圖測試。\",\"關聯事件\":[\"evt_ops_latency_001\",\"thing_ops_cluster_sh1\"]}",
+        "location": {
+          "type": "區域",
+          "value": "上海區域"
+        },
+        "external_ids": {
+          "事故工單": "INC-2026-0508-001"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "065ff50e-0ada-5775-8d9a-f9cfa25f9795",
+      "message_id": "msg_home_leak_resolved",
+      "title": "廚房漏水感測器觸發 · 已恢復",
+      "body": "# 廚房漏水感測器觸發 · 已恢復\n> 地面感測器在水槽櫃附近持續回報潮濕\n\n## 變化情況\n- 濕度曲線連續 25 分鐘保持平穩，閥門已在監督模式下重新開啟。\n- 閥門關閉並啟動通風後，濕度從 72% 降至 38%。\n- 一個家庭自動化例程已暫停，使用者仍可在 App 內手動接管。\n\n## 處置過程\n1. 確認感測器不是低電量導致的誤報。\n2. 在複核攝影機快照期間保持閥門關閉。\n3. 提醒住戶檢查櫃體接縫後再重新打開水路。\n\n## 下一步\n- 負責人：智慧家庭負責人\n- 預計時間：下一個穩定採樣視窗\n",
+      "channel_id": "home-automation",
+      "is_read": true,
+      "received_at": "2026-05-08T02:16:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_home_leak_001",
+        "event_id": "evt_home_leak_001",
+        "thing_id": "thing_home_valve_kitchen",
+        "projection_destination": "event_head",
+        "title": "廚房漏水感測器觸發 · 已恢復",
+        "description": "廚房漏水感測器觸發。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "已恢復",
+        "message": "狀態更新：濕度曲線連續 25 分鐘保持平穩，閥門已在監督模式下重新開啟。",
+        "severity": "medium",
+        "tags": [
+          "水浸感測器",
+          "廚房",
+          "閥門"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "變化情況": [
+            "濕度曲線連續 25 分鐘保持平穩，閥門已在監督模式下重新開啟。",
+            "閥門關閉並啟動通風後，濕度從 72% 降至 38%。"
+          ],
+          "負責人": "智慧家庭負責人",
+          "預計時間": "下一個穩定採樣視窗",
+          "關聯事件": [
+            "evt_home_leak_001",
+            "thing_home_valve_kitchen"
+          ]
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"繼續觀察，直到所屬物件連續出現兩次穩定採樣。\",\"稽核備註\":\"時間順序已整理，適用於 iOS 截圖測試。\",\"關聯事件\":[\"evt_home_leak_001\",\"thing_home_valve_kitchen\"]}",
+        "location": {
+          "type": "房間",
+          "value": "廚房水槽櫃"
+        },
+        "external_ids": {
+          "事故工單": "INC-2026-0508-002"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "b295499a-da21-5277-99b6-ccb5ecdd0ac7",
+      "message_id": "msg_ops_brief_001",
+      "title": "支付 API 延遲突增 · 已偵測",
+      "body": "# 支付 API 延遲突增 · 已偵測\n> 華東區域的結帳請求對企業使用者出現明顯變慢\n\n## 變化情況\n- 上海區域 3.8% 的結帳確認出現延遲。\n- P95 延遲最高達到 1.9 秒，下線唯讀副本流量後開始回落。\n- 未偵測到資料遺失，三次重試請求已自動恢復。\n\n## 處置過程\n1. 固定慢查詢指紋，並將最新唯讀副本從流量輪詢中摘除。\n2. 將資料庫連線池遙測提升到一分鐘粒度。\n3. 在下一批帳單任務無重試成長前，保持事件開啟。\n\n## 下一步\n- 負責人：值班 SRE\n- 預計時間：下一個穩定採樣視窗\n",
+      "channel_id": "ops-core",
+      "is_read": false,
+      "received_at": "2026-05-08T02:10:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_ops_latency_001",
+        "event_id": "evt_ops_latency_001",
+        "thing_id": "thing_ops_cluster_sh1",
+        "projection_destination": "event_head",
+        "title": "支付 API 延遲突增 · 已偵測",
+        "description": "支付 API 延遲突增。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "已偵測",
+        "message": "狀態更新：上海區域 3.8% 的結帳確認出現延遲。",
+        "severity": "high",
+        "tags": [
+          "資料庫",
+          "延遲",
+          "唯讀副本"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "變化情況": [
+            "上海區域 3.8% 的結帳確認出現延遲。",
+            "P95 延遲最高達到 1.9 秒，下線唯讀副本流量後開始回落。"
+          ],
+          "負責人": "值班 SRE",
+          "預計時間": "下一個穩定採樣視窗",
+          "關聯事件": [
+            "evt_ops_latency_001",
+            "thing_ops_cluster_sh1"
+          ]
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"繼續觀察，直到所屬物件連續出現兩次穩定採樣。\",\"稽核備註\":\"時間順序已整理，適用於 iOS 截圖測試。\",\"關聯事件\":[\"evt_ops_latency_001\",\"thing_ops_cluster_sh1\"]}",
+        "location": {
+          "type": "區域",
+          "value": "上海區域"
+        },
+        "external_ids": {
+          "事故工單": "INC-2026-0508-001"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "54c0b579-3466-5626-9719-fa525e40c4a1",
+      "message_id": "msg_thing_finance_ap_queue_approval",
+      "title": "應付帳款複核佇列 · 核准路徑已更新",
+      "body": "# 應付帳款複核佇列物件更新\n> 多個頻道出現新訊號後，物件投影已經刷新。\n\n## 目前快照\n- 目前狀態：餘額已對齊並鎖定重複複核\n- 關聯事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監控頻道：財務台帳\n\n## 屬性變化\n- 重複發票評分從 0.41 升至 0.93\n- 核准策略從單人複核切換為雙人複核\n\n## 下一步\n- 繼續保留在截圖資料中，因為它能把維運、財務、家庭和 Agent 場景串到同一條真實時間線裡。\n",
+      "channel_id": "finance-ledger",
+      "is_read": true,
+      "received_at": "2026-05-08T02:08:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_finance_ap_queue",
+        "thing_id": "thing_finance_ap_queue",
+        "projection_destination": "thing_head",
+        "title": "應付帳款複核佇列 · 核准路徑已更新",
+        "description": "應付帳款複核佇列。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "餘額已對齊並鎖定重複複核",
+        "message": "核准路徑已更新：重複發票評分從 0.41 升至 0.93；核准策略從單人複核切換為雙人複核",
+        "severity": "low",
+        "tags": [
+          "發票",
+          "核准",
+          "現金流"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "目前快照": "餘額已對齊並鎖定重複複核",
+          "屬性變化": [
+            "重複發票評分從 0.41 升至 0.93",
+            "核准策略從單人複核切換為雙人複核"
+          ],
+          "關聯事件": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "來源": "財務台帳"
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"在示範收件匣和物件詳情頁中保持可見。\",\"稽核備註\":\"物件包含可讀的屬性變化和關聯事件識別碼。\",\"關聯事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "部門",
+          "value": "財務共享服務中心"
+        },
+        "external_ids": {
+          "物件投影": "OBJ-THING_FINANCE_AP_QUEUE"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "ebedd33d-927a-5282-8207-21c8adcf090c",
+      "message_id": "msg_finance_invoice_resolved",
+      "title": "疑似供應商重複發票 · 已恢復",
+      "body": "# 疑似供應商重複發票 · 已恢復\n> 同一採購單的兩張發票從不同核准路徑進入系統\n\n## 變化情況\n- 第二張發票已確認是重複提交，原付款計畫已恢復。\n- 金額、供應商稅號和送貨單一致，重複評分達到 0.93。\n- 財務團隊仍可在二次核准後釋放有效發票。\n\n## 處置過程\n1. 鎖定兩筆發票記錄，並附加供應商送貨單。\n2. 請採購確認哪一個發票號碼應保持有效。\n3. 在攔截解除前，將現金流預測標記為暫定。\n\n## 下一步\n- 負責人：財務控制負責人\n- 預計時間：下一個穩定採樣視窗\n",
+      "channel_id": "finance-ledger",
+      "is_read": true,
+      "received_at": "2026-05-08T02:02:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_finance_invoice_001",
+        "event_id": "evt_finance_invoice_001",
+        "thing_id": "thing_finance_ap_queue",
+        "projection_destination": "event_head",
+        "title": "疑似供應商重複發票 · 已恢復",
+        "description": "疑似供應商重複發票。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "已恢復",
+        "message": "狀態更新：第二張發票已確認是重複提交，原付款計畫已恢復。",
+        "severity": "high",
+        "tags": [
+          "發票",
+          "核准",
+          "現金流"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "變化情況": [
+            "第二張發票已確認是重複提交，原付款計畫已恢復。",
+            "金額、供應商稅號和送貨單一致，重複評分達到 0.93。"
+          ],
+          "負責人": "財務控制負責人",
+          "預計時間": "下一個穩定採樣視窗",
+          "關聯事件": [
+            "evt_finance_invoice_001",
+            "thing_finance_ap_queue"
+          ]
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"繼續觀察，直到所屬物件連續出現兩次穩定採樣。\",\"稽核備註\":\"時間順序已整理，適用於 iOS 截圖測試。\",\"關聯事件\":[\"evt_finance_invoice_001\",\"thing_finance_ap_queue\"]}",
+        "location": {
+          "type": "部門",
+          "value": "財務共享服務中心"
+        },
+        "external_ids": {
+          "事故工單": "INC-2026-0508-003"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "b793b6ac-d514-5363-b702-a4f23a3d8aac",
+      "message_id": "msg_thing_home_valve_kitchen_valve",
+      "title": "廚房水路切斷閥 · 閥門安全備註已更新",
+      "body": "# 廚房水路切斷閥物件更新\n> 多個頻道出現新訊號後，物件投影已經刷新。\n\n## 目前快照\n- 目前狀態：觸發漏水保護後保持關閉\n- 關聯事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監控頻道：智慧家庭\n\n## 屬性變化\n- 地面感測器濕度從 72% 降至 38%\n- 閥門控制模式從自動切換為監督模式\n\n## 下一步\n- 繼續保留在截圖資料中，因為它能把維運、財務、家庭和 Agent 場景串到同一條真實時間線裡。\n",
+      "channel_id": "home-automation",
+      "is_read": true,
+      "received_at": "2026-05-08T01:49:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_home_valve_kitchen",
+        "thing_id": "thing_home_valve_kitchen",
+        "projection_destination": "thing_head",
+        "title": "廚房水路切斷閥 · 閥門安全備註已更新",
+        "description": "廚房水路切斷閥。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "觸發漏水保護後保持關閉",
+        "message": "閥門安全備註已更新：地面感測器濕度從 72% 降至 38%；閥門控制模式從自動切換為監督模式",
+        "severity": "low",
+        "tags": [
+          "水浸感測器",
+          "廚房",
+          "閥門"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "目前快照": "觸發漏水保護後保持關閉",
+          "屬性變化": [
+            "地面感測器濕度從 72% 降至 38%",
+            "閥門控制模式從自動切換為監督模式"
+          ],
+          "關聯事件": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "來源": "智慧家庭"
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"在示範收件匣和物件詳情頁中保持可見。\",\"稽核備註\":\"物件包含可讀的屬性變化和關聯事件識別碼。\",\"關聯事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "房間",
+          "value": "廚房水槽櫃"
+        },
+        "external_ids": {
+          "物件投影": "OBJ-THING_HOME_VALVE_KITCHEN"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "63620f2e-2949-5038-bf3f-20ff59d569e1",
+      "message_id": "msg_home_leak_investigating",
+      "title": "廚房漏水感測器觸發 · 調查中",
+      "body": "# 廚房漏水感測器觸發 · 調查中\n> 地面感測器在水槽櫃附近持續回報潮濕\n\n## 變化情況\n- 智慧閥門在 8 秒內關閉冷水支路，阻止水跡擴散到櫃體外。\n- 閥門關閉並啟動通風後，濕度從 72% 降至 38%。\n- 一個家庭自動化例程已暫停，使用者仍可在 App 內手動接管。\n\n## 處置過程\n1. 確認感測器不是低電量導致的誤報。\n2. 在複核攝影機快照期間保持閥門關閉。\n3. 提醒住戶檢查櫃體接縫後再重新打開水路。\n\n## 下一步\n- 負責人：智慧家庭負責人\n- 預計時間：下一個穩定採樣視窗\n",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-08T01:42:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_home_leak_001",
+        "event_id": "evt_home_leak_001",
+        "thing_id": "thing_home_valve_kitchen",
+        "projection_destination": "event_head",
+        "title": "廚房漏水感測器觸發 · 調查中",
+        "description": "廚房漏水感測器觸發。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "調查中",
+        "message": "狀態更新：智慧閥門在 8 秒內關閉冷水支路，阻止水跡擴散到櫃體外。",
+        "severity": "medium",
+        "tags": [
+          "水浸感測器",
+          "廚房",
+          "閥門"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "變化情況": [
+            "智慧閥門在 8 秒內關閉冷水支路，阻止水跡擴散到櫃體外。",
+            "閥門關閉並啟動通風後，濕度從 72% 降至 38%。"
+          ],
+          "負責人": "智慧家庭負責人",
+          "預計時間": "下一個穩定採樣視窗",
+          "關聯事件": [
+            "evt_home_leak_001",
+            "thing_home_valve_kitchen"
+          ]
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"繼續觀察，直到所屬物件連續出現兩次穩定採樣。\",\"稽核備註\":\"時間順序已整理，適用於 iOS 截圖測試。\",\"關聯事件\":[\"evt_home_leak_001\",\"thing_home_valve_kitchen\"]}",
+        "location": {
+          "type": "房間",
+          "value": "廚房水槽櫃"
+        },
+        "external_ids": {
+          "事故工單": "INC-2026-0508-002"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "9f4b3a61-5e27-5301-b937-307dd71d583f",
+      "message_id": "msg_home_leak_detected",
+      "title": "廚房漏水感測器觸發 · 已偵測",
+      "body": "# 廚房漏水感測器觸發 · 已偵測\n> 地面感測器在水槽櫃附近持續回報潮濕\n\n## 變化情況\n- 智慧閥門在 8 秒內關閉冷水支路，阻止水跡擴散到櫃體外。\n- 閥門關閉並啟動通風後，濕度從 72% 降至 38%。\n- 一個家庭自動化例程已暫停，使用者仍可在 App 內手動接管。\n\n## 處置過程\n1. 確認感測器不是低電量導致的誤報。\n2. 在複核攝影機快照期間保持閥門關閉。\n3. 提醒住戶檢查櫃體接縫後再重新打開水路。\n\n## 下一步\n- 負責人：智慧家庭負責人\n- 預計時間：下一個穩定採樣視窗\n",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-08T01:35:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_home_leak_001",
+        "event_id": "evt_home_leak_001",
+        "thing_id": "thing_home_valve_kitchen",
+        "projection_destination": "event_head",
+        "title": "廚房漏水感測器觸發 · 已偵測",
+        "description": "廚房漏水感測器觸發。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "已偵測",
+        "message": "狀態更新：智慧閥門在 8 秒內關閉冷水支路，阻止水跡擴散到櫃體外。",
+        "severity": "medium",
+        "tags": [
+          "水浸感測器",
+          "廚房",
+          "閥門"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "變化情況": [
+            "智慧閥門在 8 秒內關閉冷水支路，阻止水跡擴散到櫃體外。",
+            "閥門關閉並啟動通風後，濕度從 72% 降至 38%。"
+          ],
+          "負責人": "智慧家庭負責人",
+          "預計時間": "下一個穩定採樣視窗",
+          "關聯事件": [
+            "evt_home_leak_001",
+            "thing_home_valve_kitchen"
+          ]
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"繼續觀察，直到所屬物件連續出現兩次穩定採樣。\",\"稽核備註\":\"時間順序已整理，適用於 iOS 截圖測試。\",\"關聯事件\":[\"evt_home_leak_001\",\"thing_home_valve_kitchen\"]}",
+        "location": {
+          "type": "房間",
+          "value": "廚房水槽櫃"
+        },
+        "external_ids": {
+          "事故工單": "INC-2026-0508-002"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "2e59c49a-dccb-5aa3-801e-5635cf85066a",
+      "message_id": "msg_finance_invoice_investigating",
+      "title": "疑似供應商重複發票 · 調查中",
+      "body": "# 疑似供應商重複發票 · 調查中\n> 同一採購單的兩張發票從不同核准路徑進入系統\n\n## 變化情況\n- 一筆 18,420.00 元人民幣的計畫付款在提交銀行前被攔截。\n- 金額、供應商稅號和送貨單一致，重複評分達到 0.93。\n- 財務團隊仍可在二次核准後釋放有效發票。\n\n## 處置過程\n1. 鎖定兩筆發票記錄，並附加供應商送貨單。\n2. 請採購確認哪一個發票號碼應保持有效。\n3. 在攔截解除前，將現金流預測標記為暫定。\n\n## 下一步\n- 負責人：財務控制負責人\n- 預計時間：下一個穩定採樣視窗\n",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-08T01:20:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_finance_invoice_001",
+        "event_id": "evt_finance_invoice_001",
+        "thing_id": "thing_finance_ap_queue",
+        "projection_destination": "event_head",
+        "title": "疑似供應商重複發票 · 調查中",
+        "description": "疑似供應商重複發票。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "調查中",
+        "message": "狀態更新：一筆 18,420.00 元人民幣的計畫付款在提交銀行前被攔截。",
+        "severity": "high",
+        "tags": [
+          "發票",
+          "核准",
+          "現金流"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "變化情況": [
+            "一筆 18,420.00 元人民幣的計畫付款在提交銀行前被攔截。",
+            "金額、供應商稅號和送貨單一致，重複評分達到 0.93。"
+          ],
+          "負責人": "財務控制負責人",
+          "預計時間": "下一個穩定採樣視窗",
+          "關聯事件": [
+            "evt_finance_invoice_001",
+            "thing_finance_ap_queue"
+          ]
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"繼續觀察，直到所屬物件連續出現兩次穩定採樣。\",\"稽核備註\":\"時間順序已整理，適用於 iOS 截圖測試。\",\"關聯事件\":[\"evt_finance_invoice_001\",\"thing_finance_ap_queue\"]}",
+        "location": {
+          "type": "部門",
+          "value": "財務共享服務中心"
+        },
+        "external_ids": {
+          "事故工單": "INC-2026-0508-003"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "bbda9bab-d0d1-5ba2-91a8-c65d2ae3d002",
+      "message_id": "msg_thing_agent_support_triage_sample",
+      "title": "客服分診 AI Agent · 抽樣備註已更新",
+      "body": "# 客服分診 AI Agent物件更新\n> 多個頻道出現新訊號後，物件投影已經刷新。\n\n## 目前快照\n- 目前狀態：穩定運行並開啟人工抽檢\n- 關聯事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監控頻道：AI Agent 回饋\n\n## 屬性變化\n- 自動解決信心值從 0.78 調整為 0.86\n- 兜底規則從立即轉人工切換為抽樣複核\n\n## 下一步\n- 繼續保留在截圖資料中，因為它能把維運、財務、家庭和 Agent 場景串到同一條真實時間線裡。\n",
+      "channel_id": "ai-agent-feedback",
+      "is_read": true,
+      "received_at": "2026-05-08T01:12:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_agent_support_triage",
+        "thing_id": "thing_agent_support_triage",
+        "projection_destination": "thing_head",
+        "title": "客服分診 AI Agent · 抽樣備註已更新",
+        "description": "客服分診 AI Agent。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "穩定運行並開啟人工抽檢",
+        "message": "抽樣備註已更新：自動解決信心值從 0.78 調整為 0.86；兜底規則從立即轉人工切換為抽樣複核",
+        "severity": "low",
+        "tags": [
+          "AI Agent",
+          "工單",
+          "轉人工"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "目前快照": "穩定運行並開啟人工抽檢",
+          "屬性變化": [
+            "自動解決信心值從 0.78 調整為 0.86",
+            "兜底規則從立即轉人工切換為抽樣複核"
+          ],
+          "關聯事件": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "來源": "AI Agent 回饋"
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"在示範收件匣和物件詳情頁中保持可見。\",\"稽核備註\":\"物件包含可讀的屬性變化和關聯事件識別碼。\",\"關聯事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "佇列",
+          "value": "企業客戶支援佇列"
+        },
+        "external_ids": {
+          "物件投影": "OBJ-THING_AGENT_SUPPORT_TRIAGE"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "0bc455b2-2bb7-5aae-b972-2aa8951f97b3",
+      "message_id": "msg_finance_invoice_detected",
+      "title": "疑似供應商重複發票 · 已偵測",
+      "body": "# 疑似供應商重複發票 · 已偵測\n> 同一採購單的兩張發票從不同核准路徑進入系統\n\n## 變化情況\n- 一筆 18,420.00 元人民幣的計畫付款在提交銀行前被攔截。\n- 金額、供應商稅號和送貨單一致，重複評分達到 0.93。\n- 財務團隊仍可在二次核准後釋放有效發票。\n\n## 處置過程\n1. 鎖定兩筆發票記錄，並附加供應商送貨單。\n2. 請採購確認哪一個發票號碼應保持有效。\n3. 在攔截解除前，將現金流預測標記為暫定。\n\n## 下一步\n- 負責人：財務控制負責人\n- 預計時間：下一個穩定採樣視窗\n",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-08T00:58:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_finance_invoice_001",
+        "event_id": "evt_finance_invoice_001",
+        "thing_id": "thing_finance_ap_queue",
+        "projection_destination": "event_head",
+        "title": "疑似供應商重複發票 · 已偵測",
+        "description": "疑似供應商重複發票。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "已偵測",
+        "message": "狀態更新：一筆 18,420.00 元人民幣的計畫付款在提交銀行前被攔截。",
+        "severity": "high",
+        "tags": [
+          "發票",
+          "核准",
+          "現金流"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "變化情況": [
+            "一筆 18,420.00 元人民幣的計畫付款在提交銀行前被攔截。",
+            "金額、供應商稅號和送貨單一致，重複評分達到 0.93。"
+          ],
+          "負責人": "財務控制負責人",
+          "預計時間": "下一個穩定採樣視窗",
+          "關聯事件": [
+            "evt_finance_invoice_001",
+            "thing_finance_ap_queue"
+          ]
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"繼續觀察，直到所屬物件連續出現兩次穩定採樣。\",\"稽核備註\":\"時間順序已整理，適用於 iOS 截圖測試。\",\"關聯事件\":[\"evt_finance_invoice_001\",\"thing_finance_ap_queue\"]}",
+        "location": {
+          "type": "部門",
+          "value": "財務共享服務中心"
+        },
+        "external_ids": {
+          "事故工單": "INC-2026-0508-003"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "9e96a98a-2cc2-5965-8267-9584af781b76",
+      "message_id": "msg_thing_event_auth_gateway_baseline",
+      "title": "客戶登入風險閘道 · 基線對比已更新",
+      "body": "# 客戶登入風險閘道物件更新\n> 多個頻道出現新訊號後，物件投影已經刷新。\n\n## 目前快照\n- 目前狀態：已限流且流量趨勢恢復乾淨\n- 關聯事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監控頻道：事件監控\n\n## 屬性變化\n- 登入失敗率從 11.8% 降至 2.4%\n- 臨時挑戰門檻從中等切換為嚴格\n\n## 下一步\n- 繼續保留在截圖資料中，因為它能把維運、財務、家庭和 Agent 場景串到同一條真實時間線裡。\n",
+      "channel_id": "event-monitoring",
+      "is_read": true,
+      "received_at": "2026-05-08T00:52:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_event_auth_gateway",
+        "thing_id": "thing_event_auth_gateway",
+        "projection_destination": "thing_head",
+        "title": "客戶登入風險閘道 · 基線對比已更新",
+        "description": "客戶登入風險閘道。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "已限流且流量趨勢恢復乾淨",
+        "message": "基線對比已更新：登入失敗率從 11.8% 降至 2.4%；臨時挑戰門檻從中等切換為嚴格",
+        "severity": "low",
+        "tags": [
+          "登入",
+          "風控",
+          "客戶信任"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "目前快照": "已限流且流量趨勢恢復乾淨",
+          "屬性變化": [
+            "登入失敗率從 11.8% 降至 2.4%",
+            "臨時挑戰門檻從中等切換為嚴格"
+          ],
+          "關聯事件": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "來源": "事件監控"
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"在示範收件匣和物件詳情頁中保持可見。\",\"稽核備註\":\"物件包含可讀的屬性變化和關聯事件識別碼。\",\"關聯事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "服務",
+          "value": "客戶帳號中心"
+        },
+        "external_ids": {
+          "物件投影": "OBJ-THING_EVENT_AUTH_GATEWAY"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "7934e3e6-eaff-5bf1-85a3-f0dc9386d59e",
+      "message_id": "msg_thing_ops_cluster_sh1_maintenance",
+      "title": "上海支付叢集 · 維護備註已補充",
+      "body": "# 上海支付叢集物件更新\n> 多個頻道出現新訊號後，物件投影已經刷新。\n\n## 目前快照\n- 目前狀態：健康但保持重點觀察\n- 關聯事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監控頻道：維運核心\n\n## 屬性變化\n- API P95 延遲從 420 毫秒降至 238 毫秒\n- 唯讀副本延遲從 18 秒降至 3 秒\n\n## 下一步\n- 繼續保留在截圖資料中，因為它能把維運、財務、家庭和 Agent 場景串到同一條真實時間線裡。\n",
+      "channel_id": "ops-core",
+      "is_read": true,
+      "received_at": "2026-05-07T23:48:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_ops_cluster_sh1",
+        "thing_id": "thing_ops_cluster_sh1",
+        "projection_destination": "thing_head",
+        "title": "上海支付叢集 · 維護備註已補充",
+        "description": "上海支付叢集。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "健康但保持重點觀察",
+        "message": "維護備註已補充：API P95 延遲從 420 毫秒降至 238 毫秒；唯讀副本延遲從 18 秒降至 3 秒",
+        "severity": "low",
+        "tags": [
+          "資料庫",
+          "延遲",
+          "唯讀副本"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "目前快照": "健康但保持重點觀察",
+          "屬性變化": [
+            "API P95 延遲從 420 毫秒降至 238 毫秒",
+            "唯讀副本延遲從 18 秒降至 3 秒"
+          ],
+          "關聯事件": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "來源": "維運核心"
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"在示範收件匣和物件詳情頁中保持可見。\",\"稽核備註\":\"物件包含可讀的屬性變化和關聯事件識別碼。\",\"關聯事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "區域",
+          "value": "上海區域"
+        },
+        "external_ids": {
+          "物件投影": "OBJ-THING_OPS_CLUSTER_SH1"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "d1375da1-a1a8-55c3-b35a-28c505ad439e",
+      "message_id": "msg_thing_finance_ap_queue_cutoff",
+      "title": "應付帳款複核佇列 · 付款截點備註已更新",
+      "body": "# 應付帳款複核佇列物件更新\n> 多個頻道出現新訊號後，物件投影已經刷新。\n\n## 目前快照\n- 目前狀態：餘額已對齊並鎖定重複複核\n- 關聯事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監控頻道：財務台帳\n\n## 屬性變化\n- 重複發票評分從 0.41 升至 0.93\n- 核准策略從單人複核切換為雙人複核\n\n## 下一步\n- 繼續保留在截圖資料中，因為它能把維運、財務、家庭和 Agent 場景串到同一條真實時間線裡。\n",
+      "channel_id": "finance-ledger",
+      "is_read": true,
+      "received_at": "2026-05-07T23:32:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_finance_ap_queue",
+        "thing_id": "thing_finance_ap_queue",
+        "projection_destination": "thing_head",
+        "title": "應付帳款複核佇列 · 付款截點備註已更新",
+        "description": "應付帳款複核佇列。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "餘額已對齊並鎖定重複複核",
+        "message": "付款截點備註已更新：重複發票評分從 0.41 升至 0.93；核准策略從單人複核切換為雙人複核",
+        "severity": "low",
+        "tags": [
+          "發票",
+          "核准",
+          "現金流"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "目前快照": "餘額已對齊並鎖定重複複核",
+          "屬性變化": [
+            "重複發票評分從 0.41 升至 0.93",
+            "核准策略從單人複核切換為雙人複核"
+          ],
+          "關聯事件": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "來源": "財務台帳"
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"在示範收件匣和物件詳情頁中保持可見。\",\"稽核備註\":\"物件包含可讀的屬性變化和關聯事件識別碼。\",\"關聯事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "部門",
+          "value": "財務共享服務中心"
+        },
+        "external_ids": {
+          "物件投影": "OBJ-THING_FINANCE_AP_QUEUE"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "119fe7e9-5049-5181-81e7-78c7f67e57c5",
+      "message_id": "msg_thing_home_valve_kitchen_battery",
+      "title": "廚房水路切斷閥 · 電池與感測器備註已更新",
+      "body": "# 廚房水路切斷閥物件更新\n> 多個頻道出現新訊號後，物件投影已經刷新。\n\n## 目前快照\n- 目前狀態：觸發漏水保護後保持關閉\n- 關聯事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監控頻道：智慧家庭\n\n## 屬性變化\n- 地面感測器濕度從 72% 降至 38%\n- 閥門控制模式從自動切換為監督模式\n\n## 下一步\n- 繼續保留在截圖資料中，因為它能把維運、財務、家庭和 Agent 場景串到同一條真實時間線裡。\n",
+      "channel_id": "home-automation",
+      "is_read": true,
+      "received_at": "2026-05-07T23:18:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_home_valve_kitchen",
+        "thing_id": "thing_home_valve_kitchen",
+        "projection_destination": "thing_head",
+        "title": "廚房水路切斷閥 · 電池與感測器備註已更新",
+        "description": "廚房水路切斷閥。這筆記錄用於截圖測試資料，但時間線和處置語義依真實生產環境組織。",
+        "status": "觸發漏水保護後保持關閉",
+        "message": "電池與感測器備註已更新：地面感測器濕度從 72% 降至 38%；閥門控制模式從自動切換為監督模式",
+        "severity": "low",
+        "tags": [
+          "水浸感測器",
+          "廚房",
+          "閥門"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "目前快照": "觸發漏水保護後保持關閉",
+          "屬性變化": [
+            "地面感測器濕度從 72% 降至 38%",
+            "閥門控制模式從自動切換為監督模式"
+          ],
+          "關聯事件": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "來源": "智慧家庭"
+        },
+        "metadata": "{\"來源\":\"PushGo 測試資料產生器\",\"投影版本\":\"2026.05.08-1\",\"建議動作\":\"在示範收件匣和物件詳情頁中保持可見。\",\"稽核備註\":\"物件包含可讀的屬性變化和關聯事件識別碼。\",\"關聯事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "房間",
+          "value": "廚房水槽櫃"
+        },
+        "external_ids": {
+          "物件投影": "OBJ-THING_HOME_VALVE_KITCHEN"
+        }
+      },
+      "status": "normal"
+    }
+  ],
+  "channel_subscriptions": [
+    {
+      "channel_id": "ops-core",
+      "display_name": "維運核心",
+      "password": "fixture-ops-core-2026",
+      "last_synced_at": "2026-05-08T04:25:00.000Z",
+      "updated_at": "2026-05-08T03:10:00.000Z"
+    },
+    {
+      "channel_id": "home-automation",
+      "display_name": "智慧家庭",
+      "password": "fixture-home-automation-2026",
+      "last_synced_at": "2026-05-08T04:26:00.000Z",
+      "updated_at": "2026-05-08T03:11:00.000Z"
+    },
+    {
+      "channel_id": "finance-ledger",
+      "display_name": "財務台帳",
+      "password": "fixture-finance-ledger-2026",
+      "last_synced_at": "2026-05-08T04:27:00.000Z",
+      "updated_at": "2026-05-08T03:12:00.000Z"
+    },
+    {
+      "channel_id": "event-monitoring",
+      "display_name": "事件監控",
+      "password": "fixture-event-monitoring-2026",
+      "last_synced_at": "2026-05-08T04:28:00.000Z",
+      "updated_at": "2026-05-08T03:13:00.000Z"
+    },
+    {
+      "channel_id": "ai-agent-feedback",
+      "display_name": "AI Agent 回饋",
+      "password": "fixture-ai-agent-feedback-2026",
+      "last_synced_at": "2026-05-08T04:29:00.000Z",
+      "updated_at": "2026-05-08T03:14:00.000Z"
+    },
+    {
+      "channel_id": "executive-brief",
+      "display_name": "高階主管簡報",
+      "password": "fixture-executive-brief-2026",
+      "last_synced_at": "2026-05-08T04:30:00.000Z",
+      "updated_at": "2026-05-08T03:15:00.000Z"
+    },
+    {
+      "channel_id": "incident-command",
+      "display_name": "事故指揮",
+      "password": "fixture-incident-command-2026",
+      "last_synced_at": "2026-05-08T04:31:00.000Z",
+      "updated_at": "2026-05-08T03:16:00.000Z"
+    },
+    {
+      "channel_id": "customer-trust",
+      "display_name": "客戶信任",
+      "password": "fixture-customer-trust-2026",
+      "last_synced_at": "2026-05-08T04:32:00.000Z",
+      "updated_at": "2026-05-08T03:17:00.000Z"
+    }
+  ]
+}

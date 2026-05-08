@@ -137,18 +137,26 @@ jobs:
             exit 1
           fi
 
-          en_notes_file="$RUNNER_TEMP/pushgo-app-store-notes-en.txt"
-          zh_hans_notes_file="$RUNNER_TEMP/pushgo-app-store-notes-zh-hans.txt"
+          notes_json_file="$RUNNER_TEMP/pushgo-app-store-notes.json"
 
-          /usr/bin/python3 - "$release_notes_file" "$en_notes_file" "$zh_hans_notes_file" <<'PY'
+          /usr/bin/python3 - "$release_notes_file" "$notes_json_file" <<'PY'
           import json
           import pathlib
           import sys
 
           source = pathlib.Path(sys.argv[1])
-          en_output = pathlib.Path(sys.argv[2])
-          zh_output = pathlib.Path(sys.argv[3])
-          required = ["en", "zh-CN"]
+          output = pathlib.Path(sys.argv[2])
+          required = ["en", "de", "es", "fr", "ja", "ko", "zh-CN", "zh-TW"]
+          key_to_env = {
+              "en": "APP_STORE_RELEASE_NOTES_EN_US",
+              "de": "APP_STORE_RELEASE_NOTES_DE_DE",
+              "es": "APP_STORE_RELEASE_NOTES_ES_ES",
+              "fr": "APP_STORE_RELEASE_NOTES_FR_FR",
+              "ja": "APP_STORE_RELEASE_NOTES_JA_JP",
+              "ko": "APP_STORE_RELEASE_NOTES_KO_KR",
+              "zh-CN": "APP_STORE_RELEASE_NOTES_ZH_HANS",
+              "zh-TW": "APP_STORE_RELEASE_NOTES_ZH_HANT",
+          }
 
           payload = json.loads(source.read_text(encoding="utf-8"))
           missing = [key for key in required if not isinstance(payload.get(key), str) or not payload[key].strip()]
@@ -162,12 +170,19 @@ jobs:
                   return text[:3800] + "\n... (truncated for App Store/TestFlight limit; full notes are in GitHub Release body)"
               return text
 
-          en_output.write_text(trim_for_asc(payload["en"]) + "\n", encoding="utf-8")
-          zh_output.write_text(trim_for_asc(payload["zh-CN"]) + "\n", encoding="utf-8")
+          result = {env_key: trim_for_asc(payload[source_key]) for source_key, env_key in key_to_env.items()}
+          output.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
           PY
 
-          en_notes="$(cat "$en_notes_file")"
-          zh_hans_notes="$(cat "$zh_hans_notes_file")"
+          notes_json="$(cat "$notes_json_file")"
+          en_notes="$(printf '%s' "$notes_json" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["APP_STORE_RELEASE_NOTES_EN_US"])')"
+          de_notes="$(printf '%s' "$notes_json" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["APP_STORE_RELEASE_NOTES_DE_DE"])')"
+          es_notes="$(printf '%s' "$notes_json" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["APP_STORE_RELEASE_NOTES_ES_ES"])')"
+          fr_notes="$(printf '%s' "$notes_json" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["APP_STORE_RELEASE_NOTES_FR_FR"])')"
+          ja_notes="$(printf '%s' "$notes_json" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["APP_STORE_RELEASE_NOTES_JA_JP"])')"
+          ko_notes="$(printf '%s' "$notes_json" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["APP_STORE_RELEASE_NOTES_KO_KR"])')"
+          zh_hans_notes="$(printf '%s' "$notes_json" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["APP_STORE_RELEASE_NOTES_ZH_HANS"])')"
+          zh_hant_notes="$(printf '%s' "$notes_json" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["APP_STORE_RELEASE_NOTES_ZH_HANT"])')"
 
           {
             echo "TESTFLIGHT_CHANGELOG<<__PUSHGO_CHANGELOG_EOF__"
@@ -176,9 +191,27 @@ jobs:
             echo "APP_STORE_RELEASE_NOTES_EN_US<<__PUSHGO_RELEASE_NOTES_EN_EOF__"
             printf "%s\n" "$en_notes"
             echo "__PUSHGO_RELEASE_NOTES_EN_EOF__"
+            echo "APP_STORE_RELEASE_NOTES_DE_DE<<__PUSHGO_RELEASE_NOTES_DE_EOF__"
+            printf "%s\n" "$de_notes"
+            echo "__PUSHGO_RELEASE_NOTES_DE_EOF__"
+            echo "APP_STORE_RELEASE_NOTES_ES_ES<<__PUSHGO_RELEASE_NOTES_ES_EOF__"
+            printf "%s\n" "$es_notes"
+            echo "__PUSHGO_RELEASE_NOTES_ES_EOF__"
+            echo "APP_STORE_RELEASE_NOTES_FR_FR<<__PUSHGO_RELEASE_NOTES_FR_EOF__"
+            printf "%s\n" "$fr_notes"
+            echo "__PUSHGO_RELEASE_NOTES_FR_EOF__"
+            echo "APP_STORE_RELEASE_NOTES_JA_JP<<__PUSHGO_RELEASE_NOTES_JA_EOF__"
+            printf "%s\n" "$ja_notes"
+            echo "__PUSHGO_RELEASE_NOTES_JA_EOF__"
+            echo "APP_STORE_RELEASE_NOTES_KO_KR<<__PUSHGO_RELEASE_NOTES_KO_EOF__"
+            printf "%s\n" "$ko_notes"
+            echo "__PUSHGO_RELEASE_NOTES_KO_EOF__"
             echo "APP_STORE_RELEASE_NOTES_ZH_HANS<<__PUSHGO_RELEASE_NOTES_ZH_EOF__"
             printf "%s\n" "$zh_hans_notes"
             echo "__PUSHGO_RELEASE_NOTES_ZH_EOF__"
+            echo "APP_STORE_RELEASE_NOTES_ZH_HANT<<__PUSHGO_RELEASE_NOTES_ZH_HANT_EOF__"
+            printf "%s\n" "$zh_hant_notes"
+            echo "__PUSHGO_RELEASE_NOTES_ZH_HANT_EOF__"
           } >> "$GITHUB_ENV"
 
       - name: Import App Store signing certificates into temporary keychain

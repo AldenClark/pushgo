@@ -1750,17 +1750,6 @@ final class PushGoAutomationRuntime {
         }
         if !bundle.channelSubscriptions.isEmpty {
             try await applyFixtureSubscriptions(bundle.channelSubscriptions, environment: environment)
-            do {
-                try await environment.syncSubscriptionsIfNeeded()
-            } catch {
-                recordRuntimeError(
-                    source: "automation",
-                    category: "fixture_sync",
-                    code: "fixture_subscription_sync_failed",
-                    message: error.localizedDescription
-                )
-                throw error
-            }
         }
         await environment.refreshMessageCountsAndNotify()
         environment.publishStoreRefreshForAutomation()

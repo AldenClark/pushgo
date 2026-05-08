@@ -90,6 +90,51 @@ final class PushGo_iOSUITests: XCTestCase {
         let traceURL: URL
     }
 
+    private struct LocalizationSpec {
+        let code: String
+        let localeIdentifier: String
+    }
+
+    private struct ScreenshotPage {
+        let id: String
+        let visibleScreen: String
+        let requestName: String?
+        let requestArgs: [String: String]
+    }
+
+    private struct LocalizationFixture: Decodable {
+        struct Message: Decodable {
+            struct RawPayload: Decodable {
+                let entityType: String?
+                let entityID: String?
+
+                private enum CodingKeys: String, CodingKey {
+                    case entityType = "entity_type"
+                    case entityID = "entity_id"
+                }
+            }
+
+            let id: String
+            let messageID: String
+            let rawPayload: RawPayload?
+
+            private enum CodingKeys: String, CodingKey {
+                case id
+                case messageID = "message_id"
+                case rawPayload = "raw_payload"
+            }
+        }
+
+        let messages: [Message]
+    }
+
+    private struct LocalizationFixtureIDs {
+        let messageID: String
+        let eventID: String
+        let thingID: String
+    }
+
+
     private let eventFixturePath = fixturePath("event-lifecycle.json")
     private let eventFixtureId = "evt_p2_active_001"
     private let thingFixturePath = fixturePath("rich-thing-detail.json")
@@ -98,6 +143,20 @@ final class PushGo_iOSUITests: XCTestCase {
     private let entityRecordFixturePath = fixturePath("seed-entity-records.json")
     private let subscriptionFixturePath = fixturePath("seed-subscriptions.json")
     private let seedMessageId = "msg_p2_seed_001"
+    private let localizationSpecs: [LocalizationSpec] = [
+        .init(code: "en", localeIdentifier: "en_US"),
+        .init(code: "de", localeIdentifier: "de_DE"),
+        .init(code: "es", localeIdentifier: "es_ES"),
+        .init(code: "fr", localeIdentifier: "fr_FR"),
+        .init(code: "ja", localeIdentifier: "ja_JP"),
+        .init(code: "ko", localeIdentifier: "ko_KR"),
+        .init(code: "zh-CN", localeIdentifier: "zh_CN"),
+        .init(code: "zh-TW", localeIdentifier: "zh_TW"),
+    ]
+
+    private func localizationShowcaseFixturePath(for localization: LocalizationSpec) -> String {
+        Self.fixturePath("localization-showcase.\(localization.code).json")
+    }
     private static func fixturePath(_ filename: String) -> String {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -732,13 +791,125 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
+    func testCaptureLocalizedPrimaryScreens() throws {
+        let envOutputRootPath = ProcessInfo.processInfo.environment["PUSHGO_IOS_UI_SCREENSHOT_DIR"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let outputRoot: URL
+        if envOutputRootPath.isEmpty {
+            outputRoot = URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("artifacts", isDirectory: true)
+                .appendingPathComponent("localized-screenshots", isDirectory: true)
+        } else {
+            outputRoot = URL(fileURLWithPath: envOutputRootPath, isDirectory: true)
+        }
+        try FileManager.default.createDirectory(at: outputRoot, withIntermediateDirectories: true)
+
+        for localization in localizationSpecs {
+            let fixturePath = localizationShowcaseFixturePath(for: localization)
+            let pages: [ScreenshotPage] = [
+                .init(id: "messages-list", visibleScreen: "screen.messages.list", requestName: nil, requestArgs: [:]),
+                .init(id: "events-list", visibleScreen: "screen.events.list", requestName: "nav.switch_tab", requestArgs: ["tab": "events"]),
+                .init(id: "things-list", visibleScreen: "screen.things.list", requestName: "nav.switch_tab", requestArgs: ["tab": "things"]),
+                .init(id: "channels", visibleScreen: "screen.channels", requestName: "nav.switch_tab", requestArgs: ["tab": "channels"]),
+            ]
+            let localeOutput = outputRoot.appendingPathComponent(localization.code, isDirectory: true)
+            try FileManager.default.createDirectory(at: localeOutput, withIntermediateDirectories: true)
+            let fixtureIDs = try localizationFixtureIDs(at: fixturePath)
+            for page in pages {
+                let context = configuredLaunchContext(
+                    startupFixturePath: fixturePath,
+                    requestName: page.requestName,
+                    args: page.requestArgs,
+                    launchArguments: [
+                        "-AppleLanguages", "(\(localization.code))",
+                        "-AppleLocale", localization.localeIdentifier,
+                    ]
+                )
+                launch(context.app)
+                assertVisibleScreen(page.visibleScreen, in: context, timeout: 15)
+                RunLoop.current.run(until: Date().addingTimeInterval(0.8))
+                let screenshotPath = localeOutput.appendingPathComponent("\(page.id).png")
+                try context.app.screenshot().pngRepresentation.write(to: screenshotPath, options: .atomic)
+                context.app.terminate()
+            }
+
+            // message detail
+            do {
+                let context = configuredLaunchContext(
+                    startupFixturePath: fixturePath,
+                    requestName: "message.open",
+                    args: ["message_id": fixtureIDs.messageID],
+                    launchArguments: [
+                        "-AppleLanguages", "(\(localization.code))",
+                        "-AppleLocale", localization.localeIdentifier,
+                    ]
+                )
+                launch(context.app)
+                assertVisibleScreen("screen.messages.list", in: context, timeout: 15)
+                let response = waitForAutomationResponse(at: context.responseURL, timeout: 12, matching: { _ in true })
+                XCTAssertTrue(response?.ok == true, response?.error ?? "message.open returned no response")
+                assertVisibleScreen("screen.message.detail", in: context, timeout: 15)
+                RunLoop.current.run(until: Date().addingTimeInterval(0.8))
+                let screenshotPath = localeOutput.appendingPathComponent("message-detail.png")
+                try context.app.screenshot().pngRepresentation.write(to: screenshotPath, options: .atomic)
+                context.app.terminate()
+            }
+
+            // event detail
+            do {
+                let context = configuredLaunchContext(
+                    startupFixturePath: fixturePath,
+                    requestName: "entity.open",
+                    args: ["entity_type": "event", "entity_id": fixtureIDs.eventID],
+                    launchArguments: [
+                        "-AppleLanguages", "(\(localization.code))",
+                        "-AppleLocale", localization.localeIdentifier,
+                    ]
+                )
+                launch(context.app)
+                let response = waitForAutomationResponse(at: context.responseURL, timeout: 12, matching: { _ in true })
+                XCTAssertTrue(response?.ok == true, response?.error ?? "entity.open(event) returned no response")
+                assertVisibleScreen("screen.events.detail", in: context, timeout: 15)
+                RunLoop.current.run(until: Date().addingTimeInterval(0.8))
+                let screenshotPath = localeOutput.appendingPathComponent("event-detail.png")
+                try context.app.screenshot().pngRepresentation.write(to: screenshotPath, options: .atomic)
+                context.app.terminate()
+            }
+
+            // thing detail
+            do {
+                let context = configuredLaunchContext(
+                    startupFixturePath: fixturePath,
+                    requestName: "entity.open",
+                    args: ["entity_type": "thing", "entity_id": fixtureIDs.thingID],
+                    launchArguments: [
+                        "-AppleLanguages", "(\(localization.code))",
+                        "-AppleLocale", localization.localeIdentifier,
+                    ]
+                )
+                launch(context.app)
+                let response = waitForAutomationResponse(at: context.responseURL, timeout: 12, matching: { _ in true })
+                XCTAssertTrue(response?.ok == true, response?.error ?? "entity.open(thing) returned no response")
+                assertVisibleScreen("screen.things.detail", in: context, timeout: 15)
+                RunLoop.current.run(until: Date().addingTimeInterval(0.8))
+                let screenshotPath = localeOutput.appendingPathComponent("thing-detail.png")
+                try context.app.screenshot().pngRepresentation.write(to: screenshotPath, options: .atomic)
+                context.app.terminate()
+            }
+        }
+    }
+
     private func configuredLaunchContext(
         runtimeRoot: URL? = nil,
         startupFixturePath: String? = nil,
         requestName: String? = nil,
-        args: [String: String] = [:]
+        args: [String: String] = [:],
+        launchArguments: [String] = []
     ) -> LaunchContext {
         let app = XCUIApplication()
+        app.launchArguments += launchArguments
         let resolvedRuntimeRoot = runtimeRoot ?? makeRuntimeRoot()
         try? FileManager.default.createDirectory(at: resolvedRuntimeRoot, withIntermediateDirectories: true)
         PushGoIOSUITestRuntimeRoots.append(resolvedRuntimeRoot)
@@ -833,19 +1004,38 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(target.waitForExistence(timeout: timeout), "Missing element: \(identifier)", file: file, line: line)
     }
 
-    private func waitForAnyElementExists(
-        identifiers: [String],
-        in app: XCUIApplication,
-        timeout: TimeInterval
-    ) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            for identifier in identifiers where element(in: app, identifier: identifier).exists {
-                return true
-            }
-            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+    private func localizationFixtureIDs(at fixturePath: String) throws -> LocalizationFixtureIDs {
+        let fixtureURL = URL(fileURLWithPath: fixturePath)
+        let data = try Data(contentsOf: fixtureURL)
+        let fixture = try JSONDecoder().decode(LocalizationFixture.self, from: data)
+
+        guard let messageID = fixture.messages.first?.messageID else {
+            throw NSError(domain: "PushGo_iOSUITests", code: 1001, userInfo: [
+                NSLocalizedDescriptionKey: "fixture has no messages: \(fixturePath)"
+            ])
         }
-        return identifiers.contains { element(in: app, identifier: $0).exists }
+
+        guard let eventID = fixture.messages
+            .first(where: { $0.rawPayload?.entityType == "event" })?
+            .rawPayload?
+            .entityID
+        else {
+            throw NSError(domain: "PushGo_iOSUITests", code: 1002, userInfo: [
+                NSLocalizedDescriptionKey: "fixture has no event entity_id: \(fixturePath)"
+            ])
+        }
+
+        guard let thingID = fixture.messages
+            .first(where: { $0.rawPayload?.entityType == "thing" })?
+            .rawPayload?
+            .entityID
+        else {
+            throw NSError(domain: "PushGo_iOSUITests", code: 1003, userInfo: [
+                NSLocalizedDescriptionKey: "fixture has no thing entity_id: \(fixturePath)"
+            ])
+        }
+
+        return .init(messageID: messageID, eventID: eventID, thingID: thingID)
     }
 
     private func waitForAutomationState(

@@ -812,12 +812,22 @@ platform :ios do
   end
 
   def release_notes_payload
-    en_us_notes = ENV["APP_STORE_RELEASE_NOTES_EN_US"].to_s.strip
-    zh_hans_notes = ENV["APP_STORE_RELEASE_NOTES_ZH_HANS"].to_s.strip
+    locale_env_map = {
+      "en-US" => "APP_STORE_RELEASE_NOTES_EN_US",
+      "de-DE" => "APP_STORE_RELEASE_NOTES_DE_DE",
+      "es-ES" => "APP_STORE_RELEASE_NOTES_ES_ES",
+      "fr-FR" => "APP_STORE_RELEASE_NOTES_FR_FR",
+      "ja" => "APP_STORE_RELEASE_NOTES_JA_JP",
+      "ko" => "APP_STORE_RELEASE_NOTES_KO_KR",
+      "zh-Hans" => "APP_STORE_RELEASE_NOTES_ZH_HANS",
+      "zh-Hant" => "APP_STORE_RELEASE_NOTES_ZH_HANT"
+    }
 
     payload = {}
-    payload["en-US"] = en_us_notes unless en_us_notes.empty?
-    payload["zh-Hans"] = zh_hans_notes unless zh_hans_notes.empty?
+    locale_env_map.each do |locale, env_key|
+      notes = ENV[env_key].to_s.strip
+      payload[locale] = notes unless notes.empty?
+    end
     return nil if payload.empty?
 
     payload

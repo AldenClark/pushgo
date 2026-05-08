@@ -1,0 +1,1592 @@
+{
+  "messages": [
+    {
+      "id": "77370f2d-b820-5bd0-86eb-dc7b169d7a68",
+      "message_id": "msg_thing_agent_support_triage_summary",
+      "title": "KI-Agent für Support-Triage · Zusammenfassende Projektion aktualisiert",
+      "body": "# Objektaktualisierung für KI-Agent für Support-Triage\n> Die Objektprojektion wurde nach neuen Signalen aus mehreren Kanälen aktualisiert.\n\n## Momentaufnahme\n- Aktueller Zustand: stabil mit menschlicher Prüfung\n- Verknüpfte Ereignisse: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Überwachungskanal: KI-Agentenrückmeldungen\n\n## Attributänderungen\n- Vertrauen der Auto-Lösung stieg von 0,78 auf 0,86\n- Rückfallregel wechselte von sofortiger Übergabe zu Stichprobenprüfung\n\n## Nächster Schritt\n- Das Objekt bleibt im Screenshot-Fixture sichtbar, weil es Betrieb, Finanzen, Zuhause und Agentenszenarien in einer realistischen Zeitlinie verbindet.\n",
+      "channel_id": "ai-agent-feedback",
+      "is_read": false,
+      "received_at": "2026-05-08T04:58:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_agent_support_triage",
+        "thing_id": "thing_agent_support_triage",
+        "projection_destination": "thing_head",
+        "title": "KI-Agent für Support-Triage · Zusammenfassende Projektion aktualisiert",
+        "description": "KI-Agent für Support-Triage。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "stabil mit menschlicher Prüfung",
+        "message": "Zusammenfassende Projektion aktualisiert: Vertrauen der Auto-Lösung stieg von 0,78 auf 0,86; Rückfallregel wechselte von sofortiger Übergabe zu Stichprobenprüfung",
+        "severity": "medium",
+        "tags": [
+          "KI-Agent",
+          "Ticket",
+          "Übergabe"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Momentaufnahme": "stabil mit menschlicher Prüfung",
+          "Attributänderungen": [
+            "Vertrauen der Auto-Lösung stieg von 0,78 auf 0,86",
+            "Rückfallregel wechselte von sofortiger Übergabe zu Stichprobenprüfung"
+          ],
+          "Verknüpfte Ereignisse": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Quelle": "KI-Agentenrückmeldungen"
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Objekt im Demo-Posteingang und in der Objektdetailansicht sichtbar halten.\",\"Prüfvermerk\":\"Objekt enthält lesbare Attributänderungen und verknüpfte Ereigniskennungen.\",\"Verknüpfte Ereignisse\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "Warteschlange",
+          "value": "Supportwarteschlange für Unternehmenskunden"
+        },
+        "external_ids": {
+          "Objektprojektion": "OBJ-THING_AGENT_SUPPORT_TRIAGE"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "49c02586-406c-50c8-9c8c-132d2f8bfa5d",
+      "message_id": "msg_thing_event_auth_gateway_summary",
+      "title": "Risikogateway für Kundenanmeldung · Zusammenfassende Projektion aktualisiert",
+      "body": "# Objektaktualisierung für Risikogateway für Kundenanmeldung\n> Die Objektprojektion wurde nach neuen Signalen aus mehreren Kanälen aktualisiert.\n\n## Momentaufnahme\n- Aktueller Zustand: begrenzt mit sauberem Verkehrstrend\n- Verknüpfte Ereignisse: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Überwachungskanal: Ereignisüberwachung\n\n## Attributänderungen\n- Rate fehlgeschlagener Anmeldungen sank von 11,8% auf 2,4%\n- vorübergehende Prüfschwelle wechselte von mittel zu streng\n\n## Nächster Schritt\n- Das Objekt bleibt im Screenshot-Fixture sichtbar, weil es Betrieb, Finanzen, Zuhause und Agentenszenarien in einer realistischen Zeitlinie verbindet.\n",
+      "channel_id": "event-monitoring",
+      "is_read": false,
+      "received_at": "2026-05-08T04:54:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_event_auth_gateway",
+        "thing_id": "thing_event_auth_gateway",
+        "projection_destination": "thing_head",
+        "title": "Risikogateway für Kundenanmeldung · Zusammenfassende Projektion aktualisiert",
+        "description": "Risikogateway für Kundenanmeldung。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "begrenzt mit sauberem Verkehrstrend",
+        "message": "Zusammenfassende Projektion aktualisiert: Rate fehlgeschlagener Anmeldungen sank von 11,8% auf 2,4%; vorübergehende Prüfschwelle wechselte von mittel zu streng",
+        "severity": "medium",
+        "tags": [
+          "Anmeldung",
+          "Risikosteuerung",
+          "Kundenvertrauen"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Momentaufnahme": "begrenzt mit sauberem Verkehrstrend",
+          "Attributänderungen": [
+            "Rate fehlgeschlagener Anmeldungen sank von 11,8% auf 2,4%",
+            "vorübergehende Prüfschwelle wechselte von mittel zu streng"
+          ],
+          "Verknüpfte Ereignisse": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Quelle": "Ereignisüberwachung"
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Objekt im Demo-Posteingang und in der Objektdetailansicht sichtbar halten.\",\"Prüfvermerk\":\"Objekt enthält lesbare Attributänderungen und verknüpfte Ereigniskennungen.\",\"Verknüpfte Ereignisse\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "Dienst",
+          "value": "Kunden-Kontocenter"
+        },
+        "external_ids": {
+          "Objektprojektion": "OBJ-THING_EVENT_AUTH_GATEWAY"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "a4020ed7-fc1a-58df-ac61-8a640dc25ff8",
+      "message_id": "msg_thing_ops_cluster_sh1_summary",
+      "title": "Zahlungscluster Shanghai · Zusammenfassende Projektion aktualisiert",
+      "body": "# Objektaktualisierung für Zahlungscluster Shanghai\n> Die Objektprojektion wurde nach neuen Signalen aus mehreren Kanälen aktualisiert.\n\n## Momentaufnahme\n- Aktueller Zustand: stabil mit erhöhter Beobachtung\n- Verknüpfte Ereignisse: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Überwachungskanal: Betriebskern\n\n## Attributänderungen\n- P95-API-Latenz sank von 420 ms auf 238 ms\n- Rückstand des Lesereplikats sank von 18 s auf 3 s\n\n## Nächster Schritt\n- Das Objekt bleibt im Screenshot-Fixture sichtbar, weil es Betrieb, Finanzen, Zuhause und Agentenszenarien in einer realistischen Zeitlinie verbindet.\n",
+      "channel_id": "ops-core",
+      "is_read": false,
+      "received_at": "2026-05-08T04:50:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_ops_cluster_sh1",
+        "thing_id": "thing_ops_cluster_sh1",
+        "projection_destination": "thing_head",
+        "title": "Zahlungscluster Shanghai · Zusammenfassende Projektion aktualisiert",
+        "description": "Zahlungscluster Shanghai。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "stabil mit erhöhter Beobachtung",
+        "message": "Zusammenfassende Projektion aktualisiert: P95-API-Latenz sank von 420 ms auf 238 ms; Rückstand des Lesereplikats sank von 18 s auf 3 s",
+        "severity": "medium",
+        "tags": [
+          "Datenbank",
+          "Latenz",
+          "Lesereplikat"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Momentaufnahme": "stabil mit erhöhter Beobachtung",
+          "Attributänderungen": [
+            "P95-API-Latenz sank von 420 ms auf 238 ms",
+            "Rückstand des Lesereplikats sank von 18 s auf 3 s"
+          ],
+          "Verknüpfte Ereignisse": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Quelle": "Betriebskern"
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Objekt im Demo-Posteingang und in der Objektdetailansicht sichtbar halten.\",\"Prüfvermerk\":\"Objekt enthält lesbare Attributänderungen und verknüpfte Ereigniskennungen.\",\"Verknüpfte Ereignisse\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "Region",
+          "value": "Region Shanghai"
+        },
+        "external_ids": {
+          "Objektprojektion": "OBJ-THING_OPS_CLUSTER_SH1"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "c48cff57-2632-581f-ae2f-ad11b0b69aff",
+      "message_id": "msg_thing_finance_ap_queue_summary",
+      "title": "Prüfwarteschlange für Kreditoren · Zusammenfassende Projektion aktualisiert",
+      "body": "# Objektaktualisierung für Prüfwarteschlange für Kreditoren\n> Die Objektprojektion wurde nach neuen Signalen aus mehreren Kanälen aktualisiert.\n\n## Momentaufnahme\n- Aktueller Zustand: ausgeglichen und für Dublettenprüfung gesperrt\n- Verknüpfte Ereignisse: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Überwachungskanal: Finanzbuch\n\n## Attributänderungen\n- Dublettenwert der Rechnung stieg von 0,41 auf 0,93\n- Freigaberegel wechselte von Einzelprüfung zu Doppelprüfung\n\n## Nächster Schritt\n- Das Objekt bleibt im Screenshot-Fixture sichtbar, weil es Betrieb, Finanzen, Zuhause und Agentenszenarien in einer realistischen Zeitlinie verbindet.\n",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-08T04:45:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_finance_ap_queue",
+        "thing_id": "thing_finance_ap_queue",
+        "projection_destination": "thing_head",
+        "title": "Prüfwarteschlange für Kreditoren · Zusammenfassende Projektion aktualisiert",
+        "description": "Prüfwarteschlange für Kreditoren。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "ausgeglichen und für Dublettenprüfung gesperrt",
+        "message": "Zusammenfassende Projektion aktualisiert: Dublettenwert der Rechnung stieg von 0,41 auf 0,93; Freigaberegel wechselte von Einzelprüfung zu Doppelprüfung",
+        "severity": "medium",
+        "tags": [
+          "Rechnung",
+          "Freigabe",
+          "Liquidität"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Momentaufnahme": "ausgeglichen und für Dublettenprüfung gesperrt",
+          "Attributänderungen": [
+            "Dublettenwert der Rechnung stieg von 0,41 auf 0,93",
+            "Freigaberegel wechselte von Einzelprüfung zu Doppelprüfung"
+          ],
+          "Verknüpfte Ereignisse": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Quelle": "Finanzbuch"
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Objekt im Demo-Posteingang und in der Objektdetailansicht sichtbar halten.\",\"Prüfvermerk\":\"Objekt enthält lesbare Attributänderungen und verknüpfte Ereigniskennungen.\",\"Verknüpfte Ereignisse\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "Abteilung",
+          "value": "Zentrale Finanzserviceeinheit"
+        },
+        "external_ids": {
+          "Objektprojektion": "OBJ-THING_FINANCE_AP_QUEUE"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "3439038f-6de6-581c-bce1-827e0709dfa7",
+      "message_id": "msg_thing_home_valve_kitchen_summary",
+      "title": "Wasserabsperrventil Küche · Zusammenfassende Projektion aktualisiert",
+      "body": "# Objektaktualisierung für Wasserabsperrventil Küche\n> Die Objektprojektion wurde nach neuen Signalen aus mehreren Kanälen aktualisiert.\n\n## Momentaufnahme\n- Aktueller Zustand: nach Leckschutz geschlossen\n- Verknüpfte Ereignisse: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Überwachungskanal: Hausautomatisierung\n\n## Attributänderungen\n- Feuchtigkeit am Bodensensor sank von 72% auf 38%\n- Ventilsteuerung wechselte von automatisch zu überwacht\n\n## Nächster Schritt\n- Das Objekt bleibt im Screenshot-Fixture sichtbar, weil es Betrieb, Finanzen, Zuhause und Agentenszenarien in einer realistischen Zeitlinie verbindet.\n",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-08T04:40:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_home_valve_kitchen",
+        "thing_id": "thing_home_valve_kitchen",
+        "projection_destination": "thing_head",
+        "title": "Wasserabsperrventil Küche · Zusammenfassende Projektion aktualisiert",
+        "description": "Wasserabsperrventil Küche。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "nach Leckschutz geschlossen",
+        "message": "Zusammenfassende Projektion aktualisiert: Feuchtigkeit am Bodensensor sank von 72% auf 38%; Ventilsteuerung wechselte von automatisch zu überwacht",
+        "severity": "medium",
+        "tags": [
+          "Wassersensor",
+          "Küche",
+          "Ventil"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Momentaufnahme": "nach Leckschutz geschlossen",
+          "Attributänderungen": [
+            "Feuchtigkeit am Bodensensor sank von 72% auf 38%",
+            "Ventilsteuerung wechselte von automatisch zu überwacht"
+          ],
+          "Verknüpfte Ereignisse": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Quelle": "Hausautomatisierung"
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Objekt im Demo-Posteingang und in der Objektdetailansicht sichtbar halten.\",\"Prüfvermerk\":\"Objekt enthält lesbare Attributänderungen und verknüpfte Ereigniskennungen.\",\"Verknüpfte Ereignisse\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "Raum",
+          "value": "Spülenschrank in der Küche"
+        },
+        "external_ids": {
+          "Objektprojektion": "OBJ-THING_HOME_VALVE_KITCHEN"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "df2d1873-35d3-53e5-a5de-133b0a6cf45d",
+      "message_id": "msg_agent_ticket_resolved",
+      "title": "Qualitätsprüfung der KI-Agentenübergabe · Behoben",
+      "body": "# Qualitätsprüfung der KI-Agentenübergabe · Behoben\n> der Support-Agent markierte ein Abrechnungsticket als gelöst, aber die Kundenstimmung blieb negativ\n\n## Was sich geändert hat\n- Menschliche Prüfung bestätigte die Antwort und die neue Leitplanke senkte riskante Schließungen in der Stichprobe.\n- Das Lösungsvertrauen lag bei 0,86, während die Stimmung unter der Eskalationsschwelle blieb.\n- Der Kunde erhielt eine Folgeantwort mit dem korrekten Rechnungsbezug.\n\n## Bearbeitung\n1. Ticket zur manuellen Prüfung gesendet und Modellspur angehängt.\n2. Leitplanke für Abrechnungsantworten ergänzt, wenn Stimmung negativ bleibt.\n3. Nächste 50 Abrechnungstickets stichprobenartig prüfen, bevor volle Automatisierung zurückkehrt.\n\n## Nächster Schritt\n- Verantwortlich: Leitung Support-Automatisierung\n- Erwartete Zeit: nächstes stabiles Stichprobenfenster\n",
+      "channel_id": "ai-agent-feedback",
+      "is_read": true,
+      "received_at": "2026-05-08T04:32:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_agent_ticket_001",
+        "event_id": "evt_agent_ticket_001",
+        "thing_id": "thing_agent_support_triage",
+        "projection_destination": "event_head",
+        "title": "Qualitätsprüfung der KI-Agentenübergabe · Behoben",
+        "description": "Qualitätsprüfung der KI-Agentenübergabe。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "Behoben",
+        "message": "Statusmeldung: Menschliche Prüfung bestätigte die Antwort und die neue Leitplanke senkte riskante Schließungen in der Stichprobe.",
+        "severity": "medium",
+        "tags": [
+          "KI-Agent",
+          "Ticket",
+          "Übergabe"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Was sich geändert hat": [
+            "Menschliche Prüfung bestätigte die Antwort und die neue Leitplanke senkte riskante Schließungen in der Stichprobe.",
+            "Das Lösungsvertrauen lag bei 0,86, während die Stimmung unter der Eskalationsschwelle blieb."
+          ],
+          "Verantwortlich": "Leitung Support-Automatisierung",
+          "Erwartete Zeit": "nächstes stabiles Stichprobenfenster",
+          "Verknüpfte Ereignisse": [
+            "evt_agent_ticket_001",
+            "thing_agent_support_triage"
+          ]
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Weiter beobachten, bis das zuständige Objekt zwei stabile Stichproben zeigt.\",\"Prüfvermerk\":\"Zeitpunkte sind geordnet und für iOS-Screenshot-Tests geeignet.\",\"Verknüpfte Ereignisse\":[\"evt_agent_ticket_001\",\"thing_agent_support_triage\"]}",
+        "location": {
+          "type": "Warteschlange",
+          "value": "Supportwarteschlange für Unternehmenskunden"
+        },
+        "external_ids": {
+          "Störungsticket": "INC-2026-0508-005"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "f25559a6-5bce-5200-b204-7e3ccafc20e6",
+      "message_id": "msg_agent_ticket_investigating",
+      "title": "Qualitätsprüfung der KI-Agentenübergabe · In Prüfung",
+      "body": "# Qualitätsprüfung der KI-Agentenübergabe · In Prüfung\n> der Support-Agent markierte ein Abrechnungsticket als gelöst, aber die Kundenstimmung blieb negativ\n\n## Was sich geändert hat\n- Ein Unternehmenskunde wartete 14 Minuten länger auf eine menschliche Bestätigung.\n- Das Lösungsvertrauen lag bei 0,86, während die Stimmung unter der Eskalationsschwelle blieb.\n- Der Kunde erhielt eine Folgeantwort mit dem korrekten Rechnungsbezug.\n\n## Bearbeitung\n1. Ticket zur manuellen Prüfung gesendet und Modellspur angehängt.\n2. Leitplanke für Abrechnungsantworten ergänzt, wenn Stimmung negativ bleibt.\n3. Nächste 50 Abrechnungstickets stichprobenartig prüfen, bevor volle Automatisierung zurückkehrt.\n\n## Nächster Schritt\n- Verantwortlich: Leitung Support-Automatisierung\n- Erwartete Zeit: nächstes stabiles Stichprobenfenster\n",
+      "channel_id": "ai-agent-feedback",
+      "is_read": false,
+      "received_at": "2026-05-08T04:06:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_agent_ticket_001",
+        "event_id": "evt_agent_ticket_001",
+        "thing_id": "thing_agent_support_triage",
+        "projection_destination": "event_head",
+        "title": "Qualitätsprüfung der KI-Agentenübergabe · In Prüfung",
+        "description": "Qualitätsprüfung der KI-Agentenübergabe。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "In Prüfung",
+        "message": "Statusmeldung: Ein Unternehmenskunde wartete 14 Minuten länger auf eine menschliche Bestätigung.",
+        "severity": "medium",
+        "tags": [
+          "KI-Agent",
+          "Ticket",
+          "Übergabe"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Was sich geändert hat": [
+            "Ein Unternehmenskunde wartete 14 Minuten länger auf eine menschliche Bestätigung.",
+            "Das Lösungsvertrauen lag bei 0,86, während die Stimmung unter der Eskalationsschwelle blieb."
+          ],
+          "Verantwortlich": "Leitung Support-Automatisierung",
+          "Erwartete Zeit": "nächstes stabiles Stichprobenfenster",
+          "Verknüpfte Ereignisse": [
+            "evt_agent_ticket_001",
+            "thing_agent_support_triage"
+          ]
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Weiter beobachten, bis das zuständige Objekt zwei stabile Stichproben zeigt.\",\"Prüfvermerk\":\"Zeitpunkte sind geordnet und für iOS-Screenshot-Tests geeignet.\",\"Verknüpfte Ereignisse\":[\"evt_agent_ticket_001\",\"thing_agent_support_triage\"]}",
+        "location": {
+          "type": "Warteschlange",
+          "value": "Supportwarteschlange für Unternehmenskunden"
+        },
+        "external_ids": {
+          "Störungsticket": "INC-2026-0508-005"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "45b412ff-7970-5aae-aa55-a110b29a1ea6",
+      "message_id": "msg_monitoring_login_resolved",
+      "title": "Ungewöhnliches Muster bei Anmeldeversuchen · Behoben",
+      "body": "# Ungewöhnliches Muster bei Anmeldeversuchen · Behoben\n> Kundenanmeldeversuche bündelten sich um drei Netzbereiche\n\n## Was sich geändert hat\n- Die Wiederholrate fiel auf den Ausgangswert zurück und 30 Minuten lang erschien keine neue Hochrisikositzung.\n- Die Fehlanmelderate stieg auf 11,8% und normalisierte sich nach adaptiven Prüfungen.\n- Im Stichprobenumfang wurde kein erfolgreiches Kontoübernahmesignal gefunden.\n\n## Bearbeitung\n1. Strengere Risikoprüfungen für betroffene Bereiche aktiviert.\n2. Zeitlinie mit Kundenvertrauen für proaktive Hinweise geteilt.\n3. Prüfen, ob das Muster zu einer bekannten Liste gestohlener Zugangsdaten passt.\n\n## Nächster Schritt\n- Verantwortlich: Team Kundenvertrauen\n- Erwartete Zeit: nächstes stabiles Stichprobenfenster\n",
+      "channel_id": "event-monitoring",
+      "is_read": true,
+      "received_at": "2026-05-08T03:56:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_monitoring_login_001",
+        "event_id": "evt_monitoring_login_001",
+        "thing_id": "thing_event_auth_gateway",
+        "projection_destination": "event_head",
+        "title": "Ungewöhnliches Muster bei Anmeldeversuchen · Behoben",
+        "description": "Ungewöhnliches Muster bei Anmeldeversuchen。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "Behoben",
+        "message": "Statusmeldung: Die Wiederholrate fiel auf den Ausgangswert zurück und 30 Minuten lang erschien keine neue Hochrisikositzung.",
+        "severity": "critical",
+        "tags": [
+          "Anmeldung",
+          "Risikosteuerung",
+          "Kundenvertrauen"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Was sich geändert hat": [
+            "Die Wiederholrate fiel auf den Ausgangswert zurück und 30 Minuten lang erschien keine neue Hochrisikositzung.",
+            "Die Fehlanmelderate stieg auf 11,8% und normalisierte sich nach adaptiven Prüfungen."
+          ],
+          "Verantwortlich": "Team Kundenvertrauen",
+          "Erwartete Zeit": "nächstes stabiles Stichprobenfenster",
+          "Verknüpfte Ereignisse": [
+            "evt_monitoring_login_001",
+            "thing_event_auth_gateway"
+          ]
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Weiter beobachten, bis das zuständige Objekt zwei stabile Stichproben zeigt.\",\"Prüfvermerk\":\"Zeitpunkte sind geordnet und für iOS-Screenshot-Tests geeignet.\",\"Verknüpfte Ereignisse\":[\"evt_monitoring_login_001\",\"thing_event_auth_gateway\"]}",
+        "location": {
+          "type": "Dienst",
+          "value": "Kunden-Kontocenter"
+        },
+        "external_ids": {
+          "Störungsticket": "INC-2026-0508-004"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "240b14a6-fd28-5065-8e0f-855b80b3b401",
+      "message_id": "msg_thing_agent_support_triage_policy",
+      "title": "KI-Agent für Support-Triage · Prüfregel aktualisiert",
+      "body": "# Objektaktualisierung für KI-Agent für Support-Triage\n> Die Objektprojektion wurde nach neuen Signalen aus mehreren Kanälen aktualisiert.\n\n## Momentaufnahme\n- Aktueller Zustand: stabil mit menschlicher Prüfung\n- Verknüpfte Ereignisse: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Überwachungskanal: KI-Agentenrückmeldungen\n\n## Attributänderungen\n- Vertrauen der Auto-Lösung stieg von 0,78 auf 0,86\n- Rückfallregel wechselte von sofortiger Übergabe zu Stichprobenprüfung\n\n## Nächster Schritt\n- Das Objekt bleibt im Screenshot-Fixture sichtbar, weil es Betrieb, Finanzen, Zuhause und Agentenszenarien in einer realistischen Zeitlinie verbindet.\n",
+      "channel_id": "ai-agent-feedback",
+      "is_read": false,
+      "received_at": "2026-05-08T03:50:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_agent_support_triage",
+        "thing_id": "thing_agent_support_triage",
+        "projection_destination": "thing_head",
+        "title": "KI-Agent für Support-Triage · Prüfregel aktualisiert",
+        "description": "KI-Agent für Support-Triage。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "stabil mit menschlicher Prüfung",
+        "message": "Prüfregel aktualisiert: Vertrauen der Auto-Lösung stieg von 0,78 auf 0,86; Rückfallregel wechselte von sofortiger Übergabe zu Stichprobenprüfung",
+        "severity": "medium",
+        "tags": [
+          "KI-Agent",
+          "Ticket",
+          "Übergabe"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Momentaufnahme": "stabil mit menschlicher Prüfung",
+          "Attributänderungen": [
+            "Vertrauen der Auto-Lösung stieg von 0,78 auf 0,86",
+            "Rückfallregel wechselte von sofortiger Übergabe zu Stichprobenprüfung"
+          ],
+          "Verknüpfte Ereignisse": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Quelle": "KI-Agentenrückmeldungen"
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Objekt im Demo-Posteingang und in der Objektdetailansicht sichtbar halten.\",\"Prüfvermerk\":\"Objekt enthält lesbare Attributänderungen und verknüpfte Ereigniskennungen.\",\"Verknüpfte Ereignisse\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "Warteschlange",
+          "value": "Supportwarteschlange für Unternehmenskunden"
+        },
+        "external_ids": {
+          "Objektprojektion": "OBJ-THING_AGENT_SUPPORT_TRIAGE"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "e9a20014-0d01-5055-909a-e4a2a9b313a9",
+      "message_id": "msg_agent_ticket_detected",
+      "title": "Qualitätsprüfung der KI-Agentenübergabe · Erkannt",
+      "body": "# Qualitätsprüfung der KI-Agentenübergabe · Erkannt\n> der Support-Agent markierte ein Abrechnungsticket als gelöst, aber die Kundenstimmung blieb negativ\n\n## Was sich geändert hat\n- Ein Unternehmenskunde wartete 14 Minuten länger auf eine menschliche Bestätigung.\n- Das Lösungsvertrauen lag bei 0,86, während die Stimmung unter der Eskalationsschwelle blieb.\n- Der Kunde erhielt eine Folgeantwort mit dem korrekten Rechnungsbezug.\n\n## Bearbeitung\n1. Ticket zur manuellen Prüfung gesendet und Modellspur angehängt.\n2. Leitplanke für Abrechnungsantworten ergänzt, wenn Stimmung negativ bleibt.\n3. Nächste 50 Abrechnungstickets stichprobenartig prüfen, bevor volle Automatisierung zurückkehrt.\n\n## Nächster Schritt\n- Verantwortlich: Leitung Support-Automatisierung\n- Erwartete Zeit: nächstes stabiles Stichprobenfenster\n",
+      "channel_id": "ai-agent-feedback",
+      "is_read": false,
+      "received_at": "2026-05-08T03:44:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_agent_ticket_001",
+        "event_id": "evt_agent_ticket_001",
+        "thing_id": "thing_agent_support_triage",
+        "projection_destination": "event_head",
+        "title": "Qualitätsprüfung der KI-Agentenübergabe · Erkannt",
+        "description": "Qualitätsprüfung der KI-Agentenübergabe。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "Erkannt",
+        "message": "Statusmeldung: Ein Unternehmenskunde wartete 14 Minuten länger auf eine menschliche Bestätigung.",
+        "severity": "medium",
+        "tags": [
+          "KI-Agent",
+          "Ticket",
+          "Übergabe"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Was sich geändert hat": [
+            "Ein Unternehmenskunde wartete 14 Minuten länger auf eine menschliche Bestätigung.",
+            "Das Lösungsvertrauen lag bei 0,86, während die Stimmung unter der Eskalationsschwelle blieb."
+          ],
+          "Verantwortlich": "Leitung Support-Automatisierung",
+          "Erwartete Zeit": "nächstes stabiles Stichprobenfenster",
+          "Verknüpfte Ereignisse": [
+            "evt_agent_ticket_001",
+            "thing_agent_support_triage"
+          ]
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Weiter beobachten, bis das zuständige Objekt zwei stabile Stichproben zeigt.\",\"Prüfvermerk\":\"Zeitpunkte sind geordnet und für iOS-Screenshot-Tests geeignet.\",\"Verknüpfte Ereignisse\":[\"evt_agent_ticket_001\",\"thing_agent_support_triage\"]}",
+        "location": {
+          "type": "Warteschlange",
+          "value": "Supportwarteschlange für Unternehmenskunden"
+        },
+        "external_ids": {
+          "Störungsticket": "INC-2026-0508-005"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "8998c5d0-6d3a-5411-8841-a18df7c7ddb7",
+      "message_id": "msg_thing_event_auth_gateway_risk",
+      "title": "Risikogateway für Kundenanmeldung · Risikoschwelle aktualisiert",
+      "body": "# Objektaktualisierung für Risikogateway für Kundenanmeldung\n> Die Objektprojektion wurde nach neuen Signalen aus mehreren Kanälen aktualisiert.\n\n## Momentaufnahme\n- Aktueller Zustand: begrenzt mit sauberem Verkehrstrend\n- Verknüpfte Ereignisse: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Überwachungskanal: Ereignisüberwachung\n\n## Attributänderungen\n- Rate fehlgeschlagener Anmeldungen sank von 11,8% auf 2,4%\n- vorübergehende Prüfschwelle wechselte von mittel zu streng\n\n## Nächster Schritt\n- Das Objekt bleibt im Screenshot-Fixture sichtbar, weil es Betrieb, Finanzen, Zuhause und Agentenszenarien in einer realistischen Zeitlinie verbindet.\n",
+      "channel_id": "event-monitoring",
+      "is_read": false,
+      "received_at": "2026-05-08T03:33:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_event_auth_gateway",
+        "thing_id": "thing_event_auth_gateway",
+        "projection_destination": "thing_head",
+        "title": "Risikogateway für Kundenanmeldung · Risikoschwelle aktualisiert",
+        "description": "Risikogateway für Kundenanmeldung。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "begrenzt mit sauberem Verkehrstrend",
+        "message": "Risikoschwelle aktualisiert: Rate fehlgeschlagener Anmeldungen sank von 11,8% auf 2,4%; vorübergehende Prüfschwelle wechselte von mittel zu streng",
+        "severity": "medium",
+        "tags": [
+          "Anmeldung",
+          "Risikosteuerung",
+          "Kundenvertrauen"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Momentaufnahme": "begrenzt mit sauberem Verkehrstrend",
+          "Attributänderungen": [
+            "Rate fehlgeschlagener Anmeldungen sank von 11,8% auf 2,4%",
+            "vorübergehende Prüfschwelle wechselte von mittel zu streng"
+          ],
+          "Verknüpfte Ereignisse": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Quelle": "Ereignisüberwachung"
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Objekt im Demo-Posteingang und in der Objektdetailansicht sichtbar halten.\",\"Prüfvermerk\":\"Objekt enthält lesbare Attributänderungen und verknüpfte Ereigniskennungen.\",\"Verknüpfte Ereignisse\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "Dienst",
+          "value": "Kunden-Kontocenter"
+        },
+        "external_ids": {
+          "Objektprojektion": "OBJ-THING_EVENT_AUTH_GATEWAY"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "836d5419-9ea9-5b68-80e9-5aaaa2797413",
+      "message_id": "msg_monitoring_login_investigating",
+      "title": "Ungewöhnliches Muster bei Anmeldeversuchen · In Prüfung",
+      "body": "# Ungewöhnliches Muster bei Anmeldeversuchen · In Prüfung\n> Kundenanmeldeversuche bündelten sich um drei Netzbereiche\n\n## Was sich geändert hat\n- Seiten für Passwortzurücksetzung und Kontocenter hatten kurz zusätzliche Reibung.\n- Die Fehlanmelderate stieg auf 11,8% und normalisierte sich nach adaptiven Prüfungen.\n- Im Stichprobenumfang wurde kein erfolgreiches Kontoübernahmesignal gefunden.\n\n## Bearbeitung\n1. Strengere Risikoprüfungen für betroffene Bereiche aktiviert.\n2. Zeitlinie mit Kundenvertrauen für proaktive Hinweise geteilt.\n3. Prüfen, ob das Muster zu einer bekannten Liste gestohlener Zugangsdaten passt.\n\n## Nächster Schritt\n- Verantwortlich: Team Kundenvertrauen\n- Erwartete Zeit: nächstes stabiles Stichprobenfenster\n",
+      "channel_id": "event-monitoring",
+      "is_read": false,
+      "received_at": "2026-05-08T03:28:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_monitoring_login_001",
+        "event_id": "evt_monitoring_login_001",
+        "thing_id": "thing_event_auth_gateway",
+        "projection_destination": "event_head",
+        "title": "Ungewöhnliches Muster bei Anmeldeversuchen · In Prüfung",
+        "description": "Ungewöhnliches Muster bei Anmeldeversuchen。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "In Prüfung",
+        "message": "Statusmeldung: Seiten für Passwortzurücksetzung und Kontocenter hatten kurz zusätzliche Reibung.",
+        "severity": "critical",
+        "tags": [
+          "Anmeldung",
+          "Risikosteuerung",
+          "Kundenvertrauen"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Was sich geändert hat": [
+            "Seiten für Passwortzurücksetzung und Kontocenter hatten kurz zusätzliche Reibung.",
+            "Die Fehlanmelderate stieg auf 11,8% und normalisierte sich nach adaptiven Prüfungen."
+          ],
+          "Verantwortlich": "Team Kundenvertrauen",
+          "Erwartete Zeit": "nächstes stabiles Stichprobenfenster",
+          "Verknüpfte Ereignisse": [
+            "evt_monitoring_login_001",
+            "thing_event_auth_gateway"
+          ]
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Weiter beobachten, bis das zuständige Objekt zwei stabile Stichproben zeigt.\",\"Prüfvermerk\":\"Zeitpunkte sind geordnet und für iOS-Screenshot-Tests geeignet.\",\"Verknüpfte Ereignisse\":[\"evt_monitoring_login_001\",\"thing_event_auth_gateway\"]}",
+        "location": {
+          "type": "Dienst",
+          "value": "Kunden-Kontocenter"
+        },
+        "external_ids": {
+          "Störungsticket": "INC-2026-0508-004"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "96eb879a-9c25-5abd-b458-847ad6a043bc",
+      "message_id": "msg_monitoring_login_detected",
+      "title": "Ungewöhnliches Muster bei Anmeldeversuchen · Erkannt",
+      "body": "# Ungewöhnliches Muster bei Anmeldeversuchen · Erkannt\n> Kundenanmeldeversuche bündelten sich um drei Netzbereiche\n\n## Was sich geändert hat\n- Seiten für Passwortzurücksetzung und Kontocenter hatten kurz zusätzliche Reibung.\n- Die Fehlanmelderate stieg auf 11,8% und normalisierte sich nach adaptiven Prüfungen.\n- Im Stichprobenumfang wurde kein erfolgreiches Kontoübernahmesignal gefunden.\n\n## Bearbeitung\n1. Strengere Risikoprüfungen für betroffene Bereiche aktiviert.\n2. Zeitlinie mit Kundenvertrauen für proaktive Hinweise geteilt.\n3. Prüfen, ob das Muster zu einer bekannten Liste gestohlener Zugangsdaten passt.\n\n## Nächster Schritt\n- Verantwortlich: Team Kundenvertrauen\n- Erwartete Zeit: nächstes stabiles Stichprobenfenster\n",
+      "channel_id": "event-monitoring",
+      "is_read": false,
+      "received_at": "2026-05-08T03:18:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_monitoring_login_001",
+        "event_id": "evt_monitoring_login_001",
+        "thing_id": "thing_event_auth_gateway",
+        "projection_destination": "event_head",
+        "title": "Ungewöhnliches Muster bei Anmeldeversuchen · Erkannt",
+        "description": "Ungewöhnliches Muster bei Anmeldeversuchen。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "Erkannt",
+        "message": "Statusmeldung: Seiten für Passwortzurücksetzung und Kontocenter hatten kurz zusätzliche Reibung.",
+        "severity": "critical",
+        "tags": [
+          "Anmeldung",
+          "Risikosteuerung",
+          "Kundenvertrauen"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Was sich geändert hat": [
+            "Seiten für Passwortzurücksetzung und Kontocenter hatten kurz zusätzliche Reibung.",
+            "Die Fehlanmelderate stieg auf 11,8% und normalisierte sich nach adaptiven Prüfungen."
+          ],
+          "Verantwortlich": "Team Kundenvertrauen",
+          "Erwartete Zeit": "nächstes stabiles Stichprobenfenster",
+          "Verknüpfte Ereignisse": [
+            "evt_monitoring_login_001",
+            "thing_event_auth_gateway"
+          ]
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Weiter beobachten, bis das zuständige Objekt zwei stabile Stichproben zeigt.\",\"Prüfvermerk\":\"Zeitpunkte sind geordnet und für iOS-Screenshot-Tests geeignet.\",\"Verknüpfte Ereignisse\":[\"evt_monitoring_login_001\",\"thing_event_auth_gateway\"]}",
+        "location": {
+          "type": "Dienst",
+          "value": "Kunden-Kontocenter"
+        },
+        "external_ids": {
+          "Störungsticket": "INC-2026-0508-004"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "8a695fe4-2f30-5527-812f-d14c8038e7e1",
+      "message_id": "msg_ops_latency_resolved_003",
+      "title": "Latenzspitze der Zahlungs-API · Behoben",
+      "body": "# Latenzspitze der Zahlungs-API · Behoben\n> Kassiervorgänge in Ostchina wurden für Geschäftskunden langsamer\n\n## Was sich geändert hat\n- Die Latenz lag wieder unter 300 ms und der Replikatrückstand blieb 20 Minuten unter 5 s.\n- Die P95-Latenz erreichte 1,9 s und fiel, nachdem Replikatverkehr reduziert wurde.\n- Es wurde kein Datenverlust erkannt; drei Wiederholungen wurden automatisch wiederhergestellt.\n\n## Bearbeitung\n1. Fingerabdruck der langsamen Abfrage fixiert und neuestes Lesereplikat aus der Rotation entfernt.\n2. Telemetrie des Datenbank-Verbindungspools auf Minutenauflösung erhöht.\n3. Vorfall offen halten, bis der nächste Abrechnungslauf ohne wachsende Wiederholungen endet.\n\n## Nächster Schritt\n- Verantwortlich: SRE-Bereitschaft\n- Erwartete Zeit: nächstes stabiles Stichprobenfenster\n",
+      "channel_id": "ops-core",
+      "is_read": true,
+      "received_at": "2026-05-08T03:05:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_ops_latency_001",
+        "event_id": "evt_ops_latency_001",
+        "thing_id": "thing_ops_cluster_sh1",
+        "projection_destination": "event_head",
+        "title": "Latenzspitze der Zahlungs-API · Behoben",
+        "description": "Latenzspitze der Zahlungs-API。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "Behoben",
+        "message": "Statusmeldung: Die Latenz lag wieder unter 300 ms und der Replikatrückstand blieb 20 Minuten unter 5 s.",
+        "severity": "high",
+        "tags": [
+          "Datenbank",
+          "Latenz",
+          "Lesereplikat"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Was sich geändert hat": [
+            "Die Latenz lag wieder unter 300 ms und der Replikatrückstand blieb 20 Minuten unter 5 s.",
+            "Die P95-Latenz erreichte 1,9 s und fiel, nachdem Replikatverkehr reduziert wurde."
+          ],
+          "Verantwortlich": "SRE-Bereitschaft",
+          "Erwartete Zeit": "nächstes stabiles Stichprobenfenster",
+          "Verknüpfte Ereignisse": [
+            "evt_ops_latency_001",
+            "thing_ops_cluster_sh1"
+          ]
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Weiter beobachten, bis das zuständige Objekt zwei stabile Stichproben zeigt.\",\"Prüfvermerk\":\"Zeitpunkte sind geordnet und für iOS-Screenshot-Tests geeignet.\",\"Verknüpfte Ereignisse\":[\"evt_ops_latency_001\",\"thing_ops_cluster_sh1\"]}",
+        "location": {
+          "type": "Region",
+          "value": "Region Shanghai"
+        },
+        "external_ids": {
+          "Störungsticket": "INC-2026-0508-001"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "c6b9cee8-8cb3-50c6-b914-3289e90798d1",
+      "message_id": "msg_thing_ops_cluster_sh1_capacity",
+      "title": "Zahlungscluster Shanghai · Kapazitätssignal aktualisiert",
+      "body": "# Objektaktualisierung für Zahlungscluster Shanghai\n> Die Objektprojektion wurde nach neuen Signalen aus mehreren Kanälen aktualisiert.\n\n## Momentaufnahme\n- Aktueller Zustand: stabil mit erhöhter Beobachtung\n- Verknüpfte Ereignisse: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Überwachungskanal: Betriebskern\n\n## Attributänderungen\n- P95-API-Latenz sank von 420 ms auf 238 ms\n- Rückstand des Lesereplikats sank von 18 s auf 3 s\n\n## Nächster Schritt\n- Das Objekt bleibt im Screenshot-Fixture sichtbar, weil es Betrieb, Finanzen, Zuhause und Agentenszenarien in einer realistischen Zeitlinie verbindet.\n",
+      "channel_id": "ops-core",
+      "is_read": true,
+      "received_at": "2026-05-08T02:40:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_ops_cluster_sh1",
+        "thing_id": "thing_ops_cluster_sh1",
+        "projection_destination": "thing_head",
+        "title": "Zahlungscluster Shanghai · Kapazitätssignal aktualisiert",
+        "description": "Zahlungscluster Shanghai。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "stabil mit erhöhter Beobachtung",
+        "message": "Kapazitätssignal aktualisiert: P95-API-Latenz sank von 420 ms auf 238 ms; Rückstand des Lesereplikats sank von 18 s auf 3 s",
+        "severity": "low",
+        "tags": [
+          "Datenbank",
+          "Latenz",
+          "Lesereplikat"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Momentaufnahme": "stabil mit erhöhter Beobachtung",
+          "Attributänderungen": [
+            "P95-API-Latenz sank von 420 ms auf 238 ms",
+            "Rückstand des Lesereplikats sank von 18 s auf 3 s"
+          ],
+          "Verknüpfte Ereignisse": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Quelle": "Betriebskern"
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Objekt im Demo-Posteingang und in der Objektdetailansicht sichtbar halten.\",\"Prüfvermerk\":\"Objekt enthält lesbare Attributänderungen und verknüpfte Ereigniskennungen.\",\"Verknüpfte Ereignisse\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "Region",
+          "value": "Region Shanghai"
+        },
+        "external_ids": {
+          "Objektprojektion": "OBJ-THING_OPS_CLUSTER_SH1"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "4558c2ab-1d5c-55a3-9e5a-1ccf7c532272",
+      "message_id": "msg_ops_latency_investigating_002",
+      "title": "Latenzspitze der Zahlungs-API · In Prüfung",
+      "body": "# Latenzspitze der Zahlungs-API · In Prüfung\n> Kassiervorgänge in Ostchina wurden für Geschäftskunden langsamer\n\n## Was sich geändert hat\n- Die Checkout-Bestätigung verzögerte sich bei 3,8% der Anfragen in der Region Shanghai.\n- Die P95-Latenz erreichte 1,9 s und fiel, nachdem Replikatverkehr reduziert wurde.\n- Es wurde kein Datenverlust erkannt; drei Wiederholungen wurden automatisch wiederhergestellt.\n\n## Bearbeitung\n1. Fingerabdruck der langsamen Abfrage fixiert und neuestes Lesereplikat aus der Rotation entfernt.\n2. Telemetrie des Datenbank-Verbindungspools auf Minutenauflösung erhöht.\n3. Vorfall offen halten, bis der nächste Abrechnungslauf ohne wachsende Wiederholungen endet.\n\n## Nächster Schritt\n- Verantwortlich: SRE-Bereitschaft\n- Erwartete Zeit: nächstes stabiles Stichprobenfenster\n",
+      "channel_id": "ops-core",
+      "is_read": false,
+      "received_at": "2026-05-08T02:24:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_ops_latency_001",
+        "event_id": "evt_ops_latency_001",
+        "thing_id": "thing_ops_cluster_sh1",
+        "projection_destination": "event_head",
+        "title": "Latenzspitze der Zahlungs-API · In Prüfung",
+        "description": "Latenzspitze der Zahlungs-API。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "In Prüfung",
+        "message": "Statusmeldung: Die Checkout-Bestätigung verzögerte sich bei 3,8% der Anfragen in der Region Shanghai.",
+        "severity": "high",
+        "tags": [
+          "Datenbank",
+          "Latenz",
+          "Lesereplikat"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Was sich geändert hat": [
+            "Die Checkout-Bestätigung verzögerte sich bei 3,8% der Anfragen in der Region Shanghai.",
+            "Die P95-Latenz erreichte 1,9 s und fiel, nachdem Replikatverkehr reduziert wurde."
+          ],
+          "Verantwortlich": "SRE-Bereitschaft",
+          "Erwartete Zeit": "nächstes stabiles Stichprobenfenster",
+          "Verknüpfte Ereignisse": [
+            "evt_ops_latency_001",
+            "thing_ops_cluster_sh1"
+          ]
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Weiter beobachten, bis das zuständige Objekt zwei stabile Stichproben zeigt.\",\"Prüfvermerk\":\"Zeitpunkte sind geordnet und für iOS-Screenshot-Tests geeignet.\",\"Verknüpfte Ereignisse\":[\"evt_ops_latency_001\",\"thing_ops_cluster_sh1\"]}",
+        "location": {
+          "type": "Region",
+          "value": "Region Shanghai"
+        },
+        "external_ids": {
+          "Störungsticket": "INC-2026-0508-001"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "4aaa2beb-0718-5cfe-a347-4db5f742faa2",
+      "message_id": "msg_home_leak_resolved",
+      "title": "Lecksensor in der Küche ausgelöst · Behoben",
+      "body": "# Lecksensor in der Küche ausgelöst · Behoben\n> der Bodensensor meldete anhaltende Feuchtigkeit nahe dem Spülenschrank\n\n## Was sich geändert hat\n- Die Feuchtigkeitskurve blieb 25 Minuten flach und das Ventil wurde im überwachten Modus wieder geöffnet.\n- Die Feuchtigkeit sank von 72% auf 38%, nachdem Ventil geschlossen und Lüftung gestartet wurde.\n- Eine Haushaltsroutine wurde pausiert; manuelle Übersteuerung bleibt in der App möglich.\n\n## Bearbeitung\n1. Geprüft, dass der Sensor keinen Fehlalarm wegen schwacher Batterie meldet.\n2. Ventil geschlossen gehalten, während das Kamerabild geprüft wurde.\n3. Bewohner soll die Schrankverbindung prüfen, bevor der Zweig wieder geöffnet wird.\n\n## Nächster Schritt\n- Verantwortlich: Verantwortliche Person für Hausautomatisierung\n- Erwartete Zeit: nächstes stabiles Stichprobenfenster\n",
+      "channel_id": "home-automation",
+      "is_read": true,
+      "received_at": "2026-05-08T02:16:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_home_leak_001",
+        "event_id": "evt_home_leak_001",
+        "thing_id": "thing_home_valve_kitchen",
+        "projection_destination": "event_head",
+        "title": "Lecksensor in der Küche ausgelöst · Behoben",
+        "description": "Lecksensor in der Küche ausgelöst。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "Behoben",
+        "message": "Statusmeldung: Die Feuchtigkeitskurve blieb 25 Minuten flach und das Ventil wurde im überwachten Modus wieder geöffnet.",
+        "severity": "medium",
+        "tags": [
+          "Wassersensor",
+          "Küche",
+          "Ventil"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Was sich geändert hat": [
+            "Die Feuchtigkeitskurve blieb 25 Minuten flach und das Ventil wurde im überwachten Modus wieder geöffnet.",
+            "Die Feuchtigkeit sank von 72% auf 38%, nachdem Ventil geschlossen und Lüftung gestartet wurde."
+          ],
+          "Verantwortlich": "Verantwortliche Person für Hausautomatisierung",
+          "Erwartete Zeit": "nächstes stabiles Stichprobenfenster",
+          "Verknüpfte Ereignisse": [
+            "evt_home_leak_001",
+            "thing_home_valve_kitchen"
+          ]
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Weiter beobachten, bis das zuständige Objekt zwei stabile Stichproben zeigt.\",\"Prüfvermerk\":\"Zeitpunkte sind geordnet und für iOS-Screenshot-Tests geeignet.\",\"Verknüpfte Ereignisse\":[\"evt_home_leak_001\",\"thing_home_valve_kitchen\"]}",
+        "location": {
+          "type": "Raum",
+          "value": "Spülenschrank in der Küche"
+        },
+        "external_ids": {
+          "Störungsticket": "INC-2026-0508-002"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "5a33bdc7-fc17-5248-ab04-384af9b3c327",
+      "message_id": "msg_ops_brief_001",
+      "title": "Latenzspitze der Zahlungs-API · Erkannt",
+      "body": "# Latenzspitze der Zahlungs-API · Erkannt\n> Kassiervorgänge in Ostchina wurden für Geschäftskunden langsamer\n\n## Was sich geändert hat\n- Die Checkout-Bestätigung verzögerte sich bei 3,8% der Anfragen in der Region Shanghai.\n- Die P95-Latenz erreichte 1,9 s und fiel, nachdem Replikatverkehr reduziert wurde.\n- Es wurde kein Datenverlust erkannt; drei Wiederholungen wurden automatisch wiederhergestellt.\n\n## Bearbeitung\n1. Fingerabdruck der langsamen Abfrage fixiert und neuestes Lesereplikat aus der Rotation entfernt.\n2. Telemetrie des Datenbank-Verbindungspools auf Minutenauflösung erhöht.\n3. Vorfall offen halten, bis der nächste Abrechnungslauf ohne wachsende Wiederholungen endet.\n\n## Nächster Schritt\n- Verantwortlich: SRE-Bereitschaft\n- Erwartete Zeit: nächstes stabiles Stichprobenfenster\n",
+      "channel_id": "ops-core",
+      "is_read": false,
+      "received_at": "2026-05-08T02:10:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_ops_latency_001",
+        "event_id": "evt_ops_latency_001",
+        "thing_id": "thing_ops_cluster_sh1",
+        "projection_destination": "event_head",
+        "title": "Latenzspitze der Zahlungs-API · Erkannt",
+        "description": "Latenzspitze der Zahlungs-API。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "Erkannt",
+        "message": "Statusmeldung: Die Checkout-Bestätigung verzögerte sich bei 3,8% der Anfragen in der Region Shanghai.",
+        "severity": "high",
+        "tags": [
+          "Datenbank",
+          "Latenz",
+          "Lesereplikat"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Was sich geändert hat": [
+            "Die Checkout-Bestätigung verzögerte sich bei 3,8% der Anfragen in der Region Shanghai.",
+            "Die P95-Latenz erreichte 1,9 s und fiel, nachdem Replikatverkehr reduziert wurde."
+          ],
+          "Verantwortlich": "SRE-Bereitschaft",
+          "Erwartete Zeit": "nächstes stabiles Stichprobenfenster",
+          "Verknüpfte Ereignisse": [
+            "evt_ops_latency_001",
+            "thing_ops_cluster_sh1"
+          ]
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Weiter beobachten, bis das zuständige Objekt zwei stabile Stichproben zeigt.\",\"Prüfvermerk\":\"Zeitpunkte sind geordnet und für iOS-Screenshot-Tests geeignet.\",\"Verknüpfte Ereignisse\":[\"evt_ops_latency_001\",\"thing_ops_cluster_sh1\"]}",
+        "location": {
+          "type": "Region",
+          "value": "Region Shanghai"
+        },
+        "external_ids": {
+          "Störungsticket": "INC-2026-0508-001"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "14986314-d849-5567-b735-1523013e5e96",
+      "message_id": "msg_thing_finance_ap_queue_approval",
+      "title": "Prüfwarteschlange für Kreditoren · Freigabeweg aktualisiert",
+      "body": "# Objektaktualisierung für Prüfwarteschlange für Kreditoren\n> Die Objektprojektion wurde nach neuen Signalen aus mehreren Kanälen aktualisiert.\n\n## Momentaufnahme\n- Aktueller Zustand: ausgeglichen und für Dublettenprüfung gesperrt\n- Verknüpfte Ereignisse: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Überwachungskanal: Finanzbuch\n\n## Attributänderungen\n- Dublettenwert der Rechnung stieg von 0,41 auf 0,93\n- Freigaberegel wechselte von Einzelprüfung zu Doppelprüfung\n\n## Nächster Schritt\n- Das Objekt bleibt im Screenshot-Fixture sichtbar, weil es Betrieb, Finanzen, Zuhause und Agentenszenarien in einer realistischen Zeitlinie verbindet.\n",
+      "channel_id": "finance-ledger",
+      "is_read": true,
+      "received_at": "2026-05-08T02:08:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_finance_ap_queue",
+        "thing_id": "thing_finance_ap_queue",
+        "projection_destination": "thing_head",
+        "title": "Prüfwarteschlange für Kreditoren · Freigabeweg aktualisiert",
+        "description": "Prüfwarteschlange für Kreditoren。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "ausgeglichen und für Dublettenprüfung gesperrt",
+        "message": "Freigabeweg aktualisiert: Dublettenwert der Rechnung stieg von 0,41 auf 0,93; Freigaberegel wechselte von Einzelprüfung zu Doppelprüfung",
+        "severity": "low",
+        "tags": [
+          "Rechnung",
+          "Freigabe",
+          "Liquidität"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Momentaufnahme": "ausgeglichen und für Dublettenprüfung gesperrt",
+          "Attributänderungen": [
+            "Dublettenwert der Rechnung stieg von 0,41 auf 0,93",
+            "Freigaberegel wechselte von Einzelprüfung zu Doppelprüfung"
+          ],
+          "Verknüpfte Ereignisse": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Quelle": "Finanzbuch"
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Objekt im Demo-Posteingang und in der Objektdetailansicht sichtbar halten.\",\"Prüfvermerk\":\"Objekt enthält lesbare Attributänderungen und verknüpfte Ereigniskennungen.\",\"Verknüpfte Ereignisse\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "Abteilung",
+          "value": "Zentrale Finanzserviceeinheit"
+        },
+        "external_ids": {
+          "Objektprojektion": "OBJ-THING_FINANCE_AP_QUEUE"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "a838b80b-b7d8-5b99-b1d6-b3a155565992",
+      "message_id": "msg_finance_invoice_resolved",
+      "title": "Mögliche doppelte Lieferantenrechnung · Behoben",
+      "body": "# Mögliche doppelte Lieferantenrechnung · Behoben\n> zwei Rechnungen zur gleichen Bestellung kamen über unterschiedliche Freigabewege an\n\n## Was sich geändert hat\n- Die zweite Rechnung wurde als erneute Einreichung bestätigt und der ursprüngliche Zahlungsplan wiederhergestellt.\n- Der Dublettenwert erreichte 0,93, weil Betrag, Steuernummer und Lieferschein übereinstimmten.\n- Das Finanzteam kann die gültige Rechnung nach zweiter Freigabe weiter auslösen.\n\n## Bearbeitung\n1. Beide Rechnungsdatensätze gesperrt und den Lieferantenschein angehängt.\n2. Einkauf gebeten zu bestätigen, welche Rechnungsnummer aktiv bleiben soll.\n3. Liquiditätsprognose als vorläufig markieren, bis die Sperre gelöst ist.\n\n## Nächster Schritt\n- Verantwortlich: Finanzcontroller\n- Erwartete Zeit: nächstes stabiles Stichprobenfenster\n",
+      "channel_id": "finance-ledger",
+      "is_read": true,
+      "received_at": "2026-05-08T02:02:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_finance_invoice_001",
+        "event_id": "evt_finance_invoice_001",
+        "thing_id": "thing_finance_ap_queue",
+        "projection_destination": "event_head",
+        "title": "Mögliche doppelte Lieferantenrechnung · Behoben",
+        "description": "Mögliche doppelte Lieferantenrechnung。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "Behoben",
+        "message": "Statusmeldung: Die zweite Rechnung wurde als erneute Einreichung bestätigt und der ursprüngliche Zahlungsplan wiederhergestellt.",
+        "severity": "high",
+        "tags": [
+          "Rechnung",
+          "Freigabe",
+          "Liquidität"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Was sich geändert hat": [
+            "Die zweite Rechnung wurde als erneute Einreichung bestätigt und der ursprüngliche Zahlungsplan wiederhergestellt.",
+            "Der Dublettenwert erreichte 0,93, weil Betrag, Steuernummer und Lieferschein übereinstimmten."
+          ],
+          "Verantwortlich": "Finanzcontroller",
+          "Erwartete Zeit": "nächstes stabiles Stichprobenfenster",
+          "Verknüpfte Ereignisse": [
+            "evt_finance_invoice_001",
+            "thing_finance_ap_queue"
+          ]
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Weiter beobachten, bis das zuständige Objekt zwei stabile Stichproben zeigt.\",\"Prüfvermerk\":\"Zeitpunkte sind geordnet und für iOS-Screenshot-Tests geeignet.\",\"Verknüpfte Ereignisse\":[\"evt_finance_invoice_001\",\"thing_finance_ap_queue\"]}",
+        "location": {
+          "type": "Abteilung",
+          "value": "Zentrale Finanzserviceeinheit"
+        },
+        "external_ids": {
+          "Störungsticket": "INC-2026-0508-003"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "112cdc6f-883e-5d25-b6ec-10d0f083493f",
+      "message_id": "msg_thing_home_valve_kitchen_valve",
+      "title": "Wasserabsperrventil Küche · Sicherheitsvermerk zum Ventil aktualisiert",
+      "body": "# Objektaktualisierung für Wasserabsperrventil Küche\n> Die Objektprojektion wurde nach neuen Signalen aus mehreren Kanälen aktualisiert.\n\n## Momentaufnahme\n- Aktueller Zustand: nach Leckschutz geschlossen\n- Verknüpfte Ereignisse: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Überwachungskanal: Hausautomatisierung\n\n## Attributänderungen\n- Feuchtigkeit am Bodensensor sank von 72% auf 38%\n- Ventilsteuerung wechselte von automatisch zu überwacht\n\n## Nächster Schritt\n- Das Objekt bleibt im Screenshot-Fixture sichtbar, weil es Betrieb, Finanzen, Zuhause und Agentenszenarien in einer realistischen Zeitlinie verbindet.\n",
+      "channel_id": "home-automation",
+      "is_read": true,
+      "received_at": "2026-05-08T01:49:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_home_valve_kitchen",
+        "thing_id": "thing_home_valve_kitchen",
+        "projection_destination": "thing_head",
+        "title": "Wasserabsperrventil Küche · Sicherheitsvermerk zum Ventil aktualisiert",
+        "description": "Wasserabsperrventil Küche。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "nach Leckschutz geschlossen",
+        "message": "Sicherheitsvermerk zum Ventil aktualisiert: Feuchtigkeit am Bodensensor sank von 72% auf 38%; Ventilsteuerung wechselte von automatisch zu überwacht",
+        "severity": "low",
+        "tags": [
+          "Wassersensor",
+          "Küche",
+          "Ventil"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Momentaufnahme": "nach Leckschutz geschlossen",
+          "Attributänderungen": [
+            "Feuchtigkeit am Bodensensor sank von 72% auf 38%",
+            "Ventilsteuerung wechselte von automatisch zu überwacht"
+          ],
+          "Verknüpfte Ereignisse": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Quelle": "Hausautomatisierung"
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Objekt im Demo-Posteingang und in der Objektdetailansicht sichtbar halten.\",\"Prüfvermerk\":\"Objekt enthält lesbare Attributänderungen und verknüpfte Ereigniskennungen.\",\"Verknüpfte Ereignisse\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "Raum",
+          "value": "Spülenschrank in der Küche"
+        },
+        "external_ids": {
+          "Objektprojektion": "OBJ-THING_HOME_VALVE_KITCHEN"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "0983705e-aeb7-530a-bd42-908e528c3924",
+      "message_id": "msg_home_leak_investigating",
+      "title": "Lecksensor in der Küche ausgelöst · In Prüfung",
+      "body": "# Lecksensor in der Küche ausgelöst · In Prüfung\n> der Bodensensor meldete anhaltende Feuchtigkeit nahe dem Spülenschrank\n\n## Was sich geändert hat\n- Das Smartventil schloss den Kaltwasserzweig in 8 Sekunden und verhinderte eine Ausbreitung über den Schrank hinaus.\n- Die Feuchtigkeit sank von 72% auf 38%, nachdem Ventil geschlossen und Lüftung gestartet wurde.\n- Eine Haushaltsroutine wurde pausiert; manuelle Übersteuerung bleibt in der App möglich.\n\n## Bearbeitung\n1. Geprüft, dass der Sensor keinen Fehlalarm wegen schwacher Batterie meldet.\n2. Ventil geschlossen gehalten, während das Kamerabild geprüft wurde.\n3. Bewohner soll die Schrankverbindung prüfen, bevor der Zweig wieder geöffnet wird.\n\n## Nächster Schritt\n- Verantwortlich: Verantwortliche Person für Hausautomatisierung\n- Erwartete Zeit: nächstes stabiles Stichprobenfenster\n",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-08T01:42:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_home_leak_001",
+        "event_id": "evt_home_leak_001",
+        "thing_id": "thing_home_valve_kitchen",
+        "projection_destination": "event_head",
+        "title": "Lecksensor in der Küche ausgelöst · In Prüfung",
+        "description": "Lecksensor in der Küche ausgelöst。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "In Prüfung",
+        "message": "Statusmeldung: Das Smartventil schloss den Kaltwasserzweig in 8 Sekunden und verhinderte eine Ausbreitung über den Schrank hinaus.",
+        "severity": "medium",
+        "tags": [
+          "Wassersensor",
+          "Küche",
+          "Ventil"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Was sich geändert hat": [
+            "Das Smartventil schloss den Kaltwasserzweig in 8 Sekunden und verhinderte eine Ausbreitung über den Schrank hinaus.",
+            "Die Feuchtigkeit sank von 72% auf 38%, nachdem Ventil geschlossen und Lüftung gestartet wurde."
+          ],
+          "Verantwortlich": "Verantwortliche Person für Hausautomatisierung",
+          "Erwartete Zeit": "nächstes stabiles Stichprobenfenster",
+          "Verknüpfte Ereignisse": [
+            "evt_home_leak_001",
+            "thing_home_valve_kitchen"
+          ]
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Weiter beobachten, bis das zuständige Objekt zwei stabile Stichproben zeigt.\",\"Prüfvermerk\":\"Zeitpunkte sind geordnet und für iOS-Screenshot-Tests geeignet.\",\"Verknüpfte Ereignisse\":[\"evt_home_leak_001\",\"thing_home_valve_kitchen\"]}",
+        "location": {
+          "type": "Raum",
+          "value": "Spülenschrank in der Küche"
+        },
+        "external_ids": {
+          "Störungsticket": "INC-2026-0508-002"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "e9636362-d5d1-55b8-b61c-10be36bf7f02",
+      "message_id": "msg_home_leak_detected",
+      "title": "Lecksensor in der Küche ausgelöst · Erkannt",
+      "body": "# Lecksensor in der Küche ausgelöst · Erkannt\n> der Bodensensor meldete anhaltende Feuchtigkeit nahe dem Spülenschrank\n\n## Was sich geändert hat\n- Das Smartventil schloss den Kaltwasserzweig in 8 Sekunden und verhinderte eine Ausbreitung über den Schrank hinaus.\n- Die Feuchtigkeit sank von 72% auf 38%, nachdem Ventil geschlossen und Lüftung gestartet wurde.\n- Eine Haushaltsroutine wurde pausiert; manuelle Übersteuerung bleibt in der App möglich.\n\n## Bearbeitung\n1. Geprüft, dass der Sensor keinen Fehlalarm wegen schwacher Batterie meldet.\n2. Ventil geschlossen gehalten, während das Kamerabild geprüft wurde.\n3. Bewohner soll die Schrankverbindung prüfen, bevor der Zweig wieder geöffnet wird.\n\n## Nächster Schritt\n- Verantwortlich: Verantwortliche Person für Hausautomatisierung\n- Erwartete Zeit: nächstes stabiles Stichprobenfenster\n",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-08T01:35:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_home_leak_001",
+        "event_id": "evt_home_leak_001",
+        "thing_id": "thing_home_valve_kitchen",
+        "projection_destination": "event_head",
+        "title": "Lecksensor in der Küche ausgelöst · Erkannt",
+        "description": "Lecksensor in der Küche ausgelöst。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "Erkannt",
+        "message": "Statusmeldung: Das Smartventil schloss den Kaltwasserzweig in 8 Sekunden und verhinderte eine Ausbreitung über den Schrank hinaus.",
+        "severity": "medium",
+        "tags": [
+          "Wassersensor",
+          "Küche",
+          "Ventil"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Was sich geändert hat": [
+            "Das Smartventil schloss den Kaltwasserzweig in 8 Sekunden und verhinderte eine Ausbreitung über den Schrank hinaus.",
+            "Die Feuchtigkeit sank von 72% auf 38%, nachdem Ventil geschlossen und Lüftung gestartet wurde."
+          ],
+          "Verantwortlich": "Verantwortliche Person für Hausautomatisierung",
+          "Erwartete Zeit": "nächstes stabiles Stichprobenfenster",
+          "Verknüpfte Ereignisse": [
+            "evt_home_leak_001",
+            "thing_home_valve_kitchen"
+          ]
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Weiter beobachten, bis das zuständige Objekt zwei stabile Stichproben zeigt.\",\"Prüfvermerk\":\"Zeitpunkte sind geordnet und für iOS-Screenshot-Tests geeignet.\",\"Verknüpfte Ereignisse\":[\"evt_home_leak_001\",\"thing_home_valve_kitchen\"]}",
+        "location": {
+          "type": "Raum",
+          "value": "Spülenschrank in der Küche"
+        },
+        "external_ids": {
+          "Störungsticket": "INC-2026-0508-002"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "cac0636c-b1ed-5d07-aec3-1e4aa78bc98c",
+      "message_id": "msg_finance_invoice_investigating",
+      "title": "Mögliche doppelte Lieferantenrechnung · In Prüfung",
+      "body": "# Mögliche doppelte Lieferantenrechnung · In Prüfung\n> zwei Rechnungen zur gleichen Bestellung kamen über unterschiedliche Freigabewege an\n\n## Was sich geändert hat\n- Eine geplante Zahlung über 18.420,00 CNY wurde vor der Bankeinreichung angehalten.\n- Der Dublettenwert erreichte 0,93, weil Betrag, Steuernummer und Lieferschein übereinstimmten.\n- Das Finanzteam kann die gültige Rechnung nach zweiter Freigabe weiter auslösen.\n\n## Bearbeitung\n1. Beide Rechnungsdatensätze gesperrt und den Lieferantenschein angehängt.\n2. Einkauf gebeten zu bestätigen, welche Rechnungsnummer aktiv bleiben soll.\n3. Liquiditätsprognose als vorläufig markieren, bis die Sperre gelöst ist.\n\n## Nächster Schritt\n- Verantwortlich: Finanzcontroller\n- Erwartete Zeit: nächstes stabiles Stichprobenfenster\n",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-08T01:20:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_finance_invoice_001",
+        "event_id": "evt_finance_invoice_001",
+        "thing_id": "thing_finance_ap_queue",
+        "projection_destination": "event_head",
+        "title": "Mögliche doppelte Lieferantenrechnung · In Prüfung",
+        "description": "Mögliche doppelte Lieferantenrechnung。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "In Prüfung",
+        "message": "Statusmeldung: Eine geplante Zahlung über 18.420,00 CNY wurde vor der Bankeinreichung angehalten.",
+        "severity": "high",
+        "tags": [
+          "Rechnung",
+          "Freigabe",
+          "Liquidität"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Was sich geändert hat": [
+            "Eine geplante Zahlung über 18.420,00 CNY wurde vor der Bankeinreichung angehalten.",
+            "Der Dublettenwert erreichte 0,93, weil Betrag, Steuernummer und Lieferschein übereinstimmten."
+          ],
+          "Verantwortlich": "Finanzcontroller",
+          "Erwartete Zeit": "nächstes stabiles Stichprobenfenster",
+          "Verknüpfte Ereignisse": [
+            "evt_finance_invoice_001",
+            "thing_finance_ap_queue"
+          ]
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Weiter beobachten, bis das zuständige Objekt zwei stabile Stichproben zeigt.\",\"Prüfvermerk\":\"Zeitpunkte sind geordnet und für iOS-Screenshot-Tests geeignet.\",\"Verknüpfte Ereignisse\":[\"evt_finance_invoice_001\",\"thing_finance_ap_queue\"]}",
+        "location": {
+          "type": "Abteilung",
+          "value": "Zentrale Finanzserviceeinheit"
+        },
+        "external_ids": {
+          "Störungsticket": "INC-2026-0508-003"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "dd13088a-57ea-50e3-b375-f73a17877216",
+      "message_id": "msg_thing_agent_support_triage_sample",
+      "title": "KI-Agent für Support-Triage · Stichprobenvermerk aktualisiert",
+      "body": "# Objektaktualisierung für KI-Agent für Support-Triage\n> Die Objektprojektion wurde nach neuen Signalen aus mehreren Kanälen aktualisiert.\n\n## Momentaufnahme\n- Aktueller Zustand: stabil mit menschlicher Prüfung\n- Verknüpfte Ereignisse: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Überwachungskanal: KI-Agentenrückmeldungen\n\n## Attributänderungen\n- Vertrauen der Auto-Lösung stieg von 0,78 auf 0,86\n- Rückfallregel wechselte von sofortiger Übergabe zu Stichprobenprüfung\n\n## Nächster Schritt\n- Das Objekt bleibt im Screenshot-Fixture sichtbar, weil es Betrieb, Finanzen, Zuhause und Agentenszenarien in einer realistischen Zeitlinie verbindet.\n",
+      "channel_id": "ai-agent-feedback",
+      "is_read": true,
+      "received_at": "2026-05-08T01:12:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_agent_support_triage",
+        "thing_id": "thing_agent_support_triage",
+        "projection_destination": "thing_head",
+        "title": "KI-Agent für Support-Triage · Stichprobenvermerk aktualisiert",
+        "description": "KI-Agent für Support-Triage。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "stabil mit menschlicher Prüfung",
+        "message": "Stichprobenvermerk aktualisiert: Vertrauen der Auto-Lösung stieg von 0,78 auf 0,86; Rückfallregel wechselte von sofortiger Übergabe zu Stichprobenprüfung",
+        "severity": "low",
+        "tags": [
+          "KI-Agent",
+          "Ticket",
+          "Übergabe"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Momentaufnahme": "stabil mit menschlicher Prüfung",
+          "Attributänderungen": [
+            "Vertrauen der Auto-Lösung stieg von 0,78 auf 0,86",
+            "Rückfallregel wechselte von sofortiger Übergabe zu Stichprobenprüfung"
+          ],
+          "Verknüpfte Ereignisse": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Quelle": "KI-Agentenrückmeldungen"
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Objekt im Demo-Posteingang und in der Objektdetailansicht sichtbar halten.\",\"Prüfvermerk\":\"Objekt enthält lesbare Attributänderungen und verknüpfte Ereigniskennungen.\",\"Verknüpfte Ereignisse\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "Warteschlange",
+          "value": "Supportwarteschlange für Unternehmenskunden"
+        },
+        "external_ids": {
+          "Objektprojektion": "OBJ-THING_AGENT_SUPPORT_TRIAGE"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "66facfb2-63a5-5900-9242-ef0807626635",
+      "message_id": "msg_finance_invoice_detected",
+      "title": "Mögliche doppelte Lieferantenrechnung · Erkannt",
+      "body": "# Mögliche doppelte Lieferantenrechnung · Erkannt\n> zwei Rechnungen zur gleichen Bestellung kamen über unterschiedliche Freigabewege an\n\n## Was sich geändert hat\n- Eine geplante Zahlung über 18.420,00 CNY wurde vor der Bankeinreichung angehalten.\n- Der Dublettenwert erreichte 0,93, weil Betrag, Steuernummer und Lieferschein übereinstimmten.\n- Das Finanzteam kann die gültige Rechnung nach zweiter Freigabe weiter auslösen.\n\n## Bearbeitung\n1. Beide Rechnungsdatensätze gesperrt und den Lieferantenschein angehängt.\n2. Einkauf gebeten zu bestätigen, welche Rechnungsnummer aktiv bleiben soll.\n3. Liquiditätsprognose als vorläufig markieren, bis die Sperre gelöst ist.\n\n## Nächster Schritt\n- Verantwortlich: Finanzcontroller\n- Erwartete Zeit: nächstes stabiles Stichprobenfenster\n",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-08T00:58:00.000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "evt_finance_invoice_001",
+        "event_id": "evt_finance_invoice_001",
+        "thing_id": "thing_finance_ap_queue",
+        "projection_destination": "event_head",
+        "title": "Mögliche doppelte Lieferantenrechnung · Erkannt",
+        "description": "Mögliche doppelte Lieferantenrechnung。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "Erkannt",
+        "message": "Statusmeldung: Eine geplante Zahlung über 18.420,00 CNY wurde vor der Bankeinreichung angehalten.",
+        "severity": "high",
+        "tags": [
+          "Rechnung",
+          "Freigabe",
+          "Liquidität"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Was sich geändert hat": [
+            "Eine geplante Zahlung über 18.420,00 CNY wurde vor der Bankeinreichung angehalten.",
+            "Der Dublettenwert erreichte 0,93, weil Betrag, Steuernummer und Lieferschein übereinstimmten."
+          ],
+          "Verantwortlich": "Finanzcontroller",
+          "Erwartete Zeit": "nächstes stabiles Stichprobenfenster",
+          "Verknüpfte Ereignisse": [
+            "evt_finance_invoice_001",
+            "thing_finance_ap_queue"
+          ]
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Weiter beobachten, bis das zuständige Objekt zwei stabile Stichproben zeigt.\",\"Prüfvermerk\":\"Zeitpunkte sind geordnet und für iOS-Screenshot-Tests geeignet.\",\"Verknüpfte Ereignisse\":[\"evt_finance_invoice_001\",\"thing_finance_ap_queue\"]}",
+        "location": {
+          "type": "Abteilung",
+          "value": "Zentrale Finanzserviceeinheit"
+        },
+        "external_ids": {
+          "Störungsticket": "INC-2026-0508-003"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "27bd6978-e4e3-5047-bdb2-1620b5b71052",
+      "message_id": "msg_thing_event_auth_gateway_baseline",
+      "title": "Risikogateway für Kundenanmeldung · Basisvergleich aktualisiert",
+      "body": "# Objektaktualisierung für Risikogateway für Kundenanmeldung\n> Die Objektprojektion wurde nach neuen Signalen aus mehreren Kanälen aktualisiert.\n\n## Momentaufnahme\n- Aktueller Zustand: begrenzt mit sauberem Verkehrstrend\n- Verknüpfte Ereignisse: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Überwachungskanal: Ereignisüberwachung\n\n## Attributänderungen\n- Rate fehlgeschlagener Anmeldungen sank von 11,8% auf 2,4%\n- vorübergehende Prüfschwelle wechselte von mittel zu streng\n\n## Nächster Schritt\n- Das Objekt bleibt im Screenshot-Fixture sichtbar, weil es Betrieb, Finanzen, Zuhause und Agentenszenarien in einer realistischen Zeitlinie verbindet.\n",
+      "channel_id": "event-monitoring",
+      "is_read": true,
+      "received_at": "2026-05-08T00:52:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_event_auth_gateway",
+        "thing_id": "thing_event_auth_gateway",
+        "projection_destination": "thing_head",
+        "title": "Risikogateway für Kundenanmeldung · Basisvergleich aktualisiert",
+        "description": "Risikogateway für Kundenanmeldung。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "begrenzt mit sauberem Verkehrstrend",
+        "message": "Basisvergleich aktualisiert: Rate fehlgeschlagener Anmeldungen sank von 11,8% auf 2,4%; vorübergehende Prüfschwelle wechselte von mittel zu streng",
+        "severity": "low",
+        "tags": [
+          "Anmeldung",
+          "Risikosteuerung",
+          "Kundenvertrauen"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Momentaufnahme": "begrenzt mit sauberem Verkehrstrend",
+          "Attributänderungen": [
+            "Rate fehlgeschlagener Anmeldungen sank von 11,8% auf 2,4%",
+            "vorübergehende Prüfschwelle wechselte von mittel zu streng"
+          ],
+          "Verknüpfte Ereignisse": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Quelle": "Ereignisüberwachung"
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Objekt im Demo-Posteingang und in der Objektdetailansicht sichtbar halten.\",\"Prüfvermerk\":\"Objekt enthält lesbare Attributänderungen und verknüpfte Ereigniskennungen.\",\"Verknüpfte Ereignisse\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "Dienst",
+          "value": "Kunden-Kontocenter"
+        },
+        "external_ids": {
+          "Objektprojektion": "OBJ-THING_EVENT_AUTH_GATEWAY"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "d6512bdf-b702-54ca-bd63-7d556c39a608",
+      "message_id": "msg_thing_ops_cluster_sh1_maintenance",
+      "title": "Zahlungscluster Shanghai · Wartungsvermerk ergänzt",
+      "body": "# Objektaktualisierung für Zahlungscluster Shanghai\n> Die Objektprojektion wurde nach neuen Signalen aus mehreren Kanälen aktualisiert.\n\n## Momentaufnahme\n- Aktueller Zustand: stabil mit erhöhter Beobachtung\n- Verknüpfte Ereignisse: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Überwachungskanal: Betriebskern\n\n## Attributänderungen\n- P95-API-Latenz sank von 420 ms auf 238 ms\n- Rückstand des Lesereplikats sank von 18 s auf 3 s\n\n## Nächster Schritt\n- Das Objekt bleibt im Screenshot-Fixture sichtbar, weil es Betrieb, Finanzen, Zuhause und Agentenszenarien in einer realistischen Zeitlinie verbindet.\n",
+      "channel_id": "ops-core",
+      "is_read": true,
+      "received_at": "2026-05-07T23:48:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_ops_cluster_sh1",
+        "thing_id": "thing_ops_cluster_sh1",
+        "projection_destination": "thing_head",
+        "title": "Zahlungscluster Shanghai · Wartungsvermerk ergänzt",
+        "description": "Zahlungscluster Shanghai。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "stabil mit erhöhter Beobachtung",
+        "message": "Wartungsvermerk ergänzt: P95-API-Latenz sank von 420 ms auf 238 ms; Rückstand des Lesereplikats sank von 18 s auf 3 s",
+        "severity": "low",
+        "tags": [
+          "Datenbank",
+          "Latenz",
+          "Lesereplikat"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Momentaufnahme": "stabil mit erhöhter Beobachtung",
+          "Attributänderungen": [
+            "P95-API-Latenz sank von 420 ms auf 238 ms",
+            "Rückstand des Lesereplikats sank von 18 s auf 3 s"
+          ],
+          "Verknüpfte Ereignisse": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Quelle": "Betriebskern"
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Objekt im Demo-Posteingang und in der Objektdetailansicht sichtbar halten.\",\"Prüfvermerk\":\"Objekt enthält lesbare Attributänderungen und verknüpfte Ereigniskennungen.\",\"Verknüpfte Ereignisse\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "Region",
+          "value": "Region Shanghai"
+        },
+        "external_ids": {
+          "Objektprojektion": "OBJ-THING_OPS_CLUSTER_SH1"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "f9b8c81a-6d73-5703-a837-77b5495879d5",
+      "message_id": "msg_thing_finance_ap_queue_cutoff",
+      "title": "Prüfwarteschlange für Kreditoren · Zahlungsschluss-Vermerk aktualisiert",
+      "body": "# Objektaktualisierung für Prüfwarteschlange für Kreditoren\n> Die Objektprojektion wurde nach neuen Signalen aus mehreren Kanälen aktualisiert.\n\n## Momentaufnahme\n- Aktueller Zustand: ausgeglichen und für Dublettenprüfung gesperrt\n- Verknüpfte Ereignisse: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Überwachungskanal: Finanzbuch\n\n## Attributänderungen\n- Dublettenwert der Rechnung stieg von 0,41 auf 0,93\n- Freigaberegel wechselte von Einzelprüfung zu Doppelprüfung\n\n## Nächster Schritt\n- Das Objekt bleibt im Screenshot-Fixture sichtbar, weil es Betrieb, Finanzen, Zuhause und Agentenszenarien in einer realistischen Zeitlinie verbindet.\n",
+      "channel_id": "finance-ledger",
+      "is_read": true,
+      "received_at": "2026-05-07T23:32:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_finance_ap_queue",
+        "thing_id": "thing_finance_ap_queue",
+        "projection_destination": "thing_head",
+        "title": "Prüfwarteschlange für Kreditoren · Zahlungsschluss-Vermerk aktualisiert",
+        "description": "Prüfwarteschlange für Kreditoren。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "ausgeglichen und für Dublettenprüfung gesperrt",
+        "message": "Zahlungsschluss-Vermerk aktualisiert: Dublettenwert der Rechnung stieg von 0,41 auf 0,93; Freigaberegel wechselte von Einzelprüfung zu Doppelprüfung",
+        "severity": "low",
+        "tags": [
+          "Rechnung",
+          "Freigabe",
+          "Liquidität"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Momentaufnahme": "ausgeglichen und für Dublettenprüfung gesperrt",
+          "Attributänderungen": [
+            "Dublettenwert der Rechnung stieg von 0,41 auf 0,93",
+            "Freigaberegel wechselte von Einzelprüfung zu Doppelprüfung"
+          ],
+          "Verknüpfte Ereignisse": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Quelle": "Finanzbuch"
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Objekt im Demo-Posteingang und in der Objektdetailansicht sichtbar halten.\",\"Prüfvermerk\":\"Objekt enthält lesbare Attributänderungen und verknüpfte Ereigniskennungen.\",\"Verknüpfte Ereignisse\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "Abteilung",
+          "value": "Zentrale Finanzserviceeinheit"
+        },
+        "external_ids": {
+          "Objektprojektion": "OBJ-THING_FINANCE_AP_QUEUE"
+        }
+      },
+      "status": "normal"
+    },
+    {
+      "id": "14b0a783-e6ea-5754-914a-066f2e941a9a",
+      "message_id": "msg_thing_home_valve_kitchen_battery",
+      "title": "Wasserabsperrventil Küche · Batterie- und Sensorvermerk aktualisiert",
+      "body": "# Objektaktualisierung für Wasserabsperrventil Küche\n> Die Objektprojektion wurde nach neuen Signalen aus mehreren Kanälen aktualisiert.\n\n## Momentaufnahme\n- Aktueller Zustand: nach Leckschutz geschlossen\n- Verknüpfte Ereignisse: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Überwachungskanal: Hausautomatisierung\n\n## Attributänderungen\n- Feuchtigkeit am Bodensensor sank von 72% auf 38%\n- Ventilsteuerung wechselte von automatisch zu überwacht\n\n## Nächster Schritt\n- Das Objekt bleibt im Screenshot-Fixture sichtbar, weil es Betrieb, Finanzen, Zuhause und Agentenszenarien in einer realistischen Zeitlinie verbindet.\n",
+      "channel_id": "home-automation",
+      "is_read": true,
+      "received_at": "2026-05-07T23:18:00.000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "thing_home_valve_kitchen",
+        "thing_id": "thing_home_valve_kitchen",
+        "projection_destination": "thing_head",
+        "title": "Wasserabsperrventil Küche · Batterie- und Sensorvermerk aktualisiert",
+        "description": "Wasserabsperrventil Küche。Dieser Datensatz ist für Screenshot-Fixtures erzeugt, folgt aber einer realistischen Produktionszeitlinie.",
+        "status": "nach Leckschutz geschlossen",
+        "message": "Batterie- und Sensorvermerk aktualisiert: Feuchtigkeit am Bodensensor sank von 72% auf 38%; Ventilsteuerung wechselte von automatisch zu überwacht",
+        "severity": "low",
+        "tags": [
+          "Wassersensor",
+          "Küche",
+          "Ventil"
+        ],
+        "images": [
+          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
+        ],
+        "attrs": {
+          "Momentaufnahme": "nach Leckschutz geschlossen",
+          "Attributänderungen": [
+            "Feuchtigkeit am Bodensensor sank von 72% auf 38%",
+            "Ventilsteuerung wechselte von automatisch zu überwacht"
+          ],
+          "Verknüpfte Ereignisse": [
+            "evt_ops_latency_001",
+            "evt_home_leak_001",
+            "evt_finance_invoice_001",
+            "evt_monitoring_login_001",
+            "evt_agent_ticket_001"
+          ],
+          "Quelle": "Hausautomatisierung"
+        },
+        "metadata": "{\"Quelle\":\"PushGo-Fixture-Erzeugung\",\"Projektionsversion\":\"2026.05.08-1\",\"Empfohlene Maßnahme\":\"Objekt im Demo-Posteingang und in der Objektdetailansicht sichtbar halten.\",\"Prüfvermerk\":\"Objekt enthält lesbare Attributänderungen und verknüpfte Ereigniskennungen.\",\"Verknüpfte Ereignisse\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
+        "location": {
+          "type": "Raum",
+          "value": "Spülenschrank in der Küche"
+        },
+        "external_ids": {
+          "Objektprojektion": "OBJ-THING_HOME_VALVE_KITCHEN"
+        }
+      },
+      "status": "normal"
+    }
+  ],
+  "channel_subscriptions": [
+    {
+      "channel_id": "ops-core",
+      "display_name": "Betriebskern",
+      "password": "fixture-ops-core-2026",
+      "last_synced_at": "2026-05-08T04:25:00.000Z",
+      "updated_at": "2026-05-08T03:10:00.000Z"
+    },
+    {
+      "channel_id": "home-automation",
+      "display_name": "Hausautomatisierung",
+      "password": "fixture-home-automation-2026",
+      "last_synced_at": "2026-05-08T04:26:00.000Z",
+      "updated_at": "2026-05-08T03:11:00.000Z"
+    },
+    {
+      "channel_id": "finance-ledger",
+      "display_name": "Finanzbuch",
+      "password": "fixture-finance-ledger-2026",
+      "last_synced_at": "2026-05-08T04:27:00.000Z",
+      "updated_at": "2026-05-08T03:12:00.000Z"
+    },
+    {
+      "channel_id": "event-monitoring",
+      "display_name": "Ereignisüberwachung",
+      "password": "fixture-event-monitoring-2026",
+      "last_synced_at": "2026-05-08T04:28:00.000Z",
+      "updated_at": "2026-05-08T03:13:00.000Z"
+    },
+    {
+      "channel_id": "ai-agent-feedback",
+      "display_name": "KI-Agentenrückmeldungen",
+      "password": "fixture-ai-agent-feedback-2026",
+      "last_synced_at": "2026-05-08T04:29:00.000Z",
+      "updated_at": "2026-05-08T03:14:00.000Z"
+    },
+    {
+      "channel_id": "executive-brief",
+      "display_name": "Leitungsbriefing",
+      "password": "fixture-executive-brief-2026",
+      "last_synced_at": "2026-05-08T04:30:00.000Z",
+      "updated_at": "2026-05-08T03:15:00.000Z"
+    },
+    {
+      "channel_id": "incident-command",
+      "display_name": "Störungsleitung",
+      "password": "fixture-incident-command-2026",
+      "last_synced_at": "2026-05-08T04:31:00.000Z",
+      "updated_at": "2026-05-08T03:16:00.000Z"
+    },
+    {
+      "channel_id": "customer-trust",
+      "display_name": "Kundenvertrauen",
+      "password": "fixture-customer-trust-2026",
+      "last_synced_at": "2026-05-08T04:32:00.000Z",
+      "updated_at": "2026-05-08T03:17:00.000Z"
+    }
+  ]
+}
