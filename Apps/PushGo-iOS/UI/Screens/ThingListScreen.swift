@@ -18,6 +18,8 @@ struct ThingListScreen: View {
     @State private var selectedThingIds: Set<String> = []
     @State private var searchQuery: String = ""
     @State private var selectedChannelId: String?
+    @State private var selectedTag: String?
+    @State private var isFilterPopoverPresented = false
     @State private var isBatchModeActive = false
 
     var body: some View {
@@ -226,12 +228,29 @@ struct ThingListScreen: View {
         ).sorted()
     }
 
+    private var availableTags: [String] {
+        var tags = Set<String>()
+        for thing in viewModel.things {
+            for tag in thing.tags {
+                let normalized = normalizedTag(tag)
+                if !normalized.isEmpty {
+                    tags.insert(normalized)
+                }
+            }
+        }
+        return tags.sorted()
+    }
+
     private var filteredThings: [ThingProjection] {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let matched = viewModel.things.filter { thing in
             guard !isPendingLocalDeletion(thing) else { return false }
             let channelMatched = selectedChannelId == nil || normalizedChannel(thing.channelId) == selectedChannelId
             guard channelMatched else { return false }
+            if let selectedTag {
+                let hasTag = thing.tags.contains { normalizedTag($0) == selectedTag }
+                guard hasTag else { return false }
+            }
             guard !query.isEmpty else { return true }
             return searchableText(for: thing).contains(query)
         }
@@ -246,7 +265,7 @@ struct ThingListScreen: View {
     }
 
     private func searchAutoloadTrigger(filteredThingsCount: Int) -> String {
-        "\(normalizedSearchQuery)|\(selectedChannelId ?? "_")|\(viewModel.things.count)|\(filteredThingsCount)|\(viewModel.hasMoreThings)|\(viewModel.isLoadingMoreThings)"
+        "\(normalizedSearchQuery)|\(selectedChannelId ?? "_")|\(selectedTag ?? "_")|\(viewModel.things.count)|\(filteredThingsCount)|\(viewModel.hasMoreThings)|\(viewModel.isLoadingMoreThings)"
     }
 
     private var normalizedSearchQuery: String {
@@ -256,6 +275,7 @@ struct ThingListScreen: View {
     private func shouldAutoloadSearchResults(filteredThingsCount: Int) -> Bool {
         let hasActiveFilter = !normalizedSearchQuery.isEmpty
             || selectedChannelId != nil
+            || selectedTag != nil
         return hasActiveFilter
             && filteredThingsCount == 0
             && viewModel.hasMoreThings
@@ -315,22 +335,39 @@ struct ThingListScreen: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            Button {
-                isBatchModeActive.toggle()
-            } label: {
-                Image(systemName: isBatchMode ? "checkmark" : "checklist.unchecked")
+        if isBatchMode {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    toggleSelectAllThings()
+                } label: {
+                    Image(systemName: areAllVisibleThingsSelected ? "checkmark.rectangle.stack.fill" : "checkmark.rectangle.stack")
+                }
+                .accessibilityLabel(localizationManager.localized("all"))
             }
-            .accessibilityLabel(isBatchMode ? localizationManager.localized("done") : localizationManager.localized("edit"))
         }
         ToolbarItemGroup(placement: .primaryAction) {
-            if !isBatchMode {
-                Menu {
-                    channelFilterMenuContent
+            if isBatchMode {
+                Button {
+                    Task { await exitBatchModeAfterFlushingPendingDeletion() }
                 } label: {
-                    Image(systemName: selectedChannelId == nil ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
+                    batchDoneToolbarIcon()
+                }
+                .accessibilityLabel(localizationManager.localized("done"))
+            } else {
+                Button {
+                    isFilterPopoverPresented = true
+                } label: {
+                    filterToolbarIcon(isHighlighted: isFilterMenuHighlighted)
                 }
                 .accessibilityLabel(localizationManager.localized("channel"))
+                .popover(isPresented: $isFilterPopoverPresented, arrowEdge: .top) {
+                    if #available(iOS 16.4, *) {
+                        filterPopoverContent
+                            .presentationCompactAdaptation(.popover)
+                    } else {
+                        filterPopoverContent
+                    }
+                }
             }
         }
         if isBatchMode {
@@ -363,6 +400,10 @@ struct ThingListScreen: View {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    private func normalizedTag(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
     private func openThingIfNeeded() {
         guard !isBatchMode else { return }
         let target = openThingId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -370,6 +411,9 @@ struct ThingListScreen: View {
         if let matched = viewModel.things.first(where: { $0.id == target }) {
             if let channelId = normalizedChannel(matched.channelId) {
                 selectedChannelId = channelId
+            }
+            if selectedTag != nil {
+                selectedTag = nil
             }
             if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 searchQuery = ""
@@ -384,6 +428,9 @@ struct ThingListScreen: View {
             guard let hydrated = viewModel.things.first(where: { $0.id == target }) else { return }
             if let channelId = normalizedChannel(hydrated.channelId) {
                 selectedChannelId = channelId
+            }
+            if selectedTag != nil {
+                selectedTag = nil
             }
             if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 searchQuery = ""
@@ -400,6 +447,12 @@ struct ThingListScreen: View {
             await viewModel.ensureThingDetailsLoaded(thingId: thing.id)
             syncSelectedThingSnapshot()
         }
+    }
+
+    @MainActor
+    private func exitBatchModeAfterFlushingPendingDeletion() async {
+        await environment.pendingLocalDeletionController.commitCurrentIfNeeded()
+        isBatchModeActive = false
     }
 
     private func syncSelectedThingSnapshot() {
@@ -448,9 +501,7 @@ struct ThingListScreen: View {
             undoLabel: localizationManager.localized("cancel"),
             scope: scope
         ) {
-            for thing in uniqueThings {
-                try await viewModel.deleteThing(thingId: thing.id)
-            }
+            _ = try await viewModel.deleteThings(thingIds: uniqueThings.map(\.id))
         } onCompletion: { [environment] result in
             guard case let .failure(error) = result else { return }
             environment.showErrorToast(
@@ -464,40 +515,239 @@ struct ThingListScreen: View {
             self.selectedThing = nil
         }
         selectedThingIds.subtract(scope.thingIDs)
-        if uniqueThings.count > 1 {
-            isBatchModeActive = false
-        }
     }
 
     @ViewBuilder
     private var channelFilterMenuContent: some View {
-        Button {
-            selectedChannelId = nil
-        } label: {
-            channelFilterMenuItemLabel(
-                title: localizationManager.localized("all_groups"),
-                isSelected: selectedChannelId == nil
-            )
-        }
+        EmptyView()
+    }
 
-        ForEach(availableChannelIds, id: \.self) { channelId in
+    private var isFilterMenuHighlighted: Bool {
+        selectedChannelId != nil || selectedTag != nil
+    }
+
+    private func batchDoneToolbarIcon() -> some View {
+        Image(systemName: "checkmark")
+            .font(.footnote.weight(.bold))
+            .foregroundStyle(
+                .appAccentPrimary
+            )
+    }
+
+    private func filterToolbarIcon(isHighlighted: Bool) -> some View {
+        Image(systemName: "line.3.horizontal.decrease")
+            .font(.body.weight(.semibold))
+            .foregroundStyle(isHighlighted ? .accentColor : Color.primary)
+    }
+
+    private var filterPopoverContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
             Button {
-                selectedChannelId = channelId
+                isBatchModeActive.toggle()
+                isFilterPopoverPresented = false
             } label: {
-                channelFilterMenuItemLabel(
-                    title: environment.channelDisplayName(for: channelId) ?? channelId,
-                    isSelected: selectedChannelId == channelId
+                filterMenuSelectionRow(
+                    title: "选择",
+                    systemImage: "checklist",
+                    isSelected: isBatchModeActive
                 )
             }
+            .buttonStyle(.plain)
+            .padding(.vertical, 2)
+
+            if !availableChannelIds.isEmpty {
+                Rectangle()
+                    .fill(Color.appDividerSubtle.opacity(0.9))
+                    .frame(height: 0.5)
+                    .padding(.vertical, 2)
+
+                Text("Channels")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                ThingFilterChipFlowLayout(horizontalSpacing: 8, verticalSpacing: 8) {
+                    filterCloudChip(
+                        title: localizationManager.localized("all_groups"),
+                        isSelected: selectedChannelId == nil
+                    ) {
+                        selectedChannelId = nil
+                    }
+                    ForEach(availableChannelIds, id: \.self) { channelId in
+                        filterCloudChip(
+                            title: environment.channelDisplayName(for: channelId) ?? channelId,
+                            isSelected: selectedChannelId == channelId
+                        ) {
+                            selectedChannelId = channelId
+                        }
+                    }
+                }
+            }
+
+            if !availableTags.isEmpty {
+                Rectangle()
+                    .fill(Color.appDividerSubtle.opacity(0.9))
+                    .frame(height: 0.5)
+                    .padding(.vertical, 2)
+
+                Text("Tags")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                ThingFilterChipFlowLayout(horizontalSpacing: 8, verticalSpacing: 8) {
+                    ForEach(availableTags, id: \.self) { tag in
+                        tagCloudChip(tag: tag)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .frame(width: 316, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func tagCloudChip(tag: String) -> some View {
+        let isSelected = selectedTag == tag
+        return filterCloudChip(title: tag, isSelected: isSelected) {
+            selectedTag = isSelected ? nil : tag
         }
     }
 
-    private func channelFilterMenuItemLabel(title: String, isSelected: Bool) -> some View {
+    private func filterCloudChip(title: String, isSelected: Bool, onTap: @escaping () -> Void) -> some View {
+        Button {
+            onTap()
+            isFilterPopoverPresented = false
+        } label: {
+            Text(title)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            .font(.caption.weight(.medium))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .frame(minWidth: 60, maxWidth: 208, alignment: .leading)
+            .foregroundStyle(isSelected ? Color.appAccentPrimary : Color.appTextPrimary)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(isSelected ? Color.appAccentPrimary.opacity(0.16) : Color.appSurfaceRaised)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(
+                        isSelected ? Color.appAccentPrimary.opacity(0.45) : Color.appBorderSubtle.opacity(0.95),
+                        lineWidth: 0.8
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func filterMenuSelectionRow(title: String, systemImage: String, isSelected: Bool) -> some View {
         HStack(spacing: 8) {
             if isSelected {
                 Image(systemName: "checkmark")
+                    .font(.footnote.weight(.semibold))
+            } else {
+                Image(systemName: "checkmark")
+                    .font(.footnote.weight(.semibold))
+                    .hidden()
             }
+            Image(systemName: systemImage)
+                .font(.footnote.weight(.medium))
             Text(title)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .font(.body.weight(.semibold))
+        .foregroundStyle(Color.appTextPrimary)
+        .padding(.vertical, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var allVisibleThingIDs: Set<String> {
+        Set(filteredThings.map(\.id))
+    }
+
+    private var areAllVisibleThingsSelected: Bool {
+        let visibleIDs = allVisibleThingIDs
+        return !visibleIDs.isEmpty && selectedThingIds == visibleIDs
+    }
+
+    private func toggleSelectAllThings() {
+        let visibleIDs = allVisibleThingIDs
+        guard !visibleIDs.isEmpty else { return }
+        selectedThingIds = areAllVisibleThingsSelected ? [] : visibleIDs
+    }
+}
+
+private struct ThingFilterChipFlowLayout: Layout {
+    let horizontalSpacing: CGFloat
+    let verticalSpacing: CGFloat
+
+    init(horizontalSpacing: CGFloat = 8, verticalSpacing: CGFloat = 8) {
+        self.horizontalSpacing = horizontalSpacing
+        self.verticalSpacing = verticalSpacing
+    }
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var cursorX: CGFloat = 0
+        var cursorY: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var usedWidth: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if cursorX > 0, cursorX + size.width > maxWidth {
+                usedWidth = max(usedWidth, cursorX - horizontalSpacing)
+                cursorX = 0
+                cursorY += rowHeight + verticalSpacing
+                rowHeight = 0
+            }
+
+            cursorX += size.width + horizontalSpacing
+            rowHeight = max(rowHeight, size.height)
+        }
+
+        usedWidth = max(usedWidth, cursorX > 0 ? cursorX - horizontalSpacing : 0)
+        let totalHeight = subviews.isEmpty ? 0 : (cursorY + rowHeight)
+        let resolvedWidth = proposal.width == nil ? usedWidth : min(maxWidth, usedWidth)
+        return CGSize(width: resolvedWidth, height: totalHeight)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        var cursorX = bounds.minX
+        var cursorY = bounds.minY
+        var rowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if cursorX > bounds.minX, cursorX + size.width > bounds.maxX {
+                cursorX = bounds.minX
+                cursorY += rowHeight + verticalSpacing
+                rowHeight = 0
+            }
+
+            let center = CGPoint(
+                x: cursorX + (size.width / 2),
+                y: cursorY + (size.height / 2)
+            )
+            subview.place(
+                at: center,
+                anchor: .center,
+                proposal: ProposedViewSize(width: size.width, height: size.height)
+            )
+
+            cursorX += size.width + horizontalSpacing
+            rowHeight = max(rowHeight, size.height)
         }
     }
 }

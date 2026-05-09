@@ -113,6 +113,7 @@ struct ChannelManagementScreen: View {
         }
         .background(Color.appWindowBackground)
         .navigationTitle(localizationManager.localized("channels"))
+        .navigationBarTitleDisplayMode(.large)
         .accessibilityIdentifier("screen.channels")
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {

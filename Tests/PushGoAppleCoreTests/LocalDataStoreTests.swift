@@ -1694,6 +1694,145 @@ struct LocalDataStoreTests {
     }
 
     @Test
+    func batchDeleteEventRecordsByIdsRemovesOnlyTargetEvents() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let targetTopLevelEventId = "evt-batch-delete-target-top-001"
+            let targetThingScopedEventId = "evt-batch-delete-target-thing-001"
+            let keepEventId = "evt-batch-delete-keep-001"
+            let channel = "batch-delete-events"
+
+            let thingParent = makeMessage(
+                messageId: "thing-batch-delete-parent-001",
+                notificationRequestId: "req-thing-batch-delete-parent-001",
+                title: "Thing parent",
+                body: "Thing parent body",
+                rawPayload: [
+                    "entity_type": "thing",
+                    "entity_id": "thing-batch-delete-parent-001",
+                    "thing_id": "thing-batch-delete-parent-001",
+                    "projection_destination": "thing_head",
+                    "channel_id": channel,
+                ]
+            )
+            let targetTopLevelEvent = makeMessage(
+                messageId: targetTopLevelEventId,
+                notificationRequestId: "req-\(targetTopLevelEventId)",
+                title: "Target top-level event",
+                body: "Target top-level event body",
+                rawPayload: [
+                    "entity_type": "event",
+                    "entity_id": targetTopLevelEventId,
+                    "event_id": targetTopLevelEventId,
+                    "projection_destination": "event_head",
+                    "channel_id": channel,
+                ]
+            )
+            let targetThingScopedEvent = makeMessage(
+                messageId: targetThingScopedEventId,
+                notificationRequestId: "req-\(targetThingScopedEventId)",
+                title: "Target thing-scoped event",
+                body: "Target thing-scoped event body",
+                rawPayload: [
+                    "entity_type": "event",
+                    "entity_id": targetThingScopedEventId,
+                    "event_id": targetThingScopedEventId,
+                    "thing_id": "thing-batch-delete-parent-001",
+                    "projection_destination": "thing_sub_event",
+                    "channel_id": channel,
+                ]
+            )
+            let keepEvent = makeMessage(
+                messageId: keepEventId,
+                notificationRequestId: "req-\(keepEventId)",
+                title: "Keep event",
+                body: "Keep event body",
+                rawPayload: [
+                    "entity_type": "event",
+                    "entity_id": keepEventId,
+                    "event_id": keepEventId,
+                    "projection_destination": "event_head",
+                    "channel_id": channel,
+                ]
+            )
+
+            try await store.saveEntityRecords([thingParent, targetTopLevelEvent, targetThingScopedEvent, keepEvent])
+
+            let deleted = try await store.deleteEventRecords(
+                eventIds: [targetTopLevelEventId, targetThingScopedEventId, targetTopLevelEventId]
+            )
+            #expect(deleted == 2)
+
+            let remainingEvents = try await store.loadEventMessagesForProjection().map(\.eventId)
+            let remainingThingEvents = try await store.loadThingMessagesForProjection().map(\.eventId)
+
+            #expect(remainingEvents.contains(targetTopLevelEventId) == false)
+            #expect(remainingThingEvents.contains(targetThingScopedEventId) == false)
+            #expect(remainingEvents.contains(keepEventId) == true)
+        }
+    }
+
+    @Test
+    func batchDeleteThingRecordsByIdsRemovesOnlyTargetThings() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let targetThingId = "thing-batch-delete-target-001"
+            let keepThingId = "thing-batch-delete-keep-001"
+            let channel = "batch-delete-things"
+
+            let targetThing = makeMessage(
+                messageId: targetThingId,
+                notificationRequestId: "req-\(targetThingId)",
+                title: "Target thing",
+                body: "Target thing body",
+                rawPayload: [
+                    "entity_type": "thing",
+                    "entity_id": targetThingId,
+                    "thing_id": targetThingId,
+                    "projection_destination": "thing_head",
+                    "channel_id": channel,
+                ]
+            )
+            let targetThingEvent = makeMessage(
+                messageId: "evt-\(targetThingId)",
+                notificationRequestId: "req-evt-\(targetThingId)",
+                title: "Target thing event",
+                body: "Target thing event body",
+                rawPayload: [
+                    "entity_type": "event",
+                    "entity_id": "evt-\(targetThingId)",
+                    "event_id": "evt-\(targetThingId)",
+                    "thing_id": targetThingId,
+                    "projection_destination": "thing_sub_event",
+                    "channel_id": channel,
+                ]
+            )
+            let keepThing = makeMessage(
+                messageId: keepThingId,
+                notificationRequestId: "req-\(keepThingId)",
+                title: "Keep thing",
+                body: "Keep thing body",
+                rawPayload: [
+                    "entity_type": "thing",
+                    "entity_id": keepThingId,
+                    "thing_id": keepThingId,
+                    "projection_destination": "thing_head",
+                    "channel_id": channel,
+                ]
+            )
+
+            try await store.saveEntityRecords([targetThing, targetThingEvent, keepThing])
+
+            let deleted = try await store.deleteThingRecords(
+                thingIds: [targetThingId, targetThingId]
+            )
+            #expect(deleted == 2)
+
+            let remainingThings = try await store.loadThingMessagesForProjection().map(\.thingId)
+            #expect(remainingThings.contains(targetThingId) == false)
+            #expect(remainingThings.contains(keepThingId) == true)
+        }
+    }
+
+    @Test
     func notificationContextSnapshotRebuildsAfterDeleteMessageById() async throws {
         try await withIsolatedLocalDataStore { store, appGroupIdentifier in
             let eventId = "evt-snapshot-delete-id-001"

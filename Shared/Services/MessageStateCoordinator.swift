@@ -26,6 +26,19 @@ final class MessageStateCoordinator {
         return message
     }
 
+    func markRead(messageIds: [UUID]) async throws -> Int {
+        let uniqueIds = Array(Set(messageIds))
+        guard !uniqueIds.isEmpty else { return 0 }
+        let candidates = try await dataStore.loadMessages(ids: uniqueIds)
+        let unread = candidates.filter { !$0.isRead }
+        guard !unread.isEmpty else { return 0 }
+        let changed = try await dataStore.markMessagesRead(ids: unread.map(\.id))
+        guard changed > 0 else { return 0 }
+        removeDeliveredNotifications(identifiers: notificationRequestIds(from: unread))
+        await refreshCountsAndNotify()
+        return changed
+    }
+
     @discardableResult
     func markRead(notificationRequestId: String, messageId: String?) async throws -> PushMessage? {
         if let messageId, let message = try await dataStore.loadMessage(messageId: messageId) {
@@ -61,6 +74,19 @@ final class MessageStateCoordinator {
             await purgeImages(for: [message])
         }
         await refreshCountsAndNotify()
+    }
+
+    @discardableResult
+    func deleteMessages(messageIds: [UUID]) async throws -> Int {
+        let uniqueIds = Array(Set(messageIds))
+        guard !uniqueIds.isEmpty else { return 0 }
+        let candidates = try await dataStore.loadMessages(ids: uniqueIds)
+        let deleted = try await dataStore.deleteMessages(ids: uniqueIds)
+        guard deleted > 0 else { return 0 }
+        removeDeliveredNotifications(identifiers: notificationRequestIds(from: candidates))
+        await purgeImages(for: candidates)
+        await refreshCountsAndNotify()
+        return deleted
     }
 
     func deleteMessage(notificationRequestId: String, messageId: String?) async throws {

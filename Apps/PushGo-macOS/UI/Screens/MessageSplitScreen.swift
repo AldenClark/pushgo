@@ -16,6 +16,7 @@ struct MessageSplitScreen: View {
     @State private var isBatchMode: Bool = false
     @State private var batchSelection: Set<UUID> = []
     @State private var searchFieldText: String = ""
+    @State private var isFilterPopoverPresented = false
 
     private let fixedListWidth: CGFloat = 300
 
@@ -102,7 +103,7 @@ struct MessageSplitScreen: View {
                 placement: .toolbar,
                 prompt: Text(localizationManager.localized("search_messages"))
             )
-            .navigationTitle(localizationManager.localized("messages"))
+            .navigationTitle(isBatchMode ? "" : localizationManager.localized("messages"))
         }
         .pendingLocalDeletionBarHost(environment: environment)
         .toolbar { messageListToolbarContent }
@@ -299,7 +300,13 @@ struct MessageSplitScreen: View {
     }
 
     private var visibleFilteredMessages: [PushMessageSummary] {
-        messageListViewModel.filteredMessages.filter { !isPendingLocalDeletion($0.id, channelId: $0.channel) }
+        let baseMessages = messageListViewModel.filteredMessages.filter { !isPendingLocalDeletion($0.id, channelId: $0.channel) }
+        guard let selectedTag = messageListViewModel.selectedTag else {
+            return baseMessages
+        }
+        return baseMessages.filter { message in
+            message.tags.contains(where: { normalizedTag($0) == selectedTag })
+        }
     }
 
     private var visibleSearchResults: [PushMessageSummary] {
@@ -308,6 +315,35 @@ struct MessageSplitScreen: View {
 
     private func isPendingLocalDeletion(_ messageId: UUID, channelId: String?) -> Bool {
         environment.pendingLocalDeletionController.suppressesMessage(id: messageId, channelId: channelId)
+    }
+
+    private var displayedTagOptions: [String] {
+        var tags = Set<String>()
+        for message in messageListViewModel.filteredMessages {
+            for tag in message.tags {
+                let normalized = normalizedTag(tag)
+                if !normalized.isEmpty {
+                    tags.insert(normalized)
+                }
+            }
+        }
+        return tags.sorted()
+    }
+
+    private var displayedChannelSummaries: [MessageChannelSummary] {
+        let source = messageListViewModel.isUnreadOnlyFilterActive
+            ? messageListViewModel.channelSummaries.filter(\.hasUnread)
+            : messageListViewModel.channelSummaries
+        return source.sorted { lhs, rhs in
+            if lhs.totalCount != rhs.totalCount {
+                return lhs.totalCount > rhs.totalCount
+            }
+            return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+        }
+    }
+
+    private func normalizedTag(_ rawTag: String) -> String {
+        rawTag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     @MainActor
@@ -336,9 +372,9 @@ struct MessageSplitScreen: View {
             undoLabel: localizationManager.localized("cancel"),
             scope: scope
         ) { [environment] in
-            for message in uniqueMessages {
-                try await environment.messageStateCoordinator.deleteMessage(messageId: message.id)
-            }
+            _ = try await environment.messageStateCoordinator.deleteMessages(
+                messageIds: uniqueMessages.map(\.id)
+            )
         } onCompletion: { [environment] result in
             guard case let .failure(error) = result else { return }
             environment.showErrorToast(error, duration: 2.5)
@@ -351,9 +387,6 @@ struct MessageSplitScreen: View {
             self.selectedMessageSnapshot = nil
         }
         batchSelection.subtract(scope.messageIDs)
-        if uniqueMessages.count > 1 {
-            setBatchMode(false)
-        }
     }
 
     private var selectedBatchMessageSummaries: [PushMessageSummary] {
@@ -367,6 +400,24 @@ struct MessageSplitScreen: View {
         selectedBatchMessageSummaries.filter { !$0.isRead }
     }
 
+    private var allVisibleMessageIDs: Set<UUID> {
+        let source: [PushMessageSummary] = searchViewModel.hasSearched
+            ? visibleSearchResults
+            : visibleFilteredMessages
+        return Set(source.map(\.id))
+    }
+
+    private var areAllVisibleMessagesSelected: Bool {
+        let visibleIDs = allVisibleMessageIDs
+        return !visibleIDs.isEmpty && batchSelection == visibleIDs
+    }
+
+    private func toggleSelectAllVisibleMessages() {
+        let visibleIDs = allVisibleMessageIDs
+        guard !visibleIDs.isEmpty else { return }
+        batchSelection = areAllVisibleMessagesSelected ? [] : visibleIDs
+    }
+
     private func setBatchMode(_ enabled: Bool) {
         isBatchMode = enabled
         if enabled {
@@ -377,13 +428,17 @@ struct MessageSplitScreen: View {
         }
     }
 
+    @MainActor
+    private func exitBatchModeAfterFlushingPendingDeletion() async {
+        await environment.pendingLocalDeletionController.commitCurrentIfNeeded()
+        setBatchMode(false)
+    }
+
     private func markSelectedMessagesAsRead() {
         let unreadMessages = selectedBatchUnreadMessages
         guard !unreadMessages.isEmpty else { return }
         Task {
-            for message in unreadMessages {
-                await messageListViewModel.markRead(message, isRead: true)
-            }
+            await messageListViewModel.markRead(unreadMessages)
             await MainActor.run {
                 batchSelection.removeAll()
             }
@@ -392,15 +447,19 @@ struct MessageSplitScreen: View {
 
     @ToolbarContentBuilder
     private var messageListToolbarContent: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            Button {
-                setBatchMode(!isBatchMode)
-            } label: {
-                Image(systemName: isBatchMode ? "checkmark" : "checklist.unchecked")
+        if isBatchMode {
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    toggleSelectAllVisibleMessages()
+                } label: {
+                    Image(systemName: areAllVisibleMessagesSelected ? "checkmark.rectangle.stack.fill" : "checkmark.rectangle.stack")
+                }
+                .help(localizationManager.localized("all"))
+                .accessibilityLabel(localizationManager.localized("all"))
             }
-            .help(isBatchMode ? localizationManager.localized("done") : localizationManager.localized("edit"))
-            .accessibilityLabel(isBatchMode ? localizationManager.localized("done") : localizationManager.localized("edit"))
+        }
 
+        ToolbarItemGroup(placement: .primaryAction) {
             if isBatchMode {
                 Button {
                     markSelectedMessagesAsRead()
@@ -419,23 +478,25 @@ struct MessageSplitScreen: View {
                 .help(localizationManager.localized("delete"))
                 .accessibilityLabel(localizationManager.localized("delete"))
                 .disabled(batchSelection.isEmpty)
+                
+                Button {
+                    Task { await exitBatchModeAfterFlushingPendingDeletion() }
+                } label: {
+                    batchDoneToolbarIcon()
+                }
+                .help(localizationManager.localized("done"))
+                .accessibilityLabel(localizationManager.localized("done"))
             } else {
                 Button {
-                    messageListViewModel.toggleUnreadOnlyFilter()
+                    isFilterPopoverPresented = true
                 } label: {
-                    Image(systemName: messageListViewModel.isUnreadOnlyFilterActive ? "line.2.horizontal.decrease.circle.fill" : "line.2.horizontal.decrease.circle")
+                    filterToolbarIcon(isHighlighted: isFilterMenuHighlighted)
                 }
-                .help(localizationManager.localized("message_show_unread_only"))
-                .accessibilityLabel(localizationManager.localized("message_show_unread_only"))
-
-                Menu {
-                    channelFilterMenuContent
-                } label: {
-                    Image(systemName: isFilterMenuHighlighted ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease")
-                }
-                .menuIndicator(.hidden)
                 .help(localizationManager.localized("channel"))
                 .accessibilityLabel(localizationManager.localized("channel"))
+                .popover(isPresented: $isFilterPopoverPresented, arrowEdge: .top) {
+                    filterPopoverContent
+                }
             }
         }
     }
@@ -456,36 +517,154 @@ struct MessageSplitScreen: View {
         }
     }
 
-    @ViewBuilder
-    private var channelFilterMenuContent: some View {
-        Section {
-            ForEach(messageListViewModel.channelSummaries) { summary in
-                Button {
-                    messageListViewModel.toggleChannelSelection(summary.key)
-                } label: {
-                    channelFilterMenuItemLabel(
-                        title: resolvedChannelDisplayName(for: summary.key) ?? summary.title,
-                        isSelected: messageListViewModel.selectedChannel == summary.key
-                    )
+    private var filterPopoverContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Button {
+                setBatchMode(true)
+                isFilterPopoverPresented = false
+            } label: {
+                filterMenuSelectionRow(
+                    title: "选择",
+                    systemImage: "checklist",
+                    isSelected: isBatchMode
+                )
+            }
+            .buttonStyle(.plain)
+            .padding(.vertical, 2)
+
+            Button {
+                messageListViewModel.toggleUnreadOnlyFilter()
+                isFilterPopoverPresented = false
+            } label: {
+                filterMenuSelectionRow(
+                    title: localizationManager.localized("message_show_unread_only"),
+                    systemImage: "envelope.badge",
+                    isSelected: messageListViewModel.isUnreadOnlyFilterActive
+                )
+            }
+            .buttonStyle(.plain)
+            .padding(.vertical, 2)
+
+            if !displayedChannelSummaries.isEmpty {
+                Rectangle()
+                    .fill(Color.appDividerSubtle.opacity(0.9))
+                    .frame(height: 0.5)
+                    .padding(.vertical, 2)
+
+                Text("Channels")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                MessageSplitFilterChipFlowLayout(horizontalSpacing: 8, verticalSpacing: 8) {
+                    ForEach(displayedChannelSummaries) { summary in
+                        filterCloudChip(
+                            title: resolvedChannelDisplayName(for: summary.key) ?? summary.title,
+                            isSelected: messageListViewModel.selectedChannel == summary.key
+                        ) {
+                            messageListViewModel.toggleChannelSelection(summary.key)
+                        }
+                    }
+                }
+            }
+
+            if !displayedTagOptions.isEmpty {
+                Rectangle()
+                    .fill(Color.appDividerSubtle.opacity(0.9))
+                    .frame(height: 0.5)
+                    .padding(.vertical, 2)
+
+                Text("Tags")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                MessageSplitFilterChipFlowLayout(horizontalSpacing: 8, verticalSpacing: 8) {
+                    ForEach(displayedTagOptions, id: \.self) { tag in
+                        tagCloudChip(tag: tag)
+                    }
                 }
             }
         }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .frame(width: 316, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private var isFilterMenuHighlighted: Bool {
         messageListViewModel.selectedChannel != nil
+            || messageListViewModel.selectedTag != nil
+            || messageListViewModel.isUnreadOnlyFilterActive
     }
 
-    private func channelFilterMenuItemLabel(title: String, isSelected: Bool) -> some View {
+    private func tagCloudChip(tag: String) -> some View {
+        let isSelected = messageListViewModel.selectedTag == tag
+        return filterCloudChip(title: tag, isSelected: isSelected) {
+            messageListViewModel.toggleTagSelection(tag)
+        }
+    }
+
+    private func filterCloudChip(title: String, isSelected: Bool, onTap: @escaping () -> Void) -> some View {
+        Button {
+            onTap()
+            isFilterPopoverPresented = false
+        } label: {
+            Text(title)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .font(.caption.weight(.medium))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .frame(minWidth: 60, maxWidth: 208, alignment: .leading)
+                .foregroundStyle(isSelected ? Color.appAccentPrimary : Color.appTextPrimary)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(isSelected ? Color.appAccentPrimary.opacity(0.16) : Color.appSurfaceRaised)
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(
+                            isSelected ? Color.appAccentPrimary.opacity(0.45) : Color.appBorderSubtle.opacity(0.95),
+                            lineWidth: 0.8
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func filterMenuSelectionRow(title: String, systemImage: String, isSelected: Bool) -> some View {
         HStack(spacing: 8) {
             if isSelected {
                 Image(systemName: "checkmark")
+                    .font(.footnote.weight(.semibold))
             } else {
                 Image(systemName: "checkmark")
+                    .font(.footnote.weight(.semibold))
                     .hidden()
             }
+            Image(systemName: systemImage)
+                .font(.footnote.weight(.medium))
             Text(title)
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
+        .font(.body.weight(.semibold))
+        .foregroundStyle(Color.appTextPrimary)
+        .padding(.vertical, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func batchDoneToolbarIcon() -> some View {
+        Image(systemName: "checkmark")
+            .font(.footnote.weight(.bold))
+            .foregroundStyle(
+                .appAccentPrimary
+            )
+    }
+
+    private func filterToolbarIcon(isHighlighted: Bool) -> some View {
+        Image(systemName: "line.3.horizontal.decrease")
+            .font(.body.weight(.semibold))
+            .foregroundStyle(isHighlighted ? .accentColor : Color.primary)
     }
 
     private func resolvedChannelDisplayName(for channel: MessageChannelKey?) -> String? {
@@ -494,5 +673,78 @@ struct MessageSplitScreen: View {
             return localizationManager.localized("not_grouped")
         }
         return environment.channelDisplayName(for: channel.rawChannelValue) ?? channel.displayName
+    }
+}
+
+private struct MessageSplitFilterChipFlowLayout: Layout {
+    let horizontalSpacing: CGFloat
+    let verticalSpacing: CGFloat
+
+    init(horizontalSpacing: CGFloat = 8, verticalSpacing: CGFloat = 8) {
+        self.horizontalSpacing = horizontalSpacing
+        self.verticalSpacing = verticalSpacing
+    }
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var cursorX: CGFloat = 0
+        var cursorY: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var usedWidth: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if cursorX > 0, cursorX + size.width > maxWidth {
+                usedWidth = max(usedWidth, cursorX - horizontalSpacing)
+                cursorX = 0
+                cursorY += rowHeight + verticalSpacing
+                rowHeight = 0
+            }
+
+            cursorX += size.width + horizontalSpacing
+            rowHeight = max(rowHeight, size.height)
+        }
+
+        usedWidth = max(usedWidth, cursorX > 0 ? cursorX - horizontalSpacing : 0)
+        let totalHeight = subviews.isEmpty ? 0 : (cursorY + rowHeight)
+        let resolvedWidth = proposal.width == nil ? usedWidth : min(maxWidth, usedWidth)
+        return CGSize(width: resolvedWidth, height: totalHeight)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        var cursorX = bounds.minX
+        var cursorY = bounds.minY
+        var rowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if cursorX > bounds.minX, cursorX + size.width > bounds.maxX {
+                cursorX = bounds.minX
+                cursorY += rowHeight + verticalSpacing
+                rowHeight = 0
+            }
+
+            let center = CGPoint(
+                x: cursorX + (size.width / 2),
+                y: cursorY + (size.height / 2)
+            )
+            subview.place(
+                at: center,
+                anchor: .center,
+                proposal: ProposedViewSize(width: size.width, height: size.height)
+            )
+
+            cursorX += size.width + horizontalSpacing
+            rowHeight = max(rowHeight, size.height)
+        }
     }
 }

@@ -879,10 +879,7 @@ final class EntityProjectionViewModel {
     func deleteEvents(eventIds: [String]) async throws -> Int {
         let normalized = Array(Set(eventIds.compactMap(normalizedID)))
         guard !normalized.isEmpty else { return 0 }
-        var deleted = 0
-        for eventId in normalized {
-            deleted += try await dataStore.deleteEventRecords(eventId: eventId)
-        }
+        let deleted = try await dataStore.deleteEventRecords(eventIds: normalized)
         await reload()
         return deleted
     }
@@ -919,6 +916,14 @@ final class EntityProjectionViewModel {
         guard !normalized.isEmpty else { return }
         _ = try await dataStore.deleteThingRecords(thingId: normalized)
         await reload()
+    }
+
+    func deleteThings(thingIds: [String]) async throws -> Int {
+        let normalized = Array(Set(thingIds.compactMap(normalizedID)))
+        guard !normalized.isEmpty else { return 0 }
+        let deleted = try await dataStore.deleteThingRecords(thingIds: normalized)
+        await reload()
+        return deleted
     }
 
     func deleteThings(channelId: String?) async throws -> Int {

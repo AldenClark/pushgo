@@ -110,9 +110,6 @@ struct MessageListScreen: View {
             .onChange(of: viewModel.filteredMessagesIdentityRevision) { _, _ in
                 scrollToSelectionIfNeeded(proxy)
             }
-            .safeAreaInset(edge: .top, spacing: 0) {
-                unreadFilterRefreshHint
-            }
         }
     }
 
@@ -302,24 +299,4 @@ struct MessageListScreen: View {
         pendingScrollTarget = nil
     }
 
-    @ViewBuilder
-    private var unreadFilterRefreshHint: some View {
-        if !isShowingSearchResults, viewModel.shouldShowUnreadSessionRefreshHint {
-            Text(
-                localizationManager.localized(
-                    "message_unread_filter_refresh_hint_placeholder",
-                    viewModel.unreadSessionRetainedReadCount
-                )
-            )
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(.thinMaterial)
-            .overlay(alignment: .bottom) {
-                Divider()
-            }
-        }
-    }
 }

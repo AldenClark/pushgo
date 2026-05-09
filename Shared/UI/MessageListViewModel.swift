@@ -70,6 +70,7 @@ final class MessageListViewModel {
     private(set) var sortMode: MessageListSortMode = MessageListSortMode.loadPreference()
     private(set) var selectedFilter: MessageFilter = .all
     private(set) var selectedChannel: MessageChannelKey?
+    private(set) var selectedTag: String?
     private(set) var channelSummaries: [MessageChannelSummary] = []
     private(set) var hasLoadedOnce: Bool = false
     private(set) var totalMessageCount: Int = 0
@@ -174,6 +175,26 @@ final class MessageListViewModel {
         }
     }
 
+    func toggleTagSelection(_ rawTag: String) {
+        guard let normalized = Self.normalizedTag(rawTag) else { return }
+        if selectedTag == normalized {
+            selectedTag = nil
+        } else {
+            selectedTag = normalized
+        }
+        Task { @MainActor in
+            await enqueueReload(resetPaging: true, clearBeforeLoading: false, reconcileUnreadSession: false)
+        }
+    }
+
+    func clearTagSelection() {
+        guard selectedTag != nil else { return }
+        selectedTag = nil
+        Task { @MainActor in
+            await enqueueReload(resetPaging: true, clearBeforeLoading: false, reconcileUnreadSession: false)
+        }
+    }
+
     var isUnreadOnlyFilterActive: Bool {
         selectedFilter == .unread
     }
@@ -202,6 +223,28 @@ final class MessageListViewModel {
                 error,
                 fallbackMessage: LocalizationProvider.localized("operation_failed"),
                 code: "message_mark_read_failed"
+            )
+        }
+    }
+
+    func markRead(_ messages: [PushMessageSummary]) async {
+        let unreadIDs = Set(messages.lazy.filter { !$0.isRead }.map(\.id))
+        guard !unreadIDs.isEmpty else { return }
+        do {
+            let changed = try await environment.messageStateCoordinator.markRead(messageIds: Array(unreadIDs))
+            guard changed > 0 else { return }
+            for index in filteredMessages.indices where unreadIDs.contains(filteredMessages[index].id) {
+                filteredMessages[index].isRead = true
+                retainUnreadSessionMessageIfNeeded(filteredMessages[index])
+            }
+            await refreshCountsAndChannels()
+        } catch let appError as AppError {
+            self.error = appError
+        } catch {
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: LocalizationProvider.localized("operation_failed"),
+                code: "message_bulk_mark_read_failed"
             )
         }
     }
@@ -487,6 +530,7 @@ final class MessageListViewModel {
                 limit: pageSize,
                 filter: mapFilter(selectedFilter),
                 channel: selectedChannel?.rawChannelValue,
+                tag: selectedTag,
                 sortMode: sortMode
             )
             lastPageCount = page.count
@@ -531,6 +575,7 @@ final class MessageListViewModel {
                 limit: pageSize,
                 filter: mapFilter(selectedFilter),
                 channel: selectedChannel?.rawChannelValue,
+                tag: selectedTag,
                 sortMode: sortMode
             )
             if resetStaleSelectionIfNeeded() {
@@ -711,6 +756,11 @@ final class MessageListViewModel {
             bucket += 1
         }
         return bucket
+    }
+
+    private static func normalizedTag(_ rawTag: String) -> String? {
+        let normalized = rawTag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.isEmpty ? nil : normalized
     }
 
     private func mapFilter(_ filter: MessageFilter) -> MessageQueryFilter {

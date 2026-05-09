@@ -303,6 +303,8 @@ private func canonicalizedMessageForPersistence(_ message: PushMessage) -> PushM
 }
 
 actor LocalDataStore {
+    private static let tagMetadataBackfillDefaultsKey = "message_tag_metadata_backfill_v1"
+
     private struct SharedResourcesKey: Hashable, Sendable {
         let appGroupIdentifier: String
         let containerPath: String
@@ -1512,9 +1514,10 @@ actor LocalDataStore {
     func loadMessages(
         filter: MessageQueryFilter = .all,
         channel: String? = nil,
+        tag: String? = nil,
     ) async throws -> [PushMessage] {
         let backend = try requireBackend()
-        let messages = try await backend.loadMessages(filter: filter, channel: channel)
+        let messages = try await backend.loadMessages(filter: filter, channel: channel, tag: tag)
         return applyPendingInserts(
             to: messages,
             includePending: true,
@@ -1603,6 +1606,11 @@ actor LocalDataStore {
         return try await backend.loadMessage(id: id)
     }
 
+    func loadMessages(ids: [UUID]) async throws -> [PushMessage] {
+        let backend = try requireBackend()
+        return try await backend.loadMessages(ids: ids)
+    }
+
     func loadMessage(messageId: String) async throws -> PushMessage? {
         let backend = try requireBackend()
         return try await backend.loadMessage(messageId: messageId)
@@ -1633,6 +1641,7 @@ actor LocalDataStore {
         limit: Int,
         filter: MessageQueryFilter = .all,
         channel: String? = nil,
+        tag: String? = nil,
         sortMode: MessageListSortMode = .timeDescending
     ) async throws -> [PushMessage] {
         let backend = try requireBackend()
@@ -1641,6 +1650,7 @@ actor LocalDataStore {
             limit: limit,
             filter: filter,
             channel: channel,
+            tag: tag,
             sortMode: sortMode
         )
         return applyPendingInserts(
@@ -1655,6 +1665,7 @@ actor LocalDataStore {
         limit: Int,
         filter: MessageQueryFilter = .all,
         channel: String? = nil,
+        tag: String? = nil,
         sortMode: MessageListSortMode = .timeDescending
     ) async throws -> [PushMessageSummary] {
         let backend = try requireBackend()
@@ -1663,6 +1674,7 @@ actor LocalDataStore {
             limit: limit,
             filter: filter,
             channel: channel,
+            tag: tag,
             sortMode: sortMode
         )
         return applyPendingInsertsToSummaries(
@@ -1685,11 +1697,25 @@ actor LocalDataStore {
 
     func searchMessagesCount(query: String) async throws -> Int {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return 0 }
+        let parsedQuery = Self.parsedSearchQuery(from: trimmed)
+        guard !parsedQuery.isEmpty else { return 0 }
+        if !parsedQuery.tags.isEmpty, let metadataIndex {
+            await ensureMetadataIndexReady()
+            let textQuery = parsedQuery.textQueryForFTS
+            if textQuery == nil || searchIndex != nil {
+                if let count = try? await metadataIndex.countMessages(
+                    matchingAllTags: parsedQuery.tags,
+                    textQuery: textQuery
+                ) {
+                    return count
+                }
+            }
+        }
         if let searchIndex {
             await ensureSearchIndexReady()
-            let ftsQuery = Self.searchIndexQuery(from: trimmed)
-            if let count = try? await searchIndex.count(query: ftsQuery) {
+            if let ftsQuery = parsedQuery.textQueryForFTS,
+               let count = try? await searchIndex.count(query: ftsQuery)
+            {
                 if count > 0 {
                     return count
                 }
@@ -1721,20 +1747,39 @@ actor LocalDataStore {
         sortMode: MessageListSortMode = .timeDescending
     ) async throws -> [PushMessageSummary] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return [] }
+        let parsedQuery = Self.parsedSearchQuery(from: trimmed)
+        guard !parsedQuery.isEmpty else { return [] }
         let backend = try requireBackend()
         if sortMode == .timeDescending, let searchIndex {
             await ensureSearchIndexReady()
-            let ftsQuery = Self.searchIndexQuery(from: trimmed)
-            if let ids = try? await searchIndex.searchIDs(
-                query: ftsQuery,
-                before: cursor?.receivedAt,
-                beforeID: cursor?.id,
-                limit: limit
-            ),
-               !ids.isEmpty
-            {
-                return try await backend.loadMessageSummaries(ids: ids)
+            if parsedQuery.tags.isEmpty, let ftsQuery = parsedQuery.textQueryForFTS {
+                if let ids = try? await searchIndex.searchIDs(
+                    query: ftsQuery,
+                    before: cursor?.receivedAt,
+                    beforeID: cursor?.id,
+                    limit: limit
+                ),
+                   !ids.isEmpty
+                {
+                    return try await backend.loadMessageSummaries(ids: ids)
+                }
+            }
+        }
+        if sortMode == .timeDescending, !parsedQuery.tags.isEmpty, let metadataIndex {
+            await ensureMetadataIndexReady()
+            let textQuery = parsedQuery.textQueryForFTS
+            if textQuery == nil || searchIndex != nil {
+                if let ids = try? await metadataIndex.searchMessageIDs(
+                    matchingAllTags: parsedQuery.tags,
+                    textQuery: textQuery,
+                    before: cursor?.receivedAt,
+                    beforeID: cursor?.id,
+                    limit: limit
+                ),
+                   !ids.isEmpty
+                {
+                    return try await backend.loadMessageSummaries(ids: ids)
+                }
             }
         }
         return try await backend.searchMessageSummariesFallback(
@@ -1867,6 +1912,12 @@ actor LocalDataStore {
         }
     }
 
+    func markMessagesRead(ids: [UUID]) async throws -> Int {
+        try await performBackendWrite { backend in
+            try await backend.markMessagesRead(ids: ids)
+        }
+    }
+
     func deleteMessage(id: UUID) async throws {
         try await performBackendWrite { backend in
             try await backend.deleteMessage(id: id)
@@ -1878,6 +1929,22 @@ actor LocalDataStore {
             try? await metadataIndex.remove(id: id)
         }
         await rebuildNotificationContextSnapshot()
+    }
+
+    func deleteMessages(ids: [UUID]) async throws -> Int {
+        let deletedIds = try await performBackendWrite { backend in
+            try await backend.deleteMessages(ids: ids)
+        }
+        if let searchIndex, !deletedIds.isEmpty {
+            try? await searchIndex.bulkRemove(ids: deletedIds)
+        }
+        if let metadataIndex, !deletedIds.isEmpty {
+            try? await metadataIndex.bulkRemove(ids: deletedIds)
+        }
+        if !deletedIds.isEmpty {
+            await rebuildNotificationContextSnapshot()
+        }
+        return deletedIds.count
     }
 
     func deleteMessage(notificationRequestId: String) async throws {
@@ -1912,6 +1979,24 @@ actor LocalDataStore {
         return deletedCount
     }
 
+    func deleteEventRecords(eventIds: [String]) async throws -> Int {
+        let normalized = Array(
+            Set(
+                eventIds
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            )
+        )
+        guard !normalized.isEmpty else { return 0 }
+        let deletedCount = try await performBackendWrite { backend in
+            try await backend.deleteEventRecords(eventIds: normalized)
+        }
+        if deletedCount > 0 {
+            await rebuildNotificationContextSnapshot()
+        }
+        return deletedCount
+    }
+
     func deleteEventRecords(channel: String?) async throws -> Int {
         let normalized = channel?.trimmingCharacters(in: .whitespacesAndNewlines)
         let deletedCount = try await performBackendWrite { backend in
@@ -1928,6 +2013,24 @@ actor LocalDataStore {
         guard !normalized.isEmpty else { return 0 }
         let deletedCount = try await performBackendWrite { backend in
             try await backend.deleteThingRecords(thingId: normalized)
+        }
+        if deletedCount > 0 {
+            await rebuildNotificationContextSnapshot()
+        }
+        return deletedCount
+    }
+
+    func deleteThingRecords(thingIds: [String]) async throws -> Int {
+        let normalized = Array(
+            Set(
+                thingIds
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            )
+        )
+        guard !normalized.isEmpty else { return 0 }
+        let deletedCount = try await performBackendWrite { backend in
+            try await backend.deleteThingRecords(thingIds: normalized)
         }
         if deletedCount > 0 {
             await rebuildNotificationContextSnapshot()
@@ -2098,6 +2201,7 @@ actor LocalDataStore {
         await backend.prepareStatsIfNeeded(progressive: true)
         await rebuildSearchIndexIfNeeded(batchSize: 200, yieldBetweenBatches: true)
         await rebuildMetadataIndexIfNeeded(batchSize: 200, yieldBetweenBatches: true)
+        await rebuildTagMetadataIndexIfNeeded(batchSize: 200, yieldBetweenBatches: true)
         await rebuildNotificationContextSnapshot()
     }
 
@@ -2226,7 +2330,8 @@ actor LocalDataStore {
                 MessageMetadataIndex.Entry(
                     id: message.id,
                     receivedAt: message.receivedAt,
-                    items: message.metadata
+                    items: message.metadata,
+                    tags: message.tags
                 )
             }
             try? await metadataIndex.bulkReplace(entries: entries)
@@ -2292,6 +2397,7 @@ actor LocalDataStore {
                 limit: batchSize,
                 filter: .all,
                 channel: nil,
+                tag: nil,
                 sortMode: .timeDescending
             )
             guard let messages, !messages.isEmpty else { break }
@@ -2299,7 +2405,8 @@ actor LocalDataStore {
                 MessageMetadataIndex.Entry(
                     id: message.id,
                     receivedAt: message.receivedAt,
-                    items: message.metadata
+                    items: message.metadata,
+                    tags: message.tags
                 )
             }
             try? await metadataIndex.bulkReplace(entries: entries)
@@ -2315,6 +2422,79 @@ actor LocalDataStore {
 
     private static func searchIndexQuery(from raw: String) -> String {
         SearchQuerySemantics.normalizedSearchIndexQuery(from: raw)
+    }
+
+    private static func parsedSearchQuery(from raw: String) -> SearchQuerySemantics.ParsedQuery {
+        SearchQuerySemantics.parse(raw)
+    }
+
+    private func ensureMetadataIndexReady() async {
+        await rebuildMetadataIndexIfNeeded(batchSize: 500, yieldBetweenBatches: false)
+    }
+
+    private func rebuildTagMetadataIndexIfNeeded(
+        batchSize: Int,
+        yieldBetweenBatches: Bool
+    ) async {
+        guard metadataIndex != nil else { return }
+        let defaults = AppConstants.sharedUserDefaults(suiteName: appGroupIdentifier)
+        if defaults.bool(forKey: Self.tagMetadataBackfillDefaultsKey) {
+            return
+        }
+
+        let succeeded = await forceRebuildMetadataIndex(batchSize: batchSize, yieldBetweenBatches: yieldBetweenBatches)
+        if succeeded {
+            defaults.set(true, forKey: Self.tagMetadataBackfillDefaultsKey)
+        }
+    }
+
+    private func forceRebuildMetadataIndex(
+        batchSize: Int,
+        yieldBetweenBatches: Bool
+    ) async -> Bool {
+        guard let metadataIndex else { return false }
+        guard let backend else { return false }
+        let total = (try? await backend.messageCounts().total) ?? 0
+        guard total > 0 else { return true }
+
+        do {
+            var cursor: MessagePageCursor?
+            try await metadataIndex.clear()
+            while true {
+                let messages = try await backend.loadMessagesPage(
+                    before: cursor,
+                    limit: batchSize,
+                    filter: .all,
+                    channel: nil,
+                    tag: nil,
+                    sortMode: .timeDescending
+                )
+                if messages.isEmpty {
+                    break
+                }
+                let entries = messages.map { message in
+                    MessageMetadataIndex.Entry(
+                        id: message.id,
+                        receivedAt: message.receivedAt,
+                        items: message.metadata,
+                        tags: message.tags
+                    )
+                }
+                try await metadataIndex.bulkReplace(entries: entries)
+                cursor = messages.last.map {
+                    MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
+                }
+                if messages.count < batchSize {
+                    break
+                }
+                if yieldBetweenBatches {
+                    await Task.yield()
+                }
+            }
+            return true
+        } catch {
+            return false
+        }
     }
 }
 
@@ -3492,6 +3672,12 @@ private actor GRDBStore {
         return "(\(column) = \(sqlQuoted(trimmed)))"
     }
 
+    private func normalizedTagValue(_ rawTag: String?) -> String? {
+        guard let rawTag else { return nil }
+        let normalized = rawTag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.isEmpty ? nil : normalized
+    }
+
     private func read<T>(_ action: (Database) throws -> T) throws -> T {
         try dbQueue.read(action)
     }
@@ -3876,6 +4062,7 @@ private actor GRDBStore {
         includeTopLevelOnly: Bool,
         filter: MessageQueryFilter,
         channel: String?,
+        tag: String?,
         cursor: MessagePageCursor?,
         sortMode: MessageListSortMode
     ) -> [String] {
@@ -3904,6 +4091,20 @@ private actor GRDBStore {
 
         if let channel {
             conditions.append(Self.channelMatchCondition(value: channel))
+        }
+
+        if let normalizedTag = normalizedTagValue(tag) {
+            conditions.append(
+                """
+                EXISTS (
+                    SELECT 1
+                    FROM message_metadata_index mi
+                    WHERE mi.message_id = messages.id
+                      AND mi.key_name = 'tag'
+                      AND mi.value_norm = \(Self.sqlQuoted(normalizedTag))
+                )
+                """
+            )
         }
 
         if let cursor {
@@ -3989,6 +4190,7 @@ private actor GRDBStore {
     private func loadMessages(
         filter: MessageQueryFilter,
         channel: String?,
+        tag: String?,
         before cursor: MessagePageCursor?,
         limit: Int?,
         sortMode: MessageListSortMode
@@ -3998,6 +4200,7 @@ private actor GRDBStore {
                 includeTopLevelOnly: true,
                 filter: filter,
                 channel: channel,
+                tag: tag,
                 cursor: cursor,
                 sortMode: sortMode
             )
@@ -4031,10 +4234,18 @@ private actor GRDBStore {
         }
     }
 
-    private func matchesSearchQuery(_ message: PushMessage, query: String) -> Bool {
-        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return true }
-        let loweredQuery = normalized.lowercased()
+    private func matchesSearchQuery(
+        _ message: PushMessage,
+        parsedQuery: SearchQuerySemantics.ParsedQuery
+    ) -> Bool {
+        if !parsedQuery.tags.isEmpty {
+            let normalizedMessageTags = Set(message.tags.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
+            for tag in parsedQuery.tags where !normalizedMessageTags.contains(tag) {
+                return false
+            }
+        }
+
+        guard !parsedQuery.textTokens.isEmpty else { return true }
         let candidates = [
             message.messageId,
             message.title,
@@ -4042,14 +4253,21 @@ private actor GRDBStore {
             message.channel,
             message.eventId,
             message.thingId,
+            message.tags.joined(separator: " "),
         ]
-        for candidate in candidates {
-            guard let candidate else { continue }
-            if candidate.lowercased().contains(loweredQuery) {
-                return true
+            .compactMap { $0?.lowercased() }
+
+        for token in parsedQuery.textTokens.map({ $0.lowercased() }) {
+            var matched = false
+            for candidate in candidates where candidate.contains(token) {
+                matched = true
+                break
+            }
+            if !matched {
+                return false
             }
         }
-        return false
+        return true
     }
 
     private func unreadPredicateCondition(
@@ -4911,6 +5129,7 @@ private actor GRDBStore {
         try loadMessages(
             filter: .all,
             channel: nil,
+            tag: nil,
             before: nil,
             limit: nil,
             sortMode: .timeDescending
@@ -4919,11 +5138,13 @@ private actor GRDBStore {
 
     func loadMessages(
         filter: MessageQueryFilter,
-        channel: String?
+        channel: String?,
+        tag: String?
     ) async throws -> [PushMessage] {
         try loadMessages(
             filter: filter,
             channel: channel,
+            tag: tag,
             before: nil,
             limit: nil,
             sortMode: .timeDescending
@@ -4935,12 +5156,14 @@ private actor GRDBStore {
         limit: Int,
         filter: MessageQueryFilter,
         channel: String?,
+        tag: String?,
         sortMode: MessageListSortMode
     ) async throws -> [PushMessage] {
         guard limit > 0 else { return [] }
         return try loadMessages(
             filter: filter,
             channel: channel,
+            tag: tag,
             before: cursor,
             limit: limit,
             sortMode: sortMode
@@ -4952,6 +5175,7 @@ private actor GRDBStore {
         limit: Int,
         filter: MessageQueryFilter,
         channel: String?,
+        tag: String?,
         sortMode: MessageListSortMode
     ) async throws -> [PushMessageSummary] {
         try await loadMessagesPage(
@@ -4959,21 +5183,14 @@ private actor GRDBStore {
             limit: limit,
             filter: filter,
             channel: channel,
+            tag: tag,
             sortMode: sortMode
         )
             .map(PushMessageSummary.init(message:))
     }
 
     func loadMessageSummaries(ids: [UUID]) async throws -> [PushMessageSummary] {
-        guard !ids.isEmpty else { return [] }
-        var summaries: [PushMessageSummary] = []
-        summaries.reserveCapacity(ids.count)
-        for id in ids {
-            if let message = try await loadMessage(id: id) {
-                summaries.append(PushMessageSummary(message: message))
-            }
-        }
-        return summaries
+        try await loadMessages(ids: ids).map(PushMessageSummary.init(message:))
     }
 
     func loadEventMessagesForProjection() async throws -> [PushMessage] {
@@ -5073,6 +5290,21 @@ private actor GRDBStore {
         }
     }
 
+    func loadMessages(ids: [UUID]) async throws -> [PushMessage] {
+        let uniqueIds = Array(Set(ids))
+        guard !uniqueIds.isEmpty else { return [] }
+        return try read { db in
+            let joined = uniqueIds.map { Self.sqlQuoted($0.uuidString) }.joined(separator: ",")
+            let records = try fetchMessageRecords(
+                db: db,
+                where: ["id IN (\(joined))"],
+                orderBy: "received_at DESC, id DESC",
+                limit: nil
+            )
+            return records.map { $0.toPushMessage(decoder: decoder) }
+        }
+    }
+
     func loadMessage(messageId: String) async throws -> PushMessage? {
         try read { db in
             try loadMessageRecordByMessageId(messageId, db: db)?.toPushMessage(decoder: decoder)
@@ -5128,6 +5360,7 @@ private actor GRDBStore {
             limit: limit,
             filter: .all,
             channel: nil,
+            tag: nil,
             sortMode: .timeDescending
         )
         return messages.map { message in
@@ -5190,10 +5423,10 @@ private actor GRDBStore {
     }
 
     func searchMessagesCount(query: String) async throws -> Int {
-        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return 0 }
+        let parsedQuery = SearchQuerySemantics.parse(query)
+        guard !parsedQuery.isEmpty else { return 0 }
         let messages = try await loadMessages()
-        return messages.filter { matchesSearchQuery($0, query: normalized) }.count
+        return messages.filter { matchesSearchQuery($0, parsedQuery: parsedQuery) }.count
     }
 
     func searchMessagesPage(
@@ -5203,16 +5436,17 @@ private actor GRDBStore {
         sortMode: MessageListSortMode
     ) async throws -> [PushMessage] {
         guard limit > 0 else { return [] }
-        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return [] }
+        let parsedQuery = SearchQuerySemantics.parse(query)
+        guard !parsedQuery.isEmpty else { return [] }
         let allMessages = try loadMessages(
             filter: .all,
             channel: nil,
+            tag: nil,
             before: nil,
             limit: nil,
             sortMode: sortMode
         )
-        let filtered = allMessages.filter { matchesSearchQuery($0, query: normalized) }
+        let filtered = allMessages.filter { matchesSearchQuery($0, parsedQuery: parsedQuery) }
         let paged: [PushMessage]
         if let cursor {
             paged = filtered.filter { messageAppearsAfterCursor($0, cursor: cursor, sortMode: sortMode) }
@@ -5264,9 +5498,55 @@ private actor GRDBStore {
         }
     }
 
+    func markMessagesRead(ids: [UUID]) async throws -> Int {
+        let uniqueIds = Array(Set(ids))
+        guard !uniqueIds.isEmpty else { return 0 }
+        return try write { db in
+            let joined = uniqueIds.map { Self.sqlQuoted($0.uuidString) }.joined(separator: ",")
+            let unreadSql = """
+                SELECT COUNT(*)
+                FROM messages
+                WHERE is_top_level_message = 1
+                  AND is_read = 0
+                  AND id IN (\(joined));
+                """
+            let unreadCount = try Int.fetchOne(db, sql: unreadSql) ?? 0
+            guard unreadCount > 0 else { return 0 }
+            try db.execute(
+                sql: """
+                    UPDATE messages
+                    SET is_read = 1
+                    WHERE is_top_level_message = 1
+                      AND is_read = 0
+                      AND id IN (\(joined));
+                    """
+            )
+            return unreadCount
+        }
+    }
+
     func deleteMessage(id: UUID) async throws {
         try write { db in
             try db.execute(sql: "DELETE FROM messages WHERE id = \(Self.sqlQuoted(id.uuidString));")
+        }
+    }
+
+    func deleteMessages(ids: [UUID]) async throws -> [UUID] {
+        let uniqueIds = Array(Set(ids))
+        guard !uniqueIds.isEmpty else { return [] }
+        return try write { db in
+            let joined = uniqueIds.map { Self.sqlQuoted($0.uuidString) }.joined(separator: ",")
+            let existing = try Row.fetchAll(
+                db,
+                sql: "SELECT id FROM messages WHERE id IN (\(joined));"
+            ).compactMap { row -> UUID? in
+                let raw: String? = row["id"]
+                return raw.flatMap(UUID.init(uuidString:))
+            }
+            guard !existing.isEmpty else { return [] }
+            let existingJoined = existing.map { Self.sqlQuoted($0.uuidString) }.joined(separator: ",")
+            try db.execute(sql: "DELETE FROM messages WHERE id IN (\(existingJoined));")
+            return existing
         }
     }
 
@@ -5313,6 +5593,34 @@ private actor GRDBStore {
         }
     }
 
+    func deleteEventRecords(eventIds: [String]) async throws -> Int {
+        let normalized = Array(
+            Set(
+                eventIds
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            )
+        )
+        guard !normalized.isEmpty else { return 0 }
+        return try write { db in
+            let inClause = normalized.map(Self.sqlQuoted).joined(separator: ",")
+            let idsSQL = """
+                SELECT id
+                FROM messages
+                WHERE event_id IN (\(inClause))
+                  AND (entity_type = 'event' OR entity_type = 'message');
+                """
+            let ids = try Row.fetchAll(db, sql: idsSQL).compactMap { row -> String? in
+                let id: String? = row["id"]
+                return id
+            }
+            guard !ids.isEmpty else { return 0 }
+            let joined = ids.map(Self.sqlQuoted).joined(separator: ",")
+            try db.execute(sql: "DELETE FROM messages WHERE id IN (\(joined));")
+            return ids.count
+        }
+    }
+
     func deleteEventRecords(channel: String?) async throws -> Int {
         let normalized = channel?.trimmingCharacters(in: .whitespacesAndNewlines)
         return try write { db in
@@ -5343,6 +5651,34 @@ private actor GRDBStore {
                 FROM messages
                 WHERE thing_id = \(Self.sqlQuoted(normalized))
                    OR (entity_type = 'thing' AND entity_id = \(Self.sqlQuoted(normalized)));
+                """
+            let ids = try Row.fetchAll(db, sql: idsSQL).compactMap { row -> String? in
+                let id: String? = row["id"]
+                return id
+            }
+            guard !ids.isEmpty else { return 0 }
+            let joined = ids.map(Self.sqlQuoted).joined(separator: ",")
+            try db.execute(sql: "DELETE FROM messages WHERE id IN (\(joined));")
+            return ids.count
+        }
+    }
+
+    func deleteThingRecords(thingIds: [String]) async throws -> Int {
+        let normalized = Array(
+            Set(
+                thingIds
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            )
+        )
+        guard !normalized.isEmpty else { return 0 }
+        return try write { db in
+            let inClause = normalized.map(Self.sqlQuoted).joined(separator: ",")
+            let idsSQL = """
+                SELECT id
+                FROM messages
+                WHERE thing_id IN (\(inClause))
+                   OR (entity_type = 'thing' AND entity_id IN (\(inClause)));
                 """
             let ids = try Row.fetchAll(db, sql: idsSQL).compactMap { row -> String? in
                 let id: String? = row["id"]

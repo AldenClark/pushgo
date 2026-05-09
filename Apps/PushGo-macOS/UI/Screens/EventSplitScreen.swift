@@ -10,11 +10,13 @@ struct EventSplitScreen: View {
     var onOpenEventHandled: (() -> Void)? = nil
     @State private var searchQuery: String = ""
     @State private var selectedChannelId: String?
+    @State private var selectedTag: String?
     @State private var hydrationRequestedEventIDs: Set<String> = []
     @State private var showCloseConfirmation = false
     @State private var isBatchMode: Bool = false
     @State private var batchSelection: Set<String> = []
     @State private var searchFieldText: String = ""
+    @State private var isFilterPopoverPresented = false
     private let fixedListWidth: CGFloat = 300
 
     var body: some View {
@@ -93,7 +95,7 @@ struct EventSplitScreen: View {
                 placement: .toolbar,
                 prompt: Text(localizationManager.localized("search_events"))
             )
-            .navigationTitle(localizationManager.localized("push_type_event"))
+            .navigationTitle(isBatchMode ? "" : localizationManager.localized("push_type_event"))
         }
         .pendingLocalDeletionBarHost(environment: environment)
         .toolbar { listToolbarContent }
@@ -136,6 +138,12 @@ struct EventSplitScreen: View {
                     return false
                 }
             }
+            if let selectedTag {
+                let hasTag = event.tags.contains { normalizedTag($0) == selectedTag }
+                if !hasTag {
+                    return false
+                }
+            }
             guard !query.isEmpty else { return true }
             return [
                 event.title,
@@ -173,14 +181,19 @@ struct EventSplitScreen: View {
 
     @ToolbarContentBuilder
     private var listToolbarContent: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            Button {
-                setBatchMode(!isBatchMode)
-            } label: {
-                Image(systemName: isBatchMode ? "checkmark" : "checklist.unchecked")
+        if isBatchMode {
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    toggleSelectAllVisibleEvents()
+                } label: {
+                    Image(systemName: areAllVisibleEventsSelected ? "checkmark.rectangle.stack.fill" : "checkmark.rectangle.stack")
+                }
+                .help(localizationManager.localized("all"))
+                .accessibilityLabel(localizationManager.localized("all"))
             }
-            .help(isBatchMode ? localizationManager.localized("done") : localizationManager.localized("edit"))
-            .accessibilityLabel(isBatchMode ? localizationManager.localized("done") : localizationManager.localized("edit"))
+        }
+
+        ToolbarItemGroup(placement: .primaryAction) {
             if isBatchMode {
                 Button(role: .destructive) {
                     deleteSelectedEvents()
@@ -190,15 +203,25 @@ struct EventSplitScreen: View {
                 .help(localizationManager.localized("delete"))
                 .accessibilityLabel(localizationManager.localized("delete"))
                 .disabled(batchSelection.isEmpty)
-            } else {
-                Menu {
-                    channelFilterMenuContent
+                
+                Button {
+                    Task { await exitBatchModeAfterFlushingPendingDeletion() }
                 } label: {
-                    Image(systemName: selectedChannelId == nil ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
+                    batchDoneToolbarIcon()
                 }
-                .menuIndicator(.hidden)
+                .help(localizationManager.localized("done"))
+                .accessibilityLabel(localizationManager.localized("done"))
+            } else {
+                Button {
+                    isFilterPopoverPresented = true
+                } label: {
+                    filterToolbarIcon(isHighlighted: isFilterMenuHighlighted)
+                }
                 .help(localizationManager.localized("channel"))
                 .accessibilityLabel(localizationManager.localized("channel"))
+                .popover(isPresented: $isFilterPopoverPresented, arrowEdge: .top) {
+                    filterPopoverContent
+                }
             }
         }
     }
@@ -253,6 +276,12 @@ struct EventSplitScreen: View {
         }
     }
 
+    @MainActor
+    private func exitBatchModeAfterFlushingPendingDeletion() async {
+        await environment.pendingLocalDeletionController.commitCurrentIfNeeded()
+        setBatchMode(false)
+    }
+
     private func closeSelectedEvent() {
         guard let selectedEvent else { return }
         Task {
@@ -285,6 +314,21 @@ struct EventSplitScreen: View {
         return filteredEvents.filter { ids.contains($0.id) }
     }
 
+    private var allVisibleEventIDs: Set<String> {
+        Set(filteredEvents.map(\.id))
+    }
+
+    private var areAllVisibleEventsSelected: Bool {
+        let visibleIDs = allVisibleEventIDs
+        return !visibleIDs.isEmpty && batchSelection == visibleIDs
+    }
+
+    private func toggleSelectAllVisibleEvents() {
+        let visibleIDs = allVisibleEventIDs
+        guard !visibleIDs.isEmpty else { return }
+        batchSelection = areAllVisibleEventsSelected ? [] : visibleIDs
+    }
+
     @MainActor
     private func scheduleDeletion(for events: [EventProjection]) async {
         let uniqueEvents = Array(
@@ -311,11 +355,7 @@ struct EventSplitScreen: View {
             undoLabel: localizationManager.localized("cancel"),
             scope: scope
         ) {
-            if uniqueEvents.count == 1, let event = uniqueEvents.first {
-                try await viewModel.deleteEvent(eventId: event.id)
-            } else {
-                _ = try await viewModel.deleteEvents(eventIds: uniqueEvents.map(\.id))
-            }
+            _ = try await viewModel.deleteEvents(eventIds: uniqueEvents.map(\.id))
         } onCompletion: { [environment] result in
             guard case let .failure(error) = result else { return }
             environment.showErrorToast(
@@ -331,9 +371,6 @@ struct EventSplitScreen: View {
             selection = nil
         }
         batchSelection.subtract(scope.eventIDs)
-        if uniqueEvents.count > 1 {
-            setBatchMode(false)
-        }
     }
 
     private func syncSelection() {
@@ -344,6 +381,10 @@ struct EventSplitScreen: View {
         if let target = openEventId?.trimmingCharacters(in: .whitespacesAndNewlines),
            !target.isEmpty
         {
+            if selectedTag != nil {
+                selectedTag = nil
+                return
+            }
             if filteredEvents.contains(where: { $0.id == target }) {
                 selection = target
                 hydrationRequestedEventIDs.remove(target)
@@ -374,35 +415,235 @@ struct EventSplitScreen: View {
         selection = filteredEvents.first?.id
     }
 
-    @ViewBuilder
-    private var channelFilterMenuContent: some View {
-        Button {
-            selectedChannelId = nil
-        } label: {
-            channelFilterMenuItemLabel(
-                title: localizationManager.localized("all_groups"),
-                isSelected: selectedChannelId == nil
-            )
-        }
-
-        ForEach(channelOptions, id: \.id) { option in
+    private var filterPopoverContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
             Button {
-                selectedChannelId = option.id
+                setBatchMode(true)
+                isFilterPopoverPresented = false
             } label: {
-                channelFilterMenuItemLabel(
-                    title: option.name,
-                    isSelected: selectedChannelId == option.id
+                filterMenuSelectionRow(
+                    title: "选择",
+                    systemImage: "checklist",
+                    isSelected: isBatchMode
                 )
             }
+            .buttonStyle(.plain)
+            .padding(.vertical, 2)
+
+            if !channelOptions.isEmpty {
+                Rectangle()
+                    .fill(Color.appDividerSubtle.opacity(0.9))
+                    .frame(height: 0.5)
+                    .padding(.vertical, 2)
+
+                Text("Channels")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                EventSplitFilterChipFlowLayout(horizontalSpacing: 8, verticalSpacing: 8) {
+                    filterCloudChip(
+                        title: localizationManager.localized("all_groups"),
+                        isSelected: selectedChannelId == nil
+                    ) {
+                        selectedChannelId = nil
+                    }
+                    ForEach(channelOptions, id: \.id) { option in
+                        filterCloudChip(
+                            title: option.name,
+                            isSelected: selectedChannelId == option.id
+                        ) {
+                            selectedChannelId = option.id
+                        }
+                    }
+                }
+            }
+
+            if !availableTags.isEmpty {
+                Rectangle()
+                    .fill(Color.appDividerSubtle.opacity(0.9))
+                    .frame(height: 0.5)
+                    .padding(.vertical, 2)
+
+                Text("Tags")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                EventSplitFilterChipFlowLayout(horizontalSpacing: 8, verticalSpacing: 8) {
+                    ForEach(availableTags, id: \.self) { tag in
+                        tagCloudChip(tag: tag)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .frame(width: 316, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var availableTags: [String] {
+        var tags = Set<String>()
+        for event in viewModel.events {
+            for tag in event.tags {
+                let normalized = normalizedTag(tag)
+                if !normalized.isEmpty {
+                    tags.insert(normalized)
+                }
+            }
+        }
+        return tags.sorted()
+    }
+
+    private func normalizedTag(_ rawTag: String) -> String {
+        rawTag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private var isFilterMenuHighlighted: Bool {
+        selectedChannelId != nil || selectedTag != nil
+    }
+
+    private func tagCloudChip(tag: String) -> some View {
+        let isSelected = selectedTag == tag
+        return filterCloudChip(title: tag, isSelected: isSelected) {
+            selectedTag = isSelected ? nil : tag
         }
     }
 
-    private func channelFilterMenuItemLabel(title: String, isSelected: Bool) -> some View {
+    private func filterCloudChip(title: String, isSelected: Bool, onTap: @escaping () -> Void) -> some View {
+        Button {
+            onTap()
+            isFilterPopoverPresented = false
+        } label: {
+            Text(title)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .font(.caption.weight(.medium))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .frame(minWidth: 60, maxWidth: 208, alignment: .leading)
+                .foregroundStyle(isSelected ? Color.appAccentPrimary : Color.appTextPrimary)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(isSelected ? Color.appAccentPrimary.opacity(0.16) : Color.appSurfaceRaised)
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(
+                            isSelected ? Color.appAccentPrimary.opacity(0.45) : Color.appBorderSubtle.opacity(0.95),
+                            lineWidth: 0.8
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func filterMenuSelectionRow(title: String, systemImage: String, isSelected: Bool) -> some View {
         HStack(spacing: 8) {
             if isSelected {
                 Image(systemName: "checkmark")
+                    .font(.footnote.weight(.semibold))
+            } else {
+                Image(systemName: "checkmark")
+                    .font(.footnote.weight(.semibold))
+                    .hidden()
             }
+            Image(systemName: systemImage)
+                .font(.footnote.weight(.medium))
             Text(title)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .font(.body.weight(.semibold))
+        .foregroundStyle(Color.appTextPrimary)
+        .padding(.vertical, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func batchDoneToolbarIcon() -> some View {
+        Image(systemName: "checkmark")
+            .font(.footnote.weight(.bold))
+            .foregroundStyle(
+                .appAccentPrimary
+            )
+    }
+
+    private func filterToolbarIcon(isHighlighted: Bool) -> some View {
+        Image(systemName: "line.3.horizontal.decrease")
+            .font(.body.weight(.semibold))
+            .foregroundStyle(isHighlighted ? .accentColor : Color.primary)
+    }
+
+}
+
+private struct EventSplitFilterChipFlowLayout: Layout {
+    let horizontalSpacing: CGFloat
+    let verticalSpacing: CGFloat
+
+    init(horizontalSpacing: CGFloat = 8, verticalSpacing: CGFloat = 8) {
+        self.horizontalSpacing = horizontalSpacing
+        self.verticalSpacing = verticalSpacing
+    }
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var cursorX: CGFloat = 0
+        var cursorY: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var usedWidth: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if cursorX > 0, cursorX + size.width > maxWidth {
+                usedWidth = max(usedWidth, cursorX - horizontalSpacing)
+                cursorX = 0
+                cursorY += rowHeight + verticalSpacing
+                rowHeight = 0
+            }
+
+            cursorX += size.width + horizontalSpacing
+            rowHeight = max(rowHeight, size.height)
+        }
+
+        usedWidth = max(usedWidth, cursorX > 0 ? cursorX - horizontalSpacing : 0)
+        let totalHeight = subviews.isEmpty ? 0 : (cursorY + rowHeight)
+        let resolvedWidth = proposal.width == nil ? usedWidth : min(maxWidth, usedWidth)
+        return CGSize(width: resolvedWidth, height: totalHeight)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        var cursorX = bounds.minX
+        var cursorY = bounds.minY
+        var rowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if cursorX > bounds.minX, cursorX + size.width > bounds.maxX {
+                cursorX = bounds.minX
+                cursorY += rowHeight + verticalSpacing
+                rowHeight = 0
+            }
+
+            let center = CGPoint(
+                x: cursorX + (size.width / 2),
+                y: cursorY + (size.height / 2)
+            )
+            subview.place(
+                at: center,
+                anchor: .center,
+                proposal: ProposedViewSize(width: size.width, height: size.height)
+            )
+
+            cursorX += size.width + horizontalSpacing
+            rowHeight = max(rowHeight, size.height)
         }
     }
 }

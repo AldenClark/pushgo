@@ -227,6 +227,7 @@ actor MessageMetadataIndex {
         let id: UUID
         let receivedAt: Date
         let items: [String: String]
+        let tags: [String]
     }
 
     private struct Row: Hashable {
@@ -273,7 +274,7 @@ actor MessageMetadataIndex {
                         sql: "DELETE FROM message_metadata_index WHERE message_id = ?;",
                         arguments: [entry.id.uuidString]
                     )
-                    let rows = Self.normalizedRows(from: entry.items)
+                    let rows = Self.normalizedRows(from: entry.items, tags: entry.tags)
                     for row in rows {
                         try db.execute(
                             sql: """
@@ -291,6 +292,42 @@ actor MessageMetadataIndex {
                 }
                 return .commit
             }
+        }
+    }
+
+    func countMessages(
+        matchingAllTags rawTags: [String],
+        textQuery: String? = nil
+    ) throws -> Int {
+        let tags = Self.normalizedTagValues(rawTags)
+        guard !tags.isEmpty else { return 0 }
+        return try dbQueue.read { db in
+            let (sql, arguments) = Self.tagCountSQL(tags: tags, textQuery: textQuery)
+            return try Int.fetchOne(db, sql: sql, arguments: arguments) ?? 0
+        }
+    }
+
+    func searchMessageIDs(
+        matchingAllTags rawTags: [String],
+        textQuery: String? = nil,
+        before: Date?,
+        beforeID: UUID?,
+        limit: Int
+    ) throws -> [UUID] {
+        let tags = Self.normalizedTagValues(rawTags)
+        guard !tags.isEmpty, limit > 0 else { return [] }
+        let cutoff = before?.timeIntervalSince1970 ?? Date.distantFuture.timeIntervalSince1970
+        let cutoffID = beforeID?.uuidString ?? "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF"
+        return try dbQueue.read { db in
+            let (sql, arguments) = Self.tagSearchSQL(
+                tags: tags,
+                textQuery: textQuery,
+                cutoff: cutoff,
+                cutoffID: cutoffID,
+                limit: limit
+            )
+            let idStrings = try String.fetchAll(db, sql: sql, arguments: arguments)
+            return idStrings.compactMap(UUID.init(uuidString:))
         }
     }
 
@@ -334,7 +371,7 @@ actor MessageMetadataIndex {
             """)
     }
 
-    private static func normalizedRows(from items: [String: String]) -> [Row] {
+    private static func normalizedRows(from items: [String: String], tags: [String]) -> [Row] {
         var rows: [Row] = []
         var seen: Set<String> = []
         for (rawKey, rawValue) in items {
@@ -345,7 +382,109 @@ actor MessageMetadataIndex {
             guard seen.insert(dedupe).inserted else { continue }
             rows.append(Row(keyName: key, valueNorm: value))
         }
+        for rawTag in tags {
+            let tag = rawTag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !tag.isEmpty else { continue }
+            let dedupe = "tag\u{1F}\(tag)"
+            guard seen.insert(dedupe).inserted else { continue }
+            rows.append(Row(keyName: "tag", valueNorm: tag))
+        }
         return rows
+    }
+
+    private static func normalizedTagValues(_ rawTags: [String]) -> [String] {
+        var output: [String] = []
+        var seen: Set<String> = []
+        output.reserveCapacity(rawTags.count)
+        for raw in rawTags {
+            let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !normalized.isEmpty, seen.insert(normalized).inserted else { continue }
+            output.append(normalized)
+        }
+        return output
+    }
+
+    private static func tagCountSQL(
+        tags: [String],
+        textQuery: String?
+    ) -> (sql: String, arguments: StatementArguments) {
+        let placeholders = Array(repeating: "?", count: tags.count).joined(separator: ", ")
+        var sql = """
+            SELECT COUNT(*) FROM (
+                SELECT mi.message_id
+                FROM message_metadata_index mi
+            """
+        var arguments = StatementArguments()
+        let trimmedText = textQuery?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedText.isEmpty {
+            sql += "\nJOIN message_search ms ON ms.id = mi.message_id"
+        }
+        sql += """
+            
+                WHERE mi.key_name = 'tag'
+                  AND mi.value_norm IN (\(placeholders))
+            """
+        for tag in tags {
+            arguments += [tag]
+        }
+        if !trimmedText.isEmpty {
+            sql += "\n  AND ms.message_search MATCH ?"
+            arguments += [trimmedText]
+        }
+        sql += """
+            
+                GROUP BY mi.message_id
+                HAVING COUNT(DISTINCT mi.value_norm) = ?
+            );
+            """
+        arguments += [tags.count]
+        return (sql, arguments)
+    }
+
+    private static func tagSearchSQL(
+        tags: [String],
+        textQuery: String?,
+        cutoff: TimeInterval,
+        cutoffID: String,
+        limit: Int
+    ) -> (sql: String, arguments: StatementArguments) {
+        let placeholders = Array(repeating: "?", count: tags.count).joined(separator: ", ")
+        var sql = """
+            SELECT grouped.message_id
+            FROM (
+                SELECT
+                    mi.message_id AS message_id,
+                    MAX(mi.received_at) AS received_at
+                FROM message_metadata_index mi
+            """
+        var arguments = StatementArguments()
+        let trimmedText = textQuery?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedText.isEmpty {
+            sql += "\nJOIN message_search ms ON ms.id = mi.message_id"
+        }
+        sql += """
+            
+                WHERE mi.key_name = 'tag'
+                  AND mi.value_norm IN (\(placeholders))
+            """
+        for tag in tags {
+            arguments += [tag]
+        }
+        if !trimmedText.isEmpty {
+            sql += "\n  AND ms.message_search MATCH ?"
+            arguments += [trimmedText]
+        }
+        sql += """
+            
+                GROUP BY mi.message_id
+                HAVING COUNT(DISTINCT mi.value_norm) = ?
+            ) grouped
+            WHERE (grouped.received_at < ? OR (grouped.received_at = ? AND grouped.message_id < ?))
+            ORDER BY grouped.received_at DESC, grouped.message_id DESC
+            LIMIT ?;
+            """
+        arguments += [tags.count, cutoff, cutoff, cutoffID, max(0, limit)]
+        return (sql, arguments)
     }
 
     private static func databaseDirectory(
