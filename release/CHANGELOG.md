@@ -12,8 +12,18 @@ PushGo policy:
 
 ## [Unreleased]
 
+
+## [v1.2.2] - 2026-05-11
+
 ### Changed
-- Prepared next Apple development iteration after `v1.2.1`.
+- Added tag-aware message search and coordinated pending local deletion state handling.
+- Added multi-select facets and tag-count-backed filtering for message, event, and object lists.
+- Unified destructive actions on Apple platforms with undoable local deletion flows.
+
+### Improved
+- Improved notification ingress recovery and delivery continuity across iOS, macOS, and watchOS.
+- Improved global error UX consistency, including shared validation and toast/error presentation behavior.
+- Improved app state controller structure and automation coverage for more stable Apple cross-surface behavior.
 
 ## [v1.2.1] - 2026-04-24
 

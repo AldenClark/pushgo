@@ -1,0 +1,10 @@
+{
+  "en": "PushGo 1.2.2 adds richer Apple-side filtering and search.\n- Tag-aware message search with multi-select facet filters and tag counts\n- Unified destructive actions with undoable local deletion\n- Better error feedback consistency and stronger notification/watch delivery recovery",
+  "de": "PushGo 1.2.2 erweitert die Apple-seitige Suche und Filterung.\n- Tag-basierte Nachrichtensuche mit Mehrfachauswahl-Facets und Tag-Anzahlen\n- Vereinheitlichte destruktive Aktionen mit ruckgangig machbarer lokaler Loschung\n- Konsistentere Fehlerhinweise und robustere Wiederherstellung fur Benachrichtigungs-/Watch-Zustellung",
+  "es": "PushGo 1.2.2 mejora la busqueda y el filtrado en Apple.\n- Busqueda de mensajes por etiquetas con filtros facetados multiseleccion y conteo de etiquetas\n- Acciones destructivas unificadas con eliminacion local reversible\n- Comentarios de error mas consistentes y recuperacion mas solida para notificaciones y entrega en watch",
+  "fr": "PushGo 1.2.2 enrichit la recherche et le filtrage cote Apple.\n- Recherche des messages par tags avec filtres a facettes multi-selection et compteurs de tags\n- Actions destructives unifiees avec suppression locale annulable\n- Retours d'erreur plus coherents et meilleure recuperation de la distribution notifications/watch",
+  "ja": "PushGo 1.2.2 では、Apple 側の検索・フィルタ機能を強化しました。\n- タグ対応メッセージ検索、複数選択ファセットフィルタ、タグ件数表示\n- 破壊的操作を統一し、ローカル削除の取り消しに対応\n- エラーフィードバックの一貫性向上と通知／watch 配信復旧の強化",
+  "ko": "PushGo 1.2.2는 Apple 측 검색 및 필터링을 강화했습니다.\n- 태그 기반 메시지 검색, 다중 선택 패싯 필터, 태그 개수 표시\n- 파괴적 작업을 통합하고 로컬 삭제 실행 취소를 지원\n- 오류 피드백 일관성 개선 및 알림/watch 전달 복구 강화",
+  "zh-CN": "PushGo 1.2.2 强化了 Apple 侧搜索与筛选体验。\n- 新增标签感知消息搜索，支持多选分面筛选与标签计数\n- 统一删除/关闭等破坏性操作，并支持本地删除可撤销\n- 提升错误反馈一致性，并增强通知入口与 watch 投递恢复能力",
+  "zh-TW": "PushGo 1.2.2 強化了 Apple 側搜尋與篩選體驗。\n- 新增標籤感知訊息搜尋，支援多選分面篩選與標籤計數\n- 統一刪除/關閉等破壞性操作，並支援本地刪除可復原\n- 提升錯誤回饋一致性，並強化通知入口與 watch 投遞復原能力"
+}

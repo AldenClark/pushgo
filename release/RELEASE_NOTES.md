@@ -10,8 +10,15 @@ Policy:
 
 ## [Unreleased]
 
+
+## [v1.2.2]
+
 ### Improved
-- Ongoing Apple platform improvements in progress for the next release line.
+- Added tag-aware message search and multi-select facet filters with tag counts.
+- Improved list filtering and discovery across messages, events, and objects.
+- Unified delete/close destructive actions with undoable local deletion behavior.
+- Improved error feedback consistency across iOS, macOS, and watchOS.
+- Hardened notification ingress recovery and watch delivery reliability.
 
 ## [v1.2.1]
 
