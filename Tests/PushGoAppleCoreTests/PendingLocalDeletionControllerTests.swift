@@ -17,6 +17,21 @@ private actor CommitRecorder {
 
 @MainActor
 struct PendingLocalDeletionControllerTests {
+    private func waitUntil(
+        timeout: Duration = .seconds(2),
+        interval: Duration = .milliseconds(10),
+        _ condition: @escaping @MainActor () async -> Bool
+    ) async -> Bool {
+        let start = ContinuousClock.now
+        while ContinuousClock.now - start < timeout {
+            if await condition() {
+                return true
+            }
+            try? await Task.sleep(for: interval)
+        }
+        return await condition()
+    }
+
     @Test
     func commitCurrentIfNeededCommitsImmediatelyAndClearsPendingDeletion() async {
         let controller = PendingLocalDeletionController(timeout: 5)
@@ -101,8 +116,11 @@ struct PendingLocalDeletionControllerTests {
             await recorder.increment()
         }
 
-        try? await Task.sleep(for: .milliseconds(80))
+        let completed = await waitUntil {
+            await recorder.count == 1 && controller.pendingDeletion == nil
+        }
 
+        #expect(completed)
         #expect(await recorder.count == 1)
         #expect(controller.pendingDeletion == nil)
     }
