@@ -17,8 +17,8 @@ struct ThingListScreen: View {
     @State private var selectedThing: ThingProjection?
     @State private var selectedThingIds: Set<String> = []
     @State private var searchQuery: String = ""
-    @State private var selectedChannelId: String?
-    @State private var selectedTag: String?
+    @State private var selectedChannelIDs: Set<String> = []
+    @State private var selectedTags: Set<String> = []
     @State private var isFilterPopoverPresented = false
     @State private var isBatchModeActive = false
 
@@ -222,15 +222,18 @@ struct ThingListScreen: View {
         }
     }
 
-    private var availableChannelIds: [String] {
-        Array(
-            Set(viewModel.things.compactMap { normalizedChannel($0.channelId) })
-        ).sorted()
+    private var allChannelIds: [String] {
+        let ids = viewModel.things.compactMap { thing -> String? in
+            guard !isPendingLocalDeletion(thing) else { return nil }
+            return normalizedChannel(thing.channelId)
+        }
+        return Array(Set(ids)).sorted()
     }
 
-    private var availableTags: [String] {
+    private var allTags: [String] {
         var tags = Set<String>()
         for thing in viewModel.things {
+            guard !isPendingLocalDeletion(thing) else { continue }
             for tag in thing.tags {
                 let normalized = normalizedTag(tag)
                 if !normalized.isEmpty {
@@ -245,11 +248,11 @@ struct ThingListScreen: View {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let matched = viewModel.things.filter { thing in
             guard !isPendingLocalDeletion(thing) else { return false }
-            let channelMatched = selectedChannelId == nil || normalizedChannel(thing.channelId) == selectedChannelId
+            let channelMatched = selectedChannelIDs.isEmpty || selectedChannelIDs.contains(normalizedChannel(thing.channelId) ?? "")
             guard channelMatched else { return false }
-            if let selectedTag {
-                let hasTag = thing.tags.contains { normalizedTag($0) == selectedTag }
-                guard hasTag else { return false }
+            if !selectedTags.isEmpty {
+                let normalizedThingTags = Set(thing.tags.map(normalizedTag))
+                guard selectedTags.contains(where: normalizedThingTags.contains) else { return false }
             }
             guard !query.isEmpty else { return true }
             return searchableText(for: thing).contains(query)
@@ -265,7 +268,9 @@ struct ThingListScreen: View {
     }
 
     private func searchAutoloadTrigger(filteredThingsCount: Int) -> String {
-        "\(normalizedSearchQuery)|\(selectedChannelId ?? "_")|\(selectedTag ?? "_")|\(viewModel.things.count)|\(filteredThingsCount)|\(viewModel.hasMoreThings)|\(viewModel.isLoadingMoreThings)"
+        let channelsSignature = selectedChannelIDs.sorted().joined(separator: ",")
+        let tagsSignature = selectedTags.sorted().joined(separator: ",")
+        return "\(normalizedSearchQuery)|\(channelsSignature)|\(tagsSignature)|\(viewModel.things.count)|\(filteredThingsCount)|\(viewModel.hasMoreThings)|\(viewModel.isLoadingMoreThings)"
     }
 
     private var normalizedSearchQuery: String {
@@ -274,8 +279,8 @@ struct ThingListScreen: View {
 
     private func shouldAutoloadSearchResults(filteredThingsCount: Int) -> Bool {
         let hasActiveFilter = !normalizedSearchQuery.isEmpty
-            || selectedChannelId != nil
-            || selectedTag != nil
+            || !selectedChannelIDs.isEmpty
+            || !selectedTags.isEmpty
         return hasActiveFilter
             && filteredThingsCount == 0
             && viewModel.hasMoreThings
@@ -410,10 +415,10 @@ struct ThingListScreen: View {
         guard !target.isEmpty else { return }
         if let matched = viewModel.things.first(where: { $0.id == target }) {
             if let channelId = normalizedChannel(matched.channelId) {
-                selectedChannelId = channelId
+                selectedChannelIDs = [channelId]
             }
-            if selectedTag != nil {
-                selectedTag = nil
+            if !selectedTags.isEmpty {
+                selectedTags.removeAll()
             }
             if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 searchQuery = ""
@@ -427,10 +432,10 @@ struct ThingListScreen: View {
             await viewModel.ensureThingDetailsLoaded(thingId: target)
             guard let hydrated = viewModel.things.first(where: { $0.id == target }) else { return }
             if let channelId = normalizedChannel(hydrated.channelId) {
-                selectedChannelId = channelId
+                selectedChannelIDs = [channelId]
             }
-            if selectedTag != nil {
-                selectedTag = nil
+            if !selectedTags.isEmpty {
+                selectedTags.removeAll()
             }
             if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 searchQuery = ""
@@ -523,7 +528,7 @@ struct ThingListScreen: View {
     }
 
     private var isFilterMenuHighlighted: Bool {
-        selectedChannelId != nil || selectedTag != nil
+        !selectedChannelIDs.isEmpty || !selectedTags.isEmpty
     }
 
     private func batchDoneToolbarIcon() -> some View {
@@ -555,7 +560,7 @@ struct ThingListScreen: View {
             .buttonStyle(.plain)
             .padding(.vertical, 2)
 
-            if !availableChannelIds.isEmpty {
+            if !allChannelIds.isEmpty {
                 Rectangle()
                     .fill(Color.appDividerSubtle.opacity(0.9))
                     .frame(height: 0.5)
@@ -568,22 +573,26 @@ struct ThingListScreen: View {
                 ThingFilterChipFlowLayout(horizontalSpacing: 8, verticalSpacing: 8) {
                     filterCloudChip(
                         title: localizationManager.localized("all_groups"),
-                        isSelected: selectedChannelId == nil
+                        isSelected: selectedChannelIDs.isEmpty
                     ) {
-                        selectedChannelId = nil
+                        selectedChannelIDs.removeAll()
                     }
-                    ForEach(availableChannelIds, id: \.self) { channelId in
+                    ForEach(allChannelIds, id: \.self) { channelId in
                         filterCloudChip(
                             title: environment.channelDisplayName(for: channelId) ?? channelId,
-                            isSelected: selectedChannelId == channelId
+                            isSelected: selectedChannelIDs.contains(channelId)
                         ) {
-                            selectedChannelId = channelId
+                            if selectedChannelIDs.contains(channelId) {
+                                selectedChannelIDs.remove(channelId)
+                            } else {
+                                selectedChannelIDs.insert(channelId)
+                            }
                         }
                     }
                 }
             }
 
-            if !availableTags.isEmpty {
+            if !allTags.isEmpty {
                 Rectangle()
                     .fill(Color.appDividerSubtle.opacity(0.9))
                     .frame(height: 0.5)
@@ -594,7 +603,7 @@ struct ThingListScreen: View {
                     .foregroundStyle(.secondary)
 
                 ThingFilterChipFlowLayout(horizontalSpacing: 8, verticalSpacing: 8) {
-                    ForEach(availableTags, id: \.self) { tag in
+                    ForEach(allTags, id: \.self) { tag in
                         tagCloudChip(tag: tag)
                     }
                 }
@@ -607,36 +616,44 @@ struct ThingListScreen: View {
     }
 
     private func tagCloudChip(tag: String) -> some View {
-        let isSelected = selectedTag == tag
+        let isSelected = selectedTags.contains(tag)
         return filterCloudChip(title: tag, isSelected: isSelected) {
-            selectedTag = isSelected ? nil : tag
+            if isSelected {
+                selectedTags.remove(tag)
+            } else {
+                selectedTags.insert(tag)
+            }
         }
     }
 
-    private func filterCloudChip(title: String, isSelected: Bool, onTap: @escaping () -> Void) -> some View {
+    private func filterCloudChip(
+        title: String,
+        isSelected: Bool,
+        onTap: @escaping () -> Void
+    ) -> some View {
         Button {
             onTap()
-            isFilterPopoverPresented = false
         } label: {
             Text(title)
                 .lineLimit(1)
                 .truncationMode(.tail)
-            .font(.caption.weight(.medium))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .frame(minWidth: 60, maxWidth: 208, alignment: .leading)
-            .foregroundStyle(isSelected ? Color.appAccentPrimary : Color.appTextPrimary)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(isSelected ? Color.appAccentPrimary.opacity(0.16) : Color.appSurfaceRaised)
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(
-                        isSelected ? Color.appAccentPrimary.opacity(0.45) : Color.appBorderSubtle.opacity(0.95),
-                        lineWidth: 0.8
-                    )
-            )
+                .multilineTextAlignment(.center)
+                .font(.caption.weight(.medium))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .frame(minWidth: 60, maxWidth: 208, alignment: .center)
+                .foregroundStyle(isSelected ? Color.appAccentPrimary : Color.appTextPrimary)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(isSelected ? Color.appAccentPrimary.opacity(0.16) : Color.appSurfaceRaised)
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(
+                            isSelected ? Color.appAccentPrimary.opacity(0.45) : Color.appBorderSubtle.opacity(0.95),
+                            lineWidth: 0.8
+                        )
+                )
         }
         .buttonStyle(.plain)
     }

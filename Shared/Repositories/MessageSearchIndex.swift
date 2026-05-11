@@ -307,6 +307,31 @@ actor MessageMetadataIndex {
         }
     }
 
+    func tagCounts() throws -> [MessageTagCount] {
+        try dbQueue.read { db in
+            let sql = """
+                SELECT value_norm, COUNT(DISTINCT message_id) AS total_count, MAX(received_at) AS latest_received_at
+                FROM message_metadata_index
+                WHERE key_name = 'tag'
+                  AND value_norm != ''
+                GROUP BY value_norm
+                ORDER BY total_count DESC, value_norm ASC;
+                """
+            return try GRDB.Row.fetchAll(db, sql: sql).compactMap { row in
+                let tag: String = row["value_norm"]
+                let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return nil }
+                let totalCount: Int = row["total_count"]
+                let latestReceivedAtEpoch: Double? = row["latest_received_at"]
+                return MessageTagCount(
+                    tag: trimmed,
+                    totalCount: totalCount,
+                    latestReceivedAt: latestReceivedAtEpoch.map(Date.init(timeIntervalSince1970:))
+                )
+            }
+        }
+    }
+
     func searchMessageIDs(
         matchingAllTags rawTags: [String],
         textQuery: String? = nil,

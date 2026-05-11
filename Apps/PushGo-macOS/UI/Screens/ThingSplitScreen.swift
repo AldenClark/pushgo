@@ -9,8 +9,8 @@ struct ThingSplitScreen: View {
     var openThingId: String? = nil
     var onOpenThingHandled: (() -> Void)? = nil
     @State private var searchQuery: String = ""
-    @State private var selectedChannelId: String?
-    @State private var selectedTag: String?
+    @State private var selectedChannelIDs: Set<String> = []
+    @State private var selectedTags: Set<String> = []
     @State private var hydrationRequestedThingIDs: Set<String> = []
     @State private var isBatchMode: Bool = false
     @State private var batchSelection: Set<String> = []
@@ -133,15 +133,15 @@ struct ThingSplitScreen: View {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let filtered = viewModel.things.filter { thing in
             guard !isPendingLocalDeletion(thing) else { return false }
-            if let selectedChannelId {
+            if !selectedChannelIDs.isEmpty {
                 let thingChannelId = thing.channelId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                if thingChannelId != selectedChannelId {
+                if !selectedChannelIDs.contains(thingChannelId) {
                     return false
                 }
             }
-            if let selectedTag {
-                let hasTag = thing.tags.contains { normalizedTag($0) == selectedTag }
-                if !hasTag {
+            if !selectedTags.isEmpty {
+                let normalizedThingTags = Set(thing.tags.map(normalizedTag))
+                if !selectedTags.contains(where: normalizedThingTags.contains) {
                     return false
                 }
             }
@@ -179,8 +179,9 @@ struct ThingSplitScreen: View {
     }
 
     private var channelOptions: [(id: String, name: String)] {
-        let channelIds = Set(viewModel.things.compactMap {
-            let trimmed = $0.channelId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let channelIds = Set(viewModel.things.compactMap { thing -> String? in
+            guard !isPendingLocalDeletion(thing) else { return nil }
+            let trimmed = thing.channelId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return trimmed.isEmpty ? nil : trimmed
         })
         return channelIds
@@ -381,8 +382,8 @@ struct ThingSplitScreen: View {
         if let target = openThingId?.trimmingCharacters(in: .whitespacesAndNewlines),
            !target.isEmpty
         {
-            if selectedTag != nil {
-                selectedTag = nil
+            if !selectedTags.isEmpty {
+                selectedTags.removeAll()
                 return
             }
             if filteredThings.contains(where: { $0.id == target }) {
@@ -443,22 +444,26 @@ struct ThingSplitScreen: View {
                 ThingSplitFilterChipFlowLayout(horizontalSpacing: 8, verticalSpacing: 8) {
                     filterCloudChip(
                         title: localizationManager.localized("all_groups"),
-                        isSelected: selectedChannelId == nil
+                        isSelected: selectedChannelIDs.isEmpty
                     ) {
-                        selectedChannelId = nil
+                        selectedChannelIDs.removeAll()
                     }
                     ForEach(channelOptions, id: \.id) { option in
                         filterCloudChip(
                             title: option.name,
-                            isSelected: selectedChannelId == option.id
+                            isSelected: selectedChannelIDs.contains(option.id)
                         ) {
-                            selectedChannelId = option.id
+                            if selectedChannelIDs.contains(option.id) {
+                                selectedChannelIDs.remove(option.id)
+                            } else {
+                                selectedChannelIDs.insert(option.id)
+                            }
                         }
                     }
                 }
             }
 
-            if !availableTags.isEmpty {
+            if !allTags.isEmpty {
                 Rectangle()
                     .fill(Color.appDividerSubtle.opacity(0.9))
                     .frame(height: 0.5)
@@ -469,7 +474,7 @@ struct ThingSplitScreen: View {
                     .foregroundStyle(.secondary)
 
                 ThingSplitFilterChipFlowLayout(horizontalSpacing: 8, verticalSpacing: 8) {
-                    ForEach(availableTags, id: \.self) { tag in
+                    ForEach(allTags, id: \.self) { tag in
                         tagCloudChip(tag: tag)
                     }
                 }
@@ -482,8 +487,13 @@ struct ThingSplitScreen: View {
     }
 
     private var availableTags: [String] {
+        allTags
+    }
+
+    private var allTags: [String] {
         var tags = Set<String>()
         for thing in viewModel.things {
+            guard !isPendingLocalDeletion(thing) else { continue }
             for tag in thing.tags {
                 let normalized = normalizedTag(tag)
                 if !normalized.isEmpty {
@@ -499,28 +509,36 @@ struct ThingSplitScreen: View {
     }
 
     private var isFilterMenuHighlighted: Bool {
-        selectedChannelId != nil || selectedTag != nil
+        !selectedChannelIDs.isEmpty || !selectedTags.isEmpty
     }
 
     private func tagCloudChip(tag: String) -> some View {
-        let isSelected = selectedTag == tag
+        let isSelected = selectedTags.contains(tag)
         return filterCloudChip(title: tag, isSelected: isSelected) {
-            selectedTag = isSelected ? nil : tag
+            if isSelected {
+                selectedTags.remove(tag)
+            } else {
+                selectedTags.insert(tag)
+            }
         }
     }
 
-    private func filterCloudChip(title: String, isSelected: Bool, onTap: @escaping () -> Void) -> some View {
+    private func filterCloudChip(
+        title: String,
+        isSelected: Bool,
+        onTap: @escaping () -> Void
+    ) -> some View {
         Button {
             onTap()
-            isFilterPopoverPresented = false
         } label: {
             Text(title)
                 .lineLimit(1)
                 .truncationMode(.tail)
+                .multilineTextAlignment(.center)
                 .font(.caption.weight(.medium))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .frame(minWidth: 60, maxWidth: 208, alignment: .leading)
+                .frame(minWidth: 60, maxWidth: 208, alignment: .center)
                 .foregroundStyle(isSelected ? Color.appAccentPrimary : Color.appTextPrimary)
                 .background(
                     Capsule(style: .continuous)

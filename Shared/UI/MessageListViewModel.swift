@@ -69,9 +69,10 @@ final class MessageListViewModel {
     }
     private(set) var sortMode: MessageListSortMode = MessageListSortMode.loadPreference()
     private(set) var selectedFilter: MessageFilter = .all
-    private(set) var selectedChannel: MessageChannelKey?
-    private(set) var selectedTag: String?
+    private(set) var selectedChannels: Set<MessageChannelKey> = []
+    private(set) var selectedTags: Set<String> = []
     private(set) var channelSummaries: [MessageChannelSummary] = []
+    private(set) var tagSummaries: [MessageTagCount] = []
     private(set) var hasLoadedOnce: Bool = false
     private(set) var totalMessageCount: Int = 0
     private(set) var unreadMessageCount: Int = 0
@@ -157,10 +158,10 @@ final class MessageListViewModel {
     }
 
     func toggleChannelSelection(_ key: MessageChannelKey) {
-        if selectedChannel == key {
-            selectedChannel = nil
+        if selectedChannels.contains(key) {
+            selectedChannels.remove(key)
         } else {
-            selectedChannel = key
+            selectedChannels.insert(key)
         }
         Task { @MainActor in
             await enqueueReload(resetPaging: true, clearBeforeLoading: false, reconcileUnreadSession: false)
@@ -168,8 +169,8 @@ final class MessageListViewModel {
     }
 
     func clearChannelSelection() {
-        guard selectedChannel != nil else { return }
-        selectedChannel = nil
+        guard !selectedChannels.isEmpty else { return }
+        selectedChannels.removeAll()
         Task { @MainActor in
             await enqueueReload(resetPaging: true, clearBeforeLoading: false, reconcileUnreadSession: false)
         }
@@ -177,10 +178,10 @@ final class MessageListViewModel {
 
     func toggleTagSelection(_ rawTag: String) {
         guard let normalized = Self.normalizedTag(rawTag) else { return }
-        if selectedTag == normalized {
-            selectedTag = nil
+        if selectedTags.contains(normalized) {
+            selectedTags.remove(normalized)
         } else {
-            selectedTag = normalized
+            selectedTags.insert(normalized)
         }
         Task { @MainActor in
             await enqueueReload(resetPaging: true, clearBeforeLoading: false, reconcileUnreadSession: false)
@@ -188,8 +189,8 @@ final class MessageListViewModel {
     }
 
     func clearTagSelection() {
-        guard selectedTag != nil else { return }
-        selectedTag = nil
+        guard !selectedTags.isEmpty else { return }
+        selectedTags.removeAll()
         Task { @MainActor in
             await enqueueReload(resetPaging: true, clearBeforeLoading: false, reconcileUnreadSession: false)
         }
@@ -275,7 +276,8 @@ final class MessageListViewModel {
     }
 
     func currentChannelRawValue() -> String? {
-        selectedChannel?.rawChannelValue
+        guard selectedChannels.count == 1 else { return nil }
+        return selectedChannels.first?.rawChannelValue
     }
     func markCurrentChannelAsRead() async -> Int {
         do {
@@ -317,7 +319,7 @@ final class MessageListViewModel {
     }
 
     func cleanupCurrentChannel(kind: ChannelCleanupKind) async -> Int {
-        let channel = selectedChannel?.rawChannelValue
+        let channel = currentChannelRawValue()
         do {
             let deleted = try await environment.messageStateCoordinator.deleteMessages(
                 channel: channel,
@@ -340,7 +342,7 @@ final class MessageListViewModel {
     }
 
     func cleanupReadMessages() async -> Int {
-        let channel = selectedChannel?.rawChannelValue
+        let channel = currentChannelRawValue()
         do {
             let deleted = try await environment.messageStateCoordinator.deleteMessages(
                 channel: channel,
@@ -529,8 +531,8 @@ final class MessageListViewModel {
                 before: cursor,
                 limit: pageSize,
                 filter: mapFilter(selectedFilter),
-                channel: selectedChannel?.rawChannelValue,
-                tag: selectedTag,
+                channel: nil,
+                tag: nil,
                 sortMode: sortMode
             )
             lastPageCount = page.count
@@ -538,9 +540,10 @@ final class MessageListViewModel {
             if page.isEmpty {
                 break
             }
+            let scopedPage = applyFacetSelections(to: page)
 
-            if results.count + page.count <= targetCount {
-                results.append(contentsOf: page)
+            if results.count + scopedPage.count <= targetCount {
+                results.append(contentsOf: scopedPage)
                 cursor = page.last.map {
                     MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
                 }
@@ -549,7 +552,7 @@ final class MessageListViewModel {
                 }
             } else {
                 let needed = targetCount - results.count
-                results.append(contentsOf: page.prefix(needed))
+                results.append(contentsOf: scopedPage.prefix(needed))
                 cursor = results.last.map {
                     MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
                 }
@@ -574,14 +577,14 @@ final class MessageListViewModel {
                 before: nextCursor,
                 limit: pageSize,
                 filter: mapFilter(selectedFilter),
-                channel: selectedChannel?.rawChannelValue,
-                tag: selectedTag,
+                channel: nil,
+                tag: nil,
                 sortMode: sortMode
             )
             if resetStaleSelectionIfNeeded() {
                 return
             }
-            filteredMessages.append(contentsOf: page)
+            filteredMessages.append(contentsOf: applyFacetSelections(to: page))
             nextCursor = page.last.map {
                 MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
             }
@@ -628,13 +631,14 @@ final class MessageListViewModel {
                 if shouldLoadChannelSummaries {
                     let rawChannels = try await dataStore.messageChannelCounts()
                     channelSummaries = buildChannelSummaries(from: rawChannels)
-                    if let selectedChannel, channelSummaries.contains(where: { $0.key == selectedChannel }) == false {
-                        self.selectedChannel = nil
-                    }
+                    tagSummaries = try await dataStore.messageTagCounts()
+                    let knownKeys = Set(channelSummaries.map(\.key))
+                    selectedChannels = selectedChannels.intersection(knownKeys)
                 }
             } catch {
                 await refreshCounts()
                 channelSummaries = []
+                tagSummaries = []
             }
         } while pendingCountsAndChannels
     }
@@ -756,6 +760,16 @@ final class MessageListViewModel {
             bucket += 1
         }
         return bucket
+    }
+
+    private func applyFacetSelections(to messages: [PushMessageSummary]) -> [PushMessageSummary] {
+        guard !selectedChannels.isEmpty else {
+            return messages
+        }
+        return messages.filter { message in
+            let messageChannel = MessageChannelKey.from(message.channel)
+            return selectedChannels.contains(messageChannel)
+        }
     }
 
     private static func normalizedTag(_ rawTag: String) -> String? {

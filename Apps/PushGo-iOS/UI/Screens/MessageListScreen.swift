@@ -213,10 +213,7 @@ struct MessageListScreen: View {
     }
 
     private var displayedChannelSummaries: [MessageChannelSummary] {
-        let source = viewModel.isUnreadOnlyFilterActive
-            ? viewModel.channelSummaries.filter(\.hasUnread)
-            : viewModel.channelSummaries
-        let summaries = source.sorted { lhs, rhs in
+        let summaries = viewModel.channelSummaries.sorted { lhs, rhs in
             if lhs.totalCount != rhs.totalCount {
                 return lhs.totalCount > rhs.totalCount
             }
@@ -230,16 +227,9 @@ struct MessageListScreen: View {
     }
 
     private var displayedTagOptions: [MessageTagSummary] {
-        var tagCounts: [String: Int] = [:]
-        for message in baseVisibleFilteredMessages {
-            for tag in message.tags {
-                let normalized = normalizedTag(tag)
-                if !normalized.isEmpty {
-                    tagCounts[normalized, default: 0] += 1
-                }
-            }
+        viewModel.tagSummaries.map {
+            MessageTagSummary(tag: $0.tag, totalCount: $0.totalCount)
         }
-        return tagCounts.map { MessageTagSummary(tag: $0.key, totalCount: $0.value) }
             .sorted { lhs, rhs in
                 if lhs.totalCount != rhs.totalCount {
                     return lhs.totalCount > rhs.totalCount
@@ -598,6 +588,14 @@ private extension MessageListScreen {
                 }
                 .accessibilityLabel(localizationManager.localized("done"))
             } else {
+                if !unreadDisplayedMessages.isEmpty {
+                    Button {
+                        Task { await markAllDisplayedMessagesAsRead() }
+                    } label: {
+                        Image(systemName: "envelope.open.fill")
+                    }
+                    .accessibilityLabel(localizationManager.localized("mark_all_as_read"))
+                }
                 Button {
                     isFilterPopoverPresented = true
                 } label: {
@@ -668,7 +666,7 @@ private extension MessageListScreen {
     }
 
     private var isFilterMenuHighlighted: Bool {
-        viewModel.selectedChannel != nil || viewModel.selectedTag != nil || viewModel.isUnreadOnlyFilterActive
+        !viewModel.selectedChannels.isEmpty || !viewModel.selectedTags.isEmpty || viewModel.isUnreadOnlyFilterActive
     }
 
     private func batchDoneToolbarIcon() -> some View {
@@ -702,7 +700,6 @@ private extension MessageListScreen {
 
             Button {
                 viewModel.toggleUnreadOnlyFilter()
-                isFilterPopoverPresented = false
             } label: {
                 filterMenuSelectionRow(
                     title: localizationManager.localized("message_show_unread_only"),
@@ -727,7 +724,7 @@ private extension MessageListScreen {
                     ForEach(displayedChannelSummaries) { summary in
                         filterCloudChip(
                             title: resolvedChannelDisplayName(for: summary.key) ?? summary.title,
-                            isSelected: viewModel.selectedChannel == summary.key
+                            isSelected: viewModel.selectedChannels.contains(summary.key)
                         ) {
                             viewModel.toggleChannelSelection(summary.key)
                         }
@@ -759,36 +756,40 @@ private extension MessageListScreen {
     }
 
     private func tagCloudChip(tag: String) -> some View {
-        let isSelected = viewModel.selectedTag == tag
+        let isSelected = viewModel.selectedTags.contains(tag)
         return filterCloudChip(title: tag, isSelected: isSelected) {
             viewModel.toggleTagSelection(tag)
         }
     }
 
-    private func filterCloudChip(title: String, isSelected: Bool, onTap: @escaping () -> Void) -> some View {
+    private func filterCloudChip(
+        title: String,
+        isSelected: Bool,
+        onTap: @escaping () -> Void
+    ) -> some View {
         Button {
             onTap()
-            isFilterPopoverPresented = false
         } label: {
             Text(title)
                 .lineLimit(1)
                 .truncationMode(.tail)
-            .font(.caption.weight(.medium))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .frame(minWidth: 60, maxWidth: 208, alignment: .leading)
-            .foregroundStyle(isSelected ? Color.appAccentPrimary : Color.appTextPrimary)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(isSelected ? Color.appAccentPrimary.opacity(0.16) : Color.appSurfaceRaised)
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(
-                        isSelected ? Color.appAccentPrimary.opacity(0.45) : Color.appBorderSubtle.opacity(0.95),
-                        lineWidth: 0.8
-                    )
-            )
+                .multilineTextAlignment(.center)
+                .font(.caption.weight(.medium))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .frame(minWidth: 60, maxWidth: 208, alignment: .center)
+                .foregroundStyle(isSelected ? Color.appAccentPrimary : Color.appTextPrimary)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(isSelected ? Color.appAccentPrimary.opacity(0.16) : Color.appSurfaceRaised)
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(
+                            isSelected ? Color.appAccentPrimary.opacity(0.45) : Color.appBorderSubtle.opacity(0.95),
+                            lineWidth: 0.8
+                        )
+                )
         }
         .buttonStyle(.plain)
     }
@@ -887,6 +888,10 @@ private extension MessageListScreen {
         return visibleFilteredMessages
     }
 
+    private var unreadDisplayedMessages: [PushMessageSummary] {
+        displayedMessages.filter { !$0.isRead }
+    }
+
     private func scroll(_ proxy: ScrollViewProxy, to targetId: UUID, anchor: UnitPoint) {
         if reduceMotion {
             proxy.scrollTo(targetId, anchor: anchor)
@@ -914,6 +919,21 @@ private extension MessageListScreen {
         selectedMessageIDs.removeAll()
     }
 
+    private func markAllDisplayedMessagesAsRead() async {
+        let unreadMessages = unreadDisplayedMessages
+        guard !unreadMessages.isEmpty else { return }
+        await viewModel.markRead(unreadMessages)
+        environment.showToast(
+            message: localizationManager.localized(
+                "placeholder_number_items_read",
+                localizationManager.localized("messages"),
+                unreadMessages.count
+            ),
+            style: .success,
+            duration: 2
+        )
+    }
+
     @MainActor
     private func exitBatchModeAfterFlushingPendingDeletion() async {
         await environment.pendingLocalDeletionController.commitCurrentIfNeeded()
@@ -925,11 +945,12 @@ private extension MessageListScreen {
     }
 
     private var visibleFilteredMessages: [PushMessageSummary] {
-        guard let selectedTag = viewModel.selectedTag else {
+        guard !viewModel.selectedTags.isEmpty else {
             return baseVisibleFilteredMessages
         }
         return baseVisibleFilteredMessages.filter { message in
-            message.tags.contains(where: { normalizedTag($0) == selectedTag })
+            let tags = Set(message.tags.map(normalizedTag))
+            return viewModel.selectedTags.contains(where: tags.contains)
         }
     }
 

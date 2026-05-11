@@ -301,11 +301,13 @@ struct MessageSplitScreen: View {
 
     private var visibleFilteredMessages: [PushMessageSummary] {
         let baseMessages = messageListViewModel.filteredMessages.filter { !isPendingLocalDeletion($0.id, channelId: $0.channel) }
-        guard let selectedTag = messageListViewModel.selectedTag else {
+        let selectedTags = messageListViewModel.selectedTags
+        guard !selectedTags.isEmpty else {
             return baseMessages
         }
         return baseMessages.filter { message in
-            message.tags.contains(where: { normalizedTag($0) == selectedTag })
+            let tags = Set(message.tags.map(normalizedTag))
+            return selectedTags.contains(where: tags.contains)
         }
     }
 
@@ -318,23 +320,18 @@ struct MessageSplitScreen: View {
     }
 
     private var displayedTagOptions: [String] {
-        var tags = Set<String>()
-        for message in messageListViewModel.filteredMessages {
-            for tag in message.tags {
-                let normalized = normalizedTag(tag)
-                if !normalized.isEmpty {
-                    tags.insert(normalized)
+        messageListViewModel.tagSummaries
+            .sorted { lhs, rhs in
+                if lhs.totalCount != rhs.totalCount {
+                    return lhs.totalCount > rhs.totalCount
                 }
+                return lhs.tag.localizedCaseInsensitiveCompare(rhs.tag) == .orderedAscending
             }
-        }
-        return tags.sorted()
+            .map(\.tag)
     }
 
     private var displayedChannelSummaries: [MessageChannelSummary] {
-        let source = messageListViewModel.isUnreadOnlyFilterActive
-            ? messageListViewModel.channelSummaries.filter(\.hasUnread)
-            : messageListViewModel.channelSummaries
-        return source.sorted { lhs, rhs in
+        messageListViewModel.channelSummaries.sorted { lhs, rhs in
             if lhs.totalCount != rhs.totalCount {
                 return lhs.totalCount > rhs.totalCount
             }
@@ -534,7 +531,6 @@ struct MessageSplitScreen: View {
 
             Button {
                 messageListViewModel.toggleUnreadOnlyFilter()
-                isFilterPopoverPresented = false
             } label: {
                 filterMenuSelectionRow(
                     title: localizationManager.localized("message_show_unread_only"),
@@ -559,7 +555,7 @@ struct MessageSplitScreen: View {
                     ForEach(displayedChannelSummaries) { summary in
                         filterCloudChip(
                             title: resolvedChannelDisplayName(for: summary.key) ?? summary.title,
-                            isSelected: messageListViewModel.selectedChannel == summary.key
+                            isSelected: messageListViewModel.selectedChannels.contains(summary.key)
                         ) {
                             messageListViewModel.toggleChannelSelection(summary.key)
                         }
@@ -591,30 +587,34 @@ struct MessageSplitScreen: View {
     }
 
     private var isFilterMenuHighlighted: Bool {
-        messageListViewModel.selectedChannel != nil
-            || messageListViewModel.selectedTag != nil
+        !messageListViewModel.selectedChannels.isEmpty
+            || !messageListViewModel.selectedTags.isEmpty
             || messageListViewModel.isUnreadOnlyFilterActive
     }
 
     private func tagCloudChip(tag: String) -> some View {
-        let isSelected = messageListViewModel.selectedTag == tag
+        let isSelected = messageListViewModel.selectedTags.contains(tag)
         return filterCloudChip(title: tag, isSelected: isSelected) {
             messageListViewModel.toggleTagSelection(tag)
         }
     }
 
-    private func filterCloudChip(title: String, isSelected: Bool, onTap: @escaping () -> Void) -> some View {
+    private func filterCloudChip(
+        title: String,
+        isSelected: Bool,
+        onTap: @escaping () -> Void
+    ) -> some View {
         Button {
             onTap()
-            isFilterPopoverPresented = false
         } label: {
             Text(title)
                 .lineLimit(1)
                 .truncationMode(.tail)
+                .multilineTextAlignment(.center)
                 .font(.caption.weight(.medium))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .frame(minWidth: 60, maxWidth: 208, alignment: .leading)
+                .frame(minWidth: 60, maxWidth: 208, alignment: .center)
                 .foregroundStyle(isSelected ? Color.appAccentPrimary : Color.appTextPrimary)
                 .background(
                     Capsule(style: .continuous)

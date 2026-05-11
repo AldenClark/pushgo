@@ -73,6 +73,12 @@ struct MessageChannelCount: Hashable, Sendable {
     let latestUnreadAt: Date?
 }
 
+struct MessageTagCount: Hashable, Sendable {
+    let tag: String
+    let totalCount: Int
+    let latestReceivedAt: Date?
+}
+
 struct AppSettingsSnapshot: Hashable, Sendable {
     var manualKeyEncoding: String?
     var launchAtLoginEnabled: Bool?
@@ -1688,6 +1694,18 @@ actor LocalDataStore {
         let backend = try requireBackend()
         let baseCounts = try await backend.messageChannelCounts()
         return applyPendingInserts(to: baseCounts)
+    }
+
+    func messageTagCounts() async throws -> [MessageTagCount] {
+        let backend = try requireBackend()
+        if let metadataIndex {
+            await ensureMetadataIndexReady()
+            let indexedCounts = try await metadataIndex.tagCounts()
+            if !indexedCounts.isEmpty {
+                return indexedCounts
+            }
+        }
+        return try await backend.messageTagCounts()
     }
 
     func messageCounts() async throws -> (total: Int, unread: Int) {
@@ -5420,6 +5438,47 @@ private actor GRDBStore {
                 )
             }
         }
+    }
+
+    func messageTagCounts() async throws -> [MessageTagCount] {
+        let messages = try await loadMessages()
+        var aggregates: [String: (totalCount: Int, latestReceivedAt: Date?)] = [:]
+
+        for message in messages {
+            let tags = Set(
+                message.tags
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                    .filter { !$0.isEmpty }
+            )
+            for tag in tags {
+                let existing = aggregates[tag]
+                let latestReceivedAt: Date
+                if let existingLatest = existing?.latestReceivedAt {
+                    latestReceivedAt = max(existingLatest, message.receivedAt)
+                } else {
+                    latestReceivedAt = message.receivedAt
+                }
+                aggregates[tag] = (
+                    totalCount: (existing?.totalCount ?? 0) + 1,
+                    latestReceivedAt: latestReceivedAt
+                )
+            }
+        }
+
+        return aggregates
+            .map { tag, aggregate in
+                MessageTagCount(
+                    tag: tag,
+                    totalCount: aggregate.totalCount,
+                    latestReceivedAt: aggregate.latestReceivedAt
+                )
+            }
+            .sorted { lhs, rhs in
+                if lhs.totalCount != rhs.totalCount {
+                    return lhs.totalCount > rhs.totalCount
+                }
+                return lhs.tag.localizedCaseInsensitiveCompare(rhs.tag) == .orderedAscending
+            }
     }
 
     func searchMessagesCount(query: String) async throws -> Int {

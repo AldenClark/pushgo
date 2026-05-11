@@ -282,13 +282,13 @@ struct MainTabContainerView: View {
         guard nextTab == .messages else { return }
         switch current ?? .messagesAll {
         case .messagesAll:
-            if messageListViewModel.selectedChannel != nil {
+            if !messageListViewModel.selectedChannels.isEmpty {
                 messageListViewModel.clearChannelSelection()
             }
         case .events, .things, .channels, .settings:
             break
         case .messagesChannel:
-            if messageListViewModel.selectedChannel != nil {
+            if !messageListViewModel.selectedChannels.isEmpty {
                 messageListViewModel.clearChannelSelection()
             }
         }
