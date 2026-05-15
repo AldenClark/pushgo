@@ -214,6 +214,117 @@ jobs:
             echo "__PUSHGO_RELEASE_NOTES_ZH_HANT_EOF__"
           } >> "$GITHUB_ENV"
 
+      - name: Generate App Store metadata from release/appstore
+        shell: bash
+        run: |
+          set -euo pipefail
+          appstore_metadata_file="release/appstore.json"
+          if [[ ! -f "$appstore_metadata_file" ]]; then
+            echo "Missing $appstore_metadata_file"
+            exit 1
+          fi
+
+          /usr/bin/python3 - "$appstore_metadata_file" "fastlane/metadata" <<'PY'
+          import json
+          import pathlib
+          import sys
+          import textwrap
+          import urllib.parse
+
+          source = pathlib.Path(sys.argv[1])
+          output_root = pathlib.Path(sys.argv[2])
+          locale_to_fastlane = {
+              "en-US": "en-US",
+              "de-DE": "de-DE",
+              "es-ES": "es-ES",
+              "fr-FR": "fr-FR",
+              "ja-JP": "ja",
+              "ko-KR": "ko",
+              "zh-Hans": "zh-Hans",
+              "zh-Hant": "zh-Hant",
+          }
+          fields = {
+              "promotional_text": ("promotional_text.txt", 170),
+              "keywords": ("keywords.txt", 100),
+              "description": ("description.txt", 4000),
+              "support_url": ("support_url.txt", 255),
+          }
+
+          payload = json.loads(source.read_text(encoding="utf-8"))
+          errors = []
+          warnings = []
+
+          def shorten_text(text: str, limit: int) -> str:
+              return textwrap.shorten(text.rstrip(), width=limit, placeholder="")
+
+          def shorten_description(text: str, limit: int) -> str:
+              text = text.rstrip()
+              if len(text) <= limit:
+                  return text
+
+              paragraphs = [part.rstrip() for part in text.split("\n\n")]
+              current = ""
+              for paragraph in paragraphs:
+                  candidate = paragraph if not current else f"{current}\n\n{paragraph}"
+                  if len(candidate) > limit:
+                      break
+                  current = candidate
+              if current and len(current) >= min(2800, limit):
+                  return current
+
+              return shorten_text(text, limit)
+
+          for source_locale, fastlane_locale in locale_to_fastlane.items():
+              locale_payload = payload.get(source_locale)
+              if not isinstance(locale_payload, dict):
+                  errors.append(f"{source_locale}: missing locale object")
+                  continue
+
+              locale_dir = output_root / fastlane_locale
+              locale_dir.mkdir(parents=True, exist_ok=True)
+
+              for field_name, (filename, limit) in fields.items():
+                  value = locale_payload.get(field_name)
+                  if not isinstance(value, str) or not value.strip():
+                      errors.append(f"{source_locale}.{field_name}: missing text")
+                      continue
+
+                  text = value.rstrip()
+                  if field_name == "support_url":
+                      parsed_url = urllib.parse.urlparse(text)
+                      if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+                          errors.append(f"{source_locale}.{field_name}: expected an absolute http(s) URL")
+                          continue
+                  if field_name == "description" and len(text) > limit:
+                      original_length = len(text)
+                      text = shorten_description(text, limit)
+                      warnings.append(
+                          f"{source_locale}.{field_name}: shortened from {original_length} to {len(text)} characters"
+                      )
+                  elif field_name == "promotional_text" and len(text) > limit:
+                      original_length = len(text)
+                      text = shorten_text(text, limit)
+                      warnings.append(
+                          f"{source_locale}.{field_name}: shortened from {original_length} to {len(text)} characters"
+                      )
+                  elif len(text) > limit:
+                      errors.append(f"{source_locale}.{field_name}: {len(text)} characters exceeds App Store limit {limit}")
+                      continue
+
+                  (locale_dir / filename).write_text(f"{text}\n", encoding="utf-8")
+
+          if errors:
+              print("Invalid App Store metadata in release/appstore.json:", file=sys.stderr)
+              for error in errors:
+                  print(f"- {error}", file=sys.stderr)
+              sys.exit(1)
+
+          for warning in warnings:
+              print(f"::warning::{warning}")
+
+          print(f"Wrote localized App Store metadata under {output_root}")
+          PY
+
       - name: Import App Store signing certificates into temporary keychain
         shell: bash
         run: |
