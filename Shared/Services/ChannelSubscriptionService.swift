@@ -828,7 +828,7 @@ struct ChannelSubscriptionService {
             inferred = ("authentication_failed", .auth, false)
         case "device_key_not_found", "channel_not_found", "device_not_found":
             inferred = (normalizedCode, .notFound, false)
-        case "invalid_channel_id", "invalid_password", "invalid_platform", "invalid_device_token", "provider_token_missing", "provider_token_required":
+        case "invalid_channel_id", "invalid_password", "invalid_platform", "invalid_device_token", "provider_token_missing", "provider_token_required", "channel_subscriber_limit_exceeded":
             inferred = (normalizedCode, .validation, false)
         case "password_mismatch", "invalid_channel_password", "platform_mismatch", "channel_type_mismatch":
             inferred = (normalizedCode, .conflict, false)
@@ -892,6 +892,11 @@ struct ChannelSubscriptionService {
             }
             if detail.contains("invalid_password") || detail.contains("invalid password") {
                 return ("invalid_password", .validation, false)
+            }
+            if detail.contains("channel_subscriber_limit_exceeded")
+                || detail.contains("subscriber limit")
+            {
+                return ("channel_subscriber_limit_exceeded", .validation, false)
             }
         }
 

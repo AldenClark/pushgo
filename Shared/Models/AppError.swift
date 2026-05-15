@@ -311,6 +311,8 @@ enum AppError: LocalizedError, Equatable, Sendable {
             return LocalizationProvider.localized("channel_password_invalid_length")
         case "password_mismatch", "invalid_channel_password":
             return LocalizationProvider.localized("channel_password_incorrect")
+        case "channel_subscriber_limit_exceeded":
+            return LocalizationProvider.localized("channel_subscriber_limit_exceeded")
         case "provider_token_missing", "provider_token_required":
             return LocalizationProvider.localized("device_push_route_not_ready")
         case "event_id_required":
