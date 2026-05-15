@@ -3,20 +3,20 @@
     <channel>
         <title>PushGo</title>
         <item>
-            <title>1.2.1</title>
-            <pubDate>Fri, 24 Apr 2026 12:22:59 +0000</pubDate>
-            <sparkle:version>76</sparkle:version>
-            <sparkle:shortVersionString>1.2.1</sparkle:shortVersionString>
+            <title>1.2.2</title>
+            <pubDate>Mon, 11 May 2026 07:12:09 +0000</pubDate>
+            <sparkle:version>77</sparkle:version>
+            <sparkle:shortVersionString>1.2.2</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-            <sparkle:releaseNotesLink>https://update.pushgo.cn/macos/stable/v1.2.1/PushGo-macOS-v1.2.1.txt</sparkle:releaseNotesLink>
-            <sparkle:releaseNotesLink xml:lang="de">https://update.pushgo.cn/macos/stable/v1.2.1/PushGo-macOS-v1.2.1.de.txt</sparkle:releaseNotesLink>
-            <sparkle:releaseNotesLink xml:lang="en">https://update.pushgo.cn/macos/stable/v1.2.1/PushGo-macOS-v1.2.1.en.txt</sparkle:releaseNotesLink>
-            <sparkle:releaseNotesLink xml:lang="es">https://update.pushgo.cn/macos/stable/v1.2.1/PushGo-macOS-v1.2.1.es.txt</sparkle:releaseNotesLink>
-            <sparkle:releaseNotesLink xml:lang="fr">https://update.pushgo.cn/macos/stable/v1.2.1/PushGo-macOS-v1.2.1.fr.txt</sparkle:releaseNotesLink>
-            <sparkle:releaseNotesLink xml:lang="ja">https://update.pushgo.cn/macos/stable/v1.2.1/PushGo-macOS-v1.2.1.ja.txt</sparkle:releaseNotesLink>
-            <sparkle:releaseNotesLink xml:lang="ko">https://update.pushgo.cn/macos/stable/v1.2.1/PushGo-macOS-v1.2.1.ko.txt</sparkle:releaseNotesLink>
-            <sparkle:releaseNotesLink xml:lang="zh">https://update.pushgo.cn/macos/stable/v1.2.1/PushGo-macOS-v1.2.1.zh.txt</sparkle:releaseNotesLink>
-            <enclosure url="https://update.pushgo.cn/macos/stable/v1.2.1/PushGo-macOS-v1.2.1.dmg" length="20737834" type="application/octet-stream" sparkle:edSignature="kVS4/fZ291eP/dKz0UAAJOdTbw8zpr95cWnFbktrRQggmtDOJ/qjeFY66ORppPCsoacWNACBWTCphLGqgaZYAQ=="/>
+            <sparkle:releaseNotesLink>https://update.pushgo.cn/macos/stable/v1.2.2/PushGo-macOS-v1.2.2.txt</sparkle:releaseNotesLink>
+            <sparkle:releaseNotesLink xml:lang="de">https://update.pushgo.cn/macos/stable/v1.2.2/PushGo-macOS-v1.2.2.de.txt</sparkle:releaseNotesLink>
+            <sparkle:releaseNotesLink xml:lang="en">https://update.pushgo.cn/macos/stable/v1.2.2/PushGo-macOS-v1.2.2.en.txt</sparkle:releaseNotesLink>
+            <sparkle:releaseNotesLink xml:lang="es">https://update.pushgo.cn/macos/stable/v1.2.2/PushGo-macOS-v1.2.2.es.txt</sparkle:releaseNotesLink>
+            <sparkle:releaseNotesLink xml:lang="fr">https://update.pushgo.cn/macos/stable/v1.2.2/PushGo-macOS-v1.2.2.fr.txt</sparkle:releaseNotesLink>
+            <sparkle:releaseNotesLink xml:lang="ja">https://update.pushgo.cn/macos/stable/v1.2.2/PushGo-macOS-v1.2.2.ja.txt</sparkle:releaseNotesLink>
+            <sparkle:releaseNotesLink xml:lang="ko">https://update.pushgo.cn/macos/stable/v1.2.2/PushGo-macOS-v1.2.2.ko.txt</sparkle:releaseNotesLink>
+            <sparkle:releaseNotesLink xml:lang="zh">https://update.pushgo.cn/macos/stable/v1.2.2/PushGo-macOS-v1.2.2.zh.txt</sparkle:releaseNotesLink>
+            <enclosure url="https://update.pushgo.cn/macos/stable/v1.2.2/PushGo-macOS-v1.2.2.dmg" length="19090000" type="application/octet-stream" sparkle:edSignature="hrb+ILAAQvc1QQ9OXdREbUBhwwxvTo2sq0+OMYHgls2DEjgMbVKc2PHfLRA+YCCF7bYqdsuyQkrVzVECvyWhAw=="/>
         </item>
     </channel>
 </rss>
