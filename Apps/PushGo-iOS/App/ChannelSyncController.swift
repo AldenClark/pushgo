@@ -64,8 +64,12 @@ final class ChannelSyncController {
                 gateway: gatewayKey,
                 includeDeleted: true
             )
-            channelSubscriptions = active
-            channelSubscriptionLookup = Dictionary(uniqueKeysWithValues: all.map { ($0.channelId, $0) })
+            let normalizedActive = normalizeAndDedupeSubscriptions(active)
+            let normalizedAll = normalizeAndDedupeSubscriptions(all)
+            channelSubscriptions = normalizedActive
+            channelSubscriptionLookup = normalizedAll.reduce(into: [String: ChannelSubscription]()) { result, item in
+                result[item.channelId] = item
+            }
         } catch {
             channelSubscriptions = []
             channelSubscriptionLookup = [:]
@@ -258,6 +262,33 @@ final class ChannelSyncController {
            !token.isEmpty
         {
             await providerRouteController.syncProviderPullRoute(config: config, providerToken: token)
+        }
+    }
+
+    private func normalizeAndDedupeSubscriptions(_ items: [ChannelSubscription]) -> [ChannelSubscription] {
+        var byChannelId: [String: ChannelSubscription] = [:]
+        byChannelId.reserveCapacity(items.count)
+        for item in items {
+            let channelId = item.channelId.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !channelId.isEmpty else { continue }
+            let displayNameTrimmed = item.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedItem = ChannelSubscription(
+                gateway: item.gateway,
+                channelId: channelId,
+                displayName: displayNameTrimmed.isEmpty ? channelId : displayNameTrimmed,
+                updatedAt: item.updatedAt,
+                lastSyncedAt: item.lastSyncedAt
+            )
+            if let existing = byChannelId[channelId], existing.updatedAt > normalizedItem.updatedAt {
+                continue
+            }
+            byChannelId[channelId] = normalizedItem
+        }
+        return byChannelId.values.sorted { lhs, rhs in
+            if lhs.channelId != rhs.channelId {
+                return lhs.channelId < rhs.channelId
+            }
+            return lhs.updatedAt > rhs.updatedAt
         }
     }
 }
