@@ -1,5 +1,92 @@
 import Foundation
 
+enum PushGoMarkdownDisplayMode: String, Equatable {
+    case structuredText = "structured_text"
+    case inlineText = "inline_text"
+    case plainText = "plain_text"
+
+    var automationLoadSource: String {
+        switch self {
+        case .structuredText:
+            return "structured_text"
+        case .inlineText:
+            return "inline_text"
+        case .plainText:
+            return "plain_text_fallback"
+        }
+    }
+}
+
+func pushGoPlainTextDisplaySegments(
+    for text: String,
+    maxChunkBytes: Int = 16 * 1024,
+    maxChunkLines: Int = 160
+) -> [String] {
+    guard !text.isEmpty else { return [""] }
+    guard maxChunkBytes > 0, maxChunkLines > 0 else { return [text] }
+
+    let rawLines = text.split(separator: "\n", omittingEmptySubsequences: false)
+    let lines = rawLines.enumerated().map { index, line in
+        index < rawLines.count - 1 ? "\(line)\n" : String(line)
+    }
+    guard lines.count > maxChunkLines || text.lengthOfBytes(using: .utf8) > maxChunkBytes else {
+        return [text]
+    }
+
+    var segments: [String] = []
+    var currentLines: [String] = []
+    var currentBytes = 0
+
+    func flushCurrentLines() {
+        guard !currentLines.isEmpty else { return }
+        segments.append(currentLines.joined())
+        currentLines.removeAll(keepingCapacity: true)
+        currentBytes = 0
+    }
+
+    for line in lines {
+        let lineBytes = line.lengthOfBytes(using: .utf8)
+        let wouldExceedBytes = currentBytes + lineBytes > maxChunkBytes
+        let wouldExceedLines = currentLines.count >= maxChunkLines
+        if wouldExceedBytes || wouldExceedLines {
+            flushCurrentLines()
+        }
+        currentLines.append(line)
+        currentBytes += lineBytes
+    }
+
+    flushCurrentLines()
+    return segments.isEmpty ? [text] : segments
+}
+
+func pushGoMarkdownDisplayMode(for text: String) -> PushGoMarkdownDisplayMode {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return .plainText }
+
+#if os(macOS)
+    let utf8ByteCount = trimmed.lengthOfBytes(using: .utf8)
+    let newlineCount = trimmed.reduce(into: 0) { partialResult, character in
+        if character == "\n" {
+            partialResult += 1
+        }
+    }
+    if utf8ByteCount > 512 * 1024 || newlineCount > 20_000 {
+        return .plainText
+    }
+#endif
+
+    if trimmed.contains("\n") { return .structuredText }
+    if trimmed.contains("![") { return .structuredText }
+    if trimmed.contains("```") { return .structuredText }
+    if trimmed.hasPrefix("#") || trimmed.hasPrefix(">") { return .structuredText }
+    if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") { return .structuredText }
+    if let first = trimmed.first, first.isNumber, trimmed.contains(". ") {
+        return .structuredText
+    }
+    if trimmed.contains("|") { return .structuredText }
+    return .inlineText
+}
+
 struct PushGoMarkdownDocument: Equatable {
     let blocks: [MarkdownBlock]
 }

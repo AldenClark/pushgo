@@ -135,8 +135,6 @@ final class MessageDetailViewModel {
         }
 
         if let resolvedMessage {
-            let imageURLs = resolvedDetailImageAssetURLs(for: resolvedMessage)
-            await SharedImageCache.primeMetadataSnapshots(for: imageURLs)
             message = resolvedMessage
             hasResolvedMessage = true
             MessageDetailSnapshotCache.shared.store(
@@ -144,26 +142,41 @@ final class MessageDetailViewModel {
                 id: messageId,
                 revision: revision
             )
-            await preloadImageAssets(for: resolvedMessage, imageURLs: imageURLs)
+            scheduleDetailImageMetadataPreheat(for: resolvedMessage)
         } else {
             message = nil
         }
     }
 
-    private func preloadImageAssets(for message: PushMessage, imageURLs: [URL]? = nil) async {
-        let allURLs = imageURLs ?? resolvedDetailImageAssetURLs(for: message)
-        guard !allURLs.isEmpty else { return }
-        await SharedImageCache.preheatMetadata(
-            for: allURLs,
-            maxBytes: AppConstants.maxMessageImageBytes,
-            timeout: 10
-        )
+    private func scheduleDetailImageMetadataPreheat(for message: PushMessage) {
+        let bodyText = message.resolvedBody.rawText
+        let directImageURLs = message.imageURLs
+        Task.detached(priority: .utility) {
+            let imageURLs = resolvedDetailImageAssetURLs(
+                bodyText: bodyText,
+                directImageURLs: directImageURLs
+            )
+            guard !imageURLs.isEmpty else { return }
+            await SharedImageCache.primeMetadataSnapshots(for: imageURLs)
+            await SharedImageCache.preheatMetadata(
+                for: imageURLs,
+                maxBytes: AppConstants.maxMessageImageBytes,
+                timeout: 10
+            )
+        }
     }
 }
 
 func resolvedDetailImageAssetURLs(for message: PushMessage) -> [URL] {
-    let markdownImageURLs = MarkdownImageURLExtractor.extractURLs(from: message.resolvedBody.rawText)
-    return Array(Set(message.imageURLs + markdownImageURLs))
+    resolvedDetailImageAssetURLs(
+        bodyText: message.resolvedBody.rawText,
+        directImageURLs: message.imageURLs
+    )
+}
+
+func resolvedDetailImageAssetURLs(bodyText: String, directImageURLs: [URL]) -> [URL] {
+    let markdownImageURLs = MarkdownImageURLExtractor.extractURLs(from: bodyText)
+    return Array(Set(directImageURLs + markdownImageURLs))
 }
 
 @MainActor

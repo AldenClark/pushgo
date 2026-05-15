@@ -1246,7 +1246,13 @@ enum MessagePreviewExtractor {
     }
 
     private static func preview(from markdown: String, maxLines: Int, maxCharacters: Int) -> String {
-        let normalized = preprocessMarkdownForPreview(markdown)
+        let normalized = preprocessMarkdownForPreview(
+            boundedPreviewSource(
+                markdown,
+                maxLines: maxLines,
+                maxCharacters: maxCharacters
+            )
+        )
         let lines = plainLines(from: normalized)
         var rendered: [String] = []
         rendered.reserveCapacity(maxLines)
@@ -1264,6 +1270,36 @@ enum MessagePreviewExtractor {
         }
         let truncated = joined.prefix(maxCharacters)
         return String(truncated).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func boundedPreviewSource(
+        _ markdown: String,
+        maxLines: Int,
+        maxCharacters: Int
+    ) -> String {
+        let normalized = markdown
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        let lineBudget = max(256, maxLines * 40)
+        let characterBudget = max(16_384, maxCharacters * 8)
+
+        var lineCount = 0
+        var characterCount = 0
+        var capped = String()
+        capped.reserveCapacity(min(normalized.count, characterBudget))
+
+        for scalar in normalized {
+            if characterCount >= characterBudget || lineCount >= lineBudget {
+                break
+            }
+            capped.append(scalar)
+            characterCount += 1
+            if scalar == "\n" {
+                lineCount += 1
+            }
+        }
+
+        return capped
     }
 
     private static func plainLines(from markdown: String) -> [String] {

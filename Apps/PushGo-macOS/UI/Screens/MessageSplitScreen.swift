@@ -224,12 +224,12 @@ struct MessageSplitScreen: View {
             try await dataStore.loadMessage(id: messageId)
         }
         let loaded = loadResult.message
-        if let loaded {
-            await SharedImageCache.primeMetadataSnapshots(for: resolvedDetailImageAssetURLs(for: loaded))
-        }
         await MainActor.run {
             guard selection == messageId else { return }
             selectedMessageSnapshot = loaded
+        }
+        if let loaded {
+            scheduleDetailImageMetadataPrime(for: loaded)
         }
         guard markRead, let loaded else { return }
         await markMessageReadIfNeeded(loaded, messageId: messageId)
@@ -246,13 +246,25 @@ struct MessageSplitScreen: View {
             }
             let loaded = loadResult.message
             guard let message = loaded else { return }
-            await SharedImageCache.primeMetadataSnapshots(for: resolvedDetailImageAssetURLs(for: message))
             await MainActor.run {
                 pendingNotificationSelectionId = targetId
                 selection = targetId
                 selectedMessageSnapshot = message
                 onOpenMessageHandled?()
             }
+            scheduleDetailImageMetadataPrime(for: message)
+        }
+    }
+
+    private func scheduleDetailImageMetadataPrime(for message: PushMessage) {
+        let bodyText = message.resolvedBody.rawText
+        let directImageURLs = message.imageURLs
+        Task.detached(priority: .utility) {
+            let imageURLs = resolvedDetailImageAssetURLs(
+                bodyText: bodyText,
+                directImageURLs: directImageURLs
+            )
+            await SharedImageCache.primeMetadataSnapshots(for: imageURLs)
         }
     }
 

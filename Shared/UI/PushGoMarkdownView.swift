@@ -21,12 +21,24 @@ struct MarkdownRenderer: View {
         return limitText(text, toFirstNewlines: max)
     }
 
-    private var prefersStructuredText: Bool {
-        prefersStructuredRendering(displayText)
+    private var displayMode: PushGoMarkdownDisplayMode {
+        let mode = pushGoMarkdownDisplayMode(for: displayText)
+        #if !os(watchOS)
+        recordMarkdownDisplayModeEvaluationMetric()
+        #endif
+        return mode
     }
 
     private var normalizedText: String {
         normalizeMarkdown(displayText)
+    }
+
+    private var plainTextSegments: [String] {
+        let segments = pushGoPlainTextDisplaySegments(for: displayText)
+        #if !os(watchOS)
+        recordMarkdownPlainTextSegmentsMetric()
+        #endif
+        return segments
     }
 
     var body: some View {
@@ -50,13 +62,15 @@ struct MarkdownRenderer: View {
 extension MarkdownRenderer {
     private var markdownContent: some View {
         Group {
-            if prefersStructuredText {
+            if displayMode == .structuredText {
                 StructuredText(markdown: normalizedText)
                     .textual.structuredTextStyle(.gitHub)
                     .textual.tableCellStyle(PushGoRefinedTableCellStyle())
                     .textual.tableStyle(PushGoRefinedTableStyle())
-            } else {
+            } else if displayMode == .inlineText {
                 InlineText(markdown: normalizedText)
+            } else {
+                plainTextContent
             }
         }
         .transaction { transaction in
@@ -71,14 +85,23 @@ extension MarkdownRenderer {
         )
         .textual.imageAttachmentURLResolver(
             .init { url in
+                let cachedBeforeResolve = SharedImageCache.cachedFileURL(for: url, rendition: .original) != nil
                 if let sourceURL = await SharedImageCache.localSourceURL(
                     for: url,
                     rendition: .original,
                     maxBytes: AppConstants.maxMessageImageBytes,
                     timeout: 10
                 ) {
+                    recordMarkdownAttachmentResolutionMetric(
+                        usedCache: cachedBeforeResolve,
+                        resolvedToLocalSource: true
+                    )
                     return sourceURL
                 }
+                recordMarkdownAttachmentResolutionMetric(
+                    usedCache: cachedBeforeResolve,
+                    resolvedToLocalSource: false
+                )
                 return url
             }
         )
@@ -99,16 +122,62 @@ extension MarkdownRenderer {
         })
         .font(font)
         .foregroundStyle(foreground)
-        .lineLimit(nil)
-        .fixedSize(horizontal: false, vertical: true)
+        .modifier(MarkdownRendererLayoutMode(displayMode: displayMode))
+    }
+
+    @ViewBuilder
+    private var plainTextContent: some View {
+        #if os(macOS)
+        if plainTextSegments.count > 1 {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(plainTextSegments.enumerated()), id: \.offset) { _, segment in
+                    Text(segment)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        } else {
+            Text(displayText)
+        }
+        #else
+        Text(displayText)
+        #endif
+    }
+}
+
+private struct MarkdownRendererLayoutMode: ViewModifier {
+    let displayMode: PushGoMarkdownDisplayMode
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        if displayMode == .plainText {
+            content.frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            content
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        #else
+        content
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
+        #endif
     }
 }
 
 let markdownImageSizeProvider: URLImageAttachmentSizeProvider = { url in
-    let metadata = if let cached = await SharedImageCache.metadata(for: url) {
-        cached
+    let metadata: ImageAssetMetadata?
+    if let cached = await SharedImageCache.metadata(for: url) {
+        recordMarkdownAttachmentMetadataMetric(source: "async", isAnimated: cached.isAnimated)
+        metadata = cached
     } else {
-        await SharedImageCache.ensureMetadataFromCache(for: url)
+        let ensured = await SharedImageCache.ensureMetadataFromCache(for: url)
+        if let ensured {
+            recordMarkdownAttachmentMetadataMetric(source: "async", isAnimated: ensured.isAnimated)
+        } else {
+            recordMarkdownAttachmentMetadataMetric(source: "miss", isAnimated: false)
+        }
+        metadata = ensured
     }
     if let metadata,
        metadata.pixelWidth > 0,
@@ -124,9 +193,55 @@ let markdownImageSyncSizeProvider: URLImageAttachmentSyncSizeProvider = { url in
           metadata.pixelWidth > 0,
           metadata.pixelHeight > 0
     else {
+        recordMarkdownAttachmentMetadataMetric(source: "miss", isAnimated: false)
         return nil
     }
+    recordMarkdownAttachmentMetadataMetric(source: "sync", isAnimated: metadata.isAnimated)
     return CGSize(width: metadata.pixelWidth, height: metadata.pixelHeight)
+}
+
+private func recordMarkdownAttachmentResolutionMetric(
+    usedCache: Bool,
+    resolvedToLocalSource: Bool
+) {
+    #if DEBUG
+    Task { @MainActor in
+        PushGoAutomationRuntime.shared.recordMarkdownAttachmentResolved(
+            usedCache: usedCache,
+            resolvedToLocalSource: resolvedToLocalSource
+        )
+    }
+    #endif
+}
+
+private func recordMarkdownAttachmentMetadataMetric(
+    source: String,
+    isAnimated: Bool
+) {
+    #if DEBUG
+    Task { @MainActor in
+        PushGoAutomationRuntime.shared.recordMarkdownAttachmentMetadataProbe(
+            source: source,
+            isAnimated: isAnimated
+        )
+    }
+    #endif
+}
+
+private func recordMarkdownDisplayModeEvaluationMetric() {
+    #if DEBUG
+    Task { @MainActor in
+        PushGoAutomationRuntime.shared.recordMarkdownDisplayModeEvaluated()
+    }
+    #endif
+}
+
+private func recordMarkdownPlainTextSegmentsMetric() {
+    #if DEBUG
+    Task { @MainActor in
+        PushGoAutomationRuntime.shared.recordMarkdownPlainTextSegmentsBuilt()
+    }
+    #endif
 }
 
 
@@ -306,17 +421,4 @@ private func limitText(_ text: String, toFirstNewlines max: Int) -> String {
         }
     }
     return text
-}
-
-private func prefersStructuredRendering(_ text: String) -> Bool {
-    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return false }
-    if trimmed.contains("\n") { return true }
-    if trimmed.contains("![") { return true }
-    if trimmed.contains("```") { return true }
-    if trimmed.hasPrefix("#") || trimmed.hasPrefix(">") { return true }
-    if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") { return true }
-    if let first = trimmed.first, first.isNumber, trimmed.contains(". ") { return true }
-    if trimmed.contains("|") { return true }
-    return false
 }
