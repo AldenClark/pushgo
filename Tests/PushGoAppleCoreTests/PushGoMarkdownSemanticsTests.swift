@@ -123,14 +123,14 @@ final class PushGoMarkdownSemanticsTests: XCTestCase {
 
     func testDisplayMode_keepsStructuredRenderingForGatewaySizedMarkdown() {
         let markdownSafetyCapBytes = 27 * 1024
-        let markdown = String(repeating: "## Runtime quality headline\n- payload line\n", count: 660)
+        let markdown = String(repeating: "## Runtime quality headline\n- payload line\n", count: 642)
         XCTAssertLessThan(markdown.lengthOfBytes(using: .utf8), markdownSafetyCapBytes)
         XCTAssertEqual(pushGoMarkdownDisplayMode(for: markdown), .structuredText)
     }
 
     func testPlainTextDisplaySegments_preserveGatewaySizedContentExactly() {
         let markdownSafetyCapBytes = 27 * 1024
-        let markdown = String(repeating: "emoji 😀 中日英 mixed line with url https://example.com/path\n", count: 430)
+        let markdown = String(repeating: "emoji 😀 中日英 mixed line with url https://example.com/path\n", count: 418)
         XCTAssertLessThan(markdown.lengthOfBytes(using: .utf8), markdownSafetyCapBytes)
         let segments = pushGoPlainTextDisplaySegments(for: markdown, maxChunkBytes: 4 * 1024, maxChunkLines: 64)
 
@@ -149,7 +149,7 @@ final class PushGoMarkdownSemanticsTests: XCTestCase {
     func testBoundedPreviewSource_capsGatewaySizedMarkdownToHeadRegion() {
         let markdownSafetyCapBytes = 27 * 1024
         let head = String(repeating: "- keep preview line\n", count: 40)
-        let tail = String(repeating: "tail payload with code block marker ``` and table | a | b |\n", count: 450)
+        let tail = String(repeating: "tail payload with code block marker ``` and table | a | b |\n", count: 447)
         XCTAssertLessThan((head + tail).lengthOfBytes(using: .utf8), markdownSafetyCapBytes)
         let source = MessagePreviewExtractor.boundedPreviewSource(
             head + tail,
