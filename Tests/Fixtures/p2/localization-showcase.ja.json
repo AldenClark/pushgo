@@ -1,1532 +1,741 @@
 {
   "messages": [
     {
-      "id": "8e0d9fc8-7c02-5413-8fb1-0ee9cdf21d1f",
-      "message_id": "msg_thing_agent_support_triage_summary",
-      "title": "サポート振り分けAIエージェント · 概要投影を更新",
-      "body": "# サポート振り分けAIエージェント のオブジェクト更新\n> 複数のチャネルから新しいシグナルが届いたため、オブジェクト投影を更新しました。\n\n## 概要\n- 現在の状態: 人手確認を有効にして安定\n- 関連イベント: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監視チャネル: AIエージェントのフィードバック\n\n## 属性変更\n- 自動解決信頼度が0.78から0.86へ変更\n- フォールバック規則が即時引き継ぎから標本確認へ変更\n\n## 次の手順\n- このオブジェクトは、運用、財務、家庭、エージェントの各シナリオを現実的な時系列で結び付けるため、スクリーンショット用データに表示したままにします。\n",
-      "channel_id": "ai-agent-feedback",
-      "is_read": false,
-      "received_at": "2026-05-08T04:58:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_agent_support_triage",
-        "thing_id": "thing_agent_support_triage",
-        "projection_destination": "thing_head",
-        "title": "サポート振り分けAIエージェント · 概要投影を更新",
-        "description": "サポート振り分けAIエージェント。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "人手確認を有効にして安定",
-        "message": "概要投影を更新: 自動解決信頼度が0.78から0.86へ変更; フォールバック規則が即時引き継ぎから標本確認へ変更",
-        "severity": "medium",
-        "tags": [
-          "AIエージェント",
-          "チケット",
-          "引き継ぎ"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "概要": "人手確認を有効にして安定",
-          "属性変更": [
-            "自動解決信頼度が0.78から0.86へ変更",
-            "フォールバック規則が即時引き継ぎから標本確認へ変更"
-          ],
-          "関連イベント": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "発生元": "AIエージェントのフィードバック"
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"デモ受信箱とオブジェクト詳細画面で表示を維持する。\",\"監査メモ\":\"読みやすい属性変更と関連イベント識別子を含みます。\",\"関連イベント\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "待ち列",
-          "value": "エンタープライズサポート待ち列"
-        },
-        "external_ids": {
-          "オブジェクト投影": "OBJ-THING_AGENT_SUPPORT_TRIAGE"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "58e5db13-1426-59c1-8d21-0681ab69aab0",
-      "message_id": "msg_thing_event_auth_gateway_summary",
-      "title": "顧客ログインリスクゲートウェイ · 概要投影を更新",
-      "body": "# 顧客ログインリスクゲートウェイ のオブジェクト更新\n> 複数のチャネルから新しいシグナルが届いたため、オブジェクト投影を更新しました。\n\n## 概要\n- 現在の状態: 流量制限中でトラフィックは改善傾向\n- 関連イベント: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監視チャネル: イベント監視\n\n## 属性変更\n- ログイン失敗率が11.8%から2.4%へ低下\n- 一時チャレンジしきい値が中から厳格へ変更\n\n## 次の手順\n- このオブジェクトは、運用、財務、家庭、エージェントの各シナリオを現実的な時系列で結び付けるため、スクリーンショット用データに表示したままにします。\n",
-      "channel_id": "event-monitoring",
-      "is_read": false,
-      "received_at": "2026-05-08T04:54:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_event_auth_gateway",
-        "thing_id": "thing_event_auth_gateway",
-        "projection_destination": "thing_head",
-        "title": "顧客ログインリスクゲートウェイ · 概要投影を更新",
-        "description": "顧客ログインリスクゲートウェイ。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "流量制限中でトラフィックは改善傾向",
-        "message": "概要投影を更新: ログイン失敗率が11.8%から2.4%へ低下; 一時チャレンジしきい値が中から厳格へ変更",
-        "severity": "medium",
-        "tags": [
-          "ログイン",
-          "リスク制御",
-          "顧客信頼"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "概要": "流量制限中でトラフィックは改善傾向",
-          "属性変更": [
-            "ログイン失敗率が11.8%から2.4%へ低下",
-            "一時チャレンジしきい値が中から厳格へ変更"
-          ],
-          "関連イベント": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "発生元": "イベント監視"
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"デモ受信箱とオブジェクト詳細画面で表示を維持する。\",\"監査メモ\":\"読みやすい属性変更と関連イベント識別子を含みます。\",\"関連イベント\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "サービス",
-          "value": "顧客アカウントセンター"
-        },
-        "external_ids": {
-          "オブジェクト投影": "OBJ-THING_EVENT_AUTH_GATEWAY"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "e5ca7ecc-9852-5c11-9fc1-6e0f63648b0f",
-      "message_id": "msg_thing_ops_cluster_sh1_summary",
-      "title": "上海決済クラスタ · 概要投影を更新",
-      "body": "# 上海決済クラスタ のオブジェクト更新\n> 複数のチャネルから新しいシグナルが届いたため、オブジェクト投影を更新しました。\n\n## 概要\n- 現在の状態: 健全だが監視を強化中\n- 関連イベント: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監視チャネル: 運用コア\n\n## 属性変更\n- APIのP95遅延が420ミリ秒から238ミリ秒へ低下\n- 読み取りレプリカの遅延が18秒から3秒へ低下\n\n## 次の手順\n- このオブジェクトは、運用、財務、家庭、エージェントの各シナリオを現実的な時系列で結び付けるため、スクリーンショット用データに表示したままにします。\n",
+      "id": "1df1e53f-a83d-56a6-b24e-4f82763d7515",
+      "message_id": "msg_ja_0001",
+      "title": "本番 API のエラー率が上昇",
+      "body": "### ゲートウェイのエラー率がしきい値を超過\n\n直近 **5 分**で `api-gateway-prod` の 5xx エラー率が `0.3%` から **6.8%** に上昇しました。\n\n- 環境: `prod`\n- エンドポイント: `/v1/messages/send`\n- 現在の P95: `1.84s`\n- 対応: `message-dispatcher` と Redis の遅延を確認\n\n[ダッシュボードを開く](https://pushgo.example.com/dashboards/gateway-prod)",
       "channel_id": "ops-core",
       "is_read": false,
-      "received_at": "2026-05-08T04:50:00.000Z",
+      "received_at": "2026-05-07T04:18:58.555000Z",
       "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_ops_cluster_sh1",
-        "thing_id": "thing_ops_cluster_sh1",
-        "projection_destination": "thing_head",
-        "title": "上海決済クラスタ · 概要投影を更新",
-        "description": "上海決済クラスタ。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "健全だが監視を強化中",
-        "message": "概要投影を更新: APIのP95遅延が420ミリ秒から238ミリ秒へ低下; 読み取りレプリカの遅延が18秒から3秒へ低下",
-        "severity": "medium",
-        "tags": [
-          "データベース",
-          "遅延",
-          "読み取りレプリカ"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "概要": "健全だが監視を強化中",
-          "属性変更": [
-            "APIのP95遅延が420ミリ秒から238ミリ秒へ低下",
-            "読み取りレプリカの遅延が18秒から3秒へ低下"
-          ],
-          "関連イベント": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "発生元": "運用コア"
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"デモ受信箱とオブジェクト詳細画面で表示を維持する。\",\"監査メモ\":\"読みやすい属性変更と関連イベント識別子を含みます。\",\"関連イベント\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "地域",
-          "value": "上海地域"
-        },
-        "external_ids": {
-          "オブジェクト投影": "OBJ-THING_OPS_CLUSTER_SH1"
-        }
+        "entity_type": "message",
+        "entity_id": "message_1",
+        "severity": "high",
+        "tags": "[\"monitoring\", \"gateway\", \"prod\"]",
+        "metadata": "{\"source\": \"fixture-generator\", \"scenario\": \"ja-JP_message_1\", \"is_test\": true}"
       },
       "status": "normal"
     },
     {
-      "id": "f86c68f3-7570-5ad9-9434-23275ecc8a1c",
-      "message_id": "msg_thing_finance_ap_queue_summary",
-      "title": "買掛金レビュー待ち列 · 概要投影を更新",
-      "body": "# 買掛金レビュー待ち列 のオブジェクト更新\n> 複数のチャネルから新しいシグナルが届いたため、オブジェクト投影を更新しました。\n\n## 概要\n- 現在の状態: 重複確認のため均衡状態でロック中\n- 関連イベント: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監視チャネル: 財務台帳\n\n## 属性変更\n- 重複請求書スコアが0.41から0.93へ上昇\n- 承認ポリシーが単独確認から二重確認へ変更\n\n## 次の手順\n- このオブジェクトは、運用、財務、家庭、エージェントの各シナリオを現実的な時系列で結び付けるため、スクリーンショット用データに表示したままにします。\n",
-      "channel_id": "finance-ledger",
-      "is_read": false,
-      "received_at": "2026-05-08T04:45:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_finance_ap_queue",
-        "thing_id": "thing_finance_ap_queue",
-        "projection_destination": "thing_head",
-        "title": "買掛金レビュー待ち列 · 概要投影を更新",
-        "description": "買掛金レビュー待ち列。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "重複確認のため均衡状態でロック中",
-        "message": "概要投影を更新: 重複請求書スコアが0.41から0.93へ上昇; 承認ポリシーが単独確認から二重確認へ変更",
-        "severity": "medium",
-        "tags": [
-          "請求書",
-          "承認",
-          "資金繰り"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "概要": "重複確認のため均衡状態でロック中",
-          "属性変更": [
-            "重複請求書スコアが0.41から0.93へ上昇",
-            "承認ポリシーが単独確認から二重確認へ変更"
-          ],
-          "関連イベント": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "発生元": "財務台帳"
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"デモ受信箱とオブジェクト詳細画面で表示を維持する。\",\"監査メモ\":\"読みやすい属性変更と関連イベント識別子を含みます。\",\"関連イベント\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "部門",
-          "value": "財務共有サービスセンター"
-        },
-        "external_ids": {
-          "オブジェクト投影": "OBJ-THING_FINANCE_AP_QUEUE"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "28c79711-645d-5c4c-860b-b305327a1570",
-      "message_id": "msg_thing_home_valve_kitchen_summary",
-      "title": "キッチン止水バルブ · 概要投影を更新",
-      "body": "# キッチン止水バルブ のオブジェクト更新\n> 複数のチャネルから新しいシグナルが届いたため、オブジェクト投影を更新しました。\n\n## 概要\n- 現在の状態: 漏水保護後に閉止中\n- 関連イベント: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監視チャネル: スマートホーム\n\n## 属性変更\n- 床センサーの湿度が72%から38%へ低下\n- バルブ操作モードが自動から監視付きへ変更\n\n## 次の手順\n- このオブジェクトは、運用、財務、家庭、エージェントの各シナリオを現実的な時系列で結び付けるため、スクリーンショット用データに表示したままにします。\n",
-      "channel_id": "home-automation",
-      "is_read": false,
-      "received_at": "2026-05-08T04:40:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_home_valve_kitchen",
-        "thing_id": "thing_home_valve_kitchen",
-        "projection_destination": "thing_head",
-        "title": "キッチン止水バルブ · 概要投影を更新",
-        "description": "キッチン止水バルブ。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "漏水保護後に閉止中",
-        "message": "概要投影を更新: 床センサーの湿度が72%から38%へ低下; バルブ操作モードが自動から監視付きへ変更",
-        "severity": "medium",
-        "tags": [
-          "水センサー",
-          "キッチン",
-          "バルブ"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "概要": "漏水保護後に閉止中",
-          "属性変更": [
-            "床センサーの湿度が72%から38%へ低下",
-            "バルブ操作モードが自動から監視付きへ変更"
-          ],
-          "関連イベント": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "発生元": "スマートホーム"
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"デモ受信箱とオブジェクト詳細画面で表示を維持する。\",\"監査メモ\":\"読みやすい属性変更と関連イベント識別子を含みます。\",\"関連イベント\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "部屋",
-          "value": "キッチンのシンク下収納"
-        },
-        "external_ids": {
-          "オブジェクト投影": "OBJ-THING_HOME_VALVE_KITCHEN"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "aef953e2-90cb-5093-8547-570e4b143946",
-      "message_id": "msg_agent_ticket_resolved",
-      "title": "AIエージェント引き継ぎ品質レビュー · 解決済み",
-      "body": "# AIエージェント引き継ぎ品質レビュー · 解決済み\n> サポートエージェントが請求チケットを解決済みにしましたが、顧客感情は否定的なままでした\n\n## 変化した内容\n- 人手レビューで回答が確認され、新しいガードレールにより標本内の危険な終了が減りました。\n- 解決信頼度は0.86でしたが、感情スコアはエスカレーションしきい値を下回りました。\n- 顧客は正しい請求書参照を含むフォロー回答を受け取りました。\n\n## 対応\n1. チケットを人手レビューへ送り、モデルの追跡情報を添付しました。\n2. 感情が否定的な請求回答に対するガードレールを追加しました。\n3. 完全自動化へ戻す前に次の50件の請求チケットを標本確認します。\n\n## 次の手順\n- 担当: サポート自動化責任者\n- 予定時刻: 次の安定標本ウィンドウ\n",
-      "channel_id": "ai-agent-feedback",
-      "is_read": true,
-      "received_at": "2026-05-08T04:32:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_agent_ticket_001",
-        "event_id": "evt_agent_ticket_001",
-        "thing_id": "thing_agent_support_triage",
-        "projection_destination": "event_head",
-        "title": "AIエージェント引き継ぎ品質レビュー · 解決済み",
-        "description": "AIエージェント引き継ぎ品質レビュー。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "解決済み",
-        "message": "状態更新: 人手レビューで回答が確認され、新しいガードレールにより標本内の危険な終了が減りました。",
-        "severity": "medium",
-        "tags": [
-          "AIエージェント",
-          "チケット",
-          "引き継ぎ"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "変化した内容": [
-            "人手レビューで回答が確認され、新しいガードレールにより標本内の危険な終了が減りました。",
-            "解決信頼度は0.86でしたが、感情スコアはエスカレーションしきい値を下回りました。"
-          ],
-          "担当": "サポート自動化責任者",
-          "予定時刻": "次の安定標本ウィンドウ",
-          "関連イベント": [
-            "evt_agent_ticket_001",
-            "thing_agent_support_triage"
-          ]
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"対象オブジェクトで安定した標本が二回確認されるまで追跡を続ける。\",\"監査メモ\":\"時刻は順序どおりで、iOSスクリーンショットテストに適しています。\",\"関連イベント\":[\"evt_agent_ticket_001\",\"thing_agent_support_triage\"]}",
-        "location": {
-          "type": "待ち列",
-          "value": "エンタープライズサポート待ち列"
-        },
-        "external_ids": {
-          "インシデントチケット": "INC-2026-0508-005"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "6546b2a5-dbc0-509e-842d-45fb7724233a",
-      "message_id": "msg_agent_ticket_investigating",
-      "title": "AIエージェント引き継ぎ品質レビュー · 調査中",
-      "body": "# AIエージェント引き継ぎ品質レビュー · 調査中\n> サポートエージェントが請求チケットを解決済みにしましたが、顧客感情は否定的なままでした\n\n## 変化した内容\n- ある法人顧客は人手確認を14分長く待ちました。\n- 解決信頼度は0.86でしたが、感情スコアはエスカレーションしきい値を下回りました。\n- 顧客は正しい請求書参照を含むフォロー回答を受け取りました。\n\n## 対応\n1. チケットを人手レビューへ送り、モデルの追跡情報を添付しました。\n2. 感情が否定的な請求回答に対するガードレールを追加しました。\n3. 完全自動化へ戻す前に次の50件の請求チケットを標本確認します。\n\n## 次の手順\n- 担当: サポート自動化責任者\n- 予定時刻: 次の安定標本ウィンドウ\n",
-      "channel_id": "ai-agent-feedback",
-      "is_read": false,
-      "received_at": "2026-05-08T04:06:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_agent_ticket_001",
-        "event_id": "evt_agent_ticket_001",
-        "thing_id": "thing_agent_support_triage",
-        "projection_destination": "event_head",
-        "title": "AIエージェント引き継ぎ品質レビュー · 調査中",
-        "description": "AIエージェント引き継ぎ品質レビュー。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "調査中",
-        "message": "状態更新: ある法人顧客は人手確認を14分長く待ちました。",
-        "severity": "medium",
-        "tags": [
-          "AIエージェント",
-          "チケット",
-          "引き継ぎ"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "変化した内容": [
-            "ある法人顧客は人手確認を14分長く待ちました。",
-            "解決信頼度は0.86でしたが、感情スコアはエスカレーションしきい値を下回りました。"
-          ],
-          "担当": "サポート自動化責任者",
-          "予定時刻": "次の安定標本ウィンドウ",
-          "関連イベント": [
-            "evt_agent_ticket_001",
-            "thing_agent_support_triage"
-          ]
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"対象オブジェクトで安定した標本が二回確認されるまで追跡を続ける。\",\"監査メモ\":\"時刻は順序どおりで、iOSスクリーンショットテストに適しています。\",\"関連イベント\":[\"evt_agent_ticket_001\",\"thing_agent_support_triage\"]}",
-        "location": {
-          "type": "待ち列",
-          "value": "エンタープライズサポート待ち列"
-        },
-        "external_ids": {
-          "インシデントチケット": "INC-2026-0508-005"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "760a30e6-62c0-5c7b-971b-34686b8570b1",
-      "message_id": "msg_monitoring_login_resolved",
-      "title": "ログイン再試行の異常パターン · 解決済み",
-      "body": "# ログイン再試行の異常パターン · 解決済み\n> 顧客ログイン再試行が三つのネットワーク範囲に集中しました\n\n## 変化した内容\n- 再試行率は基準値へ戻り、30分間新しい高リスクセッションは現れませんでした。\n- ログイン失敗率は11.8%に上昇し、適応型確認の有効化後に正常化しました。\n- 標本内で成功したアカウント乗っ取りの兆候は見つかりませんでした。\n\n## 対応\n1. 影響範囲に対してより厳格なリスク確認を有効化しました。\n2. 顧客信頼チームへ時系列を共有し、先回りした案内を準備しました。\n3. 既知の認証情報詰め込みリストと一致するか確認します。\n\n## 次の手順\n- 担当: 信頼運用担当\n- 予定時刻: 次の安定標本ウィンドウ\n",
+      "id": "8d871c08-ee55-52fc-8e44-83991f7fe909",
+      "message_id": "msg_ja_0002",
+      "title": "キッチンの漏水センサーが反応",
+      "body": "### キッチン漏水アラート\n\n`キッチン・シンク下` の漏水センサーが異常を検知しました。\n\n> 状態: **Wet**  \n> 電池: `84%`  \n> 最終ハートビート: `18 秒前`\n\nシンク、浄水器、食洗機の給水ホースを確認してください。",
       "channel_id": "event-monitoring",
-      "is_read": true,
-      "received_at": "2026-05-08T03:56:00.000Z",
+      "is_read": false,
+      "received_at": "2026-05-07T04:19:58.555000Z",
       "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_monitoring_login_001",
-        "event_id": "evt_monitoring_login_001",
-        "thing_id": "thing_event_auth_gateway",
-        "projection_destination": "event_head",
-        "title": "ログイン再試行の異常パターン · 解決済み",
-        "description": "ログイン再試行の異常パターン。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "解決済み",
-        "message": "状態更新: 再試行率は基準値へ戻り、30分間新しい高リスクセッションは現れませんでした。",
+        "entity_type": "message",
+        "entity_id": "message_2",
         "severity": "critical",
-        "tags": [
-          "ログイン",
-          "リスク制御",
-          "顧客信頼"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "変化した内容": [
-            "再試行率は基準値へ戻り、30分間新しい高リスクセッションは現れませんでした。",
-            "ログイン失敗率は11.8%に上昇し、適応型確認の有効化後に正常化しました。"
-          ],
-          "担当": "信頼運用担当",
-          "予定時刻": "次の安定標本ウィンドウ",
-          "関連イベント": [
-            "evt_monitoring_login_001",
-            "thing_event_auth_gateway"
-          ]
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"対象オブジェクトで安定した標本が二回確認されるまで追跡を続ける。\",\"監査メモ\":\"時刻は順序どおりで、iOSスクリーンショットテストに適しています。\",\"関連イベント\":[\"evt_monitoring_login_001\",\"thing_event_auth_gateway\"]}",
-        "location": {
-          "type": "サービス",
-          "value": "顧客アカウントセンター"
-        },
-        "external_ids": {
-          "インシデントチケット": "INC-2026-0508-004"
-        }
+        "tags": "[\"home\", \"sensor\", \"water-leak\"]",
+        "metadata": "{\"source\": \"fixture-generator\", \"scenario\": \"ja-JP_message_2\", \"is_test\": true}"
       },
       "status": "normal"
     },
     {
-      "id": "631c5d62-65d2-5d1f-a025-b030307a712a",
-      "message_id": "msg_thing_agent_support_triage_policy",
-      "title": "サポート振り分けAIエージェント · 確認ポリシーを更新",
-      "body": "# サポート振り分けAIエージェント のオブジェクト更新\n> 複数のチャネルから新しいシグナルが届いたため、オブジェクト投影を更新しました。\n\n## 概要\n- 現在の状態: 人手確認を有効にして安定\n- 関連イベント: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監視チャネル: AIエージェントのフィードバック\n\n## 属性変更\n- 自動解決信頼度が0.78から0.86へ変更\n- フォールバック規則が即時引き継ぎから標本確認へ変更\n\n## 次の手順\n- このオブジェクトは、運用、財務、家庭、エージェントの各シナリオを現実的な時系列で結び付けるため、スクリーンショット用データに表示したままにします。\n",
+      "id": "f83a00b2-a97a-52cd-acc0-b524a8e5bff2",
+      "message_id": "msg_ja_0003",
+      "title": "GitHub Actions のビルド失敗",
+      "body": "### PushGo Android ビルド失敗\n\nリポジトリ: `pushgo/mobile`  \nブランチ: `release/1.4.0`  \nジョブ: `android-release-build`\n\n失敗ステップ:\n\n```text\n:app:minifyReleaseWithR8 FAILED\nMissing class com.google.firebase.messaging.RemoteMessage\n```\n\n`proguard-rules.pro` と FCM 依存関係を確認してください。",
+      "channel_id": "thing-hub",
+      "is_read": true,
+      "received_at": "2026-05-07T04:20:58.555000Z",
+      "raw_payload": {
+        "entity_type": "message",
+        "entity_id": "message_3",
+        "severity": "normal",
+        "tags": "[\"github\", \"ci\", \"android\"]",
+        "metadata": "{\"source\": \"fixture-generator\", \"scenario\": \"ja-JP_message_3\", \"is_test\": true}"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "547c3b85-0351-5c75-9019-8a820a835b61",
+      "message_id": "msg_ja_0004",
+      "title": "NAS バックアップ完了",
+      "body": "### 夜間バックアップ完了\n\n`Home NAS` の差分オフサイトバックアップが完了しました。\n\n| 項目 | 結果 |\n|---|---:|\n| 新規ファイル | 428 |\n| 変更ファイル | 76 |\n| アップロード | 18.4 GB |\n| 所要時間 | 43 分 |\n\nバックアップセット: `photos-2025-week45`",
       "channel_id": "ai-agent-feedback",
       "is_read": false,
-      "received_at": "2026-05-08T03:50:00.000Z",
+      "received_at": "2026-05-07T04:21:58.555000Z",
       "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_agent_support_triage",
-        "thing_id": "thing_agent_support_triage",
-        "projection_destination": "thing_head",
-        "title": "サポート振り分けAIエージェント · 確認ポリシーを更新",
-        "description": "サポート振り分けAIエージェント。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "人手確認を有効にして安定",
-        "message": "確認ポリシーを更新: 自動解決信頼度が0.78から0.86へ変更; フォールバック規則が即時引き継ぎから標本確認へ変更",
-        "severity": "medium",
-        "tags": [
-          "AIエージェント",
-          "チケット",
-          "引き継ぎ"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "概要": "人手確認を有効にして安定",
-          "属性変更": [
-            "自動解決信頼度が0.78から0.86へ変更",
-            "フォールバック規則が即時引き継ぎから標本確認へ変更"
-          ],
-          "関連イベント": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "発生元": "AIエージェントのフィードバック"
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"デモ受信箱とオブジェクト詳細画面で表示を維持する。\",\"監査メモ\":\"読みやすい属性変更と関連イベント識別子を含みます。\",\"関連イベント\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "待ち列",
-          "value": "エンタープライズサポート待ち列"
-        },
-        "external_ids": {
-          "オブジェクト投影": "OBJ-THING_AGENT_SUPPORT_TRIAGE"
-        }
+        "entity_type": "message",
+        "entity_id": "message_4",
+        "severity": "low",
+        "tags": "[\"nas\", \"backup\", \"home\"]",
+        "metadata": "{\"source\": \"fixture-generator\", \"scenario\": \"ja-JP_message_4\", \"is_test\": true}"
       },
       "status": "normal"
     },
     {
-      "id": "ef12c0c4-7f77-5e9a-9b48-a7f513fbffe4",
-      "message_id": "msg_agent_ticket_detected",
-      "title": "AIエージェント引き継ぎ品質レビュー · 検知済み",
-      "body": "# AIエージェント引き継ぎ品質レビュー · 検知済み\n> サポートエージェントが請求チケットを解決済みにしましたが、顧客感情は否定的なままでした\n\n## 変化した内容\n- ある法人顧客は人手確認を14分長く待ちました。\n- 解決信頼度は0.86でしたが、感情スコアはエスカレーションしきい値を下回りました。\n- 顧客は正しい請求書参照を含むフォロー回答を受け取りました。\n\n## 対応\n1. チケットを人手レビューへ送り、モデルの追跡情報を添付しました。\n2. 感情が否定的な請求回答に対するガードレールを追加しました。\n3. 完全自動化へ戻す前に次の50件の請求チケットを標本確認します。\n\n## 次の手順\n- 担当: サポート自動化責任者\n- 予定時刻: 次の安定標本ウィンドウ\n",
-      "channel_id": "ai-agent-feedback",
+      "id": "87df9f1a-108e-52bd-b76d-78981986fa9e",
+      "message_id": "msg_ja_0005",
+      "title": "SKU 在庫が安全在庫を下回りました",
+      "body": "### 人気 SKU 在庫アラート\n\nSKU: `PG-TEE-2025-BLK-M`  \n販売可能数: **37**  \n安全在庫: `120`\n\n推奨対応:\n\n1. 直近 3 日の販売推移を確認\n2. 仕入先の入荷予定を確認\n3. 一部広告を停止して売り越しを防止",
+      "channel_id": "finance-ledger",
       "is_read": false,
-      "received_at": "2026-05-08T03:44:00.000Z",
+      "received_at": "2026-05-07T04:22:58.555000Z",
+      "raw_payload": {
+        "entity_type": "message",
+        "entity_id": "message_5",
+        "severity": "normal",
+        "tags": "[\"business\", \"inventory\", \"sku\"]",
+        "metadata": "{\"source\": \"fixture-generator\", \"scenario\": \"ja-JP_message_5\", \"is_test\": true}"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "69875d01-2c15-5f35-b907-f0a49d86d59f",
+      "message_id": "msg_ja_0006",
+      "title": "Primary database write latency increased",
+      "body": "### P1 database incident\n\n`order-db-primary` write P95 reached **1.9s**, above the `800ms` threshold.\n\nImpact:\n\n- Delayed order status refresh\n- Payment callbacks queued\n- Admin order list occasionally slow\n\nDBA and backend owner have been notified.",
+      "channel_id": "thing-hub",
+      "is_read": false,
+      "received_at": "2026-05-07T04:23:58.555000Z",
       "raw_payload": {
         "entity_type": "event",
-        "entity_id": "evt_agent_ticket_001",
-        "event_id": "evt_agent_ticket_001",
-        "thing_id": "thing_agent_support_triage",
-        "projection_destination": "event_head",
-        "title": "AIエージェント引き継ぎ品質レビュー · 検知済み",
-        "description": "AIエージェント引き継ぎ品質レビュー。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "検知済み",
-        "message": "状態更新: ある法人顧客は人手確認を14分長く待ちました。",
-        "severity": "medium",
-        "tags": [
-          "AIエージェント",
-          "チケット",
-          "引き継ぎ"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "変化した内容": [
-            "ある法人顧客は人手確認を14分長く待ちました。",
-            "解決信頼度は0.86でしたが、感情スコアはエスカレーションしきい値を下回りました。"
-          ],
-          "担当": "サポート自動化責任者",
-          "予定時刻": "次の安定標本ウィンドウ",
-          "関連イベント": [
-            "evt_agent_ticket_001",
-            "thing_agent_support_triage"
-          ]
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"対象オブジェクトで安定した標本が二回確認されるまで追跡を続ける。\",\"監査メモ\":\"時刻は順序どおりで、iOSスクリーンショットテストに適しています。\",\"関連イベント\":[\"evt_agent_ticket_001\",\"thing_agent_support_triage\"]}",
-        "location": {
-          "type": "待ち列",
-          "value": "エンタープライズサポート待ち列"
-        },
-        "external_ids": {
-          "インシデントチケット": "INC-2026-0508-005"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "e26a2d46-cae6-5635-9ea8-60cf89337527",
-      "message_id": "msg_thing_event_auth_gateway_risk",
-      "title": "顧客ログインリスクゲートウェイ · リスクしきい値を更新",
-      "body": "# 顧客ログインリスクゲートウェイ のオブジェクト更新\n> 複数のチャネルから新しいシグナルが届いたため、オブジェクト投影を更新しました。\n\n## 概要\n- 現在の状態: 流量制限中でトラフィックは改善傾向\n- 関連イベント: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監視チャネル: イベント監視\n\n## 属性変更\n- ログイン失敗率が11.8%から2.4%へ低下\n- 一時チャレンジしきい値が中から厳格へ変更\n\n## 次の手順\n- このオブジェクトは、運用、財務、家庭、エージェントの各シナリオを現実的な時系列で結び付けるため、スクリーンショット用データに表示したままにします。\n",
-      "channel_id": "event-monitoring",
-      "is_read": false,
-      "received_at": "2026-05-08T03:33:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_event_auth_gateway",
-        "thing_id": "thing_event_auth_gateway",
-        "projection_destination": "thing_head",
-        "title": "顧客ログインリスクゲートウェイ · リスクしきい値を更新",
-        "description": "顧客ログインリスクゲートウェイ。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "流量制限中でトラフィックは改善傾向",
-        "message": "リスクしきい値を更新: ログイン失敗率が11.8%から2.4%へ低下; 一時チャレンジしきい値が中から厳格へ変更",
-        "severity": "medium",
-        "tags": [
-          "ログイン",
-          "リスク制御",
-          "顧客信頼"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "概要": "流量制限中でトラフィックは改善傾向",
-          "属性変更": [
-            "ログイン失敗率が11.8%から2.4%へ低下",
-            "一時チャレンジしきい値が中から厳格へ変更"
-          ],
-          "関連イベント": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "発生元": "イベント監視"
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"デモ受信箱とオブジェクト詳細画面で表示を維持する。\",\"監査メモ\":\"読みやすい属性変更と関連イベント識別子を含みます。\",\"関連イベント\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "サービス",
-          "value": "顧客アカウントセンター"
-        },
-        "external_ids": {
-          "オブジェクト投影": "OBJ-THING_EVENT_AUTH_GATEWAY"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "da4f0461-be6c-5cb9-bd6a-6d7c056edbfe",
-      "message_id": "msg_monitoring_login_investigating",
-      "title": "ログイン再試行の異常パターン · 調査中",
-      "body": "# ログイン再試行の異常パターン · 調査中\n> 顧客ログイン再試行が三つのネットワーク範囲に集中しました\n\n## 変化した内容\n- パスワード再設定とアカウントセンターで短時間の追加確認が発生しました。\n- ログイン失敗率は11.8%に上昇し、適応型確認の有効化後に正常化しました。\n- 標本内で成功したアカウント乗っ取りの兆候は見つかりませんでした。\n\n## 対応\n1. 影響範囲に対してより厳格なリスク確認を有効化しました。\n2. 顧客信頼チームへ時系列を共有し、先回りした案内を準備しました。\n3. 既知の認証情報詰め込みリストと一致するか確認します。\n\n## 次の手順\n- 担当: 信頼運用担当\n- 予定時刻: 次の安定標本ウィンドウ\n",
-      "channel_id": "event-monitoring",
-      "is_read": false,
-      "received_at": "2026-05-08T03:28:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_monitoring_login_001",
-        "event_id": "evt_monitoring_login_001",
-        "thing_id": "thing_event_auth_gateway",
-        "projection_destination": "event_head",
-        "title": "ログイン再試行の異常パターン · 調査中",
-        "description": "ログイン再試行の異常パターン。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "調査中",
-        "message": "状態更新: パスワード再設定とアカウントセンターで短時間の追加確認が発生しました。",
+        "entity_id": "prod_order_db_latency_p1",
+        "event_id": "prod_order_db_latency_p1",
+        "status": "ongoing",
+        "message": "### P1 database incident\n\n`order-db-primary` write P95 reached **1.9s**, above the `800ms` threshold.\n\nImpact:\n\n- Delayed order status refresh\n- Payment callbacks queued\n- Admin order list occasionally slow\n\nDBA and backend owner have been notified.",
         "severity": "critical",
-        "tags": [
-          "ログイン",
-          "リスク制御",
-          "顧客信頼"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "変化した内容": [
-            "パスワード再設定とアカウントセンターで短時間の追加確認が発生しました。",
-            "ログイン失敗率は11.8%に上昇し、適応型確認の有効化後に正常化しました。"
-          ],
-          "担当": "信頼運用担当",
-          "予定時刻": "次の安定標本ウィンドウ",
-          "関連イベント": [
-            "evt_monitoring_login_001",
-            "thing_event_auth_gateway"
-          ]
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"対象オブジェクトで安定した標本が二回確認されるまで追跡を続ける。\",\"監査メモ\":\"時刻は順序どおりで、iOSスクリーンショットテストに適しています。\",\"関連イベント\":[\"evt_monitoring_login_001\",\"thing_event_auth_gateway\"]}",
-        "location": {
-          "type": "サービス",
-          "value": "顧客アカウントセンター"
-        },
-        "external_ids": {
-          "インシデントチケット": "INC-2026-0508-004"
-        }
+        "event_time": "1762864800000"
       },
       "status": "normal"
     },
     {
-      "id": "baa0f28d-0475-5dff-97fd-07afd0327be9",
-      "message_id": "msg_monitoring_login_detected",
-      "title": "ログイン再試行の異常パターン · 検知済み",
-      "body": "# ログイン再試行の異常パターン · 検知済み\n> 顧客ログイン再試行が三つのネットワーク範囲に集中しました\n\n## 変化した内容\n- パスワード再設定とアカウントセンターで短時間の追加確認が発生しました。\n- ログイン失敗率は11.8%に上昇し、適応型確認の有効化後に正常化しました。\n- 標本内で成功したアカウント乗っ取りの兆候は見つかりませんでした。\n\n## 対応\n1. 影響範囲に対してより厳格なリスク確認を有効化しました。\n2. 顧客信頼チームへ時系列を共有し、先回りした案内を準備しました。\n3. 既知の認証情報詰め込みリストと一致するか確認します。\n\n## 次の手順\n- 担当: 信頼運用担当\n- 予定時刻: 次の安定標本ウィンドウ\n",
-      "channel_id": "event-monitoring",
+      "id": "71dbe453-50b6-5904-b02b-2f3067157bcd",
+      "message_id": "msg_ja_0007",
+      "title": "Primary database latency — investigating",
+      "body": "### Initial finding\n\nSlow query sample:\n\n```sql\nSELECT * FROM order_extra WHERE order_id = ? AND type = ?\n```\n\nActions taken:\n\n1. Paused `order-export-worker`\n2. Reduced payment callback consumers from `32` to `16`\n3. Ran `EXPLAIN ANALYZE`\n\nCurrent write P95: **1.25s**.",
+      "channel_id": "thing-hub",
       "is_read": false,
-      "received_at": "2026-05-08T03:18:00.000Z",
+      "received_at": "2026-05-07T04:24:58.555000Z",
       "raw_payload": {
         "entity_type": "event",
-        "entity_id": "evt_monitoring_login_001",
-        "event_id": "evt_monitoring_login_001",
-        "thing_id": "thing_event_auth_gateway",
-        "projection_destination": "event_head",
-        "title": "ログイン再試行の異常パターン · 検知済み",
-        "description": "ログイン再試行の異常パターン。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "検知済み",
-        "message": "状態更新: パスワード再設定とアカウントセンターで短時間の追加確認が発生しました。",
+        "entity_id": "prod_order_db_latency_p1",
+        "event_id": "prod_order_db_latency_p1",
+        "status": "ongoing",
+        "message": "### Initial finding\n\nSlow query sample:\n\n```sql\nSELECT * FROM order_extra WHERE order_id = ? AND type = ?\n```\n\nActions taken:\n\n1. Paused `order-export-worker`\n2. Reduced payment callback consumers from `32` to `16`\n3. Ran `EXPLAIN ANALYZE`\n\nCurrent write P95: **1.25s**.",
+        "severity": "high",
+        "event_time": "1762865880000"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "80a33422-67c2-5e50-a484-3c0020d8a5fb",
+      "message_id": "msg_ja_0008",
+      "title": "Primary database latency — mitigated",
+      "body": "### Mitigation effective\n\nTemporary index created:\n\n```sql\nCREATE INDEX CONCURRENTLY idx_order_extra_order_type\nON order_extra(order_id, type);\n```\n\n| Metric | Current |\n|---|---:|\n| Write P95 | 620ms |\n| Active connections | 286 |\n| Slow queries / 5min | 21 |",
+      "channel_id": "thing-hub",
+      "is_read": false,
+      "received_at": "2026-05-07T04:25:58.555000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "prod_order_db_latency_p1",
+        "event_id": "prod_order_db_latency_p1",
+        "status": "ongoing",
+        "message": "### Mitigation effective\n\nTemporary index created:\n\n```sql\nCREATE INDEX CONCURRENTLY idx_order_extra_order_type\nON order_extra(order_id, type);\n```\n\n| Metric | Current |\n|---|---:|\n| Write P95 | 620ms |\n| Active connections | 286 |\n| Slow queries / 5min | 21 |",
+        "severity": "normal",
+        "event_time": "1762867320000"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "cce6204d-df3b-5b14-8bb0-5a2a4c0bf3c6",
+      "message_id": "msg_ja_0009",
+      "title": "Primary database latency — resolved",
+      "body": "### Incident closed\n\nDatabase write latency is back to normal.\n\nFollow-up:\n\n- Add permanent index migration in `v1.4.2`\n- Add slow-query regression check\n- Add capacity alert for `order_extra`\n\nStatus: **Resolved**",
+      "channel_id": "thing-hub",
+      "is_read": true,
+      "received_at": "2026-05-07T04:26:58.555000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "prod_order_db_latency_p1",
+        "event_id": "prod_order_db_latency_p1",
+        "status": "resolved",
+        "message": "### Incident closed\n\nDatabase write latency is back to normal.\n\nFollow-up:\n\n- Add permanent index migration in `v1.4.2`\n- Add slow-query regression check\n- Add capacity alert for `order_extra`\n\nStatus: **Resolved**",
+        "severity": "low",
+        "event_time": "1762869600000"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "e8599629-a2cc-5ad9-b4d2-0e6dd0d3a983",
+      "message_id": "msg_ja_0010",
+      "title": "Kitchen leak sensor triggered",
+      "body": "### Home emergency\n\nLocation: `Kitchen / under sink`  \nSensor: `kitchen-leak-01`  \nState: **Wet**\n\nPriority actions:\n\n- Close the water filter inlet valve\n- Check the dishwasher inlet hose\n- Check the cabinet floor",
+      "channel_id": "ai-agent-feedback",
+      "is_read": false,
+      "received_at": "2026-05-07T04:27:58.555000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "home_kitchen_water_leak",
+        "event_id": "home_kitchen_water_leak",
+        "status": "ongoing",
+        "message": "### Home emergency\n\nLocation: `Kitchen / under sink`  \nSensor: `kitchen-leak-01`  \nState: **Wet**\n\nPriority actions:\n\n- Close the water filter inlet valve\n- Check the dishwasher inlet hose\n- Check the cabinet floor",
         "severity": "critical",
-        "tags": [
-          "ログイン",
-          "リスク制御",
-          "顧客信頼"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "変化した内容": [
-            "パスワード再設定とアカウントセンターで短時間の追加確認が発生しました。",
-            "ログイン失敗率は11.8%に上昇し、適応型確認の有効化後に正常化しました。"
-          ],
-          "担当": "信頼運用担当",
-          "予定時刻": "次の安定標本ウィンドウ",
-          "関連イベント": [
-            "evt_monitoring_login_001",
-            "thing_event_auth_gateway"
-          ]
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"対象オブジェクトで安定した標本が二回確認されるまで追跡を続ける。\",\"監査メモ\":\"時刻は順序どおりで、iOSスクリーンショットテストに適しています。\",\"関連イベント\":[\"evt_monitoring_login_001\",\"thing_event_auth_gateway\"]}",
-        "location": {
-          "type": "サービス",
-          "value": "顧客アカウントセンター"
-        },
-        "external_ids": {
-          "インシデントチケット": "INC-2026-0508-004"
-        }
+        "event_time": "1762864800000"
       },
       "status": "normal"
     },
     {
-      "id": "1e5103e0-f277-5ba5-bbb6-a2d5c92a38ff",
-      "message_id": "msg_ops_latency_resolved_003",
-      "title": "決済APIの遅延急増 · 解決済み",
-      "body": "# 決済APIの遅延急増 · 解決済み\n> 華東地域のチェックアウト要求が法人利用者向けに遅くなりました\n\n## 変化した内容\n- 遅延は300ミリ秒の目標を下回り、レプリカ遅延は20分間5秒未満を維持しました。\n- P95遅延は1.9秒まで上昇し、レプリカ向けトラフィックを減らした後に低下しました。\n- データ損失は検出されず、三件の再試行は自動的に回復しました。\n\n## 対応\n1. 遅いクエリの指紋を固定し、最新の読み取りレプリカをローテーションから外しました。\n2. データベース接続プールの計測を一分粒度に引き上げました。\n3. 次の請求バッチが再試行増加なしで完了するまでインシデントを開いたままにします。\n\n## 次の手順\n- 担当: 当番SRE\n- 予定時刻: 次の安定標本ウィンドウ\n",
-      "channel_id": "ops-core",
-      "is_read": true,
-      "received_at": "2026-05-08T03:05:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_ops_latency_001",
-        "event_id": "evt_ops_latency_001",
-        "thing_id": "thing_ops_cluster_sh1",
-        "projection_destination": "event_head",
-        "title": "決済APIの遅延急増 · 解決済み",
-        "description": "決済APIの遅延急増。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "解決済み",
-        "message": "状態更新: 遅延は300ミリ秒の目標を下回り、レプリカ遅延は20分間5秒未満を維持しました。",
-        "severity": "high",
-        "tags": [
-          "データベース",
-          "遅延",
-          "読み取りレプリカ"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "変化した内容": [
-            "遅延は300ミリ秒の目標を下回り、レプリカ遅延は20分間5秒未満を維持しました。",
-            "P95遅延は1.9秒まで上昇し、レプリカ向けトラフィックを減らした後に低下しました。"
-          ],
-          "担当": "当番SRE",
-          "予定時刻": "次の安定標本ウィンドウ",
-          "関連イベント": [
-            "evt_ops_latency_001",
-            "thing_ops_cluster_sh1"
-          ]
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"対象オブジェクトで安定した標本が二回確認されるまで追跡を続ける。\",\"監査メモ\":\"時刻は順序どおりで、iOSスクリーンショットテストに適しています。\",\"関連イベント\":[\"evt_ops_latency_001\",\"thing_ops_cluster_sh1\"]}",
-        "location": {
-          "type": "地域",
-          "value": "上海地域"
-        },
-        "external_ids": {
-          "インシデントチケット": "INC-2026-0508-001"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "1579267f-9712-509d-9711-5d348dd7b72b",
-      "message_id": "msg_thing_ops_cluster_sh1_capacity",
-      "title": "上海決済クラスタ · 容量シグナルを更新",
-      "body": "# 上海決済クラスタ のオブジェクト更新\n> 複数のチャネルから新しいシグナルが届いたため、オブジェクト投影を更新しました。\n\n## 概要\n- 現在の状態: 健全だが監視を強化中\n- 関連イベント: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監視チャネル: 運用コア\n\n## 属性変更\n- APIのP95遅延が420ミリ秒から238ミリ秒へ低下\n- 読み取りレプリカの遅延が18秒から3秒へ低下\n\n## 次の手順\n- このオブジェクトは、運用、財務、家庭、エージェントの各シナリオを現実的な時系列で結び付けるため、スクリーンショット用データに表示したままにします。\n",
-      "channel_id": "ops-core",
-      "is_read": true,
-      "received_at": "2026-05-08T02:40:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_ops_cluster_sh1",
-        "thing_id": "thing_ops_cluster_sh1",
-        "projection_destination": "thing_head",
-        "title": "上海決済クラスタ · 容量シグナルを更新",
-        "description": "上海決済クラスタ。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "健全だが監視を強化中",
-        "message": "容量シグナルを更新: APIのP95遅延が420ミリ秒から238ミリ秒へ低下; 読み取りレプリカの遅延が18秒から3秒へ低下",
-        "severity": "low",
-        "tags": [
-          "データベース",
-          "遅延",
-          "読み取りレプリカ"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "概要": "健全だが監視を強化中",
-          "属性変更": [
-            "APIのP95遅延が420ミリ秒から238ミリ秒へ低下",
-            "読み取りレプリカの遅延が18秒から3秒へ低下"
-          ],
-          "関連イベント": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "発生元": "運用コア"
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"デモ受信箱とオブジェクト詳細画面で表示を維持する。\",\"監査メモ\":\"読みやすい属性変更と関連イベント識別子を含みます。\",\"関連イベント\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "地域",
-          "value": "上海地域"
-        },
-        "external_ids": {
-          "オブジェクト投影": "OBJ-THING_OPS_CLUSTER_SH1"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "71a041a7-9ade-54af-92c2-3e555ef0b088",
-      "message_id": "msg_ops_latency_investigating_002",
-      "title": "決済APIの遅延急増 · 調査中",
-      "body": "# 決済APIの遅延急増 · 調査中\n> 華東地域のチェックアウト要求が法人利用者向けに遅くなりました\n\n## 変化した内容\n- 上海地域の要求の3.8%でチェックアウト確認が遅延しました。\n- P95遅延は1.9秒まで上昇し、レプリカ向けトラフィックを減らした後に低下しました。\n- データ損失は検出されず、三件の再試行は自動的に回復しました。\n\n## 対応\n1. 遅いクエリの指紋を固定し、最新の読み取りレプリカをローテーションから外しました。\n2. データベース接続プールの計測を一分粒度に引き上げました。\n3. 次の請求バッチが再試行増加なしで完了するまでインシデントを開いたままにします。\n\n## 次の手順\n- 担当: 当番SRE\n- 予定時刻: 次の安定標本ウィンドウ\n",
-      "channel_id": "ops-core",
+      "id": "2f8131a2-e7a3-5730-bb81-d95032afcdfe",
+      "message_id": "msg_ja_0011",
+      "title": "Kitchen leak — valve closed",
+      "body": "### Automation executed\n\n```yaml\naction: valve.close\ntarget: valve.kitchen_filter_inlet\n```\n\n| Item | State |\n|---|---|\n| Inlet valve | Closed |\n| Leak sensor | Wet |\n| Cabinet light | On |",
+      "channel_id": "ai-agent-feedback",
       "is_read": false,
-      "received_at": "2026-05-08T02:24:00.000Z",
+      "received_at": "2026-05-07T04:28:58.555000Z",
       "raw_payload": {
         "entity_type": "event",
-        "entity_id": "evt_ops_latency_001",
-        "event_id": "evt_ops_latency_001",
-        "thing_id": "thing_ops_cluster_sh1",
-        "projection_destination": "event_head",
-        "title": "決済APIの遅延急増 · 調査中",
-        "description": "決済APIの遅延急増。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "調査中",
-        "message": "状態更新: 上海地域の要求の3.8%でチェックアウト確認が遅延しました。",
+        "entity_id": "home_kitchen_water_leak",
+        "event_id": "home_kitchen_water_leak",
+        "status": "ongoing",
+        "message": "### Automation executed\n\n```yaml\naction: valve.close\ntarget: valve.kitchen_filter_inlet\n```\n\n| Item | State |\n|---|---|\n| Inlet valve | Closed |\n| Leak sensor | Wet |\n| Cabinet light | On |",
         "severity": "high",
-        "tags": [
-          "データベース",
-          "遅延",
-          "読み取りレプリカ"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "変化した内容": [
-            "上海地域の要求の3.8%でチェックアウト確認が遅延しました。",
-            "P95遅延は1.9秒まで上昇し、レプリカ向けトラフィックを減らした後に低下しました。"
-          ],
-          "担当": "当番SRE",
-          "予定時刻": "次の安定標本ウィンドウ",
-          "関連イベント": [
-            "evt_ops_latency_001",
-            "thing_ops_cluster_sh1"
-          ]
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"対象オブジェクトで安定した標本が二回確認されるまで追跡を続ける。\",\"監査メモ\":\"時刻は順序どおりで、iOSスクリーンショットテストに適しています。\",\"関連イベント\":[\"evt_ops_latency_001\",\"thing_ops_cluster_sh1\"]}",
-        "location": {
-          "type": "地域",
-          "value": "上海地域"
-        },
-        "external_ids": {
-          "インシデントチケット": "INC-2026-0508-001"
-        }
+        "event_time": "1762865880000"
       },
       "status": "normal"
     },
     {
-      "id": "a917d4e2-8275-5f4c-910f-ef8a874aeb96",
-      "message_id": "msg_home_leak_resolved",
-      "title": "キッチン漏水センサーが作動 · 解決済み",
-      "body": "# キッチン漏水センサーが作動 · 解決済み\n> シンク下収納付近で床センサーが継続的な湿気を報告しました\n\n## 変化した内容\n- 湿度曲線は25分間横ばいで、バルブは監視付きモードで再開されました。\n- バルブ閉止と換気開始後、湿度は72%から38%へ下がりました。\n- 家庭内ルーティンが一つ停止しましたが、アプリから手動解除できます。\n\n## 対応\n1. 電池低下による誤検知ではないことを確認しました。\n2. カメラ画像を確認する間、バルブを閉じたままにしました。\n3. 再開前に居住者へ収納部の継ぎ目確認を依頼します。\n\n## 次の手順\n- 担当: スマートホーム担当\n- 予定時刻: 次の安定標本ウィンドウ\n",
-      "channel_id": "home-automation",
-      "is_read": true,
-      "received_at": "2026-05-08T02:16:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_home_leak_001",
-        "event_id": "evt_home_leak_001",
-        "thing_id": "thing_home_valve_kitchen",
-        "projection_destination": "event_head",
-        "title": "キッチン漏水センサーが作動 · 解決済み",
-        "description": "キッチン漏水センサーが作動。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "解決済み",
-        "message": "状態更新: 湿度曲線は25分間横ばいで、バルブは監視付きモードで再開されました。",
-        "severity": "medium",
-        "tags": [
-          "水センサー",
-          "キッチン",
-          "バルブ"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "変化した内容": [
-            "湿度曲線は25分間横ばいで、バルブは監視付きモードで再開されました。",
-            "バルブ閉止と換気開始後、湿度は72%から38%へ下がりました。"
-          ],
-          "担当": "スマートホーム担当",
-          "予定時刻": "次の安定標本ウィンドウ",
-          "関連イベント": [
-            "evt_home_leak_001",
-            "thing_home_valve_kitchen"
-          ]
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"対象オブジェクトで安定した標本が二回確認されるまで追跡を続ける。\",\"監査メモ\":\"時刻は順序どおりで、iOSスクリーンショットテストに適しています。\",\"関連イベント\":[\"evt_home_leak_001\",\"thing_home_valve_kitchen\"]}",
-        "location": {
-          "type": "部屋",
-          "value": "キッチンのシンク下収納"
-        },
-        "external_ids": {
-          "インシデントチケット": "INC-2026-0508-002"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "6451312e-fc82-5428-833e-e544fc955cdd",
-      "message_id": "msg_ops_brief_001",
-      "title": "決済APIの遅延急増 · 検知済み",
-      "body": "# 決済APIの遅延急増 · 検知済み\n> 華東地域のチェックアウト要求が法人利用者向けに遅くなりました\n\n## 変化した内容\n- 上海地域の要求の3.8%でチェックアウト確認が遅延しました。\n- P95遅延は1.9秒まで上昇し、レプリカ向けトラフィックを減らした後に低下しました。\n- データ損失は検出されず、三件の再試行は自動的に回復しました。\n\n## 対応\n1. 遅いクエリの指紋を固定し、最新の読み取りレプリカをローテーションから外しました。\n2. データベース接続プールの計測を一分粒度に引き上げました。\n3. 次の請求バッチが再試行増加なしで完了するまでインシデントを開いたままにします。\n\n## 次の手順\n- 担当: 当番SRE\n- 予定時刻: 次の安定標本ウィンドウ\n",
-      "channel_id": "ops-core",
+      "id": "6d3c8c60-51a9-55a5-888b-153d2adb14e0",
+      "message_id": "msg_ja_0012",
+      "title": "Kitchen leak — valve closed",
+      "body": "### Automation executed\n\n```yaml\naction: valve.close\ntarget: valve.kitchen_filter_inlet\n```\n\n| Item | State |\n|---|---|\n| Inlet valve | Closed |\n| Leak sensor | Wet |\n| Cabinet light | On |",
+      "channel_id": "ai-agent-feedback",
       "is_read": false,
-      "received_at": "2026-05-08T02:10:00.000Z",
+      "received_at": "2026-05-07T04:29:58.555000Z",
       "raw_payload": {
         "entity_type": "event",
-        "entity_id": "evt_ops_latency_001",
-        "event_id": "evt_ops_latency_001",
-        "thing_id": "thing_ops_cluster_sh1",
-        "projection_destination": "event_head",
-        "title": "決済APIの遅延急増 · 検知済み",
-        "description": "決済APIの遅延急増。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "検知済み",
-        "message": "状態更新: 上海地域の要求の3.8%でチェックアウト確認が遅延しました。",
-        "severity": "high",
-        "tags": [
-          "データベース",
-          "遅延",
-          "読み取りレプリカ"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "変化した内容": [
-            "上海地域の要求の3.8%でチェックアウト確認が遅延しました。",
-            "P95遅延は1.9秒まで上昇し、レプリカ向けトラフィックを減らした後に低下しました。"
-          ],
-          "担当": "当番SRE",
-          "予定時刻": "次の安定標本ウィンドウ",
-          "関連イベント": [
-            "evt_ops_latency_001",
-            "thing_ops_cluster_sh1"
-          ]
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"対象オブジェクトで安定した標本が二回確認されるまで追跡を続ける。\",\"監査メモ\":\"時刻は順序どおりで、iOSスクリーンショットテストに適しています。\",\"関連イベント\":[\"evt_ops_latency_001\",\"thing_ops_cluster_sh1\"]}",
-        "location": {
-          "type": "地域",
-          "value": "上海地域"
-        },
-        "external_ids": {
-          "インシデントチケット": "INC-2026-0508-001"
-        }
+        "entity_id": "home_kitchen_water_leak",
+        "event_id": "home_kitchen_water_leak",
+        "status": "ongoing",
+        "message": "### Automation executed\n\n```yaml\naction: valve.close\ntarget: valve.kitchen_filter_inlet\n```\n\n| Item | State |\n|---|---|\n| Inlet valve | Closed |\n| Leak sensor | Wet |\n| Cabinet light | On |",
+        "severity": "normal",
+        "event_time": "1762867320000"
       },
       "status": "normal"
     },
     {
-      "id": "02b6a2df-431a-530c-8c8c-111f13c43e97",
-      "message_id": "msg_thing_finance_ap_queue_approval",
-      "title": "買掛金レビュー待ち列 · 承認経路を更新",
-      "body": "# 買掛金レビュー待ち列 のオブジェクト更新\n> 複数のチャネルから新しいシグナルが届いたため、オブジェクト投影を更新しました。\n\n## 概要\n- 現在の状態: 重複確認のため均衡状態でロック中\n- 関連イベント: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監視チャネル: 財務台帳\n\n## 属性変更\n- 重複請求書スコアが0.41から0.93へ上昇\n- 承認ポリシーが単独確認から二重確認へ変更\n\n## 次の手順\n- このオブジェクトは、運用、財務、家庭、エージェントの各シナリオを現実的な時系列で結び付けるため、スクリーンショット用データに表示したままにします。\n",
-      "channel_id": "finance-ledger",
-      "is_read": true,
-      "received_at": "2026-05-08T02:08:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_finance_ap_queue",
-        "thing_id": "thing_finance_ap_queue",
-        "projection_destination": "thing_head",
-        "title": "買掛金レビュー待ち列 · 承認経路を更新",
-        "description": "買掛金レビュー待ち列。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "重複確認のため均衡状態でロック中",
-        "message": "承認経路を更新: 重複請求書スコアが0.41から0.93へ上昇; 承認ポリシーが単独確認から二重確認へ変更",
-        "severity": "low",
-        "tags": [
-          "請求書",
-          "承認",
-          "資金繰り"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "概要": "重複確認のため均衡状態でロック中",
-          "属性変更": [
-            "重複請求書スコアが0.41から0.93へ上昇",
-            "承認ポリシーが単独確認から二重確認へ変更"
-          ],
-          "関連イベント": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "発生元": "財務台帳"
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"デモ受信箱とオブジェクト詳細画面で表示を維持する。\",\"監査メモ\":\"読みやすい属性変更と関連イベント識別子を含みます。\",\"関連イベント\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "部門",
-          "value": "財務共有サービスセンター"
-        },
-        "external_ids": {
-          "オブジェクト投影": "OBJ-THING_FINANCE_AP_QUEUE"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "29b23dad-39d4-597b-b600-df509621d2f8",
-      "message_id": "msg_finance_invoice_resolved",
-      "title": "仕入先請求書の重複疑い · 解決済み",
-      "body": "# 仕入先請求書の重複疑い · 解決済み\n> 同じ発注に対する二通の請求書が別の承認経路で届きました\n\n## 変化した内容\n- 二通目は再送信と確認され、元の支払い予定が復元されました。\n- 金額、仕入先税番号、納品書が一致したため重複スコアは0.93に達しました。\n- 財務チームは二次承認後に有効な請求書を解除できます。\n\n## 対応\n1. 両方の請求書レコードをロックし、仕入先納品書を添付しました。\n2. どの請求番号を有効に残すか購買に確認を依頼しました。\n3. 保留解除まで資金繰り予測を暫定表示のままにします。\n\n## 次の手順\n- 担当: 財務管理担当\n- 予定時刻: 次の安定標本ウィンドウ\n",
-      "channel_id": "finance-ledger",
-      "is_read": true,
-      "received_at": "2026-05-08T02:02:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_finance_invoice_001",
-        "event_id": "evt_finance_invoice_001",
-        "thing_id": "thing_finance_ap_queue",
-        "projection_destination": "event_head",
-        "title": "仕入先請求書の重複疑い · 解決済み",
-        "description": "仕入先請求書の重複疑い。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "解決済み",
-        "message": "状態更新: 二通目は再送信と確認され、元の支払い予定が復元されました。",
-        "severity": "high",
-        "tags": [
-          "請求書",
-          "承認",
-          "資金繰り"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "変化した内容": [
-            "二通目は再送信と確認され、元の支払い予定が復元されました。",
-            "金額、仕入先税番号、納品書が一致したため重複スコアは0.93に達しました。"
-          ],
-          "担当": "財務管理担当",
-          "予定時刻": "次の安定標本ウィンドウ",
-          "関連イベント": [
-            "evt_finance_invoice_001",
-            "thing_finance_ap_queue"
-          ]
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"対象オブジェクトで安定した標本が二回確認されるまで追跡を続ける。\",\"監査メモ\":\"時刻は順序どおりで、iOSスクリーンショットテストに適しています。\",\"関連イベント\":[\"evt_finance_invoice_001\",\"thing_finance_ap_queue\"]}",
-        "location": {
-          "type": "部門",
-          "value": "財務共有サービスセンター"
-        },
-        "external_ids": {
-          "インシデントチケット": "INC-2026-0508-003"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "1f7158a7-b948-59ec-aaae-7a7ed7bb8469",
-      "message_id": "msg_thing_home_valve_kitchen_valve",
-      "title": "キッチン止水バルブ · バルブ安全メモを更新",
-      "body": "# キッチン止水バルブ のオブジェクト更新\n> 複数のチャネルから新しいシグナルが届いたため、オブジェクト投影を更新しました。\n\n## 概要\n- 現在の状態: 漏水保護後に閉止中\n- 関連イベント: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監視チャネル: スマートホーム\n\n## 属性変更\n- 床センサーの湿度が72%から38%へ低下\n- バルブ操作モードが自動から監視付きへ変更\n\n## 次の手順\n- このオブジェクトは、運用、財務、家庭、エージェントの各シナリオを現実的な時系列で結び付けるため、スクリーンショット用データに表示したままにします。\n",
-      "channel_id": "home-automation",
-      "is_read": true,
-      "received_at": "2026-05-08T01:49:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_home_valve_kitchen",
-        "thing_id": "thing_home_valve_kitchen",
-        "projection_destination": "thing_head",
-        "title": "キッチン止水バルブ · バルブ安全メモを更新",
-        "description": "キッチン止水バルブ。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "漏水保護後に閉止中",
-        "message": "バルブ安全メモを更新: 床センサーの湿度が72%から38%へ低下; バルブ操作モードが自動から監視付きへ変更",
-        "severity": "low",
-        "tags": [
-          "水センサー",
-          "キッチン",
-          "バルブ"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "概要": "漏水保護後に閉止中",
-          "属性変更": [
-            "床センサーの湿度が72%から38%へ低下",
-            "バルブ操作モードが自動から監視付きへ変更"
-          ],
-          "関連イベント": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "発生元": "スマートホーム"
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"デモ受信箱とオブジェクト詳細画面で表示を維持する。\",\"監査メモ\":\"読みやすい属性変更と関連イベント識別子を含みます。\",\"関連イベント\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "部屋",
-          "value": "キッチンのシンク下収納"
-        },
-        "external_ids": {
-          "オブジェクト投影": "OBJ-THING_HOME_VALVE_KITCHEN"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "70a7a8a1-2654-5855-84b2-c9ede7fc82f8",
-      "message_id": "msg_home_leak_investigating",
-      "title": "キッチン漏水センサーが作動 · 調査中",
-      "body": "# キッチン漏水センサーが作動 · 調査中\n> シンク下収納付近で床センサーが継続的な湿気を報告しました\n\n## 変化した内容\n- スマートバルブが8秒で冷水系統を閉じ、収納外への広がりを防ぎました。\n- バルブ閉止と換気開始後、湿度は72%から38%へ下がりました。\n- 家庭内ルーティンが一つ停止しましたが、アプリから手動解除できます。\n\n## 対応\n1. 電池低下による誤検知ではないことを確認しました。\n2. カメラ画像を確認する間、バルブを閉じたままにしました。\n3. 再開前に居住者へ収納部の継ぎ目確認を依頼します。\n\n## 次の手順\n- 担当: スマートホーム担当\n- 予定時刻: 次の安定標本ウィンドウ\n",
-      "channel_id": "home-automation",
-      "is_read": false,
-      "received_at": "2026-05-08T01:42:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_home_leak_001",
-        "event_id": "evt_home_leak_001",
-        "thing_id": "thing_home_valve_kitchen",
-        "projection_destination": "event_head",
-        "title": "キッチン漏水センサーが作動 · 調査中",
-        "description": "キッチン漏水センサーが作動。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "調査中",
-        "message": "状態更新: スマートバルブが8秒で冷水系統を閉じ、収納外への広がりを防ぎました。",
-        "severity": "medium",
-        "tags": [
-          "水センサー",
-          "キッチン",
-          "バルブ"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "変化した内容": [
-            "スマートバルブが8秒で冷水系統を閉じ、収納外への広がりを防ぎました。",
-            "バルブ閉止と換気開始後、湿度は72%から38%へ下がりました。"
-          ],
-          "担当": "スマートホーム担当",
-          "予定時刻": "次の安定標本ウィンドウ",
-          "関連イベント": [
-            "evt_home_leak_001",
-            "thing_home_valve_kitchen"
-          ]
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"対象オブジェクトで安定した標本が二回確認されるまで追跡を続ける。\",\"監査メモ\":\"時刻は順序どおりで、iOSスクリーンショットテストに適しています。\",\"関連イベント\":[\"evt_home_leak_001\",\"thing_home_valve_kitchen\"]}",
-        "location": {
-          "type": "部屋",
-          "value": "キッチンのシンク下収納"
-        },
-        "external_ids": {
-          "インシデントチケット": "INC-2026-0508-002"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "999e9c24-c956-5266-994b-207d4eca02c1",
-      "message_id": "msg_home_leak_detected",
-      "title": "キッチン漏水センサーが作動 · 検知済み",
-      "body": "# キッチン漏水センサーが作動 · 検知済み\n> シンク下収納付近で床センサーが継続的な湿気を報告しました\n\n## 変化した内容\n- スマートバルブが8秒で冷水系統を閉じ、収納外への広がりを防ぎました。\n- バルブ閉止と換気開始後、湿度は72%から38%へ下がりました。\n- 家庭内ルーティンが一つ停止しましたが、アプリから手動解除できます。\n\n## 対応\n1. 電池低下による誤検知ではないことを確認しました。\n2. カメラ画像を確認する間、バルブを閉じたままにしました。\n3. 再開前に居住者へ収納部の継ぎ目確認を依頼します。\n\n## 次の手順\n- 担当: スマートホーム担当\n- 予定時刻: 次の安定標本ウィンドウ\n",
-      "channel_id": "home-automation",
-      "is_read": false,
-      "received_at": "2026-05-08T01:35:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_home_leak_001",
-        "event_id": "evt_home_leak_001",
-        "thing_id": "thing_home_valve_kitchen",
-        "projection_destination": "event_head",
-        "title": "キッチン漏水センサーが作動 · 検知済み",
-        "description": "キッチン漏水センサーが作動。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "検知済み",
-        "message": "状態更新: スマートバルブが8秒で冷水系統を閉じ、収納外への広がりを防ぎました。",
-        "severity": "medium",
-        "tags": [
-          "水センサー",
-          "キッチン",
-          "バルブ"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "変化した内容": [
-            "スマートバルブが8秒で冷水系統を閉じ、収納外への広がりを防ぎました。",
-            "バルブ閉止と換気開始後、湿度は72%から38%へ下がりました。"
-          ],
-          "担当": "スマートホーム担当",
-          "予定時刻": "次の安定標本ウィンドウ",
-          "関連イベント": [
-            "evt_home_leak_001",
-            "thing_home_valve_kitchen"
-          ]
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"対象オブジェクトで安定した標本が二回確認されるまで追跡を続ける。\",\"監査メモ\":\"時刻は順序どおりで、iOSスクリーンショットテストに適しています。\",\"関連イベント\":[\"evt_home_leak_001\",\"thing_home_valve_kitchen\"]}",
-        "location": {
-          "type": "部屋",
-          "value": "キッチンのシンク下収納"
-        },
-        "external_ids": {
-          "インシデントチケット": "INC-2026-0508-002"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "57d1d5de-0f5d-5d8b-9c9c-a69df73603ae",
-      "message_id": "msg_finance_invoice_investigating",
-      "title": "仕入先請求書の重複疑い · 調査中",
-      "body": "# 仕入先請求書の重複疑い · 調査中\n> 同じ発注に対する二通の請求書が別の承認経路で届きました\n\n## 変化した内容\n- 18,420.00 CNYの予定支払いは銀行送信前に保留されました。\n- 金額、仕入先税番号、納品書が一致したため重複スコアは0.93に達しました。\n- 財務チームは二次承認後に有効な請求書を解除できます。\n\n## 対応\n1. 両方の請求書レコードをロックし、仕入先納品書を添付しました。\n2. どの請求番号を有効に残すか購買に確認を依頼しました。\n3. 保留解除まで資金繰り予測を暫定表示のままにします。\n\n## 次の手順\n- 担当: 財務管理担当\n- 予定時刻: 次の安定標本ウィンドウ\n",
-      "channel_id": "finance-ledger",
-      "is_read": false,
-      "received_at": "2026-05-08T01:20:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_finance_invoice_001",
-        "event_id": "evt_finance_invoice_001",
-        "thing_id": "thing_finance_ap_queue",
-        "projection_destination": "event_head",
-        "title": "仕入先請求書の重複疑い · 調査中",
-        "description": "仕入先請求書の重複疑い。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "調査中",
-        "message": "状態更新: 18,420.00 CNYの予定支払いは銀行送信前に保留されました。",
-        "severity": "high",
-        "tags": [
-          "請求書",
-          "承認",
-          "資金繰り"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "変化した内容": [
-            "18,420.00 CNYの予定支払いは銀行送信前に保留されました。",
-            "金額、仕入先税番号、納品書が一致したため重複スコアは0.93に達しました。"
-          ],
-          "担当": "財務管理担当",
-          "予定時刻": "次の安定標本ウィンドウ",
-          "関連イベント": [
-            "evt_finance_invoice_001",
-            "thing_finance_ap_queue"
-          ]
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"対象オブジェクトで安定した標本が二回確認されるまで追跡を続ける。\",\"監査メモ\":\"時刻は順序どおりで、iOSスクリーンショットテストに適しています。\",\"関連イベント\":[\"evt_finance_invoice_001\",\"thing_finance_ap_queue\"]}",
-        "location": {
-          "type": "部門",
-          "value": "財務共有サービスセンター"
-        },
-        "external_ids": {
-          "インシデントチケット": "INC-2026-0508-003"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "f984fc55-61d3-52db-b558-8ea5bc451c76",
-      "message_id": "msg_thing_agent_support_triage_sample",
-      "title": "サポート振り分けAIエージェント · 標本確認メモを更新",
-      "body": "# サポート振り分けAIエージェント のオブジェクト更新\n> 複数のチャネルから新しいシグナルが届いたため、オブジェクト投影を更新しました。\n\n## 概要\n- 現在の状態: 人手確認を有効にして安定\n- 関連イベント: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監視チャネル: AIエージェントのフィードバック\n\n## 属性変更\n- 自動解決信頼度が0.78から0.86へ変更\n- フォールバック規則が即時引き継ぎから標本確認へ変更\n\n## 次の手順\n- このオブジェクトは、運用、財務、家庭、エージェントの各シナリオを現実的な時系列で結び付けるため、スクリーンショット用データに表示したままにします。\n",
+      "id": "cb9e5e4a-3e8d-5600-b465-97a3c477b05d",
+      "message_id": "msg_ja_0013",
+      "title": "Kitchen leak — cleared",
+      "body": "### Leak event closed\n\nSensor has stayed `Dry` for 30 minutes.\n\nNext steps:\n\n- Replace the quick connector\n- Check cabinet board\n- Keep automatic valve rule enabled",
       "channel_id": "ai-agent-feedback",
       "is_read": true,
-      "received_at": "2026-05-08T01:12:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_agent_support_triage",
-        "thing_id": "thing_agent_support_triage",
-        "projection_destination": "thing_head",
-        "title": "サポート振り分けAIエージェント · 標本確認メモを更新",
-        "description": "サポート振り分けAIエージェント。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "人手確認を有効にして安定",
-        "message": "標本確認メモを更新: 自動解決信頼度が0.78から0.86へ変更; フォールバック規則が即時引き継ぎから標本確認へ変更",
-        "severity": "low",
-        "tags": [
-          "AIエージェント",
-          "チケット",
-          "引き継ぎ"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "概要": "人手確認を有効にして安定",
-          "属性変更": [
-            "自動解決信頼度が0.78から0.86へ変更",
-            "フォールバック規則が即時引き継ぎから標本確認へ変更"
-          ],
-          "関連イベント": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "発生元": "AIエージェントのフィードバック"
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"デモ受信箱とオブジェクト詳細画面で表示を維持する。\",\"監査メモ\":\"読みやすい属性変更と関連イベント識別子を含みます。\",\"関連イベント\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "待ち列",
-          "value": "エンタープライズサポート待ち列"
-        },
-        "external_ids": {
-          "オブジェクト投影": "OBJ-THING_AGENT_SUPPORT_TRIAGE"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "4e36ae41-2269-582e-b933-3d7cb9a37d69",
-      "message_id": "msg_finance_invoice_detected",
-      "title": "仕入先請求書の重複疑い · 検知済み",
-      "body": "# 仕入先請求書の重複疑い · 検知済み\n> 同じ発注に対する二通の請求書が別の承認経路で届きました\n\n## 変化した内容\n- 18,420.00 CNYの予定支払いは銀行送信前に保留されました。\n- 金額、仕入先税番号、納品書が一致したため重複スコアは0.93に達しました。\n- 財務チームは二次承認後に有効な請求書を解除できます。\n\n## 対応\n1. 両方の請求書レコードをロックし、仕入先納品書を添付しました。\n2. どの請求番号を有効に残すか購買に確認を依頼しました。\n3. 保留解除まで資金繰り予測を暫定表示のままにします。\n\n## 次の手順\n- 担当: 財務管理担当\n- 予定時刻: 次の安定標本ウィンドウ\n",
-      "channel_id": "finance-ledger",
-      "is_read": false,
-      "received_at": "2026-05-08T00:58:00.000Z",
+      "received_at": "2026-05-07T04:30:58.555000Z",
       "raw_payload": {
         "entity_type": "event",
-        "entity_id": "evt_finance_invoice_001",
-        "event_id": "evt_finance_invoice_001",
-        "thing_id": "thing_finance_ap_queue",
-        "projection_destination": "event_head",
-        "title": "仕入先請求書の重複疑い · 検知済み",
-        "description": "仕入先請求書の重複疑い。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "検知済み",
-        "message": "状態更新: 18,420.00 CNYの予定支払いは銀行送信前に保留されました。",
+        "entity_id": "home_kitchen_water_leak",
+        "event_id": "home_kitchen_water_leak",
+        "status": "resolved",
+        "message": "### Leak event closed\n\nSensor has stayed `Dry` for 30 minutes.\n\nNext steps:\n\n- Replace the quick connector\n- Check cabinet board\n- Keep automatic valve rule enabled",
+        "severity": "low",
+        "event_time": "1762869600000"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "32ca0d84-04bf-56db-a64e-51c160c51730",
+      "message_id": "msg_ja_0014",
+      "title": "iOS TestFlight upload failed",
+      "body": "### Release pipeline failed\n\nVersion: `1.4.0 (128)`  \nBranch: `release/1.4.0`\n\n```text\nERROR ITMS-90161: Invalid Provisioning Profile\n```\n\nCheck signing certificates and App Store Connect API key permissions.",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:31:58.555000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "ios_testflight_release_failure",
+        "event_id": "ios_testflight_release_failure",
+        "status": "ongoing",
+        "message": "### Release pipeline failed\n\nVersion: `1.4.0 (128)`  \nBranch: `release/1.4.0`\n\n```text\nERROR ITMS-90161: Invalid Provisioning Profile\n```\n\nCheck signing certificates and App Store Connect API key permissions.",
+        "severity": "critical",
+        "event_time": "1762864800000"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "d9125905-154d-5568-846a-bd62734546e8",
+      "message_id": "msg_ja_0015",
+      "title": "TestFlight upload — certificate updated",
+      "body": "### Signing fixed\n\nUpdated:\n\n- `Apple Distribution` certificate\n- `PushGo AppStore Profile`\n- App Store Connect API Key permissions\n\nRerun workflow: `ios-release-rerun-01`",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:32:58.555000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "ios_testflight_release_failure",
+        "event_id": "ios_testflight_release_failure",
+        "status": "ongoing",
+        "message": "### Signing fixed\n\nUpdated:\n\n- `Apple Distribution` certificate\n- `PushGo AppStore Profile`\n- App Store Connect API Key permissions\n\nRerun workflow: `ios-release-rerun-01`",
         "severity": "high",
-        "tags": [
-          "請求書",
-          "承認",
-          "資金繰り"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "変化した内容": [
-            "18,420.00 CNYの予定支払いは銀行送信前に保留されました。",
-            "金額、仕入先税番号、納品書が一致したため重複スコアは0.93に達しました。"
-          ],
-          "担当": "財務管理担当",
-          "予定時刻": "次の安定標本ウィンドウ",
-          "関連イベント": [
-            "evt_finance_invoice_001",
-            "thing_finance_ap_queue"
-          ]
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"対象オブジェクトで安定した標本が二回確認されるまで追跡を続ける。\",\"監査メモ\":\"時刻は順序どおりで、iOSスクリーンショットテストに適しています。\",\"関連イベント\":[\"evt_finance_invoice_001\",\"thing_finance_ap_queue\"]}",
-        "location": {
-          "type": "部門",
-          "value": "財務共有サービスセンター"
-        },
-        "external_ids": {
-          "インシデントチケット": "INC-2026-0508-003"
-        }
+        "event_time": "1762865880000"
       },
       "status": "normal"
     },
     {
-      "id": "cbe404cf-36d9-5443-920d-ad8b44b15cc9",
-      "message_id": "msg_thing_event_auth_gateway_baseline",
-      "title": "顧客ログインリスクゲートウェイ · 基準比較を更新",
-      "body": "# 顧客ログインリスクゲートウェイ のオブジェクト更新\n> 複数のチャネルから新しいシグナルが届いたため、オブジェクト投影を更新しました。\n\n## 概要\n- 現在の状態: 流量制限中でトラフィックは改善傾向\n- 関連イベント: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監視チャネル: イベント監視\n\n## 属性変更\n- ログイン失敗率が11.8%から2.4%へ低下\n- 一時チャレンジしきい値が中から厳格へ変更\n\n## 次の手順\n- このオブジェクトは、運用、財務、家庭、エージェントの各シナリオを現実的な時系列で結び付けるため、スクリーンショット用データに表示したままにします。\n",
-      "channel_id": "event-monitoring",
-      "is_read": true,
-      "received_at": "2026-05-08T00:52:00.000Z",
+      "id": "7537c531-e468-538e-8534-84a6109a9d04",
+      "message_id": "msg_ja_0016",
+      "title": "TestFlight upload — certificate updated",
+      "body": "### Signing fixed\n\nUpdated:\n\n- `Apple Distribution` certificate\n- `PushGo AppStore Profile`\n- App Store Connect API Key permissions\n\nRerun workflow: `ios-release-rerun-01`",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:33:58.555000Z",
       "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_event_auth_gateway",
-        "thing_id": "thing_event_auth_gateway",
-        "projection_destination": "thing_head",
-        "title": "顧客ログインリスクゲートウェイ · 基準比較を更新",
-        "description": "顧客ログインリスクゲートウェイ。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "流量制限中でトラフィックは改善傾向",
-        "message": "基準比較を更新: ログイン失敗率が11.8%から2.4%へ低下; 一時チャレンジしきい値が中から厳格へ変更",
-        "severity": "low",
-        "tags": [
-          "ログイン",
-          "リスク制御",
-          "顧客信頼"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "概要": "流量制限中でトラフィックは改善傾向",
-          "属性変更": [
-            "ログイン失敗率が11.8%から2.4%へ低下",
-            "一時チャレンジしきい値が中から厳格へ変更"
-          ],
-          "関連イベント": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "発生元": "イベント監視"
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"デモ受信箱とオブジェクト詳細画面で表示を維持する。\",\"監査メモ\":\"読みやすい属性変更と関連イベント識別子を含みます。\",\"関連イベント\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "サービス",
-          "value": "顧客アカウントセンター"
-        },
-        "external_ids": {
-          "オブジェクト投影": "OBJ-THING_EVENT_AUTH_GATEWAY"
-        }
+        "entity_type": "event",
+        "entity_id": "ios_testflight_release_failure",
+        "event_id": "ios_testflight_release_failure",
+        "status": "ongoing",
+        "message": "### Signing fixed\n\nUpdated:\n\n- `Apple Distribution` certificate\n- `PushGo AppStore Profile`\n- App Store Connect API Key permissions\n\nRerun workflow: `ios-release-rerun-01`",
+        "severity": "normal",
+        "event_time": "1762867320000"
       },
       "status": "normal"
     },
     {
-      "id": "7594458c-6437-52a2-8d0b-7ce614af09bb",
-      "message_id": "msg_thing_ops_cluster_sh1_maintenance",
-      "title": "上海決済クラスタ · 保守メモを追加",
-      "body": "# 上海決済クラスタ のオブジェクト更新\n> 複数のチャネルから新しいシグナルが届いたため、オブジェクト投影を更新しました。\n\n## 概要\n- 現在の状態: 健全だが監視を強化中\n- 関連イベント: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監視チャネル: 運用コア\n\n## 属性変更\n- APIのP95遅延が420ミリ秒から238ミリ秒へ低下\n- 読み取りレプリカの遅延が18秒から3秒へ低下\n\n## 次の手順\n- このオブジェクトは、運用、財務、家庭、エージェントの各シナリオを現実的な時系列で結び付けるため、スクリーンショット用データに表示したままにします。\n",
-      "channel_id": "ops-core",
-      "is_read": true,
-      "received_at": "2026-05-07T23:48:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_ops_cluster_sh1",
-        "thing_id": "thing_ops_cluster_sh1",
-        "projection_destination": "thing_head",
-        "title": "上海決済クラスタ · 保守メモを追加",
-        "description": "上海決済クラスタ。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "健全だが監視を強化中",
-        "message": "保守メモを追加: APIのP95遅延が420ミリ秒から238ミリ秒へ低下; 読み取りレプリカの遅延が18秒から3秒へ低下",
-        "severity": "low",
-        "tags": [
-          "データベース",
-          "遅延",
-          "読み取りレプリカ"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "概要": "健全だが監視を強化中",
-          "属性変更": [
-            "APIのP95遅延が420ミリ秒から238ミリ秒へ低下",
-            "読み取りレプリカの遅延が18秒から3秒へ低下"
-          ],
-          "関連イベント": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "発生元": "運用コア"
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"デモ受信箱とオブジェクト詳細画面で表示を維持する。\",\"監査メモ\":\"読みやすい属性変更と関連イベント識別子を含みます。\",\"関連イベント\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "地域",
-          "value": "上海地域"
-        },
-        "external_ids": {
-          "オブジェクト投影": "OBJ-THING_OPS_CLUSTER_SH1"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "02ed990a-3fea-5478-b6e1-cdcae709af16",
-      "message_id": "msg_thing_finance_ap_queue_cutoff",
-      "title": "買掛金レビュー待ち列 · 支払い締めメモを更新",
-      "body": "# 買掛金レビュー待ち列 のオブジェクト更新\n> 複数のチャネルから新しいシグナルが届いたため、オブジェクト投影を更新しました。\n\n## 概要\n- 現在の状態: 重複確認のため均衡状態でロック中\n- 関連イベント: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監視チャネル: 財務台帳\n\n## 属性変更\n- 重複請求書スコアが0.41から0.93へ上昇\n- 承認ポリシーが単独確認から二重確認へ変更\n\n## 次の手順\n- このオブジェクトは、運用、財務、家庭、エージェントの各シナリオを現実的な時系列で結び付けるため、スクリーンショット用データに表示したままにします。\n",
+      "id": "0098e140-1685-58d5-92ec-d6e0165513ef",
+      "message_id": "msg_ja_0017",
+      "title": "TestFlight upload — resolved",
+      "body": "### Release recovered\n\n`PushGo 1.4.0 (129)` is available for internal TestFlight testing.\n\nNext:\n\n- Run smoke test\n- Verify APNs token registration\n- Check watchOS companion sync",
       "channel_id": "finance-ledger",
       "is_read": true,
-      "received_at": "2026-05-07T23:32:00.000Z",
+      "received_at": "2026-05-07T04:34:58.555000Z",
       "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_finance_ap_queue",
-        "thing_id": "thing_finance_ap_queue",
-        "projection_destination": "thing_head",
-        "title": "買掛金レビュー待ち列 · 支払い締めメモを更新",
-        "description": "買掛金レビュー待ち列。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "重複確認のため均衡状態でロック中",
-        "message": "支払い締めメモを更新: 重複請求書スコアが0.41から0.93へ上昇; 承認ポリシーが単独確認から二重確認へ変更",
+        "entity_type": "event",
+        "entity_id": "ios_testflight_release_failure",
+        "event_id": "ios_testflight_release_failure",
+        "status": "resolved",
+        "message": "### Release recovered\n\n`PushGo 1.4.0 (129)` is available for internal TestFlight testing.\n\nNext:\n\n- Run smoke test\n- Verify APNs token registration\n- Check watchOS companion sync",
         "severity": "low",
-        "tags": [
-          "請求書",
-          "承認",
-          "資金繰り"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "概要": "重複確認のため均衡状態でロック中",
-          "属性変更": [
-            "重複請求書スコアが0.41から0.93へ上昇",
-            "承認ポリシーが単独確認から二重確認へ変更"
-          ],
-          "関連イベント": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "発生元": "財務台帳"
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"デモ受信箱とオブジェクト詳細画面で表示を維持する。\",\"監査メモ\":\"読みやすい属性変更と関連イベント識別子を含みます。\",\"関連イベント\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "部門",
-          "value": "財務共有サービスセンター"
-        },
-        "external_ids": {
-          "オブジェクト投影": "OBJ-THING_FINANCE_AP_QUEUE"
-        }
+        "event_time": "1762869600000"
       },
       "status": "normal"
     },
     {
-      "id": "a8bfc7ac-1dba-529f-9a54-9c306639d978",
-      "message_id": "msg_thing_home_valve_kitchen_battery",
-      "title": "キッチン止水バルブ · 電池とセンサーメモを更新",
-      "body": "# キッチン止水バルブ のオブジェクト更新\n> 複数のチャネルから新しいシグナルが届いたため、オブジェクト投影を更新しました。\n\n## 概要\n- 現在の状態: 漏水保護後に閉止中\n- 関連イベント: evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 監視チャネル: スマートホーム\n\n## 属性変更\n- 床センサーの湿度が72%から38%へ低下\n- バルブ操作モードが自動から監視付きへ変更\n\n## 次の手順\n- このオブジェクトは、運用、財務、家庭、エージェントの各シナリオを現実的な時系列で結び付けるため、スクリーンショット用データに表示したままにします。\n",
-      "channel_id": "home-automation",
-      "is_read": true,
-      "received_at": "2026-05-07T23:18:00.000Z",
+      "id": "eb2025e3-8500-56a0-bcfc-804b9854206a",
+      "message_id": "msg_ja_0018",
+      "title": "Home NAS · DS923+",
+      "body": "家族写真、プロジェクトアーカイブ、バックアップジョブのメインストレージ。",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:35:58.555000Z",
       "raw_payload": {
         "entity_type": "thing",
-        "entity_id": "thing_home_valve_kitchen",
-        "thing_id": "thing_home_valve_kitchen",
+        "entity_id": "home_nas_ds923",
+        "thing_id": "home_nas_ds923",
         "projection_destination": "thing_head",
-        "title": "キッチン止水バルブ · 電池とセンサーメモを更新",
-        "description": "キッチン止水バルブ。このレコードはスクリーンショット用データとして生成されていますが、実運用に近い時系列に従っています。",
-        "status": "漏水保護後に閉止中",
-        "message": "電池とセンサーメモを更新: 床センサーの湿度が72%から38%へ低下; バルブ操作モードが自動から監視付きへ変更",
-        "severity": "low",
-        "tags": [
-          "水センサー",
-          "キッチン",
-          "バルブ"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "概要": "漏水保護後に閉止中",
-          "属性変更": [
-            "床センサーの湿度が72%から38%へ低下",
-            "バルブ操作モードが自動から監視付きへ変更"
-          ],
-          "関連イベント": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "発生元": "スマートホーム"
-        },
-        "metadata": "{\"発生元\":\"PushGoデータ生成器\",\"投影版\":\"2026.05.08-1\",\"推奨対応\":\"デモ受信箱とオブジェクト詳細画面で表示を維持する。\",\"監査メモ\":\"読みやすい属性変更と関連イベント識別子を含みます。\",\"関連イベント\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "部屋",
-          "value": "キッチンのシンク下収納"
-        },
-        "external_ids": {
-          "オブジェクト投影": "OBJ-THING_HOME_VALVE_KITCHEN"
-        }
+        "title": "Home NAS · DS923+",
+        "description": "家族写真、プロジェクトアーカイブ、バックアップジョブのメインストレージ。"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "0ba3a6e9-0948-5d26-8296-3262ceaa9ded",
+      "message_id": "msg_ja_0019",
+      "title": "Home NAS · DS923+ · Update 1",
+      "body": "家族写真、プロジェクトアーカイブ、バックアップジョブのメインストレージ。",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:36:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_nas_ds923",
+        "thing_id": "home_nas_ds923",
+        "projection_destination": "thing_head",
+        "title": "Home NAS · DS923+ · Update 1",
+        "description": "家族写真、プロジェクトアーカイブ、バックアップジョブのメインストレージ。"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "1819c334-631e-5a82-acb4-80986f1bbc9b",
+      "message_id": "msg_ja_0020",
+      "title": "Home NAS · DS923+ · Update 2",
+      "body": "家族写真、プロジェクトアーカイブ、バックアップジョブのメインストレージ。",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:37:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_nas_ds923",
+        "thing_id": "home_nas_ds923",
+        "projection_destination": "thing_head",
+        "title": "Home NAS · DS923+ · Update 2",
+        "description": "家族写真、プロジェクトアーカイブ、バックアップジョブのメインストレージ。"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "cd37aa6d-d077-5d86-85b7-221a1bc20e53",
+      "message_id": "msg_ja_0021",
+      "title": "Home NAS · DS923+ · Update 3",
+      "body": "家族写真、プロジェクトアーカイブ、バックアップジョブのメインストレージ。",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:38:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_nas_ds923",
+        "thing_id": "home_nas_ds923",
+        "projection_destination": "thing_head",
+        "title": "Home NAS · DS923+ · Update 3",
+        "description": "家族写真、プロジェクトアーカイブ、バックアップジョブのメインストレージ。"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "a5ddf65d-7447-5c58-b962-97f1907d6ba2",
+      "message_id": "msg_ja_0022",
+      "title": "Home NAS · DS923+ · Archived",
+      "body": "家族写真、プロジェクトアーカイブ、バックアップジョブのメインストレージ。",
+      "channel_id": "finance-ledger",
+      "is_read": true,
+      "received_at": "2026-05-07T04:39:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_nas_ds923",
+        "thing_id": "home_nas_ds923",
+        "projection_destination": "thing_head",
+        "status": "archived"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "cc28f477-a00f-5038-8690-b8d2d9cc5950",
+      "message_id": "msg_ja_0023",
+      "title": "home_nas_ds923 deleted",
+      "body": "{\"deleted_at\": 1762879200000, \"observed_at\": 1762879200000, \"metadata\": {\"deleted_by\": \"fixture-generator\", \"reason\": \"demo_cleanup\", \"is_test\": true}}",
+      "channel_id": "finance-ledger",
+      "is_read": true,
+      "received_at": "2026-05-07T04:40:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_nas_ds923",
+        "thing_id": "home_nas_ds923",
+        "projection_destination": "thing_deleted",
+        "status": "deleted"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "923d0bb9-0a60-5684-9244-766cedaefbc8",
+      "message_id": "msg_ja_0024",
+      "title": "Home NAS · DS923+ · Nested alert",
+      "body": "### Home NAS · DS923+\n\nThis message is attached to the object and can be displayed as a second-level message.\n\n- Status: `warning`\n- Source: `fixture-generator`",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:41:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_nas_ds923",
+        "thing_id": "home_nas_ds923",
+        "projection_destination": "thing_message",
+        "severity": "normal"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "6e6a1be3-ed3c-5c95-bfd7-2dd722abb154",
+      "message_id": "msg_ja_0025",
+      "title": "Home NAS · DS923+ · Nested event",
+      "body": "### Home NAS · DS923+\n\nA related object-level event was created for this object.",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:42:58.555000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "home_nas_ds923_event",
+        "event_id": "home_nas_ds923_event",
+        "thing_id": "home_nas_ds923",
+        "status": "ongoing",
+        "message": "### Home NAS · DS923+\n\nA related object-level event was created for this object.",
+        "severity": "high"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "c687c7b4-77dd-577e-bcf7-d0e5f16c4cd1",
+      "message_id": "msg_ja_0026",
+      "title": "本番サービス · api-gateway-prod",
+      "body": "メッセージ要求の受信、検証、配信を行う PushGo 公開ゲートウェイ API サービス。",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-07T04:43:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "prod_api_gateway_service",
+        "thing_id": "prod_api_gateway_service",
+        "projection_destination": "thing_head",
+        "title": "本番サービス · api-gateway-prod",
+        "description": "メッセージ要求の受信、検証、配信を行う PushGo 公開ゲートウェイ API サービス。"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "a8d0bcab-23dd-5d16-a165-a5f9a4975ceb",
+      "message_id": "msg_ja_0027",
+      "title": "本番サービス · api-gateway-prod · Update 1",
+      "body": "メッセージ要求の受信、検証、配信を行う PushGo 公開ゲートウェイ API サービス。",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-07T04:44:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "prod_api_gateway_service",
+        "thing_id": "prod_api_gateway_service",
+        "projection_destination": "thing_head",
+        "title": "本番サービス · api-gateway-prod · Update 1",
+        "description": "メッセージ要求の受信、検証、配信を行う PushGo 公開ゲートウェイ API サービス。"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "4c18af3c-0474-5f51-bcdc-93f09bd63b00",
+      "message_id": "msg_ja_0028",
+      "title": "本番サービス · api-gateway-prod · Update 2",
+      "body": "メッセージ要求の受信、検証、配信を行う PushGo 公開ゲートウェイ API サービス。",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-07T04:45:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "prod_api_gateway_service",
+        "thing_id": "prod_api_gateway_service",
+        "projection_destination": "thing_head",
+        "title": "本番サービス · api-gateway-prod · Update 2",
+        "description": "メッセージ要求の受信、検証、配信を行う PushGo 公開ゲートウェイ API サービス。"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "e52c2166-11c2-5cc3-a740-b8d1dc8b3562",
+      "message_id": "msg_ja_0029",
+      "title": "本番サービス · api-gateway-prod · Update 3",
+      "body": "メッセージ要求の受信、検証、配信を行う PushGo 公開ゲートウェイ API サービス。",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-07T04:46:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "prod_api_gateway_service",
+        "thing_id": "prod_api_gateway_service",
+        "projection_destination": "thing_head",
+        "title": "本番サービス · api-gateway-prod · Update 3",
+        "description": "メッセージ要求の受信、検証、配信を行う PushGo 公開ゲートウェイ API サービス。"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "d15d81d6-a04d-59e0-8b18-0fc41b974dbc",
+      "message_id": "msg_ja_0030",
+      "title": "本番サービス · api-gateway-prod · Archived",
+      "body": "メッセージ要求の受信、検証、配信を行う PushGo 公開ゲートウェイ API サービス。",
+      "channel_id": "home-automation",
+      "is_read": true,
+      "received_at": "2026-05-07T04:47:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "prod_api_gateway_service",
+        "thing_id": "prod_api_gateway_service",
+        "projection_destination": "thing_head",
+        "status": "archived"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "eca626de-2950-5966-8986-59a31ab8110d",
+      "message_id": "msg_ja_0031",
+      "title": "prod_api_gateway_service deleted",
+      "body": "{\"deleted_at\": 1762879200000, \"observed_at\": 1762879200000, \"metadata\": {\"deleted_by\": \"fixture-generator\", \"reason\": \"demo_cleanup\", \"is_test\": true}}",
+      "channel_id": "home-automation",
+      "is_read": true,
+      "received_at": "2026-05-07T04:48:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "prod_api_gateway_service",
+        "thing_id": "prod_api_gateway_service",
+        "projection_destination": "thing_deleted",
+        "status": "deleted"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "7050e0f0-d683-5111-a28a-5d4c18053baf",
+      "message_id": "msg_ja_0032",
+      "title": "本番サービス · api-gateway-prod · Nested alert",
+      "body": "### 本番サービス · api-gateway-prod\n\nThis message is attached to the object and can be displayed as a second-level message.\n\n- Status: `warning`\n- Source: `fixture-generator`",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-07T04:49:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "prod_api_gateway_service",
+        "thing_id": "prod_api_gateway_service",
+        "projection_destination": "thing_message",
+        "severity": "normal"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "1d6212ec-9f04-5a06-b2ee-23e0bfb74897",
+      "message_id": "msg_ja_0033",
+      "title": "本番サービス · api-gateway-prod · Nested event",
+      "body": "### 本番サービス · api-gateway-prod\n\nA related object-level event was created for this object.",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-07T04:50:58.555000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "prod_api_gateway_service_event",
+        "event_id": "prod_api_gateway_service_event",
+        "thing_id": "prod_api_gateway_service",
+        "status": "ongoing",
+        "message": "### 本番サービス · api-gateway-prod\n\nA related object-level event was created for this object.",
+        "severity": "high"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "4e8365b4-b10a-526d-8fee-67f7f7b38ff0",
+      "message_id": "msg_ja_0034",
+      "title": "スマートロック · 玄関ドア",
+      "body": "玄関ドアの施錠状態、低電池、異常解錠を通知するスマートロック。",
+      "channel_id": "security-watch",
+      "is_read": false,
+      "received_at": "2026-05-07T04:51:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_entry_smart_lock",
+        "thing_id": "home_entry_smart_lock",
+        "projection_destination": "thing_head",
+        "title": "スマートロック · 玄関ドア",
+        "description": "玄関ドアの施錠状態、低電池、異常解錠を通知するスマートロック。"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "1dfac69c-56cd-5589-8078-d344de5e8502",
+      "message_id": "msg_ja_0035",
+      "title": "スマートロック · 玄関ドア · Update 1",
+      "body": "玄関ドアの施錠状態、低電池、異常解錠を通知するスマートロック。",
+      "channel_id": "security-watch",
+      "is_read": false,
+      "received_at": "2026-05-07T04:52:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_entry_smart_lock",
+        "thing_id": "home_entry_smart_lock",
+        "projection_destination": "thing_head",
+        "title": "スマートロック · 玄関ドア · Update 1",
+        "description": "玄関ドアの施錠状態、低電池、異常解錠を通知するスマートロック。"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "2604b368-4d1e-51a1-b4ec-1fd002b49353",
+      "message_id": "msg_ja_0036",
+      "title": "スマートロック · 玄関ドア · Update 2",
+      "body": "玄関ドアの施錠状態、低電池、異常解錠を通知するスマートロック。",
+      "channel_id": "security-watch",
+      "is_read": false,
+      "received_at": "2026-05-07T04:53:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_entry_smart_lock",
+        "thing_id": "home_entry_smart_lock",
+        "projection_destination": "thing_head",
+        "title": "スマートロック · 玄関ドア · Update 2",
+        "description": "玄関ドアの施錠状態、低電池、異常解錠を通知するスマートロック。"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "762971ac-e787-5aaf-9244-468b842c06d2",
+      "message_id": "msg_ja_0037",
+      "title": "スマートロック · 玄関ドア · Update 3",
+      "body": "玄関ドアの施錠状態、低電池、異常解錠を通知するスマートロック。",
+      "channel_id": "security-watch",
+      "is_read": false,
+      "received_at": "2026-05-07T04:54:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_entry_smart_lock",
+        "thing_id": "home_entry_smart_lock",
+        "projection_destination": "thing_head",
+        "title": "スマートロック · 玄関ドア · Update 3",
+        "description": "玄関ドアの施錠状態、低電池、異常解錠を通知するスマートロック。"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "73739995-1f6d-5887-b929-562211a11cf9",
+      "message_id": "msg_ja_0038",
+      "title": "スマートロック · 玄関ドア · Archived",
+      "body": "玄関ドアの施錠状態、低電池、異常解錠を通知するスマートロック。",
+      "channel_id": "security-watch",
+      "is_read": true,
+      "received_at": "2026-05-07T04:55:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_entry_smart_lock",
+        "thing_id": "home_entry_smart_lock",
+        "projection_destination": "thing_head",
+        "status": "archived"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "f9f5deb8-59c5-5c2c-bae3-2ea012fbef43",
+      "message_id": "msg_ja_0039",
+      "title": "home_entry_smart_lock deleted",
+      "body": "{\"deleted_at\": 1762879200000, \"observed_at\": 1762879200000, \"metadata\": {\"deleted_by\": \"fixture-generator\", \"reason\": \"demo_cleanup\", \"is_test\": true}}",
+      "channel_id": "security-watch",
+      "is_read": true,
+      "received_at": "2026-05-07T04:56:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_entry_smart_lock",
+        "thing_id": "home_entry_smart_lock",
+        "projection_destination": "thing_deleted",
+        "status": "deleted"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "ef6bc6dd-69e6-5304-a7e7-f89baa453dfd",
+      "message_id": "msg_ja_0040",
+      "title": "スマートロック · 玄関ドア · Nested alert",
+      "body": "### スマートロック · 玄関ドア\n\nThis message is attached to the object and can be displayed as a second-level message.\n\n- Status: `warning`\n- Source: `fixture-generator`",
+      "channel_id": "security-watch",
+      "is_read": false,
+      "received_at": "2026-05-07T04:57:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_entry_smart_lock",
+        "thing_id": "home_entry_smart_lock",
+        "projection_destination": "thing_message",
+        "severity": "normal"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "9edd3e1a-a84d-517c-89b0-093928ab1ca5",
+      "message_id": "msg_ja_0041",
+      "title": "スマートロック · 玄関ドア · Nested event",
+      "body": "### スマートロック · 玄関ドア\n\nA related object-level event was created for this object.",
+      "channel_id": "security-watch",
+      "is_read": false,
+      "received_at": "2026-05-07T04:58:58.555000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "home_entry_smart_lock_event",
+        "event_id": "home_entry_smart_lock_event",
+        "thing_id": "home_entry_smart_lock",
+        "status": "ongoing",
+        "message": "### スマートロック · 玄関ドア\n\nA related object-level event was created for this object.",
+        "severity": "high"
       },
       "status": "normal"
     }
@@ -1534,59 +743,59 @@
   "channel_subscriptions": [
     {
       "channel_id": "ops-core",
-      "display_name": "運用コア",
-      "password": "fixture-ops-core-2026",
-      "last_synced_at": "2026-05-08T04:25:00.000Z",
-      "updated_at": "2026-05-08T03:10:00.000Z"
-    },
-    {
-      "channel_id": "home-automation",
-      "display_name": "スマートホーム",
-      "password": "fixture-home-automation-2026",
-      "last_synced_at": "2026-05-08T04:26:00.000Z",
-      "updated_at": "2026-05-08T03:11:00.000Z"
-    },
-    {
-      "channel_id": "finance-ledger",
-      "display_name": "財務台帳",
-      "password": "fixture-finance-ledger-2026",
-      "last_synced_at": "2026-05-08T04:27:00.000Z",
-      "updated_at": "2026-05-08T03:12:00.000Z"
+      "display_name": "Operations Core",
+      "password": "fixture-pass-1234",
+      "last_synced_at": "2026-05-07T04:17:58.555000Z",
+      "updated_at": "2026-05-07T04:17:58.555000Z"
     },
     {
       "channel_id": "event-monitoring",
-      "display_name": "イベント監視",
-      "password": "fixture-event-monitoring-2026",
-      "last_synced_at": "2026-05-08T04:28:00.000Z",
-      "updated_at": "2026-05-08T03:13:00.000Z"
+      "display_name": "Event Monitoring",
+      "password": "fixture-pass-1234",
+      "last_synced_at": "2026-05-07T04:17:58.555000Z",
+      "updated_at": "2026-05-07T04:17:58.555000Z"
+    },
+    {
+      "channel_id": "thing-hub",
+      "display_name": "Thing Hub",
+      "password": "fixture-pass-1234",
+      "last_synced_at": "2026-05-07T04:17:58.555000Z",
+      "updated_at": "2026-05-07T04:17:58.555000Z"
     },
     {
       "channel_id": "ai-agent-feedback",
-      "display_name": "AIエージェントのフィードバック",
-      "password": "fixture-ai-agent-feedback-2026",
-      "last_synced_at": "2026-05-08T04:29:00.000Z",
-      "updated_at": "2026-05-08T03:14:00.000Z"
+      "display_name": "AI Agent Feedback",
+      "password": "fixture-pass-1234",
+      "last_synced_at": "2026-05-07T04:17:58.555000Z",
+      "updated_at": "2026-05-07T04:17:58.555000Z"
     },
     {
-      "channel_id": "executive-brief",
-      "display_name": "経営ブリーフ",
-      "password": "fixture-executive-brief-2026",
-      "last_synced_at": "2026-05-08T04:30:00.000Z",
-      "updated_at": "2026-05-08T03:15:00.000Z"
+      "channel_id": "finance-ledger",
+      "display_name": "Finance Ledger",
+      "password": "fixture-pass-1234",
+      "last_synced_at": "2026-05-07T04:17:58.555000Z",
+      "updated_at": "2026-05-07T04:17:58.555000Z"
     },
     {
-      "channel_id": "incident-command",
-      "display_name": "インシデント指揮",
-      "password": "fixture-incident-command-2026",
-      "last_synced_at": "2026-05-08T04:31:00.000Z",
-      "updated_at": "2026-05-08T03:16:00.000Z"
+      "channel_id": "home-automation",
+      "display_name": "Home Automation",
+      "password": "fixture-pass-1234",
+      "last_synced_at": "2026-05-07T04:17:58.555000Z",
+      "updated_at": "2026-05-07T04:17:58.555000Z"
     },
     {
-      "channel_id": "customer-trust",
-      "display_name": "顧客信頼",
-      "password": "fixture-customer-trust-2026",
-      "last_synced_at": "2026-05-08T04:32:00.000Z",
-      "updated_at": "2026-05-08T03:17:00.000Z"
+      "channel_id": "security-watch",
+      "display_name": "Security Watch",
+      "password": "fixture-pass-1234",
+      "last_synced_at": "2026-05-07T04:17:58.555000Z",
+      "updated_at": "2026-05-07T04:17:58.555000Z"
+    },
+    {
+      "channel_id": "infra-observability",
+      "display_name": "Infra Observability",
+      "password": "fixture-pass-1234",
+      "last_synced_at": "2026-05-07T04:17:58.555000Z",
+      "updated_at": "2026-05-07T04:17:58.555000Z"
     }
   ]
 }

@@ -1,0 +1,744 @@
+{
+  "message_business_payloads": [
+    {
+      "title": "网关可用性告警",
+      "body": "过去 5 分钟错误率超过阈值。",
+      "severity": "high",
+      "url": "https://example.com/incidents/INC-1001",
+      "images": [
+        "https://example.com/images/incident-1001-1.png"
+      ],
+      "ttl": 1716352000000,
+      "tags": [
+        "monitoring",
+        "gateway"
+      ],
+      "metadata": {
+        "source": "alertmanager",
+        "env": "prod",
+        "is_test": true
+      },
+      "ciphertext": "{\"title\":\"enc_title\",\"body\":\"enc_body\"}"
+    }
+  ],
+  "event_business_timelines": [
+    {
+      "event_key": "event_case_1",
+      "timeline": {
+        "create": {
+          "title": "主库连接池耗尽",
+          "description": "连接数快速增长，服务响应抖动。",
+          "status": "ongoing",
+          "message": "连接使用率 98%，触发告警。",
+          "severity": "critical",
+          "event_time": 1713750000000,
+          "started_at": 1713750000000,
+          "ended_at": null,
+          "tags": [
+            "database",
+            "p1"
+          ],
+          "images": [
+            "https://example.com/images/db-pool-create.png"
+          ],
+          "attrs": {
+            "pool_usage": 98,
+            "active_connections": 490,
+            "remove_me": null
+          },
+          "metadata": {
+            "source": "alertmanager",
+            "incident": "INC-2001",
+            "is_test": true
+          },
+          "ciphertext": "{\"title\":\"enc_event_create\",\"message\":\"enc_message_create\"}"
+        },
+        "update": [
+          {
+            "title": "主库连接池耗尽（缓解中）",
+            "description": "已扩容连接池并限制慢查询。",
+            "status": "ongoing",
+            "message": "连接使用率下降到 85%。",
+            "severity": "high",
+            "event_time": 1713751800000,
+            "started_at": null,
+            "ended_at": null,
+            "tags": [
+              "database",
+              "mitigation"
+            ],
+            "images": [
+              "https://example.com/images/db-pool-update-1.png"
+            ],
+            "attrs": {
+              "pool_usage": 85,
+              "active_connections": 430,
+              "remove_me": null
+            },
+            "metadata": {
+              "phase": "mitigation",
+              "operator": "oncall-a",
+              "is_test": true
+            },
+            "ciphertext": "{\"message\":\"enc_update_1\"}"
+          },
+          {
+            "title": "主库连接池耗尽（基本恢复）",
+            "description": "慢查询回落，业务延迟恢复正常区间。",
+            "status": "ongoing",
+            "message": "连接使用率下降到 62%。",
+            "severity": "normal",
+            "event_time": 1713753600000,
+            "started_at": null,
+            "ended_at": null,
+            "tags": [
+              "database",
+              "recovered"
+            ],
+            "images": [
+              "https://example.com/images/db-pool-update-2.png"
+            ],
+            "attrs": {
+              "pool_usage": 62,
+              "active_connections": 310,
+              "remove_me": null
+            },
+            "metadata": {
+              "phase": "recovery",
+              "operator": "oncall-b",
+              "is_test": true
+            },
+            "ciphertext": "{\"message\":\"enc_update_2\"}"
+          }
+        ],
+        "close": {
+          "title": "主库连接池耗尽（已恢复）",
+          "description": "指标连续稳定 30 分钟，关闭事件。",
+          "status": "resolved",
+          "message": "连接使用率稳定在 45%，告警关闭。",
+          "severity": "low",
+          "event_time": 1713757200000,
+          "started_at": null,
+          "ended_at": 1713757200000,
+          "tags": [
+            "database",
+            "resolved"
+          ],
+          "images": [
+            "https://example.com/images/db-pool-close.png"
+          ],
+          "attrs": {
+            "pool_usage": 45,
+            "active_connections": 220,
+            "remove_me": null
+          },
+          "metadata": {
+            "phase": "closed",
+            "operator": "oncall-a",
+            "is_test": true
+          },
+          "ciphertext": "{\"message\":\"enc_close\"}"
+        }
+      }
+    },
+    {
+      "event_key": "event_case_2",
+      "timeline": {
+        "create": {
+          "title": "主库连接池耗尽",
+          "description": "连接数快速增长，服务响应抖动。",
+          "status": "ongoing",
+          "message": "连接使用率 98%，触发告警。",
+          "severity": "critical",
+          "event_time": 1713750000000,
+          "started_at": 1713750000000,
+          "ended_at": null,
+          "tags": [
+            "database",
+            "p1"
+          ],
+          "images": [
+            "https://example.com/images/db-pool-create.png"
+          ],
+          "attrs": {
+            "pool_usage": 98,
+            "active_connections": 490,
+            "remove_me": null
+          },
+          "metadata": {
+            "source": "alertmanager",
+            "incident": "INC-2001",
+            "is_test": true
+          },
+          "ciphertext": "{\"title\":\"enc_event_create\",\"message\":\"enc_message_create\"}"
+        },
+        "update": [
+          {
+            "title": "主库连接池耗尽（缓解中）",
+            "description": "已扩容连接池并限制慢查询。",
+            "status": "ongoing",
+            "message": "连接使用率下降到 85%。",
+            "severity": "high",
+            "event_time": 1713751800000,
+            "started_at": null,
+            "ended_at": null,
+            "tags": [
+              "database",
+              "mitigation"
+            ],
+            "images": [
+              "https://example.com/images/db-pool-update-1.png"
+            ],
+            "attrs": {
+              "pool_usage": 85,
+              "active_connections": 430,
+              "remove_me": null
+            },
+            "metadata": {
+              "phase": "mitigation",
+              "operator": "oncall-a",
+              "is_test": true
+            },
+            "ciphertext": "{\"message\":\"enc_update_1\"}"
+          },
+          {
+            "title": "主库连接池耗尽（基本恢复）",
+            "description": "慢查询回落，业务延迟恢复正常区间。",
+            "status": "ongoing",
+            "message": "连接使用率下降到 62%。",
+            "severity": "normal",
+            "event_time": 1713753600000,
+            "started_at": null,
+            "ended_at": null,
+            "tags": [
+              "database",
+              "recovered"
+            ],
+            "images": [
+              "https://example.com/images/db-pool-update-2.png"
+            ],
+            "attrs": {
+              "pool_usage": 62,
+              "active_connections": 310,
+              "remove_me": null
+            },
+            "metadata": {
+              "phase": "recovery",
+              "operator": "oncall-b",
+              "is_test": true
+            },
+            "ciphertext": "{\"message\":\"enc_update_2\"}"
+          }
+        ],
+        "close": {
+          "title": "主库连接池耗尽（已恢复）",
+          "description": "指标连续稳定 30 分钟，关闭事件。",
+          "status": "resolved",
+          "message": "连接使用率稳定在 45%，告警关闭。",
+          "severity": "low",
+          "event_time": 1713757200000,
+          "started_at": null,
+          "ended_at": 1713757200000,
+          "tags": [
+            "database",
+            "resolved"
+          ],
+          "images": [
+            "https://example.com/images/db-pool-close.png"
+          ],
+          "attrs": {
+            "pool_usage": 45,
+            "active_connections": 220,
+            "remove_me": null
+          },
+          "metadata": {
+            "phase": "closed",
+            "operator": "oncall-a",
+            "is_test": true
+          },
+          "ciphertext": "{\"message\":\"enc_close\"}"
+        }
+      }
+    }
+  ],
+  "thing_business_lifecycles": [
+    {
+      "thing_key": "thing_case_1",
+      "lifecycle": {
+        "create": {
+          "title": "上海-01 机房温度传感器",
+          "description": "主通道温度监控设备。",
+          "tags": [
+            "sensor",
+            "temperature"
+          ],
+          "primary_image": "https://example.com/images/thing-main.png",
+          "images": [
+            "https://example.com/images/thing-1.png",
+            "https://example.com/images/thing-2.png"
+          ],
+          "created_at": 1713750000000,
+          "external_ids": {
+            "asset_id": "ASSET-9001",
+            "cmdb_id": "CMDB-1001",
+            "legacy_id": null
+          },
+          "location_type": "datacenter",
+          "location_value": "sh-a-01",
+          "observed_at": 1713750000000,
+          "attrs": {
+            "temperature": 22.5,
+            "battery": 98,
+            "remove_me": null
+          },
+          "metadata": {
+            "owner": "ops",
+            "is_test": true
+          },
+          "ciphertext": "{\"title\":\"enc_thing_create\"}"
+        },
+        "update": [
+          {
+            "title": "上海-01 机房温度传感器（校准）",
+            "description": "完成一次设备校准。",
+            "tags": [
+              "sensor",
+              "calibrated"
+            ],
+            "primary_image": "https://example.com/images/thing-update-1-main.png",
+            "images": [
+              "https://example.com/images/thing-update-1.png"
+            ],
+            "external_ids": {
+              "asset_id": "ASSET-9001",
+              "legacy_id": null
+            },
+            "location_type": "logical",
+            "location_value": "cluster-a/rack-01",
+            "observed_at": 1713753600000,
+            "attrs": {
+              "temperature": 22.1,
+              "calibration_version": "v2",
+              "remove_me": null
+            },
+            "metadata": {
+              "updated_by": "automation",
+              "change_type": "calibration",
+              "is_test": true
+            },
+            "ciphertext": "{\"description\":\"enc_thing_update_1\"}"
+          },
+          {
+            "title": "上海-01 机房温度传感器（固件升级）",
+            "description": "升级到新固件并重启。",
+            "tags": [
+              "sensor",
+              "firmware"
+            ],
+            "primary_image": "https://example.com/images/thing-update-2-main.png",
+            "images": [
+              "https://example.com/images/thing-update-2.png"
+            ],
+            "external_ids": {
+              "asset_id": "ASSET-9001"
+            },
+            "location_type": "logical",
+            "location_value": "cluster-a/rack-01",
+            "observed_at": 1713755400000,
+            "attrs": {
+              "temperature": 21.8,
+              "firmware": "1.2.3",
+              "remove_me": null
+            },
+            "metadata": {
+              "updated_by": "ops",
+              "change_type": "firmware",
+              "is_test": true
+            },
+            "ciphertext": "{\"description\":\"enc_thing_update_2\"}"
+          }
+        ],
+        "archive": {
+          "title": "上海-01 机房温度传感器（归档）",
+          "description": "设备退役，进入归档状态。",
+          "tags": [
+            "archived"
+          ],
+          "primary_image": "https://example.com/images/thing-archive-main.png",
+          "images": [
+            "https://example.com/images/thing-archive-1.png"
+          ],
+          "external_ids": {
+            "asset_id": "ASSET-9001"
+          },
+          "location_type": "datacenter",
+          "location_value": "sh-a-01",
+          "observed_at": 1713759000000,
+          "attrs": {
+            "archive_reason": "retired",
+            "remove_me": null
+          },
+          "metadata": {
+            "archived_by": "ops",
+            "is_test": true
+          },
+          "ciphertext": "{\"description\":\"enc_thing_archive\"}"
+        },
+        "delete": {
+          "deleted_at": 1713760800000,
+          "observed_at": 1713760800000,
+          "metadata": {
+            "deleted_by": "ops",
+            "reason": "decommissioned",
+            "is_test": true
+          }
+        }
+      },
+      "nested": {
+        "message": [
+          {
+            "title": "设备离线通知",
+            "body": "温度传感器离线超过 60 秒。",
+            "severity": "high",
+            "url": "https://example.com/devices/ASSET-9001",
+            "images": [
+              "https://example.com/images/device-offline.png"
+            ],
+            "ttl": 1716352000000,
+            "occurred_at": 1713759600000,
+            "tags": [
+              "device",
+              "offline"
+            ],
+            "metadata": {
+              "source": "device-agent",
+              "is_test": true
+            },
+            "ciphertext": "{\"title\":\"enc_thing_message\"}"
+          }
+        ],
+        "event_timeline": {
+          "create": {
+            "title": "设备离线事件",
+            "description": "心跳中断。",
+            "status": "ongoing",
+            "message": "最近 3 次心跳均超时。",
+            "severity": "high",
+            "event_time": 1713760200000,
+            "started_at": 1713760200000,
+            "ended_at": null,
+            "tags": [
+              "device",
+              "offline"
+            ],
+            "images": [
+              "https://example.com/images/thing-event-create.png"
+            ],
+            "attrs": {
+              "heartbeat_timeout_count": 3,
+              "remove_me": null
+            },
+            "metadata": {
+              "source": "device-agent",
+              "is_test": true
+            },
+            "ciphertext": "{\"message\":\"enc_thing_event_create\"}"
+          },
+          "update": [
+            {
+              "title": "设备离线事件（排查中）",
+              "description": "网络连通性抖动。",
+              "status": "ongoing",
+              "message": "已切换备用链路，等待恢复。",
+              "severity": "normal",
+              "event_time": 1713761100000,
+              "started_at": null,
+              "ended_at": null,
+              "tags": [
+                "device",
+                "investigating"
+              ],
+              "images": [
+                "https://example.com/images/thing-event-update-1.png"
+              ],
+              "attrs": {
+                "fallback_link": "enabled",
+                "remove_me": null
+              },
+              "metadata": {
+                "phase": "investigating",
+                "is_test": true
+              },
+              "ciphertext": "{\"message\":\"enc_thing_event_update_1\"}"
+            }
+          ],
+          "close": {
+            "title": "设备离线事件（已恢复）",
+            "description": "心跳恢复。",
+            "status": "resolved",
+            "message": "连续 10 次心跳正常，关闭事件。",
+            "severity": "low",
+            "event_time": 1713762000000,
+            "started_at": null,
+            "ended_at": 1713762000000,
+            "tags": [
+              "device",
+              "resolved"
+            ],
+            "images": [
+              "https://example.com/images/thing-event-close.png"
+            ],
+            "attrs": {
+              "heartbeat_timeout_count": 0,
+              "remove_me": null
+            },
+            "metadata": {
+              "phase": "closed",
+              "is_test": true
+            },
+            "ciphertext": "{\"message\":\"enc_thing_event_close\"}"
+          }
+        }
+      }
+    },
+    {
+      "thing_key": "thing_case_2",
+      "lifecycle": {
+        "create": {
+          "title": "上海-01 机房温度传感器",
+          "description": "主通道温度监控设备。",
+          "tags": [
+            "sensor",
+            "temperature"
+          ],
+          "primary_image": "https://example.com/images/thing-main.png",
+          "images": [
+            "https://example.com/images/thing-1.png",
+            "https://example.com/images/thing-2.png"
+          ],
+          "created_at": 1713750000000,
+          "external_ids": {
+            "asset_id": "ASSET-9001",
+            "cmdb_id": "CMDB-1001",
+            "legacy_id": null
+          },
+          "location_type": "datacenter",
+          "location_value": "sh-a-01",
+          "observed_at": 1713750000000,
+          "attrs": {
+            "temperature": 22.5,
+            "battery": 98,
+            "remove_me": null
+          },
+          "metadata": {
+            "owner": "ops",
+            "is_test": true
+          },
+          "ciphertext": "{\"title\":\"enc_thing_create\"}"
+        },
+        "update": [
+          {
+            "title": "上海-01 机房温度传感器（校准）",
+            "description": "完成一次设备校准。",
+            "tags": [
+              "sensor",
+              "calibrated"
+            ],
+            "primary_image": "https://example.com/images/thing-update-1-main.png",
+            "images": [
+              "https://example.com/images/thing-update-1.png"
+            ],
+            "external_ids": {
+              "asset_id": "ASSET-9001",
+              "legacy_id": null
+            },
+            "location_type": "logical",
+            "location_value": "cluster-a/rack-01",
+            "observed_at": 1713753600000,
+            "attrs": {
+              "temperature": 22.1,
+              "calibration_version": "v2",
+              "remove_me": null
+            },
+            "metadata": {
+              "updated_by": "automation",
+              "change_type": "calibration",
+              "is_test": true
+            },
+            "ciphertext": "{\"description\":\"enc_thing_update_1\"}"
+          },
+          {
+            "title": "上海-01 机房温度传感器（固件升级）",
+            "description": "升级到新固件并重启。",
+            "tags": [
+              "sensor",
+              "firmware"
+            ],
+            "primary_image": "https://example.com/images/thing-update-2-main.png",
+            "images": [
+              "https://example.com/images/thing-update-2.png"
+            ],
+            "external_ids": {
+              "asset_id": "ASSET-9001"
+            },
+            "location_type": "logical",
+            "location_value": "cluster-a/rack-01",
+            "observed_at": 1713755400000,
+            "attrs": {
+              "temperature": 21.8,
+              "firmware": "1.2.3",
+              "remove_me": null
+            },
+            "metadata": {
+              "updated_by": "ops",
+              "change_type": "firmware",
+              "is_test": true
+            },
+            "ciphertext": "{\"description\":\"enc_thing_update_2\"}"
+          }
+        ],
+        "archive": {
+          "title": "上海-01 机房温度传感器（归档）",
+          "description": "设备退役，进入归档状态。",
+          "tags": [
+            "archived"
+          ],
+          "primary_image": "https://example.com/images/thing-archive-main.png",
+          "images": [
+            "https://example.com/images/thing-archive-1.png"
+          ],
+          "external_ids": {
+            "asset_id": "ASSET-9001"
+          },
+          "location_type": "datacenter",
+          "location_value": "sh-a-01",
+          "observed_at": 1713759000000,
+          "attrs": {
+            "archive_reason": "retired",
+            "remove_me": null
+          },
+          "metadata": {
+            "archived_by": "ops",
+            "is_test": true
+          },
+          "ciphertext": "{\"description\":\"enc_thing_archive\"}"
+        },
+        "delete": {
+          "deleted_at": 1713760800000,
+          "observed_at": 1713760800000,
+          "metadata": {
+            "deleted_by": "ops",
+            "reason": "decommissioned",
+            "is_test": true
+          }
+        }
+      },
+      "nested": {
+        "message": [
+          {
+            "title": "设备离线通知",
+            "body": "温度传感器离线超过 60 秒。",
+            "severity": "high",
+            "url": "https://example.com/devices/ASSET-9001",
+            "images": [
+              "https://example.com/images/device-offline.png"
+            ],
+            "ttl": 1716352000000,
+            "occurred_at": 1713759600000,
+            "tags": [
+              "device",
+              "offline"
+            ],
+            "metadata": {
+              "source": "device-agent",
+              "is_test": true
+            },
+            "ciphertext": "{\"title\":\"enc_thing_message\"}"
+          }
+        ],
+        "event_timeline": {
+          "create": {
+            "title": "设备离线事件",
+            "description": "心跳中断。",
+            "status": "ongoing",
+            "message": "最近 3 次心跳均超时。",
+            "severity": "high",
+            "event_time": 1713760200000,
+            "started_at": 1713760200000,
+            "ended_at": null,
+            "tags": [
+              "device",
+              "offline"
+            ],
+            "images": [
+              "https://example.com/images/thing-event-create.png"
+            ],
+            "attrs": {
+              "heartbeat_timeout_count": 3,
+              "remove_me": null
+            },
+            "metadata": {
+              "source": "device-agent",
+              "is_test": true
+            },
+            "ciphertext": "{\"message\":\"enc_thing_event_create\"}"
+          },
+          "update": [
+            {
+              "title": "设备离线事件（排查中）",
+              "description": "网络连通性抖动。",
+              "status": "ongoing",
+              "message": "已切换备用链路，等待恢复。",
+              "severity": "normal",
+              "event_time": 1713761100000,
+              "started_at": null,
+              "ended_at": null,
+              "tags": [
+                "device",
+                "investigating"
+              ],
+              "images": [
+                "https://example.com/images/thing-event-update-1.png"
+              ],
+              "attrs": {
+                "fallback_link": "enabled",
+                "remove_me": null
+              },
+              "metadata": {
+                "phase": "investigating",
+                "is_test": true
+              },
+              "ciphertext": "{\"message\":\"enc_thing_event_update_1\"}"
+            }
+          ],
+          "close": {
+            "title": "设备离线事件（已恢复）",
+            "description": "心跳恢复。",
+            "status": "resolved",
+            "message": "连续 10 次心跳正常，关闭事件。",
+            "severity": "low",
+            "event_time": 1713762000000,
+            "started_at": null,
+            "ended_at": 1713762000000,
+            "tags": [
+              "device",
+              "resolved"
+            ],
+            "images": [
+              "https://example.com/images/thing-event-close.png"
+            ],
+            "attrs": {
+              "heartbeat_timeout_count": 0,
+              "remove_me": null
+            },
+            "metadata": {
+              "phase": "closed",
+              "is_test": true
+            },
+            "ciphertext": "{\"message\":\"enc_thing_event_close\"}"
+          }
+        }
+      }
+    }
+  ]
+}

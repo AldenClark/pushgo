@@ -1,1532 +1,811 @@
 {
   "messages": [
     {
-      "id": "b25b593d-52e2-5c82-a360-08128c47005a",
-      "message_id": "msg_thing_agent_support_triage_summary",
-      "title": "客服分诊 AI Agent · 汇总投影已刷新",
-      "body": "# 客服分诊 AI Agent对象更新\n> 多个频道出现新信号后，对象投影已经刷新。\n\n## 当前快照\n- 当前状态：稳定运行并开启人工抽检\n- 关联事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 监控频道：AI Agent 反馈\n\n## 属性变化\n- 自动解决置信度从 0.78 调整为 0.86\n- 兜底规则从立即转人工切换为抽样复核\n\n## 下一步\n- 继续保留在截图数据中，因为它能把运维、财务、家庭和 Agent 场景串到同一条真实时间线里。\n",
-      "channel_id": "ai-agent-feedback",
-      "is_read": false,
-      "received_at": "2026-05-08T04:58:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_agent_support_triage",
-        "thing_id": "thing_agent_support_triage",
-        "projection_destination": "thing_head",
-        "title": "客服分诊 AI Agent · 汇总投影已刷新",
-        "description": "客服分诊 AI Agent。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "稳定运行并开启人工抽检",
-        "message": "汇总投影已刷新：自动解决置信度从 0.78 调整为 0.86；兜底规则从立即转人工切换为抽样复核",
-        "severity": "medium",
-        "tags": [
-          "AI Agent",
-          "工单",
-          "转人工"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "当前快照": "稳定运行并开启人工抽检",
-          "属性变化": [
-            "自动解决置信度从 0.78 调整为 0.86",
-            "兜底规则从立即转人工切换为抽样复核"
-          ],
-          "关联事件": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "来源": "AI Agent 反馈"
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"在演示收件箱和对象详情页中保持可见。\",\"审计备注\":\"对象包含可读的属性变化和关联事件标识。\",\"关联事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "队列",
-          "value": "企业客户支持队列"
-        },
-        "external_ids": {
-          "对象投影": "OBJ-THING_AGENT_SUPPORT_TRIAGE"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "1f230500-3ed4-584e-9a4a-1e62aa09d8cd",
-      "message_id": "msg_thing_event_auth_gateway_summary",
-      "title": "客户登录风险网关 · 汇总投影已刷新",
-      "body": "# 客户登录风险网关对象更新\n> 多个频道出现新信号后，对象投影已经刷新。\n\n## 当前快照\n- 当前状态：已限流且流量趋势恢复干净\n- 关联事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 监控频道：事件监控\n\n## 属性变化\n- 登录失败率从 11.8% 降至 2.4%\n- 临时挑战阈值从中等切换为严格\n\n## 下一步\n- 继续保留在截图数据中，因为它能把运维、财务、家庭和 Agent 场景串到同一条真实时间线里。\n",
-      "channel_id": "event-monitoring",
-      "is_read": false,
-      "received_at": "2026-05-08T04:54:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_event_auth_gateway",
-        "thing_id": "thing_event_auth_gateway",
-        "projection_destination": "thing_head",
-        "title": "客户登录风险网关 · 汇总投影已刷新",
-        "description": "客户登录风险网关。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "已限流且流量趋势恢复干净",
-        "message": "汇总投影已刷新：登录失败率从 11.8% 降至 2.4%；临时挑战阈值从中等切换为严格",
-        "severity": "medium",
-        "tags": [
-          "登录",
-          "风控",
-          "客户信任"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "当前快照": "已限流且流量趋势恢复干净",
-          "属性变化": [
-            "登录失败率从 11.8% 降至 2.4%",
-            "临时挑战阈值从中等切换为严格"
-          ],
-          "关联事件": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "来源": "事件监控"
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"在演示收件箱和对象详情页中保持可见。\",\"审计备注\":\"对象包含可读的属性变化和关联事件标识。\",\"关联事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "服务",
-          "value": "客户账号中心"
-        },
-        "external_ids": {
-          "对象投影": "OBJ-THING_EVENT_AUTH_GATEWAY"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "80ddac65-6090-5ae0-9f69-43d3829ca22d",
-      "message_id": "msg_thing_ops_cluster_sh1_summary",
-      "title": "上海支付集群 · 汇总投影已刷新",
-      "body": "# 上海支付集群对象更新\n> 多个频道出现新信号后，对象投影已经刷新。\n\n## 当前快照\n- 当前状态：健康但保持重点观察\n- 关联事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 监控频道：运维核心\n\n## 属性变化\n- API P95 延迟从 420 毫秒降至 238 毫秒\n- 只读副本滞后从 18 秒降至 3 秒\n\n## 下一步\n- 继续保留在截图数据中，因为它能把运维、财务、家庭和 Agent 场景串到同一条真实时间线里。\n",
+      "id": "c4859906-df6c-555d-a1a4-c92788266a11",
+      "message_id": "msg_zh-CN_0001",
+      "title": "生产 API 错误率升高",
+      "body": "### 网关错误率超过阈值\n\n过去 **5 分钟**，`api-gateway-prod` 的 5xx 错误率从 `0.3%` 升至 **6.8%**。\n\n- 影响环境：`prod`\n- 影响接口：`/v1/messages/send`\n- 当前 P95：`1.84s`\n- 建议操作：检查上游 `message-dispatcher` 与 Redis 延迟\n\n[查看监控面板](https://pushgo.example.com/dashboards/gateway-prod)",
       "channel_id": "ops-core",
       "is_read": false,
-      "received_at": "2026-05-08T04:50:00.000Z",
+      "received_at": "2026-05-07T04:18:58.558000Z",
       "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_ops_cluster_sh1",
-        "thing_id": "thing_ops_cluster_sh1",
-        "projection_destination": "thing_head",
-        "title": "上海支付集群 · 汇总投影已刷新",
-        "description": "上海支付集群。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "健康但保持重点观察",
-        "message": "汇总投影已刷新：API P95 延迟从 420 毫秒降至 238 毫秒；只读副本滞后从 18 秒降至 3 秒",
-        "severity": "medium",
-        "tags": [
-          "数据库",
-          "延迟",
-          "只读副本"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "当前快照": "健康但保持重点观察",
-          "属性变化": [
-            "API P95 延迟从 420 毫秒降至 238 毫秒",
-            "只读副本滞后从 18 秒降至 3 秒"
-          ],
-          "关联事件": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "来源": "运维核心"
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"在演示收件箱和对象详情页中保持可见。\",\"审计备注\":\"对象包含可读的属性变化和关联事件标识。\",\"关联事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "区域",
-          "value": "上海区域"
-        },
-        "external_ids": {
-          "对象投影": "OBJ-THING_OPS_CLUSTER_SH1"
-        }
+        "entity_type": "message",
+        "entity_id": "message_1",
+        "severity": "high",
+        "tags": "[\"monitoring\", \"gateway\", \"prod\", \"p1\"]",
+        "metadata": "{\"source\": \"alertmanager\", \"env\": \"prod\", \"service\": \"api-gateway\", \"rule\": \"gateway_5xx_rate_high\", \"is_test\": true}"
       },
       "status": "normal"
     },
     {
-      "id": "716c53a4-6cb9-5487-9d3a-ef6f1964f2e6",
-      "message_id": "msg_thing_finance_ap_queue_summary",
-      "title": "应付账款复核队列 · 汇总投影已刷新",
-      "body": "# 应付账款复核队列对象更新\n> 多个频道出现新信号后，对象投影已经刷新。\n\n## 当前快照\n- 当前状态：余额已对齐并锁定重复复核\n- 关联事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 监控频道：财务台账\n\n## 属性变化\n- 重复发票评分从 0.41 升至 0.93\n- 审批策略从单人复核切换为双人复核\n\n## 下一步\n- 继续保留在截图数据中，因为它能把运维、财务、家庭和 Agent 场景串到同一条真实时间线里。\n",
-      "channel_id": "finance-ledger",
-      "is_read": false,
-      "received_at": "2026-05-08T04:45:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_finance_ap_queue",
-        "thing_id": "thing_finance_ap_queue",
-        "projection_destination": "thing_head",
-        "title": "应付账款复核队列 · 汇总投影已刷新",
-        "description": "应付账款复核队列。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "余额已对齐并锁定重复复核",
-        "message": "汇总投影已刷新：重复发票评分从 0.41 升至 0.93；审批策略从单人复核切换为双人复核",
-        "severity": "medium",
-        "tags": [
-          "发票",
-          "审批",
-          "现金流"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "当前快照": "余额已对齐并锁定重复复核",
-          "属性变化": [
-            "重复发票评分从 0.41 升至 0.93",
-            "审批策略从单人复核切换为双人复核"
-          ],
-          "关联事件": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "来源": "财务台账"
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"在演示收件箱和对象详情页中保持可见。\",\"审计备注\":\"对象包含可读的属性变化和关联事件标识。\",\"关联事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "部门",
-          "value": "财务共享服务中心"
-        },
-        "external_ids": {
-          "对象投影": "OBJ-THING_FINANCE_AP_QUEUE"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "fdcc0cbf-b4b0-5cb6-8d54-d2433af7d31c",
-      "message_id": "msg_thing_home_valve_kitchen_summary",
-      "title": "厨房水路切断阀 · 汇总投影已刷新",
-      "body": "# 厨房水路切断阀对象更新\n> 多个频道出现新信号后，对象投影已经刷新。\n\n## 当前快照\n- 当前状态：触发漏水保护后保持关闭\n- 关联事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 监控频道：智能家居\n\n## 属性变化\n- 地面传感器湿度从 72% 降至 38%\n- 阀门控制模式从自动切换为监督模式\n\n## 下一步\n- 继续保留在截图数据中，因为它能把运维、财务、家庭和 Agent 场景串到同一条真实时间线里。\n",
-      "channel_id": "home-automation",
-      "is_read": false,
-      "received_at": "2026-05-08T04:40:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_home_valve_kitchen",
-        "thing_id": "thing_home_valve_kitchen",
-        "projection_destination": "thing_head",
-        "title": "厨房水路切断阀 · 汇总投影已刷新",
-        "description": "厨房水路切断阀。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "触发漏水保护后保持关闭",
-        "message": "汇总投影已刷新：地面传感器湿度从 72% 降至 38%；阀门控制模式从自动切换为监督模式",
-        "severity": "medium",
-        "tags": [
-          "水浸传感器",
-          "厨房",
-          "阀门"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "当前快照": "触发漏水保护后保持关闭",
-          "属性变化": [
-            "地面传感器湿度从 72% 降至 38%",
-            "阀门控制模式从自动切换为监督模式"
-          ],
-          "关联事件": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "来源": "智能家居"
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"在演示收件箱和对象详情页中保持可见。\",\"审计备注\":\"对象包含可读的属性变化和关联事件标识。\",\"关联事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "房间",
-          "value": "厨房水槽柜"
-        },
-        "external_ids": {
-          "对象投影": "OBJ-THING_HOME_VALVE_KITCHEN"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "301501f6-cd18-559f-904f-3d7f3b018246",
-      "message_id": "msg_agent_ticket_resolved",
-      "title": "AI Agent 转人工质量复核 · 已恢复",
-      "body": "# AI Agent 转人工质量复核 · 已恢复\n> 客服 Agent 将账单工单标记为已解决，但客户情绪仍为负向\n\n## 变化情况\n- 人工复核确认答复正确，新护栏降低了样本中的风险关闭。\n- 解决置信度为 0.86，但情绪分低于升级阈值。\n- 客户已收到包含正确发票引用的补充答复。\n\n## 处置过程\n1. 将工单送入人工复核，并附上模型推理轨迹。\n2. 为负向情绪下的账单回复增加护栏。\n3. 恢复全自动前，对接下来的 50 个账单工单进行抽样检查。\n\n## 下一步\n- 负责人：支持自动化负责人\n- 预计时间：下一个稳定采样窗口\n",
-      "channel_id": "ai-agent-feedback",
-      "is_read": true,
-      "received_at": "2026-05-08T04:32:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_agent_ticket_001",
-        "event_id": "evt_agent_ticket_001",
-        "thing_id": "thing_agent_support_triage",
-        "projection_destination": "event_head",
-        "title": "AI Agent 转人工质量复核 · 已恢复",
-        "description": "AI Agent 转人工质量复核。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "已恢复",
-        "message": "状态更新：人工复核确认答复正确，新护栏降低了样本中的风险关闭。",
-        "severity": "medium",
-        "tags": [
-          "AI Agent",
-          "工单",
-          "转人工"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "变化情况": [
-            "人工复核确认答复正确，新护栏降低了样本中的风险关闭。",
-            "解决置信度为 0.86，但情绪分低于升级阈值。"
-          ],
-          "负责人": "支持自动化负责人",
-          "预计时间": "下一个稳定采样窗口",
-          "关联事件": [
-            "evt_agent_ticket_001",
-            "thing_agent_support_triage"
-          ]
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"继续观察，直到所属对象连续出现两次稳定采样。\",\"审计备注\":\"时间顺序已整理，适用于 iOS 截图测试。\",\"关联事件\":[\"evt_agent_ticket_001\",\"thing_agent_support_triage\"]}",
-        "location": {
-          "type": "队列",
-          "value": "企业客户支持队列"
-        },
-        "external_ids": {
-          "事故工单": "INC-2026-0508-005"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "69f14862-9590-5673-ae88-17ca388d1c91",
-      "message_id": "msg_agent_ticket_investigating",
-      "title": "AI Agent 转人工质量复核 · 排查中",
-      "body": "# AI Agent 转人工质量复核 · 排查中\n> 客服 Agent 将账单工单标记为已解决，但客户情绪仍为负向\n\n## 变化情况\n- 一位企业客户多等待了 14 分钟才获得人工确认。\n- 解决置信度为 0.86，但情绪分低于升级阈值。\n- 客户已收到包含正确发票引用的补充答复。\n\n## 处置过程\n1. 将工单送入人工复核，并附上模型推理轨迹。\n2. 为负向情绪下的账单回复增加护栏。\n3. 恢复全自动前，对接下来的 50 个账单工单进行抽样检查。\n\n## 下一步\n- 负责人：支持自动化负责人\n- 预计时间：下一个稳定采样窗口\n",
-      "channel_id": "ai-agent-feedback",
-      "is_read": false,
-      "received_at": "2026-05-08T04:06:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_agent_ticket_001",
-        "event_id": "evt_agent_ticket_001",
-        "thing_id": "thing_agent_support_triage",
-        "projection_destination": "event_head",
-        "title": "AI Agent 转人工质量复核 · 排查中",
-        "description": "AI Agent 转人工质量复核。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "排查中",
-        "message": "状态更新：一位企业客户多等待了 14 分钟才获得人工确认。",
-        "severity": "medium",
-        "tags": [
-          "AI Agent",
-          "工单",
-          "转人工"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "变化情况": [
-            "一位企业客户多等待了 14 分钟才获得人工确认。",
-            "解决置信度为 0.86，但情绪分低于升级阈值。"
-          ],
-          "负责人": "支持自动化负责人",
-          "预计时间": "下一个稳定采样窗口",
-          "关联事件": [
-            "evt_agent_ticket_001",
-            "thing_agent_support_triage"
-          ]
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"继续观察，直到所属对象连续出现两次稳定采样。\",\"审计备注\":\"时间顺序已整理，适用于 iOS 截图测试。\",\"关联事件\":[\"evt_agent_ticket_001\",\"thing_agent_support_triage\"]}",
-        "location": {
-          "type": "队列",
-          "value": "企业客户支持队列"
-        },
-        "external_ids": {
-          "事故工单": "INC-2026-0508-005"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "4c653b4a-15a8-596a-b64a-e176724dc2e7",
-      "message_id": "msg_monitoring_login_resolved",
-      "title": "异常登录重试模式 · 已恢复",
-      "body": "# 异常登录重试模式 · 已恢复\n> 客户登录重试集中出现在三个网络段\n\n## 变化情况\n- 重试率已回到基线，连续 30 分钟没有新的高风险会话。\n- 登录失败率升至 11.8%，启用自适应挑战后恢复正常。\n- 抽样中没有发现成功账号接管信号。\n\n## 处置过程\n1. 对受影响网段启用更严格的风险挑战。\n2. 向客户信任团队共享时间线，用于提前准备说明。\n3. 复核该重试模式是否命中已知撞库名单。\n\n## 下一步\n- 负责人：客户信任运营\n- 预计时间：下一个稳定采样窗口\n",
+      "id": "da717686-a975-5d7d-aeba-2e28a855a99f",
+      "message_id": "msg_zh-CN_0002",
+      "title": "家庭水浸传感器触发",
+      "body": "### 厨房水浸告警\n\n`厨房 · 水槽下方` 的水浸传感器检测到异常。\n\n> 当前状态：**已触发**  \n> 电池电量：`84%`  \n> 最近心跳：`18 秒前`\n\n请尽快检查水槽、净水器和洗碗机进水管。",
       "channel_id": "event-monitoring",
-      "is_read": true,
-      "received_at": "2026-05-08T03:56:00.000Z",
+      "is_read": false,
+      "received_at": "2026-05-07T04:19:58.558000Z",
       "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_monitoring_login_001",
-        "event_id": "evt_monitoring_login_001",
-        "thing_id": "thing_event_auth_gateway",
-        "projection_destination": "event_head",
-        "title": "异常登录重试模式 · 已恢复",
-        "description": "异常登录重试模式。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "已恢复",
-        "message": "状态更新：重试率已回到基线，连续 30 分钟没有新的高风险会话。",
+        "entity_type": "message",
+        "entity_id": "message_2",
         "severity": "critical",
-        "tags": [
-          "登录",
-          "风控",
-          "客户信任"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "变化情况": [
-            "重试率已回到基线，连续 30 分钟没有新的高风险会话。",
-            "登录失败率升至 11.8%，启用自适应挑战后恢复正常。"
-          ],
-          "负责人": "客户信任运营",
-          "预计时间": "下一个稳定采样窗口",
-          "关联事件": [
-            "evt_monitoring_login_001",
-            "thing_event_auth_gateway"
-          ]
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"继续观察，直到所属对象连续出现两次稳定采样。\",\"审计备注\":\"时间顺序已整理，适用于 iOS 截图测试。\",\"关联事件\":[\"evt_monitoring_login_001\",\"thing_event_auth_gateway\"]}",
-        "location": {
-          "type": "服务",
-          "value": "客户账号中心"
-        },
-        "external_ids": {
-          "事故工单": "INC-2026-0508-004"
-        }
+        "tags": "[\"home\", \"sensor\", \"water-leak\", \"urgent\"]",
+        "metadata": "{\"source\": \"home-assistant\", \"home\": \"杭州家中\", \"room\": \"厨房\", \"entity_id\": \"binary_sensor.kitchen_leak_01\", \"is_test\": true}"
       },
       "status": "normal"
     },
     {
-      "id": "c6fce400-b32f-536e-8519-8a8f847da5c8",
-      "message_id": "msg_thing_agent_support_triage_policy",
-      "title": "客服分诊 AI Agent · 复核策略已更新",
-      "body": "# 客服分诊 AI Agent对象更新\n> 多个频道出现新信号后，对象投影已经刷新。\n\n## 当前快照\n- 当前状态：稳定运行并开启人工抽检\n- 关联事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 监控频道：AI Agent 反馈\n\n## 属性变化\n- 自动解决置信度从 0.78 调整为 0.86\n- 兜底规则从立即转人工切换为抽样复核\n\n## 下一步\n- 继续保留在截图数据中，因为它能把运维、财务、家庭和 Agent 场景串到同一条真实时间线里。\n",
+      "id": "ec02d947-da88-57c7-8eef-6533d7cea915",
+      "message_id": "msg_zh-CN_0003",
+      "title": "GitHub Actions 构建失败",
+      "body": "### PushGo Android 构建失败\n\n仓库：`pushgo/mobile`  \n分支：`release/1.4.0`  \n任务：`android-release-build`\n\n失败步骤：\n\n```text\n:app:minifyReleaseWithR8 FAILED\nMissing class com.google.firebase.messaging.RemoteMessage\n```\n\n建议检查 `proguard-rules.pro` 与 FCM 依赖版本。",
+      "channel_id": "thing-hub",
+      "is_read": true,
+      "received_at": "2026-05-07T04:20:58.558000Z",
+      "raw_payload": {
+        "entity_type": "message",
+        "entity_id": "message_3",
+        "severity": "normal",
+        "tags": "[\"github\", \"ci\", \"android\", \"release\"]",
+        "metadata": "{\"source\": \"github-actions\", \"repo\": \"pushgo/mobile\", \"branch\": \"release/1.4.0\", \"workflow\": \"android-release-build\", \"is_test\": true}"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "b19060a8-992f-5ecb-acf4-e3ff50ebcdbc",
+      "message_id": "msg_zh-CN_0004",
+      "title": "NAS 备份完成",
+      "body": "### 夜间备份已完成\n\n`家庭 NAS` 已完成到异地存储的增量备份。\n\n| 项目 | 结果 |\n|---|---:|\n| 新增文件 | 428 |\n| 变更文件 | 76 |\n| 上传大小 | 18.4 GB |\n| 耗时 | 43 分钟 |\n\n备份集：`photos-2025-week45`",
       "channel_id": "ai-agent-feedback",
       "is_read": false,
-      "received_at": "2026-05-08T03:50:00.000Z",
+      "received_at": "2026-05-07T04:21:58.558000Z",
       "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_agent_support_triage",
-        "thing_id": "thing_agent_support_triage",
-        "projection_destination": "thing_head",
-        "title": "客服分诊 AI Agent · 复核策略已更新",
-        "description": "客服分诊 AI Agent。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "稳定运行并开启人工抽检",
-        "message": "复核策略已更新：自动解决置信度从 0.78 调整为 0.86；兜底规则从立即转人工切换为抽样复核",
-        "severity": "medium",
-        "tags": [
-          "AI Agent",
-          "工单",
-          "转人工"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "当前快照": "稳定运行并开启人工抽检",
-          "属性变化": [
-            "自动解决置信度从 0.78 调整为 0.86",
-            "兜底规则从立即转人工切换为抽样复核"
-          ],
-          "关联事件": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "来源": "AI Agent 反馈"
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"在演示收件箱和对象详情页中保持可见。\",\"审计备注\":\"对象包含可读的属性变化和关联事件标识。\",\"关联事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "队列",
-          "value": "企业客户支持队列"
-        },
-        "external_ids": {
-          "对象投影": "OBJ-THING_AGENT_SUPPORT_TRIAGE"
-        }
+        "entity_type": "message",
+        "entity_id": "message_4",
+        "severity": "low",
+        "tags": "[\"nas\", \"backup\", \"home\", \"completed\"]",
+        "metadata": "{\"source\": \"synology-task\", \"task\": \"remote-photo-backup\", \"target\": \"s3-cold-storage\", \"is_test\": true}"
       },
       "status": "normal"
     },
     {
-      "id": "10829105-98dc-55f7-804e-db9e5b1eeff0",
-      "message_id": "msg_agent_ticket_detected",
-      "title": "AI Agent 转人工质量复核 · 已检测",
-      "body": "# AI Agent 转人工质量复核 · 已检测\n> 客服 Agent 将账单工单标记为已解决，但客户情绪仍为负向\n\n## 变化情况\n- 一位企业客户多等待了 14 分钟才获得人工确认。\n- 解决置信度为 0.86，但情绪分低于升级阈值。\n- 客户已收到包含正确发票引用的补充答复。\n\n## 处置过程\n1. 将工单送入人工复核，并附上模型推理轨迹。\n2. 为负向情绪下的账单回复增加护栏。\n3. 恢复全自动前，对接下来的 50 个账单工单进行抽样检查。\n\n## 下一步\n- 负责人：支持自动化负责人\n- 预计时间：下一个稳定采样窗口\n",
-      "channel_id": "ai-agent-feedback",
+      "id": "713aa9c7-cf64-5b4b-9b96-610b72804ece",
+      "message_id": "msg_zh-CN_0005",
+      "title": "订单库存低于安全线",
+      "body": "### 热销 SKU 库存预警\n\n商品：`PG-TEE-2025-BLK-M`  \n当前可售：**37 件**  \n安全库存：`120 件`\n\n建议：\n\n1. 检查最近 3 天销量走势\n2. 确认供应商补货 ETA\n3. 暂停部分广告投放，避免超卖",
+      "channel_id": "finance-ledger",
       "is_read": false,
-      "received_at": "2026-05-08T03:44:00.000Z",
+      "received_at": "2026-05-07T04:22:58.558000Z",
+      "raw_payload": {
+        "entity_type": "message",
+        "entity_id": "message_5",
+        "severity": "normal",
+        "tags": "[\"business\", \"inventory\", \"sku\", \"ecommerce\"]",
+        "metadata": "{\"source\": \"erp-inventory-job\", \"warehouse\": \"华东仓\", \"sku\": \"PG-TEE-2025-BLK-M\", \"is_test\": true}"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "4c2089e4-8046-531b-a2fc-ad97355556e7",
+      "message_id": "msg_zh-CN_0006",
+      "title": "主库写入延迟升高",
+      "body": "### P1 数据库事件创建\n\n`order-db-primary` 写入 P95 已达到 **1.9s**，超过阈值 `800ms`。\n\n影响范围：\n\n- 订单创建后状态刷新延迟\n- 支付回调写入排队\n- 后台订单列表偶发加载慢\n\n当前处理：已通知值班 DBA 与后端负责人。",
+      "channel_id": "thing-hub",
+      "is_read": false,
+      "received_at": "2026-05-07T04:23:58.558000Z",
       "raw_payload": {
         "entity_type": "event",
-        "entity_id": "evt_agent_ticket_001",
-        "event_id": "evt_agent_ticket_001",
-        "thing_id": "thing_agent_support_triage",
-        "projection_destination": "event_head",
-        "title": "AI Agent 转人工质量复核 · 已检测",
-        "description": "AI Agent 转人工质量复核。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "已检测",
-        "message": "状态更新：一位企业客户多等待了 14 分钟才获得人工确认。",
-        "severity": "medium",
-        "tags": [
-          "AI Agent",
-          "工单",
-          "转人工"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "变化情况": [
-            "一位企业客户多等待了 14 分钟才获得人工确认。",
-            "解决置信度为 0.86，但情绪分低于升级阈值。"
-          ],
-          "负责人": "支持自动化负责人",
-          "预计时间": "下一个稳定采样窗口",
-          "关联事件": [
-            "evt_agent_ticket_001",
-            "thing_agent_support_triage"
-          ]
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"继续观察，直到所属对象连续出现两次稳定采样。\",\"审计备注\":\"时间顺序已整理，适用于 iOS 截图测试。\",\"关联事件\":[\"evt_agent_ticket_001\",\"thing_agent_support_triage\"]}",
-        "location": {
-          "type": "队列",
-          "value": "企业客户支持队列"
-        },
-        "external_ids": {
-          "事故工单": "INC-2026-0508-005"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "bd62952e-e50b-56c3-a748-1c725369ca25",
-      "message_id": "msg_thing_event_auth_gateway_risk",
-      "title": "客户登录风险网关 · 风险阈值已更新",
-      "body": "# 客户登录风险网关对象更新\n> 多个频道出现新信号后，对象投影已经刷新。\n\n## 当前快照\n- 当前状态：已限流且流量趋势恢复干净\n- 关联事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 监控频道：事件监控\n\n## 属性变化\n- 登录失败率从 11.8% 降至 2.4%\n- 临时挑战阈值从中等切换为严格\n\n## 下一步\n- 继续保留在截图数据中，因为它能把运维、财务、家庭和 Agent 场景串到同一条真实时间线里。\n",
-      "channel_id": "event-monitoring",
-      "is_read": false,
-      "received_at": "2026-05-08T03:33:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_event_auth_gateway",
-        "thing_id": "thing_event_auth_gateway",
-        "projection_destination": "thing_head",
-        "title": "客户登录风险网关 · 风险阈值已更新",
-        "description": "客户登录风险网关。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "已限流且流量趋势恢复干净",
-        "message": "风险阈值已更新：登录失败率从 11.8% 降至 2.4%；临时挑战阈值从中等切换为严格",
-        "severity": "medium",
-        "tags": [
-          "登录",
-          "风控",
-          "客户信任"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "当前快照": "已限流且流量趋势恢复干净",
-          "属性变化": [
-            "登录失败率从 11.8% 降至 2.4%",
-            "临时挑战阈值从中等切换为严格"
-          ],
-          "关联事件": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "来源": "事件监控"
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"在演示收件箱和对象详情页中保持可见。\",\"审计备注\":\"对象包含可读的属性变化和关联事件标识。\",\"关联事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "服务",
-          "value": "客户账号中心"
-        },
-        "external_ids": {
-          "对象投影": "OBJ-THING_EVENT_AUTH_GATEWAY"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "4b53dd43-6b3d-5610-b426-e2f07c194370",
-      "message_id": "msg_monitoring_login_investigating",
-      "title": "异常登录重试模式 · 排查中",
-      "body": "# 异常登录重试模式 · 排查中\n> 客户登录重试集中出现在三个网络段\n\n## 变化情况\n- 密码重置和账号中心页面出现短暂额外验证。\n- 登录失败率升至 11.8%，启用自适应挑战后恢复正常。\n- 抽样中没有发现成功账号接管信号。\n\n## 处置过程\n1. 对受影响网段启用更严格的风险挑战。\n2. 向客户信任团队共享时间线，用于提前准备说明。\n3. 复核该重试模式是否命中已知撞库名单。\n\n## 下一步\n- 负责人：客户信任运营\n- 预计时间：下一个稳定采样窗口\n",
-      "channel_id": "event-monitoring",
-      "is_read": false,
-      "received_at": "2026-05-08T03:28:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_monitoring_login_001",
-        "event_id": "evt_monitoring_login_001",
-        "thing_id": "thing_event_auth_gateway",
-        "projection_destination": "event_head",
-        "title": "异常登录重试模式 · 排查中",
-        "description": "异常登录重试模式。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "排查中",
-        "message": "状态更新：密码重置和账号中心页面出现短暂额外验证。",
+        "entity_id": "prod_order_db_latency_p1",
+        "event_id": "prod_order_db_latency_p1",
+        "status": "ongoing",
+        "message": "### P1 数据库事件创建\n\n`order-db-primary` 写入 P95 已达到 **1.9s**，超过阈值 `800ms`。\n\n影响范围：\n\n- 订单创建后状态刷新延迟\n- 支付回调写入排队\n- 后台订单列表偶发加载慢\n\n当前处理：已通知值班 DBA 与后端负责人。",
         "severity": "critical",
-        "tags": [
-          "登录",
-          "风控",
-          "客户信任"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "变化情况": [
-            "密码重置和账号中心页面出现短暂额外验证。",
-            "登录失败率升至 11.8%，启用自适应挑战后恢复正常。"
-          ],
-          "负责人": "客户信任运营",
-          "预计时间": "下一个稳定采样窗口",
-          "关联事件": [
-            "evt_monitoring_login_001",
-            "thing_event_auth_gateway"
-          ]
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"继续观察，直到所属对象连续出现两次稳定采样。\",\"审计备注\":\"时间顺序已整理，适用于 iOS 截图测试。\",\"关联事件\":[\"evt_monitoring_login_001\",\"thing_event_auth_gateway\"]}",
-        "location": {
-          "type": "服务",
-          "value": "客户账号中心"
-        },
-        "external_ids": {
-          "事故工单": "INC-2026-0508-004"
-        }
+        "event_time": "1762864800000"
       },
       "status": "normal"
     },
     {
-      "id": "79d4e7e1-ce9b-5cb4-bb4f-122a23a5ee57",
-      "message_id": "msg_monitoring_login_detected",
-      "title": "异常登录重试模式 · 已检测",
-      "body": "# 异常登录重试模式 · 已检测\n> 客户登录重试集中出现在三个网络段\n\n## 变化情况\n- 密码重置和账号中心页面出现短暂额外验证。\n- 登录失败率升至 11.8%，启用自适应挑战后恢复正常。\n- 抽样中没有发现成功账号接管信号。\n\n## 处置过程\n1. 对受影响网段启用更严格的风险挑战。\n2. 向客户信任团队共享时间线，用于提前准备说明。\n3. 复核该重试模式是否命中已知撞库名单。\n\n## 下一步\n- 负责人：客户信任运营\n- 预计时间：下一个稳定采样窗口\n",
-      "channel_id": "event-monitoring",
+      "id": "5f3e684e-d446-5e4e-b413-a1527dd9799c",
+      "message_id": "msg_zh-CN_0007",
+      "title": "主库写入延迟升高（定位中）",
+      "body": "### 初步定位\n\n慢查询集中在：\n\n```sql\nSELECT * FROM order_extra WHERE order_id = ? AND type = ?\n```\n\n已执行动作：\n\n1. 暂停 `order-export-worker`\n2. 支付回调消费者并发从 `32` 降至 `16`\n3. 对慢查询样本执行 `EXPLAIN ANALYZE`\n\n当前写入 P95 降至 **1.25s**。",
+      "channel_id": "thing-hub",
       "is_read": false,
-      "received_at": "2026-05-08T03:18:00.000Z",
+      "received_at": "2026-05-07T04:24:58.558000Z",
       "raw_payload": {
         "entity_type": "event",
-        "entity_id": "evt_monitoring_login_001",
-        "event_id": "evt_monitoring_login_001",
-        "thing_id": "thing_event_auth_gateway",
-        "projection_destination": "event_head",
-        "title": "异常登录重试模式 · 已检测",
-        "description": "异常登录重试模式。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "已检测",
-        "message": "状态更新：密码重置和账号中心页面出现短暂额外验证。",
+        "entity_id": "prod_order_db_latency_p1",
+        "event_id": "prod_order_db_latency_p1",
+        "status": "ongoing",
+        "message": "### 初步定位\n\n慢查询集中在：\n\n```sql\nSELECT * FROM order_extra WHERE order_id = ? AND type = ?\n```\n\n已执行动作：\n\n1. 暂停 `order-export-worker`\n2. 支付回调消费者并发从 `32` 降至 `16`\n3. 对慢查询样本执行 `EXPLAIN ANALYZE`\n\n当前写入 P95 降至 **1.25s**。",
+        "severity": "high",
+        "event_time": "1762865880000"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "8d6d489f-155e-5988-960c-5713d9426649",
+      "message_id": "msg_zh-CN_0008",
+      "title": "主库写入延迟升高（缓解中）",
+      "body": "### 缓解措施生效\n\n临时索引已创建：\n\n```sql\nCREATE INDEX CONCURRENTLY idx_order_extra_order_type\nON order_extra(order_id, type);\n```\n\n| 指标 | 当前值 |\n|---|---:|\n| 写入 P95 | 620ms |\n| 活跃连接 | 286 |\n| 慢查询数 / 5min | 21 |\n\n继续观察 30 分钟。",
+      "channel_id": "thing-hub",
+      "is_read": false,
+      "received_at": "2026-05-07T04:25:58.558000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "prod_order_db_latency_p1",
+        "event_id": "prod_order_db_latency_p1",
+        "status": "ongoing",
+        "message": "### 缓解措施生效\n\n临时索引已创建：\n\n```sql\nCREATE INDEX CONCURRENTLY idx_order_extra_order_type\nON order_extra(order_id, type);\n```\n\n| 指标 | 当前值 |\n|---|---:|\n| 写入 P95 | 620ms |\n| 活跃连接 | 286 |\n| 慢查询数 / 5min | 21 |\n\n继续观察 30 分钟。",
+        "severity": "normal",
+        "event_time": "1762867320000"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "79867c99-f599-5ecd-b8c2-16a2a2d3ef3d",
+      "message_id": "msg_zh-CN_0009",
+      "title": "主库写入延迟升高（观察稳定）",
+      "body": "### 观察结果\n\n过去 30 分钟：\n\n- 写入 P95 稳定在 `410ms ~ 520ms`\n- 支付回调堆积已清空\n- 订单列表接口错误率回到 `0.02%`\n\n准备恢复批处理任务，并在下个版本补齐正式索引迁移。",
+      "channel_id": "thing-hub",
+      "is_read": false,
+      "received_at": "2026-05-07T04:26:58.558000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "prod_order_db_latency_p1",
+        "event_id": "prod_order_db_latency_p1",
+        "status": "ongoing",
+        "message": "### 观察结果\n\n过去 30 分钟：\n\n- 写入 P95 稳定在 `410ms ~ 520ms`\n- 支付回调堆积已清空\n- 订单列表接口错误率回到 `0.02%`\n\n准备恢复批处理任务，并在下个版本补齐正式索引迁移。",
+        "severity": "low",
+        "event_time": "1762869480000"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "f3d05e7b-de65-5413-91f7-9283b4f279db",
+      "message_id": "msg_zh-CN_0010",
+      "title": "主库写入延迟升高（已恢复）",
+      "body": "### 事件已关闭\n\n数据库写入延迟恢复正常，相关业务堆积已清空。\n\n复盘动作：\n\n- 将正式索引迁移纳入 `v1.4.2`\n- 增加慢查询回归检查\n- 为订单扩展属性表补充容量预警\n\n事件状态：**Resolved**",
+      "channel_id": "thing-hub",
+      "is_read": true,
+      "received_at": "2026-05-07T04:27:58.558000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "prod_order_db_latency_p1",
+        "event_id": "prod_order_db_latency_p1",
+        "status": "resolved",
+        "message": "### 事件已关闭\n\n数据库写入延迟恢复正常，相关业务堆积已清空。\n\n复盘动作：\n\n- 将正式索引迁移纳入 `v1.4.2`\n- 增加慢查询回归检查\n- 为订单扩展属性表补充容量预警\n\n事件状态：**Resolved**",
+        "severity": "low",
+        "event_time": "1762871100000"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "04ac4798-9e6d-53f6-9c25-2bfc39524c8d",
+      "message_id": "msg_zh-CN_0011",
+      "title": "厨房水浸传感器触发",
+      "body": "### 家庭紧急事件\n\n位置：`厨房 / 水槽下方`  \n传感器：`kitchen-leak-01`  \n状态：**Wet**\n\n请优先处理：\n\n- 关闭净水器进水阀\n- 检查洗碗机进水管\n- 查看橱柜底板是否积水",
+      "channel_id": "ai-agent-feedback",
+      "is_read": false,
+      "received_at": "2026-05-07T04:28:58.558000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "home_kitchen_water_leak",
+        "event_id": "home_kitchen_water_leak",
+        "status": "ongoing",
+        "message": "### 家庭紧急事件\n\n位置：`厨房 / 水槽下方`  \n传感器：`kitchen-leak-01`  \n状态：**Wet**\n\n请优先处理：\n\n- 关闭净水器进水阀\n- 检查洗碗机进水管\n- 查看橱柜底板是否积水",
         "severity": "critical",
-        "tags": [
-          "登录",
-          "风控",
-          "客户信任"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "变化情况": [
-            "密码重置和账号中心页面出现短暂额外验证。",
-            "登录失败率升至 11.8%，启用自适应挑战后恢复正常。"
-          ],
-          "负责人": "客户信任运营",
-          "预计时间": "下一个稳定采样窗口",
-          "关联事件": [
-            "evt_monitoring_login_001",
-            "thing_event_auth_gateway"
-          ]
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"继续观察，直到所属对象连续出现两次稳定采样。\",\"审计备注\":\"时间顺序已整理，适用于 iOS 截图测试。\",\"关联事件\":[\"evt_monitoring_login_001\",\"thing_event_auth_gateway\"]}",
-        "location": {
-          "type": "服务",
-          "value": "客户账号中心"
-        },
-        "external_ids": {
-          "事故工单": "INC-2026-0508-004"
-        }
+        "event_time": "1762865400000"
       },
       "status": "normal"
     },
     {
-      "id": "5c01b76b-011a-59fe-a901-b5847ae9da70",
-      "message_id": "msg_ops_latency_resolved_003",
-      "title": "支付 API 延迟突增 · 已恢复",
-      "body": "# 支付 API 延迟突增 · 已恢复\n> 华东区域的结账请求对企业用户出现明显变慢\n\n## 变化情况\n- 延迟已回到 300 毫秒目标以下，只读副本滞后连续 20 分钟低于 5 秒。\n- P95 延迟最高达到 1.9 秒，下线只读副本流量后开始回落。\n- 未检测到数据丢失，三次重试请求已自动恢复。\n\n## 处置过程\n1. 固定慢查询指纹，并将最新只读副本从流量轮询中摘除。\n2. 将数据库连接池遥测提升到一分钟粒度。\n3. 在下一批账单任务无重试增长前，保持事件打开。\n\n## 下一步\n- 负责人：值班 SRE\n- 预计时间：下一个稳定采样窗口\n",
-      "channel_id": "ops-core",
-      "is_read": true,
-      "received_at": "2026-05-08T03:05:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_ops_latency_001",
-        "event_id": "evt_ops_latency_001",
-        "thing_id": "thing_ops_cluster_sh1",
-        "projection_destination": "event_head",
-        "title": "支付 API 延迟突增 · 已恢复",
-        "description": "支付 API 延迟突增。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "已恢复",
-        "message": "状态更新：延迟已回到 300 毫秒目标以下，只读副本滞后连续 20 分钟低于 5 秒。",
-        "severity": "high",
-        "tags": [
-          "数据库",
-          "延迟",
-          "只读副本"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "变化情况": [
-            "延迟已回到 300 毫秒目标以下，只读副本滞后连续 20 分钟低于 5 秒。",
-            "P95 延迟最高达到 1.9 秒，下线只读副本流量后开始回落。"
-          ],
-          "负责人": "值班 SRE",
-          "预计时间": "下一个稳定采样窗口",
-          "关联事件": [
-            "evt_ops_latency_001",
-            "thing_ops_cluster_sh1"
-          ]
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"继续观察，直到所属对象连续出现两次稳定采样。\",\"审计备注\":\"时间顺序已整理，适用于 iOS 截图测试。\",\"关联事件\":[\"evt_ops_latency_001\",\"thing_ops_cluster_sh1\"]}",
-        "location": {
-          "type": "区域",
-          "value": "上海区域"
-        },
-        "external_ids": {
-          "事故工单": "INC-2026-0508-001"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "b54e8975-32bc-5bfc-9754-e20656ddbbfd",
-      "message_id": "msg_thing_ops_cluster_sh1_capacity",
-      "title": "上海支付集群 · 容量信号已更新",
-      "body": "# 上海支付集群对象更新\n> 多个频道出现新信号后，对象投影已经刷新。\n\n## 当前快照\n- 当前状态：健康但保持重点观察\n- 关联事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 监控频道：运维核心\n\n## 属性变化\n- API P95 延迟从 420 毫秒降至 238 毫秒\n- 只读副本滞后从 18 秒降至 3 秒\n\n## 下一步\n- 继续保留在截图数据中，因为它能把运维、财务、家庭和 Agent 场景串到同一条真实时间线里。\n",
-      "channel_id": "ops-core",
-      "is_read": true,
-      "received_at": "2026-05-08T02:40:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_ops_cluster_sh1",
-        "thing_id": "thing_ops_cluster_sh1",
-        "projection_destination": "thing_head",
-        "title": "上海支付集群 · 容量信号已更新",
-        "description": "上海支付集群。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "健康但保持重点观察",
-        "message": "容量信号已更新：API P95 延迟从 420 毫秒降至 238 毫秒；只读副本滞后从 18 秒降至 3 秒",
-        "severity": "low",
-        "tags": [
-          "数据库",
-          "延迟",
-          "只读副本"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "当前快照": "健康但保持重点观察",
-          "属性变化": [
-            "API P95 延迟从 420 毫秒降至 238 毫秒",
-            "只读副本滞后从 18 秒降至 3 秒"
-          ],
-          "关联事件": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "来源": "运维核心"
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"在演示收件箱和对象详情页中保持可见。\",\"审计备注\":\"对象包含可读的属性变化和关联事件标识。\",\"关联事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "区域",
-          "value": "上海区域"
-        },
-        "external_ids": {
-          "对象投影": "OBJ-THING_OPS_CLUSTER_SH1"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "402653c2-f75f-5312-99b1-05286cb18006",
-      "message_id": "msg_ops_latency_investigating_002",
-      "title": "支付 API 延迟突增 · 排查中",
-      "body": "# 支付 API 延迟突增 · 排查中\n> 华东区域的结账请求对企业用户出现明显变慢\n\n## 变化情况\n- 上海区域 3.8% 的结账确认出现延迟。\n- P95 延迟最高达到 1.9 秒，下线只读副本流量后开始回落。\n- 未检测到数据丢失，三次重试请求已自动恢复。\n\n## 处置过程\n1. 固定慢查询指纹，并将最新只读副本从流量轮询中摘除。\n2. 将数据库连接池遥测提升到一分钟粒度。\n3. 在下一批账单任务无重试增长前，保持事件打开。\n\n## 下一步\n- 负责人：值班 SRE\n- 预计时间：下一个稳定采样窗口\n",
-      "channel_id": "ops-core",
+      "id": "a117c393-c5ca-5fe1-8d95-1e1e2774b985",
+      "message_id": "msg_zh-CN_0012",
+      "title": "厨房水浸传感器触发（已关闭进水阀）",
+      "body": "### 自动化动作已执行\n\n已触发 Home Assistant 自动化：\n\n```yaml\naction: valve.close\ntarget: valve.kitchen_filter_inlet\n```\n\n当前状态：\n\n| 项目 | 状态 |\n|---|---|\n| 净水器进水阀 | 已关闭 |\n| 水浸传感器 | Wet |\n| 橱柜灯 | 已打开 |\n\n等待人工确认现场情况。",
+      "channel_id": "ai-agent-feedback",
       "is_read": false,
-      "received_at": "2026-05-08T02:24:00.000Z",
+      "received_at": "2026-05-07T04:29:58.558000Z",
       "raw_payload": {
         "entity_type": "event",
-        "entity_id": "evt_ops_latency_001",
-        "event_id": "evt_ops_latency_001",
-        "thing_id": "thing_ops_cluster_sh1",
-        "projection_destination": "event_head",
-        "title": "支付 API 延迟突增 · 排查中",
-        "description": "支付 API 延迟突增。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "排查中",
-        "message": "状态更新：上海区域 3.8% 的结账确认出现延迟。",
+        "entity_id": "home_kitchen_water_leak",
+        "event_id": "home_kitchen_water_leak",
+        "status": "ongoing",
+        "message": "### 自动化动作已执行\n\n已触发 Home Assistant 自动化：\n\n```yaml\naction: valve.close\ntarget: valve.kitchen_filter_inlet\n```\n\n当前状态：\n\n| 项目 | 状态 |\n|---|---|\n| 净水器进水阀 | 已关闭 |\n| 水浸传感器 | Wet |\n| 橱柜灯 | 已打开 |\n\n等待人工确认现场情况。",
         "severity": "high",
-        "tags": [
-          "数据库",
-          "延迟",
-          "只读副本"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "变化情况": [
-            "上海区域 3.8% 的结账确认出现延迟。",
-            "P95 延迟最高达到 1.9 秒，下线只读副本流量后开始回落。"
-          ],
-          "负责人": "值班 SRE",
-          "预计时间": "下一个稳定采样窗口",
-          "关联事件": [
-            "evt_ops_latency_001",
-            "thing_ops_cluster_sh1"
-          ]
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"继续观察，直到所属对象连续出现两次稳定采样。\",\"审计备注\":\"时间顺序已整理，适用于 iOS 截图测试。\",\"关联事件\":[\"evt_ops_latency_001\",\"thing_ops_cluster_sh1\"]}",
-        "location": {
-          "type": "区域",
-          "value": "上海区域"
-        },
-        "external_ids": {
-          "事故工单": "INC-2026-0508-001"
-        }
+        "event_time": "1762865580000"
       },
       "status": "normal"
     },
     {
-      "id": "aeb397fa-3c70-5f68-8b03-bed639ccbea8",
-      "message_id": "msg_home_leak_resolved",
-      "title": "厨房漏水传感器触发 · 已恢复",
-      "body": "# 厨房漏水传感器触发 · 已恢复\n> 地面传感器在水槽柜附近持续报告潮湿\n\n## 变化情况\n- 湿度曲线连续 25 分钟保持平稳，阀门已在监督模式下重新开启。\n- 阀门关闭并启动通风后，湿度从 72% 降至 38%。\n- 一个家庭自动化例程已暂停，用户仍可在 App 内手动接管。\n\n## 处置过程\n1. 确认传感器不是低电量导致的误报。\n2. 在复核摄像头快照期间保持阀门关闭。\n3. 提醒住户检查柜体接缝后再重新打开水路。\n\n## 下一步\n- 负责人：智能家居负责人\n- 预计时间：下一个稳定采样窗口\n",
-      "channel_id": "home-automation",
-      "is_read": true,
-      "received_at": "2026-05-08T02:16:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_home_leak_001",
-        "event_id": "evt_home_leak_001",
-        "thing_id": "thing_home_valve_kitchen",
-        "projection_destination": "event_head",
-        "title": "厨房漏水传感器触发 · 已恢复",
-        "description": "厨房漏水传感器触发。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "已恢复",
-        "message": "状态更新：湿度曲线连续 25 分钟保持平稳，阀门已在监督模式下重新开启。",
-        "severity": "medium",
-        "tags": [
-          "水浸传感器",
-          "厨房",
-          "阀门"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "变化情况": [
-            "湿度曲线连续 25 分钟保持平稳，阀门已在监督模式下重新开启。",
-            "阀门关闭并启动通风后，湿度从 72% 降至 38%。"
-          ],
-          "负责人": "智能家居负责人",
-          "预计时间": "下一个稳定采样窗口",
-          "关联事件": [
-            "evt_home_leak_001",
-            "thing_home_valve_kitchen"
-          ]
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"继续观察，直到所属对象连续出现两次稳定采样。\",\"审计备注\":\"时间顺序已整理，适用于 iOS 截图测试。\",\"关联事件\":[\"evt_home_leak_001\",\"thing_home_valve_kitchen\"]}",
-        "location": {
-          "type": "房间",
-          "value": "厨房水槽柜"
-        },
-        "external_ids": {
-          "事故工单": "INC-2026-0508-002"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "5f5203f2-3f93-5725-ad49-3239528685fb",
-      "message_id": "msg_ops_brief_001",
-      "title": "支付 API 延迟突增 · 已检测",
-      "body": "# 支付 API 延迟突增 · 已检测\n> 华东区域的结账请求对企业用户出现明显变慢\n\n## 变化情况\n- 上海区域 3.8% 的结账确认出现延迟。\n- P95 延迟最高达到 1.9 秒，下线只读副本流量后开始回落。\n- 未检测到数据丢失，三次重试请求已自动恢复。\n\n## 处置过程\n1. 固定慢查询指纹，并将最新只读副本从流量轮询中摘除。\n2. 将数据库连接池遥测提升到一分钟粒度。\n3. 在下一批账单任务无重试增长前，保持事件打开。\n\n## 下一步\n- 负责人：值班 SRE\n- 预计时间：下一个稳定采样窗口\n",
-      "channel_id": "ops-core",
+      "id": "8abf82e3-85f5-58dd-9b2e-68178630ef86",
+      "message_id": "msg_zh-CN_0013",
+      "title": "厨房水浸传感器触发（现场确认）",
+      "body": "### 现场处理记录\n\n- 已擦干水槽下方积水\n- 已用干纸巾包裹快接头观察\n- 水浸传感器恢复为 `Dry`\n\n> 建议：24 小时内更换净水器 PE 管快接头。",
+      "channel_id": "ai-agent-feedback",
       "is_read": false,
-      "received_at": "2026-05-08T02:10:00.000Z",
+      "received_at": "2026-05-07T04:30:58.558000Z",
       "raw_payload": {
         "entity_type": "event",
-        "entity_id": "evt_ops_latency_001",
-        "event_id": "evt_ops_latency_001",
-        "thing_id": "thing_ops_cluster_sh1",
-        "projection_destination": "event_head",
-        "title": "支付 API 延迟突增 · 已检测",
-        "description": "支付 API 延迟突增。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "已检测",
-        "message": "状态更新：上海区域 3.8% 的结账确认出现延迟。",
-        "severity": "high",
-        "tags": [
-          "数据库",
-          "延迟",
-          "只读副本"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "变化情况": [
-            "上海区域 3.8% 的结账确认出现延迟。",
-            "P95 延迟最高达到 1.9 秒，下线只读副本流量后开始回落。"
-          ],
-          "负责人": "值班 SRE",
-          "预计时间": "下一个稳定采样窗口",
-          "关联事件": [
-            "evt_ops_latency_001",
-            "thing_ops_cluster_sh1"
-          ]
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"继续观察，直到所属对象连续出现两次稳定采样。\",\"审计备注\":\"时间顺序已整理，适用于 iOS 截图测试。\",\"关联事件\":[\"evt_ops_latency_001\",\"thing_ops_cluster_sh1\"]}",
-        "location": {
-          "type": "区域",
-          "value": "上海区域"
-        },
-        "external_ids": {
-          "事故工单": "INC-2026-0508-001"
-        }
+        "entity_id": "home_kitchen_water_leak",
+        "event_id": "home_kitchen_water_leak",
+        "status": "ongoing",
+        "message": "### 现场处理记录\n\n- 已擦干水槽下方积水\n- 已用干纸巾包裹快接头观察\n- 水浸传感器恢复为 `Dry`\n\n> 建议：24 小时内更换净水器 PE 管快接头。",
+        "severity": "normal",
+        "event_time": "1762866540000"
       },
       "status": "normal"
     },
     {
-      "id": "e29e615d-f22a-5a9f-ab4f-51516dde8b9f",
-      "message_id": "msg_thing_finance_ap_queue_approval",
-      "title": "应付账款复核队列 · 审批路径已更新",
-      "body": "# 应付账款复核队列对象更新\n> 多个频道出现新信号后，对象投影已经刷新。\n\n## 当前快照\n- 当前状态：余额已对齐并锁定重复复核\n- 关联事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 监控频道：财务台账\n\n## 属性变化\n- 重复发票评分从 0.41 升至 0.93\n- 审批策略从单人复核切换为双人复核\n\n## 下一步\n- 继续保留在截图数据中，因为它能把运维、财务、家庭和 Agent 场景串到同一条真实时间线里。\n",
-      "channel_id": "finance-ledger",
-      "is_read": true,
-      "received_at": "2026-05-08T02:08:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_finance_ap_queue",
-        "thing_id": "thing_finance_ap_queue",
-        "projection_destination": "thing_head",
-        "title": "应付账款复核队列 · 审批路径已更新",
-        "description": "应付账款复核队列。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "余额已对齐并锁定重复复核",
-        "message": "审批路径已更新：重复发票评分从 0.41 升至 0.93；审批策略从单人复核切换为双人复核",
-        "severity": "low",
-        "tags": [
-          "发票",
-          "审批",
-          "现金流"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "当前快照": "余额已对齐并锁定重复复核",
-          "属性变化": [
-            "重复发票评分从 0.41 升至 0.93",
-            "审批策略从单人复核切换为双人复核"
-          ],
-          "关联事件": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "来源": "财务台账"
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"在演示收件箱和对象详情页中保持可见。\",\"审计备注\":\"对象包含可读的属性变化和关联事件标识。\",\"关联事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "部门",
-          "value": "财务共享服务中心"
-        },
-        "external_ids": {
-          "对象投影": "OBJ-THING_FINANCE_AP_QUEUE"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "c4f23606-4f3f-518b-bb0b-2b706a4f7abf",
-      "message_id": "msg_finance_invoice_resolved",
-      "title": "疑似供应商重复发票 · 已恢复",
-      "body": "# 疑似供应商重复发票 · 已恢复\n> 同一采购单的两张发票从不同审批路径进入系统\n\n## 变化情况\n- 第二张发票已确认是重复提交，原付款计划已恢复。\n- 金额、供应商税号和送货单一致，重复评分达到 0.93。\n- 财务团队仍可在二次审批后释放有效发票。\n\n## 处置过程\n1. 锁定两条发票记录，并附加供应商送货单。\n2. 请采购确认哪一个发票号码应保持有效。\n3. 在拦截解除前，将现金流预测标记为暂定。\n\n## 下一步\n- 负责人：财务控制负责人\n- 预计时间：下一个稳定采样窗口\n",
-      "channel_id": "finance-ledger",
-      "is_read": true,
-      "received_at": "2026-05-08T02:02:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_finance_invoice_001",
-        "event_id": "evt_finance_invoice_001",
-        "thing_id": "thing_finance_ap_queue",
-        "projection_destination": "event_head",
-        "title": "疑似供应商重复发票 · 已恢复",
-        "description": "疑似供应商重复发票。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "已恢复",
-        "message": "状态更新：第二张发票已确认是重复提交，原付款计划已恢复。",
-        "severity": "high",
-        "tags": [
-          "发票",
-          "审批",
-          "现金流"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "变化情况": [
-            "第二张发票已确认是重复提交，原付款计划已恢复。",
-            "金额、供应商税号和送货单一致，重复评分达到 0.93。"
-          ],
-          "负责人": "财务控制负责人",
-          "预计时间": "下一个稳定采样窗口",
-          "关联事件": [
-            "evt_finance_invoice_001",
-            "thing_finance_ap_queue"
-          ]
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"继续观察，直到所属对象连续出现两次稳定采样。\",\"审计备注\":\"时间顺序已整理，适用于 iOS 截图测试。\",\"关联事件\":[\"evt_finance_invoice_001\",\"thing_finance_ap_queue\"]}",
-        "location": {
-          "type": "部门",
-          "value": "财务共享服务中心"
-        },
-        "external_ids": {
-          "事故工单": "INC-2026-0508-003"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "867f3377-8ad2-56cd-858a-88bb9a61485c",
-      "message_id": "msg_thing_home_valve_kitchen_valve",
-      "title": "厨房水路切断阀 · 阀门安全备注已更新",
-      "body": "# 厨房水路切断阀对象更新\n> 多个频道出现新信号后，对象投影已经刷新。\n\n## 当前快照\n- 当前状态：触发漏水保护后保持关闭\n- 关联事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 监控频道：智能家居\n\n## 属性变化\n- 地面传感器湿度从 72% 降至 38%\n- 阀门控制模式从自动切换为监督模式\n\n## 下一步\n- 继续保留在截图数据中，因为它能把运维、财务、家庭和 Agent 场景串到同一条真实时间线里。\n",
-      "channel_id": "home-automation",
-      "is_read": true,
-      "received_at": "2026-05-08T01:49:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_home_valve_kitchen",
-        "thing_id": "thing_home_valve_kitchen",
-        "projection_destination": "thing_head",
-        "title": "厨房水路切断阀 · 阀门安全备注已更新",
-        "description": "厨房水路切断阀。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "触发漏水保护后保持关闭",
-        "message": "阀门安全备注已更新：地面传感器湿度从 72% 降至 38%；阀门控制模式从自动切换为监督模式",
-        "severity": "low",
-        "tags": [
-          "水浸传感器",
-          "厨房",
-          "阀门"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "当前快照": "触发漏水保护后保持关闭",
-          "属性变化": [
-            "地面传感器湿度从 72% 降至 38%",
-            "阀门控制模式从自动切换为监督模式"
-          ],
-          "关联事件": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "来源": "智能家居"
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"在演示收件箱和对象详情页中保持可见。\",\"审计备注\":\"对象包含可读的属性变化和关联事件标识。\",\"关联事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "房间",
-          "value": "厨房水槽柜"
-        },
-        "external_ids": {
-          "对象投影": "OBJ-THING_HOME_VALVE_KITCHEN"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "0a2ca6b4-300a-51cf-8703-be0e008d314f",
-      "message_id": "msg_home_leak_investigating",
-      "title": "厨房漏水传感器触发 · 排查中",
-      "body": "# 厨房漏水传感器触发 · 排查中\n> 地面传感器在水槽柜附近持续报告潮湿\n\n## 变化情况\n- 智能阀门在 8 秒内关闭冷水支路，阻止水迹扩散到柜体外。\n- 阀门关闭并启动通风后，湿度从 72% 降至 38%。\n- 一个家庭自动化例程已暂停，用户仍可在 App 内手动接管。\n\n## 处置过程\n1. 确认传感器不是低电量导致的误报。\n2. 在复核摄像头快照期间保持阀门关闭。\n3. 提醒住户检查柜体接缝后再重新打开水路。\n\n## 下一步\n- 负责人：智能家居负责人\n- 预计时间：下一个稳定采样窗口\n",
-      "channel_id": "home-automation",
-      "is_read": false,
-      "received_at": "2026-05-08T01:42:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_home_leak_001",
-        "event_id": "evt_home_leak_001",
-        "thing_id": "thing_home_valve_kitchen",
-        "projection_destination": "event_head",
-        "title": "厨房漏水传感器触发 · 排查中",
-        "description": "厨房漏水传感器触发。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "排查中",
-        "message": "状态更新：智能阀门在 8 秒内关闭冷水支路，阻止水迹扩散到柜体外。",
-        "severity": "medium",
-        "tags": [
-          "水浸传感器",
-          "厨房",
-          "阀门"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "变化情况": [
-            "智能阀门在 8 秒内关闭冷水支路，阻止水迹扩散到柜体外。",
-            "阀门关闭并启动通风后，湿度从 72% 降至 38%。"
-          ],
-          "负责人": "智能家居负责人",
-          "预计时间": "下一个稳定采样窗口",
-          "关联事件": [
-            "evt_home_leak_001",
-            "thing_home_valve_kitchen"
-          ]
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"继续观察，直到所属对象连续出现两次稳定采样。\",\"审计备注\":\"时间顺序已整理，适用于 iOS 截图测试。\",\"关联事件\":[\"evt_home_leak_001\",\"thing_home_valve_kitchen\"]}",
-        "location": {
-          "type": "房间",
-          "value": "厨房水槽柜"
-        },
-        "external_ids": {
-          "事故工单": "INC-2026-0508-002"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "b2d503d7-182e-50d6-a699-0a28c347e558",
-      "message_id": "msg_home_leak_detected",
-      "title": "厨房漏水传感器触发 · 已检测",
-      "body": "# 厨房漏水传感器触发 · 已检测\n> 地面传感器在水槽柜附近持续报告潮湿\n\n## 变化情况\n- 智能阀门在 8 秒内关闭冷水支路，阻止水迹扩散到柜体外。\n- 阀门关闭并启动通风后，湿度从 72% 降至 38%。\n- 一个家庭自动化例程已暂停，用户仍可在 App 内手动接管。\n\n## 处置过程\n1. 确认传感器不是低电量导致的误报。\n2. 在复核摄像头快照期间保持阀门关闭。\n3. 提醒住户检查柜体接缝后再重新打开水路。\n\n## 下一步\n- 负责人：智能家居负责人\n- 预计时间：下一个稳定采样窗口\n",
-      "channel_id": "home-automation",
-      "is_read": false,
-      "received_at": "2026-05-08T01:35:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_home_leak_001",
-        "event_id": "evt_home_leak_001",
-        "thing_id": "thing_home_valve_kitchen",
-        "projection_destination": "event_head",
-        "title": "厨房漏水传感器触发 · 已检测",
-        "description": "厨房漏水传感器触发。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "已检测",
-        "message": "状态更新：智能阀门在 8 秒内关闭冷水支路，阻止水迹扩散到柜体外。",
-        "severity": "medium",
-        "tags": [
-          "水浸传感器",
-          "厨房",
-          "阀门"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "变化情况": [
-            "智能阀门在 8 秒内关闭冷水支路，阻止水迹扩散到柜体外。",
-            "阀门关闭并启动通风后，湿度从 72% 降至 38%。"
-          ],
-          "负责人": "智能家居负责人",
-          "预计时间": "下一个稳定采样窗口",
-          "关联事件": [
-            "evt_home_leak_001",
-            "thing_home_valve_kitchen"
-          ]
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"继续观察，直到所属对象连续出现两次稳定采样。\",\"审计备注\":\"时间顺序已整理，适用于 iOS 截图测试。\",\"关联事件\":[\"evt_home_leak_001\",\"thing_home_valve_kitchen\"]}",
-        "location": {
-          "type": "房间",
-          "value": "厨房水槽柜"
-        },
-        "external_ids": {
-          "事故工单": "INC-2026-0508-002"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "d6b552bd-90e3-57a1-b8b0-5e4d6869e36d",
-      "message_id": "msg_finance_invoice_investigating",
-      "title": "疑似供应商重复发票 · 排查中",
-      "body": "# 疑似供应商重复发票 · 排查中\n> 同一采购单的两张发票从不同审批路径进入系统\n\n## 变化情况\n- 一笔 18,420.00 元人民币的计划付款在提交银行前被拦截。\n- 金额、供应商税号和送货单一致，重复评分达到 0.93。\n- 财务团队仍可在二次审批后释放有效发票。\n\n## 处置过程\n1. 锁定两条发票记录，并附加供应商送货单。\n2. 请采购确认哪一个发票号码应保持有效。\n3. 在拦截解除前，将现金流预测标记为暂定。\n\n## 下一步\n- 负责人：财务控制负责人\n- 预计时间：下一个稳定采样窗口\n",
-      "channel_id": "finance-ledger",
-      "is_read": false,
-      "received_at": "2026-05-08T01:20:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_finance_invoice_001",
-        "event_id": "evt_finance_invoice_001",
-        "thing_id": "thing_finance_ap_queue",
-        "projection_destination": "event_head",
-        "title": "疑似供应商重复发票 · 排查中",
-        "description": "疑似供应商重复发票。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "排查中",
-        "message": "状态更新：一笔 18,420.00 元人民币的计划付款在提交银行前被拦截。",
-        "severity": "high",
-        "tags": [
-          "发票",
-          "审批",
-          "现金流"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "变化情况": [
-            "一笔 18,420.00 元人民币的计划付款在提交银行前被拦截。",
-            "金额、供应商税号和送货单一致，重复评分达到 0.93。"
-          ],
-          "负责人": "财务控制负责人",
-          "预计时间": "下一个稳定采样窗口",
-          "关联事件": [
-            "evt_finance_invoice_001",
-            "thing_finance_ap_queue"
-          ]
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"继续观察，直到所属对象连续出现两次稳定采样。\",\"审计备注\":\"时间顺序已整理，适用于 iOS 截图测试。\",\"关联事件\":[\"evt_finance_invoice_001\",\"thing_finance_ap_queue\"]}",
-        "location": {
-          "type": "部门",
-          "value": "财务共享服务中心"
-        },
-        "external_ids": {
-          "事故工单": "INC-2026-0508-003"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "1c8af58e-1c25-5ffc-a1c5-15983948d312",
-      "message_id": "msg_thing_agent_support_triage_sample",
-      "title": "客服分诊 AI Agent · 抽样备注已更新",
-      "body": "# 客服分诊 AI Agent对象更新\n> 多个频道出现新信号后，对象投影已经刷新。\n\n## 当前快照\n- 当前状态：稳定运行并开启人工抽检\n- 关联事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 监控频道：AI Agent 反馈\n\n## 属性变化\n- 自动解决置信度从 0.78 调整为 0.86\n- 兜底规则从立即转人工切换为抽样复核\n\n## 下一步\n- 继续保留在截图数据中，因为它能把运维、财务、家庭和 Agent 场景串到同一条真实时间线里。\n",
+      "id": "19446958-315e-5199-b679-7d6447fdd265",
+      "message_id": "msg_zh-CN_0014",
+      "title": "厨房水浸传感器触发（已解除）",
+      "body": "### 水浸事件已关闭\n\n传感器状态连续 30 分钟为 `Dry`。\n\n后续事项：\n\n- 更换净水器快接头\n- 检查橱柜底板是否变形\n- 保留自动关阀规则\n\n状态：**Resolved**",
       "channel_id": "ai-agent-feedback",
       "is_read": true,
-      "received_at": "2026-05-08T01:12:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_agent_support_triage",
-        "thing_id": "thing_agent_support_triage",
-        "projection_destination": "thing_head",
-        "title": "客服分诊 AI Agent · 抽样备注已更新",
-        "description": "客服分诊 AI Agent。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "稳定运行并开启人工抽检",
-        "message": "抽样备注已更新：自动解决置信度从 0.78 调整为 0.86；兜底规则从立即转人工切换为抽样复核",
-        "severity": "low",
-        "tags": [
-          "AI Agent",
-          "工单",
-          "转人工"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "当前快照": "稳定运行并开启人工抽检",
-          "属性变化": [
-            "自动解决置信度从 0.78 调整为 0.86",
-            "兜底规则从立即转人工切换为抽样复核"
-          ],
-          "关联事件": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "来源": "AI Agent 反馈"
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"在演示收件箱和对象详情页中保持可见。\",\"审计备注\":\"对象包含可读的属性变化和关联事件标识。\",\"关联事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "队列",
-          "value": "企业客户支持队列"
-        },
-        "external_ids": {
-          "对象投影": "OBJ-THING_AGENT_SUPPORT_TRIAGE"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "3f6d3ce8-3597-5a8e-a4ed-db879d435db8",
-      "message_id": "msg_finance_invoice_detected",
-      "title": "疑似供应商重复发票 · 已检测",
-      "body": "# 疑似供应商重复发票 · 已检测\n> 同一采购单的两张发票从不同审批路径进入系统\n\n## 变化情况\n- 一笔 18,420.00 元人民币的计划付款在提交银行前被拦截。\n- 金额、供应商税号和送货单一致，重复评分达到 0.93。\n- 财务团队仍可在二次审批后释放有效发票。\n\n## 处置过程\n1. 锁定两条发票记录，并附加供应商送货单。\n2. 请采购确认哪一个发票号码应保持有效。\n3. 在拦截解除前，将现金流预测标记为暂定。\n\n## 下一步\n- 负责人：财务控制负责人\n- 预计时间：下一个稳定采样窗口\n",
-      "channel_id": "finance-ledger",
-      "is_read": false,
-      "received_at": "2026-05-08T00:58:00.000Z",
+      "received_at": "2026-05-07T04:31:58.558000Z",
       "raw_payload": {
         "entity_type": "event",
-        "entity_id": "evt_finance_invoice_001",
-        "event_id": "evt_finance_invoice_001",
-        "thing_id": "thing_finance_ap_queue",
-        "projection_destination": "event_head",
-        "title": "疑似供应商重复发票 · 已检测",
-        "description": "疑似供应商重复发票。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "已检测",
-        "message": "状态更新：一笔 18,420.00 元人民币的计划付款在提交银行前被拦截。",
+        "entity_id": "home_kitchen_water_leak",
+        "event_id": "home_kitchen_water_leak",
+        "status": "resolved",
+        "message": "### 水浸事件已关闭\n\n传感器状态连续 30 分钟为 `Dry`。\n\n后续事项：\n\n- 更换净水器快接头\n- 检查橱柜底板是否变形\n- 保留自动关阀规则\n\n状态：**Resolved**",
+        "severity": "low",
+        "event_time": "1762868700000"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "e6b6433c-6a69-56f2-922a-b1af5399308b",
+      "message_id": "msg_zh-CN_0015",
+      "title": "iOS TestFlight 上传失败",
+      "body": "### 发布流水线失败\n\n版本：`1.4.0 (128)`  \n分支：`release/1.4.0`  \n失败阶段：`upload-testflight`\n\n```text\nERROR ITMS-90161: Invalid Provisioning Profile\n```\n\n需要检查签名证书和 App Store Connect API Key 权限。",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:32:58.558000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "ios_testflight_release_failure",
+        "event_id": "ios_testflight_release_failure",
+        "status": "ongoing",
+        "message": "### 发布流水线失败\n\n版本：`1.4.0 (128)`  \n分支：`release/1.4.0`  \n失败阶段：`upload-testflight`\n\n```text\nERROR ITMS-90161: Invalid Provisioning Profile\n```\n\n需要检查签名证书和 App Store Connect API Key 权限。",
         "severity": "high",
-        "tags": [
-          "发票",
-          "审批",
-          "现金流"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "变化情况": [
-            "一笔 18,420.00 元人民币的计划付款在提交银行前被拦截。",
-            "金额、供应商税号和送货单一致，重复评分达到 0.93。"
-          ],
-          "负责人": "财务控制负责人",
-          "预计时间": "下一个稳定采样窗口",
-          "关联事件": [
-            "evt_finance_invoice_001",
-            "thing_finance_ap_queue"
-          ]
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"继续观察，直到所属对象连续出现两次稳定采样。\",\"审计备注\":\"时间顺序已整理，适用于 iOS 截图测试。\",\"关联事件\":[\"evt_finance_invoice_001\",\"thing_finance_ap_queue\"]}",
-        "location": {
-          "type": "部门",
-          "value": "财务共享服务中心"
-        },
-        "external_ids": {
-          "事故工单": "INC-2026-0508-003"
-        }
+        "event_time": "1762854000000"
       },
       "status": "normal"
     },
     {
-      "id": "74736651-1572-5208-95c6-bbde8c4980fd",
-      "message_id": "msg_thing_event_auth_gateway_baseline",
-      "title": "客户登录风险网关 · 基线对比已更新",
-      "body": "# 客户登录风险网关对象更新\n> 多个频道出现新信号后，对象投影已经刷新。\n\n## 当前快照\n- 当前状态：已限流且流量趋势恢复干净\n- 关联事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 监控频道：事件监控\n\n## 属性变化\n- 登录失败率从 11.8% 降至 2.4%\n- 临时挑战阈值从中等切换为严格\n\n## 下一步\n- 继续保留在截图数据中，因为它能把运维、财务、家庭和 Agent 场景串到同一条真实时间线里。\n",
-      "channel_id": "event-monitoring",
-      "is_read": true,
-      "received_at": "2026-05-08T00:52:00.000Z",
+      "id": "f546d1c1-2ea7-5519-8bd1-51959c49e5ff",
+      "message_id": "msg_zh-CN_0016",
+      "title": "iOS TestFlight 上传失败（证书已更新）",
+      "body": "### 证书处理完成\n\n已更新：\n\n- `Apple Distribution` 证书\n- `PushGo AppStore Profile`\n- App Store Connect API Key 权限\n\n重新运行 workflow：`ios-release-rerun-01`",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:33:58.558000Z",
       "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_event_auth_gateway",
-        "thing_id": "thing_event_auth_gateway",
-        "projection_destination": "thing_head",
-        "title": "客户登录风险网关 · 基线对比已更新",
-        "description": "客户登录风险网关。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "已限流且流量趋势恢复干净",
-        "message": "基线对比已更新：登录失败率从 11.8% 降至 2.4%；临时挑战阈值从中等切换为严格",
-        "severity": "low",
-        "tags": [
-          "登录",
-          "风控",
-          "客户信任"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "当前快照": "已限流且流量趋势恢复干净",
-          "属性变化": [
-            "登录失败率从 11.8% 降至 2.4%",
-            "临时挑战阈值从中等切换为严格"
-          ],
-          "关联事件": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "来源": "事件监控"
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"在演示收件箱和对象详情页中保持可见。\",\"审计备注\":\"对象包含可读的属性变化和关联事件标识。\",\"关联事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "服务",
-          "value": "客户账号中心"
-        },
-        "external_ids": {
-          "对象投影": "OBJ-THING_EVENT_AUTH_GATEWAY"
-        }
+        "entity_type": "event",
+        "entity_id": "ios_testflight_release_failure",
+        "event_id": "ios_testflight_release_failure",
+        "status": "ongoing",
+        "message": "### 证书处理完成\n\n已更新：\n\n- `Apple Distribution` 证书\n- `PushGo AppStore Profile`\n- App Store Connect API Key 权限\n\n重新运行 workflow：`ios-release-rerun-01`",
+        "severity": "normal",
+        "event_time": "1762855800000"
       },
       "status": "normal"
     },
     {
-      "id": "131495e5-3ca5-5aad-bf8b-a8a2894c533c",
-      "message_id": "msg_thing_ops_cluster_sh1_maintenance",
-      "title": "上海支付集群 · 维护备注已补充",
-      "body": "# 上海支付集群对象更新\n> 多个频道出现新信号后，对象投影已经刷新。\n\n## 当前快照\n- 当前状态：健康但保持重点观察\n- 关联事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 监控频道：运维核心\n\n## 属性变化\n- API P95 延迟从 420 毫秒降至 238 毫秒\n- 只读副本滞后从 18 秒降至 3 秒\n\n## 下一步\n- 继续保留在截图数据中，因为它能把运维、财务、家庭和 Agent 场景串到同一条真实时间线里。\n",
-      "channel_id": "ops-core",
-      "is_read": true,
-      "received_at": "2026-05-07T23:48:00.000Z",
+      "id": "bc26bb87-896e-5178-9407-5c65bc274acf",
+      "message_id": "msg_zh-CN_0017",
+      "title": "iOS TestFlight 上传失败（上传成功）",
+      "body": "### 上传成功\n\n构建 `1.4.0 (129)` 已上传至 TestFlight。\n\n| 项目 | 状态 |\n|---|---|\n| Archive | 成功 |\n| Notarization | 成功 |\n| Upload | 成功 |\n| Processing | 进行中 |\n\n等待 App Store Connect 处理完成。",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:34:58.558000Z",
       "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_ops_cluster_sh1",
-        "thing_id": "thing_ops_cluster_sh1",
-        "projection_destination": "thing_head",
-        "title": "上海支付集群 · 维护备注已补充",
-        "description": "上海支付集群。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "健康但保持重点观察",
-        "message": "维护备注已补充：API P95 延迟从 420 毫秒降至 238 毫秒；只读副本滞后从 18 秒降至 3 秒",
+        "entity_type": "event",
+        "entity_id": "ios_testflight_release_failure",
+        "event_id": "ios_testflight_release_failure",
+        "status": "ongoing",
+        "message": "### 上传成功\n\n构建 `1.4.0 (129)` 已上传至 TestFlight。\n\n| 项目 | 状态 |\n|---|---|\n| Archive | 成功 |\n| Notarization | 成功 |\n| Upload | 成功 |\n| Processing | 进行中 |\n\n等待 App Store Connect 处理完成。",
         "severity": "low",
-        "tags": [
-          "数据库",
-          "延迟",
-          "只读副本"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "当前快照": "健康但保持重点观察",
-          "属性变化": [
-            "API P95 延迟从 420 毫秒降至 238 毫秒",
-            "只读副本滞后从 18 秒降至 3 秒"
-          ],
-          "关联事件": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "来源": "运维核心"
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"在演示收件箱和对象详情页中保持可见。\",\"审计备注\":\"对象包含可读的属性变化和关联事件标识。\",\"关联事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "区域",
-          "value": "上海区域"
-        },
-        "external_ids": {
-          "对象投影": "OBJ-THING_OPS_CLUSTER_SH1"
-        }
+        "event_time": "1762857300000"
       },
       "status": "normal"
     },
     {
-      "id": "3545ea1e-8296-51ba-b80a-cc821b5c4668",
-      "message_id": "msg_thing_finance_ap_queue_cutoff",
-      "title": "应付账款复核队列 · 付款截点备注已更新",
-      "body": "# 应付账款复核队列对象更新\n> 多个频道出现新信号后，对象投影已经刷新。\n\n## 当前快照\n- 当前状态：余额已对齐并锁定重复复核\n- 关联事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 监控频道：财务台账\n\n## 属性变化\n- 重复发票评分从 0.41 升至 0.93\n- 审批策略从单人复核切换为双人复核\n\n## 下一步\n- 继续保留在截图数据中，因为它能把运维、财务、家庭和 Agent 场景串到同一条真实时间线里。\n",
+      "id": "fbd157de-6264-5c58-9e90-416c45c0dde7",
+      "message_id": "msg_zh-CN_0018",
+      "title": "iOS TestFlight 上传失败（已恢复）",
+      "body": "### 发布恢复\n\n`PushGo 1.4.0 (129)` 已进入 TestFlight 内部测试。\n\n下一步：\n\n- 运行 smoke test\n- 检查 APNs token 注册\n- 检查 watchOS companion 同步\n\n事件关闭。",
       "channel_id": "finance-ledger",
       "is_read": true,
-      "received_at": "2026-05-07T23:32:00.000Z",
+      "received_at": "2026-05-07T04:35:58.558000Z",
       "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_finance_ap_queue",
-        "thing_id": "thing_finance_ap_queue",
-        "projection_destination": "thing_head",
-        "title": "应付账款复核队列 · 付款截点备注已更新",
-        "description": "应付账款复核队列。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "余额已对齐并锁定重复复核",
-        "message": "付款截点备注已更新：重复发票评分从 0.41 升至 0.93；审批策略从单人复核切换为双人复核",
+        "entity_type": "event",
+        "entity_id": "ios_testflight_release_failure",
+        "event_id": "ios_testflight_release_failure",
+        "status": "resolved",
+        "message": "### 发布恢复\n\n`PushGo 1.4.0 (129)` 已进入 TestFlight 内部测试。\n\n下一步：\n\n- 运行 smoke test\n- 检查 APNs token 注册\n- 检查 watchOS companion 同步\n\n事件关闭。",
         "severity": "low",
-        "tags": [
-          "发票",
-          "审批",
-          "现金流"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "当前快照": "余额已对齐并锁定重复复核",
-          "属性变化": [
-            "重复发票评分从 0.41 升至 0.93",
-            "审批策略从单人复核切换为双人复核"
-          ],
-          "关联事件": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "来源": "财务台账"
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"在演示收件箱和对象详情页中保持可见。\",\"审计备注\":\"对象包含可读的属性变化和关联事件标识。\",\"关联事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "部门",
-          "value": "财务共享服务中心"
-        },
-        "external_ids": {
-          "对象投影": "OBJ-THING_FINANCE_AP_QUEUE"
-        }
+        "event_time": "1762859100000"
       },
       "status": "normal"
     },
     {
-      "id": "366265d8-505b-5f2e-a07d-a620c1185166",
-      "message_id": "msg_thing_home_valve_kitchen_battery",
-      "title": "厨房水路切断阀 · 电池与传感器备注已更新",
-      "body": "# 厨房水路切断阀对象更新\n> 多个频道出现新信号后，对象投影已经刷新。\n\n## 当前快照\n- 当前状态：触发漏水保护后保持关闭\n- 关联事件：evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- 监控频道：智能家居\n\n## 属性变化\n- 地面传感器湿度从 72% 降至 38%\n- 阀门控制模式从自动切换为监督模式\n\n## 下一步\n- 继续保留在截图数据中，因为它能把运维、财务、家庭和 Agent 场景串到同一条真实时间线里。\n",
-      "channel_id": "home-automation",
-      "is_read": true,
-      "received_at": "2026-05-07T23:18:00.000Z",
+      "id": "3a283db7-2848-5272-bdd2-57a748522f9b",
+      "message_id": "msg_zh-CN_0019",
+      "title": "家庭 NAS · DS923+",
+      "body": "家庭照片、项目归档和备份任务的主存储设备。",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:36:58.558000Z",
       "raw_payload": {
         "entity_type": "thing",
-        "entity_id": "thing_home_valve_kitchen",
-        "thing_id": "thing_home_valve_kitchen",
+        "entity_id": "home_nas_ds923",
+        "thing_id": "home_nas_ds923",
         "projection_destination": "thing_head",
-        "title": "厨房水路切断阀 · 电池与传感器备注已更新",
-        "description": "厨房水路切断阀。这条记录用于截图测试数据，但时间线和处置语义按真实生产环境组织。",
-        "status": "触发漏水保护后保持关闭",
-        "message": "电池与传感器备注已更新：地面传感器湿度从 72% 降至 38%；阀门控制模式从自动切换为监督模式",
-        "severity": "low",
-        "tags": [
-          "水浸传感器",
-          "厨房",
-          "阀门"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "当前快照": "触发漏水保护后保持关闭",
-          "属性变化": [
-            "地面传感器湿度从 72% 降至 38%",
-            "阀门控制模式从自动切换为监督模式"
-          ],
-          "关联事件": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "来源": "智能家居"
-        },
-        "metadata": "{\"来源\":\"PushGo 测试数据生成器\",\"投影版本\":\"2026.05.08-1\",\"建议动作\":\"在演示收件箱和对象详情页中保持可见。\",\"审计备注\":\"对象包含可读的属性变化和关联事件标识。\",\"关联事件\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "房间",
-          "value": "厨房水槽柜"
-        },
-        "external_ids": {
-          "对象投影": "OBJ-THING_HOME_VALVE_KITCHEN"
-        }
+        "title": "家庭 NAS · DS923+",
+        "description": "家庭照片、项目归档和备份任务的主存储设备。"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "59499096-d3a1-5050-a357-81d80a0820c3",
+      "message_id": "msg_zh-CN_0020",
+      "title": "家庭 NAS · DS923+（新增异地备份任务）",
+      "body": "为照片库增加异地冷备份任务。",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:37:58.558000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_nas_ds923",
+        "thing_id": "home_nas_ds923",
+        "projection_destination": "thing_head",
+        "title": "家庭 NAS · DS923+（新增异地备份任务）",
+        "description": "为照片库增加异地冷备份任务。"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "d13f5bdc-713b-55dc-ae28-0dbbbd6d2515",
+      "message_id": "msg_zh-CN_0021",
+      "title": "家庭 NAS · DS923+（硬盘健康波动）",
+      "body": "2 号盘出现短暂 SMART 读错误，已标记观察。",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:38:58.558000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_nas_ds923",
+        "thing_id": "home_nas_ds923",
+        "projection_destination": "thing_head",
+        "title": "家庭 NAS · DS923+（硬盘健康波动）",
+        "description": "2 号盘出现短暂 SMART 读错误，已标记观察。"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "863863c4-c170-5b93-9410-14a5f1b072e5",
+      "message_id": "msg_zh-CN_0022",
+      "title": "家庭 NAS · DS923+（网络切换）",
+      "body": "主链路短暂丢包，已切换到备用网口。",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:39:58.558000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_nas_ds923",
+        "thing_id": "home_nas_ds923",
+        "projection_destination": "thing_head",
+        "title": "家庭 NAS · DS923+（网络切换）",
+        "description": "主链路短暂丢包，已切换到备用网口。"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "edf0bf08-dc5c-5c20-a96c-ba8ccfe6db10",
+      "message_id": "msg_zh-CN_0023",
+      "title": "家庭 NAS · DS923+（演示归档）",
+      "body": "测试生命周期归档流程，不代表真实退役。",
+      "channel_id": "finance-ledger",
+      "is_read": true,
+      "received_at": "2026-05-07T04:40:58.558000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_nas_ds923",
+        "thing_id": "home_nas_ds923",
+        "projection_destination": "thing_head",
+        "status": "archived"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "65525fea-930a-5efa-b5ff-e85f9d855c98",
+      "message_id": "msg_zh-CN_0024",
+      "title": "home_nas_ds923 deleted",
+      "body": "{\"deleted_at\": 1762879200000, \"observed_at\": 1762879200000, \"metadata\": {\"deleted_by\": \"fixture-generator\", \"reason\": \"cleanup_demo_lifecycle\", \"is_test\": true}}",
+      "channel_id": "finance-ledger",
+      "is_read": true,
+      "received_at": "2026-05-07T04:41:58.558000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_nas_ds923",
+        "thing_id": "home_nas_ds923",
+        "projection_destination": "thing_deleted",
+        "status": "deleted"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "5af01515-9e7e-5468-8f6d-fed11be19e88",
+      "message_id": "msg_zh-CN_0025",
+      "title": "NAS 2 号盘 SMART 状态异常",
+      "body": "### 硬盘健康提醒\n\n对象：`家庭 NAS · DS923+`  \n槽位：`Disk 2`  \n状态：**Warning**\n\n当前读错误计数出现轻微波动，暂未出现重映射扇区。\n\n建议：\n\n- 观察未来 24 小时 SMART 指标\n- 确认最近一次异地备份是否完成\n- 准备一块同容量备用盘",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:42:58.558000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_nas_ds923",
+        "thing_id": "home_nas_ds923",
+        "projection_destination": "thing_message",
+        "severity": "high"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "b93337eb-5af4-5379-ae82-55806fe4d776",
+      "message_id": "msg_zh-CN_0026",
+      "title": "照片库异地备份完成",
+      "body": "### 备份任务完成\n\n备份任务：`photos-daily-incremental`  \n目标：`s3-cold-storage`  \n结果：**成功**\n\n```text\n新增：428 files\n变更：76 files\n上传：18.4 GB\n耗时：43m12s\n```\n\n这条消息关联到对象 `家庭 NAS · DS923+`，可作为对象下的二级消息展示。",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:43:58.558000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_nas_ds923",
+        "thing_id": "home_nas_ds923",
+        "projection_destination": "thing_message",
+        "severity": "low"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "c7c178ac-f089-581b-a3c3-19b724d2b315",
+      "message_id": "msg_zh-CN_0027",
+      "title": "NAS 主链路丢包",
+      "body": "### NAS 网络事件\n\n`bond0` 主链路在过去 3 分钟内出现连续丢包。\n\n- 主网口：`LAN1`\n- 备用网口：`LAN2`\n- 当前策略：自动切换\n\n事件关联对象：`家庭 NAS · DS923+`",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:44:58.558000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "home_nas_ds923_event",
+        "event_id": "home_nas_ds923_event",
+        "thing_id": "home_nas_ds923",
+        "status": "ongoing",
+        "message": "### NAS 网络事件\n\n`bond0` 主链路在过去 3 分钟内出现连续丢包。\n\n- 主网口：`LAN1`\n- 备用网口：`LAN2`\n- 当前策略：自动切换\n\n事件关联对象：`家庭 NAS · DS923+`",
+        "severity": "high"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "1ec27c2d-5168-5dd4-8da1-f1e0cc3ec4ae",
+      "message_id": "msg_zh-CN_0028",
+      "title": "生产服务 · api-gateway-prod",
+      "body": "PushGo 公共网关的生产 API 服务，负责接收、校验和分发消息请求。",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-07T04:45:58.558000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "prod_api_gateway_service",
+        "thing_id": "prod_api_gateway_service",
+        "projection_destination": "thing_head",
+        "title": "生产服务 · api-gateway-prod",
+        "description": "PushGo 公共网关的生产 API 服务，负责接收、校验和分发消息请求。"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "894b23ff-a426-5c42-a496-79e4f2e51c44",
+      "message_id": "msg_zh-CN_0029",
+      "title": "生产服务 · api-gateway-prod（版本升级）",
+      "body": "滚动升级到 1.4.0，新增对象级事件聚合接口。",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-07T04:46:58.558000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "prod_api_gateway_service",
+        "thing_id": "prod_api_gateway_service",
+        "projection_destination": "thing_head",
+        "title": "生产服务 · api-gateway-prod（版本升级）",
+        "description": "滚动升级到 1.4.0，新增对象级事件聚合接口。"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "573bb6c5-ea86-537a-a412-f61c0f12a0d2",
+      "message_id": "msg_zh-CN_0030",
+      "title": "生产服务 · api-gateway-prod（临时扩容）",
+      "body": "午高峰期间请求量上升，HPA 扩容到 12 副本。",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-07T04:47:58.558000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "prod_api_gateway_service",
+        "thing_id": "prod_api_gateway_service",
+        "projection_destination": "thing_head",
+        "title": "生产服务 · api-gateway-prod（临时扩容）",
+        "description": "午高峰期间请求量上升，HPA 扩容到 12 副本。"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "355a3e17-31ee-56b8-a63a-f1ca10075b23",
+      "message_id": "msg_zh-CN_0031",
+      "title": "生产服务 · api-gateway-prod（限流策略调整）",
+      "body": "为异常来源增加短期限流规则。",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-07T04:48:58.558000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "prod_api_gateway_service",
+        "thing_id": "prod_api_gateway_service",
+        "projection_destination": "thing_head",
+        "title": "生产服务 · api-gateway-prod（限流策略调整）",
+        "description": "为异常来源增加短期限流规则。"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "d7ec4e10-d4dc-53d8-8bfc-e0ab17fa1f70",
+      "message_id": "msg_zh-CN_0032",
+      "title": "生产服务 · api-gateway-prod（蓝绿切换归档）",
+      "body": "旧蓝色部署完成流量迁移后归档。",
+      "channel_id": "home-automation",
+      "is_read": true,
+      "received_at": "2026-05-07T04:49:58.558000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "prod_api_gateway_service",
+        "thing_id": "prod_api_gateway_service",
+        "projection_destination": "thing_head",
+        "status": "archived"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "b91d6ee9-d866-5a3e-8a35-3ce721cbe799",
+      "message_id": "msg_zh-CN_0033",
+      "title": "prod_api_gateway_service deleted",
+      "body": "{\"deleted_at\": 1762908000000, \"observed_at\": 1762908000000, \"metadata\": {\"deleted_by\": \"k8s-gc\", \"reason\": \"old_blue_deployment_removed\", \"is_test\": true}}",
+      "channel_id": "home-automation",
+      "is_read": true,
+      "received_at": "2026-05-07T04:50:58.558000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "prod_api_gateway_service",
+        "thing_id": "prod_api_gateway_service",
+        "projection_destination": "thing_deleted",
+        "status": "deleted"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "839ce226-7b1a-5018-9c27-a8e834d48757",
+      "message_id": "msg_zh-CN_0034",
+      "title": "异常来源触发限流",
+      "body": "### API 限流提醒\n\n`api-gateway-prod` 对异常来源启用了短期限流。\n\n- 命中规则：`rl-abuse-20251111`\n- 被拦截 IP：`27`\n- 主要接口：`/v1/messages/send`\n- 当前窗口：`10 分钟`\n\n如确认是正常客户流量，请在 WAF 控制台添加白名单。",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-07T04:51:58.558000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "prod_api_gateway_service",
+        "thing_id": "prod_api_gateway_service",
+        "projection_destination": "thing_message",
+        "severity": "normal"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "ba45cee4-6888-520d-b0ca-dca3dd30ac2d",
+      "message_id": "msg_zh-CN_0035",
+      "title": "公共网关流量高峰",
+      "body": "### 流量高峰已扩容\n\n公共网关 QPS 达到 **1840**，HPA 已扩容至 `12` 副本。\n\n| 指标 | 当前值 |\n|---|---:|\n| QPS | 1840 |\n| CPU | 68% |\n| P95 | 210ms |\n\n服务状态：**正常**",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-07T04:52:58.558000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "prod_api_gateway_service",
+        "thing_id": "prod_api_gateway_service",
+        "projection_destination": "thing_message",
+        "severity": "low"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "8f3f5f32-dc4f-5a5e-b126-fcbb743c9ade",
+      "message_id": "msg_zh-CN_0036",
+      "title": "公共网关 5xx 错误率升高",
+      "body": "### 网关服务事件\n\n`api-gateway-prod` 过去 5 分钟 5xx 错误率达到 **6.8%**。\n\n可能原因：\n\n- 上游 `message-dispatcher` 延迟升高\n- Redis 写入抖动\n- 异常来源短时间高频请求",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-07T04:53:58.558000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "prod_api_gateway_service_event",
+        "event_id": "prod_api_gateway_service_event",
+        "thing_id": "prod_api_gateway_service",
+        "status": "ongoing",
+        "message": "### 网关服务事件\n\n`api-gateway-prod` 过去 5 分钟 5xx 错误率达到 **6.8%**。\n\n可能原因：\n\n- 上游 `message-dispatcher` 延迟升高\n- Redis 写入抖动\n- 异常来源短时间高频请求",
+        "severity": "high"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "fd63625e-42ff-5257-b5ee-71522bcde41d",
+      "message_id": "msg_zh-CN_0037",
+      "title": "智能门锁 · 入户门",
+      "body": "家中入户门智能门锁，用于门锁状态、低电量和异常开门提醒。",
+      "channel_id": "security-watch",
+      "is_read": false,
+      "received_at": "2026-05-07T04:54:58.558000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_entry_smart_lock",
+        "thing_id": "home_entry_smart_lock",
+        "projection_destination": "thing_head",
+        "title": "智能门锁 · 入户门",
+        "description": "家中入户门智能门锁，用于门锁状态、低电量和异常开门提醒。"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "cd04a509-743c-57ad-a43c-8558b6211ac4",
+      "message_id": "msg_zh-CN_0038",
+      "title": "智能门锁 · 入户门（成员权限更新）",
+      "body": "新增临时访客密码，有效期 2 小时。",
+      "channel_id": "security-watch",
+      "is_read": false,
+      "received_at": "2026-05-07T04:55:58.558000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_entry_smart_lock",
+        "thing_id": "home_entry_smart_lock",
+        "projection_destination": "thing_head",
+        "title": "智能门锁 · 入户门（成员权限更新）",
+        "description": "新增临时访客密码，有效期 2 小时。"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "f1c3075a-8ba3-5ec1-8050-5bc66381000a",
+      "message_id": "msg_zh-CN_0039",
+      "title": "智能门锁 · 入户门（电量下降）",
+      "body": "门锁电池低于 30%，建议本周更换。",
+      "channel_id": "security-watch",
+      "is_read": false,
+      "received_at": "2026-05-07T04:56:58.558000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_entry_smart_lock",
+        "thing_id": "home_entry_smart_lock",
+        "projection_destination": "thing_head",
+        "title": "智能门锁 · 入户门（电量下降）",
+        "description": "门锁电池低于 30%，建议本周更换。"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "63c51209-9e9d-5ae1-9c9f-0683179969d6",
+      "message_id": "msg_zh-CN_0040",
+      "title": "智能门锁 · 入户门（固件升级）",
+      "body": "门锁固件升级到 2.9.0，修复低电量上报延迟。",
+      "channel_id": "security-watch",
+      "is_read": false,
+      "received_at": "2026-05-07T04:57:58.558000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_entry_smart_lock",
+        "thing_id": "home_entry_smart_lock",
+        "projection_destination": "thing_head",
+        "title": "智能门锁 · 入户门（固件升级）",
+        "description": "门锁固件升级到 2.9.0，修复低电量上报延迟。"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "b424c183-780f-5a5f-9fac-df56b8c9592a",
+      "message_id": "msg_zh-CN_0041",
+      "title": "智能门锁 · 入户门（旧设备归档）",
+      "body": "更换新门锁后，旧设备进入归档状态。",
+      "channel_id": "security-watch",
+      "is_read": true,
+      "received_at": "2026-05-07T04:58:58.558000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_entry_smart_lock",
+        "thing_id": "home_entry_smart_lock",
+        "projection_destination": "thing_head",
+        "status": "archived"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "e21c86c4-158a-50ef-9e1b-befb2eac9a9a",
+      "message_id": "msg_zh-CN_0042",
+      "title": "home_entry_smart_lock deleted",
+      "body": "{\"deleted_at\": 1762954800000, \"observed_at\": 1762954800000, \"metadata\": {\"deleted_by\": \"home-app\", \"reason\": \"demo_cleanup_after_replacement\", \"is_test\": true}}",
+      "channel_id": "security-watch",
+      "is_read": true,
+      "received_at": "2026-05-07T04:59:58.558000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_entry_smart_lock",
+        "thing_id": "home_entry_smart_lock",
+        "projection_destination": "thing_deleted",
+        "status": "deleted"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "4eda18c4-efa8-51d5-a747-c638821710a3",
+      "message_id": "msg_zh-CN_0043",
+      "title": "门锁临时密码已启用",
+      "body": "### 访客密码已生效\n\n对象：`智能门锁 · 入户门`\n\n- 有效期：`2 小时`\n- 使用次数：`1 次`\n- 到期后自动失效\n\n请勿通过非加密渠道转发临时密码。",
+      "channel_id": "security-watch",
+      "is_read": false,
+      "received_at": "2026-05-07T05:00:58.558000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_entry_smart_lock",
+        "thing_id": "home_entry_smart_lock",
+        "projection_destination": "thing_message",
+        "severity": "normal"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "1949629e-c4fd-5228-9b77-bf776dfa6cff",
+      "message_id": "msg_zh-CN_0044",
+      "title": "门锁电池电量偏低",
+      "body": "### 电池提醒\n\n`智能门锁 · 入户门` 电量降至 **28%**。\n\n建议：\n\n- 本周内更换电池\n- 更换后确认低电量告警恢复\n- 检查备用机械钥匙位置",
+      "channel_id": "security-watch",
+      "is_read": false,
+      "received_at": "2026-05-07T05:01:58.558000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_entry_smart_lock",
+        "thing_id": "home_entry_smart_lock",
+        "projection_destination": "thing_message",
+        "severity": "normal"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "083ed35a-69d0-5a42-946b-ffe0167db96e",
+      "message_id": "msg_zh-CN_0045",
+      "title": "入户门异常开门",
+      "body": "### 安全事件\n\n`智能门锁 · 入户门` 在非预期时间被打开。\n\n- 时间：`02:13`\n- 开锁方式：`临时密码`\n- 室内人体传感器：未检测到常驻成员\n\n请确认是否为预期访客。",
+      "channel_id": "security-watch",
+      "is_read": false,
+      "received_at": "2026-05-07T05:02:58.558000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "home_entry_smart_lock_event",
+        "event_id": "home_entry_smart_lock_event",
+        "thing_id": "home_entry_smart_lock",
+        "status": "ongoing",
+        "message": "### 安全事件\n\n`智能门锁 · 入户门` 在非预期时间被打开。\n\n- 时间：`02:13`\n- 开锁方式：`临时密码`\n- 室内人体传感器：未检测到常驻成员\n\n请确认是否为预期访客。",
+        "severity": "critical"
       },
       "status": "normal"
     }
@@ -1534,59 +813,59 @@
   "channel_subscriptions": [
     {
       "channel_id": "ops-core",
-      "display_name": "运维核心",
-      "password": "fixture-ops-core-2026",
-      "last_synced_at": "2026-05-08T04:25:00.000Z",
-      "updated_at": "2026-05-08T03:10:00.000Z"
-    },
-    {
-      "channel_id": "home-automation",
-      "display_name": "智能家居",
-      "password": "fixture-home-automation-2026",
-      "last_synced_at": "2026-05-08T04:26:00.000Z",
-      "updated_at": "2026-05-08T03:11:00.000Z"
-    },
-    {
-      "channel_id": "finance-ledger",
-      "display_name": "财务台账",
-      "password": "fixture-finance-ledger-2026",
-      "last_synced_at": "2026-05-08T04:27:00.000Z",
-      "updated_at": "2026-05-08T03:12:00.000Z"
+      "display_name": "Operations Core",
+      "password": "fixture-pass-1234",
+      "last_synced_at": "2026-05-07T04:17:58.558000Z",
+      "updated_at": "2026-05-07T04:17:58.558000Z"
     },
     {
       "channel_id": "event-monitoring",
-      "display_name": "事件监控",
-      "password": "fixture-event-monitoring-2026",
-      "last_synced_at": "2026-05-08T04:28:00.000Z",
-      "updated_at": "2026-05-08T03:13:00.000Z"
+      "display_name": "Event Monitoring",
+      "password": "fixture-pass-1234",
+      "last_synced_at": "2026-05-07T04:17:58.558000Z",
+      "updated_at": "2026-05-07T04:17:58.558000Z"
+    },
+    {
+      "channel_id": "thing-hub",
+      "display_name": "Thing Hub",
+      "password": "fixture-pass-1234",
+      "last_synced_at": "2026-05-07T04:17:58.558000Z",
+      "updated_at": "2026-05-07T04:17:58.558000Z"
     },
     {
       "channel_id": "ai-agent-feedback",
-      "display_name": "AI Agent 反馈",
-      "password": "fixture-ai-agent-feedback-2026",
-      "last_synced_at": "2026-05-08T04:29:00.000Z",
-      "updated_at": "2026-05-08T03:14:00.000Z"
+      "display_name": "AI Agent Feedback",
+      "password": "fixture-pass-1234",
+      "last_synced_at": "2026-05-07T04:17:58.558000Z",
+      "updated_at": "2026-05-07T04:17:58.558000Z"
     },
     {
-      "channel_id": "executive-brief",
-      "display_name": "高管简报",
-      "password": "fixture-executive-brief-2026",
-      "last_synced_at": "2026-05-08T04:30:00.000Z",
-      "updated_at": "2026-05-08T03:15:00.000Z"
+      "channel_id": "finance-ledger",
+      "display_name": "Finance Ledger",
+      "password": "fixture-pass-1234",
+      "last_synced_at": "2026-05-07T04:17:58.558000Z",
+      "updated_at": "2026-05-07T04:17:58.558000Z"
     },
     {
-      "channel_id": "incident-command",
-      "display_name": "事故指挥",
-      "password": "fixture-incident-command-2026",
-      "last_synced_at": "2026-05-08T04:31:00.000Z",
-      "updated_at": "2026-05-08T03:16:00.000Z"
+      "channel_id": "home-automation",
+      "display_name": "Home Automation",
+      "password": "fixture-pass-1234",
+      "last_synced_at": "2026-05-07T04:17:58.558000Z",
+      "updated_at": "2026-05-07T04:17:58.558000Z"
     },
     {
-      "channel_id": "customer-trust",
-      "display_name": "客户信任",
-      "password": "fixture-customer-trust-2026",
-      "last_synced_at": "2026-05-08T04:32:00.000Z",
-      "updated_at": "2026-05-08T03:17:00.000Z"
+      "channel_id": "security-watch",
+      "display_name": "Security Watch",
+      "password": "fixture-pass-1234",
+      "last_synced_at": "2026-05-07T04:17:58.558000Z",
+      "updated_at": "2026-05-07T04:17:58.558000Z"
+    },
+    {
+      "channel_id": "infra-observability",
+      "display_name": "Infra Observability",
+      "password": "fixture-pass-1234",
+      "last_synced_at": "2026-05-07T04:17:58.558000Z",
+      "updated_at": "2026-05-07T04:17:58.558000Z"
     }
   ]
 }

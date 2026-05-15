@@ -1,1532 +1,741 @@
 {
   "messages": [
     {
-      "id": "5e20c898-d30d-541a-8543-f5f35a38b6fd",
-      "message_id": "msg_thing_agent_support_triage_summary",
-      "title": "Agent IA de triage support · Projection de synthèse actualisée",
-      "body": "# Mise à jour de l’objet Agent IA de triage support\n> La projection de l’objet a été rafraîchie après l’arrivée de nouveaux signaux depuis plusieurs canaux.\n\n## Instantané\n- État actuel : stable avec revue humaine activée\n- Événements liés : evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Canal de surveillance : Retours de l’agent IA\n\n## Changements d’attributs\n- la confiance de résolution automatique est passée de 0,78 à 0,86\n- la règle de repli est passée du transfert immédiat à la revue par échantillon\n\n## Prochaine étape\n- Garder l’objet visible dans les données de capture, car il relie opérations, finance, domicile et agent dans une chronologie réaliste.\n",
-      "channel_id": "ai-agent-feedback",
-      "is_read": false,
-      "received_at": "2026-05-08T04:58:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_agent_support_triage",
-        "thing_id": "thing_agent_support_triage",
-        "projection_destination": "thing_head",
-        "title": "Agent IA de triage support · Projection de synthèse actualisée",
-        "description": "Agent IA de triage support。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "stable avec revue humaine activée",
-        "message": "Projection de synthèse actualisée: la confiance de résolution automatique est passée de 0,78 à 0,86; la règle de repli est passée du transfert immédiat à la revue par échantillon",
-        "severity": "medium",
-        "tags": [
-          "agent IA",
-          "ticket",
-          "transfert"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Instantané": "stable avec revue humaine activée",
-          "Changements d’attributs": [
-            "la confiance de résolution automatique est passée de 0,78 à 0,86",
-            "la règle de repli est passée du transfert immédiat à la revue par échantillon"
-          ],
-          "Événements liés": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "Source": "Retours de l’agent IA"
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Garder l’objet visible dans la boîte de démonstration et la vue de détail.\",\"Note de contrôle\":\"L’objet contient des changements d’attributs lisibles et des identifiants d’événements liés.\",\"Événements liés\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "file",
-          "value": "file de support entreprise"
-        },
-        "external_ids": {
-          "projection d’objet": "OBJ-THING_AGENT_SUPPORT_TRIAGE"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "e0ca12af-761e-5474-90ea-ba448f1b87c3",
-      "message_id": "msg_thing_event_auth_gateway_summary",
-      "title": "Passerelle de risque de connexion client · Projection de synthèse actualisée",
-      "body": "# Mise à jour de l’objet Passerelle de risque de connexion client\n> La projection de l’objet a été rafraîchie après l’arrivée de nouveaux signaux depuis plusieurs canaux.\n\n## Instantané\n- État actuel : limitée avec tendance de trafic propre\n- Événements liés : evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Canal de surveillance : Surveillance des événements\n\n## Changements d’attributs\n- le taux d’échecs de connexion est passé de 11,8% à 2,4%\n- le seuil temporaire de défi est passé de moyen à strict\n\n## Prochaine étape\n- Garder l’objet visible dans les données de capture, car il relie opérations, finance, domicile et agent dans une chronologie réaliste.\n",
-      "channel_id": "event-monitoring",
-      "is_read": false,
-      "received_at": "2026-05-08T04:54:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_event_auth_gateway",
-        "thing_id": "thing_event_auth_gateway",
-        "projection_destination": "thing_head",
-        "title": "Passerelle de risque de connexion client · Projection de synthèse actualisée",
-        "description": "Passerelle de risque de connexion client。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "limitée avec tendance de trafic propre",
-        "message": "Projection de synthèse actualisée: le taux d’échecs de connexion est passé de 11,8% à 2,4%; le seuil temporaire de défi est passé de moyen à strict",
-        "severity": "medium",
-        "tags": [
-          "connexion",
-          "contrôle du risque",
-          "confiance client"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Instantané": "limitée avec tendance de trafic propre",
-          "Changements d’attributs": [
-            "le taux d’échecs de connexion est passé de 11,8% à 2,4%",
-            "le seuil temporaire de défi est passé de moyen à strict"
-          ],
-          "Événements liés": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "Source": "Surveillance des événements"
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Garder l’objet visible dans la boîte de démonstration et la vue de détail.\",\"Note de contrôle\":\"L’objet contient des changements d’attributs lisibles et des identifiants d’événements liés.\",\"Événements liés\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "service",
-          "value": "centre de comptes client"
-        },
-        "external_ids": {
-          "projection d’objet": "OBJ-THING_EVENT_AUTH_GATEWAY"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "07f35e9d-8cb1-5613-8650-b7e2f23596d9",
-      "message_id": "msg_thing_ops_cluster_sh1_summary",
-      "title": "Grappe de paiement de Shanghai · Projection de synthèse actualisée",
-      "body": "# Mise à jour de l’objet Grappe de paiement de Shanghai\n> La projection de l’objet a été rafraîchie après l’arrivée de nouveaux signaux depuis plusieurs canaux.\n\n## Instantané\n- État actuel : saine avec surveillance renforcée\n- Événements liés : evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Canal de surveillance : Cœur des opérations\n\n## Changements d’attributs\n- la latence P95 de l’API est passée de 420 ms à 238 ms\n- le retard de la réplique de lecture est passé de 18 s à 3 s\n\n## Prochaine étape\n- Garder l’objet visible dans les données de capture, car il relie opérations, finance, domicile et agent dans une chronologie réaliste.\n",
+      "id": "02d40392-daad-573a-80b4-39e813c2fa9e",
+      "message_id": "msg_fr_0001",
+      "title": "Taux d’erreur de l’API prod en hausse",
+      "body": "### Taux d’erreur de la passerelle au-dessus du seuil\n\nSur les **5 dernières minutes**, les erreurs 5xx de `api-gateway-prod` sont passées de `0.3%` à **6.8%**.\n\n- Environnement : `prod`\n- Endpoint : `/v1/messages/send`\n- P95 actuel : `1.84s`\n- Action : vérifier `message-dispatcher` et la latence Redis\n\n[Ouvrir le tableau de bord](https://pushgo.example.com/dashboards/gateway-prod)",
       "channel_id": "ops-core",
       "is_read": false,
-      "received_at": "2026-05-08T04:50:00.000Z",
+      "received_at": "2026-05-07T04:18:58.555000Z",
       "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_ops_cluster_sh1",
-        "thing_id": "thing_ops_cluster_sh1",
-        "projection_destination": "thing_head",
-        "title": "Grappe de paiement de Shanghai · Projection de synthèse actualisée",
-        "description": "Grappe de paiement de Shanghai。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "saine avec surveillance renforcée",
-        "message": "Projection de synthèse actualisée: la latence P95 de l’API est passée de 420 ms à 238 ms; le retard de la réplique de lecture est passé de 18 s à 3 s",
-        "severity": "medium",
-        "tags": [
-          "base de données",
-          "latence",
-          "réplique de lecture"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Instantané": "saine avec surveillance renforcée",
-          "Changements d’attributs": [
-            "la latence P95 de l’API est passée de 420 ms à 238 ms",
-            "le retard de la réplique de lecture est passé de 18 s à 3 s"
-          ],
-          "Événements liés": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "Source": "Cœur des opérations"
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Garder l’objet visible dans la boîte de démonstration et la vue de détail.\",\"Note de contrôle\":\"L’objet contient des changements d’attributs lisibles et des identifiants d’événements liés.\",\"Événements liés\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "région",
-          "value": "région de Shanghai"
-        },
-        "external_ids": {
-          "projection d’objet": "OBJ-THING_OPS_CLUSTER_SH1"
-        }
+        "entity_type": "message",
+        "entity_id": "message_1",
+        "severity": "high",
+        "tags": "[\"monitoring\", \"gateway\", \"prod\"]",
+        "metadata": "{\"source\": \"fixture-generator\", \"scenario\": \"fr-FR_message_1\", \"is_test\": true}"
       },
       "status": "normal"
     },
     {
-      "id": "7f21aab4-ca69-5117-98c7-d37de5880ef4",
-      "message_id": "msg_thing_finance_ap_queue_summary",
-      "title": "File de contrôle des comptes fournisseurs · Projection de synthèse actualisée",
-      "body": "# Mise à jour de l’objet File de contrôle des comptes fournisseurs\n> La projection de l’objet a été rafraîchie après l’arrivée de nouveaux signaux depuis plusieurs canaux.\n\n## Instantané\n- État actuel : équilibrée et verrouillée pour contrôle des doublons\n- Événements liés : evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Canal de surveillance : Grand livre financier\n\n## Changements d’attributs\n- le score de facture en double est passé de 0,41 à 0,93\n- la règle d’approbation est passée d’un contrôle simple à un double contrôle\n\n## Prochaine étape\n- Garder l’objet visible dans les données de capture, car il relie opérations, finance, domicile et agent dans une chronologie réaliste.\n",
-      "channel_id": "finance-ledger",
-      "is_read": false,
-      "received_at": "2026-05-08T04:45:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_finance_ap_queue",
-        "thing_id": "thing_finance_ap_queue",
-        "projection_destination": "thing_head",
-        "title": "File de contrôle des comptes fournisseurs · Projection de synthèse actualisée",
-        "description": "File de contrôle des comptes fournisseurs。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "équilibrée et verrouillée pour contrôle des doublons",
-        "message": "Projection de synthèse actualisée: le score de facture en double est passé de 0,41 à 0,93; la règle d’approbation est passée d’un contrôle simple à un double contrôle",
-        "severity": "medium",
-        "tags": [
-          "facture",
-          "approbation",
-          "trésorerie"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Instantané": "équilibrée et verrouillée pour contrôle des doublons",
-          "Changements d’attributs": [
-            "le score de facture en double est passé de 0,41 à 0,93",
-            "la règle d’approbation est passée d’un contrôle simple à un double contrôle"
-          ],
-          "Événements liés": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "Source": "Grand livre financier"
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Garder l’objet visible dans la boîte de démonstration et la vue de détail.\",\"Note de contrôle\":\"L’objet contient des changements d’attributs lisibles et des identifiants d’événements liés.\",\"Événements liés\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "département",
-          "value": "centre financier partagé"
-        },
-        "external_ids": {
-          "projection d’objet": "OBJ-THING_FINANCE_AP_QUEUE"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "383c1e5f-8e29-5d90-979f-ec6c4a2df7ee",
-      "message_id": "msg_thing_home_valve_kitchen_summary",
-      "title": "Vanne d’arrêt d’eau de la cuisine · Projection de synthèse actualisée",
-      "body": "# Mise à jour de l’objet Vanne d’arrêt d’eau de la cuisine\n> La projection de l’objet a été rafraîchie après l’arrivée de nouveaux signaux depuis plusieurs canaux.\n\n## Instantané\n- État actuel : fermée après protection contre la fuite\n- Événements liés : evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Canal de surveillance : Automatisation domestique\n\n## Changements d’attributs\n- l’humidité du capteur de sol est passée de 72% à 38%\n- le mode de commande de la vanne est passé d’automatique à supervisé\n\n## Prochaine étape\n- Garder l’objet visible dans les données de capture, car il relie opérations, finance, domicile et agent dans une chronologie réaliste.\n",
-      "channel_id": "home-automation",
-      "is_read": false,
-      "received_at": "2026-05-08T04:40:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_home_valve_kitchen",
-        "thing_id": "thing_home_valve_kitchen",
-        "projection_destination": "thing_head",
-        "title": "Vanne d’arrêt d’eau de la cuisine · Projection de synthèse actualisée",
-        "description": "Vanne d’arrêt d’eau de la cuisine。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "fermée après protection contre la fuite",
-        "message": "Projection de synthèse actualisée: l’humidité du capteur de sol est passée de 72% à 38%; le mode de commande de la vanne est passé d’automatique à supervisé",
-        "severity": "medium",
-        "tags": [
-          "capteur d’eau",
-          "cuisine",
-          "vanne"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Instantané": "fermée après protection contre la fuite",
-          "Changements d’attributs": [
-            "l’humidité du capteur de sol est passée de 72% à 38%",
-            "le mode de commande de la vanne est passé d’automatique à supervisé"
-          ],
-          "Événements liés": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "Source": "Automatisation domestique"
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Garder l’objet visible dans la boîte de démonstration et la vue de détail.\",\"Note de contrôle\":\"L’objet contient des changements d’attributs lisibles et des identifiants d’événements liés.\",\"Événements liés\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "pièce",
-          "value": "meuble sous évier de la cuisine"
-        },
-        "external_ids": {
-          "projection d’objet": "OBJ-THING_HOME_VALVE_KITCHEN"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "d73b703c-5bf9-5046-bb73-69ce7a69b4d1",
-      "message_id": "msg_agent_ticket_resolved",
-      "title": "Revue qualité du transfert par agent IA · Résolu",
-      "body": "# Revue qualité du transfert par agent IA · Résolu\n> l’agent support a marqué un ticket de facturation comme résolu alors que le sentiment client restait négatif\n\n## Ce qui a changé\n- La revue humaine a confirmé la réponse et la nouvelle règle a réduit les clôtures risquées dans l’échantillon.\n- La confiance de résolution était de 0,86, tandis que le sentiment restait sous le seuil d’escalade.\n- Le client a reçu une réponse de suivi avec la bonne référence de facture.\n\n## Traitement\n1. Envoyer le ticket en revue manuelle et joindre la trace du modèle.\n2. Ajouter une règle de garde pour les réponses de facturation lorsque le sentiment reste négatif.\n3. Échantillonner les 50 prochains tickets de facturation avant retour à l’automatisation complète.\n\n## Prochaine étape\n- Responsable: Responsable automatisation support\n- Heure prévue: prochaine fenêtre d’échantillon stable\n",
-      "channel_id": "ai-agent-feedback",
-      "is_read": true,
-      "received_at": "2026-05-08T04:32:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_agent_ticket_001",
-        "event_id": "evt_agent_ticket_001",
-        "thing_id": "thing_agent_support_triage",
-        "projection_destination": "event_head",
-        "title": "Revue qualité du transfert par agent IA · Résolu",
-        "description": "Revue qualité du transfert par agent IA。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "Résolu",
-        "message": "Mise à jour d’état: La revue humaine a confirmé la réponse et la nouvelle règle a réduit les clôtures risquées dans l’échantillon.",
-        "severity": "medium",
-        "tags": [
-          "agent IA",
-          "ticket",
-          "transfert"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Ce qui a changé": [
-            "La revue humaine a confirmé la réponse et la nouvelle règle a réduit les clôtures risquées dans l’échantillon.",
-            "La confiance de résolution était de 0,86, tandis que le sentiment restait sous le seuil d’escalade."
-          ],
-          "Responsable": "Responsable automatisation support",
-          "Heure prévue": "prochaine fenêtre d’échantillon stable",
-          "Événements liés": [
-            "evt_agent_ticket_001",
-            "thing_agent_support_triage"
-          ]
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Continuer le suivi jusqu’à ce que l’objet responsable affiche deux échantillons stables.\",\"Note de contrôle\":\"Les heures sont ordonnées et adaptées aux tests de captures iOS.\",\"Événements liés\":[\"evt_agent_ticket_001\",\"thing_agent_support_triage\"]}",
-        "location": {
-          "type": "file",
-          "value": "file de support entreprise"
-        },
-        "external_ids": {
-          "ticket d’incident": "INC-2026-0508-005"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "9d0e3d7f-9aa8-527b-a213-4f246286814c",
-      "message_id": "msg_agent_ticket_investigating",
-      "title": "Revue qualité du transfert par agent IA · En analyse",
-      "body": "# Revue qualité du transfert par agent IA · En analyse\n> l’agent support a marqué un ticket de facturation comme résolu alors que le sentiment client restait négatif\n\n## Ce qui a changé\n- Un client entreprise a attendu 14 minutes de plus pour une confirmation humaine.\n- La confiance de résolution était de 0,86, tandis que le sentiment restait sous le seuil d’escalade.\n- Le client a reçu une réponse de suivi avec la bonne référence de facture.\n\n## Traitement\n1. Envoyer le ticket en revue manuelle et joindre la trace du modèle.\n2. Ajouter une règle de garde pour les réponses de facturation lorsque le sentiment reste négatif.\n3. Échantillonner les 50 prochains tickets de facturation avant retour à l’automatisation complète.\n\n## Prochaine étape\n- Responsable: Responsable automatisation support\n- Heure prévue: prochaine fenêtre d’échantillon stable\n",
-      "channel_id": "ai-agent-feedback",
-      "is_read": false,
-      "received_at": "2026-05-08T04:06:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_agent_ticket_001",
-        "event_id": "evt_agent_ticket_001",
-        "thing_id": "thing_agent_support_triage",
-        "projection_destination": "event_head",
-        "title": "Revue qualité du transfert par agent IA · En analyse",
-        "description": "Revue qualité du transfert par agent IA。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "En analyse",
-        "message": "Mise à jour d’état: Un client entreprise a attendu 14 minutes de plus pour une confirmation humaine.",
-        "severity": "medium",
-        "tags": [
-          "agent IA",
-          "ticket",
-          "transfert"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Ce qui a changé": [
-            "Un client entreprise a attendu 14 minutes de plus pour une confirmation humaine.",
-            "La confiance de résolution était de 0,86, tandis que le sentiment restait sous le seuil d’escalade."
-          ],
-          "Responsable": "Responsable automatisation support",
-          "Heure prévue": "prochaine fenêtre d’échantillon stable",
-          "Événements liés": [
-            "evt_agent_ticket_001",
-            "thing_agent_support_triage"
-          ]
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Continuer le suivi jusqu’à ce que l’objet responsable affiche deux échantillons stables.\",\"Note de contrôle\":\"Les heures sont ordonnées et adaptées aux tests de captures iOS.\",\"Événements liés\":[\"evt_agent_ticket_001\",\"thing_agent_support_triage\"]}",
-        "location": {
-          "type": "file",
-          "value": "file de support entreprise"
-        },
-        "external_ids": {
-          "ticket d’incident": "INC-2026-0508-005"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "a6539e96-a035-5672-91f4-a90f14aa826c",
-      "message_id": "msg_monitoring_login_resolved",
-      "title": "Schéma inhabituel de nouvelles tentatives de connexion · Résolu",
-      "body": "# Schéma inhabituel de nouvelles tentatives de connexion · Résolu\n> les tentatives de connexion client se sont concentrées sur trois plages réseau\n\n## Ce qui a changé\n- Le taux de nouvelles tentatives est revenu à la base et aucune session à haut risque n’est apparue pendant 30 minutes.\n- Le taux d’échecs de connexion est monté à 11,8% puis s’est normalisé après activation des défis adaptatifs.\n- Aucun signal de prise de contrôle réussie de compte n’a été trouvé dans l’échantillon.\n\n## Traitement\n1. Activer des défis de risque plus stricts pour les plages concernées.\n2. Partager la chronologie avec l’équipe confiance client pour des notes proactives.\n3. Vérifier si le schéma correspond à une liste connue de bourrage d’identifiants.\n\n## Prochaine étape\n- Responsable: Opérations confiance\n- Heure prévue: prochaine fenêtre d’échantillon stable\n",
+      "id": "b9d1e5e4-bb49-5da9-a16c-d57fdd5ae22e",
+      "message_id": "msg_fr_0002",
+      "title": "Capteur de fuite déclenché dans la cuisine",
+      "body": "### Alerte fuite d’eau cuisine\n\nLe capteur sous l’évier a détecté de l’eau.\n\n> État : **Wet**  \n> Batterie : `84%`  \n> Dernier heartbeat : `il y a 18 s`\n\nVérifie l’évier, le filtre à eau et l’arrivée du lave-vaisselle.",
       "channel_id": "event-monitoring",
-      "is_read": true,
-      "received_at": "2026-05-08T03:56:00.000Z",
+      "is_read": false,
+      "received_at": "2026-05-07T04:19:58.555000Z",
       "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_monitoring_login_001",
-        "event_id": "evt_monitoring_login_001",
-        "thing_id": "thing_event_auth_gateway",
-        "projection_destination": "event_head",
-        "title": "Schéma inhabituel de nouvelles tentatives de connexion · Résolu",
-        "description": "Schéma inhabituel de nouvelles tentatives de connexion。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "Résolu",
-        "message": "Mise à jour d’état: Le taux de nouvelles tentatives est revenu à la base et aucune session à haut risque n’est apparue pendant 30 minutes.",
+        "entity_type": "message",
+        "entity_id": "message_2",
         "severity": "critical",
-        "tags": [
-          "connexion",
-          "contrôle du risque",
-          "confiance client"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Ce qui a changé": [
-            "Le taux de nouvelles tentatives est revenu à la base et aucune session à haut risque n’est apparue pendant 30 minutes.",
-            "Le taux d’échecs de connexion est monté à 11,8% puis s’est normalisé après activation des défis adaptatifs."
-          ],
-          "Responsable": "Opérations confiance",
-          "Heure prévue": "prochaine fenêtre d’échantillon stable",
-          "Événements liés": [
-            "evt_monitoring_login_001",
-            "thing_event_auth_gateway"
-          ]
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Continuer le suivi jusqu’à ce que l’objet responsable affiche deux échantillons stables.\",\"Note de contrôle\":\"Les heures sont ordonnées et adaptées aux tests de captures iOS.\",\"Événements liés\":[\"evt_monitoring_login_001\",\"thing_event_auth_gateway\"]}",
-        "location": {
-          "type": "service",
-          "value": "centre de comptes client"
-        },
-        "external_ids": {
-          "ticket d’incident": "INC-2026-0508-004"
-        }
+        "tags": "[\"home\", \"sensor\", \"water-leak\"]",
+        "metadata": "{\"source\": \"fixture-generator\", \"scenario\": \"fr-FR_message_2\", \"is_test\": true}"
       },
       "status": "normal"
     },
     {
-      "id": "1d208f85-366c-5283-91e6-16552df9e538",
-      "message_id": "msg_thing_agent_support_triage_policy",
-      "title": "Agent IA de triage support · Règle de revue actualisée",
-      "body": "# Mise à jour de l’objet Agent IA de triage support\n> La projection de l’objet a été rafraîchie après l’arrivée de nouveaux signaux depuis plusieurs canaux.\n\n## Instantané\n- État actuel : stable avec revue humaine activée\n- Événements liés : evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Canal de surveillance : Retours de l’agent IA\n\n## Changements d’attributs\n- la confiance de résolution automatique est passée de 0,78 à 0,86\n- la règle de repli est passée du transfert immédiat à la revue par échantillon\n\n## Prochaine étape\n- Garder l’objet visible dans les données de capture, car il relie opérations, finance, domicile et agent dans une chronologie réaliste.\n",
+      "id": "4b06c581-756f-5a41-9c9d-36494e8f9487",
+      "message_id": "msg_fr_0003",
+      "title": "GitHub Actions build failed",
+      "body": "### PushGo Android build failed\n\nRepository: `pushgo/mobile`  \nBranch: `release/1.4.0`  \nJob: `android-release-build`\n\nFailed step:\n\n```text\n:app:minifyReleaseWithR8 FAILED\nMissing class com.google.firebase.messaging.RemoteMessage\n```\n\nCheck `proguard-rules.pro` and the FCM dependency version.",
+      "channel_id": "thing-hub",
+      "is_read": true,
+      "received_at": "2026-05-07T04:20:58.555000Z",
+      "raw_payload": {
+        "entity_type": "message",
+        "entity_id": "message_3",
+        "severity": "normal",
+        "tags": "[\"github\", \"ci\", \"android\"]",
+        "metadata": "{\"source\": \"fixture-generator\", \"scenario\": \"fr-FR_message_3\", \"is_test\": true}"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "009decee-de65-539d-bf3a-ba5421e01c86",
+      "message_id": "msg_fr_0004",
+      "title": "NAS backup completed",
+      "body": "### Nightly backup completed\n\n`Home NAS` finished the incremental offsite backup.\n\n| Item | Result |\n|---|---:|\n| New files | 428 |\n| Changed files | 76 |\n| Uploaded | 18.4 GB |\n| Duration | 43 min |\n\nBackup set: `photos-2025-week45`",
       "channel_id": "ai-agent-feedback",
       "is_read": false,
-      "received_at": "2026-05-08T03:50:00.000Z",
+      "received_at": "2026-05-07T04:21:58.555000Z",
       "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_agent_support_triage",
-        "thing_id": "thing_agent_support_triage",
-        "projection_destination": "thing_head",
-        "title": "Agent IA de triage support · Règle de revue actualisée",
-        "description": "Agent IA de triage support。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "stable avec revue humaine activée",
-        "message": "Règle de revue actualisée: la confiance de résolution automatique est passée de 0,78 à 0,86; la règle de repli est passée du transfert immédiat à la revue par échantillon",
-        "severity": "medium",
-        "tags": [
-          "agent IA",
-          "ticket",
-          "transfert"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Instantané": "stable avec revue humaine activée",
-          "Changements d’attributs": [
-            "la confiance de résolution automatique est passée de 0,78 à 0,86",
-            "la règle de repli est passée du transfert immédiat à la revue par échantillon"
-          ],
-          "Événements liés": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "Source": "Retours de l’agent IA"
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Garder l’objet visible dans la boîte de démonstration et la vue de détail.\",\"Note de contrôle\":\"L’objet contient des changements d’attributs lisibles et des identifiants d’événements liés.\",\"Événements liés\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "file",
-          "value": "file de support entreprise"
-        },
-        "external_ids": {
-          "projection d’objet": "OBJ-THING_AGENT_SUPPORT_TRIAGE"
-        }
+        "entity_type": "message",
+        "entity_id": "message_4",
+        "severity": "low",
+        "tags": "[\"nas\", \"backup\", \"home\"]",
+        "metadata": "{\"source\": \"fixture-generator\", \"scenario\": \"fr-FR_message_4\", \"is_test\": true}"
       },
       "status": "normal"
     },
     {
-      "id": "fe108de8-ce92-5fe8-bdbd-765ee790c42a",
-      "message_id": "msg_agent_ticket_detected",
-      "title": "Revue qualité du transfert par agent IA · Détecté",
-      "body": "# Revue qualité du transfert par agent IA · Détecté\n> l’agent support a marqué un ticket de facturation comme résolu alors que le sentiment client restait négatif\n\n## Ce qui a changé\n- Un client entreprise a attendu 14 minutes de plus pour une confirmation humaine.\n- La confiance de résolution était de 0,86, tandis que le sentiment restait sous le seuil d’escalade.\n- Le client a reçu une réponse de suivi avec la bonne référence de facture.\n\n## Traitement\n1. Envoyer le ticket en revue manuelle et joindre la trace du modèle.\n2. Ajouter une règle de garde pour les réponses de facturation lorsque le sentiment reste négatif.\n3. Échantillonner les 50 prochains tickets de facturation avant retour à l’automatisation complète.\n\n## Prochaine étape\n- Responsable: Responsable automatisation support\n- Heure prévue: prochaine fenêtre d’échantillon stable\n",
-      "channel_id": "ai-agent-feedback",
+      "id": "864b3ff5-d228-5e2e-a3a9-3579b3531d00",
+      "message_id": "msg_fr_0005",
+      "title": "SKU inventory below safety level",
+      "body": "### Fast-moving SKU inventory alert\n\nSKU: `PG-TEE-2025-BLK-M`  \nAvailable: **37**  \nSafety stock: `120`\n\nRecommended actions:\n\n1. Check sales trend for the last 3 days\n2. Confirm supplier ETA\n3. Pause some ads to avoid overselling",
+      "channel_id": "finance-ledger",
       "is_read": false,
-      "received_at": "2026-05-08T03:44:00.000Z",
+      "received_at": "2026-05-07T04:22:58.555000Z",
+      "raw_payload": {
+        "entity_type": "message",
+        "entity_id": "message_5",
+        "severity": "normal",
+        "tags": "[\"business\", \"inventory\", \"sku\"]",
+        "metadata": "{\"source\": \"fixture-generator\", \"scenario\": \"fr-FR_message_5\", \"is_test\": true}"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "510f49af-02dd-5527-ad72-6c2fa2d7a4da",
+      "message_id": "msg_fr_0006",
+      "title": "Primary database write latency increased",
+      "body": "### P1 database incident\n\n`order-db-primary` write P95 reached **1.9s**, above the `800ms` threshold.\n\nImpact:\n\n- Delayed order status refresh\n- Payment callbacks queued\n- Admin order list occasionally slow\n\nDBA and backend owner have been notified.",
+      "channel_id": "thing-hub",
+      "is_read": false,
+      "received_at": "2026-05-07T04:23:58.555000Z",
       "raw_payload": {
         "entity_type": "event",
-        "entity_id": "evt_agent_ticket_001",
-        "event_id": "evt_agent_ticket_001",
-        "thing_id": "thing_agent_support_triage",
-        "projection_destination": "event_head",
-        "title": "Revue qualité du transfert par agent IA · Détecté",
-        "description": "Revue qualité du transfert par agent IA。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "Détecté",
-        "message": "Mise à jour d’état: Un client entreprise a attendu 14 minutes de plus pour une confirmation humaine.",
-        "severity": "medium",
-        "tags": [
-          "agent IA",
-          "ticket",
-          "transfert"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Ce qui a changé": [
-            "Un client entreprise a attendu 14 minutes de plus pour une confirmation humaine.",
-            "La confiance de résolution était de 0,86, tandis que le sentiment restait sous le seuil d’escalade."
-          ],
-          "Responsable": "Responsable automatisation support",
-          "Heure prévue": "prochaine fenêtre d’échantillon stable",
-          "Événements liés": [
-            "evt_agent_ticket_001",
-            "thing_agent_support_triage"
-          ]
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Continuer le suivi jusqu’à ce que l’objet responsable affiche deux échantillons stables.\",\"Note de contrôle\":\"Les heures sont ordonnées et adaptées aux tests de captures iOS.\",\"Événements liés\":[\"evt_agent_ticket_001\",\"thing_agent_support_triage\"]}",
-        "location": {
-          "type": "file",
-          "value": "file de support entreprise"
-        },
-        "external_ids": {
-          "ticket d’incident": "INC-2026-0508-005"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "fbe77dc6-0ade-5b16-87cc-20b13075b1fa",
-      "message_id": "msg_thing_event_auth_gateway_risk",
-      "title": "Passerelle de risque de connexion client · Seuil de risque actualisé",
-      "body": "# Mise à jour de l’objet Passerelle de risque de connexion client\n> La projection de l’objet a été rafraîchie après l’arrivée de nouveaux signaux depuis plusieurs canaux.\n\n## Instantané\n- État actuel : limitée avec tendance de trafic propre\n- Événements liés : evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Canal de surveillance : Surveillance des événements\n\n## Changements d’attributs\n- le taux d’échecs de connexion est passé de 11,8% à 2,4%\n- le seuil temporaire de défi est passé de moyen à strict\n\n## Prochaine étape\n- Garder l’objet visible dans les données de capture, car il relie opérations, finance, domicile et agent dans une chronologie réaliste.\n",
-      "channel_id": "event-monitoring",
-      "is_read": false,
-      "received_at": "2026-05-08T03:33:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_event_auth_gateway",
-        "thing_id": "thing_event_auth_gateway",
-        "projection_destination": "thing_head",
-        "title": "Passerelle de risque de connexion client · Seuil de risque actualisé",
-        "description": "Passerelle de risque de connexion client。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "limitée avec tendance de trafic propre",
-        "message": "Seuil de risque actualisé: le taux d’échecs de connexion est passé de 11,8% à 2,4%; le seuil temporaire de défi est passé de moyen à strict",
-        "severity": "medium",
-        "tags": [
-          "connexion",
-          "contrôle du risque",
-          "confiance client"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Instantané": "limitée avec tendance de trafic propre",
-          "Changements d’attributs": [
-            "le taux d’échecs de connexion est passé de 11,8% à 2,4%",
-            "le seuil temporaire de défi est passé de moyen à strict"
-          ],
-          "Événements liés": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "Source": "Surveillance des événements"
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Garder l’objet visible dans la boîte de démonstration et la vue de détail.\",\"Note de contrôle\":\"L’objet contient des changements d’attributs lisibles et des identifiants d’événements liés.\",\"Événements liés\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "service",
-          "value": "centre de comptes client"
-        },
-        "external_ids": {
-          "projection d’objet": "OBJ-THING_EVENT_AUTH_GATEWAY"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "ab091512-c3a1-54a0-8bf0-61ca1f0acac4",
-      "message_id": "msg_monitoring_login_investigating",
-      "title": "Schéma inhabituel de nouvelles tentatives de connexion · En analyse",
-      "body": "# Schéma inhabituel de nouvelles tentatives de connexion · En analyse\n> les tentatives de connexion client se sont concentrées sur trois plages réseau\n\n## Ce qui a changé\n- Les pages de réinitialisation du mot de passe et du centre de compte ont connu une friction brève.\n- Le taux d’échecs de connexion est monté à 11,8% puis s’est normalisé après activation des défis adaptatifs.\n- Aucun signal de prise de contrôle réussie de compte n’a été trouvé dans l’échantillon.\n\n## Traitement\n1. Activer des défis de risque plus stricts pour les plages concernées.\n2. Partager la chronologie avec l’équipe confiance client pour des notes proactives.\n3. Vérifier si le schéma correspond à une liste connue de bourrage d’identifiants.\n\n## Prochaine étape\n- Responsable: Opérations confiance\n- Heure prévue: prochaine fenêtre d’échantillon stable\n",
-      "channel_id": "event-monitoring",
-      "is_read": false,
-      "received_at": "2026-05-08T03:28:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_monitoring_login_001",
-        "event_id": "evt_monitoring_login_001",
-        "thing_id": "thing_event_auth_gateway",
-        "projection_destination": "event_head",
-        "title": "Schéma inhabituel de nouvelles tentatives de connexion · En analyse",
-        "description": "Schéma inhabituel de nouvelles tentatives de connexion。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "En analyse",
-        "message": "Mise à jour d’état: Les pages de réinitialisation du mot de passe et du centre de compte ont connu une friction brève.",
+        "entity_id": "prod_order_db_latency_p1",
+        "event_id": "prod_order_db_latency_p1",
+        "status": "ongoing",
+        "message": "### P1 database incident\n\n`order-db-primary` write P95 reached **1.9s**, above the `800ms` threshold.\n\nImpact:\n\n- Delayed order status refresh\n- Payment callbacks queued\n- Admin order list occasionally slow\n\nDBA and backend owner have been notified.",
         "severity": "critical",
-        "tags": [
-          "connexion",
-          "contrôle du risque",
-          "confiance client"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Ce qui a changé": [
-            "Les pages de réinitialisation du mot de passe et du centre de compte ont connu une friction brève.",
-            "Le taux d’échecs de connexion est monté à 11,8% puis s’est normalisé après activation des défis adaptatifs."
-          ],
-          "Responsable": "Opérations confiance",
-          "Heure prévue": "prochaine fenêtre d’échantillon stable",
-          "Événements liés": [
-            "evt_monitoring_login_001",
-            "thing_event_auth_gateway"
-          ]
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Continuer le suivi jusqu’à ce que l’objet responsable affiche deux échantillons stables.\",\"Note de contrôle\":\"Les heures sont ordonnées et adaptées aux tests de captures iOS.\",\"Événements liés\":[\"evt_monitoring_login_001\",\"thing_event_auth_gateway\"]}",
-        "location": {
-          "type": "service",
-          "value": "centre de comptes client"
-        },
-        "external_ids": {
-          "ticket d’incident": "INC-2026-0508-004"
-        }
+        "event_time": "1762864800000"
       },
       "status": "normal"
     },
     {
-      "id": "027dbe44-eb2d-55a9-96db-3537c0ad0db2",
-      "message_id": "msg_monitoring_login_detected",
-      "title": "Schéma inhabituel de nouvelles tentatives de connexion · Détecté",
-      "body": "# Schéma inhabituel de nouvelles tentatives de connexion · Détecté\n> les tentatives de connexion client se sont concentrées sur trois plages réseau\n\n## Ce qui a changé\n- Les pages de réinitialisation du mot de passe et du centre de compte ont connu une friction brève.\n- Le taux d’échecs de connexion est monté à 11,8% puis s’est normalisé après activation des défis adaptatifs.\n- Aucun signal de prise de contrôle réussie de compte n’a été trouvé dans l’échantillon.\n\n## Traitement\n1. Activer des défis de risque plus stricts pour les plages concernées.\n2. Partager la chronologie avec l’équipe confiance client pour des notes proactives.\n3. Vérifier si le schéma correspond à une liste connue de bourrage d’identifiants.\n\n## Prochaine étape\n- Responsable: Opérations confiance\n- Heure prévue: prochaine fenêtre d’échantillon stable\n",
-      "channel_id": "event-monitoring",
+      "id": "4a0c7c3e-a73a-5611-8e57-050b14aeabdc",
+      "message_id": "msg_fr_0007",
+      "title": "Primary database latency — investigating",
+      "body": "### Initial finding\n\nSlow query sample:\n\n```sql\nSELECT * FROM order_extra WHERE order_id = ? AND type = ?\n```\n\nActions taken:\n\n1. Paused `order-export-worker`\n2. Reduced payment callback consumers from `32` to `16`\n3. Ran `EXPLAIN ANALYZE`\n\nCurrent write P95: **1.25s**.",
+      "channel_id": "thing-hub",
       "is_read": false,
-      "received_at": "2026-05-08T03:18:00.000Z",
+      "received_at": "2026-05-07T04:24:58.555000Z",
       "raw_payload": {
         "entity_type": "event",
-        "entity_id": "evt_monitoring_login_001",
-        "event_id": "evt_monitoring_login_001",
-        "thing_id": "thing_event_auth_gateway",
-        "projection_destination": "event_head",
-        "title": "Schéma inhabituel de nouvelles tentatives de connexion · Détecté",
-        "description": "Schéma inhabituel de nouvelles tentatives de connexion。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "Détecté",
-        "message": "Mise à jour d’état: Les pages de réinitialisation du mot de passe et du centre de compte ont connu une friction brève.",
+        "entity_id": "prod_order_db_latency_p1",
+        "event_id": "prod_order_db_latency_p1",
+        "status": "ongoing",
+        "message": "### Initial finding\n\nSlow query sample:\n\n```sql\nSELECT * FROM order_extra WHERE order_id = ? AND type = ?\n```\n\nActions taken:\n\n1. Paused `order-export-worker`\n2. Reduced payment callback consumers from `32` to `16`\n3. Ran `EXPLAIN ANALYZE`\n\nCurrent write P95: **1.25s**.",
+        "severity": "high",
+        "event_time": "1762865880000"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "21d1f381-f93e-5d17-aba1-a0aeec1c895b",
+      "message_id": "msg_fr_0008",
+      "title": "Primary database latency — mitigated",
+      "body": "### Mitigation effective\n\nTemporary index created:\n\n```sql\nCREATE INDEX CONCURRENTLY idx_order_extra_order_type\nON order_extra(order_id, type);\n```\n\n| Metric | Current |\n|---|---:|\n| Write P95 | 620ms |\n| Active connections | 286 |\n| Slow queries / 5min | 21 |",
+      "channel_id": "thing-hub",
+      "is_read": false,
+      "received_at": "2026-05-07T04:25:58.555000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "prod_order_db_latency_p1",
+        "event_id": "prod_order_db_latency_p1",
+        "status": "ongoing",
+        "message": "### Mitigation effective\n\nTemporary index created:\n\n```sql\nCREATE INDEX CONCURRENTLY idx_order_extra_order_type\nON order_extra(order_id, type);\n```\n\n| Metric | Current |\n|---|---:|\n| Write P95 | 620ms |\n| Active connections | 286 |\n| Slow queries / 5min | 21 |",
+        "severity": "normal",
+        "event_time": "1762867320000"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "229f7bd6-39d8-5a1a-b127-5e68a39e3827",
+      "message_id": "msg_fr_0009",
+      "title": "Primary database latency — resolved",
+      "body": "### Incident closed\n\nDatabase write latency is back to normal.\n\nFollow-up:\n\n- Add permanent index migration in `v1.4.2`\n- Add slow-query regression check\n- Add capacity alert for `order_extra`\n\nStatus: **Resolved**",
+      "channel_id": "thing-hub",
+      "is_read": true,
+      "received_at": "2026-05-07T04:26:58.555000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "prod_order_db_latency_p1",
+        "event_id": "prod_order_db_latency_p1",
+        "status": "resolved",
+        "message": "### Incident closed\n\nDatabase write latency is back to normal.\n\nFollow-up:\n\n- Add permanent index migration in `v1.4.2`\n- Add slow-query regression check\n- Add capacity alert for `order_extra`\n\nStatus: **Resolved**",
+        "severity": "low",
+        "event_time": "1762869600000"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "f1b16657-c6d3-5e9f-b766-3a0b7ebd9885",
+      "message_id": "msg_fr_0010",
+      "title": "Kitchen leak sensor triggered",
+      "body": "### Home emergency\n\nLocation: `Kitchen / under sink`  \nSensor: `kitchen-leak-01`  \nState: **Wet**\n\nPriority actions:\n\n- Close the water filter inlet valve\n- Check the dishwasher inlet hose\n- Check the cabinet floor",
+      "channel_id": "ai-agent-feedback",
+      "is_read": false,
+      "received_at": "2026-05-07T04:27:58.555000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "home_kitchen_water_leak",
+        "event_id": "home_kitchen_water_leak",
+        "status": "ongoing",
+        "message": "### Home emergency\n\nLocation: `Kitchen / under sink`  \nSensor: `kitchen-leak-01`  \nState: **Wet**\n\nPriority actions:\n\n- Close the water filter inlet valve\n- Check the dishwasher inlet hose\n- Check the cabinet floor",
         "severity": "critical",
-        "tags": [
-          "connexion",
-          "contrôle du risque",
-          "confiance client"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Ce qui a changé": [
-            "Les pages de réinitialisation du mot de passe et du centre de compte ont connu une friction brève.",
-            "Le taux d’échecs de connexion est monté à 11,8% puis s’est normalisé après activation des défis adaptatifs."
-          ],
-          "Responsable": "Opérations confiance",
-          "Heure prévue": "prochaine fenêtre d’échantillon stable",
-          "Événements liés": [
-            "evt_monitoring_login_001",
-            "thing_event_auth_gateway"
-          ]
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Continuer le suivi jusqu’à ce que l’objet responsable affiche deux échantillons stables.\",\"Note de contrôle\":\"Les heures sont ordonnées et adaptées aux tests de captures iOS.\",\"Événements liés\":[\"evt_monitoring_login_001\",\"thing_event_auth_gateway\"]}",
-        "location": {
-          "type": "service",
-          "value": "centre de comptes client"
-        },
-        "external_ids": {
-          "ticket d’incident": "INC-2026-0508-004"
-        }
+        "event_time": "1762864800000"
       },
       "status": "normal"
     },
     {
-      "id": "65de0c98-f04e-52f2-8feb-93b3f4defaab",
-      "message_id": "msg_ops_latency_resolved_003",
-      "title": "Pic de latence de l’API de paiement · Résolu",
-      "body": "# Pic de latence de l’API de paiement · Résolu\n> les demandes de paiement en Chine de l’Est ont ralenti pour les utilisateurs professionnels\n\n## Ce qui a changé\n- La latence est repassée sous l’objectif de 300 ms et le retard de réplique est resté sous 5 s pendant 20 minutes.\n- La latence P95 a culminé à 1,9 s puis a baissé après réduction du trafic vers la réplique.\n- Aucune perte de données détectée ; trois nouvelles tentatives ont été récupérées automatiquement.\n\n## Traitement\n1. Empreinte de la requête lente épinglée et réplique de lecture récente retirée de la rotation.\n2. Télémétrie du pool de connexions base de données portée à une granularité d’une minute.\n3. Garder l’incident ouvert jusqu’à la fin du prochain lot de facturation sans hausse des nouvelles tentatives.\n\n## Prochaine étape\n- Responsable: SRE d’astreinte\n- Heure prévue: prochaine fenêtre d’échantillon stable\n",
-      "channel_id": "ops-core",
-      "is_read": true,
-      "received_at": "2026-05-08T03:05:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_ops_latency_001",
-        "event_id": "evt_ops_latency_001",
-        "thing_id": "thing_ops_cluster_sh1",
-        "projection_destination": "event_head",
-        "title": "Pic de latence de l’API de paiement · Résolu",
-        "description": "Pic de latence de l’API de paiement。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "Résolu",
-        "message": "Mise à jour d’état: La latence est repassée sous l’objectif de 300 ms et le retard de réplique est resté sous 5 s pendant 20 minutes.",
-        "severity": "high",
-        "tags": [
-          "base de données",
-          "latence",
-          "réplique de lecture"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Ce qui a changé": [
-            "La latence est repassée sous l’objectif de 300 ms et le retard de réplique est resté sous 5 s pendant 20 minutes.",
-            "La latence P95 a culminé à 1,9 s puis a baissé après réduction du trafic vers la réplique."
-          ],
-          "Responsable": "SRE d’astreinte",
-          "Heure prévue": "prochaine fenêtre d’échantillon stable",
-          "Événements liés": [
-            "evt_ops_latency_001",
-            "thing_ops_cluster_sh1"
-          ]
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Continuer le suivi jusqu’à ce que l’objet responsable affiche deux échantillons stables.\",\"Note de contrôle\":\"Les heures sont ordonnées et adaptées aux tests de captures iOS.\",\"Événements liés\":[\"evt_ops_latency_001\",\"thing_ops_cluster_sh1\"]}",
-        "location": {
-          "type": "région",
-          "value": "région de Shanghai"
-        },
-        "external_ids": {
-          "ticket d’incident": "INC-2026-0508-001"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "a1350c29-2217-5217-8f1b-bcc58a317814",
-      "message_id": "msg_thing_ops_cluster_sh1_capacity",
-      "title": "Grappe de paiement de Shanghai · Signal de capacité actualisé",
-      "body": "# Mise à jour de l’objet Grappe de paiement de Shanghai\n> La projection de l’objet a été rafraîchie après l’arrivée de nouveaux signaux depuis plusieurs canaux.\n\n## Instantané\n- État actuel : saine avec surveillance renforcée\n- Événements liés : evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Canal de surveillance : Cœur des opérations\n\n## Changements d’attributs\n- la latence P95 de l’API est passée de 420 ms à 238 ms\n- le retard de la réplique de lecture est passé de 18 s à 3 s\n\n## Prochaine étape\n- Garder l’objet visible dans les données de capture, car il relie opérations, finance, domicile et agent dans une chronologie réaliste.\n",
-      "channel_id": "ops-core",
-      "is_read": true,
-      "received_at": "2026-05-08T02:40:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_ops_cluster_sh1",
-        "thing_id": "thing_ops_cluster_sh1",
-        "projection_destination": "thing_head",
-        "title": "Grappe de paiement de Shanghai · Signal de capacité actualisé",
-        "description": "Grappe de paiement de Shanghai。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "saine avec surveillance renforcée",
-        "message": "Signal de capacité actualisé: la latence P95 de l’API est passée de 420 ms à 238 ms; le retard de la réplique de lecture est passé de 18 s à 3 s",
-        "severity": "low",
-        "tags": [
-          "base de données",
-          "latence",
-          "réplique de lecture"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Instantané": "saine avec surveillance renforcée",
-          "Changements d’attributs": [
-            "la latence P95 de l’API est passée de 420 ms à 238 ms",
-            "le retard de la réplique de lecture est passé de 18 s à 3 s"
-          ],
-          "Événements liés": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "Source": "Cœur des opérations"
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Garder l’objet visible dans la boîte de démonstration et la vue de détail.\",\"Note de contrôle\":\"L’objet contient des changements d’attributs lisibles et des identifiants d’événements liés.\",\"Événements liés\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "région",
-          "value": "région de Shanghai"
-        },
-        "external_ids": {
-          "projection d’objet": "OBJ-THING_OPS_CLUSTER_SH1"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "9be502bd-0e63-54c0-9ba4-f7d9c5e2548f",
-      "message_id": "msg_ops_latency_investigating_002",
-      "title": "Pic de latence de l’API de paiement · En analyse",
-      "body": "# Pic de latence de l’API de paiement · En analyse\n> les demandes de paiement en Chine de l’Est ont ralenti pour les utilisateurs professionnels\n\n## Ce qui a changé\n- La confirmation de paiement a été retardée pour 3,8% des demandes dans la région de Shanghai.\n- La latence P95 a culminé à 1,9 s puis a baissé après réduction du trafic vers la réplique.\n- Aucune perte de données détectée ; trois nouvelles tentatives ont été récupérées automatiquement.\n\n## Traitement\n1. Empreinte de la requête lente épinglée et réplique de lecture récente retirée de la rotation.\n2. Télémétrie du pool de connexions base de données portée à une granularité d’une minute.\n3. Garder l’incident ouvert jusqu’à la fin du prochain lot de facturation sans hausse des nouvelles tentatives.\n\n## Prochaine étape\n- Responsable: SRE d’astreinte\n- Heure prévue: prochaine fenêtre d’échantillon stable\n",
-      "channel_id": "ops-core",
+      "id": "fd9d6faa-7a61-5fd3-866b-7c62badae18d",
+      "message_id": "msg_fr_0011",
+      "title": "Kitchen leak — valve closed",
+      "body": "### Automation executed\n\n```yaml\naction: valve.close\ntarget: valve.kitchen_filter_inlet\n```\n\n| Item | State |\n|---|---|\n| Inlet valve | Closed |\n| Leak sensor | Wet |\n| Cabinet light | On |",
+      "channel_id": "ai-agent-feedback",
       "is_read": false,
-      "received_at": "2026-05-08T02:24:00.000Z",
+      "received_at": "2026-05-07T04:28:58.555000Z",
       "raw_payload": {
         "entity_type": "event",
-        "entity_id": "evt_ops_latency_001",
-        "event_id": "evt_ops_latency_001",
-        "thing_id": "thing_ops_cluster_sh1",
-        "projection_destination": "event_head",
-        "title": "Pic de latence de l’API de paiement · En analyse",
-        "description": "Pic de latence de l’API de paiement。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "En analyse",
-        "message": "Mise à jour d’état: La confirmation de paiement a été retardée pour 3,8% des demandes dans la région de Shanghai.",
+        "entity_id": "home_kitchen_water_leak",
+        "event_id": "home_kitchen_water_leak",
+        "status": "ongoing",
+        "message": "### Automation executed\n\n```yaml\naction: valve.close\ntarget: valve.kitchen_filter_inlet\n```\n\n| Item | State |\n|---|---|\n| Inlet valve | Closed |\n| Leak sensor | Wet |\n| Cabinet light | On |",
         "severity": "high",
-        "tags": [
-          "base de données",
-          "latence",
-          "réplique de lecture"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Ce qui a changé": [
-            "La confirmation de paiement a été retardée pour 3,8% des demandes dans la région de Shanghai.",
-            "La latence P95 a culminé à 1,9 s puis a baissé après réduction du trafic vers la réplique."
-          ],
-          "Responsable": "SRE d’astreinte",
-          "Heure prévue": "prochaine fenêtre d’échantillon stable",
-          "Événements liés": [
-            "evt_ops_latency_001",
-            "thing_ops_cluster_sh1"
-          ]
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Continuer le suivi jusqu’à ce que l’objet responsable affiche deux échantillons stables.\",\"Note de contrôle\":\"Les heures sont ordonnées et adaptées aux tests de captures iOS.\",\"Événements liés\":[\"evt_ops_latency_001\",\"thing_ops_cluster_sh1\"]}",
-        "location": {
-          "type": "région",
-          "value": "région de Shanghai"
-        },
-        "external_ids": {
-          "ticket d’incident": "INC-2026-0508-001"
-        }
+        "event_time": "1762865880000"
       },
       "status": "normal"
     },
     {
-      "id": "cf1ef527-189c-55e3-960e-c9b37818c6f6",
-      "message_id": "msg_home_leak_resolved",
-      "title": "Capteur de fuite cuisine déclenché · Résolu",
-      "body": "# Capteur de fuite cuisine déclenché · Résolu\n> le capteur de sol a signalé une humidité continue près du meuble sous évier\n\n## Ce qui a changé\n- La courbe d’humidité est restée plate 25 minutes et la vanne a été rouverte en mode supervisé.\n- L’humidité est passée de 72% à 38% après fermeture de la vanne et démarrage de la ventilation.\n- Une routine domestique a été suspendue ; le déverrouillage manuel reste disponible dans l’app.\n\n## Traitement\n1. Vérifier que le capteur ne déclenchait pas un faux positif de batterie faible.\n2. Maintenir la vanne fermée pendant la revue de l’image caméra.\n3. Demander au résident de contrôler le joint du meuble avant réouverture.\n\n## Prochaine étape\n- Responsable: Responsable domotique\n- Heure prévue: prochaine fenêtre d’échantillon stable\n",
-      "channel_id": "home-automation",
-      "is_read": true,
-      "received_at": "2026-05-08T02:16:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_home_leak_001",
-        "event_id": "evt_home_leak_001",
-        "thing_id": "thing_home_valve_kitchen",
-        "projection_destination": "event_head",
-        "title": "Capteur de fuite cuisine déclenché · Résolu",
-        "description": "Capteur de fuite cuisine déclenché。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "Résolu",
-        "message": "Mise à jour d’état: La courbe d’humidité est restée plate 25 minutes et la vanne a été rouverte en mode supervisé.",
-        "severity": "medium",
-        "tags": [
-          "capteur d’eau",
-          "cuisine",
-          "vanne"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Ce qui a changé": [
-            "La courbe d’humidité est restée plate 25 minutes et la vanne a été rouverte en mode supervisé.",
-            "L’humidité est passée de 72% à 38% après fermeture de la vanne et démarrage de la ventilation."
-          ],
-          "Responsable": "Responsable domotique",
-          "Heure prévue": "prochaine fenêtre d’échantillon stable",
-          "Événements liés": [
-            "evt_home_leak_001",
-            "thing_home_valve_kitchen"
-          ]
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Continuer le suivi jusqu’à ce que l’objet responsable affiche deux échantillons stables.\",\"Note de contrôle\":\"Les heures sont ordonnées et adaptées aux tests de captures iOS.\",\"Événements liés\":[\"evt_home_leak_001\",\"thing_home_valve_kitchen\"]}",
-        "location": {
-          "type": "pièce",
-          "value": "meuble sous évier de la cuisine"
-        },
-        "external_ids": {
-          "ticket d’incident": "INC-2026-0508-002"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "7b2fb708-cb42-5883-9733-cf03d1bcb1b7",
-      "message_id": "msg_ops_brief_001",
-      "title": "Pic de latence de l’API de paiement · Détecté",
-      "body": "# Pic de latence de l’API de paiement · Détecté\n> les demandes de paiement en Chine de l’Est ont ralenti pour les utilisateurs professionnels\n\n## Ce qui a changé\n- La confirmation de paiement a été retardée pour 3,8% des demandes dans la région de Shanghai.\n- La latence P95 a culminé à 1,9 s puis a baissé après réduction du trafic vers la réplique.\n- Aucune perte de données détectée ; trois nouvelles tentatives ont été récupérées automatiquement.\n\n## Traitement\n1. Empreinte de la requête lente épinglée et réplique de lecture récente retirée de la rotation.\n2. Télémétrie du pool de connexions base de données portée à une granularité d’une minute.\n3. Garder l’incident ouvert jusqu’à la fin du prochain lot de facturation sans hausse des nouvelles tentatives.\n\n## Prochaine étape\n- Responsable: SRE d’astreinte\n- Heure prévue: prochaine fenêtre d’échantillon stable\n",
-      "channel_id": "ops-core",
+      "id": "8b9d6a72-b5eb-5cff-841a-06fcc2ae09ee",
+      "message_id": "msg_fr_0012",
+      "title": "Kitchen leak — valve closed",
+      "body": "### Automation executed\n\n```yaml\naction: valve.close\ntarget: valve.kitchen_filter_inlet\n```\n\n| Item | State |\n|---|---|\n| Inlet valve | Closed |\n| Leak sensor | Wet |\n| Cabinet light | On |",
+      "channel_id": "ai-agent-feedback",
       "is_read": false,
-      "received_at": "2026-05-08T02:10:00.000Z",
+      "received_at": "2026-05-07T04:29:58.555000Z",
       "raw_payload": {
         "entity_type": "event",
-        "entity_id": "evt_ops_latency_001",
-        "event_id": "evt_ops_latency_001",
-        "thing_id": "thing_ops_cluster_sh1",
-        "projection_destination": "event_head",
-        "title": "Pic de latence de l’API de paiement · Détecté",
-        "description": "Pic de latence de l’API de paiement。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "Détecté",
-        "message": "Mise à jour d’état: La confirmation de paiement a été retardée pour 3,8% des demandes dans la région de Shanghai.",
-        "severity": "high",
-        "tags": [
-          "base de données",
-          "latence",
-          "réplique de lecture"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Ce qui a changé": [
-            "La confirmation de paiement a été retardée pour 3,8% des demandes dans la région de Shanghai.",
-            "La latence P95 a culminé à 1,9 s puis a baissé après réduction du trafic vers la réplique."
-          ],
-          "Responsable": "SRE d’astreinte",
-          "Heure prévue": "prochaine fenêtre d’échantillon stable",
-          "Événements liés": [
-            "evt_ops_latency_001",
-            "thing_ops_cluster_sh1"
-          ]
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Continuer le suivi jusqu’à ce que l’objet responsable affiche deux échantillons stables.\",\"Note de contrôle\":\"Les heures sont ordonnées et adaptées aux tests de captures iOS.\",\"Événements liés\":[\"evt_ops_latency_001\",\"thing_ops_cluster_sh1\"]}",
-        "location": {
-          "type": "région",
-          "value": "région de Shanghai"
-        },
-        "external_ids": {
-          "ticket d’incident": "INC-2026-0508-001"
-        }
+        "entity_id": "home_kitchen_water_leak",
+        "event_id": "home_kitchen_water_leak",
+        "status": "ongoing",
+        "message": "### Automation executed\n\n```yaml\naction: valve.close\ntarget: valve.kitchen_filter_inlet\n```\n\n| Item | State |\n|---|---|\n| Inlet valve | Closed |\n| Leak sensor | Wet |\n| Cabinet light | On |",
+        "severity": "normal",
+        "event_time": "1762867320000"
       },
       "status": "normal"
     },
     {
-      "id": "16188688-cbcb-5ae1-960f-35c485d830ff",
-      "message_id": "msg_thing_finance_ap_queue_approval",
-      "title": "File de contrôle des comptes fournisseurs · Circuit d’approbation actualisé",
-      "body": "# Mise à jour de l’objet File de contrôle des comptes fournisseurs\n> La projection de l’objet a été rafraîchie après l’arrivée de nouveaux signaux depuis plusieurs canaux.\n\n## Instantané\n- État actuel : équilibrée et verrouillée pour contrôle des doublons\n- Événements liés : evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Canal de surveillance : Grand livre financier\n\n## Changements d’attributs\n- le score de facture en double est passé de 0,41 à 0,93\n- la règle d’approbation est passée d’un contrôle simple à un double contrôle\n\n## Prochaine étape\n- Garder l’objet visible dans les données de capture, car il relie opérations, finance, domicile et agent dans une chronologie réaliste.\n",
-      "channel_id": "finance-ledger",
-      "is_read": true,
-      "received_at": "2026-05-08T02:08:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_finance_ap_queue",
-        "thing_id": "thing_finance_ap_queue",
-        "projection_destination": "thing_head",
-        "title": "File de contrôle des comptes fournisseurs · Circuit d’approbation actualisé",
-        "description": "File de contrôle des comptes fournisseurs。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "équilibrée et verrouillée pour contrôle des doublons",
-        "message": "Circuit d’approbation actualisé: le score de facture en double est passé de 0,41 à 0,93; la règle d’approbation est passée d’un contrôle simple à un double contrôle",
-        "severity": "low",
-        "tags": [
-          "facture",
-          "approbation",
-          "trésorerie"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Instantané": "équilibrée et verrouillée pour contrôle des doublons",
-          "Changements d’attributs": [
-            "le score de facture en double est passé de 0,41 à 0,93",
-            "la règle d’approbation est passée d’un contrôle simple à un double contrôle"
-          ],
-          "Événements liés": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "Source": "Grand livre financier"
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Garder l’objet visible dans la boîte de démonstration et la vue de détail.\",\"Note de contrôle\":\"L’objet contient des changements d’attributs lisibles et des identifiants d’événements liés.\",\"Événements liés\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "département",
-          "value": "centre financier partagé"
-        },
-        "external_ids": {
-          "projection d’objet": "OBJ-THING_FINANCE_AP_QUEUE"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "15ee9eda-44d4-5958-a4a1-ade1d28d7c68",
-      "message_id": "msg_finance_invoice_resolved",
-      "title": "Possible facture fournisseur en double · Résolu",
-      "body": "# Possible facture fournisseur en double · Résolu\n> deux factures pour la même commande sont arrivées par deux circuits d’approbation\n\n## Ce qui a changé\n- La seconde facture a été confirmée comme renvoi et le calendrier de paiement initial a été rétabli.\n- Le score de doublon a atteint 0,93 car le montant, le numéro fiscal et le bon de livraison correspondaient.\n- L’équipe finance peut encore libérer la facture valide après une seconde approbation.\n\n## Traitement\n1. Verrouiller les deux enregistrements de facture et joindre le bon de livraison fournisseur.\n2. Demander aux achats de confirmer quel numéro de facture doit rester actif.\n3. Garder la prévision de trésorerie en statut provisoire jusqu’à levée du blocage.\n\n## Prochaine étape\n- Responsable: Contrôle financier\n- Heure prévue: prochaine fenêtre d’échantillon stable\n",
-      "channel_id": "finance-ledger",
-      "is_read": true,
-      "received_at": "2026-05-08T02:02:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_finance_invoice_001",
-        "event_id": "evt_finance_invoice_001",
-        "thing_id": "thing_finance_ap_queue",
-        "projection_destination": "event_head",
-        "title": "Possible facture fournisseur en double · Résolu",
-        "description": "Possible facture fournisseur en double。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "Résolu",
-        "message": "Mise à jour d’état: La seconde facture a été confirmée comme renvoi et le calendrier de paiement initial a été rétabli.",
-        "severity": "high",
-        "tags": [
-          "facture",
-          "approbation",
-          "trésorerie"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Ce qui a changé": [
-            "La seconde facture a été confirmée comme renvoi et le calendrier de paiement initial a été rétabli.",
-            "Le score de doublon a atteint 0,93 car le montant, le numéro fiscal et le bon de livraison correspondaient."
-          ],
-          "Responsable": "Contrôle financier",
-          "Heure prévue": "prochaine fenêtre d’échantillon stable",
-          "Événements liés": [
-            "evt_finance_invoice_001",
-            "thing_finance_ap_queue"
-          ]
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Continuer le suivi jusqu’à ce que l’objet responsable affiche deux échantillons stables.\",\"Note de contrôle\":\"Les heures sont ordonnées et adaptées aux tests de captures iOS.\",\"Événements liés\":[\"evt_finance_invoice_001\",\"thing_finance_ap_queue\"]}",
-        "location": {
-          "type": "département",
-          "value": "centre financier partagé"
-        },
-        "external_ids": {
-          "ticket d’incident": "INC-2026-0508-003"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "a47d6a75-7e31-50b9-8b05-b61aeb215e51",
-      "message_id": "msg_thing_home_valve_kitchen_valve",
-      "title": "Vanne d’arrêt d’eau de la cuisine · Note de sécurité de vanne actualisée",
-      "body": "# Mise à jour de l’objet Vanne d’arrêt d’eau de la cuisine\n> La projection de l’objet a été rafraîchie après l’arrivée de nouveaux signaux depuis plusieurs canaux.\n\n## Instantané\n- État actuel : fermée après protection contre la fuite\n- Événements liés : evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Canal de surveillance : Automatisation domestique\n\n## Changements d’attributs\n- l’humidité du capteur de sol est passée de 72% à 38%\n- le mode de commande de la vanne est passé d’automatique à supervisé\n\n## Prochaine étape\n- Garder l’objet visible dans les données de capture, car il relie opérations, finance, domicile et agent dans une chronologie réaliste.\n",
-      "channel_id": "home-automation",
-      "is_read": true,
-      "received_at": "2026-05-08T01:49:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_home_valve_kitchen",
-        "thing_id": "thing_home_valve_kitchen",
-        "projection_destination": "thing_head",
-        "title": "Vanne d’arrêt d’eau de la cuisine · Note de sécurité de vanne actualisée",
-        "description": "Vanne d’arrêt d’eau de la cuisine。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "fermée après protection contre la fuite",
-        "message": "Note de sécurité de vanne actualisée: l’humidité du capteur de sol est passée de 72% à 38%; le mode de commande de la vanne est passé d’automatique à supervisé",
-        "severity": "low",
-        "tags": [
-          "capteur d’eau",
-          "cuisine",
-          "vanne"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Instantané": "fermée après protection contre la fuite",
-          "Changements d’attributs": [
-            "l’humidité du capteur de sol est passée de 72% à 38%",
-            "le mode de commande de la vanne est passé d’automatique à supervisé"
-          ],
-          "Événements liés": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "Source": "Automatisation domestique"
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Garder l’objet visible dans la boîte de démonstration et la vue de détail.\",\"Note de contrôle\":\"L’objet contient des changements d’attributs lisibles et des identifiants d’événements liés.\",\"Événements liés\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "pièce",
-          "value": "meuble sous évier de la cuisine"
-        },
-        "external_ids": {
-          "projection d’objet": "OBJ-THING_HOME_VALVE_KITCHEN"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "5af6101a-2ba0-56f8-bbd4-9b08d7c445ec",
-      "message_id": "msg_home_leak_investigating",
-      "title": "Capteur de fuite cuisine déclenché · En analyse",
-      "body": "# Capteur de fuite cuisine déclenché · En analyse\n> le capteur de sol a signalé une humidité continue près du meuble sous évier\n\n## Ce qui a changé\n- La vanne intelligente a fermé la branche d’eau froide en 8 secondes et empêché la fuite de sortir du meuble.\n- L’humidité est passée de 72% à 38% après fermeture de la vanne et démarrage de la ventilation.\n- Une routine domestique a été suspendue ; le déverrouillage manuel reste disponible dans l’app.\n\n## Traitement\n1. Vérifier que le capteur ne déclenchait pas un faux positif de batterie faible.\n2. Maintenir la vanne fermée pendant la revue de l’image caméra.\n3. Demander au résident de contrôler le joint du meuble avant réouverture.\n\n## Prochaine étape\n- Responsable: Responsable domotique\n- Heure prévue: prochaine fenêtre d’échantillon stable\n",
-      "channel_id": "home-automation",
-      "is_read": false,
-      "received_at": "2026-05-08T01:42:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_home_leak_001",
-        "event_id": "evt_home_leak_001",
-        "thing_id": "thing_home_valve_kitchen",
-        "projection_destination": "event_head",
-        "title": "Capteur de fuite cuisine déclenché · En analyse",
-        "description": "Capteur de fuite cuisine déclenché。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "En analyse",
-        "message": "Mise à jour d’état: La vanne intelligente a fermé la branche d’eau froide en 8 secondes et empêché la fuite de sortir du meuble.",
-        "severity": "medium",
-        "tags": [
-          "capteur d’eau",
-          "cuisine",
-          "vanne"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Ce qui a changé": [
-            "La vanne intelligente a fermé la branche d’eau froide en 8 secondes et empêché la fuite de sortir du meuble.",
-            "L’humidité est passée de 72% à 38% après fermeture de la vanne et démarrage de la ventilation."
-          ],
-          "Responsable": "Responsable domotique",
-          "Heure prévue": "prochaine fenêtre d’échantillon stable",
-          "Événements liés": [
-            "evt_home_leak_001",
-            "thing_home_valve_kitchen"
-          ]
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Continuer le suivi jusqu’à ce que l’objet responsable affiche deux échantillons stables.\",\"Note de contrôle\":\"Les heures sont ordonnées et adaptées aux tests de captures iOS.\",\"Événements liés\":[\"evt_home_leak_001\",\"thing_home_valve_kitchen\"]}",
-        "location": {
-          "type": "pièce",
-          "value": "meuble sous évier de la cuisine"
-        },
-        "external_ids": {
-          "ticket d’incident": "INC-2026-0508-002"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "2a7c935e-9cbe-5b63-b673-c43b9896781a",
-      "message_id": "msg_home_leak_detected",
-      "title": "Capteur de fuite cuisine déclenché · Détecté",
-      "body": "# Capteur de fuite cuisine déclenché · Détecté\n> le capteur de sol a signalé une humidité continue près du meuble sous évier\n\n## Ce qui a changé\n- La vanne intelligente a fermé la branche d’eau froide en 8 secondes et empêché la fuite de sortir du meuble.\n- L’humidité est passée de 72% à 38% après fermeture de la vanne et démarrage de la ventilation.\n- Une routine domestique a été suspendue ; le déverrouillage manuel reste disponible dans l’app.\n\n## Traitement\n1. Vérifier que le capteur ne déclenchait pas un faux positif de batterie faible.\n2. Maintenir la vanne fermée pendant la revue de l’image caméra.\n3. Demander au résident de contrôler le joint du meuble avant réouverture.\n\n## Prochaine étape\n- Responsable: Responsable domotique\n- Heure prévue: prochaine fenêtre d’échantillon stable\n",
-      "channel_id": "home-automation",
-      "is_read": false,
-      "received_at": "2026-05-08T01:35:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_home_leak_001",
-        "event_id": "evt_home_leak_001",
-        "thing_id": "thing_home_valve_kitchen",
-        "projection_destination": "event_head",
-        "title": "Capteur de fuite cuisine déclenché · Détecté",
-        "description": "Capteur de fuite cuisine déclenché。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "Détecté",
-        "message": "Mise à jour d’état: La vanne intelligente a fermé la branche d’eau froide en 8 secondes et empêché la fuite de sortir du meuble.",
-        "severity": "medium",
-        "tags": [
-          "capteur d’eau",
-          "cuisine",
-          "vanne"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Ce qui a changé": [
-            "La vanne intelligente a fermé la branche d’eau froide en 8 secondes et empêché la fuite de sortir du meuble.",
-            "L’humidité est passée de 72% à 38% après fermeture de la vanne et démarrage de la ventilation."
-          ],
-          "Responsable": "Responsable domotique",
-          "Heure prévue": "prochaine fenêtre d’échantillon stable",
-          "Événements liés": [
-            "evt_home_leak_001",
-            "thing_home_valve_kitchen"
-          ]
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Continuer le suivi jusqu’à ce que l’objet responsable affiche deux échantillons stables.\",\"Note de contrôle\":\"Les heures sont ordonnées et adaptées aux tests de captures iOS.\",\"Événements liés\":[\"evt_home_leak_001\",\"thing_home_valve_kitchen\"]}",
-        "location": {
-          "type": "pièce",
-          "value": "meuble sous évier de la cuisine"
-        },
-        "external_ids": {
-          "ticket d’incident": "INC-2026-0508-002"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "e024dece-4db6-5e93-91fb-f3aa356e5405",
-      "message_id": "msg_finance_invoice_investigating",
-      "title": "Possible facture fournisseur en double · En analyse",
-      "body": "# Possible facture fournisseur en double · En analyse\n> deux factures pour la même commande sont arrivées par deux circuits d’approbation\n\n## Ce qui a changé\n- Un paiement planifié de 18 420,00 CNY a été retenu avant soumission bancaire.\n- Le score de doublon a atteint 0,93 car le montant, le numéro fiscal et le bon de livraison correspondaient.\n- L’équipe finance peut encore libérer la facture valide après une seconde approbation.\n\n## Traitement\n1. Verrouiller les deux enregistrements de facture et joindre le bon de livraison fournisseur.\n2. Demander aux achats de confirmer quel numéro de facture doit rester actif.\n3. Garder la prévision de trésorerie en statut provisoire jusqu’à levée du blocage.\n\n## Prochaine étape\n- Responsable: Contrôle financier\n- Heure prévue: prochaine fenêtre d’échantillon stable\n",
-      "channel_id": "finance-ledger",
-      "is_read": false,
-      "received_at": "2026-05-08T01:20:00.000Z",
-      "raw_payload": {
-        "entity_type": "event",
-        "entity_id": "evt_finance_invoice_001",
-        "event_id": "evt_finance_invoice_001",
-        "thing_id": "thing_finance_ap_queue",
-        "projection_destination": "event_head",
-        "title": "Possible facture fournisseur en double · En analyse",
-        "description": "Possible facture fournisseur en double。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "En analyse",
-        "message": "Mise à jour d’état: Un paiement planifié de 18 420,00 CNY a été retenu avant soumission bancaire.",
-        "severity": "high",
-        "tags": [
-          "facture",
-          "approbation",
-          "trésorerie"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Ce qui a changé": [
-            "Un paiement planifié de 18 420,00 CNY a été retenu avant soumission bancaire.",
-            "Le score de doublon a atteint 0,93 car le montant, le numéro fiscal et le bon de livraison correspondaient."
-          ],
-          "Responsable": "Contrôle financier",
-          "Heure prévue": "prochaine fenêtre d’échantillon stable",
-          "Événements liés": [
-            "evt_finance_invoice_001",
-            "thing_finance_ap_queue"
-          ]
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Continuer le suivi jusqu’à ce que l’objet responsable affiche deux échantillons stables.\",\"Note de contrôle\":\"Les heures sont ordonnées et adaptées aux tests de captures iOS.\",\"Événements liés\":[\"evt_finance_invoice_001\",\"thing_finance_ap_queue\"]}",
-        "location": {
-          "type": "département",
-          "value": "centre financier partagé"
-        },
-        "external_ids": {
-          "ticket d’incident": "INC-2026-0508-003"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "d0084409-6052-598b-a439-2e1d7f4721b2",
-      "message_id": "msg_thing_agent_support_triage_sample",
-      "title": "Agent IA de triage support · Note d’échantillonnage actualisée",
-      "body": "# Mise à jour de l’objet Agent IA de triage support\n> La projection de l’objet a été rafraîchie après l’arrivée de nouveaux signaux depuis plusieurs canaux.\n\n## Instantané\n- État actuel : stable avec revue humaine activée\n- Événements liés : evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Canal de surveillance : Retours de l’agent IA\n\n## Changements d’attributs\n- la confiance de résolution automatique est passée de 0,78 à 0,86\n- la règle de repli est passée du transfert immédiat à la revue par échantillon\n\n## Prochaine étape\n- Garder l’objet visible dans les données de capture, car il relie opérations, finance, domicile et agent dans une chronologie réaliste.\n",
+      "id": "06f2bb52-d4cb-5bfd-ab39-fe13bf42f552",
+      "message_id": "msg_fr_0013",
+      "title": "Kitchen leak — cleared",
+      "body": "### Leak event closed\n\nSensor has stayed `Dry` for 30 minutes.\n\nNext steps:\n\n- Replace the quick connector\n- Check cabinet board\n- Keep automatic valve rule enabled",
       "channel_id": "ai-agent-feedback",
       "is_read": true,
-      "received_at": "2026-05-08T01:12:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_agent_support_triage",
-        "thing_id": "thing_agent_support_triage",
-        "projection_destination": "thing_head",
-        "title": "Agent IA de triage support · Note d’échantillonnage actualisée",
-        "description": "Agent IA de triage support。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "stable avec revue humaine activée",
-        "message": "Note d’échantillonnage actualisée: la confiance de résolution automatique est passée de 0,78 à 0,86; la règle de repli est passée du transfert immédiat à la revue par échantillon",
-        "severity": "low",
-        "tags": [
-          "agent IA",
-          "ticket",
-          "transfert"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1677442136019-21780ecad995?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Instantané": "stable avec revue humaine activée",
-          "Changements d’attributs": [
-            "la confiance de résolution automatique est passée de 0,78 à 0,86",
-            "la règle de repli est passée du transfert immédiat à la revue par échantillon"
-          ],
-          "Événements liés": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "Source": "Retours de l’agent IA"
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Garder l’objet visible dans la boîte de démonstration et la vue de détail.\",\"Note de contrôle\":\"L’objet contient des changements d’attributs lisibles et des identifiants d’événements liés.\",\"Événements liés\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "file",
-          "value": "file de support entreprise"
-        },
-        "external_ids": {
-          "projection d’objet": "OBJ-THING_AGENT_SUPPORT_TRIAGE"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "d31b8b22-e59c-57d9-8630-9073a2475c7f",
-      "message_id": "msg_finance_invoice_detected",
-      "title": "Possible facture fournisseur en double · Détecté",
-      "body": "# Possible facture fournisseur en double · Détecté\n> deux factures pour la même commande sont arrivées par deux circuits d’approbation\n\n## Ce qui a changé\n- Un paiement planifié de 18 420,00 CNY a été retenu avant soumission bancaire.\n- Le score de doublon a atteint 0,93 car le montant, le numéro fiscal et le bon de livraison correspondaient.\n- L’équipe finance peut encore libérer la facture valide après une seconde approbation.\n\n## Traitement\n1. Verrouiller les deux enregistrements de facture et joindre le bon de livraison fournisseur.\n2. Demander aux achats de confirmer quel numéro de facture doit rester actif.\n3. Garder la prévision de trésorerie en statut provisoire jusqu’à levée du blocage.\n\n## Prochaine étape\n- Responsable: Contrôle financier\n- Heure prévue: prochaine fenêtre d’échantillon stable\n",
-      "channel_id": "finance-ledger",
-      "is_read": false,
-      "received_at": "2026-05-08T00:58:00.000Z",
+      "received_at": "2026-05-07T04:30:58.555000Z",
       "raw_payload": {
         "entity_type": "event",
-        "entity_id": "evt_finance_invoice_001",
-        "event_id": "evt_finance_invoice_001",
-        "thing_id": "thing_finance_ap_queue",
-        "projection_destination": "event_head",
-        "title": "Possible facture fournisseur en double · Détecté",
-        "description": "Possible facture fournisseur en double。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "Détecté",
-        "message": "Mise à jour d’état: Un paiement planifié de 18 420,00 CNY a été retenu avant soumission bancaire.",
+        "entity_id": "home_kitchen_water_leak",
+        "event_id": "home_kitchen_water_leak",
+        "status": "resolved",
+        "message": "### Leak event closed\n\nSensor has stayed `Dry` for 30 minutes.\n\nNext steps:\n\n- Replace the quick connector\n- Check cabinet board\n- Keep automatic valve rule enabled",
+        "severity": "low",
+        "event_time": "1762869600000"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "9df151f5-dfe4-53fc-9bf1-bc425eed49e0",
+      "message_id": "msg_fr_0014",
+      "title": "iOS TestFlight upload failed",
+      "body": "### Release pipeline failed\n\nVersion: `1.4.0 (128)`  \nBranch: `release/1.4.0`\n\n```text\nERROR ITMS-90161: Invalid Provisioning Profile\n```\n\nCheck signing certificates and App Store Connect API key permissions.",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:31:58.555000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "ios_testflight_release_failure",
+        "event_id": "ios_testflight_release_failure",
+        "status": "ongoing",
+        "message": "### Release pipeline failed\n\nVersion: `1.4.0 (128)`  \nBranch: `release/1.4.0`\n\n```text\nERROR ITMS-90161: Invalid Provisioning Profile\n```\n\nCheck signing certificates and App Store Connect API key permissions.",
+        "severity": "critical",
+        "event_time": "1762864800000"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "f9ebd54a-73cc-5338-b23e-88a18a225664",
+      "message_id": "msg_fr_0015",
+      "title": "TestFlight upload — certificate updated",
+      "body": "### Signing fixed\n\nUpdated:\n\n- `Apple Distribution` certificate\n- `PushGo AppStore Profile`\n- App Store Connect API Key permissions\n\nRerun workflow: `ios-release-rerun-01`",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:32:58.555000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "ios_testflight_release_failure",
+        "event_id": "ios_testflight_release_failure",
+        "status": "ongoing",
+        "message": "### Signing fixed\n\nUpdated:\n\n- `Apple Distribution` certificate\n- `PushGo AppStore Profile`\n- App Store Connect API Key permissions\n\nRerun workflow: `ios-release-rerun-01`",
         "severity": "high",
-        "tags": [
-          "facture",
-          "approbation",
-          "trésorerie"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Ce qui a changé": [
-            "Un paiement planifié de 18 420,00 CNY a été retenu avant soumission bancaire.",
-            "Le score de doublon a atteint 0,93 car le montant, le numéro fiscal et le bon de livraison correspondaient."
-          ],
-          "Responsable": "Contrôle financier",
-          "Heure prévue": "prochaine fenêtre d’échantillon stable",
-          "Événements liés": [
-            "evt_finance_invoice_001",
-            "thing_finance_ap_queue"
-          ]
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Continuer le suivi jusqu’à ce que l’objet responsable affiche deux échantillons stables.\",\"Note de contrôle\":\"Les heures sont ordonnées et adaptées aux tests de captures iOS.\",\"Événements liés\":[\"evt_finance_invoice_001\",\"thing_finance_ap_queue\"]}",
-        "location": {
-          "type": "département",
-          "value": "centre financier partagé"
-        },
-        "external_ids": {
-          "ticket d’incident": "INC-2026-0508-003"
-        }
+        "event_time": "1762865880000"
       },
       "status": "normal"
     },
     {
-      "id": "a6e0fe04-5981-52c4-b846-9eeea568c240",
-      "message_id": "msg_thing_event_auth_gateway_baseline",
-      "title": "Passerelle de risque de connexion client · Comparaison de base actualisée",
-      "body": "# Mise à jour de l’objet Passerelle de risque de connexion client\n> La projection de l’objet a été rafraîchie après l’arrivée de nouveaux signaux depuis plusieurs canaux.\n\n## Instantané\n- État actuel : limitée avec tendance de trafic propre\n- Événements liés : evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Canal de surveillance : Surveillance des événements\n\n## Changements d’attributs\n- le taux d’échecs de connexion est passé de 11,8% à 2,4%\n- le seuil temporaire de défi est passé de moyen à strict\n\n## Prochaine étape\n- Garder l’objet visible dans les données de capture, car il relie opérations, finance, domicile et agent dans une chronologie réaliste.\n",
-      "channel_id": "event-monitoring",
-      "is_read": true,
-      "received_at": "2026-05-08T00:52:00.000Z",
+      "id": "d680b58b-d1c9-58d6-a90e-97601dcb8d7f",
+      "message_id": "msg_fr_0016",
+      "title": "TestFlight upload — certificate updated",
+      "body": "### Signing fixed\n\nUpdated:\n\n- `Apple Distribution` certificate\n- `PushGo AppStore Profile`\n- App Store Connect API Key permissions\n\nRerun workflow: `ios-release-rerun-01`",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:33:58.555000Z",
       "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_event_auth_gateway",
-        "thing_id": "thing_event_auth_gateway",
-        "projection_destination": "thing_head",
-        "title": "Passerelle de risque de connexion client · Comparaison de base actualisée",
-        "description": "Passerelle de risque de connexion client。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "limitée avec tendance de trafic propre",
-        "message": "Comparaison de base actualisée: le taux d’échecs de connexion est passé de 11,8% à 2,4%; le seuil temporaire de défi est passé de moyen à strict",
-        "severity": "low",
-        "tags": [
-          "connexion",
-          "contrôle du risque",
-          "confiance client"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Instantané": "limitée avec tendance de trafic propre",
-          "Changements d’attributs": [
-            "le taux d’échecs de connexion est passé de 11,8% à 2,4%",
-            "le seuil temporaire de défi est passé de moyen à strict"
-          ],
-          "Événements liés": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "Source": "Surveillance des événements"
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Garder l’objet visible dans la boîte de démonstration et la vue de détail.\",\"Note de contrôle\":\"L’objet contient des changements d’attributs lisibles et des identifiants d’événements liés.\",\"Événements liés\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "service",
-          "value": "centre de comptes client"
-        },
-        "external_ids": {
-          "projection d’objet": "OBJ-THING_EVENT_AUTH_GATEWAY"
-        }
+        "entity_type": "event",
+        "entity_id": "ios_testflight_release_failure",
+        "event_id": "ios_testflight_release_failure",
+        "status": "ongoing",
+        "message": "### Signing fixed\n\nUpdated:\n\n- `Apple Distribution` certificate\n- `PushGo AppStore Profile`\n- App Store Connect API Key permissions\n\nRerun workflow: `ios-release-rerun-01`",
+        "severity": "normal",
+        "event_time": "1762867320000"
       },
       "status": "normal"
     },
     {
-      "id": "cb083a3a-9b65-58ce-b1d6-a1f06e08da8b",
-      "message_id": "msg_thing_ops_cluster_sh1_maintenance",
-      "title": "Grappe de paiement de Shanghai · Note de maintenance ajoutée",
-      "body": "# Mise à jour de l’objet Grappe de paiement de Shanghai\n> La projection de l’objet a été rafraîchie après l’arrivée de nouveaux signaux depuis plusieurs canaux.\n\n## Instantané\n- État actuel : saine avec surveillance renforcée\n- Événements liés : evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Canal de surveillance : Cœur des opérations\n\n## Changements d’attributs\n- la latence P95 de l’API est passée de 420 ms à 238 ms\n- le retard de la réplique de lecture est passé de 18 s à 3 s\n\n## Prochaine étape\n- Garder l’objet visible dans les données de capture, car il relie opérations, finance, domicile et agent dans une chronologie réaliste.\n",
-      "channel_id": "ops-core",
-      "is_read": true,
-      "received_at": "2026-05-07T23:48:00.000Z",
-      "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_ops_cluster_sh1",
-        "thing_id": "thing_ops_cluster_sh1",
-        "projection_destination": "thing_head",
-        "title": "Grappe de paiement de Shanghai · Note de maintenance ajoutée",
-        "description": "Grappe de paiement de Shanghai。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "saine avec surveillance renforcée",
-        "message": "Note de maintenance ajoutée: la latence P95 de l’API est passée de 420 ms à 238 ms; le retard de la réplique de lecture est passé de 18 s à 3 s",
-        "severity": "low",
-        "tags": [
-          "base de données",
-          "latence",
-          "réplique de lecture"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Instantané": "saine avec surveillance renforcée",
-          "Changements d’attributs": [
-            "la latence P95 de l’API est passée de 420 ms à 238 ms",
-            "le retard de la réplique de lecture est passé de 18 s à 3 s"
-          ],
-          "Événements liés": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "Source": "Cœur des opérations"
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Garder l’objet visible dans la boîte de démonstration et la vue de détail.\",\"Note de contrôle\":\"L’objet contient des changements d’attributs lisibles et des identifiants d’événements liés.\",\"Événements liés\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "région",
-          "value": "région de Shanghai"
-        },
-        "external_ids": {
-          "projection d’objet": "OBJ-THING_OPS_CLUSTER_SH1"
-        }
-      },
-      "status": "normal"
-    },
-    {
-      "id": "10c391c4-4345-50fb-abd3-6932a16fe5f2",
-      "message_id": "msg_thing_finance_ap_queue_cutoff",
-      "title": "File de contrôle des comptes fournisseurs · Note de coupure de paiement actualisée",
-      "body": "# Mise à jour de l’objet File de contrôle des comptes fournisseurs\n> La projection de l’objet a été rafraîchie après l’arrivée de nouveaux signaux depuis plusieurs canaux.\n\n## Instantané\n- État actuel : équilibrée et verrouillée pour contrôle des doublons\n- Événements liés : evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Canal de surveillance : Grand livre financier\n\n## Changements d’attributs\n- le score de facture en double est passé de 0,41 à 0,93\n- la règle d’approbation est passée d’un contrôle simple à un double contrôle\n\n## Prochaine étape\n- Garder l’objet visible dans les données de capture, car il relie opérations, finance, domicile et agent dans une chronologie réaliste.\n",
+      "id": "bb726839-5202-59bc-9582-fc813634c0e4",
+      "message_id": "msg_fr_0017",
+      "title": "TestFlight upload — resolved",
+      "body": "### Release recovered\n\n`PushGo 1.4.0 (129)` is available for internal TestFlight testing.\n\nNext:\n\n- Run smoke test\n- Verify APNs token registration\n- Check watchOS companion sync",
       "channel_id": "finance-ledger",
       "is_read": true,
-      "received_at": "2026-05-07T23:32:00.000Z",
+      "received_at": "2026-05-07T04:34:58.555000Z",
       "raw_payload": {
-        "entity_type": "thing",
-        "entity_id": "thing_finance_ap_queue",
-        "thing_id": "thing_finance_ap_queue",
-        "projection_destination": "thing_head",
-        "title": "File de contrôle des comptes fournisseurs · Note de coupure de paiement actualisée",
-        "description": "File de contrôle des comptes fournisseurs。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "équilibrée et verrouillée pour contrôle des doublons",
-        "message": "Note de coupure de paiement actualisée: le score de facture en double est passé de 0,41 à 0,93; la règle d’approbation est passée d’un contrôle simple à un double contrôle",
+        "entity_type": "event",
+        "entity_id": "ios_testflight_release_failure",
+        "event_id": "ios_testflight_release_failure",
+        "status": "resolved",
+        "message": "### Release recovered\n\n`PushGo 1.4.0 (129)` is available for internal TestFlight testing.\n\nNext:\n\n- Run smoke test\n- Verify APNs token registration\n- Check watchOS companion sync",
         "severity": "low",
-        "tags": [
-          "facture",
-          "approbation",
-          "trésorerie"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Instantané": "équilibrée et verrouillée pour contrôle des doublons",
-          "Changements d’attributs": [
-            "le score de facture en double est passé de 0,41 à 0,93",
-            "la règle d’approbation est passée d’un contrôle simple à un double contrôle"
-          ],
-          "Événements liés": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "Source": "Grand livre financier"
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Garder l’objet visible dans la boîte de démonstration et la vue de détail.\",\"Note de contrôle\":\"L’objet contient des changements d’attributs lisibles et des identifiants d’événements liés.\",\"Événements liés\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "département",
-          "value": "centre financier partagé"
-        },
-        "external_ids": {
-          "projection d’objet": "OBJ-THING_FINANCE_AP_QUEUE"
-        }
+        "event_time": "1762869600000"
       },
       "status": "normal"
     },
     {
-      "id": "22a57eb0-e2b4-56a5-878b-3f3577d5ad5e",
-      "message_id": "msg_thing_home_valve_kitchen_battery",
-      "title": "Vanne d’arrêt d’eau de la cuisine · Note batterie et capteur actualisée",
-      "body": "# Mise à jour de l’objet Vanne d’arrêt d’eau de la cuisine\n> La projection de l’objet a été rafraîchie après l’arrivée de nouveaux signaux depuis plusieurs canaux.\n\n## Instantané\n- État actuel : fermée après protection contre la fuite\n- Événements liés : evt_ops_latency_001, evt_home_leak_001, evt_finance_invoice_001, evt_monitoring_login_001, evt_agent_ticket_001\n- Canal de surveillance : Automatisation domestique\n\n## Changements d’attributs\n- l’humidité du capteur de sol est passée de 72% à 38%\n- le mode de commande de la vanne est passé d’automatique à supervisé\n\n## Prochaine étape\n- Garder l’objet visible dans les données de capture, car il relie opérations, finance, domicile et agent dans une chronologie réaliste.\n",
-      "channel_id": "home-automation",
-      "is_read": true,
-      "received_at": "2026-05-07T23:18:00.000Z",
+      "id": "659e6252-0344-5e30-abca-f8cfc0e99911",
+      "message_id": "msg_fr_0018",
+      "title": "NAS maison · DS923+",
+      "body": "Stockage principal pour les photos familiales, les archives de projets et les tâches de sauvegarde.",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:35:58.555000Z",
       "raw_payload": {
         "entity_type": "thing",
-        "entity_id": "thing_home_valve_kitchen",
-        "thing_id": "thing_home_valve_kitchen",
+        "entity_id": "home_nas_ds923",
+        "thing_id": "home_nas_ds923",
         "projection_destination": "thing_head",
-        "title": "Vanne d’arrêt d’eau de la cuisine · Note batterie et capteur actualisée",
-        "description": "Vanne d’arrêt d’eau de la cuisine。Cet enregistrement est généré pour des données de capture, mais suit une chronologie de production réaliste.",
-        "status": "fermée après protection contre la fuite",
-        "message": "Note batterie et capteur actualisée: l’humidité du capteur de sol est passée de 72% à 38%; le mode de commande de la vanne est passé d’automatique à supervisé",
-        "severity": "low",
-        "tags": [
-          "capteur d’eau",
-          "cuisine",
-          "vanne"
-        ],
-        "images": [
-          "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1200&q=80"
-        ],
-        "attrs": {
-          "Instantané": "fermée après protection contre la fuite",
-          "Changements d’attributs": [
-            "l’humidité du capteur de sol est passée de 72% à 38%",
-            "le mode de commande de la vanne est passé d’automatique à supervisé"
-          ],
-          "Événements liés": [
-            "evt_ops_latency_001",
-            "evt_home_leak_001",
-            "evt_finance_invoice_001",
-            "evt_monitoring_login_001",
-            "evt_agent_ticket_001"
-          ],
-          "Source": "Automatisation domestique"
-        },
-        "metadata": "{\"Source\":\"Générateur de données PushGo\",\"Version de projection\":\"2026.05.08-1\",\"Action recommandée\":\"Garder l’objet visible dans la boîte de démonstration et la vue de détail.\",\"Note de contrôle\":\"L’objet contient des changements d’attributs lisibles et des identifiants d’événements liés.\",\"Événements liés\":[\"evt_ops_latency_001\",\"evt_home_leak_001\",\"evt_finance_invoice_001\",\"evt_monitoring_login_001\",\"evt_agent_ticket_001\"]}",
-        "location": {
-          "type": "pièce",
-          "value": "meuble sous évier de la cuisine"
-        },
-        "external_ids": {
-          "projection d’objet": "OBJ-THING_HOME_VALVE_KITCHEN"
-        }
+        "title": "NAS maison · DS923+",
+        "description": "Stockage principal pour les photos familiales, les archives de projets et les tâches de sauvegarde."
+      },
+      "status": "normal"
+    },
+    {
+      "id": "1e6d8b72-459f-522b-9096-0990350f61dc",
+      "message_id": "msg_fr_0019",
+      "title": "NAS maison · DS923+ · Update 1",
+      "body": "Stockage principal pour les photos familiales, les archives de projets et les tâches de sauvegarde.",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:36:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_nas_ds923",
+        "thing_id": "home_nas_ds923",
+        "projection_destination": "thing_head",
+        "title": "NAS maison · DS923+ · Update 1",
+        "description": "Stockage principal pour les photos familiales, les archives de projets et les tâches de sauvegarde."
+      },
+      "status": "normal"
+    },
+    {
+      "id": "ec8a7e92-85ff-5fde-b188-ddbbe60e6953",
+      "message_id": "msg_fr_0020",
+      "title": "NAS maison · DS923+ · Update 2",
+      "body": "Stockage principal pour les photos familiales, les archives de projets et les tâches de sauvegarde.",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:37:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_nas_ds923",
+        "thing_id": "home_nas_ds923",
+        "projection_destination": "thing_head",
+        "title": "NAS maison · DS923+ · Update 2",
+        "description": "Stockage principal pour les photos familiales, les archives de projets et les tâches de sauvegarde."
+      },
+      "status": "normal"
+    },
+    {
+      "id": "3a31289f-e297-5267-a07f-70bba1b33d72",
+      "message_id": "msg_fr_0021",
+      "title": "NAS maison · DS923+ · Update 3",
+      "body": "Stockage principal pour les photos familiales, les archives de projets et les tâches de sauvegarde.",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:38:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_nas_ds923",
+        "thing_id": "home_nas_ds923",
+        "projection_destination": "thing_head",
+        "title": "NAS maison · DS923+ · Update 3",
+        "description": "Stockage principal pour les photos familiales, les archives de projets et les tâches de sauvegarde."
+      },
+      "status": "normal"
+    },
+    {
+      "id": "7078fa81-9a1a-533e-b926-9f9805748632",
+      "message_id": "msg_fr_0022",
+      "title": "NAS maison · DS923+ · Archived",
+      "body": "Stockage principal pour les photos familiales, les archives de projets et les tâches de sauvegarde.",
+      "channel_id": "finance-ledger",
+      "is_read": true,
+      "received_at": "2026-05-07T04:39:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_nas_ds923",
+        "thing_id": "home_nas_ds923",
+        "projection_destination": "thing_head",
+        "status": "archived"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "c3773673-d4f6-5e57-ae6e-b0fe11cfea8b",
+      "message_id": "msg_fr_0023",
+      "title": "home_nas_ds923 deleted",
+      "body": "{\"deleted_at\": 1762879200000, \"observed_at\": 1762879200000, \"metadata\": {\"deleted_by\": \"fixture-generator\", \"reason\": \"demo_cleanup\", \"is_test\": true}}",
+      "channel_id": "finance-ledger",
+      "is_read": true,
+      "received_at": "2026-05-07T04:40:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_nas_ds923",
+        "thing_id": "home_nas_ds923",
+        "projection_destination": "thing_deleted",
+        "status": "deleted"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "dd001ff1-f8ba-5ac7-9c9a-361bd793226f",
+      "message_id": "msg_fr_0024",
+      "title": "NAS maison · DS923+ · Nested alert",
+      "body": "### NAS maison · DS923+\n\nThis message is attached to the object and can be displayed as a second-level message.\n\n- Status: `warning`\n- Source: `fixture-generator`",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:41:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_nas_ds923",
+        "thing_id": "home_nas_ds923",
+        "projection_destination": "thing_message",
+        "severity": "normal"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "042e4c97-05ff-51dc-86e7-2a6b76416b11",
+      "message_id": "msg_fr_0025",
+      "title": "NAS maison · DS923+ · Nested event",
+      "body": "### NAS maison · DS923+\n\nA related object-level event was created for this object.",
+      "channel_id": "finance-ledger",
+      "is_read": false,
+      "received_at": "2026-05-07T04:42:58.555000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "home_nas_ds923_event",
+        "event_id": "home_nas_ds923_event",
+        "thing_id": "home_nas_ds923",
+        "status": "ongoing",
+        "message": "### NAS maison · DS923+\n\nA related object-level event was created for this object.",
+        "severity": "high"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "c6b06cc9-91ef-500e-8863-beb30ba6cdd4",
+      "message_id": "msg_fr_0026",
+      "title": "Service prod · api-gateway-prod",
+      "body": "Service API de la passerelle publique PushGo, chargé de recevoir, valider et distribuer les demandes de messages.",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-07T04:43:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "prod_api_gateway_service",
+        "thing_id": "prod_api_gateway_service",
+        "projection_destination": "thing_head",
+        "title": "Service prod · api-gateway-prod",
+        "description": "Service API de la passerelle publique PushGo, chargé de recevoir, valider et distribuer les demandes de messages."
+      },
+      "status": "normal"
+    },
+    {
+      "id": "25a23be8-be44-5c11-9b67-274542a1cd82",
+      "message_id": "msg_fr_0027",
+      "title": "Service prod · api-gateway-prod · Update 1",
+      "body": "Service API de la passerelle publique PushGo, chargé de recevoir, valider et distribuer les demandes de messages.",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-07T04:44:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "prod_api_gateway_service",
+        "thing_id": "prod_api_gateway_service",
+        "projection_destination": "thing_head",
+        "title": "Service prod · api-gateway-prod · Update 1",
+        "description": "Service API de la passerelle publique PushGo, chargé de recevoir, valider et distribuer les demandes de messages."
+      },
+      "status": "normal"
+    },
+    {
+      "id": "da2ed6d3-8645-5786-97e8-f812d52edd26",
+      "message_id": "msg_fr_0028",
+      "title": "Service prod · api-gateway-prod · Update 2",
+      "body": "Service API de la passerelle publique PushGo, chargé de recevoir, valider et distribuer les demandes de messages.",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-07T04:45:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "prod_api_gateway_service",
+        "thing_id": "prod_api_gateway_service",
+        "projection_destination": "thing_head",
+        "title": "Service prod · api-gateway-prod · Update 2",
+        "description": "Service API de la passerelle publique PushGo, chargé de recevoir, valider et distribuer les demandes de messages."
+      },
+      "status": "normal"
+    },
+    {
+      "id": "6bc61ccf-b9e1-577f-9f41-6dd9f8fafe75",
+      "message_id": "msg_fr_0029",
+      "title": "Service prod · api-gateway-prod · Update 3",
+      "body": "Service API de la passerelle publique PushGo, chargé de recevoir, valider et distribuer les demandes de messages.",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-07T04:46:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "prod_api_gateway_service",
+        "thing_id": "prod_api_gateway_service",
+        "projection_destination": "thing_head",
+        "title": "Service prod · api-gateway-prod · Update 3",
+        "description": "Service API de la passerelle publique PushGo, chargé de recevoir, valider et distribuer les demandes de messages."
+      },
+      "status": "normal"
+    },
+    {
+      "id": "0ebfab80-b027-5101-be1e-e8eec0703192",
+      "message_id": "msg_fr_0030",
+      "title": "Service prod · api-gateway-prod · Archived",
+      "body": "Service API de la passerelle publique PushGo, chargé de recevoir, valider et distribuer les demandes de messages.",
+      "channel_id": "home-automation",
+      "is_read": true,
+      "received_at": "2026-05-07T04:47:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "prod_api_gateway_service",
+        "thing_id": "prod_api_gateway_service",
+        "projection_destination": "thing_head",
+        "status": "archived"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "d67e3067-6767-5c05-8cc9-9e8862bf5a1f",
+      "message_id": "msg_fr_0031",
+      "title": "prod_api_gateway_service deleted",
+      "body": "{\"deleted_at\": 1762879200000, \"observed_at\": 1762879200000, \"metadata\": {\"deleted_by\": \"fixture-generator\", \"reason\": \"demo_cleanup\", \"is_test\": true}}",
+      "channel_id": "home-automation",
+      "is_read": true,
+      "received_at": "2026-05-07T04:48:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "prod_api_gateway_service",
+        "thing_id": "prod_api_gateway_service",
+        "projection_destination": "thing_deleted",
+        "status": "deleted"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "3ac44302-f660-5b2e-a26c-6c50c8ae7c18",
+      "message_id": "msg_fr_0032",
+      "title": "Service prod · api-gateway-prod · Nested alert",
+      "body": "### Service prod · api-gateway-prod\n\nThis message is attached to the object and can be displayed as a second-level message.\n\n- Status: `warning`\n- Source: `fixture-generator`",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-07T04:49:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "prod_api_gateway_service",
+        "thing_id": "prod_api_gateway_service",
+        "projection_destination": "thing_message",
+        "severity": "normal"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "461fa8f0-17ac-5ef8-bc33-02c881c7b1c9",
+      "message_id": "msg_fr_0033",
+      "title": "Service prod · api-gateway-prod · Nested event",
+      "body": "### Service prod · api-gateway-prod\n\nA related object-level event was created for this object.",
+      "channel_id": "home-automation",
+      "is_read": false,
+      "received_at": "2026-05-07T04:50:58.555000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "prod_api_gateway_service_event",
+        "event_id": "prod_api_gateway_service_event",
+        "thing_id": "prod_api_gateway_service",
+        "status": "ongoing",
+        "message": "### Service prod · api-gateway-prod\n\nA related object-level event was created for this object.",
+        "severity": "high"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "4fd5d283-3db7-5102-9947-978f84a20038",
+      "message_id": "msg_fr_0034",
+      "title": "Serrure connectée · Porte d’entrée",
+      "body": "Serrure connectée pour l’état de verrouillage, la batterie faible et les ouvertures inhabituelles.",
+      "channel_id": "security-watch",
+      "is_read": false,
+      "received_at": "2026-05-07T04:51:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_entry_smart_lock",
+        "thing_id": "home_entry_smart_lock",
+        "projection_destination": "thing_head",
+        "title": "Serrure connectée · Porte d’entrée",
+        "description": "Serrure connectée pour l’état de verrouillage, la batterie faible et les ouvertures inhabituelles."
+      },
+      "status": "normal"
+    },
+    {
+      "id": "3eabb08c-606b-585b-ace9-1a24aa4891de",
+      "message_id": "msg_fr_0035",
+      "title": "Serrure connectée · Porte d’entrée · Update 1",
+      "body": "Serrure connectée pour l’état de verrouillage, la batterie faible et les ouvertures inhabituelles.",
+      "channel_id": "security-watch",
+      "is_read": false,
+      "received_at": "2026-05-07T04:52:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_entry_smart_lock",
+        "thing_id": "home_entry_smart_lock",
+        "projection_destination": "thing_head",
+        "title": "Serrure connectée · Porte d’entrée · Update 1",
+        "description": "Serrure connectée pour l’état de verrouillage, la batterie faible et les ouvertures inhabituelles."
+      },
+      "status": "normal"
+    },
+    {
+      "id": "fef21494-3119-582c-b8cd-2f60c3e37f64",
+      "message_id": "msg_fr_0036",
+      "title": "Serrure connectée · Porte d’entrée · Update 2",
+      "body": "Serrure connectée pour l’état de verrouillage, la batterie faible et les ouvertures inhabituelles.",
+      "channel_id": "security-watch",
+      "is_read": false,
+      "received_at": "2026-05-07T04:53:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_entry_smart_lock",
+        "thing_id": "home_entry_smart_lock",
+        "projection_destination": "thing_head",
+        "title": "Serrure connectée · Porte d’entrée · Update 2",
+        "description": "Serrure connectée pour l’état de verrouillage, la batterie faible et les ouvertures inhabituelles."
+      },
+      "status": "normal"
+    },
+    {
+      "id": "f772217d-fd68-5595-8b52-e3d2f4e596eb",
+      "message_id": "msg_fr_0037",
+      "title": "Serrure connectée · Porte d’entrée · Update 3",
+      "body": "Serrure connectée pour l’état de verrouillage, la batterie faible et les ouvertures inhabituelles.",
+      "channel_id": "security-watch",
+      "is_read": false,
+      "received_at": "2026-05-07T04:54:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_entry_smart_lock",
+        "thing_id": "home_entry_smart_lock",
+        "projection_destination": "thing_head",
+        "title": "Serrure connectée · Porte d’entrée · Update 3",
+        "description": "Serrure connectée pour l’état de verrouillage, la batterie faible et les ouvertures inhabituelles."
+      },
+      "status": "normal"
+    },
+    {
+      "id": "d13f531b-6142-57d2-8e24-c2f6942d04d8",
+      "message_id": "msg_fr_0038",
+      "title": "Serrure connectée · Porte d’entrée · Archived",
+      "body": "Serrure connectée pour l’état de verrouillage, la batterie faible et les ouvertures inhabituelles.",
+      "channel_id": "security-watch",
+      "is_read": true,
+      "received_at": "2026-05-07T04:55:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_entry_smart_lock",
+        "thing_id": "home_entry_smart_lock",
+        "projection_destination": "thing_head",
+        "status": "archived"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "7dee2a28-63b5-500d-9dd2-665215af7693",
+      "message_id": "msg_fr_0039",
+      "title": "home_entry_smart_lock deleted",
+      "body": "{\"deleted_at\": 1762879200000, \"observed_at\": 1762879200000, \"metadata\": {\"deleted_by\": \"fixture-generator\", \"reason\": \"demo_cleanup\", \"is_test\": true}}",
+      "channel_id": "security-watch",
+      "is_read": true,
+      "received_at": "2026-05-07T04:56:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_entry_smart_lock",
+        "thing_id": "home_entry_smart_lock",
+        "projection_destination": "thing_deleted",
+        "status": "deleted"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "550de839-8732-59c3-940e-465e37f270cc",
+      "message_id": "msg_fr_0040",
+      "title": "Serrure connectée · Porte d’entrée · Nested alert",
+      "body": "### Serrure connectée · Porte d’entrée\n\nThis message is attached to the object and can be displayed as a second-level message.\n\n- Status: `warning`\n- Source: `fixture-generator`",
+      "channel_id": "security-watch",
+      "is_read": false,
+      "received_at": "2026-05-07T04:57:58.555000Z",
+      "raw_payload": {
+        "entity_type": "thing",
+        "entity_id": "home_entry_smart_lock",
+        "thing_id": "home_entry_smart_lock",
+        "projection_destination": "thing_message",
+        "severity": "normal"
+      },
+      "status": "normal"
+    },
+    {
+      "id": "88b0ed5e-439c-57d4-9ecc-c9f853bbda75",
+      "message_id": "msg_fr_0041",
+      "title": "Serrure connectée · Porte d’entrée · Nested event",
+      "body": "### Serrure connectée · Porte d’entrée\n\nA related object-level event was created for this object.",
+      "channel_id": "security-watch",
+      "is_read": false,
+      "received_at": "2026-05-07T04:58:58.555000Z",
+      "raw_payload": {
+        "entity_type": "event",
+        "entity_id": "home_entry_smart_lock_event",
+        "event_id": "home_entry_smart_lock_event",
+        "thing_id": "home_entry_smart_lock",
+        "status": "ongoing",
+        "message": "### Serrure connectée · Porte d’entrée\n\nA related object-level event was created for this object.",
+        "severity": "high"
       },
       "status": "normal"
     }
@@ -1534,59 +743,59 @@
   "channel_subscriptions": [
     {
       "channel_id": "ops-core",
-      "display_name": "Cœur des opérations",
-      "password": "fixture-ops-core-2026",
-      "last_synced_at": "2026-05-08T04:25:00.000Z",
-      "updated_at": "2026-05-08T03:10:00.000Z"
-    },
-    {
-      "channel_id": "home-automation",
-      "display_name": "Automatisation domestique",
-      "password": "fixture-home-automation-2026",
-      "last_synced_at": "2026-05-08T04:26:00.000Z",
-      "updated_at": "2026-05-08T03:11:00.000Z"
-    },
-    {
-      "channel_id": "finance-ledger",
-      "display_name": "Grand livre financier",
-      "password": "fixture-finance-ledger-2026",
-      "last_synced_at": "2026-05-08T04:27:00.000Z",
-      "updated_at": "2026-05-08T03:12:00.000Z"
+      "display_name": "Operations Core",
+      "password": "fixture-pass-1234",
+      "last_synced_at": "2026-05-07T04:17:58.555000Z",
+      "updated_at": "2026-05-07T04:17:58.555000Z"
     },
     {
       "channel_id": "event-monitoring",
-      "display_name": "Surveillance des événements",
-      "password": "fixture-event-monitoring-2026",
-      "last_synced_at": "2026-05-08T04:28:00.000Z",
-      "updated_at": "2026-05-08T03:13:00.000Z"
+      "display_name": "Event Monitoring",
+      "password": "fixture-pass-1234",
+      "last_synced_at": "2026-05-07T04:17:58.555000Z",
+      "updated_at": "2026-05-07T04:17:58.555000Z"
+    },
+    {
+      "channel_id": "thing-hub",
+      "display_name": "Thing Hub",
+      "password": "fixture-pass-1234",
+      "last_synced_at": "2026-05-07T04:17:58.555000Z",
+      "updated_at": "2026-05-07T04:17:58.555000Z"
     },
     {
       "channel_id": "ai-agent-feedback",
-      "display_name": "Retours de l’agent IA",
-      "password": "fixture-ai-agent-feedback-2026",
-      "last_synced_at": "2026-05-08T04:29:00.000Z",
-      "updated_at": "2026-05-08T03:14:00.000Z"
+      "display_name": "AI Agent Feedback",
+      "password": "fixture-pass-1234",
+      "last_synced_at": "2026-05-07T04:17:58.555000Z",
+      "updated_at": "2026-05-07T04:17:58.555000Z"
     },
     {
-      "channel_id": "executive-brief",
-      "display_name": "Note de direction",
-      "password": "fixture-executive-brief-2026",
-      "last_synced_at": "2026-05-08T04:30:00.000Z",
-      "updated_at": "2026-05-08T03:15:00.000Z"
+      "channel_id": "finance-ledger",
+      "display_name": "Finance Ledger",
+      "password": "fixture-pass-1234",
+      "last_synced_at": "2026-05-07T04:17:58.555000Z",
+      "updated_at": "2026-05-07T04:17:58.555000Z"
     },
     {
-      "channel_id": "incident-command",
-      "display_name": "Pilotage d’incident",
-      "password": "fixture-incident-command-2026",
-      "last_synced_at": "2026-05-08T04:31:00.000Z",
-      "updated_at": "2026-05-08T03:16:00.000Z"
+      "channel_id": "home-automation",
+      "display_name": "Home Automation",
+      "password": "fixture-pass-1234",
+      "last_synced_at": "2026-05-07T04:17:58.555000Z",
+      "updated_at": "2026-05-07T04:17:58.555000Z"
     },
     {
-      "channel_id": "customer-trust",
-      "display_name": "Confiance client",
-      "password": "fixture-customer-trust-2026",
-      "last_synced_at": "2026-05-08T04:32:00.000Z",
-      "updated_at": "2026-05-08T03:17:00.000Z"
+      "channel_id": "security-watch",
+      "display_name": "Security Watch",
+      "password": "fixture-pass-1234",
+      "last_synced_at": "2026-05-07T04:17:58.555000Z",
+      "updated_at": "2026-05-07T04:17:58.555000Z"
+    },
+    {
+      "channel_id": "infra-observability",
+      "display_name": "Infra Observability",
+      "password": "fixture-pass-1234",
+      "last_synced_at": "2026-05-07T04:17:58.555000Z",
+      "updated_at": "2026-05-07T04:17:58.555000Z"
     }
   ]
 }

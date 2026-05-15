@@ -4301,6 +4301,29 @@
         }
       }
     },
+    "channel_subscriber_limit_exceeded": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This channel already has 32 subscribers. Remove an unused device before adding another one."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "该频道已达到 32 个订阅者上限，请先移除不再使用的设备。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此頻道已達 32 個訂閱者上限，請先移除不再使用的裝置。"
+          }
+        }
+      }
+    },
     "gateway_rate_limited": {
       "extractionState": "manual",
       "localizations": {
