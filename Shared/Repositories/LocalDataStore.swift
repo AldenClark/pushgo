@@ -1847,13 +1847,13 @@ actor LocalDataStore {
 
     func saveMessages(_ messages: [PushMessage]) async throws {
         let canonicalMessages = messages.map(canonicalizedMessageForPersistence)
-        try await performBackendWrite { backend in
+        let storedMessages = try await performBackendWrite { backend in
             try await backend.saveMessages(canonicalMessages)
         }
-        let searchable = canonicalMessages.filter(isTopLevelMessage)
+        let searchable = storedMessages.filter(isTopLevelMessage)
         await rebuildSearchIndex(with: searchable)
         await rebuildMetadataIndex(with: searchable)
-        await mergeNotificationContextSnapshot(with: canonicalMessages)
+        await mergeNotificationContextSnapshot(with: storedMessages)
     }
 
     func saveEntityRecords(_ messages: [PushMessage]) async throws {
@@ -1866,13 +1866,13 @@ actor LocalDataStore {
 
     func saveMessage(_ message: PushMessage) async throws {
         let canonicalMessage = canonicalizedMessageForPersistence(message)
-        try await performBackendWrite { backend in
+        let storedMessages = try await performBackendWrite { backend in
             try await backend.saveMessages([canonicalMessage])
         }
-        let searchable = isTopLevelMessage(canonicalMessage) ? [canonicalMessage] : []
+        let searchable = storedMessages.filter(isTopLevelMessage)
         await rebuildSearchIndex(with: searchable)
         await rebuildMetadataIndex(with: searchable)
-        await mergeNotificationContextSnapshot(with: [canonicalMessage])
+        await mergeNotificationContextSnapshot(with: storedMessages)
     }
 
     func persistNotificationMessageIfNeeded(
@@ -1906,13 +1906,13 @@ actor LocalDataStore {
     func saveMessagesBatch(_ messages: [PushMessage]) async throws {
         guard !messages.isEmpty else { return }
         let canonicalMessages = messages.map(canonicalizedMessageForPersistence)
-        try await performBackendWrite { backend in
+        let storedMessages = try await performBackendWrite { backend in
             try await backend.saveMessages(canonicalMessages)
         }
-        let searchable = canonicalMessages.filter(isTopLevelMessage)
+        let searchable = storedMessages.filter(isTopLevelMessage)
         await rebuildSearchIndex(with: searchable)
         await rebuildMetadataIndex(with: searchable)
-        await mergeNotificationContextSnapshot(with: canonicalMessages)
+        await mergeNotificationContextSnapshot(with: storedMessages)
     }
 
     func setMessageReadState(id: UUID, isRead: Bool) async throws {
@@ -2642,6 +2642,35 @@ private struct GRDBMessageRecord {
             rawPayload: payload,
             status: resolvedStatus,
             decryptionState: resolvedDecryptionState
+        )
+    }
+
+    func withID(_ id: UUID) -> GRDBMessageRecord {
+        GRDBMessageRecord(
+            id: id,
+            messageId: messageId,
+            title: title,
+            body: body,
+            channel: channel,
+            url: url,
+            isRead: isRead,
+            receivedAt: receivedAt,
+            rawPayloadJSON: rawPayloadJSON,
+            status: status,
+            decryptionState: decryptionState,
+            notificationRequestId: notificationRequestId,
+            deliveryId: deliveryId,
+            operationId: operationId,
+            entityType: entityType,
+            entityId: entityId,
+            eventId: eventId,
+            thingId: thingId,
+            projectionDestination: projectionDestination,
+            eventState: eventState,
+            eventTimeEpoch: eventTimeEpoch,
+            observedTimeEpoch: observedTimeEpoch,
+            occurredAtEpoch: occurredAtEpoch,
+            topLevelMessage: topLevelMessage
         )
     }
 
@@ -4028,7 +4057,8 @@ private actor GRDBStore {
                     event_time_epoch = excluded.event_time_epoch,
                     observed_time_epoch = excluded.observed_time_epoch,
                     occurred_at_epoch = excluded.occurred_at_epoch,
-                    is_top_level_message = excluded.is_top_level_message;
+                    is_top_level_message = excluded.is_top_level_message
+                WHERE excluded.received_at >= messages.received_at;
                 """
             try db.execute(sql: sql)
         } else {
@@ -5123,8 +5153,10 @@ private actor GRDBStore {
         }
     }
 
-    func saveMessages(_ messages: [PushMessage]) async throws {
-        guard !messages.isEmpty else { return }
+    func saveMessages(_ messages: [PushMessage]) async throws -> [PushMessage] {
+        guard !messages.isEmpty else { return [] }
+        var storedMessages: [PushMessage] = []
+        storedMessages.reserveCapacity(messages.count)
         try write { db in
             for message in messages {
                 let canonical = canonicalizedMessageForPersistence(message)
@@ -5135,12 +5167,22 @@ private actor GRDBStore {
                     try enqueuePendingInboundMessage(record, thingId: thingId, db: db)
                     continue
                 }
+                let existing = try loadMessageRecordByMessageId(record.messageId, db: db)
+                if let existing, record.receivedAt < existing.receivedAt {
+                    continue
+                }
                 try insertOrUpdateMessage(record, db: db, updateOnConflict: true)
+                if let existing {
+                    storedMessages.append(record.withID(existing.id).toPushMessage(decoder: decoder))
+                } else {
+                    storedMessages.append(canonical)
+                }
                 if let thingId = thingParentIdentity(from: canonical) {
                     try replayPendingInboundMessages(thingId: thingId, db: db)
                 }
             }
         }
+        return storedMessages
     }
 
     func loadMessages() async throws -> [PushMessage] {

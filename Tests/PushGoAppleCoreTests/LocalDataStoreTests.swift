@@ -1911,6 +1911,153 @@ struct LocalDataStoreTests {
     }
 
     @Test
+    func staleLateInputsDoNotPolluteSideIndexesOrNotificationSnapshot() async throws {
+        try await withIsolatedLocalDataStore { store, appGroupIdentifier in
+            let topLevelNewer = makeMessage(
+                id: UUID(uuidString: "20000000-0000-0000-0000-000000000001")!,
+                messageId: "stale-index-top-level-001",
+                notificationRequestId: "req-stale-index-top-level-001",
+                title: "Fresh top level title",
+                body: "Fresh top level body",
+                receivedAt: Date(timeIntervalSince1970: 1_800_001_000),
+                rawPayload: [
+                    "entity_type": "message",
+                    "entity_id": "stale-index-top-level-entity-001",
+                    "tags": #"["fresh-tag"]"#,
+                    "metadata": #"{"kind":"fresh"}"#,
+                    "channel_id": "stale-index-tests",
+                ]
+            )
+            let topLevelStale = makeMessage(
+                id: UUID(uuidString: "20000000-0000-0000-0000-000000000002")!,
+                messageId: "stale-index-top-level-001",
+                notificationRequestId: "req-stale-index-top-level-001-stale",
+                title: "Older compensating title",
+                body: "Older compensating body",
+                receivedAt: Date(timeIntervalSince1970: 1_800_000_900),
+                rawPayload: [
+                    "entity_type": "message",
+                    "entity_id": "stale-index-top-level-entity-001",
+                    "tags": #"["stale-tag"]"#,
+                    "metadata": #"{"kind":"stale","patch":"richer"}"#,
+                    "channel_id": "stale-index-tests",
+                ]
+            )
+            let topLevelEqualUpdate = makeMessage(
+                id: UUID(uuidString: "20000000-0000-0000-0000-000000000003")!,
+                messageId: "stale-index-top-level-001",
+                notificationRequestId: "req-stale-index-top-level-001-equal",
+                title: "Equal timestamp accepted",
+                body: "Equal timestamp accepted body",
+                receivedAt: topLevelNewer.receivedAt,
+                rawPayload: [
+                    "entity_type": "message",
+                    "entity_id": "stale-index-top-level-entity-001",
+                    "tags": #"["equal-tag"]"#,
+                    "metadata": #"{"kind":"equal","mode":"accepted"}"#,
+                    "channel_id": "stale-index-tests",
+                ]
+            )
+            let eventId = "evt-stale-index-001"
+            let snapshotNewer = makeMessage(
+                id: UUID(uuidString: "20000000-0000-0000-0000-000000000004")!,
+                messageId: "stale-index-event-001",
+                notificationRequestId: "req-stale-index-event-001",
+                title: "Fresh event title",
+                body: "Fresh event body",
+                receivedAt: Date(timeIntervalSince1970: 1_800_001_000),
+                rawPayload: [
+                    "entity_type": "event",
+                    "entity_id": eventId,
+                    "event_id": eventId,
+                    "projection_destination": "event_head",
+                    "channel_id": "stale-index-tests",
+                ]
+            )
+            let snapshotStale = makeMessage(
+                id: UUID(uuidString: "20000000-0000-0000-0000-000000000005")!,
+                messageId: "stale-index-event-001",
+                notificationRequestId: "req-stale-index-event-001-stale",
+                title: "Older event title",
+                body: "Older event body",
+                receivedAt: Date(timeIntervalSince1970: 1_800_000_900),
+                rawPayload: [
+                    "entity_type": "event",
+                    "entity_id": eventId,
+                    "event_id": eventId,
+                    "projection_destination": "event_head",
+                    "channel_id": "stale-index-tests",
+                ]
+            )
+            let snapshotEqualUpdate = makeMessage(
+                id: UUID(uuidString: "20000000-0000-0000-0000-000000000006")!,
+                messageId: "stale-index-event-001",
+                notificationRequestId: "req-stale-index-event-001-equal",
+                title: "Equal event title",
+                body: "Equal event body",
+                receivedAt: snapshotNewer.receivedAt,
+                rawPayload: [
+                    "entity_type": "event",
+                    "entity_id": eventId,
+                    "event_id": eventId,
+                    "projection_destination": "event_head",
+                    "channel_id": "stale-index-tests",
+                ]
+            )
+
+            try await store.saveMessagesBatch([topLevelNewer, snapshotNewer])
+            try await store.saveMessagesBatch([topLevelStale, snapshotStale])
+
+            let afterStale = try #require(try await store.loadMessage(messageId: topLevelNewer.messageId ?? ""))
+            #expect(afterStale.title == "Fresh top level title")
+            #expect(afterStale.body == "Fresh top level body")
+            #expect(afterStale.receivedAt == topLevelNewer.receivedAt)
+            #expect(afterStale.metadata["kind"] == "fresh")
+            #expect(afterStale.metadata["patch"] == nil)
+            #expect(afterStale.tags == ["fresh-tag"])
+            #expect(try await store.searchMessagesCount(query: "Fresh top level title") == 1)
+            #expect(try await store.searchMessagesCount(query: "Older compensating title") == 0)
+            #expect(try await store.searchMessagesCount(query: "tag:fresh-tag") == 1)
+            #expect(try await store.searchMessagesCount(query: "tag:stale-tag") == 0)
+            let tagCountsAfterStale = try await store.messageTagCounts()
+            #expect(tagCountsAfterStale.first(where: { $0.tag == "fresh-tag" })?.totalCount == 1)
+            #expect(tagCountsAfterStale.contains(where: { $0.tag == "stale-tag" }) == false)
+
+            let staleSnapshot = NotificationContextSnapshotStore.load(
+                fileManager: .default,
+                appGroupIdentifier: appGroupIdentifier
+            )
+            #expect(staleSnapshot?.events[eventId]?.title == "Fresh event title")
+            #expect(staleSnapshot?.events[eventId]?.body == "Fresh event body")
+
+            try await store.saveMessagesBatch([topLevelEqualUpdate, snapshotEqualUpdate])
+
+            let afterEqual = try #require(try await store.loadMessage(messageId: topLevelNewer.messageId ?? ""))
+            #expect(afterEqual.title == "Equal timestamp accepted")
+            #expect(afterEqual.body == "Equal timestamp accepted body")
+            #expect(afterEqual.receivedAt == topLevelNewer.receivedAt)
+            #expect(afterEqual.metadata["kind"] == "equal")
+            #expect(afterEqual.metadata["mode"] == "accepted")
+            #expect(afterEqual.tags == ["equal-tag"])
+            #expect(try await store.searchMessagesCount(query: "Equal timestamp accepted") == 1)
+            #expect(try await store.searchMessagesCount(query: "Fresh top level title") == 0)
+            #expect(try await store.searchMessagesCount(query: "tag:equal-tag") == 1)
+            #expect(try await store.searchMessagesCount(query: "tag:fresh-tag") == 0)
+
+            let tagCountsAfterEqual = try await store.messageTagCounts()
+            #expect(tagCountsAfterEqual.first(where: { $0.tag == "equal-tag" })?.totalCount == 1)
+            #expect(tagCountsAfterEqual.contains(where: { $0.tag == "fresh-tag" }) == false)
+
+            let equalSnapshot = NotificationContextSnapshotStore.load(
+                fileManager: .default,
+                appGroupIdentifier: appGroupIdentifier
+            )
+            #expect(equalSnapshot?.events[eventId]?.title == "Equal event title")
+            #expect(equalSnapshot?.events[eventId]?.body == "Equal event body")
+        }
+    }
+
+    @Test
     func loadEntityOpenTargetResolvesEventProjectionByNotificationRequestId() async throws {
         try await withIsolatedLocalDataStore { store, _ in
             let eventId = "evt-open-target-001"
@@ -2030,21 +2177,24 @@ struct LocalDataStoreTests {
     }
 
     private func makeMessage(
+        id: UUID = UUID(),
         messageId: String,
         notificationRequestId: String,
         title: String,
         body: String,
+        receivedAt: Date = Date(timeIntervalSince1970: 1_741_572_800),
         rawPayload: [String: Any] = [:]
     ) -> PushMessage {
         var payload = rawPayload
         payload["message_id"] = messageId
         payload["_notificationRequestId"] = notificationRequestId
         return PushMessage(
+            id: id,
             messageId: messageId,
             title: title,
             body: body,
             channel: (payload["channel_id"] as? String) ?? "default",
-            receivedAt: Date(timeIntervalSince1970: 1_741_572_800),
+            receivedAt: receivedAt,
             rawPayload: payload.reduce(into: [String: AnyCodable]()) { result, item in
                 result[item.key] = AnyCodable(item.value)
             }
