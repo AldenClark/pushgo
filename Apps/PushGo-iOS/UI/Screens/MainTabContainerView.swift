@@ -64,6 +64,9 @@ struct MainTabContainerView: View {
             }
             .task(id: automationStateVersion) {
                 guard selection.automationPublishesFromRoot else { return }
+                // Message list/detail screens already publish precise selection state.
+                // Skip root-level message publish to avoid list-state overwriting detail-state.
+                guard selection != .messages else { return }
                 PushGoAutomationRuntime.shared.publishState(
                     environment: environment,
                     activeTab: selection.automationIdentifier,

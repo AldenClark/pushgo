@@ -100,6 +100,11 @@ struct MessageDetailScreen: View {
                 openedMessageDecryptionState: viewModel.message?.decryptionState?.rawValue
             )
         }
+        .task(id: detailReadyAutomationSignature) {
+            guard let message = viewModel.message else { return }
+            let loadSource = pushGoMarkdownDisplayMode(for: message.resolvedBody.rawText).automationLoadSource
+            PushGoAutomationRuntime.shared.recordMessageDetailReady(message: message, loadSource: loadSource)
+        }
 #endif
     }
 
@@ -114,6 +119,14 @@ struct MessageDetailScreen: View {
         let identifier = message.messageId ?? message.id.uuidString
         let decryption = message.decryptionState?.rawValue ?? "none"
         return "\(identifier)|\(decryption)|\(message.isRead)"
+    }
+
+    private var detailReadyAutomationSignature: String {
+        guard let message = viewModel.message else {
+            return "message:none"
+        }
+        let identifier = message.messageId ?? message.id.uuidString
+        return "\(identifier)|\(message.body.count)|\(message.title.count)"
     }
 
     @ViewBuilder
@@ -603,7 +616,12 @@ private extension View {
 
 private extension Date {
     func pushgoDetailTimestamp() -> String {
-        formatted(date: .complete, time: .standard)
+#if DEBUG
+        Task { @MainActor in
+            PushGoAutomationRuntime.shared.recordDetailTimestampFormatted()
+        }
+#endif
+        return formatted(date: .complete, time: .standard)
     }
 }
 

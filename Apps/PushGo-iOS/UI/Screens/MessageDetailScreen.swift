@@ -17,6 +17,7 @@ struct MessageDetailScreen: View {
     private let onPrepareDelete: (() -> Void)?
     private let shouldDismissOnDelete: Bool
     private let useNavigationContainer: Bool
+    private let automationMessageIdentifierHint: String
 
     private enum Layout {
         static let singleImageHeight: CGFloat = 240
@@ -33,6 +34,7 @@ struct MessageDetailScreen: View {
         shouldDismissOnDelete: Bool = true,
         useNavigationContainer: Bool = true,
     ) {
+        let automationMessageIdentifierHint = message?.messageId ?? message?.id.uuidString ?? "unknown"
         _viewModel = State(wrappedValue: MessageDetailViewModel(
             messageId: messageId,
             initialMessage: message,
@@ -41,6 +43,7 @@ struct MessageDetailScreen: View {
         self.onPrepareDelete = onPrepareDelete
         self.shouldDismissOnDelete = shouldDismissOnDelete
         self.useNavigationContainer = useNavigationContainer
+        self.automationMessageIdentifierHint = automationMessageIdentifierHint
     }
 
     var body: some View {
@@ -59,6 +62,11 @@ struct MessageDetailScreen: View {
         .onAppear {
             guard !didLoad else { return }
             didLoad = true
+#if DEBUG
+            PushGoAutomationRuntime.shared.recordMessageDetailViewAppeared(
+                messageId: viewModel.message?.messageId ?? viewModel.message?.id.uuidString ?? automationMessageIdentifierHint
+            )
+#endif
             Task {
                 await viewModel.ensureLoaded()
                 await viewModel.markAsReadIfNeeded()
@@ -89,6 +97,12 @@ struct MessageDetailScreen: View {
                 openedMessageDecryptionState: viewModel.message?.decryptionState?.rawValue
             )
         }
+        .task(id: detailReadyAutomationSignature) {
+            guard let message = viewModel.message else { return }
+            PushGoAutomationRuntime.shared.recordMessageDetailContentReady(message: message)
+            let loadSource = pushGoMarkdownDisplayMode(for: message.resolvedBody.rawText).automationLoadSource
+            PushGoAutomationRuntime.shared.recordMessageDetailReady(message: message, loadSource: loadSource)
+        }
 #endif
     }
 
@@ -99,6 +113,14 @@ struct MessageDetailScreen: View {
         let identifier = message.messageId ?? message.id.uuidString
         let decryption = message.decryptionState?.rawValue ?? "none"
         return "\(identifier)|\(decryption)|\(message.isRead)"
+    }
+
+    private var detailReadyAutomationSignature: String {
+        guard let message = viewModel.message else {
+            return "message:none"
+        }
+        let identifier = message.messageId ?? message.id.uuidString
+        return "\(identifier)|\(message.body.count)|\(message.title.count)"
     }
 
     @ViewBuilder
@@ -573,7 +595,12 @@ private extension View {
 
 private extension Date {
     func pushgoDetailTimestamp() -> String {
-        formatted(date: .complete, time: .standard)
+#if DEBUG
+        Task { @MainActor in
+            PushGoAutomationRuntime.shared.recordDetailTimestampFormatted()
+        }
+#endif
+        return formatted(date: .complete, time: .standard)
     }
 }
 

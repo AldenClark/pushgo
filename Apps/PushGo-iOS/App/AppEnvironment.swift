@@ -682,6 +682,9 @@ final class AppEnvironment {
         category: String = "runtime"
     ) {
         #if DEBUG
+        if shouldSuppressAutomationRuntimeError(error, source: source) {
+            return
+        }
         let message: String
         let code: String?
         if let appError = error as? AppError {
@@ -698,6 +701,20 @@ final class AppEnvironment {
             message: message
         )
         #endif
+    }
+
+    private func shouldSuppressAutomationRuntimeError(_ error: Error, source: String) -> Bool {
+        guard PushGoAutomationContext.isActive else { return false }
+        if (source == "channel.sync.launch" || source == "channel.sync.entry"),
+           PushGoAutomationContext.bypassPushAuthorizationPrompt
+        {
+            return true
+        }
+        guard source == "channel.sync.launch" || source == "channel.sync.entry" else { return false }
+        if let appError = error as? AppError {
+            return appError == .apnsDenied || appError.code == "E_APNS_DENIED"
+        }
+        return (error as NSError).localizedDescription.contains("E_APNS_DENIED")
     }
 
     private func recordAutomationRuntimeMessage(

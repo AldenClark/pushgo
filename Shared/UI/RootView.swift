@@ -1,6 +1,13 @@
 import Foundation
 import SwiftUI
 
+#if canImport(Darwin)
+import Darwin
+#endif
+#if os(macOS)
+import AppKit
+#endif
+
 struct RootView: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
 
@@ -30,6 +37,81 @@ struct RootView: View {
 }
 
 #if DEBUG && !os(watchOS)
+@MainActor
+private final class PushGoAutomationPerformanceMonitor: NSObject {
+    static let shared = PushGoAutomationPerformanceMonitor()
+
+    struct Snapshot: Sendable {
+        let residentMemoryBytes: UInt64?
+        let mainThreadMaxStallMilliseconds: Int
+    }
+
+    private let expectedTickInterval: TimeInterval = 1.0 / 30.0
+    private var started = false
+    private var timer: Timer?
+    private var lastTickUptime: TimeInterval?
+    private var maxStallMilliseconds = 0
+
+    private override init() {
+        super.init()
+    }
+
+    func startIfNeeded() {
+        guard !started else { return }
+        started = true
+        lastTickUptime = ProcessInfo.processInfo.systemUptime
+
+        let timer = Timer(
+            timeInterval: expectedTickInterval,
+            target: self,
+            selector: #selector(handleTimerTick),
+            userInfo: nil,
+            repeats: true
+        )
+        self.timer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    func snapshot() -> Snapshot {
+        Snapshot(
+            residentMemoryBytes: currentResidentMemoryBytes(),
+            mainThreadMaxStallMilliseconds: maxStallMilliseconds
+        )
+    }
+
+    private func currentResidentMemoryBytes() -> UInt64? {
+        #if canImport(Darwin)
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) { pointer in
+            pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { rebound in
+                task_info(
+                    mach_task_self_,
+                    task_flavor_t(MACH_TASK_BASIC_INFO),
+                    rebound,
+                    &count
+                )
+            }
+        }
+        guard result == KERN_SUCCESS else { return nil }
+        return UInt64(info.resident_size)
+        #else
+        return nil
+        #endif
+    }
+
+    @objc
+    private func handleTimerTick() {
+        let now = ProcessInfo.processInfo.systemUptime
+        if let lastTickUptime {
+            let stall = max(0, now - lastTickUptime - expectedTickInterval)
+            let stallMilliseconds = Int((stall * 1_000).rounded())
+            maxStallMilliseconds = max(maxStallMilliseconds, stallMilliseconds)
+        }
+        lastTickUptime = now
+    }
+}
+
 private enum PushGoAutomationEnvironment {
     static let request = "PUSHGO_AUTOMATION_REQUEST"
     static let responsePath = "PUSHGO_AUTOMATION_RESPONSE_PATH"
@@ -113,6 +195,8 @@ struct PushGoAutomationState: Encodable, Equatable {
     let privateDetail: String?
     let ackPendingCount: Int
     let channelCount: Int
+    let messageTagOptionCount: Int
+    let runtimeQualityTagCount: Int
     let lastNotificationAction: String?
     let lastNotificationTarget: String?
     let lastFixtureImportPath: String?
@@ -127,6 +211,8 @@ struct PushGoAutomationState: Encodable, Equatable {
     let latestRuntimeErrorCode: String?
     let latestRuntimeErrorMessage: String?
     let latestRuntimeErrorTimestamp: String?
+    let residentMemoryBytes: UInt64?
+    let mainThreadMaxStallMilliseconds: Int
 
     private enum CodingKeys: String, CodingKey {
         case platform
@@ -162,6 +248,8 @@ struct PushGoAutomationState: Encodable, Equatable {
         case privateDetail = "private_detail"
         case ackPendingCount = "ack_pending_count"
         case channelCount = "channel_count"
+        case messageTagOptionCount = "message_tag_option_count"
+        case runtimeQualityTagCount = "runtimequality_tag_count"
         case lastNotificationAction = "last_notification_action"
         case lastNotificationTarget = "last_notification_target"
         case lastFixtureImportPath = "last_fixture_import_path"
@@ -176,6 +264,8 @@ struct PushGoAutomationState: Encodable, Equatable {
         case latestRuntimeErrorCode = "latest_runtime_error_code"
         case latestRuntimeErrorMessage = "latest_runtime_error_message"
         case latestRuntimeErrorTimestamp = "latest_runtime_error_timestamp"
+        case residentMemoryBytes = "resident_memory_bytes"
+        case mainThreadMaxStallMilliseconds = "main_thread_max_stall_ms"
     }
 }
 
@@ -185,6 +275,38 @@ private struct PushGoAutomationRuntimeError: Equatable {
     let code: String?
     let message: String
     let timestamp: String
+}
+
+private struct PushGoAutomationDetailReadySample: Equatable {
+    let sequence: Int
+    let messageId: String
+    let loadSource: String
+    let bodyBytes: Int
+    let titleBytes: Int
+    let lineCount: Int
+    let maxLineBytes: Int
+    let imageURLCount: Int
+    let isMarkdown: Bool
+}
+
+private struct PushGoAutomationDetailLifecycleSample: Equatable {
+    let sequence: Int
+    let messageId: String
+}
+
+private struct PushGoAutomationInstrumentationCounters: Equatable {
+    let detailTimestampFormatCount: Int
+    let markdownDisplayModeEvalCount: Int
+    let markdownPlainTextSegmentBuildCount: Int
+    let markdownAttachmentResolveCount: Int
+    let markdownAttachmentCacheHitCount: Int
+    let markdownAttachmentCacheMissCount: Int
+    let markdownAttachmentLocalSourceCount: Int
+    let markdownAttachmentRemoteFallbackCount: Int
+    let markdownAttachmentMetadataSyncHitCount: Int
+    let markdownAttachmentMetadataAsyncHitCount: Int
+    let markdownAttachmentMetadataMissCount: Int
+    let markdownAttachmentAnimatedCount: Int
 }
 
 private struct PushGoAutomationResponse: Encodable {
@@ -400,13 +522,33 @@ final class PushGoAutomationRuntime {
     private var lastFixtureImportSubscriptionCount = 0
     private var runtimeErrorCount = 0
     private var latestRuntimeError: PushGoAutomationRuntimeError?
+    private var latestDetailReadySample: PushGoAutomationDetailReadySample?
+    private var latestDetailViewAppearSample: PushGoAutomationDetailLifecycleSample?
+    private var latestDetailContentReadySample: PushGoAutomationDetailLifecycleSample?
+    private var nextDetailReadySequence = 0
+    private var nextDetailViewAppearSequence = 0
+    private var nextDetailContentReadySequence = 0
+    private var detailTimestampFormatCount = 0
+    private var markdownDisplayModeEvalCount = 0
+    private var markdownPlainTextSegmentBuildCount = 0
+    private var markdownAttachmentResolveCount = 0
+    private var markdownAttachmentCacheHitCount = 0
+    private var markdownAttachmentCacheMissCount = 0
+    private var markdownAttachmentLocalSourceCount = 0
+    private var markdownAttachmentRemoteFallbackCount = 0
+    private var markdownAttachmentMetadataSyncHitCount = 0
+    private var markdownAttachmentMetadataAsyncHitCount = 0
+    private var markdownAttachmentMetadataMissCount = 0
+    private var markdownAttachmentAnimatedCount = 0
     private var activeTrace: PushGoAutomationActiveTrace?
+    private var expensiveStateEnrichmentSuspensionCount = 0
 
     private init() {}
 
     func configureFromProcessEnvironment() {
         guard !configured else { return }
         configured = true
+        PushGoAutomationPerformanceMonitor.shared.startIfNeeded()
         responseURL = fileURL(for: PushGoAutomationEnvironment.responsePath)
         stateURL = fileURL(for: PushGoAutomationEnvironment.statePath)
         eventsURL = fileURL(for: PushGoAutomationEnvironment.eventsPath)
@@ -452,6 +594,7 @@ final class PushGoAutomationRuntime {
     ) {
         configureFromProcessEnvironment()
         let previousState = latestState
+        let performance = PushGoAutomationPerformanceMonitor.shared.snapshot()
         let state = PushGoAutomationState(
             platform: platformIdentifier,
             buildMode: "debug",
@@ -486,6 +629,8 @@ final class PushGoAutomationRuntime {
             privateDetail: nil,
             ackPendingCount: 0,
             channelCount: environment.channelSubscriptions.count,
+            messageTagOptionCount: 0,
+            runtimeQualityTagCount: 0,
             lastNotificationAction: lastNotificationAction,
             lastNotificationTarget: lastNotificationTarget,
             lastFixtureImportPath: lastFixtureImportPath,
@@ -499,7 +644,9 @@ final class PushGoAutomationRuntime {
             latestRuntimeErrorCategory: latestRuntimeError?.category,
             latestRuntimeErrorCode: latestRuntimeError?.code,
             latestRuntimeErrorMessage: latestRuntimeError?.message,
-            latestRuntimeErrorTimestamp: latestRuntimeError?.timestamp
+            latestRuntimeErrorTimestamp: latestRuntimeError?.timestamp,
+            residentMemoryBytes: performance.residentMemoryBytes,
+            mainThreadMaxStallMilliseconds: performance.mainThreadMaxStallMilliseconds
         )
         latestState = state
         writeJSON(state, to: stateURL)
@@ -509,7 +656,11 @@ final class PushGoAutomationRuntime {
         ])
         writeDerivedEvents(previous: previousState, current: state)
         Task { @MainActor [weak self] in
-            await self?.publishEnrichedState(baseState: state, environment: environment)
+            await self?.publishEnrichedState(
+                baseState: state,
+                derivedCountsState: previousState,
+                environment: environment
+            )
         }
     }
 
@@ -538,8 +689,14 @@ final class PushGoAutomationRuntime {
         guard let request else { return }
         startCommandTrace(request)
         writeEvent(type: "command.received", command: request.name, details: [:])
+        writePhaseMarker(command: request.name, phase: "command.total", status: "start")
+        let commandStartedAt = Date()
+        let commandPerformanceBefore = PushGoAutomationPerformanceMonitor.shared.snapshot()
+        let commandCountersBefore = instrumentationCountersSnapshot()
 
         do {
+            let commandBodyStartedAt = Date()
+            writePhaseMarker(command: request.name, phase: "command.body", status: "start")
             switch request.name {
             case "snapshot.get":
                 break
@@ -640,17 +797,100 @@ final class PushGoAutomationRuntime {
                 try await seedEntityRecords(request: request, environment: environment)
             case "fixture.seed_subscriptions":
                 try await seedSubscriptions(request: request, environment: environment)
+            case "runtime.measure_message_queries":
+                try await measureRuntimeMessageQueries(environment: environment)
+            case "runtime.measure_detail_variants":
+                try await withExpensiveStateEnrichmentSuspended {
+                    try await measureRuntimeDetailVariants(environment: environment)
+                }
+                refreshState(environment: environment)
+            case "runtime.measure_window_resize":
+                try await measureRuntimeWindowResize(environment: environment)
+            case "runtime.measure_sort_modes":
+                try await measureRuntimeSortModes(environment: environment)
+            case "runtime.measure_media_cycles":
+                try await withExpensiveStateEnrichmentSuspended {
+                    try await measureRuntimeMediaCycles(environment: environment)
+                }
+            case "runtime.measure_detail_release_cycles":
+                try await withExpensiveStateEnrichmentSuspended {
+                    try await measureRuntimeDetailReleaseCycles(environment: environment)
+                }
             case "debug.reset_local_state", "fixture.reset_local_state":
                 try await resetLocalState(environment: environment)
             default:
                 throw PushGoAutomationError.unsupportedCommand(request.name)
             }
-
+            writePhaseMarker(
+                command: request.name,
+                phase: "command.body",
+                status: "end",
+                startedAt: commandBodyStartedAt
+            )
+            let commandBodyMs = max(0, Int(Date().timeIntervalSince(commandBodyStartedAt) * 1_000))
+            let stateWaitStartedAt = Date()
+            writePhaseMarker(command: request.name, phase: "command.state_wait", status: "start")
             await waitForStatePropagation(after: request.name)
+            writePhaseMarker(
+                command: request.name,
+                phase: "command.state_wait",
+                status: "end",
+                startedAt: stateWaitStartedAt
+            )
+            let stateWaitMs = max(0, Int(Date().timeIntervalSince(stateWaitStartedAt) * 1_000))
+            let commandTotalMs = max(0, Int(Date().timeIntervalSince(commandStartedAt) * 1_000))
+            let commandPerformanceAfter = PushGoAutomationPerformanceMonitor.shared.snapshot()
+            let commandCountersAfter = instrumentationCountersSnapshot()
+            writeEvent(
+                type: "runtime.command_metrics",
+                command: request.name,
+                details: commandMetricDetails(
+                    status: "ok",
+                    commandStartedAt: commandStartedAt,
+                    commandBodyMs: commandBodyMs,
+                    stateWaitMs: stateWaitMs,
+                    performanceBefore: commandPerformanceBefore,
+                    performanceAfter: commandPerformanceAfter,
+                    countersBefore: commandCountersBefore,
+                    countersAfter: commandCountersAfter,
+                    totalMsOverride: commandTotalMs
+                )
+            )
+            writePhaseMarker(
+                command: request.name,
+                phase: "command.total",
+                status: "end",
+                startedAt: commandStartedAt
+            )
             writeEvent(type: "command.completed", command: request.name, details: [:])
             endCommandTrace(status: "ok", attributes: [:], errorCode: nil, errorMessage: nil)
             await writeResponse(ok: true, error: nil, environment: environment)
         } catch {
+            let commandTotalMs = max(0, Int(Date().timeIntervalSince(commandStartedAt) * 1_000))
+            let commandPerformanceAfter = PushGoAutomationPerformanceMonitor.shared.snapshot()
+            let commandCountersAfter = instrumentationCountersSnapshot()
+            writeEvent(
+                type: "runtime.command_metrics",
+                command: request.name,
+                details: commandMetricDetails(
+                    status: "error",
+                    commandStartedAt: commandStartedAt,
+                    commandBodyMs: commandTotalMs,
+                    stateWaitMs: 0,
+                    performanceBefore: commandPerformanceBefore,
+                    performanceAfter: commandPerformanceAfter,
+                    countersBefore: commandCountersBefore,
+                    countersAfter: commandCountersAfter,
+                    totalMsOverride: commandTotalMs
+                )
+            )
+            writePhaseMarker(
+                command: request.name,
+                phase: "command.total",
+                status: "error",
+                startedAt: commandStartedAt,
+                extra: ["error": error.localizedDescription]
+            )
             writeEvent(
                 type: "command.failed",
                 command: request.name,
@@ -664,6 +904,106 @@ final class PushGoAutomationRuntime {
             )
             await writeResponse(ok: false, error: error.localizedDescription, environment: environment)
         }
+    }
+
+    private func instrumentationCountersSnapshot() -> PushGoAutomationInstrumentationCounters {
+        PushGoAutomationInstrumentationCounters(
+            detailTimestampFormatCount: detailTimestampFormatCount,
+            markdownDisplayModeEvalCount: markdownDisplayModeEvalCount,
+            markdownPlainTextSegmentBuildCount: markdownPlainTextSegmentBuildCount,
+            markdownAttachmentResolveCount: markdownAttachmentResolveCount,
+            markdownAttachmentCacheHitCount: markdownAttachmentCacheHitCount,
+            markdownAttachmentCacheMissCount: markdownAttachmentCacheMissCount,
+            markdownAttachmentLocalSourceCount: markdownAttachmentLocalSourceCount,
+            markdownAttachmentRemoteFallbackCount: markdownAttachmentRemoteFallbackCount,
+            markdownAttachmentMetadataSyncHitCount: markdownAttachmentMetadataSyncHitCount,
+            markdownAttachmentMetadataAsyncHitCount: markdownAttachmentMetadataAsyncHitCount,
+            markdownAttachmentMetadataMissCount: markdownAttachmentMetadataMissCount,
+            markdownAttachmentAnimatedCount: markdownAttachmentAnimatedCount
+        )
+    }
+
+    private func commandMetricDetails(
+        status: String,
+        commandStartedAt: Date,
+        commandBodyMs: Int,
+        stateWaitMs: Int,
+        performanceBefore: PushGoAutomationPerformanceMonitor.Snapshot,
+        performanceAfter: PushGoAutomationPerformanceMonitor.Snapshot,
+        countersBefore: PushGoAutomationInstrumentationCounters,
+        countersAfter: PushGoAutomationInstrumentationCounters,
+        totalMsOverride: Int? = nil
+    ) -> [String: String] {
+        let totalMs = totalMsOverride ?? max(0, Int(Date().timeIntervalSince(commandStartedAt) * 1_000))
+        let memoryBefore = Int64(performanceBefore.residentMemoryBytes ?? 0)
+        let memoryAfter = Int64(performanceAfter.residentMemoryBytes ?? 0)
+        let memoryDelta = memoryAfter - memoryBefore
+        let stallBefore = performanceBefore.mainThreadMaxStallMilliseconds
+        let stallAfter = performanceAfter.mainThreadMaxStallMilliseconds
+        let stallDelta = max(0, stallAfter - stallBefore)
+        return [
+            "status": status,
+            "command_total_ms": String(totalMs),
+            "command_body_ms": String(commandBodyMs),
+            "state_wait_ms": String(stateWaitMs),
+            "resident_memory_before_bytes": String(memoryBefore),
+            "resident_memory_after_bytes": String(memoryAfter),
+            "resident_memory_delta_bytes": String(memoryDelta),
+            "main_thread_stall_before_ms": String(stallBefore),
+            "main_thread_stall_after_ms": String(stallAfter),
+            "main_thread_stall_delta_ms": String(stallDelta),
+            "detail_timestamp_format_count_delta": String(
+                max(0, countersAfter.detailTimestampFormatCount - countersBefore.detailTimestampFormatCount)
+            ),
+            "markdown_display_mode_eval_count_delta": String(
+                max(0, countersAfter.markdownDisplayModeEvalCount - countersBefore.markdownDisplayModeEvalCount)
+            ),
+            "markdown_plain_text_segment_build_count_delta": String(
+                max(
+                    0,
+                    countersAfter.markdownPlainTextSegmentBuildCount - countersBefore.markdownPlainTextSegmentBuildCount
+                )
+            ),
+            "markdown_attachment_resolve_count_delta": String(
+                max(0, countersAfter.markdownAttachmentResolveCount - countersBefore.markdownAttachmentResolveCount)
+            ),
+            "markdown_attachment_cache_hit_count_delta": String(
+                max(0, countersAfter.markdownAttachmentCacheHitCount - countersBefore.markdownAttachmentCacheHitCount)
+            ),
+            "markdown_attachment_cache_miss_count_delta": String(
+                max(0, countersAfter.markdownAttachmentCacheMissCount - countersBefore.markdownAttachmentCacheMissCount)
+            ),
+            "markdown_attachment_local_source_count_delta": String(
+                max(0, countersAfter.markdownAttachmentLocalSourceCount - countersBefore.markdownAttachmentLocalSourceCount)
+            ),
+            "markdown_attachment_remote_fallback_count_delta": String(
+                max(
+                    0,
+                    countersAfter.markdownAttachmentRemoteFallbackCount - countersBefore.markdownAttachmentRemoteFallbackCount
+                )
+            ),
+            "markdown_attachment_metadata_sync_hit_count_delta": String(
+                max(
+                    0,
+                    countersAfter.markdownAttachmentMetadataSyncHitCount - countersBefore.markdownAttachmentMetadataSyncHitCount
+                )
+            ),
+            "markdown_attachment_metadata_async_hit_count_delta": String(
+                max(
+                    0,
+                    countersAfter.markdownAttachmentMetadataAsyncHitCount - countersBefore.markdownAttachmentMetadataAsyncHitCount
+                )
+            ),
+            "markdown_attachment_metadata_miss_count_delta": String(
+                max(
+                    0,
+                    countersAfter.markdownAttachmentMetadataMissCount - countersBefore.markdownAttachmentMetadataMissCount
+                )
+            ),
+            "markdown_attachment_animated_count_delta": String(
+                max(0, countersAfter.markdownAttachmentAnimatedCount - countersBefore.markdownAttachmentAnimatedCount)
+            ),
+        ]
     }
 
     func importStartupFixtureIfNeeded(environment: AppEnvironment) async {
@@ -722,7 +1062,21 @@ final class PushGoAutomationRuntime {
         guard let latestState else {
             return refreshed
         }
-        let openedMessageId = latestState.openedMessageId ?? refreshed.openedMessageId
+        let usesLatestMessageDetailScreen = refreshed.activeTab == "messages"
+            && refreshed.visibleScreen == "screen.messages.list"
+            && latestState.activeTab == "messages"
+            && latestState.visibleScreen == "screen.message.detail"
+            && normalizedIdentifier(latestState.openedMessageId) != nil
+        let visibleScreen = usesLatestMessageDetailScreen ? latestState.visibleScreen : refreshed.visibleScreen
+        let openedMessageId: String? = {
+            if let refreshedOpened = normalizedIdentifier(refreshed.openedMessageId) {
+                return refreshedOpened
+            }
+            if usesLatestMessageDetailScreen {
+                return normalizedIdentifier(latestState.openedMessageId)
+            }
+            return normalizedIdentifier(latestState.openedMessageId)
+        }()
         let openedMessageDecryptionState = await resolvedAutomationMessageDecryptionState(
             messageId: openedMessageId,
             environment: environment
@@ -730,12 +1084,12 @@ final class PushGoAutomationRuntime {
         return PushGoAutomationState(
             platform: latestState.platform,
             buildMode: latestState.buildMode,
-            activeTab: latestState.activeTab,
-            visibleScreen: latestState.visibleScreen,
+            activeTab: refreshed.activeTab,
+            visibleScreen: visibleScreen,
             openedMessageId: openedMessageId,
             openedMessageDecryptionState: openedMessageDecryptionState,
-            openedEntityType: latestState.openedEntityType,
-            openedEntityId: latestState.openedEntityId,
+            openedEntityType: refreshed.openedEntityType ?? latestState.openedEntityType,
+            openedEntityId: refreshed.openedEntityId ?? latestState.openedEntityId,
             pendingMessageId: refreshed.pendingMessageId,
             pendingEventId: refreshed.pendingEventId,
             pendingThingId: refreshed.pendingThingId,
@@ -761,6 +1115,8 @@ final class PushGoAutomationRuntime {
             privateDetail: refreshed.privateDetail,
             ackPendingCount: refreshed.ackPendingCount,
             channelCount: refreshed.channelCount,
+            messageTagOptionCount: refreshed.messageTagOptionCount,
+            runtimeQualityTagCount: refreshed.runtimeQualityTagCount,
             lastNotificationAction: refreshed.lastNotificationAction,
             lastNotificationTarget: refreshed.lastNotificationTarget,
             lastFixtureImportPath: refreshed.lastFixtureImportPath,
@@ -774,7 +1130,9 @@ final class PushGoAutomationRuntime {
             latestRuntimeErrorCategory: refreshed.latestRuntimeErrorCategory,
             latestRuntimeErrorCode: refreshed.latestRuntimeErrorCode,
             latestRuntimeErrorMessage: refreshed.latestRuntimeErrorMessage,
-            latestRuntimeErrorTimestamp: refreshed.latestRuntimeErrorTimestamp
+            latestRuntimeErrorTimestamp: refreshed.latestRuntimeErrorTimestamp,
+            residentMemoryBytes: refreshed.residentMemoryBytes,
+            mainThreadMaxStallMilliseconds: refreshed.mainThreadMaxStallMilliseconds
         )
     }
 
@@ -794,15 +1152,123 @@ final class PushGoAutomationRuntime {
         timeout: TimeInterval,
         predicate: @escaping (PushGoAutomationState) -> Bool
     ) async -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
+        await waitForAutomationStateMetrics(
+            environment: environment,
+            timeout: timeout,
+            predicate: predicate
+        ).matched
+    }
+
+    private struct AutomationStateWaitMetrics {
+        let matched: Bool
+        let pollCount: Int
+        let durationMilliseconds: Int
+        let stateFetchMilliseconds: Int
+        let matchedState: PushGoAutomationState?
+    }
+
+    private struct DetailReadyWaitMetrics {
+        let sample: PushGoAutomationDetailReadySample?
+        let pollCount: Int
+        let durationMilliseconds: Int
+    }
+
+    private struct DetailLifecycleWaitMetrics {
+        let sample: PushGoAutomationDetailLifecycleSample?
+        let pollCount: Int
+        let durationMilliseconds: Int
+    }
+
+    private func waitForAutomationStateMetrics(
+        environment: AppEnvironment,
+        timeout: TimeInterval,
+        predicate: @escaping (PushGoAutomationState) -> Bool
+    ) async -> AutomationStateWaitMetrics {
+        let startedAt = Date()
+        let deadline = startedAt.addingTimeInterval(timeout)
+        var polls = 0
+        var stateFetchMs = 0
         while Date() < deadline {
+            polls += 1
+            let fetchStartedAt = Date()
             let state = await currentState(environment: environment)
+            stateFetchMs += max(0, Int(Date().timeIntervalSince(fetchStartedAt) * 1_000))
             if predicate(state) {
-                return true
+                return AutomationStateWaitMetrics(
+                    matched: true,
+                    pollCount: polls,
+                    durationMilliseconds: max(0, Int(Date().timeIntervalSince(startedAt) * 1_000)),
+                    stateFetchMilliseconds: stateFetchMs,
+                    matchedState: state
+                )
             }
             try? await Task.sleep(for: .milliseconds(100))
         }
-        return false
+        return AutomationStateWaitMetrics(
+            matched: false,
+            pollCount: polls,
+            durationMilliseconds: max(0, Int(Date().timeIntervalSince(startedAt) * 1_000)),
+            stateFetchMilliseconds: stateFetchMs,
+            matchedState: nil
+        )
+    }
+
+    private func waitForDetailReadySampleMetrics(
+        messageId: String,
+        afterSequence: Int,
+        timeout: TimeInterval
+    ) async -> DetailReadyWaitMetrics {
+        let startedAt = Date()
+        let deadline = startedAt.addingTimeInterval(timeout)
+        var polls = 0
+        while Date() < deadline {
+            polls += 1
+            if let sample = latestDetailReadySample,
+               sample.sequence > afterSequence,
+               sample.messageId == messageId {
+                return DetailReadyWaitMetrics(
+                    sample: sample,
+                    pollCount: polls,
+                    durationMilliseconds: max(0, Int(Date().timeIntervalSince(startedAt) * 1_000))
+                )
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        return DetailReadyWaitMetrics(
+            sample: nil,
+            pollCount: polls,
+            durationMilliseconds: max(0, Int(Date().timeIntervalSince(startedAt) * 1_000))
+        )
+    }
+
+    private func waitForDetailLifecycleSampleMetrics(
+        sampleProvider: @autoclosure @escaping () -> PushGoAutomationDetailLifecycleSample?,
+        messageId: String,
+        afterSequence: Int,
+        allowUnknownMessageId: Bool = false,
+        timeout: TimeInterval
+    ) async -> DetailLifecycleWaitMetrics {
+        let startedAt = Date()
+        let deadline = startedAt.addingTimeInterval(timeout)
+        var polls = 0
+        while Date() < deadline {
+            polls += 1
+            if let sample = sampleProvider(),
+               sample.sequence > afterSequence,
+               (sample.messageId == messageId || (allowUnknownMessageId && sample.messageId == "unknown")) {
+                return DetailLifecycleWaitMetrics(
+                    sample: sample,
+                    pollCount: polls,
+                    durationMilliseconds: max(0, Int(Date().timeIntervalSince(startedAt) * 1_000))
+                )
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        return DetailLifecycleWaitMetrics(
+            sample: nil,
+            pollCount: polls,
+            durationMilliseconds: max(0, Int(Date().timeIntervalSince(startedAt) * 1_000))
+        )
     }
 
     private func fileURL(for environmentKey: String) -> URL? {
@@ -932,6 +1398,176 @@ final class PushGoAutomationRuntime {
                 "export_path": path,
             ]
         )
+    }
+
+    func recordMessageDetailViewAppeared(messageId: String?) {
+        configureFromProcessEnvironment()
+        let resolvedMessageId = normalizedIdentifier(messageId) ?? "unknown"
+        nextDetailViewAppearSequence += 1
+        let sample = PushGoAutomationDetailLifecycleSample(
+            sequence: nextDetailViewAppearSequence,
+            messageId: resolvedMessageId
+        )
+        latestDetailViewAppearSample = sample
+        writeEvent(
+            type: "message.detail_view_appeared",
+            command: nil,
+            details: [
+                "message_id": sample.messageId,
+                "sequence": String(sample.sequence),
+            ]
+        )
+    }
+
+    func recordMessageDetailContentReady(message: PushMessage) {
+        configureFromProcessEnvironment()
+        let messageId = normalizedIdentifier(message.messageId) ?? message.id.uuidString
+        nextDetailContentReadySequence += 1
+        let sample = PushGoAutomationDetailLifecycleSample(
+            sequence: nextDetailContentReadySequence,
+            messageId: messageId
+        )
+        latestDetailContentReadySample = sample
+        writeEvent(
+            type: "message.detail_content_ready",
+            command: nil,
+            details: [
+                "message_id": sample.messageId,
+                "sequence": String(sample.sequence),
+                "is_markdown": message.resolvedBody.isMarkdown ? "true" : "false",
+                "body_bytes": String(message.resolvedBody.rawText.lengthOfBytes(using: .utf8)),
+            ]
+        )
+    }
+
+    func recordMessageDetailReady(message: PushMessage, loadSource: String = "rendered") {
+        configureFromProcessEnvironment()
+        let messageId = normalizedIdentifier(message.messageId) ?? message.id.uuidString
+        let body = message.resolvedBody.rawText
+        let lineLengths = body.split(separator: "\n", omittingEmptySubsequences: false)
+            .map { String($0).lengthOfBytes(using: .utf8) }
+        let imageURLCount = resolvedDetailImageAssetURLs(for: message).count
+        nextDetailReadySequence += 1
+        let sample = PushGoAutomationDetailReadySample(
+            sequence: nextDetailReadySequence,
+            messageId: messageId,
+            loadSource: normalizedIdentifier(loadSource) ?? "rendered",
+            bodyBytes: body.lengthOfBytes(using: .utf8),
+            titleBytes: message.title.lengthOfBytes(using: .utf8),
+            lineCount: lineLengths.count,
+            maxLineBytes: lineLengths.max() ?? 0,
+            imageURLCount: imageURLCount,
+            isMarkdown: message.resolvedBody.isMarkdown
+        )
+        latestDetailReadySample = sample
+        writeEvent(
+            type: "message.detail_ready",
+            command: nil,
+            details: [
+                "message_id": sample.messageId,
+                "load_source": sample.loadSource,
+                "body_bytes": String(sample.bodyBytes),
+                "title_bytes": String(sample.titleBytes),
+                "line_count": String(sample.lineCount),
+                "max_line_bytes": String(sample.maxLineBytes),
+                "image_url_count": String(sample.imageURLCount),
+                "is_markdown": sample.isMarkdown ? "true" : "false",
+                "sequence": String(sample.sequence),
+            ]
+        )
+    }
+
+    func recordDetailTimestampFormatted() {
+        configureFromProcessEnvironment()
+        detailTimestampFormatCount += 1
+    }
+
+    func recordMarkdownDisplayModeEvaluated() {
+        configureFromProcessEnvironment()
+        markdownDisplayModeEvalCount += 1
+    }
+
+    func recordMarkdownPlainTextSegmentsBuilt() {
+        configureFromProcessEnvironment()
+        markdownPlainTextSegmentBuildCount += 1
+    }
+
+    func recordMarkdownAttachmentResolved(
+        usedCache: Bool,
+        resolvedToLocalSource: Bool
+    ) {
+        configureFromProcessEnvironment()
+        markdownAttachmentResolveCount += 1
+        if usedCache {
+            markdownAttachmentCacheHitCount += 1
+        } else {
+            markdownAttachmentCacheMissCount += 1
+        }
+        if resolvedToLocalSource {
+            markdownAttachmentLocalSourceCount += 1
+        } else {
+            markdownAttachmentRemoteFallbackCount += 1
+        }
+    }
+
+    func recordMarkdownAttachmentMetadataProbe(
+        source: String,
+        isAnimated: Bool
+    ) {
+        configureFromProcessEnvironment()
+        switch source {
+        case "sync":
+            markdownAttachmentMetadataSyncHitCount += 1
+        case "async":
+            markdownAttachmentMetadataAsyncHitCount += 1
+        default:
+            markdownAttachmentMetadataMissCount += 1
+        }
+        if isAnimated {
+            markdownAttachmentAnimatedCount += 1
+        }
+    }
+
+    private func writePhaseMarker(
+        command: String,
+        phase: String,
+        status: String,
+        startedAt: Date? = nil,
+        extra: [String: String] = [:]
+    ) {
+        let performance = PushGoAutomationPerformanceMonitor.shared.snapshot()
+        var details = extra
+        details["phase"] = phase
+        details["status"] = status
+        details["main_thread_max_stall_ms"] = String(performance.mainThreadMaxStallMilliseconds)
+        details["resident_memory_bytes"] = String(performance.residentMemoryBytes ?? 0)
+        if let startedAt {
+            details["elapsed_ms"] = String(max(0, Int(Date().timeIntervalSince(startedAt) * 1_000)))
+        }
+        writeEvent(type: "runtime.phase_marker", command: command, details: details)
+    }
+
+    private func withPhaseMarker<T>(
+        command: String,
+        phase: String,
+        operation: () async throws -> T
+    ) async throws -> T {
+        let startedAt = Date()
+        writePhaseMarker(command: command, phase: phase, status: "start")
+        do {
+            let result = try await operation()
+            writePhaseMarker(command: command, phase: phase, status: "end", startedAt: startedAt)
+            return result
+        } catch {
+            writePhaseMarker(
+                command: command,
+                phase: phase,
+                status: "error",
+                startedAt: startedAt,
+                extra: ["error": error.localizedDescription]
+            )
+            throw error
+        }
     }
 
     func recordRuntimeError(
@@ -1219,9 +1855,17 @@ final class PushGoAutomationRuntime {
         }
     }
 
-    private func publishEnrichedState(baseState: PushGoAutomationState, environment: AppEnvironment) async {
+    private func publishEnrichedState(
+        baseState: PushGoAutomationState,
+        derivedCountsState: PushGoAutomationState?,
+        environment: AppEnvironment
+    ) async {
         let previousState = latestState
-        let state = await enrichState(baseState, environment: environment)
+        let state = await enrichState(
+            baseState,
+            derivedCountsState: derivedCountsState,
+            environment: environment
+        )
         latestState = state
         writeJSON(state, to: stateURL)
         writeDerivedEvents(previous: previousState, current: state)
@@ -1270,6 +1914,8 @@ final class PushGoAutomationRuntime {
             privateDetail: nil,
             ackPendingCount: 0,
             channelCount: environment.channelSubscriptions.count,
+            messageTagOptionCount: 0,
+            runtimeQualityTagCount: 0,
             lastNotificationAction: lastNotificationAction,
             lastNotificationTarget: lastNotificationTarget,
             lastFixtureImportPath: lastFixtureImportPath,
@@ -1283,9 +1929,11 @@ final class PushGoAutomationRuntime {
             latestRuntimeErrorCategory: latestRuntimeError?.category,
             latestRuntimeErrorCode: latestRuntimeError?.code,
             latestRuntimeErrorMessage: latestRuntimeError?.message,
-            latestRuntimeErrorTimestamp: latestRuntimeError?.timestamp
+            latestRuntimeErrorTimestamp: latestRuntimeError?.timestamp,
+            residentMemoryBytes: nil,
+            mainThreadMaxStallMilliseconds: 0
         )
-        return await enrichState(baseState, environment: environment)
+        return await enrichState(baseState, derivedCountsState: latestState, environment: environment)
     }
 
     private func resolvedAutomationMessageId(
@@ -1319,14 +1967,1009 @@ final class PushGoAutomationRuntime {
         return nil
     }
 
-    private func enrichState(_ state: PushGoAutomationState, environment: AppEnvironment) async -> PushGoAutomationState {
+    private func measureRuntimeMessageQueries(environment: AppEnvironment) async throws {
+        let command = "runtime.measure_message_queries"
+        let dataStore = environment.dataStore
+        var firstPage: [PushMessageSummary] = []
+        var secondPage: [PushMessageSummary] = []
+        var unreadPage: [PushMessageSummary] = []
+        var tagPage: [PushMessageSummary] = []
+        var searchPage: [PushMessageSummary] = []
+        var searchCount = 0
+
+        let firstPageMs = try await withPhaseMarker(command: command, phase: "query.first_page") {
+            try await elapsedMilliseconds {
+                firstPage = try await dataStore.loadMessageSummariesPage(
+                    before: nil,
+                    limit: 50,
+                    sortMode: .timeDescending
+                )
+            }
+        }
+        guard let firstPageCursor = firstPage.last.map({
+            MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
+        }) else {
+            throw PushGoAutomationError.invalidArgument("runtime message first page is empty")
+        }
+
+        let secondPageMs = try await withPhaseMarker(command: command, phase: "query.second_page") {
+            try await elapsedMilliseconds {
+                secondPage = try await dataStore.loadMessageSummariesPage(
+                    before: firstPageCursor,
+                    limit: 50,
+                    sortMode: .timeDescending
+                )
+            }
+        }
+        let unreadPageMs = try await withPhaseMarker(command: command, phase: "query.unread_page") {
+            try await elapsedMilliseconds {
+                unreadPage = try await dataStore.loadMessageSummariesPage(
+                    before: nil,
+                    limit: 100,
+                    filter: .unreadOnly,
+                    sortMode: .unreadFirst
+                )
+            }
+        }
+        let tagPageMs = try await withPhaseMarker(command: command, phase: "query.tag_page") {
+            try await elapsedMilliseconds {
+                tagPage = try await dataStore.loadMessageSummariesPage(
+                    before: nil,
+                    limit: 100,
+                    tag: "runtimequality",
+                    sortMode: .timeDescending
+                )
+            }
+        }
+        let searchCountMs = try await withPhaseMarker(command: command, phase: "query.search_count") {
+            try await elapsedMilliseconds {
+                searchCount = try await dataStore.searchMessagesCount(query: "Runtime quality")
+            }
+        }
+        let searchPageMs = try await withPhaseMarker(command: command, phase: "query.search_page") {
+            try await elapsedMilliseconds {
+                searchPage = try await dataStore.searchMessageSummariesPage(
+                    query: "Runtime quality",
+                    before: nil,
+                    limit: 20,
+                    sortMode: .timeDescending
+                )
+            }
+        }
+
+        let uniquePaginatedIDs = Set((firstPage + secondPage).map(\.id))
+        guard uniquePaginatedIDs.count == firstPage.count + secondPage.count else {
+            throw PushGoAutomationError.invalidArgument("runtime message pagination returned duplicate ids")
+        }
+        guard unreadPage.allSatisfy({ !$0.isRead }) else {
+            throw PushGoAutomationError.invalidArgument("runtime unread page contains read messages")
+        }
+        guard tagPage.count > 0 else {
+            throw PushGoAutomationError.invalidArgument("runtime tag page is empty")
+        }
+        guard searchCount > 0, searchPage.count > 0 else {
+            throw PushGoAutomationError.invalidArgument("runtime search result is empty")
+        }
+
+        let details: [String: String] = [
+            "first_page_count": String(firstPage.count),
+            "first_page_ms": String(firstPageMs),
+            "second_page_count": String(secondPage.count),
+            "second_page_ms": String(secondPageMs),
+            "unread_page_count": String(unreadPage.count),
+            "unread_page_ms": String(unreadPageMs),
+            "tag_page_count": String(tagPage.count),
+            "tag_page_ms": String(tagPageMs),
+            "search_count": String(searchCount),
+            "search_count_ms": String(searchCountMs),
+            "search_page_count": String(searchPage.count),
+            "search_page_ms": String(searchPageMs),
+        ]
+        writeEvent(type: "runtime.message_queries", command: nil, details: details)
+    }
+
+    private func measureRuntimeSortModes(environment: AppEnvironment) async throws {
+        let command = "runtime.measure_sort_modes"
+        let dataStore = environment.dataStore
+        var timeDescendingPage: [PushMessageSummary] = []
+        var unreadFirstPage: [PushMessageSummary] = []
+
+        let queryTimeDescendingMs = try await withPhaseMarker(command: command, phase: "query.time_desc") {
+            try await elapsedMilliseconds {
+                timeDescendingPage = try await dataStore.loadMessageSummariesPage(
+                    before: nil,
+                    limit: 100,
+                    sortMode: .timeDescending
+                )
+            }
+        }
+        let queryUnreadFirstMs = try await withPhaseMarker(command: command, phase: "query.unread_first") {
+            try await elapsedMilliseconds {
+                unreadFirstPage = try await dataStore.loadMessageSummariesPage(
+                    before: nil,
+                    limit: 100,
+                    sortMode: .unreadFirst
+                )
+            }
+        }
+
+        guard !timeDescendingPage.isEmpty else {
+            throw PushGoAutomationError.invalidArgument("runtime sort time-desc page is empty")
+        }
+        guard !unreadFirstPage.isEmpty else {
+            throw PushGoAutomationError.invalidArgument("runtime sort unread-first page is empty")
+        }
+
+        let viewModel = MessageListViewModel(environment: environment)
+        let initialLoadMs = try await withPhaseMarker(command: command, phase: "viewmodel.initial_load") {
+            try await elapsedMilliseconds {
+                await viewModel.loadMessages()
+                guard await waitForMessageListViewModelReady(viewModel, minimumRevisionExclusive: nil, timeout: 18.0) else {
+                    throw PushGoAutomationError.invalidArgument("runtime sort initial viewmodel load timeout")
+                }
+            }
+        }
+
+        let originalSortMode = viewModel.sortMode
+        defer {
+            if viewModel.sortMode != originalSortMode {
+                viewModel.setSortMode(originalSortMode)
+            }
+        }
+
+        let timeDescendingRevisionBefore = viewModel.filteredMessagesIdentityRevision
+        let timeDescendingModeChanged = viewModel.sortMode != .timeDescending
+        let timeDescendingSetSortMs = try await withPhaseMarker(command: command, phase: "viewmodel.set_sort.time_desc") {
+            try await elapsedMilliseconds {
+                viewModel.setSortMode(.timeDescending)
+            }
+        }
+        var timeDescendingReady = true
+        let timeDescendingReadyMs: Int
+        if timeDescendingModeChanged {
+            timeDescendingReadyMs = try await withPhaseMarker(command: command, phase: "ui_ready.time_desc") {
+                let timeDescendingReadyStartedAt = Date()
+                timeDescendingReady = await waitForMessageListViewModelReady(
+                    viewModel,
+                    minimumRevisionExclusive: timeDescendingRevisionBefore,
+                    timeout: 18.0
+                )
+                return max(0, Int(Date().timeIntervalSince(timeDescendingReadyStartedAt) * 1_000))
+            }
+        } else {
+            timeDescendingReady = true
+            timeDescendingReadyMs = 0
+        }
+
+        let unreadFirstRevisionBefore = viewModel.filteredMessagesIdentityRevision
+        let unreadFirstModeChanged = viewModel.sortMode != .unreadFirst
+        let unreadFirstSetSortMs = try await withPhaseMarker(command: command, phase: "viewmodel.set_sort.unread_first") {
+            try await elapsedMilliseconds {
+                viewModel.setSortMode(.unreadFirst)
+            }
+        }
+        var unreadFirstReady = true
+        let unreadFirstReadyMs: Int
+        if unreadFirstModeChanged {
+            unreadFirstReadyMs = try await withPhaseMarker(command: command, phase: "ui_ready.unread_first") {
+                let unreadFirstReadyStartedAt = Date()
+                unreadFirstReady = await waitForMessageListViewModelReady(
+                    viewModel,
+                    minimumRevisionExclusive: unreadFirstRevisionBefore,
+                    timeout: 18.0
+                )
+                return max(0, Int(Date().timeIntervalSince(unreadFirstReadyStartedAt) * 1_000))
+            }
+        } else {
+            unreadFirstReady = true
+            unreadFirstReadyMs = 0
+        }
+
+        let details: [String: String] = [
+            "query_time_desc_page_count": String(timeDescendingPage.count),
+            "query_time_desc_page_ms": String(queryTimeDescendingMs),
+            "query_unread_first_page_count": String(unreadFirstPage.count),
+            "query_unread_first_page_ms": String(queryUnreadFirstMs),
+            "viewmodel_initial_load_ms": String(initialLoadMs),
+            "viewmodel_set_sort_time_desc_ms": String(timeDescendingSetSortMs),
+            "viewmodel_set_sort_unread_first_ms": String(unreadFirstSetSortMs),
+            "ui_ready_time_desc_ms": String(timeDescendingReadyMs),
+            "ui_ready_unread_first_ms": String(unreadFirstReadyMs),
+            "ui_ready_time_desc_ok": timeDescendingReady ? "true" : "false",
+            "ui_ready_unread_first_ok": unreadFirstReady ? "true" : "false",
+            "time_desc_first_id": timeDescendingPage.first.map { $0.id.uuidString } ?? "",
+            "unread_first_first_id": unreadFirstPage.first.map { $0.id.uuidString } ?? "",
+            "time_desc_first_is_read": (timeDescendingPage.first?.isRead == true) ? "true" : "false",
+            "unread_first_first_is_read": (unreadFirstPage.first?.isRead == true) ? "true" : "false",
+        ]
+        writeEvent(type: "runtime.sort_modes", command: nil, details: details)
+    }
+
+    private func measureRuntimeMediaCycles(environment: AppEnvironment) async throws {
+        let command = "runtime.measure_media_cycles"
+        let mediaMessageId = "runtime-ui-msg-3"
+        let baselineMessageId = "runtime-ui-msg-0"
+        let iterationCount = 8
+
+        guard try await environment.dataStore.loadMessage(messageId: mediaMessageId) != nil else {
+            throw PushGoAutomationError.invalidArgument("runtime media message missing: \(mediaMessageId)")
+        }
+        guard try await environment.dataStore.loadMessage(messageId: baselineMessageId) != nil else {
+            throw PushGoAutomationError.invalidArgument("runtime baseline message missing: \(baselineMessageId)")
+        }
+
+        let startPerformance = PushGoAutomationPerformanceMonitor.shared.snapshot()
+        let countersBefore = instrumentationCountersSnapshot()
+        var peakResidentMemory = startPerformance.residentMemoryBytes ?? 0
+        var peakMainThreadStall = startPerformance.mainThreadMaxStallMilliseconds
+        var openDurations: [Int] = []
+        var listReturnDurations: [Int] = []
+        var preOpenResidentSamples: [Int64] = []
+        var postOpenResidentSamples: [Int64] = []
+        var postReturnResidentSamples: [Int64] = []
+        var mediaReadySources = Set<String>()
+        var mediaImageURLCount = 0
+
+        for _ in 0..<iterationCount {
+            let preOpenResident = Int64(PushGoAutomationPerformanceMonitor.shared.snapshot().residentMemoryBytes ?? 0)
+            preOpenResidentSamples.append(preOpenResident)
+            let mediaPreviousSequence = latestDetailReadySample?.sequence ?? 0
+            let openMs = try await withPhaseMarker(command: command, phase: "cycle.media_open") {
+                try await elapsedMilliseconds {
+                    await environment.handleNotificationOpen(messageId: mediaMessageId)
+                    guard let mediaSample = await waitForDetailReadySample(
+                        messageId: mediaMessageId,
+                        afterSequence: mediaPreviousSequence,
+                        timeout: 15.0
+                    ) else {
+                        throw PushGoAutomationError.invalidArgument("runtime media cycle open timeout")
+                    }
+                    mediaReadySources.insert(mediaSample.loadSource)
+                    mediaImageURLCount = max(mediaImageURLCount, mediaSample.imageURLCount)
+                }
+            }
+            openDurations.append(openMs)
+            let afterOpenResident = Int64(PushGoAutomationPerformanceMonitor.shared.snapshot().residentMemoryBytes ?? 0)
+            postOpenResidentSamples.append(afterOpenResident)
+
+            let baselinePreviousSequence = latestDetailReadySample?.sequence ?? 0
+            try await withPhaseMarker(command: command, phase: "cycle.baseline_detail_open") {
+                await environment.handleNotificationOpen(messageId: baselineMessageId)
+                guard await waitForDetailReadySample(
+                    messageId: baselineMessageId,
+                    afterSequence: baselinePreviousSequence,
+                    timeout: 15.0
+                ) != nil else {
+                    throw PushGoAutomationError.invalidArgument("runtime media cycle baseline return timeout")
+                }
+            }
+            let listReturnMs = try await withPhaseMarker(command: command, phase: "cycle.return_to_list") {
+                let startedAt = Date()
+                guard await returnToMessagesList(environment: environment) else {
+                    throw PushGoAutomationError.invalidArgument("runtime media cycle return to messages list timeout")
+                }
+                return max(0, Int(Date().timeIntervalSince(startedAt) * 1_000))
+            }
+            listReturnDurations.append(listReturnMs)
+            let afterReturnResident = Int64(PushGoAutomationPerformanceMonitor.shared.snapshot().residentMemoryBytes ?? 0)
+            postReturnResidentSamples.append(afterReturnResident)
+
+            let performance = PushGoAutomationPerformanceMonitor.shared.snapshot()
+            peakResidentMemory = max(peakResidentMemory, performance.residentMemoryBytes ?? 0)
+            peakMainThreadStall = max(peakMainThreadStall, performance.mainThreadMaxStallMilliseconds)
+        }
+
+        let endPerformance = PushGoAutomationPerformanceMonitor.shared.snapshot()
+        let countersAfter = instrumentationCountersSnapshot()
+        let firstOpenMs = openDurations.first ?? -1
+        let repeatDurations = Array(openDurations.dropFirst())
+        let repeatAvgMs = repeatDurations.isEmpty ? -1 : repeatDurations.reduce(0, +) / repeatDurations.count
+        let repeatMaxMs = repeatDurations.max() ?? firstOpenMs
+        let repeatMinMs = repeatDurations.min() ?? firstOpenMs
+        let listReturnAvgMs = listReturnDurations.isEmpty ? -1 : listReturnDurations.reduce(0, +) / listReturnDurations.count
+        let listReturnMaxMs = listReturnDurations.max() ?? -1
+        let startResident = Int64(startPerformance.residentMemoryBytes ?? 0)
+        let endResident = Int64(endPerformance.residentMemoryBytes ?? 0)
+        let peakResident = Int64(peakResidentMemory)
+        let residentDelta = endResident - startResident
+        let residentPeakDelta = peakResident - startResident
+        let repeatAfterOpen = Array(postOpenResidentSamples.dropFirst())
+        let repeatAfterReturn = Array(postReturnResidentSamples.dropFirst())
+        let repeatOpenResidentGrowth = repeatAfterOpen.last.map { $0 - (repeatAfterOpen.first ?? 0) } ?? 0
+        let repeatReturnResidentGrowth = repeatAfterReturn.last.map { $0 - (repeatAfterReturn.first ?? 0) } ?? 0
+
+        var details: [String: String] = [
+            "message_id": mediaMessageId,
+            "iteration_count": String(iterationCount),
+            "markdown_attachment_rendering_mode": "interactive",
+            "first_open_ms": String(firstOpenMs),
+            "repeat_avg_ms": String(repeatAvgMs),
+            "repeat_min_ms": String(repeatMinMs),
+            "repeat_max_ms": String(repeatMaxMs),
+            "list_return_avg_ms": String(listReturnAvgMs),
+            "list_return_max_ms": String(listReturnMaxMs),
+            "ready_source_count": String(mediaReadySources.count),
+            "ready_sources": mediaReadySources.sorted().joined(separator: ","),
+            "image_url_count": String(mediaImageURLCount),
+            "resident_memory_start_bytes": String(startResident),
+            "resident_memory_end_bytes": String(endResident),
+            "resident_memory_peak_bytes": String(peakResident),
+            "resident_memory_delta_bytes": String(residentDelta),
+            "resident_memory_peak_delta_bytes": String(residentPeakDelta),
+            "first_pre_open_resident_bytes": String(preOpenResidentSamples.first ?? startResident),
+            "first_post_open_resident_bytes": String(postOpenResidentSamples.first ?? startResident),
+            "first_post_return_resident_bytes": String(postReturnResidentSamples.first ?? startResident),
+            "repeat_post_open_resident_growth_bytes": String(repeatOpenResidentGrowth),
+            "repeat_post_return_resident_growth_bytes": String(repeatReturnResidentGrowth),
+            "loop_end_resident_bytes": String(postReturnResidentSamples.last ?? endResident),
+            "main_thread_stall_start_ms": String(startPerformance.mainThreadMaxStallMilliseconds),
+            "main_thread_stall_end_ms": String(endPerformance.mainThreadMaxStallMilliseconds),
+            "main_thread_stall_peak_ms": String(peakMainThreadStall),
+            "detail_timestamp_format_count_delta": String(
+                max(0, countersAfter.detailTimestampFormatCount - countersBefore.detailTimestampFormatCount)
+            ),
+            "markdown_display_mode_eval_count_delta": String(
+                max(0, countersAfter.markdownDisplayModeEvalCount - countersBefore.markdownDisplayModeEvalCount)
+            ),
+            "markdown_plain_text_segment_build_count_delta": String(
+                max(
+                    0,
+                    countersAfter.markdownPlainTextSegmentBuildCount - countersBefore.markdownPlainTextSegmentBuildCount
+                )
+            ),
+            "markdown_attachment_resolve_count_delta": String(
+                max(0, countersAfter.markdownAttachmentResolveCount - countersBefore.markdownAttachmentResolveCount)
+            ),
+            "markdown_attachment_cache_hit_count_delta": String(
+                max(0, countersAfter.markdownAttachmentCacheHitCount - countersBefore.markdownAttachmentCacheHitCount)
+            ),
+            "markdown_attachment_cache_miss_count_delta": String(
+                max(0, countersAfter.markdownAttachmentCacheMissCount - countersBefore.markdownAttachmentCacheMissCount)
+            ),
+            "markdown_attachment_metadata_sync_hit_count_delta": String(
+                max(
+                    0,
+                    countersAfter.markdownAttachmentMetadataSyncHitCount - countersBefore.markdownAttachmentMetadataSyncHitCount
+                )
+            ),
+            "markdown_attachment_metadata_async_hit_count_delta": String(
+                max(
+                    0,
+                    countersAfter.markdownAttachmentMetadataAsyncHitCount - countersBefore.markdownAttachmentMetadataAsyncHitCount
+                )
+            ),
+            "markdown_attachment_metadata_miss_count_delta": String(
+                max(
+                    0,
+                    countersAfter.markdownAttachmentMetadataMissCount - countersBefore.markdownAttachmentMetadataMissCount
+                )
+            ),
+            "markdown_attachment_animated_count_delta": String(
+                max(0, countersAfter.markdownAttachmentAnimatedCount - countersBefore.markdownAttachmentAnimatedCount)
+            ),
+        ]
+        for index in 0..<iterationCount {
+            let suffix = index == 0 ? "first" : "repeat_\(index)"
+            if preOpenResidentSamples.indices.contains(index) {
+                details["\(suffix)_pre_open_resident_bytes"] = String(preOpenResidentSamples[index])
+            }
+            if postOpenResidentSamples.indices.contains(index) {
+                details["\(suffix)_post_open_resident_bytes"] = String(postOpenResidentSamples[index])
+            }
+            if postReturnResidentSamples.indices.contains(index) {
+                details["\(suffix)_post_return_resident_bytes"] = String(postReturnResidentSamples[index])
+            }
+        }
+        writeEvent(type: "runtime.media_cycles", command: nil, details: details)
+    }
+
+    private func measureRuntimeDetailReleaseCycles(environment: AppEnvironment) async throws {
+        let command = "runtime.measure_detail_release_cycles"
+        struct Scenario {
+            let name: String
+            let messageId: String
+        }
+
+        let scenarios = [
+            Scenario(name: "normal", messageId: "runtime-ui-msg-0"),
+            Scenario(name: "markdown_26k", messageId: "runtime-ui-msg-2"),
+            Scenario(name: "media", messageId: "runtime-ui-msg-3"),
+        ]
+        let cyclesPerScenario = 20
+        var details: [String: String] = [
+            "scenario_count": String(scenarios.count),
+            "cycles_per_scenario": String(cyclesPerScenario),
+        ]
+
+        for scenario in scenarios {
+            try await withPhaseMarker(command: command, phase: "scenario.\(scenario.name).setup") {
+                guard try await environment.dataStore.loadMessage(messageId: scenario.messageId) != nil else {
+                    throw PushGoAutomationError.invalidArgument("runtime release scenario missing: \(scenario.messageId)")
+                }
+            }
+
+            let scenarioStartPerformance = PushGoAutomationPerformanceMonitor.shared.snapshot()
+            let scenarioCountersBefore = instrumentationCountersSnapshot()
+            var peakResidentMemory = scenarioStartPerformance.residentMemoryBytes ?? 0
+            var peakMainThreadStall = scenarioStartPerformance.mainThreadMaxStallMilliseconds
+            var cycleDurations: [Int] = []
+            var routeOpenDurations: [Int] = []
+            var detailReadyDurations: [Int] = []
+            var detailReadyStateWaitDurations: [Int] = []
+            var detailReadySampleWaitDurations: [Int] = []
+            var listReturnDurations: [Int] = []
+            var listReturnRecoveryDurations: [Int] = []
+            var statePollCountTotal = 0
+            var statePollFetchTotalMs = 0
+            var detailReadyMissCount = 0
+            var listReturnMissCount = 0
+
+            for _ in 0..<cyclesPerScenario {
+                let previousSequence = latestDetailReadySample?.sequence ?? 0
+                let cycleStartedAt = Date()
+                let cycleIndex = cycleDurations.count
+                let cyclePrefix = "scenario.\(scenario.name).cycle.\(cycleIndex)"
+                let detailReadyStartedAt = Date()
+                let routeOpenMs = try await withPhaseMarker(command: command, phase: "\(cyclePrefix).route_open") {
+                    try await elapsedMilliseconds {
+                        await environment.handleNotificationOpen(messageId: scenario.messageId)
+                    }
+                }
+                routeOpenDurations.append(routeOpenMs)
+                let detailReadyStateWait = await waitForAutomationStateMetrics(environment: environment, timeout: 2.0) { state in
+                    state.visibleScreen == "screen.message.detail" && state.openedMessageId == scenario.messageId
+                }
+                statePollCountTotal += detailReadyStateWait.pollCount
+                statePollFetchTotalMs += detailReadyStateWait.stateFetchMilliseconds
+                var cycleDetailReady = detailReadyStateWait.matched
+                var detailReadySampleWaitMs = 0
+                if !cycleDetailReady {
+                    let detailReadySampleWait = await waitForDetailReadySampleMetrics(
+                        messageId: scenario.messageId,
+                        afterSequence: previousSequence,
+                        timeout: 1.0
+                    )
+                    detailReadySampleWaitMs = detailReadySampleWait.durationMilliseconds
+                    cycleDetailReady = detailReadySampleWait.sample != nil
+                }
+                if !cycleDetailReady {
+                    detailReadyMissCount += 1
+                }
+                writePhaseMarker(
+                    command: command,
+                    phase: "\(cyclePrefix).open_detail",
+                    status: cycleDetailReady ? "end" : "timeout",
+                    startedAt: detailReadyStartedAt
+                )
+                detailReadyDurations.append(max(0, Int(Date().timeIntervalSince(detailReadyStartedAt) * 1_000)))
+                detailReadyStateWaitDurations.append(detailReadyStateWait.durationMilliseconds)
+                detailReadySampleWaitDurations.append(detailReadySampleWaitMs)
+                let listReturnStartedAt = Date()
+                writePhaseMarker(command: command, phase: "\(cyclePrefix).return_list", status: "start")
+                NotificationCenter.default.post(name: .pushgoAutomationSelectTab, object: "messages")
+                let listReturnWait = await waitForAutomationStateMetrics(environment: environment, timeout: 1.0) { state in
+                    state.visibleScreen == "screen.messages.list"
+                }
+                statePollCountTotal += listReturnWait.pollCount
+                statePollFetchTotalMs += listReturnWait.stateFetchMilliseconds
+                let returnedToList = listReturnWait.matched
+                var recoveryMs = 0
+                if !returnedToList {
+                    listReturnMissCount += 1
+                    let recoveryStartedAt = Date()
+                    NotificationCenter.default.post(name: .pushgoAutomationSelectTab, object: "channels")
+                    let channelSwitchWait = await waitForAutomationStateMetrics(environment: environment, timeout: 0.5) { state in
+                        state.activeTab == "channels" || state.visibleScreen == "screen.channels"
+                    }
+                    statePollCountTotal += channelSwitchWait.pollCount
+                    statePollFetchTotalMs += channelSwitchWait.stateFetchMilliseconds
+                    NotificationCenter.default.post(name: .pushgoAutomationSelectTab, object: "messages")
+                    let messageReturnWait = await waitForAutomationStateMetrics(environment: environment, timeout: 0.5) { state in
+                        state.visibleScreen == "screen.messages.list"
+                    }
+                    statePollCountTotal += messageReturnWait.pollCount
+                    statePollFetchTotalMs += messageReturnWait.stateFetchMilliseconds
+                    recoveryMs = max(0, Int(Date().timeIntervalSince(recoveryStartedAt) * 1_000))
+                }
+                writePhaseMarker(
+                    command: command,
+                    phase: "\(cyclePrefix).return_list",
+                    status: returnedToList ? "end" : "timeout",
+                    startedAt: listReturnStartedAt
+                )
+                listReturnDurations.append(listReturnWait.durationMilliseconds)
+                listReturnRecoveryDurations.append(recoveryMs)
+                let cycleMs = max(0, Int(Date().timeIntervalSince(cycleStartedAt) * 1_000))
+                cycleDurations.append(cycleMs)
+                let currentPerformance = PushGoAutomationPerformanceMonitor.shared.snapshot()
+                peakResidentMemory = max(peakResidentMemory, currentPerformance.residentMemoryBytes ?? 0)
+                peakMainThreadStall = max(peakMainThreadStall, currentPerformance.mainThreadMaxStallMilliseconds)
+            }
+
+            let scenarioEndPerformance = PushGoAutomationPerformanceMonitor.shared.snapshot()
+            let scenarioCountersAfter = instrumentationCountersSnapshot()
+            let startResident = Int64(scenarioStartPerformance.residentMemoryBytes ?? 0)
+            let endResident = Int64(scenarioEndPerformance.residentMemoryBytes ?? 0)
+            let peakResident = Int64(peakResidentMemory)
+            let scenarioFirst = cycleDurations.first ?? -1
+            let scenarioAvg = cycleDurations.isEmpty ? -1 : cycleDurations.reduce(0, +) / cycleDurations.count
+            let scenarioMax = cycleDurations.max() ?? -1
+            let scenarioMin = cycleDurations.min() ?? -1
+            let detailReadyAvg = detailReadyDurations.isEmpty ? -1 : detailReadyDurations.reduce(0, +) / detailReadyDurations.count
+            let detailReadyStateWaitAvg = detailReadyStateWaitDurations.isEmpty
+                ? -1
+                : detailReadyStateWaitDurations.reduce(0, +) / detailReadyStateWaitDurations.count
+            let detailReadySampleWaitAvg = detailReadySampleWaitDurations.isEmpty
+                ? -1
+                : detailReadySampleWaitDurations.reduce(0, +) / detailReadySampleWaitDurations.count
+            let listReturnAvg = listReturnDurations.isEmpty ? -1 : listReturnDurations.reduce(0, +) / listReturnDurations.count
+            let listReturnRecoveryAvg = listReturnRecoveryDurations.isEmpty
+                ? -1
+                : listReturnRecoveryDurations.reduce(0, +) / listReturnRecoveryDurations.count
+            let routeOpenAvg = routeOpenDurations.isEmpty ? -1 : routeOpenDurations.reduce(0, +) / routeOpenDurations.count
+
+            details["\(scenario.name)_first_cycle_ms"] = String(scenarioFirst)
+            details["\(scenario.name)_avg_cycle_ms"] = String(scenarioAvg)
+            details["\(scenario.name)_min_cycle_ms"] = String(scenarioMin)
+            details["\(scenario.name)_max_cycle_ms"] = String(scenarioMax)
+            details["\(scenario.name)_route_open_avg_ms"] = String(routeOpenAvg)
+            details["\(scenario.name)_open_detail_avg_ms"] = String(detailReadyAvg)
+            details["\(scenario.name)_open_detail_state_wait_avg_ms"] = String(detailReadyStateWaitAvg)
+            details["\(scenario.name)_open_detail_sample_wait_avg_ms"] = String(detailReadySampleWaitAvg)
+            details["\(scenario.name)_return_list_avg_ms"] = String(listReturnAvg)
+            details["\(scenario.name)_return_list_recovery_avg_ms"] = String(listReturnRecoveryAvg)
+            details["\(scenario.name)_state_poll_total_count"] = String(statePollCountTotal)
+            details["\(scenario.name)_state_poll_fetch_total_ms"] = String(statePollFetchTotalMs)
+            details["\(scenario.name)_resident_memory_start_bytes"] = String(startResident)
+            details["\(scenario.name)_resident_memory_end_bytes"] = String(endResident)
+            details["\(scenario.name)_resident_memory_peak_bytes"] = String(peakResident)
+            details["\(scenario.name)_resident_memory_delta_bytes"] = String(endResident - startResident)
+            details["\(scenario.name)_resident_memory_peak_delta_bytes"] = String(peakResident - startResident)
+            details["\(scenario.name)_detail_ready_miss_count"] = String(detailReadyMissCount)
+            details["\(scenario.name)_list_return_miss_count"] = String(listReturnMissCount)
+            details["\(scenario.name)_main_thread_stall_start_ms"] = String(
+                scenarioStartPerformance.mainThreadMaxStallMilliseconds
+            )
+            details["\(scenario.name)_main_thread_stall_end_ms"] = String(
+                scenarioEndPerformance.mainThreadMaxStallMilliseconds
+            )
+            details["\(scenario.name)_main_thread_stall_peak_ms"] = String(peakMainThreadStall)
+            details["\(scenario.name)_detail_timestamp_format_count_delta"] = String(
+                max(0, scenarioCountersAfter.detailTimestampFormatCount - scenarioCountersBefore.detailTimestampFormatCount)
+            )
+            details["\(scenario.name)_markdown_display_mode_eval_count_delta"] = String(
+                max(
+                    0,
+                    scenarioCountersAfter.markdownDisplayModeEvalCount - scenarioCountersBefore.markdownDisplayModeEvalCount
+                )
+            )
+            details["\(scenario.name)_markdown_plain_text_segment_build_count_delta"] = String(
+                max(
+                    0,
+                    scenarioCountersAfter.markdownPlainTextSegmentBuildCount - scenarioCountersBefore.markdownPlainTextSegmentBuildCount
+                )
+            )
+            details["\(scenario.name)_markdown_attachment_resolve_count_delta"] = String(
+                max(
+                    0,
+                    scenarioCountersAfter.markdownAttachmentResolveCount - scenarioCountersBefore.markdownAttachmentResolveCount
+                )
+            )
+            details["\(scenario.name)_markdown_attachment_cache_hit_count_delta"] = String(
+                max(
+                    0,
+                    scenarioCountersAfter.markdownAttachmentCacheHitCount - scenarioCountersBefore.markdownAttachmentCacheHitCount
+                )
+            )
+            details["\(scenario.name)_markdown_attachment_cache_miss_count_delta"] = String(
+                max(
+                    0,
+                    scenarioCountersAfter.markdownAttachmentCacheMissCount - scenarioCountersBefore.markdownAttachmentCacheMissCount
+                )
+            )
+            details["\(scenario.name)_markdown_attachment_metadata_sync_hit_count_delta"] = String(
+                max(
+                    0,
+                    scenarioCountersAfter.markdownAttachmentMetadataSyncHitCount -
+                        scenarioCountersBefore.markdownAttachmentMetadataSyncHitCount
+                )
+            )
+            details["\(scenario.name)_markdown_attachment_metadata_async_hit_count_delta"] = String(
+                max(
+                    0,
+                    scenarioCountersAfter.markdownAttachmentMetadataAsyncHitCount -
+                        scenarioCountersBefore.markdownAttachmentMetadataAsyncHitCount
+                )
+            )
+            details["\(scenario.name)_markdown_attachment_metadata_miss_count_delta"] = String(
+                max(
+                    0,
+                    scenarioCountersAfter.markdownAttachmentMetadataMissCount -
+                        scenarioCountersBefore.markdownAttachmentMetadataMissCount
+                )
+            )
+            details["\(scenario.name)_markdown_attachment_animated_count_delta"] = String(
+                max(
+                    0,
+                    scenarioCountersAfter.markdownAttachmentAnimatedCount - scenarioCountersBefore.markdownAttachmentAnimatedCount
+                )
+            )
+        }
+
+        writeEvent(type: "runtime.detail_release_cycles", command: nil, details: details)
+    }
+
+    private func measureRuntimeDetailVariants(environment: AppEnvironment) async throws {
+        let command = "runtime.measure_detail_variants"
+        struct Variant {
+            let name: String
+            let messageId: String
+        }
+
+        let variants = [
+            Variant(name: "baseline", messageId: "runtime-ui-msg-0"),
+            Variant(name: "markdown_10k", messageId: "runtime-ui-msg-1"),
+            Variant(name: "markdown_26k", messageId: "runtime-ui-msg-2"),
+            Variant(name: "media_rich", messageId: "runtime-ui-msg-3"),
+            Variant(name: "longline_unicode", messageId: "runtime-ui-msg-4"),
+            Variant(name: "baseline_repeat", messageId: "runtime-ui-msg-0"),
+        ]
+
+        var details: [String: String] = [
+            "variant_count": String(variants.count),
+        ]
+
+        for variant in variants {
+            var loadedMessage: PushMessage?
+            let countersBefore = instrumentationCountersSnapshot()
+            let storeLookupMs = try await withPhaseMarker(
+                command: command,
+                phase: "variant.\(variant.name).store_lookup"
+            ) {
+                try await elapsedMilliseconds {
+                    loadedMessage = try await environment.dataStore.loadMessage(messageId: variant.messageId)
+                }
+            }
+            guard let loadedMessage else {
+                throw PushGoAutomationError.invalidArgument("runtime detail variant missing: \(variant.messageId)")
+            }
+            let bodyText = loadedMessage.resolvedBody.rawText
+            var preparedDisplayMode = pushGoMarkdownDisplayMode(for: bodyText)
+            var preparedPlainSegmentCount = 0
+            var preparedImageReferenceCount = 0
+            let markdownPrepareMs = try await withPhaseMarker(
+                command: command,
+                phase: "variant.\(variant.name).markdown_prepare"
+            ) {
+                try await elapsedMilliseconds {
+                    preparedDisplayMode = pushGoMarkdownDisplayMode(for: bodyText)
+                    preparedPlainSegmentCount = pushGoPlainTextDisplaySegments(for: bodyText).count
+                    #if canImport(Textual)
+                    preparedImageReferenceCount = MarkdownImageURLExtractor.extractURLs(from: bodyText).count
+                    #else
+                    preparedImageReferenceCount = 0
+                    #endif
+                }
+            }
+            let previousSequence = latestDetailReadySample?.sequence ?? 0
+            let previousViewAppearSequence = latestDetailViewAppearSample?.sequence ?? 0
+            let previousContentReadySequence = latestDetailContentReadySample?.sequence ?? 0
+            let uiOpenStartedAt = Date()
+            let preRouteStateFetchStartedAt = Date()
+            let preRouteState = await currentState(environment: environment)
+            let preRouteStateFetchMs = max(0, Int(Date().timeIntervalSince(preRouteStateFetchStartedAt) * 1_000))
+            var readySample: PushGoAutomationDetailReadySample?
+            let routeOpenMs = try await withPhaseMarker(
+                command: command,
+                phase: "variant.\(variant.name).route_open"
+            ) {
+                try await elapsedMilliseconds {
+                    await environment.handleNotificationOpen(messageId: variant.messageId)
+                }
+            }
+            let selectionReady = await waitForAutomationStateMetrics(environment: environment, timeout: 12.0) { state in
+                state.visibleScreen == "screen.message.detail" && state.openedMessageId == variant.messageId
+            }
+            let viewAppearWait = await waitForDetailLifecycleSampleMetrics(
+                sampleProvider: self.latestDetailViewAppearSample,
+                messageId: variant.messageId,
+                afterSequence: previousViewAppearSequence,
+                allowUnknownMessageId: true,
+                timeout: selectionReady.matched ? 6.0 : 12.0
+            )
+            let contentReadyWait = await waitForDetailLifecycleSampleMetrics(
+                sampleProvider: self.latestDetailContentReadySample,
+                messageId: variant.messageId,
+                afterSequence: previousContentReadySequence,
+                timeout: selectionReady.matched ? 6.0 : 12.0
+            )
+            let settleDelayMs = try await withPhaseMarker(
+                command: command,
+                phase: "variant.\(variant.name).settle_delay"
+            ) {
+                try await elapsedMilliseconds {
+                    try? await Task.sleep(for: .milliseconds(150))
+                }
+            }
+            let detailReadyWait = await waitForDetailReadySampleMetrics(
+                messageId: variant.messageId,
+                afterSequence: previousSequence,
+                timeout: selectionReady.matched ? 8.0 : 12.0
+            )
+            guard let sample = detailReadyWait.sample else {
+                throw PushGoAutomationError.invalidArgument("runtime detail variant render timeout: \(variant.name)")
+            }
+            readySample = sample
+            let accessibilityOrElementWaitMs = 0
+            let knownUIWaitMs = routeOpenMs
+                + selectionReady.durationMilliseconds
+                + viewAppearWait.durationMilliseconds
+                + contentReadyWait.durationMilliseconds
+                + detailReadyWait.durationMilliseconds
+                + settleDelayMs
+                + accessibilityOrElementWaitMs
+            let observedUIWaitMs = max(0, Int(Date().timeIntervalSince(uiOpenStartedAt) * 1_000))
+            let unknownWaitMs = max(0, observedUIWaitMs - knownUIWaitMs)
+            let postReadyStateFetchStartedAt = Date()
+            let postReadyState = await currentState(environment: environment)
+            let postReadyStateFetchMs = max(0, Int(Date().timeIntervalSince(postReadyStateFetchStartedAt) * 1_000))
+            guard let sample = readySample else {
+                throw PushGoAutomationError.invalidArgument("runtime detail variant sample missing: \(variant.name)")
+            }
+            let countersAfter = instrumentationCountersSnapshot()
+            let uiOpenWaitMs = knownUIWaitMs + unknownWaitMs
+            let durationMs = storeLookupMs + markdownPrepareMs + uiOpenWaitMs
+            let performance = PushGoAutomationPerformanceMonitor.shared.snapshot()
+            details["\(variant.name)_message_id"] = variant.messageId
+            details["\(variant.name)_ms"] = String(durationMs)
+            details["\(variant.name)_store_lookup_ms"] = String(storeLookupMs)
+            details["\(variant.name)_markdown_prepare_ms"] = String(markdownPrepareMs)
+            details["\(variant.name)_ui_open_wait_ms"] = String(uiOpenWaitMs)
+            details["\(variant.name)_route_open_ms"] = String(routeOpenMs)
+            details["\(variant.name)_selection_ready_ms"] = String(selectionReady.durationMilliseconds)
+            details["\(variant.name)_selection_ready_ok"] = selectionReady.matched ? "true" : "false"
+            details["\(variant.name)_selection_ready_poll_count"] = String(selectionReady.pollCount)
+            details["\(variant.name)_selection_ready_state_fetch_ms"] = String(selectionReady.stateFetchMilliseconds)
+            details["\(variant.name)_selection_ready_unread_count"] = String(
+                selectionReady.matchedState?.unreadMessageCount ?? -1
+            )
+            details["\(variant.name)_selection_ready_total_count"] = String(
+                selectionReady.matchedState?.totalMessageCount ?? -1
+            )
+            details["\(variant.name)_view_appear_wait_ms"] = String(viewAppearWait.durationMilliseconds)
+            details["\(variant.name)_view_appear_poll_count"] = String(viewAppearWait.pollCount)
+            details["\(variant.name)_view_appear_sequence_delta"] = String(
+                max(0, (viewAppearWait.sample?.sequence ?? previousViewAppearSequence) - previousViewAppearSequence)
+            )
+            details["\(variant.name)_content_ready_wait_ms"] = String(contentReadyWait.durationMilliseconds)
+            details["\(variant.name)_content_ready_poll_count"] = String(contentReadyWait.pollCount)
+            details["\(variant.name)_content_ready_sequence_delta"] = String(
+                max(0, (contentReadyWait.sample?.sequence ?? previousContentReadySequence) - previousContentReadySequence)
+            )
+            details["\(variant.name)_settle_delay_ms"] = String(settleDelayMs)
+            details["\(variant.name)_accessibility_or_element_wait_ms"] = String(accessibilityOrElementWaitMs)
+            details["\(variant.name)_unknown_wait_ms"] = String(unknownWaitMs)
+            details["\(variant.name)_detail_ready_wait_ms"] = String(detailReadyWait.durationMilliseconds)
+            details["\(variant.name)_detail_ready_poll_count"] = String(detailReadyWait.pollCount)
+            details["\(variant.name)_detail_ready_sequence_delta"] = String(max(0, sample.sequence - previousSequence))
+            details["\(variant.name)_post_ready_unread_count"] = String(postReadyState.unreadMessageCount)
+            details["\(variant.name)_post_ready_total_count"] = String(postReadyState.totalMessageCount)
+            details["\(variant.name)_post_ready_state_fetch_ms"] = String(postReadyStateFetchMs)
+            details["\(variant.name)_pre_route_unread_count"] = String(preRouteState.unreadMessageCount)
+            details["\(variant.name)_pre_route_total_count"] = String(preRouteState.totalMessageCount)
+            details["\(variant.name)_pre_route_state_fetch_ms"] = String(preRouteStateFetchMs)
+            details["\(variant.name)_unread_delta_pre_to_selection"] = String(
+                (selectionReady.matchedState?.unreadMessageCount ?? preRouteState.unreadMessageCount) - preRouteState.unreadMessageCount
+            )
+            details["\(variant.name)_unread_delta_selection_to_post_ready"] = String(
+                postReadyState.unreadMessageCount - (selectionReady.matchedState?.unreadMessageCount ?? postReadyState.unreadMessageCount)
+            )
+            details["\(variant.name)_source"] = sample.loadSource
+            details["\(variant.name)_prepared_display_mode"] = preparedDisplayMode.rawValue
+            details["\(variant.name)_prepared_plain_segment_count"] = String(preparedPlainSegmentCount)
+            details["\(variant.name)_prepared_image_reference_count"] = String(preparedImageReferenceCount)
+            details["\(variant.name)_body_bytes"] = String(sample.bodyBytes)
+            details["\(variant.name)_title_bytes"] = String(sample.titleBytes)
+            details["\(variant.name)_line_count"] = String(sample.lineCount)
+            details["\(variant.name)_max_line_bytes"] = String(sample.maxLineBytes)
+            details["\(variant.name)_image_url_count"] = String(sample.imageURLCount)
+            details["\(variant.name)_is_markdown"] = sample.isMarkdown ? "true" : "false"
+            details["\(variant.name)_resident_memory_bytes"] = String(performance.residentMemoryBytes ?? 0)
+            details["\(variant.name)_main_thread_max_stall_ms"] = String(performance.mainThreadMaxStallMilliseconds)
+            details["\(variant.name)_attachment_resolve_delta"] = String(
+                max(0, countersAfter.markdownAttachmentResolveCount - countersBefore.markdownAttachmentResolveCount)
+            )
+            details["\(variant.name)_attachment_cache_hit_delta"] = String(
+                max(0, countersAfter.markdownAttachmentCacheHitCount - countersBefore.markdownAttachmentCacheHitCount)
+            )
+            details["\(variant.name)_attachment_cache_miss_delta"] = String(
+                max(0, countersAfter.markdownAttachmentCacheMissCount - countersBefore.markdownAttachmentCacheMissCount)
+            )
+            details["\(variant.name)_attachment_metadata_sync_hit_delta"] = String(
+                max(
+                    0,
+                    countersAfter.markdownAttachmentMetadataSyncHitCount - countersBefore.markdownAttachmentMetadataSyncHitCount
+                )
+            )
+            details["\(variant.name)_attachment_metadata_async_hit_delta"] = String(
+                max(
+                    0,
+                    countersAfter.markdownAttachmentMetadataAsyncHitCount - countersBefore.markdownAttachmentMetadataAsyncHitCount
+                )
+            )
+            details["\(variant.name)_attachment_metadata_miss_delta"] = String(
+                max(0, countersAfter.markdownAttachmentMetadataMissCount - countersBefore.markdownAttachmentMetadataMissCount)
+            )
+            details["\(variant.name)_attachment_animated_delta"] = String(
+                max(0, countersAfter.markdownAttachmentAnimatedCount - countersBefore.markdownAttachmentAnimatedCount)
+            )
+            details["\(variant.name)_display_mode_eval_delta"] = String(
+                max(0, countersAfter.markdownDisplayModeEvalCount - countersBefore.markdownDisplayModeEvalCount)
+            )
+            details["\(variant.name)_plain_text_segment_build_delta"] = String(
+                max(
+                    0,
+                    countersAfter.markdownPlainTextSegmentBuildCount - countersBefore.markdownPlainTextSegmentBuildCount
+                )
+            )
+        }
+
+        writeEvent(type: "runtime.detail_variants", command: nil, details: details)
+    }
+
+    private func measureRuntimeWindowResize(environment: AppEnvironment) async throws {
+        #if os(macOS)
+        guard try await environment.dataStore.loadMessage(messageId: "runtime-ui-msg-0") != nil else {
+            throw PushGoAutomationError.invalidArgument("runtime resize message missing: runtime-ui-msg-0")
+        }
+
+        let previousSequence = latestDetailReadySample?.sequence ?? 0
+        await environment.handleNotificationOpen(messageId: "runtime-ui-msg-0")
+        try? await Task.sleep(for: .milliseconds(150))
+        guard let detailSample = await waitForDetailReadySample(
+            messageId: "runtime-ui-msg-0",
+            afterSequence: previousSequence,
+            timeout: 12.0
+        ) else {
+            throw PushGoAutomationError.invalidArgument("runtime resize detail render timeout")
+        }
+
+        guard let window = await MainActor.run(body: {
+            NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first
+        }) else {
+            throw PushGoAutomationError.invalidArgument("runtime resize window unavailable")
+        }
+
+        let originalFrame = await MainActor.run { window.frame }
+        let targetWidths = [900.0, 1280.0, Double(originalFrame.width.rounded())]
+        var details: [String: String] = [
+            "message_id": detailSample.messageId,
+            "body_bytes": String(detailSample.bodyBytes),
+            "line_count": String(detailSample.lineCount),
+            "step_count": String(targetWidths.count),
+            "original_width": String(Int(originalFrame.width.rounded())),
+            "original_height": String(Int(originalFrame.height.rounded())),
+        ]
+
+        for (index, targetWidth) in targetWidths.enumerated() {
+            let durationMs = try await elapsedMilliseconds {
+                let nextFrame = await MainActor.run { () -> CGRect in
+                    var frame = window.frame
+                    frame.size.width = CGFloat(targetWidth)
+                    return frame
+                }
+                await MainActor.run {
+                    window.setFrame(nextFrame, display: true, animate: false)
+                    window.layoutIfNeeded()
+                }
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+            let performance = PushGoAutomationPerformanceMonitor.shared.snapshot()
+            details["step_\(index)_width"] = String(Int(targetWidth.rounded()))
+            details["step_\(index)_ms"] = String(durationMs)
+            details["step_\(index)_resident_memory_bytes"] = String(performance.residentMemoryBytes ?? 0)
+            details["step_\(index)_main_thread_max_stall_ms"] = String(performance.mainThreadMaxStallMilliseconds)
+        }
+
+        await MainActor.run {
+            window.setFrame(originalFrame, display: true, animate: false)
+            window.layoutIfNeeded()
+        }
+        writeEvent(type: "runtime.window_resize", command: nil, details: details)
+        #else
+        throw PushGoAutomationError.unsupportedCommand("runtime.measure_window_resize")
+        #endif
+    }
+
+    private func waitForDetailReadySample(
+        messageId: String,
+        afterSequence: Int,
+        timeout: TimeInterval
+    ) async -> PushGoAutomationDetailReadySample? {
+        await waitForDetailReadySampleMetrics(
+            messageId: messageId,
+            afterSequence: afterSequence,
+            timeout: timeout
+        ).sample
+    }
+
+    private func waitForMessageListViewModelReady(
+        _ viewModel: MessageListViewModel,
+        minimumRevisionExclusive: UInt64?,
+        timeout: TimeInterval
+    ) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let hasLoaded = viewModel.hasLoadedOnce
+            let hasData = !viewModel.filteredMessages.isEmpty
+            let idle = !viewModel.isLoadingPage
+            let revisionSatisfied: Bool
+            if let minimumRevisionExclusive {
+                revisionSatisfied = viewModel.filteredMessagesIdentityRevision > minimumRevisionExclusive
+            } else {
+                revisionSatisfied = true
+            }
+            if hasLoaded && hasData && idle && revisionSatisfied {
+                return true
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        return false
+    }
+
+    private func returnToMessagesList(environment: AppEnvironment) async -> Bool {
+        if await waitForAutomationState(environment: environment, timeout: 1.0, predicate: { state in
+            state.visibleScreen == "screen.messages.list"
+        }) {
+            return true
+        }
+
+        NotificationCenter.default.post(name: .pushgoAutomationSelectTab, object: "channels")
+        let switchedToChannels = await waitForAutomationState(environment: environment, timeout: 2.5) { state in
+            state.activeTab == "channels" || state.visibleScreen == "screen.channels"
+        }
+        if !switchedToChannels {
+            NotificationCenter.default.post(name: .pushgoAutomationSelectTab, object: "messages")
+            return await waitForAutomationState(environment: environment, timeout: 8.0) { state in
+                state.visibleScreen == "screen.messages.list"
+            }
+        }
+        NotificationCenter.default.post(name: .pushgoAutomationSelectTab, object: "messages")
+        return await waitForAutomationState(environment: environment, timeout: 8.0) { state in
+            state.visibleScreen == "screen.messages.list"
+        }
+    }
+
+    private func elapsedMilliseconds(_ operation: () async throws -> Void) async throws -> Int {
+        let startedAt = Date()
+        try await operation()
+        return max(0, Int(Date().timeIntervalSince(startedAt) * 1_000))
+    }
+
+    private func enrichState(
+        _ state: PushGoAutomationState,
+        derivedCountsState: PushGoAutomationState?,
+        environment: AppEnvironment
+    ) async -> PushGoAutomationState {
         let platform = platformIdentifier
         let providerToken = await environment.dataStore.cachedPushToken(for: platform)
             ?? PushGoAutomationContext.providerToken
         let deviceKey = await environment.dataStore.cachedDeviceKey(for: platform)
+        let performance = PushGoAutomationPerformanceMonitor.shared.snapshot()
         let ackPendingCount = 0
-        let eventCount = (try? await environment.dataStore.loadEventMessagesForProjection().count) ?? 0
-        let thingCount = (try? await environment.dataStore.loadThingMessagesForProjection().count) ?? 0
+        let shouldSkipExpensiveDerivedCounts = expensiveStateEnrichmentSuspensionCount > 0
+        let eventCount = shouldSkipExpensiveDerivedCounts
+            ? (derivedCountsState?.eventCount ?? 0)
+            : ((try? await environment.dataStore.loadEventMessagesForProjection().count) ?? 0)
+        let thingCount = shouldSkipExpensiveDerivedCounts
+            ? (derivedCountsState?.thingCount ?? 0)
+            : ((try? await environment.dataStore.loadThingMessagesForProjection().count) ?? 0)
+        let tagCounts = shouldSkipExpensiveDerivedCounts
+            ? nil
+            : ((try? await environment.dataStore.messageTagCounts()) ?? [])
+        let messageTagOptionCount = tagCounts?.count ?? (derivedCountsState?.messageTagOptionCount ?? 0)
+        let runtimeQualityTagCount = tagCounts?.first { $0.tag == "runtimequality" }?.totalCount
+            ?? (derivedCountsState?.runtimeQualityTagCount ?? 0)
         let notificationKeyEncoding = await environment.dataStore.loadManualKeyPreferences()
         let notificationKeyConfigured = environment.currentNotificationMaterial?.isConfigured == true
         let openedMessageDecryptionState = await resolvedAutomationMessageDecryptionState(
@@ -1383,6 +3026,8 @@ final class PushGoAutomationRuntime {
             privateDetail: privateDetail,
             ackPendingCount: ackPendingCount,
             channelCount: environment.channelSubscriptions.count,
+            messageTagOptionCount: messageTagOptionCount,
+            runtimeQualityTagCount: runtimeQualityTagCount,
             lastNotificationAction: state.lastNotificationAction,
             lastNotificationTarget: state.lastNotificationTarget,
             lastFixtureImportPath: state.lastFixtureImportPath,
@@ -1396,8 +3041,18 @@ final class PushGoAutomationRuntime {
             latestRuntimeErrorCategory: state.latestRuntimeErrorCategory,
             latestRuntimeErrorCode: state.latestRuntimeErrorCode,
             latestRuntimeErrorMessage: state.latestRuntimeErrorMessage,
-            latestRuntimeErrorTimestamp: state.latestRuntimeErrorTimestamp
+            latestRuntimeErrorTimestamp: state.latestRuntimeErrorTimestamp,
+            residentMemoryBytes: performance.residentMemoryBytes,
+            mainThreadMaxStallMilliseconds: performance.mainThreadMaxStallMilliseconds
         )
+    }
+
+    private func withExpensiveStateEnrichmentSuspended<T>(
+        _ operation: () async throws -> T
+    ) async rethrows -> T {
+        expensiveStateEnrichmentSuspensionCount += 1
+        defer { expensiveStateEnrichmentSuspensionCount -= 1 }
+        return try await operation()
     }
 
     private func parseBoolean(_ raw: String?) -> Bool? {
@@ -1639,24 +3294,31 @@ final class PushGoAutomationRuntime {
     }
 
     private func seedMessages(request: PushGoAutomationRequest, environment: AppEnvironment) async throws {
-        let bundle = try loadFixtureBundle(request: request)
+        let command = "fixture.seed_messages"
+        let bundle = try await withPhaseMarker(command: command, phase: "fixture.load_bundle") {
+            try loadFixtureBundle(request: request)
+        }
         guard !bundle.messages.isEmpty else {
             throw PushGoAutomationError.invalidArgument("path")
         }
-        if !bundle.messages.isEmpty {
+        try await withPhaseMarker(command: command, phase: "fixture.save_messages") {
             try await environment.dataStore.saveMessages(
                 bundle.messages
                     .map { $0.toPushMessage() }
                     .sorted { $0.receivedAt > $1.receivedAt }
             )
         }
-        await environment.refreshMessageCountsAndNotify()
-        recordFixtureImport(
-            path: normalizedIdentifier(request.args?.path),
-            messageCount: bundle.messages.count,
-            entityRecordCount: 0,
-            subscriptionCount: 0
-        )
+        try await withPhaseMarker(command: command, phase: "fixture.refresh_state") {
+            await environment.refreshMessageCountsAndNotify()
+        }
+        try await withPhaseMarker(command: command, phase: "fixture.record_import") {
+            recordFixtureImport(
+                path: normalizedIdentifier(request.args?.path),
+                messageCount: bundle.messages.count,
+                entityRecordCount: 0,
+                subscriptionCount: 0
+            )
+        }
     }
 
     private func seedEntityRecords(request: PushGoAutomationRequest, environment: AppEnvironment) async throws {
