@@ -108,11 +108,6 @@ for row in "${MATCHES[@]}"; do
   key="$rel|$token"
   OBSERVED_KEYS+=("$key")
 
-  if [[ "$token" == "nonisolated_unsafe" || "$token" == "unchecked_sendable" || "$token" == "mainactor_assumeisolated" || "$token" == "task_detached" || "$token" == "dispatch_global" ]]; then
-    VIOLATIONS+=("$rel:$line | $token | $text")
-    continue
-  fi
-
   if ! is_allowed "$key"; then
     VIOLATIONS+=("$rel:$line | $token | $text")
   fi

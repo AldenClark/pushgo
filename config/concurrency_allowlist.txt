@@ -10,3 +10,10 @@ Extensions/PushGoNSE-macOS/NotificationService.swift|preconcurrency|UserNotifica
 Extensions/PushGoNSE-watchOS/NotificationService.swift|preconcurrency|UserNotifications preconcurrency bridge
 Extensions/PushGoNSE-watchOS/WatchLightNotificationStore.swift|unsafe_raw_pointer|SQLite C API error message pointer boundary; owned and freed via sqlite3_free
 Shared/Utilities/AppConstants.swift|unsafe_raw_pointer|C notify FFI signature boundary only; no manual pointer ownership/casting in runtime logic
+Tests/PushGoAppleCoreTests/LocalDataStoreTests.swift|task_detached|Detached cleanup task used in stress test to validate cancellation/ordering behavior
+Tests/PushGoAppleCoreTests/RuntimeQualityLargeScaleTests.swift|unsafe_raw_pointer|Darwin mach_task_basic_info pointer bridge for runtime memory probe in test-only quality harness
+Tests/PushGoAppleCoreTests/RuntimeQualityLargeScaleTests.swift|unchecked_sendable|Main-thread probe type is test-only and guarded by explicit synchronization
+Shared/UI/RootView.swift|unsafe_raw_pointer|Darwin mach_task_basic_info pointer bridge for in-app runtime diagnostics panel
+Shared/UI/MessageDetailViewModel.swift|task_detached|Utility-priority detached preheat task intentionally decoupled from view lifecycle
+Apps/PushGo-macOS/UI/Screens/MessageSplitScreen.swift|task_detached|Utility-priority detached detail preheat task for split-view responsiveness
+Apps/PushGo-watchOS/WatchAutomation.swift|unsafe_raw_pointer|Darwin mach_task_basic_info pointer bridge for automation runtime metrics
