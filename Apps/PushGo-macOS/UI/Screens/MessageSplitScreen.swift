@@ -491,8 +491,9 @@ struct MessageSplitScreen: View {
                 }
                 .help(localizationManager.localized("channel"))
                 .accessibilityLabel(localizationManager.localized("channel"))
+                .accessibilityIdentifier("action.messages.filter")
                 .popover(isPresented: $isFilterPopoverPresented, arrowEdge: .top) {
-                    filterPopoverContent
+                    filterPopoverPresentationContent
                 }
             }
         }
@@ -512,6 +513,13 @@ struct MessageSplitScreen: View {
             .accessibilityLabel(localizationManager.localized("delete"))
             .disabled(selectedMessageSnapshot?.id != selection || isBatchMode)
         }
+    }
+
+    private var filterPopoverPresentationContent: some View {
+        ScrollView {
+            filterPopoverContent
+        }
+        .frame(maxHeight: 420)
     }
 
     private var filterPopoverContent: some View {
@@ -597,6 +605,7 @@ struct MessageSplitScreen: View {
         return filterCloudChip(title: tag, isSelected: isSelected) {
             messageListViewModel.toggleTagSelection(tag)
         }
+        .accessibilityIdentifier("filter.tag.\(tag)")
     }
 
     private func filterCloudChip(

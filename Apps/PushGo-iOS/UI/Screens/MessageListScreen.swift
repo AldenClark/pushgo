@@ -602,12 +602,13 @@ private extension MessageListScreen {
                     filterToolbarIcon(isHighlighted: isFilterMenuHighlighted)
                 }
                 .accessibilityLabel(localizationManager.localized("channel"))
+                .accessibilityIdentifier("action.messages.filter")
                 .popover(isPresented: $isFilterPopoverPresented, arrowEdge: .top) {
                     if #available(iOS 16.4, *) {
-                        filterPopoverContent
+                        filterPopoverPresentationContent
                             .presentationCompactAdaptation(.popover)
                     } else {
-                        filterPopoverContent
+                        filterPopoverPresentationContent
                     }
                 }
             }
@@ -683,6 +684,13 @@ private extension MessageListScreen {
             .foregroundStyle(isHighlighted ? .accentColor : Color.primary)
     }
 
+    private var filterPopoverPresentationContent: some View {
+        ScrollView {
+            filterPopoverContent
+        }
+        .frame(maxHeight: 420)
+    }
+
     private var filterPopoverContent: some View {
         VStack(alignment: .leading, spacing: 14) {
             Button {
@@ -708,6 +716,7 @@ private extension MessageListScreen {
                 )
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("filter.unread_only")
             .padding(.vertical, 2)
 
             if !displayedChannelSummaries.isEmpty {
@@ -760,6 +769,7 @@ private extension MessageListScreen {
         return filterCloudChip(title: tag, isSelected: isSelected) {
             viewModel.toggleTagSelection(tag)
         }
+        .accessibilityIdentifier("filter.tag.\(tag)")
     }
 
     private func filterCloudChip(
