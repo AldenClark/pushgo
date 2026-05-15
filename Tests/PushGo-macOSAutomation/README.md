@@ -25,6 +25,11 @@ It is designed as a stable complement to `PushGo-macOSUITests`.
 | `notification_mark_read` | notification mark-read command updates unread count and action bookkeeping |
 | `notification_delete` | notification delete command removes the seeded message and publishes action bookkeeping |
 | `gateway_set_server` | `gateway.set_server` updates gateway base URL and token-presence state |
+| `runtime_quality_large_fixture` | optional 10,000-message runtime fixture import validates list readiness and store health |
+| `runtime_quality_message_queries` | optional shared-runtime app-process query probe validates first page, second page, unread sort, tag filter, search count, and search page timings after large fixture import |
+| `runtime_quality_message_detail` | optional shared-runtime `message.open` validates detail readiness after large fixture import |
+| `runtime_quality_event_detail` | optional shared-runtime `entity.open(event)` validates event detail readiness after large fixture import |
+| `runtime_quality_thing_detail` | optional shared-runtime `entity.open(thing)` validates thing detail readiness after large fixture import |
 
 ## Run Command
 
@@ -37,10 +42,17 @@ Automation runtime defaults to `PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS=0`
 Smoke cases are executed through the app's built-in startup automation protocol (`PUSHGO_AUTOMATION_REQUEST` + response/state/events files), without external helper scripts.
 Fixture defaults now point to `pushgo/Tests/Fixtures/p2` inside this repository.
 
+Large runtime-quality mode is opt-in:
+
+```bash
+RUNTIME_QUALITY_ONLY=1 RUNTIME_QUALITY_CASE=1 RUNTIME_QUALITY_SCALE=10000 RESPONSE_TIMEOUT_SECONDS=180 CASE_RETRY_COUNT=1 /Users/ethan/Repo/PushGo/pushgo/Tests/PushGo-macOSAutomation/macos_automation_smoke.sh
+```
+
 ## Pass Criteria
 
 - All smoke cases complete successfully.
 - All command cases produce valid response and state payloads.
 - Every `ok=true` case also satisfies `runtime_error_count == 0` and `local_store_mode != unavailable`.
 - `entity.open` cases must observe a matching `entity.opened` event for the requested entity id.
+- Runtime quality mode prints `[runtime-quality-macos-query]` with per-query counts and milliseconds; all query probes must return non-empty expected pages under the 10s guard.
 - No manual interaction required.

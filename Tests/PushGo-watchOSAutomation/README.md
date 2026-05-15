@@ -15,6 +15,8 @@ This matrix uses the built-in `WatchAutomation` command/response/state/event fil
 | `fixture_thing_import` | fixture import path validates thing projection ingestion (`thing_count >= 1`) |
 | `entity_open_event` | shared-runtime fixture + `entity.open` validates event detail state and target `entity.opened` event |
 | `entity_open_thing` | shared-runtime fixture + `entity.open` validates thing detail state and target `entity.opened` event |
+| `runtime_quality_large_fixture` | optional 10,000-message watch-light fixture import validates list readiness and store health |
+| `runtime_quality_message_detail` | optional shared-runtime `message.open` validates detail readiness after large fixture import |
 
 ## Run Command
 
@@ -34,6 +36,12 @@ Serial full Apple pipeline entry:
 默认启用非交互签名参数（`NO_INTERACTIVE_SIGNING=1`）以减少系统密码/二次验证弹窗。
 设备选择支持自动解析：优先使用 `WATCH_DEVICE_ID`/`IPHONE_DEVICE_ID`，找不到时按 `WATCH_DEVICE_NAME`/`IPHONE_DEVICE_NAME`，再回退到首个可用设备。
 Apple automation 环境默认设置 `PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS=0`，避免跨 App 数据访问弹窗阻塞。
+
+大规模 runtime-quality 模式需要显式开启：
+
+```bash
+RUNTIME_QUALITY_ONLY=1 RUNTIME_QUALITY_CASE=1 RUNTIME_QUALITY_SCALE=10000 RESPONSE_TIMEOUT_SECONDS=180 CASE_RETRY_COUNT=1 /Users/ethan/Repo/PushGo/pushgo/Tests/PushGo-watchOSAutomation/watchos_automation_smoke.sh
+```
 
 ## Pass Criteria
 
