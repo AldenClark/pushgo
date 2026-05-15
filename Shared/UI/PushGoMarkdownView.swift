@@ -21,24 +21,18 @@ struct MarkdownRenderer: View {
         return limitText(text, toFirstNewlines: max)
     }
 
-    private var displayMode: PushGoMarkdownDisplayMode {
+    private func markdownRenderPreparation(for displayText: String) -> (
+        displayMode: PushGoMarkdownDisplayMode,
+        normalizedText: String
+    ) {
         let mode = pushGoMarkdownDisplayMode(for: displayText)
         #if !os(watchOS)
         recordMarkdownDisplayModeEvaluationMetric()
         #endif
-        return mode
-    }
-
-    private var normalizedText: String {
-        normalizeMarkdown(displayText)
-    }
-
-    private var plainTextSegments: [String] {
-        let segments = pushGoPlainTextDisplaySegments(for: displayText)
-        #if !os(watchOS)
-        recordMarkdownPlainTextSegmentsMetric()
-        #endif
-        return segments
+        return (
+            displayMode: mode,
+            normalizedText: normalizeMarkdown(displayText)
+        )
     }
 
     var body: some View {
@@ -61,16 +55,18 @@ struct MarkdownRenderer: View {
 #if canImport(Textual) && !os(watchOS)
 extension MarkdownRenderer {
     private var markdownContent: some View {
-        Group {
-            if displayMode == .structuredText {
-                StructuredText(markdown: normalizedText)
+        let currentDisplayText = displayText
+        let renderPreparation = markdownRenderPreparation(for: currentDisplayText)
+        return Group {
+            if renderPreparation.displayMode == .structuredText {
+                StructuredText(markdown: renderPreparation.normalizedText)
                     .textual.structuredTextStyle(.gitHub)
                     .textual.tableCellStyle(PushGoRefinedTableCellStyle())
                     .textual.tableStyle(PushGoRefinedTableStyle())
-            } else if displayMode == .inlineText {
-                InlineText(markdown: normalizedText)
+            } else if renderPreparation.displayMode == .inlineText {
+                InlineText(markdown: renderPreparation.normalizedText)
             } else {
-                plainTextContent
+                plainTextContent(displayText: currentDisplayText)
             }
         }
         .transaction { transaction in
@@ -122,12 +118,16 @@ extension MarkdownRenderer {
         })
         .font(font)
         .foregroundStyle(foreground)
-        .modifier(MarkdownRendererLayoutMode(displayMode: displayMode))
+        .modifier(MarkdownRendererLayoutMode(displayMode: renderPreparation.displayMode))
     }
 
     @ViewBuilder
-    private var plainTextContent: some View {
+    private func plainTextContent(displayText: String) -> some View {
         #if os(macOS)
+        let plainTextSegments = pushGoPlainTextDisplaySegments(for: displayText)
+        #if !os(watchOS)
+        recordMarkdownPlainTextSegmentsMetric()
+        #endif
         if plainTextSegments.count > 1 {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(plainTextSegments.enumerated()), id: \.offset) { _, segment in
@@ -400,12 +400,18 @@ private func normalizeMarkdown(_ markdown: String) -> String {
     // Foundation's markdown parser does not render [![...]](...) as an image.
     // Keep this narrowly scoped: unwrap link-wrapped images and delegate all
     // other markdown semantics to Textual/Foundation.
-    let pattern = #"\[(!\[[^\]]*?\]\((?:\\.|[^\\)])*?\))\]\((?:\\.|[^\\)])*?\)"#
-    guard let regex = try? NSRegularExpression(pattern: pattern) else {
+    guard let regex = MarkdownNormalizationRegex.linkWrappedImage else {
         return markdown
     }
     let range = NSRange(markdown.startIndex ..< markdown.endIndex, in: markdown)
     return regex.stringByReplacingMatches(in: markdown, range: range, withTemplate: "$1")
+}
+
+private enum MarkdownNormalizationRegex {
+    static let linkWrappedImage: NSRegularExpression? = {
+        let pattern = #"\[(!\[[^\]]*?\]\((?:\\.|[^\\)])*?\))\]\((?:\\.|[^\\)])*?\)"#
+        return try? NSRegularExpression(pattern: pattern)
+    }()
 }
 
 private func limitText(_ text: String, toFirstNewlines max: Int) -> String {

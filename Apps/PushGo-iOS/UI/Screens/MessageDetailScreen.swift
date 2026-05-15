@@ -126,6 +126,11 @@ struct MessageDetailScreen: View {
     @ViewBuilder
     private var detailContent: some View {
         if let message = viewModel.message {
+            let resolvedBody = message.resolvedBody
+            let messageTags = message.tags
+            let messageMetadata = message.metadata
+            let messageImageURLs = message.imageURLs
+            let messageSeverity = message.severity
             GeometryReader { proxy in
                 let markdownWidthHint = max(proxy.size.width - (EntityVisualTokens.detailPaddingHorizontal * 2), 1)
                 ScrollView {
@@ -149,7 +154,7 @@ struct MessageDetailScreen: View {
                                     Text(message.receivedAt.pushgoDetailTimestamp())
                                         .font(.subheadline)
                                         .foregroundStyle(Color.appTextSecondary)
-                                    messageSeverityBadge(for: message.severity)
+                                    messageSeverityBadge(for: messageSeverity)
                                 }
                                 if let channelName = environment.channelDisplayName(for: message.channel) {
                                     ChannelTagView(text: channelName)
@@ -157,17 +162,16 @@ struct MessageDetailScreen: View {
                             }
                         }
                     }
-                    if !message.tags.isEmpty {
-                        messageTagChipRow(tags: message.tags)
+                    if !messageTags.isEmpty {
+                        messageTagChipRow(tags: messageTags)
                     }
-                    if !message.metadata.isEmpty {
-                        metadataSection(items: message.metadata)
+                    if !messageMetadata.isEmpty {
+                        metadataSection(items: messageMetadata)
                     }
-                    if !message.imageURLs.isEmpty {
-                        messageImagesSection(imageURLs: message.imageURLs)
+                    if !messageImageURLs.isEmpty {
+                        messageImagesSection(imageURLs: messageImageURLs)
                     }
-                    criticalSeverityHint(for: message.severity)
-                    let resolvedBody = message.resolvedBody
+                    criticalSeverityHint(for: messageSeverity)
                     MarkdownRenderer(
                         text: resolvedBody.rawText,
                         font: .body,
