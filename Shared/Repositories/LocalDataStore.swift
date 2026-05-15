@@ -263,6 +263,14 @@ private func isReferencedEntityMessage(_ message: PushMessage) -> Bool {
         )
 }
 
+private func affectsNotificationContextSnapshot(_ message: PushMessage) -> Bool {
+    let entityType = normalizedEntityType(message)
+    return entityType == "event"
+        || entityType == "thing"
+        || normalizeEntityReference(message.eventId) != nil
+        || normalizeEntityReference(message.thingId) != nil
+}
+
 private func isTopLevelEventProjection(_ message: PushMessage) -> Bool {
     ProjectionSemantics.isTopLevelEventProjection(
         entityType: normalizedEntityType(message),
@@ -1950,16 +1958,24 @@ actor LocalDataStore {
     }
 
     func deleteMessages(ids: [UUID]) async throws -> Int {
-        let deletedIds = try await performBackendWrite { backend in
-            try await backend.deleteMessages(ids: ids)
+        let deletion = try await performBackendWrite { backend -> (ids: [UUID], affectsNotificationContextSnapshot: Bool) in
+            let uniqueIds = Array(Set(ids))
+            let existingMessages = try await backend.loadMessages(ids: uniqueIds)
+            let deletedIds = try await backend.deleteMessages(ids: uniqueIds)
+            let deletedIdSet = Set(deletedIds)
+            let affectsSnapshot = existingMessages.contains { message in
+                deletedIdSet.contains(message.id) && affectsNotificationContextSnapshot(message)
+            }
+            return (deletedIds, affectsSnapshot)
         }
+        let deletedIds = deletion.ids
         if let searchIndex, !deletedIds.isEmpty {
             try? await searchIndex.bulkRemove(ids: deletedIds)
         }
         if let metadataIndex, !deletedIds.isEmpty {
             try? await metadataIndex.bulkRemove(ids: deletedIds)
         }
-        if !deletedIds.isEmpty {
+        if deletion.affectsNotificationContextSnapshot {
             await rebuildNotificationContextSnapshot()
         }
         return deletedIds.count

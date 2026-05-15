@@ -2058,6 +2058,102 @@ struct LocalDataStoreTests {
     }
 
     @Test
+    func deleteMessagesRebuildsNotificationContextSnapshotOnlyForRelevantSemanticRows() async throws {
+        try await withIsolatedLocalDataStore { store, appGroupIdentifier in
+            let ordinary = makeMessage(
+                id: UUID(uuidString: "40000000-0000-0000-0000-000000000001")!,
+                messageId: "snapshot-ordinary-001",
+                notificationRequestId: "req-snapshot-ordinary-001",
+                title: "Ordinary message",
+                body: "Deleting this should not change semantic snapshot",
+                receivedAt: Date(timeIntervalSince1970: 1_800_003_000),
+                rawPayload: [
+                    "entity_type": "message",
+                    "entity_id": "ordinary-001",
+                    "tags": #"["ordinary"]"#,
+                    "channel_id": "snapshot-conditions",
+                ]
+            )
+            let eventReference = makeMessage(
+                id: UUID(uuidString: "40000000-0000-0000-0000-000000000002")!,
+                messageId: "snapshot-event-ref-001",
+                notificationRequestId: "req-snapshot-event-ref-001",
+                title: "Event reference message",
+                body: "This top-level message carries event context",
+                receivedAt: Date(timeIntervalSince1970: 1_800_002_990),
+                rawPayload: [
+                    "entity_type": "message",
+                    "entity_id": "event-ref-001",
+                    "event_id": "evt-delete-conditions-001",
+                    "tags": #"["eventref"]"#,
+                    "channel_id": "snapshot-conditions",
+                ]
+            )
+            let thingRecord = makeMessage(
+                id: UUID(uuidString: "40000000-0000-0000-0000-000000000003")!,
+                messageId: "snapshot-thing-001",
+                notificationRequestId: "req-snapshot-thing-001",
+                title: "Thing snapshot",
+                body: "Thing body",
+                receivedAt: Date(timeIntervalSince1970: 1_800_002_980),
+                rawPayload: [
+                    "entity_type": "thing",
+                    "entity_id": "thing-delete-conditions-001",
+                    "thing_id": "thing-delete-conditions-001",
+                    "projection_destination": "thing_head",
+                    "channel_id": "snapshot-conditions",
+                ]
+            )
+
+            try await store.saveMessagesBatch([ordinary, eventReference])
+            try await store.saveEntityRecords([thingRecord])
+
+            let beforeOrdinaryDelete = try #require(
+                NotificationContextSnapshotStore.snapshotFileURL(appGroupIdentifier: appGroupIdentifier)
+            )
+            let beforeOrdinaryData = try Data(contentsOf: beforeOrdinaryDelete)
+            let beforeOrdinarySnapshot = try #require(
+                NotificationContextSnapshotStore.load(
+                    fileManager: .default,
+                    appGroupIdentifier: appGroupIdentifier
+                )
+            )
+            #expect(beforeOrdinarySnapshot.events["evt-delete-conditions-001"] != nil)
+            #expect(beforeOrdinarySnapshot.things["thing-delete-conditions-001"] != nil)
+
+            _ = try await store.deleteMessages(ids: [ordinary.id])
+
+            let afterOrdinaryData = try Data(contentsOf: beforeOrdinaryDelete)
+            let afterOrdinarySnapshot = try #require(
+                NotificationContextSnapshotStore.load(
+                    fileManager: .default,
+                    appGroupIdentifier: appGroupIdentifier
+                )
+            )
+            #expect(afterOrdinaryData == beforeOrdinaryData)
+            #expect(afterOrdinarySnapshot.events["evt-delete-conditions-001"] != nil)
+            #expect(afterOrdinarySnapshot.things["thing-delete-conditions-001"] != nil)
+
+            _ = try await store.deleteMessages(ids: [eventReference.id, ordinary.id])
+
+            let afterEventDeleteSnapshot = NotificationContextSnapshotStore.load(
+                fileManager: .default,
+                appGroupIdentifier: appGroupIdentifier
+            )
+            #expect(afterEventDeleteSnapshot?.events["evt-delete-conditions-001"] == nil)
+            #expect(afterEventDeleteSnapshot?.things["thing-delete-conditions-001"] != nil)
+
+            _ = try await store.deleteMessages(ids: [thingRecord.id, ordinary.id])
+
+            let afterThingDeleteSnapshot = NotificationContextSnapshotStore.load(
+                fileManager: .default,
+                appGroupIdentifier: appGroupIdentifier
+            )
+            #expect(afterThingDeleteSnapshot?.things["thing-delete-conditions-001"] == nil)
+        }
+    }
+
+    @Test
     func loadEntityOpenTargetResolvesEventProjectionByNotificationRequestId() async throws {
         try await withIsolatedLocalDataStore { store, _ in
             let eventId = "evt-open-target-001"
