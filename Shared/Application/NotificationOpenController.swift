@@ -124,20 +124,31 @@ final class NotificationOpenController {
         removeFromNotificationCenter: Bool
     ) async {
         let targetId = target.id
-
-        if markAsReadInStore {
-            _ = try? await messageStateCoordinatorProvider()?.markRead(messageId: targetId)
-        } else {
-            await refreshCountsAndNotify()
-            if removeFromNotificationCenter {
-                removeDeliveredNotificationIfNeeded(target)
-            }
-        }
         autoEnableDataPage("message")
 
         pendingEventToOpen = nil
         pendingThingToOpen = nil
         pendingMessageToOpen = targetId
+
+        if markAsReadInStore {
+            // Keep detail navigation responsive: open first, then finalize read-state side effects.
+            Task { @MainActor [self] in
+                if let coordinator = messageStateCoordinatorProvider() {
+                    _ = try? await coordinator.markRead(messageId: targetId)
+                } else {
+                    await refreshCountsAndNotify()
+                    if removeFromNotificationCenter {
+                        removeDeliveredNotificationIfNeeded(target)
+                    }
+                }
+            }
+            return
+        }
+
+        await refreshCountsAndNotify()
+        if removeFromNotificationCenter {
+            removeDeliveredNotificationIfNeeded(target)
+        }
     }
 
     private func handleEntityOpenTarget(_ target: EntityOpenTarget) async {
