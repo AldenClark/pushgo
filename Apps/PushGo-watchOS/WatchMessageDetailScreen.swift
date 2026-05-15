@@ -109,6 +109,17 @@ struct WatchMessageDetailScreen: View {
                 }
             }
         }
+#if DEBUG
+        .task(id: automationDetailSignature) {
+            guard let message else { return }
+            PushGoWatchAutomationRuntime.shared.recordMessageDetailReady(message: message)
+        }
+#endif
+    }
+
+    private var automationDetailSignature: String {
+        guard let message else { return "message:none" }
+        return "\(message.messageId)|\(message.body.count)|\(message.title.count)|\(message.isRead)"
     }
 
     @ViewBuilder

@@ -1,7 +1,86 @@
 import Foundation
 import SwiftUI
 
+#if canImport(Darwin)
+import Darwin
+#endif
+
 #if DEBUG
+@MainActor
+private final class PushGoAutomationPerformanceMonitor: NSObject {
+    static let shared = PushGoAutomationPerformanceMonitor()
+
+    struct Snapshot: Sendable {
+        let residentMemoryBytes: UInt64?
+        let mainThreadMaxStallMilliseconds: Int
+    }
+
+    private let expectedTickInterval: TimeInterval = 1.0 / 30.0
+    private var started = false
+    private var timer: Timer?
+    private var lastTickUptime: TimeInterval?
+    private var maxStallMilliseconds = 0
+
+    private override init() {
+        super.init()
+    }
+
+    func startIfNeeded() {
+        guard !started else { return }
+        started = true
+        lastTickUptime = ProcessInfo.processInfo.systemUptime
+
+        let timer = Timer(
+            timeInterval: expectedTickInterval,
+            target: self,
+            selector: #selector(handleTimerTick),
+            userInfo: nil,
+            repeats: true
+        )
+        self.timer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    func snapshot() -> Snapshot {
+        Snapshot(
+            residentMemoryBytes: currentResidentMemoryBytes(),
+            mainThreadMaxStallMilliseconds: maxStallMilliseconds
+        )
+    }
+
+    private func currentResidentMemoryBytes() -> UInt64? {
+        #if canImport(Darwin)
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) { pointer in
+            pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { rebound in
+                task_info(
+                    mach_task_self_,
+                    task_flavor_t(MACH_TASK_BASIC_INFO),
+                    rebound,
+                    &count
+                )
+            }
+        }
+        guard result == KERN_SUCCESS else { return nil }
+        return UInt64(info.resident_size)
+        #else
+        return nil
+        #endif
+    }
+
+    @objc
+    private func handleTimerTick() {
+        let now = ProcessInfo.processInfo.systemUptime
+        if let lastTickUptime {
+            let stall = max(0, now - lastTickUptime - expectedTickInterval)
+            let stallMilliseconds = Int((stall * 1_000).rounded())
+            maxStallMilliseconds = max(maxStallMilliseconds, stallMilliseconds)
+        }
+        lastTickUptime = now
+    }
+}
+
 private enum PushGoWatchAutomationEnvironment {
     static let request = "PUSHGO_AUTOMATION_REQUEST"
     static let responsePath = "PUSHGO_AUTOMATION_RESPONSE_PATH"
@@ -72,6 +151,8 @@ private struct PushGoWatchAutomationState: Encodable, Equatable {
     let latestRuntimeErrorCode: String?
     let latestRuntimeErrorMessage: String?
     let latestRuntimeErrorTimestamp: String?
+    let residentMemoryBytes: UInt64?
+    let mainThreadMaxStallMilliseconds: Int
 
     private enum CodingKeys: String, CodingKey {
         case platform
@@ -108,6 +189,8 @@ private struct PushGoWatchAutomationState: Encodable, Equatable {
         case latestRuntimeErrorCode = "latest_runtime_error_code"
         case latestRuntimeErrorMessage = "latest_runtime_error_message"
         case latestRuntimeErrorTimestamp = "latest_runtime_error_timestamp"
+        case residentMemoryBytes = "resident_memory_bytes"
+        case mainThreadMaxStallMilliseconds = "main_thread_max_stall_ms"
     }
 }
 
@@ -117,6 +200,16 @@ private struct PushGoWatchAutomationRuntimeError: Equatable {
     let code: String?
     let message: String
     let timestamp: String
+}
+
+private struct PushGoWatchAutomationDetailReadySample: Equatable {
+    let sequence: Int
+    let messageId: String
+    let bodyBytes: Int
+    let titleBytes: Int
+    let lineCount: Int
+    let maxLineBytes: Int
+    let imageURLCount: Int
 }
 
 private struct PushGoWatchAutomationResponse: Encodable {
@@ -318,6 +411,8 @@ final class PushGoWatchAutomationRuntime {
     private var latestState: PushGoWatchAutomationState?
     private var runtimeErrorCount = 0
     private var latestRuntimeError: PushGoWatchAutomationRuntimeError?
+    private var latestDetailReadySample: PushGoWatchAutomationDetailReadySample?
+    private var nextDetailReadySequence = 0
     private var activeTrace: PushGoWatchActiveTrace?
 
     private init() {}
@@ -325,6 +420,7 @@ final class PushGoWatchAutomationRuntime {
     func configureFromProcessEnvironment() {
         guard !configured else { return }
         configured = true
+        PushGoAutomationPerformanceMonitor.shared.startIfNeeded()
         responseURL = fileURL(for: PushGoWatchAutomationEnvironment.responsePath)
         stateURL = fileURL(for: PushGoWatchAutomationEnvironment.statePath)
         eventsURL = fileURL(for: PushGoWatchAutomationEnvironment.eventsPath)
@@ -354,6 +450,7 @@ final class PushGoWatchAutomationRuntime {
     ) {
         configureFromProcessEnvironment()
         let previousState = latestState
+        let performance = PushGoAutomationPerformanceMonitor.shared.snapshot()
         let state = PushGoWatchAutomationState(
             platform: platformIdentifier,
             buildMode: "debug",
@@ -388,7 +485,9 @@ final class PushGoWatchAutomationRuntime {
             latestRuntimeErrorCategory: latestRuntimeError?.category,
             latestRuntimeErrorCode: latestRuntimeError?.code,
             latestRuntimeErrorMessage: latestRuntimeError?.message,
-            latestRuntimeErrorTimestamp: latestRuntimeError?.timestamp
+            latestRuntimeErrorTimestamp: latestRuntimeError?.timestamp,
+            residentMemoryBytes: performance.residentMemoryBytes,
+            mainThreadMaxStallMilliseconds: performance.mainThreadMaxStallMilliseconds
         )
         latestState = state
         writeJSON(state, to: stateURL)
@@ -449,6 +548,12 @@ final class PushGoWatchAutomationRuntime {
                 try await seedEntityRecords(request: request, environment: environment)
             case "fixture.seed_subscriptions":
                 try await seedSubscriptions(request: request, environment: environment)
+            case "runtime.measure_list_reloads":
+                try await measureRuntimeListReloads(environment: environment)
+            case "runtime.measure_detail_variants":
+                try await measureRuntimeDetailVariants(environment: environment)
+            case "runtime.measure_detail_cycles":
+                try await measureRuntimeDetailCycles(environment: environment)
             case "debug.reset_local_state", "fixture.reset_local_state":
                 try await resetLocalState(environment: environment)
             default:
@@ -519,7 +624,11 @@ final class PushGoWatchAutomationRuntime {
         let providerToken = await environment.dataStore.cachedPushToken(for: platformIdentifier)
             ?? PushGoAutomationContext.providerToken
         let deviceKey = await environment.dataStore.cachedDeviceKey(for: platformIdentifier)
+        let performance = PushGoAutomationPerformanceMonitor.shared.snapshot()
         let ackPendingCount = 0
+        let messages = (try? await environment.dataStore.loadWatchLightMessages()) ?? []
+        let totalMessageCount = messages.count
+        let unreadMessageCount = messages.filter { !$0.isRead }.count
         let eventCount = (try? await environment.dataStore.loadWatchLightEvents().count) ?? 0
         let thingCount = (try? await environment.dataStore.loadWatchLightThings().count) ?? 0
         let openedMessageDecryptionState = await resolvedAutomationMessageDecryptionState(
@@ -554,8 +663,8 @@ final class PushGoWatchAutomationRuntime {
             pendingMessageId: pendingMessageId,
             pendingEventId: state.pendingEventId,
             pendingThingId: state.pendingThingId,
-            unreadMessageCount: state.unreadMessageCount,
-            totalMessageCount: state.totalMessageCount,
+            unreadMessageCount: unreadMessageCount,
+            totalMessageCount: totalMessageCount,
             eventCount: eventCount,
             thingCount: thingCount,
             gatewayBaseURL: state.gatewayBaseURL,
@@ -576,7 +685,9 @@ final class PushGoWatchAutomationRuntime {
             latestRuntimeErrorCategory: state.latestRuntimeErrorCategory,
             latestRuntimeErrorCode: state.latestRuntimeErrorCode,
             latestRuntimeErrorMessage: state.latestRuntimeErrorMessage,
-            latestRuntimeErrorTimestamp: state.latestRuntimeErrorTimestamp
+            latestRuntimeErrorTimestamp: state.latestRuntimeErrorTimestamp,
+            residentMemoryBytes: performance.residentMemoryBytes,
+            mainThreadMaxStallMilliseconds: performance.mainThreadMaxStallMilliseconds
         )
     }
 
@@ -650,6 +761,283 @@ final class PushGoWatchAutomationRuntime {
             "gateway_base_url": current.gatewayBaseURL ?? "",
             "changed_keys": changedKeys.joined(separator: ","),
         ]
+    }
+
+    func recordMessageDetailReady(message: WatchLightMessage) {
+        configureFromProcessEnvironment()
+        let body = message.body
+        let lineLengths = body.split(separator: "\n", omittingEmptySubsequences: false)
+            .map { String($0).lengthOfBytes(using: .utf8) }
+        nextDetailReadySequence += 1
+        let sample = PushGoWatchAutomationDetailReadySample(
+            sequence: nextDetailReadySequence,
+            messageId: message.messageId,
+            bodyBytes: body.lengthOfBytes(using: .utf8),
+            titleBytes: message.title.lengthOfBytes(using: .utf8),
+            lineCount: lineLengths.count,
+            maxLineBytes: lineLengths.max() ?? 0,
+            imageURLCount: message.imageURL == nil ? 0 : 1
+        )
+        latestDetailReadySample = sample
+        writeEvent(type: "message.detail_ready", command: nil, details: [
+            "message_id": sample.messageId,
+            "body_bytes": String(sample.bodyBytes),
+            "title_bytes": String(sample.titleBytes),
+            "line_count": String(sample.lineCount),
+            "max_line_bytes": String(sample.maxLineBytes),
+            "image_url_count": String(sample.imageURLCount),
+            "sequence": String(sample.sequence),
+        ])
+    }
+
+    private func measureRuntimeDetailVariants(environment: AppEnvironment) async throws {
+        struct Variant {
+            let name: String
+            let messageId: String
+        }
+
+        let variants = [
+            Variant(name: "baseline", messageId: "runtime-watch-msg-0"),
+            Variant(name: "markdown_10k", messageId: "runtime-watch-msg-1"),
+            Variant(name: "markdown_26k", messageId: "runtime-watch-msg-2"),
+            Variant(name: "media_rich", messageId: "runtime-watch-msg-3"),
+            Variant(name: "longline_unicode", messageId: "runtime-watch-msg-4"),
+            Variant(name: "baseline_repeat", messageId: "runtime-watch-msg-0"),
+        ]
+
+        var details: [String: String] = [
+            "variant_count": String(variants.count),
+        ]
+
+        for variant in variants {
+            guard try await environment.dataStore.loadWatchLightMessage(messageId: variant.messageId) != nil else {
+                throw PushGoWatchAutomationError.invalidArgument("missing message_id \(variant.messageId)")
+            }
+            let previousSequence = latestDetailReadySample?.sequence ?? 0
+            let startedAt = Date()
+            await environment.handleNotificationOpen(messageId: variant.messageId)
+            try? await Task.sleep(for: .milliseconds(150))
+            guard let sample = await waitForDetailReadySample(
+                messageId: variant.messageId,
+                afterSequence: previousSequence,
+                timeout: 12.0
+            ) else {
+                throw PushGoWatchAutomationError.invalidArgument("detail variant render timeout")
+            }
+            let durationMs = max(0, Int(Date().timeIntervalSince(startedAt) * 1_000))
+            let performance = PushGoAutomationPerformanceMonitor.shared.snapshot()
+            details["\(variant.name)_message_id"] = variant.messageId
+            details["\(variant.name)_ms"] = String(durationMs)
+            details["\(variant.name)_body_bytes"] = String(sample.bodyBytes)
+            details["\(variant.name)_title_bytes"] = String(sample.titleBytes)
+            details["\(variant.name)_line_count"] = String(sample.lineCount)
+            details["\(variant.name)_max_line_bytes"] = String(sample.maxLineBytes)
+            details["\(variant.name)_image_url_count"] = String(sample.imageURLCount)
+            details["\(variant.name)_resident_memory_bytes"] = String(performance.residentMemoryBytes ?? 0)
+            details["\(variant.name)_main_thread_max_stall_ms"] = String(performance.mainThreadMaxStallMilliseconds)
+        }
+
+        writeEvent(type: "runtime.detail_variants", command: nil, details: details)
+    }
+
+    private func measureRuntimeListReloads(environment: AppEnvironment) async throws {
+        let viewModel = WatchLightStoreViewModel(environment: environment)
+        let iterationCount = 10
+        var reloadDurations: [Int] = []
+        reloadDurations.reserveCapacity(iterationCount)
+        var peakResidentMemoryBytes: UInt64 = 0
+        var peakMainThreadStallMs = 0
+
+        for _ in 0 ..< iterationCount {
+            let startedAt = Date()
+            await viewModel.reload()
+            let durationMs = max(0, Int(Date().timeIntervalSince(startedAt) * 1_000))
+            guard !viewModel.messages.isEmpty else {
+                throw PushGoWatchAutomationError.invalidArgument("list reload produced empty watch message list")
+            }
+            reloadDurations.append(durationMs)
+            let performance = PushGoAutomationPerformanceMonitor.shared.snapshot()
+            peakResidentMemoryBytes = max(peakResidentMemoryBytes, performance.residentMemoryBytes ?? 0)
+            peakMainThreadStallMs = max(peakMainThreadStallMs, performance.mainThreadMaxStallMilliseconds)
+        }
+
+        guard let firstReload = reloadDurations.first,
+              let lastReload = reloadDurations.last,
+              let maxReload = reloadDurations.max()
+        else {
+            throw PushGoWatchAutomationError.invalidArgument("watch reload metrics unavailable")
+        }
+
+        writeEvent(type: "runtime.list_reloads", command: nil, details: [
+            "iteration_count": String(iterationCount),
+            "first_reload_ms": String(firstReload),
+            "last_reload_ms": String(lastReload),
+            "max_reload_ms": String(maxReload),
+            "message_count": String(viewModel.messages.count),
+            "event_count": String(viewModel.events.count),
+            "thing_count": String(viewModel.things.count),
+            "peak_resident_memory_bytes": String(peakResidentMemoryBytes),
+            "peak_main_thread_max_stall_ms": String(peakMainThreadStallMs),
+        ])
+    }
+
+    private func measureRuntimeDetailCycles(environment: AppEnvironment) async throws {
+        struct Scenario {
+            let name: String
+            let messageId: String
+        }
+
+        let scenarios = [
+            Scenario(name: "normal", messageId: "runtime-watch-msg-0"),
+            Scenario(name: "markdown_26k", messageId: "runtime-watch-msg-2"),
+            Scenario(name: "media", messageId: "runtime-watch-msg-3"),
+        ]
+        let cyclesPerScenario = 20
+        let detailReadyTimeout = runtimeTimeoutFromEnv(
+            "PUSHGO_WATCH_RUNTIME_DETAIL_READY_TIMEOUT_SECONDS",
+            defaultValue: 12.0
+        )
+        let listReturnTimeout = runtimeTimeoutFromEnv(
+            "PUSHGO_WATCH_RUNTIME_DETAIL_RETURN_TIMEOUT_SECONDS",
+            defaultValue: 2.0
+        )
+        var details: [String: String] = [
+            "scenario_count": String(scenarios.count),
+            "cycles_per_scenario": String(cyclesPerScenario),
+            "detail_ready_timeout_seconds": String(format: "%.1f", detailReadyTimeout),
+            "list_return_timeout_seconds": String(format: "%.1f", listReturnTimeout),
+        ]
+
+        for scenario in scenarios {
+            guard try await environment.dataStore.loadWatchLightMessage(messageId: scenario.messageId) != nil else {
+                throw PushGoWatchAutomationError.invalidArgument("missing message_id \(scenario.messageId)")
+            }
+
+            let startPerformance = PushGoAutomationPerformanceMonitor.shared.snapshot()
+            var peakResidentMemory = startPerformance.residentMemoryBytes ?? 0
+            var peakMainThreadStallMs = startPerformance.mainThreadMaxStallMilliseconds
+            var durations: [Int] = []
+            durations.reserveCapacity(cyclesPerScenario)
+            var detailReadyAdvanceCount = 0
+            var detailReadyFallbackCount = 0
+
+            for cycleIndex in 0 ..< cyclesPerScenario {
+                let previousSequence = latestDetailReadySample?.sequence ?? 0
+                let startedAt = Date()
+                await environment.handleNotificationOpen(messageId: scenario.messageId)
+                let enteredDetail = await waitForAutomationState(
+                    environment: environment,
+                    timeout: min(3.0, detailReadyTimeout)
+                ) { state in
+                    state.visibleScreen == "screen.message.detail" || state.openedMessageId == scenario.messageId
+                }
+                let detailSample = await waitForDetailReadySample(
+                    messageId: scenario.messageId,
+                    afterSequence: previousSequence,
+                    timeout: detailReadyTimeout
+                )
+                if detailSample != nil {
+                    detailReadyAdvanceCount += 1
+                } else if enteredDetail {
+                    // watchOS detail reload may reuse the same rendered view without emitting a new detail-ready sample.
+                    detailReadyFallbackCount += 1
+                } else {
+                    let latestSample = latestDetailReadySample
+                    let latestStateSnapshot = latestState
+                    writeEvent(type: "runtime.detail_cycle_timeout", command: nil, details: [
+                        "scenario": scenario.name,
+                        "cycle_index": String(cycleIndex),
+                        "phase": "detail_ready",
+                        "detail_ready_timeout_seconds": String(format: "%.1f", detailReadyTimeout),
+                        "expected_message_id": scenario.messageId,
+                        "entered_detail_before_timeout": enteredDetail ? "true" : "false",
+                        "previous_detail_ready_sequence": String(previousSequence),
+                        "latest_detail_ready_sequence": String(latestSample?.sequence ?? -1),
+                        "latest_detail_ready_message_id": latestSample?.messageId ?? "",
+                        "latest_state_active_tab": latestStateSnapshot?.activeTab ?? "",
+                        "latest_state_visible_screen": latestStateSnapshot?.visibleScreen ?? "",
+                    ])
+                    throw PushGoWatchAutomationError.invalidArgument(
+                        "detail cycle timeout for \(scenario.name) (detail_ready_timeout_seconds=\(String(format: "%.1f", detailReadyTimeout)))"
+                    )
+                }
+                NotificationCenter.default.post(name: .pushgoWatchAutomationSelectTab, object: "events")
+                _ = await waitForAutomationState(environment: environment, timeout: listReturnTimeout) { state in
+                    state.activeTab == "tab.events" || state.visibleScreen == "screen.events.list"
+                }
+                NotificationCenter.default.post(name: .pushgoWatchAutomationSelectTab, object: "messages")
+                let returnedToMessages = await waitForAutomationState(environment: environment, timeout: listReturnTimeout) { state in
+                    state.activeTab == "tab.messages" || state.visibleScreen == "screen.messages.list"
+                }
+                guard returnedToMessages else {
+                    let latestSample = latestDetailReadySample
+                    let latestStateSnapshot = latestState
+                    writeEvent(type: "runtime.detail_cycle_timeout", command: nil, details: [
+                        "scenario": scenario.name,
+                        "cycle_index": String(cycleIndex),
+                        "phase": "list_return",
+                        "list_return_timeout_seconds": String(format: "%.1f", listReturnTimeout),
+                        "expected_message_id": scenario.messageId,
+                        "latest_detail_ready_sequence": String(latestSample?.sequence ?? -1),
+                        "latest_detail_ready_message_id": latestSample?.messageId ?? "",
+                        "latest_state_active_tab": latestStateSnapshot?.activeTab ?? "",
+                        "latest_state_visible_screen": latestStateSnapshot?.visibleScreen ?? "",
+                    ])
+                    throw PushGoWatchAutomationError.invalidArgument(
+                        "detail cycle list return timeout for \(scenario.name) (list_return_timeout_seconds=\(String(format: "%.1f", listReturnTimeout)))"
+                    )
+                }
+                let cycleMs = max(0, Int(Date().timeIntervalSince(startedAt) * 1_000))
+                durations.append(cycleMs)
+                let performance = PushGoAutomationPerformanceMonitor.shared.snapshot()
+                peakResidentMemory = max(peakResidentMemory, performance.residentMemoryBytes ?? 0)
+                peakMainThreadStallMs = max(peakMainThreadStallMs, performance.mainThreadMaxStallMilliseconds)
+            }
+
+            let endPerformance = PushGoAutomationPerformanceMonitor.shared.snapshot()
+            let startResident = Int64(startPerformance.residentMemoryBytes ?? 0)
+            let endResident = Int64(endPerformance.residentMemoryBytes ?? 0)
+            let peakResident = Int64(peakResidentMemory)
+            details["\(scenario.name)_first_cycle_ms"] = String(durations.first ?? -1)
+            details["\(scenario.name)_avg_cycle_ms"] = String(durations.isEmpty ? -1 : durations.reduce(0, +) / durations.count)
+            details["\(scenario.name)_max_cycle_ms"] = String(durations.max() ?? -1)
+            details["\(scenario.name)_resident_memory_delta_bytes"] = String(endResident - startResident)
+            details["\(scenario.name)_resident_memory_peak_delta_bytes"] = String(peakResident - startResident)
+            details["\(scenario.name)_main_thread_stall_start_ms"] = String(startPerformance.mainThreadMaxStallMilliseconds)
+            details["\(scenario.name)_main_thread_stall_end_ms"] = String(endPerformance.mainThreadMaxStallMilliseconds)
+            details["\(scenario.name)_main_thread_stall_peak_ms"] = String(peakMainThreadStallMs)
+            details["\(scenario.name)_detail_ready_advance_count"] = String(detailReadyAdvanceCount)
+            details["\(scenario.name)_detail_ready_fallback_count"] = String(detailReadyFallbackCount)
+        }
+
+        writeEvent(type: "runtime.detail_cycles", command: nil, details: details)
+    }
+
+    private func runtimeTimeoutFromEnv(_ key: String, defaultValue: TimeInterval) -> TimeInterval {
+        guard let rawValue = ProcessInfo.processInfo.environment[key],
+              let parsedValue = Double(rawValue),
+              parsedValue > 0
+        else {
+            return defaultValue
+        }
+        return parsedValue
+    }
+
+    private func waitForDetailReadySample(
+        messageId: String,
+        afterSequence: Int,
+        timeout: TimeInterval
+    ) async -> PushGoWatchAutomationDetailReadySample? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let sample = latestDetailReadySample,
+               sample.sequence > afterSequence,
+               sample.messageId == messageId {
+                return sample
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        return nil
     }
 
     private func updateGatewayConfig(request: PushGoWatchAutomationRequest, environment: AppEnvironment) async throws {
@@ -786,12 +1174,43 @@ final class PushGoWatchAutomationRuntime {
         _ fixtures: [PushGoWatchAutomationFixtureMessage],
         environment: AppEnvironment
     ) async throws {
+        var messages: [WatchLightMessage] = []
+        var events: [WatchLightEvent] = []
+        var things: [WatchLightThing] = []
+
         for fixture in fixtures.sorted(by: { $0.receivedAt > $1.receivedAt }) {
             guard let payload = fixture.toWatchLightPayload() else {
                 continue
             }
-            try await environment.dataStore.upsertWatchLightPayload(payload)
+            switch payload {
+            case let .message(message):
+                messages.append(message)
+            case let .event(event):
+                events.append(event)
+            case let .thing(thing):
+                things.append(thing)
+            }
         }
+
+        guard !messages.isEmpty || !events.isEmpty || !things.isEmpty else {
+            return
+        }
+
+        let exportedAt = Date()
+        let snapshot = WatchMirrorSnapshot(
+            generation: Int64(exportedAt.timeIntervalSince1970 * 1_000),
+            mode: .standalone,
+            messages: messages,
+            events: events,
+            things: things,
+            exportedAt: exportedAt,
+            contentDigest: WatchMirrorSnapshot.contentDigest(
+                messages: messages,
+                events: events,
+                things: things
+            )
+        )
+        try await environment.dataStore.mergeWatchMirrorSnapshot(snapshot)
     }
 
     private func applyFixtureSubscriptions(
@@ -833,12 +1252,13 @@ final class PushGoWatchAutomationRuntime {
     }
 
     private func writeResponse(ok: Bool, error: String?, environment: AppEnvironment) async {
-        let state: PushGoWatchAutomationState
+        let baseState: PushGoWatchAutomationState
         if let latestState {
-            state = latestState
+            baseState = latestState
         } else {
-            state = await fallbackState(environment: environment)
+            baseState = await fallbackState(environment: environment)
         }
+        let state = await enrichState(baseState, environment: environment)
         latestState = state
         writeJSON(
             PushGoWatchAutomationResponse(
@@ -891,7 +1311,9 @@ final class PushGoWatchAutomationRuntime {
             latestRuntimeErrorCategory: latestRuntimeError?.category,
             latestRuntimeErrorCode: latestRuntimeError?.code,
             latestRuntimeErrorMessage: latestRuntimeError?.message,
-            latestRuntimeErrorTimestamp: latestRuntimeError?.timestamp
+            latestRuntimeErrorTimestamp: latestRuntimeError?.timestamp,
+            residentMemoryBytes: nil,
+            mainThreadMaxStallMilliseconds: 0
         )
         return await enrichState(baseState, environment: environment)
     }

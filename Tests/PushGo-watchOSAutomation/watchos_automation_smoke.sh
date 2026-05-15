@@ -19,6 +19,12 @@ BOOT_IPHONE="${BOOT_IPHONE:-0}"
 RESPONSE_TIMEOUT_SECONDS="${RESPONSE_TIMEOUT_SECONDS:-25}"
 CASE_RETRY_COUNT="${CASE_RETRY_COUNT:-2}"
 NO_INTERACTIVE_SIGNING="${NO_INTERACTIVE_SIGNING:-1}"
+RUNTIME_QUALITY_CASE="${RUNTIME_QUALITY_CASE:-0}"
+RUNTIME_QUALITY_ONLY="${RUNTIME_QUALITY_ONLY:-0}"
+RUNTIME_QUALITY_SCALE="${RUNTIME_QUALITY_SCALE:-10000}"
+RUNTIME_QUALITY_FIXTURE_PATH="${RUNTIME_QUALITY_FIXTURE_PATH:-}"
+WATCH_RUNTIME_DETAIL_READY_TIMEOUT_SECONDS="${WATCH_RUNTIME_DETAIL_READY_TIMEOUT_SECONDS:-}"
+WATCH_RUNTIME_DETAIL_RETURN_TIMEOUT_SECONDS="${WATCH_RUNTIME_DETAIL_RETURN_TIMEOUT_SECONDS:-}"
 
 BUILD_APP_PATH="${DERIVED_DATA_PATH}/Build/Products/Debug-watchsimulator/PushGoWatch.app"
 XCODE_NO_SIGN_FLAGS=()
@@ -178,6 +184,83 @@ wait_for_jq_true() {
   done
 }
 
+write_runtime_quality_fixture() {
+  local fixture_path="$1"
+  local message_count="$2"
+  jq -n --argjson count "$message_count" '
+    def markdown_block($label; $section):
+      "## \($label) section \($section)\n\n- watch runtime detail rendering\n- unicode 中文 English 日本語 한국어 عربى\n- repeated links https://example.com/pushgo/watch/\($label)/\($section)\n\n| field | value |\n| --- | --- |\n| label | \($label) |\n| section | \($section) |\n| mode | render-profile |\n\n> Dense watch detail profile for markdown wrapping and list rendering.";
+    def markdown_body($label; $repeat_count; $long_line):
+      ([range(0; $repeat_count) | markdown_block($label; .)] | join("\n\n"))
+      + (if $long_line then
+          "\n\n" + ([range(0; 240) | "LongLine-\($label)-0123456789中文日本語한국어عربى"] | join(""))
+         else "" end);
+    def title($i):
+      if ($i % 8) == 0 then "Runtime quality alert \($i)"
+      elif ($i % 8) == 1 then "发布流程检查 \($i)"
+      elif ($i % 8) == 2 then "イベント更新 \($i)"
+      elif ($i % 8) == 3 then "تنبيه تشغيل \($i)"
+      else "Watch message \($i)"
+      end;
+    def body($i):
+      if $i == 0 then
+        markdown_body("baseline"; 4; false)
+      elif $i == 1 then
+        markdown_body("markdown-10k"; 24; false)
+      elif $i == 2 then
+        markdown_body("markdown-26k"; 63; false)
+      elif $i == 3 then
+        markdown_body("media-rich"; 56; false)
+      elif $i == 4 then
+        markdown_body("longline-unicode"; 20; true)
+      elif ($i % 17) == 0 then
+        ([range(0; 28) | "Long watch body \($i)"] | join(" "))
+      elif ($i % 13) == 0 then
+        "Mixed Unicode body \($i): 中文 English 日本語 한국어 عربى"
+      else
+        "Runtime watch body \($i) with https://example.com and list/detail content."
+      end;
+    def scenario($i):
+      if $i == 0 then "baseline_detail"
+      elif $i == 1 then "markdown_10k"
+      elif $i == 2 then "markdown_26k"
+      elif $i == 3 then "media_rich"
+      elif $i == 4 then "longline_unicode"
+      else ["normal", "unicode_mixed", "rtl_text", "long_markdown", "same_timestamp", "out_of_order", "duplicate_identity", "url"][$i % 8]
+      end;
+    {
+      messages: [
+        range(0; $count) as $i
+        | {
+            message_id: "runtime-watch-msg-\($i)",
+            title: title($i),
+            body: body($i),
+            channel_id: "runtime-watch-channel-\($i % 24)",
+            url: "https://example.com/pushgo/watch/\($i)",
+            is_read: (($i % 3) == 0),
+            received_at: "2026-01-01T00:00:00Z",
+            status: "normal",
+            raw_payload: {
+              watch_light_kind: "message",
+              message_id: "runtime-watch-msg-\($i)",
+              title: title($i),
+              body: body($i),
+              channel_id: "runtime-watch-channel-\($i % 24)",
+              url: "https://example.com/pushgo/watch/\($i)",
+              sent_at: "2026-01-01T00:00:00Z",
+              severity: (["info", "success", "warning", "critical"][$i % 4]),
+              scenario: scenario($i),
+              tags: "runtimequality,channel-\($i % 24)",
+              op_id: "runtime-watch-op-\($i % 7500)"
+            }
+          }
+      ],
+      entity_records: [],
+      channel_subscriptions: []
+    }
+  ' >"$fixture_path"
+}
+
 assert_entity_opened_event_in_events_file() {
   local runtime_root="$1"
   local entity_type="$2"
@@ -191,6 +274,142 @@ assert_entity_opened_event_in_events_file() {
       | length >= 1
     ' \
     "$events_path" >/dev/null
+}
+
+assert_fixture_imported_message_count() {
+  local runtime_root="$1"
+  local expected_count="$2"
+  local events_path="${runtime_root}/automation-events.jsonl"
+  jq -Rse --arg expected "$expected_count" \
+    '
+      split("\n")
+      | map(select(length > 0) | fromjson?)
+      | map(select(.type == "fixture.imported" and .details.message_count == $expected))
+      | length >= 1
+    ' \
+    "$events_path" >/dev/null
+}
+
+assert_message_detail_ready_event() {
+  local runtime_root="$1"
+  local message_id="$2"
+  local events_path="${runtime_root}/automation-events.jsonl"
+  jq -Rse \
+    '
+      split("\n")
+      | map(select(length > 0) | fromjson?)
+      | map(select(.type == "message.detail_ready" and .details.message_id == "'"${message_id}"'"))
+      | length >= 1
+    ' \
+    "$events_path" >/dev/null
+}
+
+runtime_performance_summary() {
+  local runtime_root="$1"
+  local state_path="${runtime_root}/automation-state.json"
+  jq -r '"residentMemoryBytes=\(.resident_memory_bytes // -1) mainThreadMaxStallMs=\(.main_thread_max_stall_ms // -1)"' "$state_path"
+}
+
+assert_runtime_detail_variants_event() {
+  local runtime_root="$1"
+  local events_path="${runtime_root}/automation-events.jsonl"
+  jq -Rse \
+    '
+      split("\n")
+      | map(select(length > 0) | fromjson?)
+      | map(select(.type == "runtime.detail_variants"))
+      | any(
+          (.details.baseline_ms | tonumber) >= 0
+          and (.details.markdown_10k_ms | tonumber) >= 0
+          and (.details.markdown_26k_ms | tonumber) >= 0
+          and (.details.media_rich_ms | tonumber) >= 0
+          and (.details.longline_unicode_ms | tonumber) >= 0
+          and (.details.baseline_repeat_ms | tonumber) >= 0
+        )
+    ' \
+    "$events_path" >/dev/null
+}
+
+runtime_detail_variants_summary() {
+  local runtime_root="$1"
+  local events_path="${runtime_root}/automation-events.jsonl"
+  jq -Rse -r \
+    '
+      split("\n")
+      | map(select(length > 0) | fromjson?)
+      | map(select(.type == "runtime.detail_variants"))
+      | last
+      | .details
+      | "baseline=\(.baseline_ms)ms md10k=\(.markdown_10k_ms)ms md26k=\(.markdown_26k_ms)ms media=\(.media_rich_ms)ms longline=\(.longline_unicode_ms)ms repeat=\(.baseline_repeat_ms)ms"
+    ' \
+    "$events_path"
+}
+
+assert_runtime_list_reloads_event() {
+  local runtime_root="$1"
+  local events_path="${runtime_root}/automation-events.jsonl"
+  jq -Rse \
+    '
+      split("\n")
+      | map(select(length > 0) | fromjson?)
+      | map(select(.type == "runtime.list_reloads"))
+      | any(
+          (.details.iteration_count | tonumber) == 10
+          and (.details.first_reload_ms | tonumber) >= 0
+          and (.details.last_reload_ms | tonumber) >= 0
+          and (.details.max_reload_ms | tonumber) >= 0
+          and (.details.message_count | tonumber) > 0
+        )
+    ' \
+    "$events_path" >/dev/null
+}
+
+runtime_list_reloads_summary() {
+  local runtime_root="$1"
+  local events_path="${runtime_root}/automation-events.jsonl"
+  jq -Rse -r \
+    '
+      split("\n")
+      | map(select(length > 0) | fromjson?)
+      | map(select(.type == "runtime.list_reloads"))
+      | last
+      | .details
+      | "reloads=\(.iteration_count) first=\(.first_reload_ms)ms last=\(.last_reload_ms)ms max=\(.max_reload_ms)ms messages=\(.message_count)"
+    ' \
+    "$events_path"
+}
+
+assert_runtime_detail_cycles_event() {
+  local runtime_root="$1"
+  local events_path="${runtime_root}/automation-events.jsonl"
+  jq -Rse \
+    '
+      split("\n")
+      | map(select(length > 0) | fromjson?)
+      | map(select(.type == "runtime.detail_cycles"))
+      | any(
+          (.details.cycles_per_scenario | tonumber) == 20
+          and (.details.normal_avg_cycle_ms | tonumber) >= 0
+          and (.details.markdown_26k_avg_cycle_ms | tonumber) >= 0
+          and (.details.media_avg_cycle_ms | tonumber) >= 0
+        )
+    ' \
+    "$events_path" >/dev/null
+}
+
+runtime_detail_cycles_summary() {
+  local runtime_root="$1"
+  local events_path="${runtime_root}/automation-events.jsonl"
+  jq -Rse -r \
+    '
+      split("\n")
+      | map(select(length > 0) | fromjson?)
+      | map(select(.type == "runtime.detail_cycles"))
+      | last
+      | .details
+      | "normal=\(.normal_avg_cycle_ms)ms md26k=\(.markdown_26k_avg_cycle_ms)ms media=\(.media_avg_cycle_ms)ms mediaPeakDelta=\(.media_resident_memory_peak_delta_bytes)"
+    ' \
+    "$events_path"
 }
 
 run_case() {
@@ -220,6 +439,8 @@ run_case() {
       "SIMCTL_CHILD_PUSHGO_AUTOMATION_STORAGE_ROOT=${runtime_root}" \
       "SIMCTL_CHILD_PUSHGO_AUTOMATION_PROVIDER_TOKEN=watch-smoke-provider-token" \
       "SIMCTL_CHILD_PUSHGO_AUTOMATION_SKIP_PUSH_AUTHORIZATION=1" \
+      "SIMCTL_CHILD_PUSHGO_WATCH_RUNTIME_DETAIL_READY_TIMEOUT_SECONDS=${WATCH_RUNTIME_DETAIL_READY_TIMEOUT_SECONDS}" \
+      "SIMCTL_CHILD_PUSHGO_WATCH_RUNTIME_DETAIL_RETURN_TIMEOUT_SECONDS=${WATCH_RUNTIME_DETAIL_RETURN_TIMEOUT_SECONDS}" \
       "SIMCTL_CHILD_PUSHGO_AUTOMATION_RESPONSE_PATH=${response_path}" \
       "SIMCTL_CHILD_PUSHGO_AUTOMATION_STATE_PATH=${state_path}" \
       "SIMCTL_CHILD_PUSHGO_AUTOMATION_EVENTS_PATH=${events_path}" \
@@ -289,6 +510,7 @@ run_case() {
   done
 }
 
+if [[ "$RUNTIME_QUALITY_ONLY" != "1" ]]; then
 run_case \
   "nav_events" \
   '{"id":"watch-nav-events-001","plane":"command","name":"nav.switch_tab","args":{"tab":"events"}}' \
@@ -344,5 +566,117 @@ run_case \
   ".visible_screen == \"screen.thing.detail\" and .opened_entity_type == \"thing\" and .runtime_error_count == 0" \
   "$SHARED_RUNTIME_ROOT"
 assert_entity_opened_event_in_events_file "$SHARED_RUNTIME_ROOT" "thing" "$THING_FIXTURE_ID"
+fi
+
+if [[ "$RUNTIME_QUALITY_CASE" == "1" ]]; then
+  if [[ -z "$RUNTIME_QUALITY_FIXTURE_PATH" ]]; then
+    RUNTIME_QUALITY_FIXTURE_PATH="$(mktemp -d /tmp/pushgo-watchos-runtime-quality-fixture.XXXXXX)/runtime-quality-watchos.json"
+    fixture_started_at="$(date +%s)"
+    write_runtime_quality_fixture "$RUNTIME_QUALITY_FIXTURE_PATH" "$RUNTIME_QUALITY_SCALE"
+    fixture_finished_at="$(date +%s)"
+    fixture_duration=$((fixture_finished_at - fixture_started_at))
+  else
+    fixture_duration="prebuilt"
+  fi
+
+  RUNTIME_ROOT="$(mktemp -d /tmp/pushgo-watchos-runtime-quality.XXXXXX)"
+  runtime_started_at="$(date +%s)"
+  run_case \
+    "runtime_quality_large_fixture" \
+    "{\"id\":\"watch-runtime-quality-large-001\",\"plane\":\"command\",\"name\":\"fixture.seed_messages\",\"args\":{\"path\":\"${RUNTIME_QUALITY_FIXTURE_PATH}\"}}" \
+    ".ok == true and .platform == \"watchos\" and .state.total_message_count == ${RUNTIME_QUALITY_SCALE} and .state.runtime_error_count == 0 and .state.local_store_mode != \"unavailable\"" \
+    ".total_message_count == ${RUNTIME_QUALITY_SCALE} and .runtime_error_count == 0 and .local_store_mode != \"unavailable\"" \
+    "$RUNTIME_ROOT"
+  assert_fixture_imported_message_count "$RUNTIME_ROOT" "$RUNTIME_QUALITY_SCALE"
+  runtime_finished_at="$(date +%s)"
+  runtime_duration=$((runtime_finished_at - runtime_started_at))
+  runtime_metrics="$(runtime_performance_summary "$RUNTIME_ROOT")"
+
+  detail_variants_started_at="$(date +%s)"
+  run_case \
+    "runtime_quality_detail_variants" \
+    "{\"id\":\"watch-runtime-quality-detail-variants-001\",\"plane\":\"command\",\"name\":\"runtime.measure_detail_variants\"}" \
+    ".ok == true and .platform == \"watchos\" and .state.runtime_error_count == 0 and .state.local_store_mode != \"unavailable\"" \
+    ".runtime_error_count == 0 and .local_store_mode != \"unavailable\"" \
+    "$RUNTIME_ROOT"
+  assert_runtime_detail_variants_event "$RUNTIME_ROOT"
+  detail_variant_metrics="$(runtime_detail_variants_summary "$RUNTIME_ROOT")"
+  detail_variants_finished_at="$(date +%s)"
+  detail_variants_duration=$((detail_variants_finished_at - detail_variants_started_at))
+
+  list_reloads_started_at="$(date +%s)"
+  run_case \
+    "runtime_quality_list_reloads" \
+    "{\"id\":\"watch-runtime-quality-list-reloads-001\",\"plane\":\"command\",\"name\":\"runtime.measure_list_reloads\"}" \
+    ".ok == true and .platform == \"watchos\" and .state.runtime_error_count == 0 and .state.local_store_mode != \"unavailable\"" \
+    ".runtime_error_count == 0 and .local_store_mode != \"unavailable\"" \
+    "$RUNTIME_ROOT"
+  assert_runtime_list_reloads_event "$RUNTIME_ROOT"
+  list_reload_metrics="$(runtime_list_reloads_summary "$RUNTIME_ROOT")"
+  list_reloads_finished_at="$(date +%s)"
+  list_reloads_duration=$((list_reloads_finished_at - list_reloads_started_at))
+
+  detail_cycles_started_at="$(date +%s)"
+  run_case \
+    "runtime_quality_detail_cycles" \
+    "{\"id\":\"watch-runtime-quality-detail-cycles-001\",\"plane\":\"command\",\"name\":\"runtime.measure_detail_cycles\"}" \
+    ".ok == true and .platform == \"watchos\" and .state.runtime_error_count == 0 and .state.local_store_mode != \"unavailable\"" \
+    ".runtime_error_count == 0 and .local_store_mode != \"unavailable\"" \
+    "$RUNTIME_ROOT"
+  assert_runtime_detail_cycles_event "$RUNTIME_ROOT"
+  detail_cycles_metrics="$(runtime_detail_cycles_summary "$RUNTIME_ROOT")"
+  detail_cycles_finished_at="$(date +%s)"
+  detail_cycles_duration=$((detail_cycles_finished_at - detail_cycles_started_at))
+
+  detail_started_at="$(date +%s)"
+  run_case \
+    "runtime_quality_message_detail" \
+    "{\"id\":\"watch-runtime-quality-detail-001\",\"plane\":\"command\",\"name\":\"message.open\",\"args\":{\"message_id\":\"runtime-watch-msg-0\"}}" \
+    ".ok == true and .platform == \"watchos\" and .state.runtime_error_count == 0 and .state.local_store_mode != \"unavailable\"" \
+    ".runtime_error_count == 0 and .local_store_mode != \"unavailable\"" \
+    "$RUNTIME_ROOT"
+  assert_message_detail_ready_event "$RUNTIME_ROOT" "runtime-watch-msg-0"
+  detail_finished_at="$(date +%s)"
+  detail_duration=$((detail_finished_at - detail_started_at))
+  detail_metrics="$(runtime_performance_summary "$RUNTIME_ROOT")"
+
+  event_detail_started_at="$(date +%s)"
+  run_case \
+    "runtime_quality_event_import" \
+    "{\"id\":\"watch-runtime-quality-event-import-001\",\"plane\":\"command\",\"name\":\"fixture.import\",\"args\":{\"path\":\"${EVENT_FIXTURE_PATH}\"}}" \
+    ".ok == true and .platform == \"watchos\" and .state.runtime_error_count == 0" \
+    ".event_count >= 1 and .runtime_error_count == 0" \
+    "$RUNTIME_ROOT"
+  run_case \
+    "runtime_quality_event_detail" \
+    "{\"id\":\"watch-runtime-quality-event-detail-001\",\"plane\":\"command\",\"name\":\"entity.open\",\"args\":{\"entity_type\":\"event\",\"entity_id\":\"${EVENT_FIXTURE_ID}\"}}" \
+    ".ok == true and .platform == \"watchos\" and .state.runtime_error_count == 0 and .state.opened_entity_type == \"event\"" \
+    ".runtime_error_count == 0" \
+    "$RUNTIME_ROOT"
+  assert_entity_opened_event_in_events_file "$RUNTIME_ROOT" "event" "$EVENT_FIXTURE_ID"
+  event_detail_finished_at="$(date +%s)"
+  event_detail_duration=$((event_detail_finished_at - event_detail_started_at))
+  event_detail_metrics="$(runtime_performance_summary "$RUNTIME_ROOT")"
+
+  thing_detail_started_at="$(date +%s)"
+  run_case \
+    "runtime_quality_thing_import" \
+    "{\"id\":\"watch-runtime-quality-thing-import-001\",\"plane\":\"command\",\"name\":\"fixture.import\",\"args\":{\"path\":\"${THING_FIXTURE_PATH}\"}}" \
+    ".ok == true and .platform == \"watchos\" and .state.runtime_error_count == 0" \
+    ".thing_count >= 1 and .runtime_error_count == 0" \
+    "$RUNTIME_ROOT"
+  run_case \
+    "runtime_quality_thing_detail" \
+    "{\"id\":\"watch-runtime-quality-thing-detail-001\",\"plane\":\"command\",\"name\":\"entity.open\",\"args\":{\"entity_type\":\"thing\",\"entity_id\":\"${THING_FIXTURE_ID}\"}}" \
+    ".ok == true and .platform == \"watchos\" and .state.runtime_error_count == 0 and .state.opened_entity_type == \"thing\"" \
+    ".runtime_error_count == 0" \
+    "$RUNTIME_ROOT"
+  assert_entity_opened_event_in_events_file "$RUNTIME_ROOT" "thing" "$THING_FIXTURE_ID"
+  thing_detail_finished_at="$(date +%s)"
+  thing_detail_duration=$((thing_detail_finished_at - thing_detail_started_at))
+  thing_detail_metrics="$(runtime_performance_summary "$RUNTIME_ROOT")"
+
+  echo "[runtime-quality-watchos] scale=${RUNTIME_QUALITY_SCALE} fixtureGeneration=${fixture_duration}s launchImportListReady=${runtime_duration}s launchMetrics=${runtime_metrics} detailVariantsReady=${detail_variants_duration}s detailVariantMetrics=${detail_variant_metrics} listReloadsReady=${list_reloads_duration}s listReloadMetrics=${list_reload_metrics} detailCyclesReady=${detail_cycles_duration}s detailCyclesMetrics=${detail_cycles_metrics} messageDetailReady=${detail_duration}s messageDetailMetrics=${detail_metrics} eventDetailReady=${event_detail_duration}s eventDetailMetrics=${event_detail_metrics} thingDetailReady=${thing_detail_duration}s thingDetailMetrics=${thing_detail_metrics}"
+fi
 
 echo "[watchos-smoke] all cases passed"
