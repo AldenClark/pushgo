@@ -1911,6 +1911,116 @@ struct LocalDataStoreTests {
     }
 
     @Test
+    func legacyRawPayloadTagFormatsRemainDeterministicAcrossReload() async throws {
+        try await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let jsonTags = makeMessage(
+                id: UUID(uuidString: "10000000-0000-0000-0000-000000000001")!,
+                messageId: "legacy-tags-json-001",
+                notificationRequestId: "req-legacy-tags-json-001",
+                title: "Legacy JSON tags",
+                body: "JSON string encoded tags should survive reload",
+                receivedAt: Date(timeIntervalSince1970: 1_800_000_100),
+                rawPayload: [
+                    "tags": #"["legacy-json","stable"]"#,
+                    "metadata": #"{"kind":"json","tag":"shadow-json"}"#,
+                    "channel_id": "legacy-tags",
+                ]
+            )
+            let directArrayTags = makeMessage(
+                id: UUID(uuidString: "10000000-0000-0000-0000-000000000002")!,
+                messageId: "legacy-tags-array-001",
+                notificationRequestId: "req-legacy-tags-array-001",
+                title: "Legacy direct array tags",
+                body: "Direct array tags are a legacy shape",
+                receivedAt: Date(timeIntervalSince1970: 1_800_000_090),
+                rawPayload: [
+                    "tags": ["legacy-array", "ignored"],
+                    "metadata": #"{"kind":"array"}"#,
+                    "channel_id": "legacy-tags",
+                ]
+            )
+            let commaTags = makeMessage(
+                id: UUID(uuidString: "10000000-0000-0000-0000-000000000003")!,
+                messageId: "legacy-tags-comma-001",
+                notificationRequestId: "req-legacy-tags-comma-001",
+                title: "Legacy comma tags",
+                body: "Comma separated tags should not be treated as parsed tags",
+                receivedAt: Date(timeIntervalSince1970: 1_800_000_080),
+                rawPayload: [
+                    "tags": "legacy,comma",
+                    "metadata": #"{"kind":"comma"}"#,
+                    "channel_id": "legacy-tags",
+                ]
+            )
+            let missingTags = makeMessage(
+                id: UUID(uuidString: "10000000-0000-0000-0000-000000000004")!,
+                messageId: "legacy-tags-missing-001",
+                notificationRequestId: "req-legacy-tags-missing-001",
+                title: "Legacy missing tags",
+                body: "Missing tags stay empty",
+                receivedAt: Date(timeIntervalSince1970: 1_800_000_070),
+                rawPayload: [
+                    "metadata": #"{"kind":"missing","tag":"shadow-missing"}"#,
+                    "channel_id": "legacy-tags",
+                ]
+            )
+            let wrongTypeTags = makeMessage(
+                id: UUID(uuidString: "10000000-0000-0000-0000-000000000005")!,
+                messageId: "legacy-tags-wrong-001",
+                notificationRequestId: "req-legacy-tags-wrong-001",
+                title: "Legacy wrong type tags",
+                body: "Scalar tags stay empty",
+                receivedAt: Date(timeIntervalSince1970: 1_800_000_060),
+                rawPayload: [
+                    "tags": 7,
+                    "metadata": #"{"kind":"wrong","tag":"shadow-wrong"}"#,
+                    "channel_id": "legacy-tags",
+                ]
+            )
+
+            try createLegacyMainStoreFixture(
+                appGroupIdentifier: appGroupIdentifier,
+                messages: [jsonTags, directArrayTags, commaTags, missingTags, wrongTypeTags]
+            )
+
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+
+            let loadedJSON = try #require(try await store.loadMessage(messageId: jsonTags.messageId ?? ""))
+            let loadedArray = try #require(try await store.loadMessage(messageId: directArrayTags.messageId ?? ""))
+            let loadedComma = try #require(try await store.loadMessage(messageId: commaTags.messageId ?? ""))
+            let loadedMissing = try #require(try await store.loadMessage(messageId: missingTags.messageId ?? ""))
+            let loadedWrong = try #require(try await store.loadMessage(messageId: wrongTypeTags.messageId ?? ""))
+
+            #expect(Set(loadedJSON.tags) == Set(["legacy-json", "stable"]))
+            #expect(loadedArray.tags.isEmpty)
+            #expect(loadedComma.tags.isEmpty)
+            #expect(loadedMissing.tags.isEmpty)
+            #expect(loadedWrong.tags.isEmpty)
+
+            let jsonTagPage = try await store.loadMessageSummariesPage(
+                before: nil,
+                limit: 10,
+                filter: .all,
+                channel: nil,
+                tag: "legacy-json"
+            )
+            #expect(jsonTagPage.map(\.id) == [jsonTags.id])
+
+            #expect(try await store.searchMessagesCount(query: "tag:legacy-json") == 1)
+            #expect(try await store.searchMessagesCount(query: "tag:legacy-array") == 0)
+            #expect(try await store.searchMessagesCount(query: "tag:shadow-wrong") == 0)
+
+            let tagCounts = try await store.messageTagCounts()
+            #expect(tagCounts.first(where: { $0.tag == "legacy-json" })?.totalCount == 1)
+            #expect(!tagCounts.contains(where: { $0.tag == "shadow-json" }))
+            #expect(!tagCounts.contains(where: { $0.tag == "shadow-missing" }))
+            #expect(!tagCounts.contains(where: { $0.tag == "shadow-wrong" }))
+            #expect(!tagCounts.contains(where: { $0.tag == "legacy-array" }))
+            #expect(!tagCounts.contains(where: { $0.tag == "legacy" }))
+        }
+    }
+
+    @Test
     func staleLateInputsDoNotPolluteSideIndexesOrNotificationSnapshot() async throws {
         try await withIsolatedLocalDataStore { store, appGroupIdentifier in
             let topLevelNewer = makeMessage(
@@ -2054,6 +2164,268 @@ struct LocalDataStoreTests {
             )
             #expect(equalSnapshot?.events[eventId]?.title == "Equal event title")
             #expect(equalSnapshot?.events[eventId]?.body == "Equal event body")
+        }
+    }
+
+    @Test
+    func malformedLegacyMetadataIndexSafelyFallsBackToMainStoreData() async throws {
+        try await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let messages = [
+                makeMessage(
+                    id: UUID(uuidString: "30000000-0000-0000-0000-000000000001")!,
+                    messageId: "legacy-index-fallback-001",
+                    notificationRequestId: "req-legacy-index-fallback-001",
+                    title: "Legacy index fallback one",
+                    body: "Main store data must survive malformed metadata index",
+                    receivedAt: Date(timeIntervalSince1970: 1_800_002_000),
+                    rawPayload: [
+                        "tags": #"["legacy-fallback"]"#,
+                        "metadata": #"{"kind":"fallback","tier":"one"}"#,
+                        "channel_id": "legacy-index",
+                    ]
+                ),
+                makeMessage(
+                    id: UUID(uuidString: "30000000-0000-0000-0000-000000000002")!,
+                    messageId: "legacy-index-fallback-002",
+                    notificationRequestId: "req-legacy-index-fallback-002",
+                    title: "Legacy index fallback two",
+                    body: "Malformed metadata index should not break tag fallback",
+                    receivedAt: Date(timeIntervalSince1970: 1_800_001_990),
+                    rawPayload: [
+                        "tags": #"["legacy-fallback"]"#,
+                        "metadata": #"{"kind":"fallback","tier":"two"}"#,
+                        "channel_id": "legacy-index",
+                    ]
+                ),
+            ]
+            try createLegacyMainStoreFixture(
+                appGroupIdentifier: appGroupIdentifier,
+                messages: messages
+            )
+
+            let databaseDirectory = try AppConstants.appLocalDatabaseDirectory(
+                fileManager: .default,
+                appGroupIdentifier: appGroupIdentifier
+            )
+            let indexURL = databaseDirectory.appendingPathComponent(AppConstants.messageIndexDatabaseFilename)
+            try removeSQLiteArtifacts(at: indexURL)
+
+            let malformedIndex = try DatabaseQueue(path: indexURL.path)
+            try await malformedIndex.write { db in
+                try db.execute(sql: """
+                    CREATE TABLE message_metadata_index (
+                        message_id TEXT PRIMARY KEY NOT NULL
+                    );
+                    """)
+                try db.execute(
+                    sql: "INSERT INTO message_metadata_index(message_id) VALUES (?);",
+                    arguments: [messages[0].id.uuidString]
+                )
+            }
+
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let counts = try await store.messageCounts()
+            #expect(counts.total == 2)
+            #expect(counts.unread == 2)
+
+            let fallbackTagPage = try await store.loadMessageSummariesPage(
+                before: nil,
+                limit: 10,
+                filter: .all,
+                channel: nil,
+                tag: "legacy-fallback"
+            )
+            #expect(Set(fallbackTagPage.map(\.id)) == Set(messages.map(\.id)))
+            #expect(try await store.searchMessagesCount(query: "tag:legacy-fallback") == 2)
+            #expect(try await store.searchMessagesCount(query: "tag fallback") == 1)
+
+            let tagCounts = try await store.messageTagCounts()
+            #expect(tagCounts.first(where: { $0.tag == "legacy-fallback" })?.totalCount == 2)
+
+            let survivingIDs = Set(try await store.loadMessages().map(\.id))
+            #expect(survivingIDs == Set(messages.map(\.id)))
+        }
+    }
+
+    @Test
+    func emptyIndexFileRebuildsSearchAndMetadataFromCanonicalMainStore() async throws {
+        try await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let fixture = makeLegacyCompatibilityFixture()
+            try createLegacyMainStoreFixture(
+                appGroupIdentifier: appGroupIdentifier,
+                messages: fixture.messages
+            )
+            try writeLegacyNotificationSnapshot(
+                appGroupIdentifier: appGroupIdentifier,
+                fixture: fixture
+            )
+            try createEmptyIndexFile(appGroupIdentifier: appGroupIdentifier)
+
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            _ = try await exerciseLegacyFixture(
+                store: store,
+                appGroupIdentifier: appGroupIdentifier,
+                fixture: fixture
+            )
+            try assertCanonicalIndexContents(
+                appGroupIdentifier: appGroupIdentifier,
+                fixture: fixture
+            )
+        }
+    }
+
+    @Test
+    func searchIndexSchemaCorruptionWithHealthyMetadataRebuildsWithoutBreakingTagPaths() async throws {
+        try await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let fixture = makeLegacyCompatibilityFixture()
+            try createLegacyMainStoreFixture(
+                appGroupIdentifier: appGroupIdentifier,
+                messages: fixture.messages
+            )
+            try writeLegacyNotificationSnapshot(
+                appGroupIdentifier: appGroupIdentifier,
+                fixture: fixture
+            )
+            try createLegacySearchSchemaIndexFile(
+                appGroupIdentifier: appGroupIdentifier,
+                includeHealthyMetadata: true
+            )
+
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            _ = try await exerciseLegacyFixture(
+                store: store,
+                appGroupIdentifier: appGroupIdentifier,
+                fixture: fixture
+            )
+            try assertCanonicalIndexContents(
+                appGroupIdentifier: appGroupIdentifier,
+                fixture: fixture
+            )
+        }
+    }
+
+    @Test
+    func metadataIndexSchemaCorruptionWithHealthySearchRebuildsWithoutBreakingSearchPaths() async throws {
+        try await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let fixture = makeLegacyCompatibilityFixture()
+            try createLegacyMainStoreFixture(
+                appGroupIdentifier: appGroupIdentifier,
+                messages: fixture.messages
+            )
+            try writeLegacyNotificationSnapshot(
+                appGroupIdentifier: appGroupIdentifier,
+                fixture: fixture
+            )
+            try createLegacyMetadataSchemaIndexFile(
+                appGroupIdentifier: appGroupIdentifier,
+                includeHealthySearch: true
+            )
+
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            _ = try await exerciseLegacyFixture(
+                store: store,
+                appGroupIdentifier: appGroupIdentifier,
+                fixture: fixture
+            )
+            try assertCanonicalIndexContents(
+                appGroupIdentifier: appGroupIdentifier,
+                fixture: fixture
+            )
+        }
+    }
+
+    @Test
+    func bothIndexTablesCorruptedRebuildFromMainStoreAndRemainCanonical() async throws {
+        try await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let fixture = makeLegacyCompatibilityFixture()
+            try createLegacyMainStoreFixture(
+                appGroupIdentifier: appGroupIdentifier,
+                messages: fixture.messages
+            )
+            try writeLegacyNotificationSnapshot(
+                appGroupIdentifier: appGroupIdentifier,
+                fixture: fixture
+            )
+            try createFullyLegacySchemaIndexFile(appGroupIdentifier: appGroupIdentifier)
+
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            _ = try await exerciseLegacyFixture(
+                store: store,
+                appGroupIdentifier: appGroupIdentifier,
+                fixture: fixture
+            )
+            try assertCanonicalIndexContents(
+                appGroupIdentifier: appGroupIdentifier,
+                fixture: fixture
+            )
+        }
+    }
+
+    @Test
+    func persistentIndexInitializationFailureSafelyDegradesToCanonicalQueries() async throws {
+        try await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let fixture = makeLegacyCompatibilityFixture()
+            try createLegacyMainStoreFixture(
+                appGroupIdentifier: appGroupIdentifier,
+                messages: fixture.messages
+            )
+            try writeLegacyNotificationSnapshot(
+                appGroupIdentifier: appGroupIdentifier,
+                fixture: fixture
+            )
+            let indexURL = try indexDatabaseURL(appGroupIdentifier: appGroupIdentifier)
+            try FileManager.default.createDirectory(
+                at: indexURL,
+                withIntermediateDirectories: true
+            )
+
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            _ = try await exerciseLegacyFixture(
+                store: store,
+                appGroupIdentifier: appGroupIdentifier,
+                fixture: fixture
+            )
+
+            var isDirectory = ObjCBool(false)
+            #expect(FileManager.default.fileExists(atPath: indexURL.path, isDirectory: &isDirectory))
+            #expect(isDirectory.boolValue)
+        }
+    }
+
+    @Test
+    func transientIndexInitializationFailureRetriesThenBuildsCanonicalIndexes() async throws {
+        try await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let fixture = makeLegacyCompatibilityFixture()
+            try createLegacyMainStoreFixture(
+                appGroupIdentifier: appGroupIdentifier,
+                messages: fixture.messages
+            )
+            try writeLegacyNotificationSnapshot(
+                appGroupIdentifier: appGroupIdentifier,
+                fixture: fixture
+            )
+            let indexURL = try indexDatabaseURL(appGroupIdentifier: appGroupIdentifier)
+            try FileManager.default.createDirectory(
+                at: indexURL,
+                withIntermediateDirectories: true
+            )
+
+            let remover = Task.detached {
+                try? await Task.sleep(nanoseconds: 30_000_000)
+                try? FileManager.default.removeItem(at: indexURL)
+            }
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            _ = await remover.result
+
+            _ = try await exerciseLegacyFixture(
+                store: store,
+                appGroupIdentifier: appGroupIdentifier,
+                fixture: fixture
+            )
+            try assertCanonicalIndexContents(
+                appGroupIdentifier: appGroupIdentifier,
+                fixture: fixture
+            )
         }
     }
 
@@ -2295,6 +2667,650 @@ struct LocalDataStoreTests {
                 result[item.key] = AnyCodable(item.value)
             }
         )
+    }
+
+    private func createLegacyMainStoreFixture(
+        appGroupIdentifier: String,
+        messages: [PushMessage]
+    ) throws {
+        let databaseDirectory = try AppConstants.appLocalDatabaseDirectory(
+            fileManager: .default,
+            appGroupIdentifier: appGroupIdentifier
+        )
+        try FileManager.default.createDirectory(
+            at: databaseDirectory,
+            withIntermediateDirectories: true
+        )
+        let databaseURL = databaseDirectory.appendingPathComponent(AppConstants.databaseStoreFilename)
+        let dbQueue = try DatabaseQueue(path: databaseURL.path)
+        try dbQueue.write { db in
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS messages (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    message_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    channel TEXT,
+                    url TEXT,
+                    is_read INTEGER NOT NULL,
+                    received_at REAL NOT NULL,
+                    raw_payload_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    decryption_state TEXT,
+                    notification_request_id TEXT,
+                    delivery_id TEXT,
+                    operation_id TEXT,
+                    entity_type TEXT NOT NULL,
+                    entity_id TEXT,
+                    event_id TEXT,
+                    thing_id TEXT,
+                    projection_destination TEXT,
+                    event_state TEXT,
+                    event_time_epoch INTEGER,
+                    observed_time_epoch INTEGER,
+                    occurred_at_epoch INTEGER,
+                    is_top_level_message INTEGER NOT NULL,
+                    CHECK (length(trim(message_id)) > 0)
+                );
+                """)
+            try db.execute(sql: "CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_message_id_unique ON messages(message_id);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_received_at ON messages(received_at DESC, id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_top_level_received_at ON messages(is_top_level_message, received_at DESC, id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_notification_request_id ON messages(notification_request_id);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_channel_received_at ON messages(channel, received_at DESC, id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_read_state_received_at ON messages(is_read, received_at DESC, id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_entity_projection ON messages(entity_type, event_time_epoch DESC, occurred_at_epoch DESC, received_at DESC, id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_event_projection ON messages(event_id, event_time_epoch DESC, received_at DESC, id DESC);")
+            try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_thing_projection ON messages(thing_id, occurred_at_epoch DESC, observed_time_epoch DESC, event_time_epoch DESC, received_at DESC, id DESC);")
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS grdb_migrations (
+                    identifier TEXT NOT NULL PRIMARY KEY
+                );
+                """)
+            for identifier in [
+                "v1_grdb_primary_store",
+                "v2_watch_sync_state_columns",
+                "v3_watch_provisioning_columns",
+                "v4_watch_mode_control_state_columns",
+                "v5_watch_mode_control_readiness_column",
+                "v6_watch_publication_digest_columns",
+                "v7_watch_light_notify_columns",
+                "v8_rebuild_snake_case_schema",
+                "v9_message_occurred_at_epoch",
+                "v10_pending_inbound_messages",
+                "v11_projection_epoch_millis",
+                "v12_all_epoch_millis",
+                "v13_watch_light_decryption_state_columns",
+                "v14_provider_delivery_ack_outbox",
+                "v15_drop_provider_delivery_ack_outbox",
+            ] {
+                try db.execute(
+                    sql: "INSERT OR REPLACE INTO grdb_migrations(identifier) VALUES (?);",
+                    arguments: [identifier]
+                )
+            }
+
+            for message in messages {
+                try db.execute(
+                    sql: """
+                        INSERT INTO messages (
+                            id, message_id, title, body, channel, url, is_read, received_at,
+                            raw_payload_json, status, decryption_state, notification_request_id,
+                            delivery_id, operation_id, entity_type, entity_id, event_id, thing_id,
+                            projection_destination, event_state, event_time_epoch, observed_time_epoch,
+                            occurred_at_epoch, is_top_level_message
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                        """,
+                    arguments: [
+                        message.id.uuidString,
+                        message.messageId ?? "",
+                        message.title,
+                        message.body,
+                        message.channel,
+                        message.url?.absoluteString,
+                        message.isRead ? 1 : 0,
+                        message.receivedAt.timeIntervalSince1970,
+                        try rawPayloadJSONString(from: message.rawPayload),
+                        message.status.rawValue,
+                        message.decryptionState?.rawValue,
+                        message.notificationRequestId,
+                        message.deliveryId,
+                        message.operationId,
+                        message.entityType,
+                        message.entityId,
+                        message.eventId,
+                        message.thingId,
+                        message.projectionDestination,
+                        message.eventState,
+                        nil,
+                        nil,
+                        nil,
+                        fixtureIsTopLevelMessage(message) ? 1 : 0,
+                    ]
+                )
+            }
+        }
+    }
+
+    private func createEmptyIndexFile(appGroupIdentifier: String) throws {
+        let indexURL = try indexDatabaseURL(appGroupIdentifier: appGroupIdentifier)
+        try removeSQLiteArtifacts(at: indexURL)
+        let dbQueue = try DatabaseQueue(path: indexURL.path)
+        try dbQueue.write { db in
+            try db.execute(sql: """
+                CREATE VIRTUAL TABLE message_search USING fts5(
+                    id UNINDEXED,
+                    title,
+                    body,
+                    channel_id,
+                    received_at UNINDEXED,
+                    tokenize = 'unicode61'
+                );
+                """)
+            try db.execute(sql: """
+                CREATE TABLE message_metadata_index (
+                    message_id TEXT NOT NULL,
+                    key_name TEXT NOT NULL,
+                    value_norm TEXT NOT NULL,
+                    received_at REAL NOT NULL,
+                    PRIMARY KEY (message_id, key_name, value_norm)
+                );
+                CREATE INDEX idx_metadata_key_value_time
+                    ON message_metadata_index(key_name, value_norm, received_at DESC);
+                CREATE INDEX idx_metadata_key_value_time_message
+                    ON message_metadata_index(key_name, value_norm, received_at DESC, message_id DESC);
+                CREATE INDEX idx_metadata_message
+                    ON message_metadata_index(message_id);
+                """)
+        }
+    }
+
+    private func createLegacySearchSchemaIndexFile(
+        appGroupIdentifier: String,
+        includeHealthyMetadata: Bool
+    ) throws {
+        let indexURL = try indexDatabaseURL(appGroupIdentifier: appGroupIdentifier)
+        try removeSQLiteArtifacts(at: indexURL)
+        let dbQueue = try DatabaseQueue(path: indexURL.path)
+        try dbQueue.write { db in
+            try db.execute(sql: """
+                CREATE TABLE message_search (
+                    id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    received_at REAL NOT NULL
+                );
+                """)
+            if includeHealthyMetadata {
+                try db.execute(sql: """
+                    CREATE TABLE message_metadata_index (
+                        message_id TEXT NOT NULL,
+                        key_name TEXT NOT NULL,
+                        value_norm TEXT NOT NULL,
+                        received_at REAL NOT NULL,
+                        PRIMARY KEY (message_id, key_name, value_norm)
+                    );
+                    CREATE INDEX idx_metadata_key_value_time
+                        ON message_metadata_index(key_name, value_norm, received_at DESC);
+                    CREATE INDEX idx_metadata_key_value_time_message
+                        ON message_metadata_index(key_name, value_norm, received_at DESC, message_id DESC);
+                    CREATE INDEX idx_metadata_message
+                        ON message_metadata_index(message_id);
+                    """)
+            }
+        }
+    }
+
+    private func createLegacyMetadataSchemaIndexFile(
+        appGroupIdentifier: String,
+        includeHealthySearch: Bool
+    ) throws {
+        let indexURL = try indexDatabaseURL(appGroupIdentifier: appGroupIdentifier)
+        try removeSQLiteArtifacts(at: indexURL)
+        let dbQueue = try DatabaseQueue(path: indexURL.path)
+        try dbQueue.write { db in
+            if includeHealthySearch {
+                try db.execute(sql: """
+                    CREATE VIRTUAL TABLE message_search USING fts5(
+                        id UNINDEXED,
+                        title,
+                        body,
+                        channel_id,
+                        received_at UNINDEXED,
+                        tokenize = 'unicode61'
+                    );
+                    """)
+            }
+            try db.execute(sql: """
+                CREATE TABLE message_metadata_index (
+                    message_id TEXT PRIMARY KEY NOT NULL
+                );
+                """)
+            try db.execute(
+                sql: "INSERT INTO message_metadata_index(message_id) VALUES ('legacy-bad-row');"
+            )
+        }
+    }
+
+    private func createFullyLegacySchemaIndexFile(appGroupIdentifier: String) throws {
+        let indexURL = try indexDatabaseURL(appGroupIdentifier: appGroupIdentifier)
+        try removeSQLiteArtifacts(at: indexURL)
+        let dbQueue = try DatabaseQueue(path: indexURL.path)
+        try dbQueue.write { db in
+            try db.execute(sql: """
+                CREATE TABLE message_search (
+                    id TEXT NOT NULL,
+                    title TEXT NOT NULL
+                );
+                """)
+            try db.execute(sql: """
+                CREATE TABLE message_metadata_index (
+                    message_id TEXT PRIMARY KEY NOT NULL
+                );
+                """)
+        }
+    }
+
+    private func writeLegacyNotificationSnapshot(
+        appGroupIdentifier: String,
+        fixture: LegacyCompatibilityFixture
+    ) throws {
+        #expect(
+            NotificationContextSnapshotStore.write(
+                fixture.snapshot,
+                fileManager: .default,
+                appGroupIdentifier: appGroupIdentifier
+            )
+        )
+    }
+
+    private func exerciseLegacyFixture(
+        store: LocalDataStore,
+        appGroupIdentifier: String,
+        fixture: LegacyCompatibilityFixture
+    ) async throws -> LegacyCompatibilityProbe {
+        let counts = try await store.messageCounts()
+        #expect(counts.total == fixture.topLevelIDs.count)
+        #expect(counts.unread == fixture.topLevelIDs.count)
+
+        let summaries = try await store.loadMessageSummariesPage(
+            before: nil,
+            limit: 10,
+            filter: .all,
+            channel: nil,
+            tag: nil
+        )
+        #expect(summaries.map(\.id) == fixture.topLevelIDs)
+
+        let tagPage = try await store.loadMessageSummariesPage(
+            before: nil,
+            limit: 10,
+            filter: .all,
+            channel: nil,
+            tag: "legacy-fixture"
+        )
+        #expect(tagPage.map(\.id) == fixture.topLevelIDs)
+
+        let searchCount = try await store.searchMessagesCount(query: "legacy fixture")
+        #expect(searchCount == fixture.topLevelIDs.count)
+
+        let searchPage = try await store.searchMessageSummariesPage(
+            query: "legacy fixture",
+            before: nil,
+            limit: 10
+        )
+        #expect(searchPage.map(\.id) == fixture.topLevelIDs)
+
+        let tagSearchCount = try await store.searchMessagesCount(query: "tag:legacy-fixture")
+        #expect(tagSearchCount == fixture.topLevelIDs.count)
+        #expect(try await store.searchMessagesCount(query: "tag:shadow-alpha") == 0)
+
+        let tagCounts = try await store.messageTagCounts()
+        #expect(tagCounts.first(where: { $0.tag == "legacy-fixture" })?.totalCount == fixture.topLevelIDs.count)
+        #expect(tagCounts.contains(where: { $0.tag == "shadow-alpha" }) == false)
+
+        let eventPage = try await store.loadEventMessagesForProjectionPage(before: nil, limit: 10)
+        #expect(eventPage.map(\.id) == fixture.eventTimelineIDs)
+
+        let eventTimeline = try await store.loadEventMessagesForProjection(eventId: fixture.eventID)
+        #expect(eventTimeline.map(\.id) == fixture.eventTimelineIDs)
+
+        let thingPage = try await store.loadThingMessagesForProjectionPage(before: nil, limit: 10)
+        #expect(thingPage.map(\.id) == fixture.thingTimelineIDs)
+
+        let thingTimeline = try await store.loadThingMessagesForProjection(thingId: fixture.thingID)
+        #expect(thingTimeline.map(\.id) == fixture.thingTimelineIDs)
+
+        let detail = try #require(try await store.loadMessage(id: fixture.topLevelIDs[0]))
+        #expect(detail.title == fixture.detailTitle)
+
+        let snapshot = try #require(
+            NotificationContextSnapshotStore.load(
+                fileManager: .default,
+                appGroupIdentifier: appGroupIdentifier
+            )
+        )
+        #expect(snapshot.events[fixture.eventID]?.title == fixture.snapshot.events[fixture.eventID]?.title)
+        #expect(snapshot.things[fixture.thingID]?.title == fixture.snapshot.things[fixture.thingID]?.title)
+
+        return LegacyCompatibilityProbe(
+            summaryIDs: summaries.map(\.id),
+            searchCount: searchCount,
+            searchPageIDs: searchPage.map(\.id),
+            tagSearchCount: tagSearchCount,
+            tagPageIDs: tagPage.map(\.id),
+            eventPageIDs: eventPage.map(\.id),
+            eventTimelineIDs: eventTimeline.map(\.id),
+            thingPageIDs: thingPage.map(\.id),
+            thingTimelineIDs: thingTimeline.map(\.id),
+            detailTitle: detail.title,
+            snapshotEventTitle: snapshot.events[fixture.eventID]?.title,
+            snapshotThingTitle: snapshot.things[fixture.thingID]?.title
+        )
+    }
+
+    private func assertCanonicalIndexContents(
+        appGroupIdentifier: String,
+        fixture: LegacyCompatibilityFixture
+    ) throws {
+        let indexURL = try indexDatabaseURL(appGroupIdentifier: appGroupIdentifier)
+        let dbQueue = try DatabaseQueue(path: indexURL.path)
+        let facts = try dbQueue.read { db in
+            let searchRowCount = try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM message_search;"
+            ) ?? 0
+            let legacyTagCount = try Int.fetchOne(
+                db,
+                sql: """
+                    SELECT COUNT(DISTINCT message_id)
+                    FROM message_metadata_index
+                    WHERE key_name = 'tag' AND value_norm = 'legacy-fixture';
+                    """
+            ) ?? 0
+            let shadowTagCount = try Int.fetchOne(
+                db,
+                sql: """
+                    SELECT COUNT(*) FROM message_metadata_index
+                    WHERE key_name = 'tag' AND value_norm = 'shadow-alpha';
+                    """
+            ) ?? 0
+            let metadataShadowCount = try Int.fetchOne(
+                db,
+                sql: """
+                    SELECT COUNT(*) FROM message_metadata_index
+                    WHERE key_name = 'metadata_tag' AND value_norm = 'shadow-alpha';
+                    """
+            ) ?? 0
+            return (searchRowCount, legacyTagCount, shadowTagCount, metadataShadowCount)
+        }
+        #expect(facts.0 == fixture.topLevelIDs.count)
+        #expect(facts.1 == fixture.topLevelIDs.count)
+        #expect(facts.2 == 0)
+        #expect(facts.3 == 1)
+    }
+
+    private func makeLegacyCompatibilityFixture() -> LegacyCompatibilityFixture {
+        let topAlpha = makeMessage(
+            id: UUID(uuidString: "60000000-0000-0000-0000-000000000001")!,
+            messageId: "legacy-compat-top-alpha",
+            notificationRequestId: "req-legacy-compat-top-alpha",
+            title: "Legacy fixture alpha",
+            body: "legacy fixture alpha body",
+            receivedAt: Date(timeIntervalSince1970: 1_800_100_000),
+            rawPayload: [
+                "entity_type": "message",
+                "entity_id": "legacy-message-alpha",
+                "tags": #"["legacy-fixture","alpha"]"#,
+                "metadata": #"{"kind":"top","tag":"shadow-alpha"}"#,
+                "channel_id": "legacy-compat",
+            ]
+        )
+        let topBeta = makeMessage(
+            id: UUID(uuidString: "60000000-0000-0000-0000-000000000002")!,
+            messageId: "legacy-compat-top-beta",
+            notificationRequestId: "req-legacy-compat-top-beta",
+            title: "Legacy fixture beta",
+            body: "legacy fixture beta body",
+            receivedAt: Date(timeIntervalSince1970: 1_800_099_990),
+            rawPayload: [
+                "entity_type": "message",
+                "entity_id": "legacy-message-beta",
+                "tags": #"["legacy-fixture","beta"]"#,
+                "metadata": #"{"kind":"top"}"#,
+                "channel_id": "legacy-compat",
+            ]
+        )
+        let eventOpened = makeMessage(
+            id: UUID(uuidString: "60000000-0000-0000-0000-000000000003")!,
+            messageId: "legacy-compat-event-opened",
+            notificationRequestId: "req-legacy-compat-event-opened",
+            title: "Legacy event opened",
+            body: "legacy event timeline body 1",
+            receivedAt: Date(timeIntervalSince1970: 1_800_099_980),
+            rawPayload: [
+                "entity_type": "event",
+                "entity_id": "legacy-event-001",
+                "event_id": "legacy-event-001",
+                "event_time": "1800099980000",
+                "event_state": "open",
+                "channel_id": "legacy-compat",
+            ]
+        )
+        let eventUpdated = makeMessage(
+            id: UUID(uuidString: "60000000-0000-0000-0000-000000000004")!,
+            messageId: "legacy-compat-event-updated",
+            notificationRequestId: "req-legacy-compat-event-updated",
+            title: "Legacy event updated",
+            body: "legacy event timeline body 2",
+            receivedAt: Date(timeIntervalSince1970: 1_800_099_985),
+            rawPayload: [
+                "entity_type": "event",
+                "entity_id": "legacy-event-001",
+                "event_id": "legacy-event-001",
+                "event_time": "1800099985000",
+                "event_state": "ack",
+                "channel_id": "legacy-compat",
+            ]
+        )
+        let thingHead = makeMessage(
+            id: UUID(uuidString: "60000000-0000-0000-0000-000000000005")!,
+            messageId: "legacy-compat-thing-head",
+            notificationRequestId: "req-legacy-compat-thing-head",
+            title: "Legacy thing head",
+            body: "legacy thing head body",
+            receivedAt: Date(timeIntervalSince1970: 1_800_099_970),
+            rawPayload: [
+                "entity_type": "thing",
+                "entity_id": "legacy-thing-001",
+                "thing_id": "legacy-thing-001",
+                "observed_time": "1800099970000",
+                "channel_id": "legacy-compat",
+            ]
+        )
+        let thingDetail = makeMessage(
+            id: UUID(uuidString: "60000000-0000-0000-0000-000000000006")!,
+            messageId: "legacy-compat-thing-detail",
+            notificationRequestId: "req-legacy-compat-thing-detail",
+            title: "Legacy thing detail",
+            body: "legacy thing timeline detail",
+            receivedAt: Date(timeIntervalSince1970: 1_800_099_975),
+            rawPayload: [
+                "entity_type": "message",
+                "entity_id": "legacy-thing-message-001",
+                "thing_id": "legacy-thing-001",
+                "projection_destination": "thing",
+                "occurred_at": "1800099975000",
+                "channel_id": "legacy-compat",
+            ]
+        )
+
+        let messages = [topAlpha, topBeta, eventOpened, eventUpdated, thingHead, thingDetail]
+        let snapshotInputs = messages
+            .filter { $0.eventId != nil || $0.thingId != nil || $0.entityType == "thing" }
+            .map { message in
+                NotificationContextProjectionInput(
+                    eventId: message.eventId,
+                    thingId: message.thingId,
+                    entityId: message.entityId,
+                    title: message.title,
+                    body: message.body,
+                    channel: message.channel,
+                    messageId: message.messageId,
+                    decryptionStateRaw: message.decryptionState?.rawValue,
+                    eventState: message.eventState,
+                    receivedAt: message.receivedAt,
+                    rawPayload: message.rawPayload,
+                    imageURLs: message.imageURLs
+                )
+            }
+        let snapshot = NotificationContextSnapshotProjector.rebuild(
+            eventMessages: snapshotInputs.filter { $0.eventId != nil },
+            thingMessages: snapshotInputs.filter { $0.thingId != nil || $0.entityId == "legacy-thing-001" },
+            source: "legacy-file-fixture"
+        )
+
+        return LegacyCompatibilityFixture(
+            messages: messages,
+            topLevelIDs: [topAlpha.id, topBeta.id],
+            eventID: "legacy-event-001",
+            eventTimelineIDs: [eventUpdated.id, eventOpened.id],
+            thingID: "legacy-thing-001",
+            thingTimelineIDs: [thingDetail.id, thingHead.id],
+            detailTitle: topAlpha.title,
+            snapshot: snapshot
+        )
+    }
+
+    private func cloneAutomationStorageFixture(
+        root: URL,
+        sourceAppGroupIdentifier: String,
+        destinationAppGroupIdentifier: String
+    ) throws {
+        let fileManager = FileManager.default
+        let sourceAppLocal = root
+            .appendingPathComponent("app-local", isDirectory: true)
+            .appendingPathComponent(sourceAppGroupIdentifier, isDirectory: true)
+        let destinationAppLocal = root
+            .appendingPathComponent("app-local", isDirectory: true)
+            .appendingPathComponent(destinationAppGroupIdentifier, isDirectory: true)
+        let sourceAppGroup = root
+            .appendingPathComponent("app-groups", isDirectory: true)
+            .appendingPathComponent(sourceAppGroupIdentifier, isDirectory: true)
+        let destinationAppGroup = root
+            .appendingPathComponent("app-groups", isDirectory: true)
+            .appendingPathComponent(destinationAppGroupIdentifier, isDirectory: true)
+
+        if fileManager.fileExists(atPath: destinationAppLocal.path) {
+            try fileManager.removeItem(at: destinationAppLocal)
+        }
+        if fileManager.fileExists(atPath: destinationAppGroup.path) {
+            try fileManager.removeItem(at: destinationAppGroup)
+        }
+        try fileManager.createDirectory(
+            at: destinationAppLocal.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try fileManager.createDirectory(
+            at: destinationAppGroup.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try fileManager.copyItem(at: sourceAppLocal, to: destinationAppLocal)
+        if fileManager.fileExists(atPath: sourceAppGroup.path) {
+            try fileManager.copyItem(at: sourceAppGroup, to: destinationAppGroup)
+        }
+    }
+
+    private func indexDatabaseURL(appGroupIdentifier: String) throws -> URL {
+        try AppConstants.appLocalDatabaseDirectory(
+            fileManager: .default,
+            appGroupIdentifier: appGroupIdentifier
+        )
+        .appendingPathComponent(AppConstants.messageIndexDatabaseFilename)
+    }
+
+    private func rawPayloadJSONString(from rawPayload: [String: AnyCodable]) throws -> String {
+        let jsonObject = try normalizeJSONObject(rawPayload.mapValues(\.value))
+        let data = try JSONSerialization.data(withJSONObject: jsonObject, options: [.sortedKeys])
+        guard let json = String(data: data, encoding: .utf8) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        return json
+    }
+
+    private func normalizeJSONObject(_ value: Any) throws -> Any {
+        switch value {
+        case let dictionary as [String: Any]:
+            return try dictionary.mapValues { try normalizeJSONObject($0) }
+        case let array as [Any]:
+            return try array.map { try normalizeJSONObject($0) }
+        case let string as String:
+            return string
+        case let number as NSNumber:
+            return number
+        case let bool as Bool:
+            return bool
+        case let int as Int:
+            return int
+        case let int64 as Int64:
+            return int64
+        case let double as Double:
+            return double
+        case let uuid as UUID:
+            return uuid.uuidString
+        case Optional<Any>.none:
+            return NSNull()
+        default:
+            throw CocoaError(.coderInvalidValue)
+        }
+    }
+
+    private func fixtureIsTopLevelMessage(_ message: PushMessage) -> Bool {
+        let entityType = message.entityType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard entityType == "message" else { return false }
+        return normalizedReference(message.eventId) == nil && normalizedReference(message.thingId) == nil
+    }
+
+    private func normalizedReference(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func removeSQLiteArtifacts(at fileURL: URL) throws {
+        let sidecars = [
+            fileURL,
+            URL(fileURLWithPath: fileURL.path + "-wal"),
+            URL(fileURLWithPath: fileURL.path + "-shm"),
+        ]
+        for url in sidecars where FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
+        }
+    }
+
+    private struct LegacyCompatibilityFixture {
+        let messages: [PushMessage]
+        let topLevelIDs: [UUID]
+        let eventID: String
+        let eventTimelineIDs: [UUID]
+        let thingID: String
+        let thingTimelineIDs: [UUID]
+        let detailTitle: String
+        let snapshot: NotificationContextSnapshot
+    }
+
+    private struct LegacyCompatibilityProbe: Equatable {
+        let summaryIDs: [UUID]
+        let searchCount: Int
+        let searchPageIDs: [UUID]
+        let tagSearchCount: Int
+        let tagPageIDs: [UUID]
+        let eventPageIDs: [UUID]
+        let eventTimelineIDs: [UUID]
+        let thingPageIDs: [UUID]
+        let thingTimelineIDs: [UUID]
+        let detailTitle: String
+        let snapshotEventTitle: String?
+        let snapshotThingTitle: String?
     }
 
     private func automationKeychainItemURL(

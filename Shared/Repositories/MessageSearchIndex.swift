@@ -59,8 +59,8 @@ actor MessageSearchIndex {
 
     func isEmpty() throws -> Bool {
         try dbQueue.read { db in
-            let count = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM message_search;") ?? 0
-            return count == 0
+            let firstRow = try Int.fetchOne(db, sql: "SELECT 1 FROM message_search LIMIT 1;")
+            return firstRow == nil
         }
     }
 
@@ -73,34 +73,9 @@ actor MessageSearchIndex {
     func bulkUpsert(entries: [Entry]) throws {
         guard !entries.isEmpty else { return }
         try dbQueue.write { db in
-            try db.inTransaction(.immediate) {
-                for entry in entries {
-                    try db.execute(
-                        sql: """
-                        INSERT INTO message_search (id, title, body, channel_id, received_at)
-                        VALUES (?, ?, ?, ?, ?);
-                        """,
-                        arguments: [
-                            entry.id.uuidString,
-                            entry.title,
-                            entry.body,
-                            Self.normalizedChannel(entry.channel),
-                            entry.receivedAt.timeIntervalSince1970,
-                        ]
-                    )
-                }
-                return .commit
-            }
-        }
-    }
-
-    func upsert(entry: Entry) throws {
-        try dbQueue.write { db in
-            try db.inTransaction(.immediate) {
-                try db.execute(
-                    sql: "DELETE FROM message_search WHERE id = ?;",
-                    arguments: [entry.id.uuidString]
-                )
+            let joinedIDs = entries.map { Self.sqlQuoted($0.id.uuidString) }.joined(separator: ",")
+            try db.execute(sql: "DELETE FROM message_search WHERE id IN (\(joinedIDs));")
+            for entry in entries {
                 try db.execute(
                     sql: """
                     INSERT INTO message_search (id, title, body, channel_id, received_at)
@@ -114,8 +89,29 @@ actor MessageSearchIndex {
                         entry.receivedAt.timeIntervalSince1970,
                     ]
                 )
-                return .commit
             }
+        }
+    }
+
+    func upsert(entry: Entry) throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "DELETE FROM message_search WHERE id = ?;",
+                arguments: [entry.id.uuidString]
+            )
+            try db.execute(
+                sql: """
+                INSERT INTO message_search (id, title, body, channel_id, received_at)
+                VALUES (?, ?, ?, ?, ?);
+                """,
+                arguments: [
+                    entry.id.uuidString,
+                    entry.title,
+                    entry.body,
+                    Self.normalizedChannel(entry.channel),
+                    entry.receivedAt.timeIntervalSince1970,
+                ]
+            )
         }
     }
 
@@ -131,14 +127,11 @@ actor MessageSearchIndex {
     func bulkRemove(ids: [UUID]) throws {
         guard !ids.isEmpty else { return }
         try dbQueue.write { db in
-            try db.inTransaction(.immediate) {
-                for id in ids {
-                    try db.execute(
-                        sql: "DELETE FROM message_search WHERE id = ?;",
-                        arguments: [id.uuidString]
-                    )
-                }
-                return .commit
+            for id in ids {
+                try db.execute(
+                    sql: "DELETE FROM message_search WHERE id = ?;",
+                    arguments: [id.uuidString]
+                )
             }
         }
     }
@@ -183,6 +176,10 @@ actor MessageSearchIndex {
         guard let channel else { return nil }
         let trimmed = channel.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func sqlQuoted(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "''"))'"
     }
 
     private static func createTablesIfNeeded(db: Database) throws {
@@ -254,8 +251,8 @@ actor MessageMetadataIndex {
 
     func isEmpty() throws -> Bool {
         try dbQueue.read { db in
-            let count = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM message_metadata_index;") ?? 0
-            return count == 0
+            let firstRow = try Int.fetchOne(db, sql: "SELECT 1 FROM message_metadata_index LIMIT 1;")
+            return firstRow == nil
         }
     }
 
@@ -268,29 +265,26 @@ actor MessageMetadataIndex {
     func bulkReplace(entries: [Entry]) throws {
         guard !entries.isEmpty else { return }
         try dbQueue.write { db in
-            try db.inTransaction(.immediate) {
-                for entry in entries {
+            for entry in entries {
+                try db.execute(
+                    sql: "DELETE FROM message_metadata_index WHERE message_id = ?;",
+                    arguments: [entry.id.uuidString]
+                )
+                let rows = Self.normalizedRows(from: entry.items, tags: entry.tags)
+                for row in rows {
                     try db.execute(
-                        sql: "DELETE FROM message_metadata_index WHERE message_id = ?;",
-                        arguments: [entry.id.uuidString]
+                        sql: """
+                        INSERT INTO message_metadata_index (message_id, key_name, value_norm, received_at)
+                        VALUES (?, ?, ?, ?);
+                        """,
+                        arguments: [
+                            entry.id.uuidString,
+                            row.keyName,
+                            row.valueNorm,
+                            entry.receivedAt.timeIntervalSince1970,
+                        ]
                     )
-                    let rows = Self.normalizedRows(from: entry.items, tags: entry.tags)
-                    for row in rows {
-                        try db.execute(
-                            sql: """
-                            INSERT INTO message_metadata_index (message_id, key_name, value_norm, received_at)
-                            VALUES (?, ?, ?, ?);
-                            """,
-                            arguments: [
-                                entry.id.uuidString,
-                                row.keyName,
-                                row.valueNorm,
-                                entry.receivedAt.timeIntervalSince1970,
-                            ]
-                        )
-                    }
                 }
-                return .commit
             }
         }
     }
@@ -368,19 +362,17 @@ actor MessageMetadataIndex {
     func bulkRemove(ids: [UUID]) throws {
         guard !ids.isEmpty else { return }
         try dbQueue.write { db in
-            try db.inTransaction(.immediate) {
-                for id in ids {
-                    try db.execute(
-                        sql: "DELETE FROM message_metadata_index WHERE message_id = ?;",
-                        arguments: [id.uuidString]
-                    )
-                }
-                return .commit
+            for id in ids {
+                try db.execute(
+                    sql: "DELETE FROM message_metadata_index WHERE message_id = ?;",
+                    arguments: [id.uuidString]
+                )
             }
         }
     }
 
     private static func createTablesIfNeeded(db: Database) throws {
+        try resetMetadataTableIfNeeded(db: db)
         try db.execute(sql: """
             CREATE TABLE IF NOT EXISTS message_metadata_index (
                 message_id TEXT NOT NULL,
@@ -391,16 +383,34 @@ actor MessageMetadataIndex {
             );
             CREATE INDEX IF NOT EXISTS idx_metadata_key_value_time
                 ON message_metadata_index(key_name, value_norm, received_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_metadata_key_value_time_message
+                ON message_metadata_index(key_name, value_norm, received_at DESC, message_id DESC);
             CREATE INDEX IF NOT EXISTS idx_metadata_message
                 ON message_metadata_index(message_id);
             """)
+    }
+
+    private static func resetMetadataTableIfNeeded(db: Database) throws {
+        do {
+            _ = try GRDB.Row.fetchCursor(
+                db,
+                sql: """
+                    SELECT message_id, key_name, value_norm, received_at
+                    FROM message_metadata_index
+                    LIMIT 1;
+                    """
+            )
+        } catch {
+            try db.execute(sql: "DROP TABLE IF EXISTS message_metadata_index;")
+        }
     }
 
     private static func normalizedRows(from items: [String: String], tags: [String]) -> [Row] {
         var rows: [Row] = []
         var seen: Set<String> = []
         for (rawKey, rawValue) in items {
-            let key = rawKey.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let normalizedKey = rawKey.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let key = normalizedKey == "tag" ? "metadata_tag" : normalizedKey
             let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             guard !key.isEmpty, !value.isEmpty else { continue }
             let dedupe = "\(key)\u{1F}\(value)"
@@ -433,6 +443,19 @@ actor MessageMetadataIndex {
         tags: [String],
         textQuery: String?
     ) -> (sql: String, arguments: StatementArguments) {
+        let trimmedText = textQuery?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if tags.count == 1, trimmedText.isEmpty {
+            return (
+                """
+                SELECT COUNT(DISTINCT message_id)
+                FROM message_metadata_index
+                WHERE key_name = 'tag'
+                  AND value_norm = ?;
+                """,
+                [tags[0]]
+            )
+        }
+
         let placeholders = Array(repeating: "?", count: tags.count).joined(separator: ", ")
         var sql = """
             SELECT COUNT(*) FROM (
@@ -440,7 +463,6 @@ actor MessageMetadataIndex {
                 FROM message_metadata_index mi
             """
         var arguments = StatementArguments()
-        let trimmedText = textQuery?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !trimmedText.isEmpty {
             sql += "\nJOIN message_search ms ON ms.id = mi.message_id"
         }
@@ -473,6 +495,22 @@ actor MessageMetadataIndex {
         cutoffID: String,
         limit: Int
     ) -> (sql: String, arguments: StatementArguments) {
+        let trimmedText = textQuery?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if tags.count == 1, trimmedText.isEmpty {
+            return (
+                """
+                SELECT message_id
+                FROM message_metadata_index
+                WHERE key_name = 'tag'
+                  AND value_norm = ?
+                  AND (received_at < ? OR (received_at = ? AND message_id < ?))
+                ORDER BY received_at DESC, message_id DESC
+                LIMIT ?;
+                """,
+                [tags[0], cutoff, cutoff, cutoffID, max(0, limit)]
+            )
+        }
+
         let placeholders = Array(repeating: "?", count: tags.count).joined(separator: ", ")
         var sql = """
             SELECT grouped.message_id
@@ -483,7 +521,6 @@ actor MessageMetadataIndex {
                 FROM message_metadata_index mi
             """
         var arguments = StatementArguments()
-        let trimmedText = textQuery?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !trimmedText.isEmpty {
             sql += "\nJOIN message_search ms ON ms.id = mi.message_id"
         }

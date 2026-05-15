@@ -496,12 +496,12 @@ actor LocalDataStore {
             resolvedStorageState = StorageState(mode: .unavailable, reason: error.localizedDescription)
         }
 
-        let resolvedSearchIndex = try? MessageSearchIndex(
-            appGroupIdentifier: appGroupIdentifier
-        )
-        let resolvedMetadataIndex = try? MessageMetadataIndex(
-            appGroupIdentifier: appGroupIdentifier
-        )
+        let resolvedMetadataIndex = makeIndexResource {
+            try MessageMetadataIndex(appGroupIdentifier: appGroupIdentifier)
+        }
+        let resolvedSearchIndex = makeIndexResource {
+            try MessageSearchIndex(appGroupIdentifier: appGroupIdentifier)
+        }
 
         return SharedResources(
             backend: resolvedBackend,
@@ -509,6 +509,22 @@ actor LocalDataStore {
             metadataIndex: resolvedMetadataIndex,
             storageState: resolvedStorageState
         )
+    }
+
+    private static func makeIndexResource<Index>(
+        attempts: Int = 3,
+        build: () throws -> Index
+    ) -> Index? {
+        for attempt in 0 ..< max(1, attempts) {
+            do {
+                return try build()
+            } catch {
+                if attempt + 1 < attempts {
+                    Thread.sleep(forTimeInterval: 0.02)
+                }
+            }
+        }
+        return nil
     }
 
     private static func writeStorageProbe(
@@ -1659,6 +1675,21 @@ actor LocalDataStore {
         sortMode: MessageListSortMode = .timeDescending
     ) async throws -> [PushMessage] {
         let backend = try requireBackend()
+        if let indexedMessages = try await indexedTagMessagesPageIfAvailable(
+            backend: backend,
+            before: cursor,
+            limit: limit,
+            filter: filter,
+            channel: channel,
+            tag: tag,
+            sortMode: sortMode
+        ) {
+            return applyPendingInserts(
+                to: indexedMessages,
+                includePending: cursor == nil,
+                limit: limit
+            )
+        }
         let messages = try await backend.loadMessagesPage(
             before: cursor,
             limit: limit,
@@ -1683,6 +1714,21 @@ actor LocalDataStore {
         sortMode: MessageListSortMode = .timeDescending
     ) async throws -> [PushMessageSummary] {
         let backend = try requireBackend()
+        if let indexedMessages = try await indexedTagMessagesPageIfAvailable(
+            backend: backend,
+            before: cursor,
+            limit: limit,
+            filter: filter,
+            channel: channel,
+            tag: tag,
+            sortMode: sortMode
+        ) {
+            return applyPendingInsertsToSummaries(
+                base: indexedMessages.map(PushMessageSummary.init(message:)),
+                includePending: cursor == nil,
+                limit: limit
+            )
+        }
         let summaries = try await backend.loadMessageSummariesPage(
             before: cursor,
             limit: limit,
@@ -1696,6 +1742,43 @@ actor LocalDataStore {
             includePending: cursor == nil,
             limit: limit
         )
+    }
+
+    private func indexedTagMessagesPageIfAvailable(
+        backend: GRDBStore,
+        before cursor: MessagePageCursor?,
+        limit: Int,
+        filter: MessageQueryFilter,
+        channel: String?,
+        tag: String?,
+        sortMode: MessageListSortMode
+    ) async throws -> [PushMessage]? {
+        guard limit > 0,
+              filter == .all,
+              channel == nil,
+              sortMode == .timeDescending,
+              let normalizedTag = Self.normalizedTagValue(tag),
+              let metadataIndex
+        else {
+            return nil
+        }
+
+        await ensureMetadataIndexReady()
+        let ids = try await metadataIndex.searchMessageIDs(
+            matchingAllTags: [normalizedTag],
+            textQuery: nil,
+            before: cursor?.receivedAt,
+            beforeID: cursor?.id,
+            limit: limit
+        )
+        guard !ids.isEmpty else { return [] }
+        return try await backend.loadMessages(ids: ids)
+    }
+
+    private static func normalizedTagValue(_ rawTag: String?) -> String? {
+        guard let rawTag else { return nil }
+        let normalized = rawTag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.isEmpty ? nil : normalized
     }
 
     func messageChannelCounts() async throws -> [MessageChannelCount] {
@@ -4157,20 +4240,6 @@ private actor GRDBStore {
             conditions.append(Self.channelMatchCondition(value: channel))
         }
 
-        if let normalizedTag = normalizedTagValue(tag) {
-            conditions.append(
-                """
-                EXISTS (
-                    SELECT 1
-                    FROM message_metadata_index mi
-                    WHERE mi.message_id = messages.id
-                      AND mi.key_name = 'tag'
-                      AND mi.value_norm = \(Self.sqlQuoted(normalizedTag))
-                )
-                """
-            )
-        }
-
         if let cursor {
             conditions.append(messageCursorCondition(cursor, sortMode: sortMode))
         }
@@ -4260,20 +4329,26 @@ private actor GRDBStore {
         sortMode: MessageListSortMode
     ) throws -> [PushMessage] {
         try read { db in
+            let normalizedTag = normalizedTagValue(tag)
             let conditions = baseMessageConditions(
                 includeTopLevelOnly: true,
                 filter: filter,
                 channel: channel,
-                tag: tag,
+                tag: nil,
                 cursor: cursor,
                 sortMode: sortMode
             )
-            return try fetchMessages(
+            let sqlLimit = normalizedTag == nil ? limit : nil
+            let messages = try fetchMessages(
                 db: db,
                 where: conditions,
                 orderBy: messageOrderBy(sortMode: sortMode),
-                limit: limit
+                limit: sqlLimit
             )
+            guard let normalizedTag else { return messages }
+            let filtered = messages.filter { $0.tags.contains(normalizedTag) }
+            guard let limit else { return filtered }
+            return Array(filtered.prefix(max(0, limit)))
         }
     }
 
