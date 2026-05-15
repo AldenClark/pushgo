@@ -405,12 +405,26 @@ final class WatchNotificationServiceProcessor {
 
     private func wakeupServerCandidates(from payload: [String: Any]) async -> [WatchWakeupServerCandidate] {
         var candidates: [WatchWakeupServerCandidate] = []
-        var dedupe = Set<String>()
+        var indexByBaseURL: [String: Int] = [:]
 
         func appendCandidate(baseURL: URL, token: String?) {
-            let dedupeKey = "\(baseURL.absoluteString.lowercased())|\(token ?? "")"
-            guard dedupe.insert(dedupeKey).inserted else { return }
-            candidates.append(WatchWakeupServerCandidate(baseURL: baseURL, token: token))
+            let key = baseURL.absoluteString.lowercased()
+            let normalizedToken = token?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let hasToken = normalizedToken?.isEmpty == false
+            if let existingIndex = indexByBaseURL[key] {
+                let existingHasToken = candidates[existingIndex].token?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .isEmpty == false
+                if existingHasToken {
+                    return
+                }
+                if hasToken {
+                    candidates[existingIndex] = WatchWakeupServerCandidate(baseURL: baseURL, token: normalizedToken)
+                }
+                return
+            }
+            candidates.append(WatchWakeupServerCandidate(baseURL: baseURL, token: normalizedToken))
+            indexByBaseURL[key] = candidates.count - 1
         }
 
         if let payloadServerURL = wakeupGatewayURL(from: payload) {

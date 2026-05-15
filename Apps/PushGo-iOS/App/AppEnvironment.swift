@@ -1067,8 +1067,10 @@ final class AppEnvironment {
     }
 
     private func requestNetworkPermissionOnLaunch() {
-        let baseURL = serverConfig?.baseURL ?? AppConstants.defaultServerURL
-        networkPermissionChecker.requestAccessIfNeeded(baseURL: baseURL) {
+        let config = serverConfig
+        let baseURL = config?.baseURL ?? AppConstants.defaultServerURL
+        let token = config?.token ?? AppConstants.defaultGatewayToken
+        networkPermissionChecker.requestAccessIfNeeded(baseURL: baseURL, token: token) {
             Task { @MainActor in
                 let message = LocalizationManager.shared.localized("network_permission_denied_cannot_subscribe")
                 AppEnvironment.shared.recordAutomationRuntimeMessage(
@@ -1326,7 +1328,7 @@ private final class NetworkPermissionChecker {
     private let queue = DispatchQueue(label: "io.ethan.pushgo.network-permission")
     private var monitor: NWPathMonitor?
 
-    func requestAccessIfNeeded(baseURL: URL?, onDenied: @escaping @Sendable () -> Void) {
+    func requestAccessIfNeeded(baseURL: URL?, token: String?, onDenied: @escaping @Sendable () -> Void) {
         monitor?.cancel()
 
         let monitor = NWPathMonitor()
@@ -1352,6 +1354,7 @@ private final class NetworkPermissionChecker {
         request.httpMethod = "HEAD"
         request.timeoutInterval = 3
         request.cachePolicy = .reloadIgnoringLocalCacheData
+        ChannelSubscriptionService.applyGatewayHeaders(&request, token: token)
         URLSession.shared.dataTask(with: request).resume()
     }
 }
