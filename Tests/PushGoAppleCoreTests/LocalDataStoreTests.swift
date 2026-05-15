@@ -2248,6 +2248,52 @@ struct LocalDataStoreTests {
     }
 
     @Test
+    func legacyFileFixtureWithMissingIndexFilesRebuildsAndStaysStableAfterReload() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            let fixture = makeLegacyCompatibilityFixture()
+            try createLegacyMainStoreFixture(
+                appGroupIdentifier: appGroupIdentifier,
+                messages: fixture.messages
+            )
+            try writeLegacyNotificationSnapshot(
+                appGroupIdentifier: appGroupIdentifier,
+                fixture: fixture
+            )
+            try removeSQLiteArtifacts(at: indexDatabaseURL(appGroupIdentifier: appGroupIdentifier))
+
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let firstProbe = try await exerciseLegacyFixture(
+                store: store,
+                appGroupIdentifier: appGroupIdentifier,
+                fixture: fixture
+            )
+            try assertCanonicalIndexContents(
+                appGroupIdentifier: appGroupIdentifier,
+                fixture: fixture
+            )
+
+            let reloadedAppGroupIdentifier = "group.ethan.pushgo.tests.\(UUID().uuidString.lowercased())"
+            try cloneAutomationStorageFixture(
+                root: root,
+                sourceAppGroupIdentifier: appGroupIdentifier,
+                destinationAppGroupIdentifier: reloadedAppGroupIdentifier
+            )
+
+            let reloadedStore = LocalDataStore(appGroupIdentifier: reloadedAppGroupIdentifier)
+            let secondProbe = try await exerciseLegacyFixture(
+                store: reloadedStore,
+                appGroupIdentifier: reloadedAppGroupIdentifier,
+                fixture: fixture
+            )
+            #expect(secondProbe == firstProbe)
+            try assertCanonicalIndexContents(
+                appGroupIdentifier: reloadedAppGroupIdentifier,
+                fixture: fixture
+            )
+        }
+    }
+
+    @Test
     func emptyIndexFileRebuildsSearchAndMetadataFromCanonicalMainStore() async throws {
         try await withIsolatedAutomationStorage { _, appGroupIdentifier in
             let fixture = makeLegacyCompatibilityFixture()
