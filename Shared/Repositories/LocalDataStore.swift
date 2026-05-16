@@ -527,7 +527,8 @@ actor LocalDataStore {
     }
 
     private static func makeIndexResource<Index>(
-        attempts: Int = 3,
+        attempts: Int = 8,
+        retryDelay: TimeInterval = 0.05,
         build: () throws -> Index
     ) -> Index? {
         for attempt in 0 ..< max(1, attempts) {
@@ -535,7 +536,7 @@ actor LocalDataStore {
                 return try build()
             } catch {
                 if attempt + 1 < attempts {
-                    Thread.sleep(forTimeInterval: 0.02)
+                    Thread.sleep(forTimeInterval: retryDelay)
                 }
             }
         }

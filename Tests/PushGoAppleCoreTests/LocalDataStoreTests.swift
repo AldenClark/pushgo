@@ -2509,12 +2509,15 @@ struct LocalDataStoreTests {
                 withIntermediateDirectories: true
             )
 
-            let remover = Task.detached {
-                try? await Task.sleep(nanoseconds: 30_000_000)
+            let remover = Thread {
+                Thread.sleep(forTimeInterval: 0.03)
                 try? FileManager.default.removeItem(at: indexURL)
             }
+            remover.start()
             let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
-            _ = await remover.result
+            while !remover.isFinished {
+                try await Task.sleep(nanoseconds: 1_000_000)
+            }
 
             _ = try await exerciseLegacyFixture(
                 store: store,
