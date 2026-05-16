@@ -11,6 +11,15 @@ Policy:
 ## [Unreleased]
 
 
+## [v1.2.3]
+
+### Improved
+- The unread-only message filter now stays active when returning to the message list.
+- Channel subscription lists are more stable and reject blank or duplicate subscription identifiers.
+- Large rich-text and markdown message details render more smoothly.
+- Notification taps open message details more reliably before read-state refresh finishes.
+- Filtering remains usable with larger tag sets and heavier local message data.
+
 ## [v1.2.2]
 
 ### Improved

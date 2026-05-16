@@ -124,10 +124,7 @@ extension MarkdownRenderer {
     @ViewBuilder
     private func plainTextContent(displayText: String) -> some View {
         #if os(macOS)
-        let plainTextSegments = pushGoPlainTextDisplaySegments(for: displayText)
-        #if !os(watchOS)
-        recordMarkdownPlainTextSegmentsMetric()
-        #endif
+        let plainTextSegments = plainTextDisplaySegments(for: displayText)
         if plainTextSegments.count > 1 {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(plainTextSegments.enumerated()), id: \.offset) { _, segment in
@@ -142,6 +139,12 @@ extension MarkdownRenderer {
         #else
         Text(displayText)
         #endif
+    }
+
+    private func plainTextDisplaySegments(for displayText: String) -> [String] {
+        let segments = pushGoPlainTextDisplaySegments(for: displayText)
+        recordMarkdownPlainTextSegmentsMetric()
+        return segments
     }
 }
 

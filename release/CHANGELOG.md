@@ -13,6 +13,23 @@ PushGo policy:
 ## [Unreleased]
 
 
+## [v1.2.3] - 2026-05-16
+
+### Changed
+- Persisted unread-only message filter state across message list sessions.
+- Added App Store metadata generation for release submissions, including localized support URLs.
+- Expanded Apple runtime quality automation and localized fixture coverage across iOS, macOS, and watchOS.
+
+### Improved
+- Improved rich message detail rendering performance for large markdown payloads.
+- Improved message filtering behavior with large tag sets and richer runtime fixtures.
+- Improved notification-open handling so tapped notifications show detail content before deferred read-state refresh.
+
+### Fixed
+- Fixed channel subscription list identity and duplicate subscription handling to prevent list instability.
+- Rejected blank channel subscription identifiers before they can enter subscription state.
+- Hardened local metadata indexes, tag filtering, and legacy data rebuild paths.
+
 ## [v1.2.2] - 2026-05-11
 
 ### Changed
