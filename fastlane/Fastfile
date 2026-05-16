@@ -833,6 +833,26 @@ platform :ios do
     payload
   end
 
+  def app_store_build_selection_options
+    app_version = ENV["APP_STORE_VERSION"].to_s.strip
+    app_version = ENV["SEMVER_VERSION"].to_s.strip if app_version.empty?
+    build_number = ENV["APP_STORE_BUILD_NUMBER"].to_s.strip
+
+    options = {}
+    options[:app_version] = app_version unless app_version.empty?
+    options[:build_number] = build_number unless build_number.empty?
+    options
+  end
+
+  def app_store_submission_information
+    {
+      export_compliance_uses_encryption: true,
+      export_compliance_contains_proprietary_cryptography: false,
+      export_compliance_contains_third_party_cryptography: true,
+      export_compliance_available_on_french_store: false
+    }
+  end
+
   def build_release_dmg!
     project = resolve_from_repo(ENV.fetch("APP_PROJECT", "pushgo.xcodeproj"))
     scheme = ENV.fetch("APP_MACOS_DMG_SCHEME", ENV.fetch("APP_MACOS_SCHEME", "PushGo-macOS-DMG"))
@@ -986,14 +1006,18 @@ platform :ios do
     macos_pkg_path = archive_macos_app_store_pkg!
     changelog = ENV["TESTFLIGHT_CHANGELOG"].to_s.strip
     groups = ENV.fetch("TESTFLIGHT_EXTERNAL_GROUPS", "").split(",").map(&:strip).reject(&:empty?)
+    build_selection = app_store_build_selection_options
     UI.user_error!("Missing TESTFLIGHT_EXTERNAL_GROUPS for beta auto-submit") if groups.empty?
 
     with_transient_asc_retry!("upload iOS build to TestFlight") do
       upload_to_testflight(
         api_key: api_key,
+        app_platform: "ios",
         ipa: ios_ipa_path,
+        **build_selection,
         changelog: changelog.empty? ? nil : changelog,
         groups: groups,
+        uses_non_exempt_encryption: true,
         distribute_external: true,
         submit_beta_review: true,
         skip_waiting_for_build_processing: false
@@ -1002,9 +1026,12 @@ platform :ios do
     with_transient_asc_retry!("upload macOS build to TestFlight") do
       upload_to_testflight(
         api_key: api_key,
+        app_platform: "osx",
         pkg: macos_pkg_path,
+        **build_selection,
         changelog: changelog.empty? ? nil : changelog,
         groups: groups,
+        uses_non_exempt_encryption: true,
         distribute_external: true,
         submit_beta_review: true,
         skip_waiting_for_build_processing: false
@@ -1017,16 +1044,21 @@ platform :ios do
     ios_ipa_path = archive_ios_app!
     macos_pkg_path = archive_macos_app_store_pkg!
     release_notes = release_notes_payload
+    build_selection = app_store_build_selection_options
+    submission_information = app_store_submission_information
 
     with_transient_asc_retry!("upload iOS build to App Store Connect") do
       upload_to_app_store(
         api_key: api_key,
+        platform: "ios",
         ipa: ios_ipa_path,
+        **build_selection,
         skip_metadata: false,
         skip_screenshots: true,
         release_notes: release_notes,
+        submission_information: submission_information,
         submit_for_review: ENV.fetch("APP_STORE_SUBMIT_FOR_REVIEW", "false") == "true",
-        automatic_release: ENV.fetch("APP_STORE_AUTOMATIC_RELEASE", "false") == "true",
+        automatic_release: ENV.fetch("APP_STORE_AUTOMATIC_RELEASE", "true") == "true",
         run_precheck_before_submit: false,
         force: true
       )
@@ -1034,12 +1066,15 @@ platform :ios do
     with_transient_asc_retry!("upload macOS build to App Store Connect") do
       upload_to_app_store(
         api_key: api_key,
+        platform: "osx",
         pkg: macos_pkg_path,
+        **build_selection,
         skip_metadata: false,
         skip_screenshots: true,
         release_notes: release_notes,
+        submission_information: submission_information,
         submit_for_review: ENV.fetch("APP_STORE_SUBMIT_FOR_REVIEW", "false") == "true",
-        automatic_release: ENV.fetch("APP_STORE_AUTOMATIC_RELEASE", "false") == "true",
+        automatic_release: ENV.fetch("APP_STORE_AUTOMATIC_RELEASE", "true") == "true",
         run_precheck_before_submit: false,
         force: true
       )

@@ -21,7 +21,7 @@ jobs:
       ASC_KEY_IS_BASE64: ${{ vars.ASC_KEY_IS_BASE64 || 'false' }}
       TESTFLIGHT_EXTERNAL_GROUPS: ${{ vars.TESTFLIGHT_EXTERNAL_GROUPS || '' }}
       APP_STORE_SUBMIT_FOR_REVIEW: ${{ vars.APP_STORE_SUBMIT_FOR_REVIEW || 'false' }}
-      APP_STORE_AUTOMATIC_RELEASE: ${{ vars.APP_STORE_AUTOMATIC_RELEASE || 'false' }}
+      APP_STORE_AUTOMATIC_RELEASE: "true"
       APPLE_DISTRIBUTION_IDENTITY: ${{ vars.APPLE_DISTRIBUTION_IDENTITY || '' }}
       MAC_INSTALLER_DISTRIBUTION_IDENTITY: ${{ vars.MAC_INSTALLER_DISTRIBUTION_IDENTITY || '' }}
       FASTLANE_DISABLE_COLORS: "1"
@@ -96,6 +96,70 @@ jobs:
             echo "SEMVER_FULL_VERSION=$semver_full_version"
             echo "PUSHGO_DISPLAY_VERSION=v$semver_full_version"
           } >> "$GITHUB_ENV"
+
+      - name: Resolve App Store build version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          bundle _2.5.23_ exec ruby <<'RUBY'
+          require "xcodeproj"
+
+          project_path = ENV.fetch("APP_PROJECT")
+          semver_version = ENV.fetch("SEMVER_VERSION")
+          target_names = [
+            ENV.fetch("APP_SCHEME", "PushGo-iOS"),
+            ENV.fetch("APP_MACOS_SCHEME", "PushGo-macOS")
+          ].uniq
+
+          project = Xcodeproj::Project.open(project_path)
+          targets = target_names.map do |name|
+            target = project.targets.find { |candidate| candidate.name == name }
+            abort("Missing Xcode target #{name.inspect} in #{project_path}") unless target
+            target
+          end
+
+          release_settings = targets.map do |target|
+            config = target.build_configurations.find { |candidate| candidate.name == "Release" }
+            abort("Missing Release build configuration for #{target.name}") unless config
+
+            settings = config.build_settings
+            {
+              target: target.name,
+              marketing_version: settings["MARKETING_VERSION"].to_s.strip,
+              build_number: settings["CURRENT_PROJECT_VERSION"].to_s.strip
+            }
+          end
+
+          errors = []
+          release_settings.each do |entry|
+            if entry[:marketing_version] != semver_version
+              errors << "#{entry[:target]} MARKETING_VERSION=#{entry[:marketing_version].inspect}, expected #{semver_version.inspect}"
+            end
+            if entry[:build_number].empty?
+              errors << "#{entry[:target]} CURRENT_PROJECT_VERSION is empty"
+            end
+          end
+
+          build_numbers = release_settings.map { |entry| entry[:build_number] }.uniq
+          if build_numbers.length != 1
+            errors << "Release build numbers differ: #{release_settings.map { |entry| "#{entry[:target]}=#{entry[:build_number]}" }.join(", ")}"
+          end
+
+          unless errors.empty?
+            warn("Invalid App Store build version for this tag:")
+            errors.each { |error| warn("- #{error}") }
+            exit(1)
+          end
+
+          build_number = build_numbers.fetch(0)
+          File.open(ENV.fetch("GITHUB_ENV"), "a") do |env|
+            env.puts("APP_STORE_VERSION=#{semver_version}")
+            env.puts("APP_STORE_BUILD_NUMBER=#{build_number}")
+          end
+
+          puts("Resolved App Store version #{semver_version} build #{build_number} from #{target_names.join(", ")}")
+          RUBY
 
       - name: Validate App Store signing assets
         shell: bash
