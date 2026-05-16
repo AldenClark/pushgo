@@ -68,7 +68,7 @@ final class MessageListViewModel {
         }
     }
     private(set) var sortMode: MessageListSortMode = MessageListSortMode.loadPreference()
-    private(set) var selectedFilter: MessageFilter = .all
+    private(set) var selectedFilter: MessageFilter = MessageUnreadOnlyFilterPreference.load() ? .unread : .all
     private(set) var selectedChannels: Set<MessageChannelKey> = []
     private(set) var selectedTags: Set<String> = []
     private(set) var channelSummaries: [MessageChannelSummary] = []
@@ -142,6 +142,7 @@ final class MessageListViewModel {
     func setFilter(_ filter: MessageFilter) {
         guard selectedFilter != filter else { return }
         selectedFilter = filter
+        MessageUnreadOnlyFilterPreference.persist(filter == .unread)
         resetUnreadFilterSessionIfNeeded(for: filter)
         Task { @MainActor in
             await enqueueReload(resetPaging: true, clearBeforeLoading: false, reconcileUnreadSession: false)

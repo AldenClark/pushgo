@@ -57,6 +57,21 @@ enum MessageListSortMode: String, CaseIterable, Equatable, Hashable, Sendable {
     }
 }
 
+struct MessageUnreadOnlyFilterPreference {
+    static let preferenceKey = "message_unread_only_filter"
+
+    static func load(defaults: UserDefaults = AppConstants.sharedUserDefaults()) -> Bool {
+        defaults.bool(forKey: preferenceKey)
+    }
+
+    static func persist(
+        _ enabled: Bool,
+        defaults: UserDefaults = AppConstants.sharedUserDefaults()
+    ) {
+        defaults.set(enabled, forKey: preferenceKey)
+    }
+}
+
 enum MessageQueryFilter: Hashable, Sendable {
     case all
     case unreadOnly

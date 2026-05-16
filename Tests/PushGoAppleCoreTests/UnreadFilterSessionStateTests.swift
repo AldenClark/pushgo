@@ -36,6 +36,22 @@ final class UnreadFilterSessionStateTests: XCTestCase {
         XCTAssertEqual(session.retainedReadCount, 0)
     }
 
+    func testUnreadOnlyFilterPreferencePersistsSelection() throws {
+        let suiteName = "UnreadFilterPreferenceTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        XCTAssertFalse(MessageUnreadOnlyFilterPreference.load(defaults: defaults))
+
+        MessageUnreadOnlyFilterPreference.persist(true, defaults: defaults)
+        XCTAssertTrue(MessageUnreadOnlyFilterPreference.load(defaults: defaults))
+
+        MessageUnreadOnlyFilterPreference.persist(false, defaults: defaults)
+        XCTAssertFalse(MessageUnreadOnlyFilterPreference.load(defaults: defaults))
+    }
+
     private func makeSummary(
         id: UUID,
         title: String,
