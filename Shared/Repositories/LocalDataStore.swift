@@ -921,6 +921,14 @@ actor LocalDataStore {
         )
         let now = Date()
         let trimmedChannelId = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedChannelId.isEmpty else {
+            throw AppError.typedLocal(
+                code: "channel_id_required",
+                category: .validation,
+                message: LocalizationProvider.localized("channel_id_required"),
+                detail: "channel_id required for channel subscription upsert"
+            )
+        }
         let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedName = trimmedName.isEmpty ? trimmedChannelId : trimmedName
         let trimmedPassword = (password ?? "").trimmingCharacters(in: .whitespacesAndNewlines)

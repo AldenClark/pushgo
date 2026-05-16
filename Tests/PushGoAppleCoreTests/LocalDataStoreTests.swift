@@ -280,6 +280,59 @@ struct LocalDataStoreTests {
     }
 
     @Test
+    func channelSubscriptionCredentialReadsIgnoreBlankLegacyValues() async throws {
+        try await withIsolatedLocalDataStore { store, appGroupIdentifier in
+            let dbURL = try localStoreDatabaseURL(appGroupIdentifier: appGroupIdentifier)
+            let queue = try DatabaseQueue(path: dbURL.path)
+            try await queue.write { db in
+                try db.execute(sql: """
+                    INSERT INTO channel_subscriptions (
+                        gateway, channel_id, display_name, password, last_synced_at, updated_at, is_deleted, deleted_at
+                    ) VALUES
+                        ('https://sandbox.pushgo.dev', 'valid-channel', 'Valid', 'valid-password', NULL, 1742000000, 0, NULL),
+                        ('https://sandbox.pushgo.dev', 'blank-password', 'Blank password', '   ', NULL, 1742000001, 0, NULL),
+                        ('https://sandbox.pushgo.dev', 'deleted-channel', 'Deleted', 'deleted-password', NULL, 1742000002, 1, 1742000003);
+                    """)
+            }
+
+            let subscriptions = try await store.loadChannelSubscriptions(
+                gateway: "https://sandbox.pushgo.dev",
+                includeDeleted: false
+            )
+            let credentials = try await store.activeChannelCredentials(gateway: "https://sandbox.pushgo.dev")
+
+            #expect(subscriptions.map(\.channelId) == ["blank-password", "valid-channel"])
+            #expect(credentials.map(\.channelId) == ["valid-channel"])
+            #expect(credentials.map(\.password) == ["valid-password"])
+        }
+    }
+
+    @Test
+    func invalidChannelSubscriptionUpsertDoesNotPolluteFallbackCredentialStore() async throws {
+        await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let gateway = "https://sandbox.pushgo.dev"
+
+            await #expect(throws: Error.self) {
+                _ = try await store.upsertChannelSubscription(
+                    gateway: gateway,
+                    channelId: "   ",
+                    displayName: "Blank channel",
+                    password: "valid-password",
+                    lastSyncedAt: nil
+                )
+            }
+
+            let keychainItemURL = automationKeychainItemURL(
+                root: root,
+                service: "io.ethan.pushgo.channel.subscriptions",
+                account: gateway
+            )
+            #expect(!FileManager.default.fileExists(atPath: keychainItemURL.path))
+        }
+    }
+
+    @Test
     func loadGatewayURLsForChannelUsesHistoryAndActiveFilter() async throws {
         try await withIsolatedLocalDataStore { store, _ in
             let channelId = "ops-history-001"
@@ -3331,6 +3384,17 @@ struct LocalDataStoreTests {
         for url in sidecars where FileManager.default.fileExists(atPath: url.path) {
             try FileManager.default.removeItem(at: url)
         }
+    }
+
+    private func localStoreDatabaseURL(appGroupIdentifier: String) throws -> URL {
+        guard let root = PushGoAutomationContext.storageRootURL else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        return root
+            .appendingPathComponent("app-local", isDirectory: true)
+            .appendingPathComponent(appGroupIdentifier, isDirectory: true)
+            .appendingPathComponent("Database", isDirectory: true)
+            .appendingPathComponent(AppConstants.databaseStoreFilename, isDirectory: false)
     }
 
     private struct LegacyCompatibilityFixture {
