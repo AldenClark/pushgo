@@ -7,7 +7,11 @@ struct ChannelSubscription: Codable, Hashable, Identifiable {
     let updatedAt: Date
     let lastSyncedAt: Date?
 
-    var id: String { channelId }
+    var id: String {
+        let normalizedGateway = gateway.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedChannelId = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        return "\(normalizedGateway)|\(normalizedChannelId)"
+    }
 
     enum CodingKeys: String, CodingKey {
         case gateway
