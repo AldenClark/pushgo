@@ -57,6 +57,16 @@ private struct ServerManagementContentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
+            if let errorMessage = viewModel.errorMessage {
+                AppInlineFeedbackBanner(
+                    message: errorMessage,
+                    tone: .danger,
+                    accessibilityID: "feedback.settings.server"
+                ) {
+                    viewModel.clearError()
+                }
+            }
+
             AppFormField(titleText: localizationManager.localized("server_address"), isFocused: focusedField == .address) {
                 HStack(spacing: 10) {
                     TextField(
@@ -65,6 +75,7 @@ private struct ServerManagementContentView: View {
                         prompt: AppFieldPrompt.text(AppConstants.defaultServerAddress)
                     )
                     .textFieldStyle(.plain)
+                    .accessibilityIdentifier("field.settings.server.address")
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled(true)
                     .keyboardType(.URL)
@@ -108,6 +119,7 @@ private struct ServerManagementContentView: View {
                         }
                     }
                     .textFieldStyle(.plain)
+                    .accessibilityIdentifier("field.settings.server.token")
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled(true)
                     .focused($focusedField, equals: .token)
@@ -146,6 +158,7 @@ private struct ServerManagementContentView: View {
                 Task { await viewModel.saveServerConfig() }
             }
             .disabled(viewModel.isSavingServerConfig)
+            .accessibilityIdentifier("action.settings.server.save")
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -160,6 +173,9 @@ private struct ServerManagementContentView: View {
             } else {
                 dismiss()
             }
+        }
+        .onDisappear {
+            viewModel.clearError()
         }
         .background {
             SettingsFocusDismissBackground {
@@ -193,6 +209,16 @@ private struct ManualKeySettingsContentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
+            if let errorMessage = viewModel.errorMessage {
+                AppInlineFeedbackBanner(
+                    message: errorMessage,
+                    tone: .danger,
+                    accessibilityID: "feedback.settings.decryption"
+                ) {
+                    viewModel.clearError()
+                }
+            }
+
             keyEncodingPicker
             keyField
             Text(localizationManager
@@ -212,6 +238,7 @@ private struct ManualKeySettingsContentView: View {
                 Task { await viewModel.saveManualKeyConfig() }
             }
             .disabled(viewModel.isSaving)
+            .accessibilityIdentifier("action.settings.decryption.save")
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -219,6 +246,9 @@ private struct ManualKeySettingsContentView: View {
             SettingsFocusDismissBackground {
                 sheetFocus = nil
             }
+        }
+        .onDisappear {
+            viewModel.clearError()
         }
     }
 
@@ -265,6 +295,7 @@ private struct ManualKeySettingsContentView: View {
                         }
                         .textFieldStyle(.plain)
                         .font(.system(.body, design: .monospaced))
+                        .accessibilityIdentifier("field.settings.decryption.key")
                         .focused($sheetFocus, equals: .manualKey)
                         .submitLabel(.done)
                         .onSubmit {
@@ -306,6 +337,7 @@ private struct ManualKeySettingsContentView: View {
                         }
                         .textFieldStyle(.plain)
                         .font(.system(.body, design: .monospaced))
+                        .accessibilityIdentifier("field.settings.decryption.key")
                         .focused($sheetFocus, equals: .manualKey)
                         .submitLabel(.done)
                         .onSubmit {

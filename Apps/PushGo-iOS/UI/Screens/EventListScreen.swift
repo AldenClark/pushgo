@@ -90,6 +90,7 @@ struct EventListScreen: View {
                     Task { await closeEvent(event: event) }
                 }
             )
+            .toastOverlay(environment: environment, showsPendingDeletionBar: false)
             .accessibilityIdentifier("sheet.event.detail")
         }
         content

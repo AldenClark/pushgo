@@ -42,6 +42,11 @@ final class SettingsViewModel {
     var error: AppError?
     var successMessage: String?
 
+    var errorMessage: String? {
+        guard let error else { return nil }
+        return error.errorDescription ?? localizationManager.localized("operation_failed")
+    }
+
     private let environment: AppEnvironment
     private let localizationManager: LocalizationManager
     private let dataStore: LocalDataStore
@@ -186,7 +191,12 @@ final class SettingsViewModel {
         gatewayInput.address = AppConstants.defaultServerAddress
     }
 
+    func clearError() {
+        error = nil
+    }
+
     func saveServerConfig() async {
+        error = nil
         let trimmedAddress = gatewayInput.address.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedAddress.isEmpty else {
             error = .typedLocal(
@@ -260,6 +270,7 @@ final class SettingsViewModel {
     }
 
     func requestNotificationPermission() async {
+        error = nil
         do {
             try await environment.pushRegistrationService.requestAuthorization()
             successMessage = localizationManager.localized("notification_permission_status_updated")
@@ -275,6 +286,7 @@ final class SettingsViewModel {
     }
 
     func saveManualKeyConfig() async {
+        error = nil
         let trimmedKey = manualKeyInput.key.trimmingCharacters(in: .whitespacesAndNewlines)
         let encoding = manualKeyInput.encoding
         if trimmedKey.isEmpty {
@@ -341,6 +353,7 @@ final class SettingsViewModel {
     }
 
     func clearAllMessages() async {
+        error = nil
         guard environment.totalMessageCount > 0 else {
             successMessage = localizationManager.localized("no_messages_to_clear")
             return
@@ -420,6 +433,7 @@ final class SettingsViewModel {
     ]
 
     func cleanupMessages(option: MessageCleanupOption) async {
+        error = nil
         guard !isClearingMessages else { return }
         isClearingMessages = true
         defer { isClearingMessages = false }

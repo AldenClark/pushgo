@@ -75,6 +75,7 @@ final class AppEnvironment {
     private(set) var betaChannelEnabled: Bool = false
     var activeMainTab: MainTab { navigationState.activeMainTab }
     private(set) var channelSubscriptions: [ChannelSubscription] = []
+    private(set) var channelListFeedbackMessage: String?
     private var channelSubscriptionLookup: [String: ChannelSubscription] = [:]
     @ObservationIgnored private let appUpdateManager: any AppUpdateManaging
 
@@ -800,19 +801,38 @@ final class AppEnvironment {
     }
 
     func syncSubscriptionsOnChannelListEntry() async {
+        channelListFeedbackMessage = nil
         do {
             try await syncSubscriptionsIfNeeded()
         } catch let appError as AppError {
             recordAutomationRuntimeError(appError, source: "channel.sync.entry")
-            showToast(message: appError.errorDescription ?? localizationManager
-                .localized("unable_to_sync_channels"))
+            presentChannelListEntrySyncError(
+                appError.errorDescription ?? localizationManager.localized("unable_to_sync_channels")
+            )
         } catch {
             recordAutomationRuntimeError(error, source: "channel.sync.entry")
-            showToast(message: localizationManager.localized(
-                "unable_to_sync_channels_placeholder",
-                userFacingErrorMessage(error),
-            ))
+            presentChannelListEntrySyncError(
+                localizationManager.localized(
+                    "unable_to_sync_channels_placeholder",
+                    userFacingErrorMessage(error)
+                )
+            )
         }
+    }
+
+    private func presentChannelListEntrySyncError(_ message: String) {
+        switch FeedbackPresentationPolicy.presentation(for: .contextualSyncError) {
+        case .inline:
+            channelListFeedbackMessage = message
+        case .toast:
+            showToast(message: message)
+        case .pendingLocalDeletionBar, .none:
+            break
+        }
+    }
+
+    func clearChannelListFeedback() {
+        channelListFeedbackMessage = nil
     }
 
     private func ensureActivePushToken(serverConfig: ServerConfig) async throws -> String {

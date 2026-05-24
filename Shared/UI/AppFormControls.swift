@@ -167,6 +167,94 @@ struct AppFieldHint: View {
     }
 }
 
+struct AppInlineFeedbackBanner: View {
+    let message: String
+    var tone: AppSemanticTone = .info
+    var accessibilityID: String?
+    var dismissAction: (() -> Void)?
+
+    init(
+        message: String,
+        tone: AppSemanticTone = .info,
+        accessibilityID: String? = nil,
+        dismissAction: (() -> Void)? = nil
+    ) {
+        self.message = message
+        self.tone = tone
+        self.accessibilityID = accessibilityID
+        self.dismissAction = dismissAction
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: iconName)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(tone.foreground)
+                .frame(width: 20, height: 20)
+                .accessibilityHidden(true)
+
+            Text(message)
+                .font(.footnote)
+                .foregroundStyle(Color.appTextPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let dismissAction {
+                Button(action: dismissAction) {
+                    Image(systemName: "xmark")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.appTextSecondary)
+                        .frame(width: 20, height: 20)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(LocalizedStringKey("close"))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(tone.background)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(tone.border, lineWidth: 1)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(accessibilityID ?? "feedback.inline.\(toneAccessibilitySuffix)")
+    }
+
+    private var iconName: String {
+        switch tone {
+        case .info:
+            return "info.circle.fill"
+        case .neutral:
+            return "circle.fill"
+        case .success:
+            return "checkmark.circle.fill"
+        case .warning:
+            return "exclamationmark.triangle.fill"
+        case .danger:
+            return "exclamationmark.circle.fill"
+        }
+    }
+
+    private var toneAccessibilitySuffix: String {
+        switch tone {
+        case .info:
+            return "info"
+        case .neutral:
+            return "neutral"
+        case .success:
+            return "success"
+        case .warning:
+            return "warning"
+        case .danger:
+            return "danger"
+        }
+    }
+}
+
 struct AppFieldTag: View {
     private let text: Text
 

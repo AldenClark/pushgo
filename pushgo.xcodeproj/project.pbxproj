@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		D1B100000000000000000001 /* AppNavigationState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000001 /* AppNavigationState.swift */; };
 		D1B100000000000000000002 /* DataPageVisibilityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000002 /* DataPageVisibilityController.swift */; };
+		D1B100000000000000000009 /* FeedbackPresentationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000009 /* FeedbackPresentationPolicy.swift */; };
 		D1B100000000000000000003 /* LocalStoreRecoveryController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000003 /* LocalStoreRecoveryController.swift */; };
 		D1B100000000000000000004 /* LocalStoreRecoveryState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000004 /* LocalStoreRecoveryState.swift */; };
 		D1B100000000000000000005 /* MainTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000005 /* MainTab.swift */; };
@@ -17,6 +18,7 @@
 		D1B100000000000000000008 /* PendingLocalDeletionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000008 /* PendingLocalDeletionBar.swift */; };
 		D1C100000000000000000001 /* AppNavigationState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000001 /* AppNavigationState.swift */; };
 		D1C100000000000000000002 /* DataPageVisibilityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000002 /* DataPageVisibilityController.swift */; };
+		D1C100000000000000000009 /* FeedbackPresentationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000009 /* FeedbackPresentationPolicy.swift */; };
 		D1C100000000000000000003 /* LocalStoreRecoveryController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000003 /* LocalStoreRecoveryController.swift */; };
 		D1C100000000000000000004 /* LocalStoreRecoveryState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000004 /* LocalStoreRecoveryState.swift */; };
 		D1C100000000000000000005 /* MainTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000005 /* MainTab.swift */; };
@@ -359,6 +361,7 @@
 /* Begin PBXFileReference section */
 		D1A100000000000000000001 /* AppNavigationState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/Application/AppNavigationState.swift"; sourceTree = SOURCE_ROOT; };
 		D1A100000000000000000002 /* DataPageVisibilityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/Application/DataPageVisibilityController.swift"; sourceTree = SOURCE_ROOT; };
+		D1A100000000000000000009 /* FeedbackPresentationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/Application/FeedbackPresentationPolicy.swift"; sourceTree = SOURCE_ROOT; };
 		D1A100000000000000000003 /* LocalStoreRecoveryController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/Application/LocalStoreRecoveryController.swift"; sourceTree = SOURCE_ROOT; };
 		D1A100000000000000000004 /* LocalStoreRecoveryState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/Application/LocalStoreRecoveryState.swift"; sourceTree = SOURCE_ROOT; };
 		D1A100000000000000000005 /* MainTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/Application/MainTab.swift"; sourceTree = SOURCE_ROOT; };
@@ -687,6 +690,7 @@
 			children = (
 				D1A100000000000000000001 /* AppNavigationState.swift */,
 				D1A100000000000000000002 /* DataPageVisibilityController.swift */,
+				D1A100000000000000000009 /* FeedbackPresentationPolicy.swift */,
 				D1A100000000000000000003 /* LocalStoreRecoveryController.swift */,
 				D1A100000000000000000004 /* LocalStoreRecoveryState.swift */,
 				D1A100000000000000000005 /* MainTab.swift */,
@@ -1246,6 +1250,7 @@
 			files = (
 				D1B100000000000000000001 /* AppNavigationState.swift in Sources */,
 				D1B100000000000000000002 /* DataPageVisibilityController.swift in Sources */,
+				D1B100000000000000000009 /* FeedbackPresentationPolicy.swift in Sources */,
 				D1B100000000000000000003 /* LocalStoreRecoveryController.swift in Sources */,
 				D1B100000000000000000004 /* LocalStoreRecoveryState.swift in Sources */,
 				D1B100000000000000000005 /* MainTab.swift in Sources */,
@@ -1312,6 +1317,7 @@
 			files = (
 				D1C100000000000000000001 /* AppNavigationState.swift in Sources */,
 				D1C100000000000000000002 /* DataPageVisibilityController.swift in Sources */,
+				D1C100000000000000000009 /* FeedbackPresentationPolicy.swift in Sources */,
 				D1C100000000000000000003 /* LocalStoreRecoveryController.swift in Sources */,
 				D1C100000000000000000004 /* LocalStoreRecoveryState.swift in Sources */,
 				D1C100000000000000000005 /* MainTab.swift in Sources */,

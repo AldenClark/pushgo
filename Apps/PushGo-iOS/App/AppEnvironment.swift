@@ -66,6 +66,7 @@ final class AppEnvironment {
     var isEventListAtTop: Bool { navigationState.isEventListAtTop }
     var isThingListAtTop: Bool { navigationState.isThingListAtTop }
     var pendingSettingsPresentation: SettingsPresentationRequest?
+    private(set) var channelListFeedbackMessage: String?
     var channelSubscriptions: [ChannelSubscription] { channelSyncController.channelSubscriptions }
     private let channelSubscriptionService = ChannelSubscriptionService()
     private let networkPermissionChecker = NetworkPermissionChecker()
@@ -168,6 +169,9 @@ final class AppEnvironment {
         },
         showToast: { [weak self] message in
             self?.showToast(message: message)
+        },
+        showChannelEntryFeedback: { [weak self] message in
+            self?.channelListFeedbackMessage = message
         }
     )
     @ObservationIgnored private(set) lazy var dataPageVisibilityController = DataPageVisibilityController(
@@ -674,6 +678,10 @@ final class AppEnvironment {
             style: style,
             duration: duration
         )
+    }
+
+    func clearChannelListFeedback() {
+        channelListFeedbackMessage = nil
     }
 
     private func recordAutomationRuntimeError(

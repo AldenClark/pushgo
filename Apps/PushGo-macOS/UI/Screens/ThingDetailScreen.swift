@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ThingDetailScreen: View {
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     let thing: ThingProjection?
@@ -199,6 +200,7 @@ private struct ThingDetailPanel: View {
             ThingSecondaryDetailSheet {
                 EventDetailScreen(event: event)
             }
+            .toastOverlay(environment: environment)
         }
         .sheet(item: $selectedMessage) { message in
             ThingSecondaryDetailSheet {
@@ -208,17 +210,20 @@ private struct ThingDetailPanel: View {
                     useNavigationContainer: false
                 )
             }
+            .toastOverlay(environment: environment)
         }
         .sheet(item: $selectedUpdate) { update in
             ThingSecondaryDetailSheet {
                 ThingRelatedUpdateDetailScreen(update: update)
             }
+            .toastOverlay(environment: environment)
         }
         .sheet(isPresented: $showMetadataSheet) {
             ThingMetadataSheet(
                 title: localizationManager.localized("metadata"),
                 entries: metadataEntries
             )
+            .toastOverlay(environment: environment)
         }
     }
 

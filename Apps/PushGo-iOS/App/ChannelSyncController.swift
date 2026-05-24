@@ -8,6 +8,7 @@ final class ChannelSyncController {
     typealias WatchProvisioningRequester = @MainActor (_ immediate: Bool) -> Void
     typealias RuntimeErrorRecorder = @MainActor (Error, String) -> Void
     typealias ToastPresenter = @MainActor (String) -> Void
+    typealias ChannelEntryFeedbackPresenter = @MainActor (String?) -> Void
 
     private let dataStore: LocalDataStore
     private let pushRegistrationService: PushRegistrationService
@@ -18,6 +19,7 @@ final class ChannelSyncController {
     @ObservationIgnored private let requestWatchStandaloneProvisioningSync: WatchProvisioningRequester
     @ObservationIgnored private let recordRuntimeError: RuntimeErrorRecorder
     @ObservationIgnored private let showToast: ToastPresenter
+    @ObservationIgnored private let showChannelEntryFeedback: ChannelEntryFeedbackPresenter
     @ObservationIgnored private let platform = "ios"
 
     private(set) var channelSubscriptions: [ChannelSubscription] = []
@@ -32,7 +34,8 @@ final class ChannelSyncController {
         serverConfigProvider: @escaping ServerConfigProvider,
         requestWatchStandaloneProvisioningSync: @escaping WatchProvisioningRequester,
         recordRuntimeError: @escaping RuntimeErrorRecorder,
-        showToast: @escaping ToastPresenter
+        showToast: @escaping ToastPresenter,
+        showChannelEntryFeedback: @escaping ChannelEntryFeedbackPresenter
     ) {
         self.dataStore = dataStore
         self.pushRegistrationService = pushRegistrationService
@@ -43,6 +46,7 @@ final class ChannelSyncController {
         self.requestWatchStandaloneProvisioningSync = requestWatchStandaloneProvisioningSync
         self.recordRuntimeError = recordRuntimeError
         self.showToast = showToast
+        self.showChannelEntryFeedback = showChannelEntryFeedback
     }
 
     func refreshChannelSubscriptions(syncWatch: Bool = true, immediateStandalone: Bool = false) async {
@@ -153,14 +157,18 @@ final class ChannelSyncController {
 
     func syncSubscriptionsOnChannelListEntry() async {
         guard serverConfigProvider() != nil else {
+            showChannelEntryFeedback(nil)
             await refreshChannelSubscriptions()
             return
         }
+        showChannelEntryFeedback(nil)
         do {
             try await syncSubscriptionsIfNeeded()
         } catch let appError as AppError {
             recordRuntimeError(appError, "channel.sync.entry")
-            showToast(appError.errorDescription ?? localizationManager.localized("unable_to_sync_channels"))
+            presentChannelEntrySyncError(
+                appError.errorDescription ?? localizationManager.localized("unable_to_sync_channels")
+            )
         } catch {
             recordRuntimeError(error, "channel.sync.entry")
             let message = AppError.wrap(
@@ -168,10 +176,23 @@ final class ChannelSyncController {
                 fallbackMessage: localizationManager.localized("unable_to_sync_channels"),
                 code: "subscription_sync_failed"
             ).errorDescription ?? localizationManager.localized("unable_to_sync_channels")
-            showToast(localizationManager.localized(
-                "unable_to_sync_channels_placeholder",
-                message
-            ))
+            presentChannelEntrySyncError(
+                localizationManager.localized(
+                    "unable_to_sync_channels_placeholder",
+                    message
+                )
+            )
+        }
+    }
+
+    private func presentChannelEntrySyncError(_ message: String) {
+        switch FeedbackPresentationPolicy.presentation(for: .contextualSyncError) {
+        case .inline:
+            showChannelEntryFeedback(message)
+        case .toast:
+            showToast(message)
+        case .pendingLocalDeletionBar, .none:
+            break
         }
     }
 

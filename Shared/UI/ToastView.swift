@@ -15,6 +15,7 @@ struct ToastView: View {
         .background(backgroundColor)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .shadow(radius: 8, y: 4)
+        .accessibilityIdentifier("feedback.toast.\(styleAccessibilitySuffix)")
     }
 
     private var backgroundColor: Color {
@@ -25,6 +26,17 @@ struct ToastView: View {
             Color.appToastSuccessBackground
         case .error:
             Color.appToastErrorBackground
+        }
+    }
+
+    private var styleAccessibilitySuffix: String {
+        switch toast.style {
+        case .info:
+            return "info"
+        case .success:
+            return "success"
+        case .error:
+            return "error"
         }
     }
 }

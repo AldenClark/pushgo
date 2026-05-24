@@ -152,6 +152,7 @@ struct MessageListScreen: View {
             baseContent
                 .sheet(item: $selectedMessage) { message in
                     MessageDetailScreen(messageId: message.id, message: nil)
+                        .toastOverlay(environment: environment, showsPendingDeletionBar: false)
                         .pushgoSheetSizing(.detail)
                         .accessibilityIdentifier("sheet.message.detail")
                 }

@@ -279,6 +279,31 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: 12, matching: { $0.ok }))
     }
 
+    func testInvalidServerAddressShowsInlineFeedbackInsteadOfToast() {
+        let context = configuredLaunchContext(
+            requestName: "nav.switch_tab",
+            args: ["tab": "settings"]
+        )
+        launch(context.app)
+
+        assertVisibleScreen("screen.settings", in: context, timeout: 15)
+        element(in: context.app, identifier: "action.settings.server_management").tap()
+
+        let addressField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(addressField.waitForExistence(timeout: 8))
+        replaceText(in: addressField, with: "not a valid url")
+        element(in: context.app, identifier: "action.settings.server.save").tap()
+
+        XCTAssertTrue(
+            element(in: context.app, identifier: "feedback.settings.server").waitForExistence(timeout: 5),
+            "Server validation errors should stay inline in the sheet."
+        )
+        XCTAssertFalse(
+            element(in: context.app, identifier: "feedback.toast.error").waitForExistence(timeout: 1),
+            "Server validation errors must not be routed to the global toast overlay."
+        )
+    }
+
     func testFixtureSeedMessagesRefreshesMessageList() {
         let context = configuredLaunchContext(
             requestName: "fixture.seed_messages",
@@ -1382,6 +1407,13 @@ final class PushGo_iOSUITests: XCTestCase {
 
     private func element(in app: XCUIApplication, identifier: String) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+    }
+
+    private func replaceText(in field: XCUIElement, with text: String) {
+        field.tap()
+        let existingLength = (field.value as? String)?.count ?? 0
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: max(existingLength, 80)))
+        field.typeText(text)
     }
 
     private func assertElementExists(

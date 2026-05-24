@@ -20,27 +20,44 @@ struct ChannelManagementView: View {
     @State private var subscribeChannelId = ""
     @State private var subscribeChannelPassword = ""
     @State private var isSubscribeSubmitting = false
+    @State private var channelEntryErrorMessage: String?
 
     var body: some View {
         navigationContainer {
-            Group {
-                if environment.channelSubscriptions.isEmpty {
-                    EntityOnboardingEmptyView(
-                        kind: .channels,
-                        channelPrimaryAction: {
-                            presentChannelEntrySheet()
+            VStack(spacing: 0) {
+                if let feedback = environment.channelListFeedbackMessage {
+                    AppInlineFeedbackBanner(
+                        message: feedback,
+                        tone: .danger,
+                        accessibilityID: "feedback.channels.entry-sync"
+                    ) {
+                        environment.clearChannelListFeedback()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
+                    .padding(.bottom, 4)
+                }
+
+                Group {
+                    if environment.channelSubscriptions.isEmpty {
+                        EntityOnboardingEmptyView(
+                            kind: .channels,
+                            channelPrimaryAction: {
+                                presentChannelEntrySheet()
+                            }
+                        )
+                        .accessibilityIdentifier("state.channels.empty")
+                    } else {
+                        ScrollView {
+                            VStack(spacing: 12) {
+                                channelList
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 20)
                         }
-                    )
-                    .accessibilityIdentifier("state.channels.empty")
-                } else {
-                    ScrollView {
-                        VStack(spacing: 12) {
-                            channelList
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 20)
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .background(channelBackgroundColor)
             .navigationTitle(localizationManager.localized("channels"))
@@ -110,6 +127,7 @@ struct ChannelManagementView: View {
             onDismiss: resetChannelEntrySheetState
         ) {
             channelEntrySheet
+                .toastOverlay(environment: environment)
         }
     }
 
@@ -257,6 +275,7 @@ struct ChannelManagementView: View {
                     prompt: AppFieldPrompt.text(localizationManager.localized("channel_name_placeholder"))
                 )
                 .textFieldStyle(.plain)
+                .accessibilityIdentifier("field.channels.create.name")
                 .autocorrectionDisabled(true)
             }
 
@@ -267,6 +286,7 @@ struct ChannelManagementView: View {
                     prompt: AppFieldPrompt.text(localizationManager.localized("channel_password_placeholder"))
                 )
                 .textFieldStyle(.plain)
+                .accessibilityIdentifier("field.channels.create.password")
                 .autocorrectionDisabled(true)
             }
 
@@ -278,6 +298,7 @@ struct ChannelManagementView: View {
                     prompt: AppFieldPrompt.text(localizationManager.localized("channel_id_placeholder"))
                 )
                 .textFieldStyle(.plain)
+                .accessibilityIdentifier("field.channels.subscribe.id")
                 .autocorrectionDisabled(true)
             }
 
@@ -288,6 +309,7 @@ struct ChannelManagementView: View {
                     prompt: AppFieldPrompt.text(localizationManager.localized("channel_password_placeholder"))
                 )
                 .textFieldStyle(.plain)
+                .accessibilityIdentifier("field.channels.subscribe.password")
                 .autocorrectionDisabled(true)
             }
 
@@ -333,12 +355,25 @@ struct ChannelManagementView: View {
             .accessibilityIdentifier("select.channels.entry.mode")
             .disabled(isChannelEntrySubmitting)
 
+            if let channelEntryErrorMessage {
+                AppInlineFeedbackBanner(
+                    message: channelEntryErrorMessage,
+                    tone: .danger,
+                    accessibilityID: "feedback.channels.entry"
+                ) {
+                    self.channelEntryErrorMessage = nil
+                }
+            }
+
             channelEntryFields
 
             channelEntryActionButtons
         }
         .padding(20)
         .frame(width: 460)
+        .onChange(of: channelEntryMode) { _, _ in
+            channelEntryErrorMessage = nil
+        }
     }
 
     private func presentChannelEntrySheet() {
@@ -354,6 +389,7 @@ struct ChannelManagementView: View {
         subscribeChannelPassword = ""
         isCreateSubmitting = false
         isSubscribeSubmitting = false
+        channelEntryErrorMessage = nil
     }
 
     @MainActor
@@ -381,6 +417,7 @@ struct ChannelManagementView: View {
     @MainActor
     private func createChannelFromSheet() async {
         guard !isCreateSubmitting else { return }
+        channelEntryErrorMessage = nil
         isCreateSubmitting = true
         defer { isCreateSubmitting = false }
 
@@ -397,13 +434,14 @@ struct ChannelManagementView: View {
                 duration: 1.5
             )
         } catch {
-            environment.showErrorToast(error, duration: 2.5)
+            presentChannelEntryError(error)
         }
     }
 
     @MainActor
     private func subscribeChannelFromSheet() async {
         guard !isSubscribeSubmitting else { return }
+        channelEntryErrorMessage = nil
         isSubscribeSubmitting = true
         defer { isSubscribeSubmitting = false }
 
@@ -419,7 +457,20 @@ struct ChannelManagementView: View {
                 duration: 1.5
             )
         } catch {
-            environment.showErrorToast(error, duration: 2.5)
+            presentChannelEntryError(error)
+        }
+    }
+
+    @MainActor
+    private func presentChannelEntryError(_ error: Error) {
+        let message = environment.userFacingErrorMessage(error)
+        switch FeedbackPresentationPolicy.presentation(for: .formSubmissionError) {
+        case .inline:
+            channelEntryErrorMessage = message
+        case .toast:
+            environment.showToast(message: message, style: .error, duration: 2.5)
+        case .pendingLocalDeletionBar, .none:
+            break
         }
     }
 
@@ -452,11 +503,6 @@ struct ChannelManagementView: View {
                         duration: 2.5
                     )
                 }
-                environment.showToast(
-                    message: localizationManager.localized("channel_unsubscribed"),
-                    style: .success,
-                    duration: 1.5
-                )
             } else {
                 environment.showToast(
                     message: localizationManager.localized("channel_unsubscribed"),

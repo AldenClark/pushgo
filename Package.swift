@@ -50,6 +50,7 @@ let package = Package(
             sources: [
                 "Application/AppNavigationState.swift",
                 "Application/DataPageVisibilityController.swift",
+                "Application/FeedbackPresentationPolicy.swift",
                 "Application/LocalStoreRecoveryController.swift",
                 "Application/LocalStoreRecoveryState.swift",
                 "Application/MainTab.swift",

@@ -22,6 +22,7 @@ struct RootView: View {
                     embedInNavigationContainer: true,
                     openDecryptionOnAppear: presentation == .decryption
                 )
+                .toastOverlay(environment: environment, showsPendingDeletionBar: false)
             }
 #endif
     }

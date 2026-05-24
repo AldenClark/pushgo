@@ -60,20 +60,12 @@ struct SettingsView: View {
         }
         .onChange(of: viewModel.successMessage) { _, message in
             guard let message else { return }
+            viewModel.clearError()
             if activeSheet == .manualKey {
                 activeSheet = nil
             }
             presentToast(message: message, style: .success, duration: 1.5)
             viewModel.successMessage = nil
-        }
-        .onChange(of: viewModel.error) { _, error in
-            guard let error else { return }
-            presentToast(
-                message: error.errorDescription ?? localizationManager.localized("operation_failed"),
-                style: .error,
-                duration: 2.5,
-            )
-            viewModel.error = nil
         }
 #if DEBUG
         .task(id: automationStateSignature) {
@@ -88,10 +80,12 @@ struct SettingsView: View {
             switch sheet {
             case .manualKey:
                 ManualKeySettingsSheet(viewModel: viewModel)
+                    .toastOverlay(environment: environment, showsPendingDeletionBar: false)
                     .presentationDetents([.medium])
                     .presentationDragIndicator(.visible)
             case .serverManagement:
                 ServerManagementSheet(viewModel: viewModel)
+                    .toastOverlay(environment: environment, showsPendingDeletionBar: false)
                     .presentationDetents([.medium])
                     .presentationDragIndicator(.visible)
             }
@@ -166,6 +160,19 @@ struct SettingsView: View {
         @Bindable var bindableEnvironment = environment
         let rowInsets = EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)
         List {
+            if let errorMessage = viewModel.errorMessage {
+                AppInlineFeedbackBanner(
+                    message: errorMessage,
+                    tone: .danger,
+                    accessibilityID: "feedback.settings.root"
+                ) {
+                    viewModel.clearError()
+                }
+                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 0, trailing: 16))
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+            }
+
             if viewModel.notificationStatus != .authorized {
                 notificationCard
                     .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 0, trailing: 16))
@@ -174,6 +181,7 @@ struct SettingsView: View {
             }
 
             Button {
+                viewModel.clearError()
                 viewModel.prepareServerEditor()
                 activeSheet = .serverManagement
             } label: {
@@ -214,6 +222,7 @@ struct SettingsView: View {
             .listRowBackground(Color.clear)
 
             Button {
+                viewModel.clearError()
                 activeSheet = .manualKey
             } label: {
                 SettingsActionRow(

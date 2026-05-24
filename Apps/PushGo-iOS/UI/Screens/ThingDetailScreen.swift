@@ -233,13 +233,16 @@ private struct ThingDetailPanel: View {
         .pushgoImagePreviewOverlay(previewItem: $previewImageItem, imageURL: \.url)
         .sheet(item: $selectedEvent) { event in
             EventDetailScreen(event: event)
+                .toastOverlay(environment: environment, showsPendingDeletionBar: false)
         }
         .sheet(item: $selectedMessage) { message in
             MessageDetailScreen(messageId: message.id, message: nil)
+                .toastOverlay(environment: environment, showsPendingDeletionBar: false)
                 .pushgoSheetSizing(.detail)
         }
         .sheet(item: $selectedUpdate) { update in
             ThingRelatedUpdateDetailScreen(update: update)
+                .toastOverlay(environment: environment, showsPendingDeletionBar: false)
                 .pushgoSheetSizing(.detail)
         }
         .sheet(isPresented: $showMetadataSheet) {
@@ -247,6 +250,7 @@ private struct ThingDetailPanel: View {
                 title: localizationManager.localized("metadata"),
                 entries: metadataEntries
             )
+            .toastOverlay(environment: environment, showsPendingDeletionBar: false)
             .pushgoSheetSizing(.detail)
         }
     }

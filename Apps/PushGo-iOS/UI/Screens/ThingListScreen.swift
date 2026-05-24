@@ -87,6 +87,7 @@ struct ThingListScreen: View {
                     selectedThing = nil
                 }
             )
+            .toastOverlay(environment: environment, showsPendingDeletionBar: false)
             .accessibilityIdentifier("sheet.thing.detail")
         }
         content

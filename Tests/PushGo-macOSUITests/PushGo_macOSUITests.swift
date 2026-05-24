@@ -226,6 +226,30 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
+    func testInvalidServerAddressShowsInlineFeedbackInsteadOfToast() {
+        let context = configuredApp()
+        launch(context)
+
+        openSidebarTab("settings", in: context.app)
+        assertVisibleScreen("screen.settings", in: context)
+        element(in: context.app, identifier: "action.settings.server_management").click()
+
+        let addressField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(addressField.waitForExistence(timeout: 8))
+        replaceText(in: addressField, with: "not a valid url")
+        element(in: context.app, identifier: "action.settings.server.save").click()
+
+        XCTAssertTrue(
+            element(in: context.app, identifier: "feedback.settings.server").waitForExistence(timeout: 5),
+            "Server validation errors should stay inline in the sheet."
+        )
+        XCTAssertFalse(
+            element(in: context.app, identifier: "feedback.toast.error").waitForExistence(timeout: 1),
+            "Server validation errors must not be routed to the global toast overlay."
+        )
+    }
+
+    @MainActor
     func testSettingsPageVisibilityCommandCanHideEventPage() {
         let context = configuredApp(
             requestName: "settings.set_page_visibility",
@@ -1105,6 +1129,13 @@ final class PushGo_macOSUITests: XCTestCase {
     @MainActor
     private func element(in app: XCUIApplication, identifier: String) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+    }
+
+    @MainActor
+    private func replaceText(in field: XCUIElement, with text: String) {
+        field.click()
+        field.typeKey("a", modifierFlags: .command)
+        field.typeText(text)
     }
 
     @MainActor
