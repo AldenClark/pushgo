@@ -11,6 +11,14 @@ Policy:
 ## [Unreleased]
 
 
+## [v1.2.4]
+
+### Improved
+- Improved cross-platform interaction consistency for message, event, and thing lists between iOS and macOS.
+- Improved toast and inline feedback clarity across settings, search, and management surfaces.
+- Shared app controllers now reduce iOS/macOS behavior drift in channel sync and notification ingress flows.
+- Improved local data and automation runtime stability under retry and larger-state conditions.
+
 ## [v1.2.3]
 
 ### Improved

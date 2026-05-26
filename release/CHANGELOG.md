@@ -13,6 +13,23 @@ PushGo policy:
 ## [Unreleased]
 
 
+## [v1.2.4] - 2026-05-26
+
+### Changed
+- Finalized Apple release display version to `v1.2.4` across release targets.
+- Bumped Apple build number by `+1` for release packaging (`CURRENT_PROJECT_VERSION: 78 -> 79`).
+- Added versioned release note source file: `release/update-notes/v1.2.4.json`.
+- Updated release notes baseline with a dedicated `v1.2.4` section in `release/RELEASE_NOTES.md`.
+
+### Improved
+- Shared Apple app controllers across iOS and macOS to reduce behavior drift in channel sync, provider route updates, and notification ingress flows.
+- Refactored toast and feedback presentation policy for clearer and more consistent validation and status messaging across settings, search, and management screens.
+- Improved list-level interaction consistency for message, event, and thing surfaces across Apple clients.
+
+### Fixed
+- Fixed Apple strict-concurrency audit gate failure by removing a stale unsafe-pointer allowlist entry after runtime diagnostics moved out of `RootView`.
+- Stabilized local index retry test behavior in Apple CI runtime-quality coverage.
+
 ## [v1.2.3] - 2026-05-16
 
 ### Changed
