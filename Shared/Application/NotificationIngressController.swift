@@ -10,6 +10,7 @@ final class NotificationIngressController {
     typealias ProviderErrorRecorder = @MainActor (Error, String) -> Void
     typealias StartupWakeupPullDeferPredicate = @MainActor () -> Bool
 
+    private let platformSuffix: String
     private let dataStore: LocalDataStore
     private let channelSubscriptionService: ChannelSubscriptionService
     private let serverConfigProvider: ServerConfigProvider
@@ -22,7 +23,7 @@ final class NotificationIngressController {
     private let ackFailureStore: ProviderDeliveryAckFailureStore
 
     private lazy var providerIngressCoordinator = ProviderIngressCoordinator(
-        platformSuffix: "ios",
+        platformSuffix: platformSuffix,
         dataStore: dataStore,
         channelSubscriptionService: channelSubscriptionService,
         notificationIngressInbox: notificationIngressInbox,
@@ -55,6 +56,7 @@ final class NotificationIngressController {
     )
 
     init(
+        platformSuffix: String,
         dataStore: LocalDataStore,
         channelSubscriptionService: ChannelSubscriptionService,
         serverConfigProvider: @escaping ServerConfigProvider,
@@ -66,6 +68,7 @@ final class NotificationIngressController {
         notificationIngressInbox: NotificationIngressInbox = .shared,
         ackFailureStore: ProviderDeliveryAckFailureStore = .shared
     ) {
+        self.platformSuffix = platformSuffix
         self.dataStore = dataStore
         self.channelSubscriptionService = channelSubscriptionService
         self.serverConfigProvider = serverConfigProvider
@@ -130,6 +133,21 @@ final class NotificationIngressController {
     @discardableResult
     func purgePendingUnresolvedWakeupEntries(limit: Int = 256) async -> Int {
         await providerIngressCoordinator.purgePendingUnresolvedWakeupEntries(limit: limit)
+    }
+
+    @discardableResult
+    func persistRemotePayloadIfNeeded(
+        _ payload: [AnyHashable: Any],
+        requestIdentifier: String? = nil
+    ) async -> NotificationPersistenceOutcome {
+        let outcome = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
+            payload,
+            requestIdentifier: requestIdentifier,
+            dataStore: dataStore,
+            beforeSave: beforePersistMessage
+        )
+        applyNotificationPersistenceOutcome(outcome)
+        return outcome
     }
 
     @discardableResult

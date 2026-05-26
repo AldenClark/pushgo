@@ -29,21 +29,10 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency 
             await environment.bootstrap()
         }
 
+        MainWindowLifecycleController.shared.startApplicationActivationObserver()
         Task { @MainActor in
-            for await _ in NotificationCenter.default.notifications(
-                named: NSApplication.didBecomeActiveNotification
-            ) {
-                ensureMainWindowKey(retries: 8, delay: 0.06)
-            }
-        }
-        Task { @MainActor in
-            await Task.yield()
             activateForAutomationIfNeeded()
-            if PushGoAutomationContext.forceForegroundApp {
-                MainWindowController.shared.showMainWindow()
-            }
-            ensureMainWindowKey(retries: 25, delay: 0.08)
-            observeWindowLifecycle()
+            MainWindowLifecycleController.shared.prepareInitialWindowState()
         }
     }
 
@@ -58,7 +47,7 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency 
             await environment.bootstrap()
             if PushGoAutomationContext.forceForegroundApp {
                 MainWindowController.shared.showMainWindow()
-                ensureMainWindowKey(retries: 25, delay: 0.08)
+                MainWindowLifecycleController.shared.ensureMainWindowKey(retries: 25, delay: 0.08)
             }
             await Task.yield()
             PushGoAutomationRuntime.shared.recordBootstrapCheckpoint("macos.app_delegate.before_fixture_import")
@@ -319,114 +308,5 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency 
         }
     }
 
-    @MainActor
-    private func makeMainWindowKey() {
-        MainWindowController.shared.showMainWindow()
-    }
-
-    @MainActor
-    private func ensureMainWindowKey(retries: Int, delay: TimeInterval) {
-        if NSApp.keyWindow != nil {
-            return
-        }
-
-        if let mainWindow =
-            MainWindowController.shared.mainWindow
-            ?? NSApp.windows.first(where: { $0.identifier?.rawValue == "PushGoMainWindow" })
-            ?? NSApp.windows.first(where: { candidate in
-                candidate.isVisible
-                    && !candidate.isMiniaturized
-                    && candidate.canBecomeKey
-                    && !String(describing: type(of: candidate)).contains("NSStatusBarWindow")
-            })
-        {
-            MainWindowController.shared.captureMainWindow(mainWindow)
-            NSApp.setActivationPolicy(.regular)
-            NSApp.activate(ignoringOtherApps: true)
-            mainWindow.makeKeyAndOrderFront(nil)
-            return
-        }
-
-        makeMainWindowKey()
-
-        guard retries > 0 else { return }
-        Task { @MainActor [weak self] in
-            let nanoseconds = UInt64(delay * 1_000_000_000)
-            try? await Task.sleep(for: .nanoseconds(Int64(nanoseconds)))
-            self?.ensureMainWindowKey(retries: retries - 1, delay: delay)
-        }
-    }
-
-    private func observeWindowLifecycle() {
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleWindowNotification),
-            name: NSWindow.didBecomeKeyNotification,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleWindowNotification),
-            name: NSWindow.didBecomeMainNotification,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleWindowNotification),
-            name: NSWindow.didResignKeyNotification,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleWindowNotification),
-            name: NSWindow.didResignMainNotification,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleWindowNotification),
-            name: NSWindow.didMiniaturizeNotification,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleWindowNotification),
-            name: NSWindow.didDeminiaturizeNotification,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleWindowNotification),
-            name: NSWindow.willCloseNotification,
-            object: nil
-        )
-    }
-
-    @objc
-    private func handleWindowNotification(_ notification: Notification) {
-        switch notification.name {
-        case NSWindow.didBecomeKeyNotification,
-             NSWindow.didBecomeMainNotification,
-             NSWindow.didDeminiaturizeNotification:
-            updateMainWindowVisibilityIfNeeded(isVisible: true, window: notification.object as? NSWindow)
-        case NSWindow.didMiniaturizeNotification,
-             NSWindow.willCloseNotification:
-            updateMainWindowVisibilityIfNeeded(isVisible: false, window: notification.object as? NSWindow)
-        case NSWindow.didResignKeyNotification,
-             NSWindow.didResignMainNotification:
-            return
-        default:
-            return
-        }
-    }
-
-    private func updateMainWindowVisibilityIfNeeded(isVisible: Bool, window: NSWindow?) {
-        guard isMainWindow(notificationWindow: window) else { return }
-        AppEnvironment.shared.updateMainWindowVisibility(isVisible: isVisible)
-    }
-
-    private func isMainWindow(notificationWindow: NSWindow?) -> Bool {
-        notificationWindow?.identifier?.rawValue == "PushGoMainWindow"
-    }
 
 }

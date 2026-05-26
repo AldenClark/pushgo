@@ -101,6 +101,43 @@ final class PendingLocalDeletionController {
         armCommitTask(for: deletion)
     }
 
+    @discardableResult
+    func scheduleItems<Item, ID: Hashable & Sendable>(
+        _ items: [Item],
+        identity: (Item) -> ID,
+        title: (Item) -> String,
+        fallbackSingleSummary: String,
+        multipleSummaryTitle: String,
+        undoLabel: String,
+        scope: ([Item]) -> Scope,
+        commit: @escaping @Sendable ([ID]) async throws -> Void,
+        onCompletion: CompletionHandler? = nil
+    ) async -> (items: [Item], scope: Scope)? {
+        let uniqueItems = uniquePreservingOrder(items, identity: identity)
+        guard !uniqueItems.isEmpty else { return nil }
+        let uniqueIDs = uniqueItems.map(identity)
+
+        let summary: String
+        if uniqueItems.count == 1, let first = uniqueItems.first {
+            let resolvedTitle = title(first).trimmingCharacters(in: .whitespacesAndNewlines)
+            summary = resolvedTitle.isEmpty ? fallbackSingleSummary : resolvedTitle
+        } else {
+            summary = "\(uniqueItems.count) × \(multipleSummaryTitle)"
+        }
+
+        let resolvedScope = scope(uniqueItems)
+        await schedule(
+            summary: summary,
+            undoLabel: undoLabel,
+            scope: resolvedScope,
+            commit: {
+                try await commit(uniqueIDs)
+            },
+            onCompletion: onCompletion
+        )
+        return (uniqueItems, resolvedScope)
+    }
+
     func undoCurrent() {
         commitTask?.cancel()
         commitTask = nil
@@ -155,5 +192,18 @@ final class PendingLocalDeletionController {
         guard scheduledDeletion?.deletion.id == expectedID else { return }
         scheduledDeletion = nil
         pendingDeletion = nil
+    }
+
+    private func uniquePreservingOrder<Item, ID: Hashable>(
+        _ items: [Item],
+        identity: (Item) -> ID
+    ) -> [Item] {
+        var seen = Set<ID>()
+        var result: [Item] = []
+        result.reserveCapacity(items.count)
+        for item in items where seen.insert(identity(item)).inserted {
+            result.append(item)
+        }
+        return result
     }
 }

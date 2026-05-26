@@ -13,6 +13,15 @@ private actor CommitRecorder {
     func append(_ value: String) {
         entries.append(value)
     }
+
+    func replaceEntries(_ values: [String]) {
+        entries = values
+    }
+}
+
+private struct DeletionTestItem {
+    let id: String
+    let title: String
 }
 
 @MainActor
@@ -123,5 +132,60 @@ struct PendingLocalDeletionControllerTests {
         #expect(completed)
         #expect(await recorder.count == 1)
         #expect(controller.pendingDeletion == nil)
+    }
+
+    @Test
+    func scheduleItemsDeduplicatesAndBuildsSummaryAndScope() async {
+        let controller = PendingLocalDeletionController(timeout: 5)
+
+        let result = await controller.scheduleItems(
+            [
+                DeletionTestItem(id: "event-a", title: "Alpha"),
+                DeletionTestItem(id: "event-a", title: "Duplicate"),
+                DeletionTestItem(id: "event-b", title: "Beta")
+            ],
+            identity: { $0.id },
+            title: { $0.title },
+            fallbackSingleSummary: "Event",
+            multipleSummaryTitle: "Events",
+            undoLabel: "Undo",
+            scope: { PendingLocalDeletionController.Scope(eventIDs: Set($0.map(\.id))) },
+            commit: { _ in }
+        )
+
+        #expect(result?.items.map(\.id) == ["event-a", "event-b"])
+        #expect(result?.scope.eventIDs == Set(["event-a", "event-b"]))
+        #expect(controller.pendingDeletion?.summary == "2 × Events")
+        #expect(controller.pendingDeletion?.undoLabel == "Undo")
+        #expect(controller.suppressesEvent(id: "event-a", channelId: nil))
+        #expect(controller.suppressesEvent(id: "event-b", channelId: nil))
+        #expect(!controller.suppressesEvent(id: "event-c", channelId: nil))
+    }
+
+    @Test
+    func scheduleItemsCommitsDeduplicatedIDs() async {
+        let controller = PendingLocalDeletionController(timeout: 5)
+        let recorder = CommitRecorder()
+
+        _ = await controller.scheduleItems(
+            [
+                DeletionTestItem(id: "event-a", title: "Alpha"),
+                DeletionTestItem(id: "event-a", title: "Duplicate"),
+                DeletionTestItem(id: "event-b", title: "Beta")
+            ],
+            identity: { $0.id },
+            title: { $0.title },
+            fallbackSingleSummary: "Event",
+            multipleSummaryTitle: "Events",
+            undoLabel: "Undo",
+            scope: { PendingLocalDeletionController.Scope(eventIDs: Set($0.map(\.id))) },
+            commit: { ids in
+                await recorder.replaceEntries(ids)
+            }
+        )
+
+        await controller.commitCurrentIfNeeded()
+
+        #expect(await recorder.entries == ["event-a", "event-b"])
     }
 }

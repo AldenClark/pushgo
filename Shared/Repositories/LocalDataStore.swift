@@ -1,7 +1,6 @@
 import Foundation
 import GRDB
 import os
-import UserNotifications
 
 struct MessagePageCursor: Hashable, Sendable {
     let receivedAt: Date
@@ -790,10 +789,6 @@ actor LocalDataStore {
     ) async {
         guard maxCount > 0 else { return }
         guard let backend else { return }
-        let candidates = (try? await backend.loadPruneCandidates(
-            maxCount: maxCount,
-            batchSize: batchSize
-        )) ?? []
         guard let deletedIds = try? await backend.pruneMessagesIfNeeded(
             maxCount: maxCount,
             batchSize: batchSize
@@ -807,7 +802,6 @@ actor LocalDataStore {
         if let metadataIndex {
             try? await metadataIndex.bulkRemove(ids: deletedIds)
         }
-        removeDeliveredNotifications(identifiers: notificationRequestIds(from: candidates))
     }
 
     func loadServerConfig() async throws -> ServerConfig? {
@@ -2478,18 +2472,6 @@ actor LocalDataStore {
             try? await metadataIndex.bulkReplace(entries: entries)
             index = upper
         }
-    }
-
-    private func notificationRequestIds(from messages: [PushMessage]) -> [String] {
-        messages.compactMap { message in
-            let id = message.notificationRequestId?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return id?.isEmpty == false ? id : nil
-        }
-    }
-
-    private func removeDeliveredNotifications(identifiers: [String]) {
-        guard !identifiers.isEmpty else { return }
-        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: identifiers)
     }
 
     private func ensureSearchIndexReady() async {

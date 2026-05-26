@@ -77,6 +77,7 @@ final class AppEnvironment {
     // should extend the dedicated controllers below instead of growing new
     // state machines in this type.
     @ObservationIgnored private(set) lazy var providerRouteController = ProviderRouteController(
+        platform: platformIdentifier(),
         dataStore: dataStore,
         channelSubscriptionService: channelSubscriptionService,
         localizationManager: localizationManager,
@@ -108,6 +109,7 @@ final class AppEnvironment {
         }
     )
     @ObservationIgnored private(set) lazy var notificationIngressController = NotificationIngressController(
+        platformSuffix: platformIdentifier(),
         dataStore: dataStore,
         channelSubscriptionService: channelSubscriptionService,
         serverConfigProvider: { [weak self] in
@@ -153,6 +155,7 @@ final class AppEnvironment {
     )
     @ObservationIgnored private(set) lazy var navigationState = AppNavigationState()
     @ObservationIgnored private(set) lazy var channelSyncController = ChannelSyncController(
+        platform: platformIdentifier(),
         dataStore: dataStore,
         pushRegistrationService: pushRegistrationService,
         channelSubscriptionService: channelSubscriptionService,
@@ -178,6 +181,7 @@ final class AppEnvironment {
         dataStore: dataStore
     )
     @ObservationIgnored private(set) lazy var channelSubscriptionController = ChannelSubscriptionController(
+        platform: platformIdentifier(),
         dataStore: dataStore,
         channelSubscriptionService: channelSubscriptionService,
         providerRouteController: providerRouteController,

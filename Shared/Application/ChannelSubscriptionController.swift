@@ -14,9 +14,10 @@ final class ChannelSubscriptionController {
     private let serverConfigProvider: ServerConfigProvider
     private let messageStateCoordinatorProvider: MessageStateCoordinatorProvider
     private let refreshMessageCountsAndNotify: RefreshCountsAndNotify
-    private let platform = "ios"
+    private let platform: String
 
     init(
+        platform: String,
         dataStore: LocalDataStore,
         channelSubscriptionService: ChannelSubscriptionService,
         providerRouteController: ProviderRouteController,
@@ -26,6 +27,7 @@ final class ChannelSubscriptionController {
         messageStateCoordinatorProvider: @escaping MessageStateCoordinatorProvider,
         refreshMessageCountsAndNotify: @escaping RefreshCountsAndNotify
     ) {
+        self.platform = platform
         self.dataStore = dataStore
         self.channelSubscriptionService = channelSubscriptionService
         self.providerRouteController = providerRouteController

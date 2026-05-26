@@ -20,12 +20,17 @@ final class ChannelSyncController {
     @ObservationIgnored private let recordRuntimeError: RuntimeErrorRecorder
     @ObservationIgnored private let showToast: ToastPresenter
     @ObservationIgnored private let showChannelEntryFeedback: ChannelEntryFeedbackPresenter
-    @ObservationIgnored private let platform = "ios"
+    @ObservationIgnored private let platform: String
+    @ObservationIgnored private var subscriptionSyncTask: Task<Void, Error>?
+    @ObservationIgnored private var subscriptionSyncTaskKey: String?
+    @ObservationIgnored private var lastSubscriptionSyncKey: String?
+    @ObservationIgnored private var lastSubscriptionSyncAt: Date = .distantPast
 
     private(set) var channelSubscriptions: [ChannelSubscription] = []
     @ObservationIgnored private var channelSubscriptionLookup: [String: ChannelSubscription] = [:]
 
     init(
+        platform: String,
         dataStore: LocalDataStore,
         pushRegistrationService: PushRegistrationService,
         channelSubscriptionService: ChannelSubscriptionService,
@@ -37,6 +42,7 @@ final class ChannelSyncController {
         showToast: @escaping ToastPresenter,
         showChannelEntryFeedback: @escaping ChannelEntryFeedbackPresenter
     ) {
+        self.platform = platform
         self.dataStore = dataStore
         self.pushRegistrationService = pushRegistrationService
         self.channelSubscriptionService = channelSubscriptionService
@@ -212,13 +218,69 @@ final class ChannelSyncController {
 
         let credentials = try await dataStore.activeChannelCredentials(gateway: gatewayKey)
         let token = try await ensureActivePushToken(serverConfig: config)
+        let normalizedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedToken.isEmpty else {
+            throw AppError.typedLocal(
+                code: "provider_token_missing",
+                category: .validation,
+                message: localizationManager.localized("operation_failed"),
+                detail: "provider token missing"
+            )
+        }
         guard !credentials.isEmpty else {
             await refreshChannelSubscriptions()
             return
         }
+        let syncKey = "\(gatewayKey)|\(normalizedToken)"
+        if let inFlightTask = subscriptionSyncTask,
+           subscriptionSyncTaskKey == syncKey
+        {
+            try await inFlightTask.value
+            return
+        }
+        if lastSubscriptionSyncKey == syncKey,
+           Date().timeIntervalSince(lastSubscriptionSyncAt) < 3
+        {
+            return
+        }
+
+        let task = Task<Void, Error> { @MainActor [weak self] in
+            guard let self else {
+                throw AppError.typedLocal(
+                    code: "subscription_sync_context_released",
+                    category: .internalError,
+                    message: LocalizationProvider.localized("operation_failed"),
+                    detail: "subscription sync context released"
+                )
+            }
+            try await self.performSubscriptionsSync(
+                config: config,
+                credentials: credentials,
+                providerToken: normalizedToken
+            )
+        }
+        subscriptionSyncTaskKey = syncKey
+        subscriptionSyncTask = task
+        defer {
+            if subscriptionSyncTaskKey == syncKey {
+                subscriptionSyncTaskKey = nil
+                subscriptionSyncTask = nil
+            }
+        }
+        try await task.value
+        lastSubscriptionSyncKey = syncKey
+        lastSubscriptionSyncAt = Date()
+    }
+
+    private func performSubscriptionsSync(
+        config: ServerConfig,
+        credentials: [(channelId: String, password: String)],
+        providerToken: String
+    ) async throws {
+        let gatewayKey = config.gatewayKey
         let deviceKey = try await providerRouteController.ensureProviderRoute(
             config: config,
-            providerToken: token
+            providerToken: providerToken
         )
         let channels = credentials.map {
             ChannelSubscriptionService.SyncItem(channelId: $0.channelId, password: $0.password)

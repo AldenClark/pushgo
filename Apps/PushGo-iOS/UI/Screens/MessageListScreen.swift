@@ -982,42 +982,29 @@ private extension MessageListScreen {
 
     @MainActor
     private func scheduleDeletion(for messages: [PushMessageSummary]) async {
-        let uniqueMessages = Array(
-            Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) }).values
-        )
-        guard !uniqueMessages.isEmpty else { return }
-
-        let summary: String = {
-            if uniqueMessages.count == 1,
-               let first = uniqueMessages.first
-            {
-                let title = first.title.trimmingCharacters(in: .whitespacesAndNewlines)
-                return title.isEmpty ? localizationManager.localized("tab_messages") : title
-            }
-            return "\(uniqueMessages.count) × \(localizationManager.localized("tab_messages"))"
-        }()
-
-        let scope = PendingLocalDeletionController.Scope(
-            messageIDs: Set(uniqueMessages.map(\.id))
-        )
-
-        await environment.pendingLocalDeletionController.schedule(
-            summary: summary,
+        guard let result = await environment.pendingLocalDeletionController.scheduleItems(
+            messages,
+            identity: { $0.id },
+            title: { $0.title },
+            fallbackSingleSummary: localizationManager.localized("tab_messages"),
+            multipleSummaryTitle: localizationManager.localized("tab_messages"),
             undoLabel: localizationManager.localized("cancel"),
-            scope: scope
-        ) { [environment] in
-            _ = try await environment.messageStateCoordinator.deleteMessages(
-                messageIds: uniqueMessages.map(\.id)
-            )
-        } onCompletion: { [environment] result in
-            guard case let .failure(error) = result else { return }
-            environment.showErrorToast(error, duration: 2.5)
-        }
+            scope: { PendingLocalDeletionController.Scope(messageIDs: Set($0.map(\.id))) },
+            commit: { [environment] messageIDs in
+                _ = try await environment.messageStateCoordinator.deleteMessages(
+                    messageIds: messageIDs
+                )
+            },
+            onCompletion: { [environment] result in
+                guard case let .failure(error) = result else { return }
+                environment.showErrorToast(error, duration: 2.5)
+            }
+        ) else { return }
 
-        if let selectedMessage, scope.suppressesMessage(id: selectedMessage.id, channelId: selectedMessage.channel) {
+        if let selectedMessage, result.scope.suppressesMessage(id: selectedMessage.id, channelId: selectedMessage.channel) {
             self.selectedMessage = nil
         }
-        selectedMessageIDs.subtract(scope.messageIDs)
+        selectedMessageIDs.subtract(result.scope.messageIDs)
     }
 }
 

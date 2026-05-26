@@ -483,44 +483,31 @@ struct ThingListScreen: View {
 
     @MainActor
     private func scheduleDeletion(for things: [ThingProjection]) async {
-        let uniqueThings = Array(
-            Dictionary(uniqueKeysWithValues: things.map { ($0.id, $0) }).values
-        )
-        guard !uniqueThings.isEmpty else { return }
-
-        let summary: String = {
-            if uniqueThings.count == 1,
-               let first = uniqueThings.first
-            {
-                let title = first.title.trimmingCharacters(in: .whitespacesAndNewlines)
-                return title.isEmpty ? localizationManager.localized("push_type_thing") : title
-            }
-            return "\(uniqueThings.count) × \(localizationManager.localized("push_type_thing"))"
-        }()
-
-        let scope = PendingLocalDeletionController.Scope(
-            thingIDs: Set(uniqueThings.map(\.id))
-        )
-
-        await environment.pendingLocalDeletionController.schedule(
-            summary: summary,
+        guard let result = await environment.pendingLocalDeletionController.scheduleItems(
+            things,
+            identity: { $0.id },
+            title: { $0.title },
+            fallbackSingleSummary: localizationManager.localized("push_type_thing"),
+            multipleSummaryTitle: localizationManager.localized("push_type_thing"),
             undoLabel: localizationManager.localized("cancel"),
-            scope: scope
-        ) {
-            _ = try await viewModel.deleteThings(thingIds: uniqueThings.map(\.id))
-        } onCompletion: { [environment] result in
-            guard case let .failure(error) = result else { return }
-            environment.showErrorToast(
-                error,
-                fallbackMessage: localizationManager.localized("operation_failed"),
-                duration: 2
-            )
-        }
+            scope: { PendingLocalDeletionController.Scope(thingIDs: Set($0.map(\.id))) },
+            commit: { thingIDs in
+                _ = try await viewModel.deleteThings(thingIds: thingIDs)
+            },
+            onCompletion: { [environment] result in
+                guard case let .failure(error) = result else { return }
+                environment.showErrorToast(
+                    error,
+                    fallbackMessage: localizationManager.localized("operation_failed"),
+                    duration: 2
+                )
+            }
+        ) else { return }
 
-        if let selectedThing, scope.suppressesThing(id: selectedThing.id, channelId: selectedThing.channelId) {
+        if let selectedThing, result.scope.suppressesThing(id: selectedThing.id, channelId: selectedThing.channelId) {
             self.selectedThing = nil
         }
-        selectedThingIds.subtract(scope.thingIDs)
+        selectedThingIds.subtract(result.scope.thingIDs)
     }
 
     @ViewBuilder

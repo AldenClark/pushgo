@@ -10,8 +10,8 @@ final class ProviderRouteController {
     private let localizationManager: LocalizationManager
     private let refreshAutomationState: AutomationStateRefresher
     private let runtimeMessageRecorder: RuntimeMessageRecorder
-    private let platform = "ios"
-    private let channelType = "apns"
+    private let platform: String
+    private let channelType: String
     private let providerRouteResultReuseInterval: TimeInterval = 25
 
     private var providerRouteTask: Task<String, Error>?
@@ -22,12 +22,16 @@ final class ProviderRouteController {
     private var lastWakeupRouteFingerprint: String?
 
     init(
+        platform: String,
+        channelType: String = "apns",
         dataStore: LocalDataStore,
         channelSubscriptionService: ChannelSubscriptionService,
         localizationManager: LocalizationManager,
         refreshAutomationState: @escaping AutomationStateRefresher,
         runtimeMessageRecorder: @escaping RuntimeMessageRecorder
     ) {
+        self.platform = platform
+        self.channelType = channelType
         self.dataStore = dataStore
         self.channelSubscriptionService = channelSubscriptionService
         self.localizationManager = localizationManager

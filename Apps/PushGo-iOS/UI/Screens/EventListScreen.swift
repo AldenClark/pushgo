@@ -500,44 +500,31 @@ struct EventListScreen: View {
 
     @MainActor
     private func scheduleDeletion(for events: [EventProjection]) async {
-        let uniqueEvents = Array(
-            Dictionary(uniqueKeysWithValues: events.map { ($0.id, $0) }).values
-        )
-        guard !uniqueEvents.isEmpty else { return }
-
-        let summary: String = {
-            if uniqueEvents.count == 1,
-               let first = uniqueEvents.first
-            {
-                let title = first.title.trimmingCharacters(in: .whitespacesAndNewlines)
-                return title.isEmpty ? localizationManager.localized("push_type_event") : title
-            }
-            return "\(uniqueEvents.count) × \(localizationManager.localized("push_type_event"))"
-        }()
-
-        let scope = PendingLocalDeletionController.Scope(
-            eventIDs: Set(uniqueEvents.map(\.id))
-        )
-
-        await environment.pendingLocalDeletionController.schedule(
-            summary: summary,
+        guard let result = await environment.pendingLocalDeletionController.scheduleItems(
+            events,
+            identity: { $0.id },
+            title: { $0.title },
+            fallbackSingleSummary: localizationManager.localized("push_type_event"),
+            multipleSummaryTitle: localizationManager.localized("push_type_event"),
             undoLabel: localizationManager.localized("cancel"),
-            scope: scope
-        ) {
-            _ = try await viewModel.deleteEvents(eventIds: uniqueEvents.map(\.id))
-        } onCompletion: { [environment] result in
-            guard case let .failure(error) = result else { return }
-            environment.showErrorToast(
-                error,
-                fallbackMessage: localizationManager.localized("operation_failed"),
-                duration: 2
-            )
-        }
+            scope: { PendingLocalDeletionController.Scope(eventIDs: Set($0.map(\.id))) },
+            commit: { eventIDs in
+                _ = try await viewModel.deleteEvents(eventIds: eventIDs)
+            },
+            onCompletion: { [environment] result in
+                guard case let .failure(error) = result else { return }
+                environment.showErrorToast(
+                    error,
+                    fallbackMessage: localizationManager.localized("operation_failed"),
+                    duration: 2
+                )
+            }
+        ) else { return }
 
-        if let selectedEvent, scope.suppressesEvent(id: selectedEvent.id, channelId: selectedEvent.channelId) {
+        if let selectedEvent, result.scope.suppressesEvent(id: selectedEvent.id, channelId: selectedEvent.channelId) {
             self.selectedEvent = nil
         }
-        selectedEventIds.subtract(scope.eventIDs)
+        selectedEventIds.subtract(result.scope.eventIDs)
     }
 
     @ViewBuilder
