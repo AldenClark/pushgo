@@ -833,14 +833,14 @@ platform :ios do
     payload
   end
 
-  def app_store_build_selection_options
+  def app_store_build_selection_options(include_build_number: true)
     app_version = ENV["APP_STORE_VERSION"].to_s.strip
     app_version = ENV["SEMVER_VERSION"].to_s.strip if app_version.empty?
     build_number = ENV["APP_STORE_BUILD_NUMBER"].to_s.strip
 
     options = {}
     options[:app_version] = app_version unless app_version.empty?
-    options[:build_number] = build_number unless build_number.empty?
+    options[:build_number] = build_number if include_build_number && !build_number.empty?
     options
   end
 
@@ -1006,7 +1006,7 @@ platform :ios do
     macos_pkg_path = archive_macos_app_store_pkg!
     changelog = ENV["TESTFLIGHT_CHANGELOG"].to_s.strip
     groups = ENV.fetch("TESTFLIGHT_EXTERNAL_GROUPS", "").split(",").map(&:strip).reject(&:empty?)
-    build_selection = app_store_build_selection_options
+    build_selection = app_store_build_selection_options(include_build_number: false)
     UI.user_error!("Missing TESTFLIGHT_EXTERNAL_GROUPS for beta auto-submit") if groups.empty?
 
     with_transient_asc_retry!("upload iOS build to TestFlight") do
@@ -1044,7 +1044,7 @@ platform :ios do
     ios_ipa_path = archive_ios_app!
     macos_pkg_path = archive_macos_app_store_pkg!
     release_notes = release_notes_payload
-    build_selection = app_store_build_selection_options
+    build_selection = app_store_build_selection_options(include_build_number: false)
     submission_information = app_store_submission_information
 
     with_transient_asc_retry!("upload iOS build to App Store Connect") do
