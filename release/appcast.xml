@@ -16,7 +16,7 @@
             <sparkle:releaseNotesLink xml:lang="ja">https://update.pushgo.cn/macos/stable/v1.2.4/PushGo-macOS-v1.2.4.ja.txt</sparkle:releaseNotesLink>
             <sparkle:releaseNotesLink xml:lang="ko">https://update.pushgo.cn/macos/stable/v1.2.4/PushGo-macOS-v1.2.4.ko.txt</sparkle:releaseNotesLink>
             <sparkle:releaseNotesLink xml:lang="zh">https://update.pushgo.cn/macos/stable/v1.2.4/PushGo-macOS-v1.2.4.zh.txt</sparkle:releaseNotesLink>
-            <enclosure url="https://update.pushgo.cn/macos/stable/v1.2.4/PushGo-macOS-v1.2.4.dmg" length="19170087" type="application/octet-stream" sparkle:edSignature="ObPv/J2Wg3I/AqvcPUygtaitrySHzQS6elPvhp3fkXMlNGkvY2KnDqC6VuwwoKNOBWvtqmG229A3hQgwSKHaDw=="/>
+            <enclosure url="https://update.pushgo.cn/macos/stable/v1.2.4/PushGo-macOS-v1.2.4.dmg" length="19170125" type="application/octet-stream" sparkle:edSignature="0QIJYf0S/vs6sZFmzX+hlKIfM6+VfAvER1Fp8xYUqiCojTN+eCIM7X9YndJAGlIbTvxVQa5214U16z3WAnK+Bg=="/>
         </item>
     </channel>
 </rss>
