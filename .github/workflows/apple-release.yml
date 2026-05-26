@@ -101,65 +101,100 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          project_path="${APP_PROJECT}"
+          semver_version="${SEMVER_VERSION}"
+          target_names=("${APP_SCHEME:-PushGo-iOS}" "${APP_MACOS_SCHEME:-PushGo-macOS}")
 
-          bundle _2.5.23_ exec ruby <<'RUBY'
-          require "xcodeproj"
+          errors=()
+          release_entries=()
+          build_numbers=()
 
-          project_path = ENV.fetch("APP_PROJECT")
-          semver_version = ENV.fetch("SEMVER_VERSION")
-          target_names = [
-            ENV.fetch("APP_SCHEME", "PushGo-iOS"),
-            ENV.fetch("APP_MACOS_SCHEME", "PushGo-macOS")
-          ].uniq
+          resolve_setting_unique() {
+            local settings_text="$1"
+            local key="$2"
+            local values
+            values="$(
+              printf '%s\n' "$settings_text" \
+                | sed -nE "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*(.+)$/\\1/p" \
+                | sed -E 's/[[:space:]]+$//' \
+                | awk 'NF' \
+                | sort -u
+            )"
+            local count
+            count="$(printf '%s\n' "$values" | awk 'NF' | wc -l | tr -d ' ')"
+            if [[ "$count" == "0" ]]; then
+              echo ""
+              return 1
+            fi
+            if [[ "$count" != "1" ]]; then
+              echo "$values"
+              return 2
+            fi
+            printf '%s\n' "$values"
+          }
 
-          project = Xcodeproj::Project.open(project_path)
-          targets = target_names.map do |name|
-            target = project.targets.find { |candidate| candidate.name == name }
-            abort("Missing Xcode target #{name.inspect} in #{project_path}") unless target
-            target
-          end
+          for target_name in "${target_names[@]}"; do
+            settings_text="$(
+              xcodebuild \
+                -project "$project_path" \
+                -scheme "$target_name" \
+                -configuration Release \
+                -showBuildSettings 2>/dev/null
+            )"
+            if [[ -z "$settings_text" ]]; then
+              errors+=("${target_name} failed to resolve build settings")
+              continue
+            fi
 
-          release_settings = targets.map do |target|
-            config = target.build_configurations.find { |candidate| candidate.name == "Release" }
-            abort("Missing Release build configuration for #{target.name}") unless config
+            marketing_version=""
+            if ! marketing_version="$(resolve_setting_unique "$settings_text" "MARKETING_VERSION")"; then
+              rc=$?
+              if [[ $rc -eq 1 ]]; then
+                errors+=("${target_name} MARKETING_VERSION is missing")
+              else
+                errors+=("${target_name} MARKETING_VERSION has multiple values: ${marketing_version//$'\n'/, }")
+              fi
+            fi
 
-            settings = config.build_settings
-            {
-              target: target.name,
-              marketing_version: settings["MARKETING_VERSION"].to_s.strip,
-              build_number: settings["CURRENT_PROJECT_VERSION"].to_s.strip
-            }
-          end
+            build_number=""
+            if ! build_number="$(resolve_setting_unique "$settings_text" "CURRENT_PROJECT_VERSION")"; then
+              rc=$?
+              if [[ $rc -eq 1 ]]; then
+                errors+=("${target_name} CURRENT_PROJECT_VERSION is missing")
+              else
+                errors+=("${target_name} CURRENT_PROJECT_VERSION has multiple values: ${build_number//$'\n'/, }")
+              fi
+            fi
 
-          errors = []
-          release_settings.each do |entry|
-            if entry[:marketing_version] != semver_version
-              errors << "#{entry[:target]} MARKETING_VERSION=#{entry[:marketing_version].inspect}, expected #{semver_version.inspect}"
-            end
-            if entry[:build_number].empty?
-              errors << "#{entry[:target]} CURRENT_PROJECT_VERSION is empty"
-            end
-          end
+            if [[ -n "$marketing_version" && "$marketing_version" != "$semver_version" ]]; then
+              errors+=("${target_name} MARKETING_VERSION=${marketing_version@Q}, expected ${semver_version@Q}")
+            fi
+            if [[ -n "$build_number" ]]; then
+              build_numbers+=("$build_number")
+            fi
 
-          build_numbers = release_settings.map { |entry| entry[:build_number] }.uniq
-          if build_numbers.length != 1
-            errors << "Release build numbers differ: #{release_settings.map { |entry| "#{entry[:target]}=#{entry[:build_number]}" }.join(", ")}"
-          end
+            release_entries+=("${target_name}=v${marketing_version} (${build_number})")
+          done
 
-          unless errors.empty?
-            warn("Invalid App Store build version for this tag:")
-            errors.each { |error| warn("- #{error}") }
-            exit(1)
-          end
+          unique_build_numbers="$(printf '%s\n' "${build_numbers[@]:-}" | awk 'NF' | sort -u)"
+          unique_build_count="$(printf '%s\n' "$unique_build_numbers" | awk 'NF' | wc -l | tr -d ' ')"
+          if [[ "$unique_build_count" != "1" ]]; then
+            errors+=("Release build numbers differ: ${release_entries[*]}")
+          fi
 
-          build_number = build_numbers.fetch(0)
-          File.open(ENV.fetch("GITHUB_ENV"), "a") do |env|
-            env.puts("APP_STORE_VERSION=#{semver_version}")
-            env.puts("APP_STORE_BUILD_NUMBER=#{build_number}")
-          end
+          if (( ${#errors[@]} > 0 )); then
+            echo "Invalid App Store build version for this tag:"
+            printf -- '- %s\n' "${errors[@]}"
+            exit 1
+          fi
 
-          puts("Resolved App Store version #{semver_version} build #{build_number} from #{target_names.join(", ")}")
-          RUBY
+          build_number="$(printf '%s\n' "$unique_build_numbers" | awk 'NF {print; exit}')"
+          {
+            echo "APP_STORE_VERSION=$semver_version"
+            echo "APP_STORE_BUILD_NUMBER=$build_number"
+          } >> "$GITHUB_ENV"
+
+          echo "Resolved App Store version ${semver_version} build ${build_number} from ${target_names[*]}"
 
       - name: Validate App Store signing assets
         shell: bash
