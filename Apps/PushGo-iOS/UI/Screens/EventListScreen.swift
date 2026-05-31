@@ -21,6 +21,7 @@ struct EventListScreen: View {
     @State private var selectedTags: Set<String> = []
     @State private var isFilterPopoverPresented = false
     @State private var isBatchModeActive = false
+    @State private var pendingOpenEventClearTask: Task<Void, Never>?
 
     var body: some View {
         let filteredEventsSnapshot = filteredEvents
@@ -58,6 +59,7 @@ struct EventListScreen: View {
 #endif
         }
         .onChange(of: selectedEvent?.id) { _, _ in
+            schedulePendingOpenEventClearIfNeeded()
 #if DEBUG
             publishAutomationState()
 #endif
@@ -429,23 +431,38 @@ struct EventListScreen: View {
                 searchQuery = ""
             }
             selectEvent(matched)
-            onOpenEventHandled?()
             return
         }
 
         Task { @MainActor in
-            await viewModel.ensureEventDetailsLoaded(eventId: target)
-            guard let hydrated = viewModel.events.first(where: { $0.id == target }) else { return }
-            if let channelId = normalizedChannel(hydrated.channelId) {
-                selectedChannelIDs = [channelId]
+            for _ in 0..<8 {
+                await viewModel.ensureEventDetailsLoaded(eventId: target)
+                if let hydrated = viewModel.events.first(where: { $0.id == target }) {
+                    if let channelId = normalizedChannel(hydrated.channelId) {
+                        selectedChannelIDs = [channelId]
+                    }
+                    if !selectedTags.isEmpty {
+                        selectedTags.removeAll()
+                    }
+                    if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        searchQuery = ""
+                    }
+                    selectEvent(hydrated)
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(120))
             }
-            if !selectedTags.isEmpty {
-                selectedTags.removeAll()
-            }
-            if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                searchQuery = ""
-            }
-            selectEvent(hydrated)
+        }
+    }
+
+    private func schedulePendingOpenEventClearIfNeeded() {
+        pendingOpenEventClearTask?.cancel()
+        guard let selectedId = selectedEvent?.id else { return }
+        let target = openEventId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !target.isEmpty, selectedId == target else { return }
+        pendingOpenEventClearTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled, selectedEvent?.id == target else { return }
             onOpenEventHandled?()
         }
     }

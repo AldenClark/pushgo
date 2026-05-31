@@ -21,6 +21,7 @@ struct ThingListScreen: View {
     @State private var selectedTags: Set<String> = []
     @State private var isFilterPopoverPresented = false
     @State private var isBatchModeActive = false
+    @State private var pendingOpenThingClearTask: Task<Void, Never>?
 
     var body: some View {
         let filteredThingsSnapshot = filteredThings
@@ -58,6 +59,7 @@ struct ThingListScreen: View {
 #endif
         }
         .onChange(of: selectedThing?.id) { _, _ in
+            schedulePendingOpenThingClearIfNeeded()
 #if DEBUG
             publishAutomationState()
 #endif
@@ -425,23 +427,38 @@ struct ThingListScreen: View {
                 searchQuery = ""
             }
             selectThing(matched)
-            onOpenThingHandled?()
             return
         }
 
         Task { @MainActor in
-            await viewModel.ensureThingDetailsLoaded(thingId: target)
-            guard let hydrated = viewModel.things.first(where: { $0.id == target }) else { return }
-            if let channelId = normalizedChannel(hydrated.channelId) {
-                selectedChannelIDs = [channelId]
+            for _ in 0..<8 {
+                await viewModel.ensureThingDetailsLoaded(thingId: target)
+                if let hydrated = viewModel.things.first(where: { $0.id == target }) {
+                    if let channelId = normalizedChannel(hydrated.channelId) {
+                        selectedChannelIDs = [channelId]
+                    }
+                    if !selectedTags.isEmpty {
+                        selectedTags.removeAll()
+                    }
+                    if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        searchQuery = ""
+                    }
+                    selectThing(hydrated)
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(120))
             }
-            if !selectedTags.isEmpty {
-                selectedTags.removeAll()
-            }
-            if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                searchQuery = ""
-            }
-            selectThing(hydrated)
+        }
+    }
+
+    private func schedulePendingOpenThingClearIfNeeded() {
+        pendingOpenThingClearTask?.cancel()
+        guard let selectedId = selectedThing?.id else { return }
+        let target = openThingId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !target.isEmpty, selectedId == target else { return }
+        pendingOpenThingClearTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled, selectedThing?.id == target else { return }
             onOpenThingHandled?()
         }
     }

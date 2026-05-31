@@ -1260,6 +1260,7 @@ final class PushGoWatchAutomationRuntime {
         }
         let state = await enrichState(baseState, environment: environment)
         latestState = state
+        writeJSON(state, to: stateURL)
         writeJSON(
             PushGoWatchAutomationResponse(
                 id: request?.id,

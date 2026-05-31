@@ -132,7 +132,9 @@ final class EntityProjectionViewModel {
         do {
             let messages = try await dataStore.loadEventMessagesForProjection(eventId: normalized)
             events = mergeEventProjections(events, buildEvents(messages))
-            hydratedEventIDs.insert(normalized)
+            if events.contains(where: { $0.id == normalized }) {
+                hydratedEventIDs.insert(normalized)
+            }
             self.error = nil
         } catch let appError as AppError {
             self.error = appError
@@ -152,7 +154,9 @@ final class EntityProjectionViewModel {
         do {
             let messages = try await dataStore.loadThingMessagesForProjection(thingId: normalized)
             things = mergeThingProjections(things, buildThings(messages))
-            hydratedThingIDs.insert(normalized)
+            if things.contains(where: { $0.id == normalized }) {
+                hydratedThingIDs.insert(normalized)
+            }
             self.error = nil
         } catch let appError as AppError {
             self.error = appError
