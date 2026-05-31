@@ -452,18 +452,25 @@ private struct ScrollObserverModifier: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         if enabled {
-            content
-                .onScrollGeometryChange(
-                    for: CGFloat.self,
-                    of: { geom in
-                        geom.contentOffset.y
-                    },
-                    action: { _, newY in
-                        let topOffset = newY
-                        let pull = max(0, -newY)
-                        onChange(topOffset, pull)
-                    },
-                )
+            if #available(iOS 18.0, *) {
+                content
+                    .onScrollGeometryChange(
+                        for: CGFloat.self,
+                        of: { geom in
+                            geom.contentOffset.y
+                        },
+                        action: { _, newY in
+                            let topOffset = newY
+                            let pull = max(0, -newY)
+                            onChange(topOffset, pull)
+                        },
+                    )
+            } else {
+                content
+                    .onAppear {
+                        onChange(0, 0)
+                    }
+            }
         } else {
             content
         }

@@ -36,25 +36,44 @@ extension View {
     @ViewBuilder
     func pushgoSheetSizing(_ style: PushgoSheetSizingStyle) -> some View {
 #if os(iOS)
-        switch style {
-        case .form:
-            self
-                .presentationSizing(.form.fitted(horizontal: false, vertical: true))
-                .presentationContentInteraction(.scrolls)
-                .presentationDragIndicator(.visible)
-        case .detail:
-            self
-                .presentationSizing(
-                    .page
-                        .fitted(horizontal: false, vertical: true)
-                        .sticky(horizontal: false, vertical: true),
-                )
-                .presentationContentInteraction(.scrolls)
-                .presentationDragIndicator(.visible)
-        case .fitted:
-            self
-                .presentationSizing(.fitted)
-                .presentationDragIndicator(.visible)
+        if #available(iOS 18.0, *) {
+            switch style {
+            case .form:
+                self
+                    .presentationSizing(.form.fitted(horizontal: false, vertical: true))
+                    .presentationContentInteraction(.scrolls)
+                    .presentationDragIndicator(.visible)
+            case .detail:
+                self
+                    .presentationSizing(
+                        .page
+                            .fitted(horizontal: false, vertical: true)
+                            .sticky(horizontal: false, vertical: true),
+                    )
+                    .presentationContentInteraction(.scrolls)
+                    .presentationDragIndicator(.visible)
+            case .fitted:
+                self
+                    .presentationSizing(.fitted)
+                    .presentationDragIndicator(.visible)
+            }
+        } else {
+            switch style {
+            case .form:
+                self
+                    .presentationDetents([.medium, .large])
+                    .presentationContentInteraction(.scrolls)
+                    .presentationDragIndicator(.visible)
+            case .detail:
+                self
+                    .presentationDetents([.large])
+                    .presentationContentInteraction(.scrolls)
+                    .presentationDragIndicator(.visible)
+            case .fitted:
+                self
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
         }
 #else
         self
@@ -74,7 +93,7 @@ extension View {
     @ViewBuilder
     func pushgoHideTabBarForDetail() -> some View {
 #if os(iOS)
-        self.toolbarVisibility(.hidden, for: .tabBar)
+        self.toolbar(.hidden, for: .tabBar)
 #else
         self
 #endif

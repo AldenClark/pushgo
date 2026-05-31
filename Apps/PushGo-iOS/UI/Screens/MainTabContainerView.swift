@@ -133,49 +133,57 @@ struct MainTabContainerView: View {
         let unreadCount = environment.unreadMessageCount
         TabView(selection: $selection) {
             if showsMessagesTab {
-                Tab(LocalizationManager.localizedSync("messages"), systemImage: "tray.full", value: MainTab.messages) {
-                    MessageListScreen(
-                        viewModel: messageListViewModel,
-                        scrollToUnreadToken: messageScrollToUnreadToken,
-                        scrollToTopToken: messageScrollToTopToken
-                    )
+                MessageListScreen(
+                    viewModel: messageListViewModel,
+                    scrollToUnreadToken: messageScrollToUnreadToken,
+                    scrollToTopToken: messageScrollToTopToken
+                )
+                .tabItem {
+                    Label(LocalizationManager.localizedSync("messages"), systemImage: "tray.full")
                 }
+                .tag(MainTab.messages)
                 .badge(unreadCount > 0 ? Text("\(unreadCount)") : nil)
             }
 
             if showsEventsTab {
-                Tab(LocalizationManager.localizedSync("thing_detail_tab_events"), systemImage: "waveform.path.ecg", value: MainTab.events) {
-                    navigationContainer {
-                        EventListScreen(
-                            viewModel: entityViewModel,
-                            openEventId: environment.pendingEventToOpen,
-                            scrollToTopToken: eventScrollToTopToken,
-                            onOpenEventHandled: {
-                                environment.pendingEventToOpen = nil
-                            }
-                        )
-                    }
+                navigationContainer {
+                    EventListScreen(
+                        viewModel: entityViewModel,
+                        openEventId: environment.pendingEventToOpen,
+                        scrollToTopToken: eventScrollToTopToken,
+                        onOpenEventHandled: {
+                            environment.pendingEventToOpen = nil
+                        }
+                    )
                 }
+                .tabItem {
+                    Label(LocalizationManager.localizedSync("thing_detail_tab_events"), systemImage: "waveform.path.ecg")
+                }
+                .tag(MainTab.events)
             }
 
             if showsThingsTab {
-                Tab(LocalizationManager.localizedSync("push_type_thing"), systemImage: "cpu", value: MainTab.things) {
-                    navigationContainer {
-                        ThingListScreen(
-                            viewModel: entityViewModel,
-                            openThingId: environment.pendingThingToOpen,
-                            scrollToTopToken: thingScrollToTopToken,
-                            onOpenThingHandled: {
-                                environment.pendingThingToOpen = nil
-                            }
-                        )
-                    }
+                navigationContainer {
+                    ThingListScreen(
+                        viewModel: entityViewModel,
+                        openThingId: environment.pendingThingToOpen,
+                        scrollToTopToken: thingScrollToTopToken,
+                        onOpenThingHandled: {
+                            environment.pendingThingToOpen = nil
+                        }
+                    )
                 }
+                .tabItem {
+                    Label(LocalizationManager.localizedSync("push_type_thing"), systemImage: "cpu")
+                }
+                .tag(MainTab.things)
             }
 
-            Tab(LocalizationManager.localizedSync("channels"), systemImage: "dot.radiowaves.left.and.right", value: MainTab.channels) {
-                ChannelManagementScreen()
-            }
+            ChannelManagementScreen()
+                .tabItem {
+                    Label(LocalizationManager.localizedSync("channels"), systemImage: "dot.radiowaves.left.and.right")
+                }
+                .tag(MainTab.channels)
         }
     }
 

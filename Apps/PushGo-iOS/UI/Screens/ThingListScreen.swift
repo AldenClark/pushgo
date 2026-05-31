@@ -764,15 +764,22 @@ private struct ThingListTopObserverModifier: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         if enabled {
-            content.onScrollGeometryChange(
-                for: CGFloat.self,
-                of: { geometry in
-                    geometry.contentOffset.y
-                },
-                action: { _, newValue in
-                    onChange(newValue)
-                }
-            )
+            if #available(iOS 18.0, *) {
+                content.onScrollGeometryChange(
+                    for: CGFloat.self,
+                    of: { geometry in
+                        geometry.contentOffset.y
+                    },
+                    action: { _, newValue in
+                        onChange(newValue)
+                    }
+                )
+            } else {
+                content
+                    .onAppear {
+                        onChange(0)
+                    }
+            }
         } else {
             content
         }

@@ -15,9 +15,9 @@ PushGo for Apple platforms (iOS/macOS/watchOS) is the official client app for Pu
 
 ## Requirements
 
-- iOS 18+
-- macOS 15+
-- watchOS 11+
+- iOS 17+
+- macOS 14+
+- watchOS 10+
 
 ## Testing
 
@@ -44,9 +44,9 @@ PushGo Apple 平台（iOS/macOS/watchOS）是 PushGo 的官方客户端应用，
 
 ## 环境要求
 
-- iOS 18+
-- macOS 15+
-- watchOS 11+
+- iOS 17+
+- macOS 14+
+- watchOS 10+
 
 ## 测试
 

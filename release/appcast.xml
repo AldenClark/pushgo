@@ -7,7 +7,7 @@
             <pubDate>Tue, 26 May 2026 14:03:37 +0000</pubDate>
             <sparkle:version>79</sparkle:version>
             <sparkle:shortVersionString>1.2.4</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <sparkle:releaseNotesLink>https://update.pushgo.cn/macos/stable/v1.2.4/PushGo-macOS-v1.2.4.txt</sparkle:releaseNotesLink>
             <sparkle:releaseNotesLink xml:lang="de">https://update.pushgo.cn/macos/stable/v1.2.4/PushGo-macOS-v1.2.4.de.txt</sparkle:releaseNotesLink>
             <sparkle:releaseNotesLink xml:lang="en">https://update.pushgo.cn/macos/stable/v1.2.4/PushGo-macOS-v1.2.4.en.txt</sparkle:releaseNotesLink>
