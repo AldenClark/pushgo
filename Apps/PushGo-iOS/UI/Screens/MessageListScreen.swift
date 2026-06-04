@@ -253,8 +253,6 @@ struct MessageListScreen: View {
     private var messageList: some View {
         ScrollViewReader { proxy in
             List(selection: batchSelectionBinding) {
-                scrollOffsetProbe
-
                 if isShowingSearchResults {
                     if visibleSearchResults.isEmpty {
                         searchPlaceholderRow
@@ -343,19 +341,6 @@ struct MessageListScreen: View {
                 scrollToTopIfNeeded(proxy)
             }
         }
-    }
-
-    private var scrollOffsetProbe: some View {
-        GeometryReader { proxy in
-            Color.clear.preference(
-                key: MessageListScrollOffsetPreferenceKey.self,
-                value: proxy.frame(in: .named(MessageListScrollMetrics.coordinateSpaceName)).minY
-            )
-        }
-        .frame(height: 0)
-        .listRowInsets(EdgeInsets())
-        .listRowSeparator(.hidden)
-        .accessibilityHidden(true)
     }
 
     @ViewBuilder
@@ -483,9 +468,9 @@ private struct ScrollObserverModifier: ViewModifier {
                     )
             } else {
                 content
-                    .onPreferenceChange(MessageListScrollOffsetPreferenceKey.self) { minY in
-                        let topOffset = -minY
-                        let pull = max(0, minY)
+                    .legacyScrollViewOffsetObserver { offsetY in
+                        let topOffset = offsetY
+                        let pull = max(0, -offsetY)
                         onChange(topOffset, pull)
                     }
             }
@@ -501,14 +486,6 @@ private enum MessageListTopMetrics {
 
 private enum MessageListScrollMetrics {
     static let coordinateSpaceName = "message-list-scroll"
-}
-
-private struct MessageListScrollOffsetPreferenceKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
 }
 
 private struct TopSeparatorModifier: ViewModifier {

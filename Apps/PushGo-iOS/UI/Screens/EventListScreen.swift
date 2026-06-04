@@ -128,8 +128,6 @@ struct EventListScreen: View {
     private func eventList(filteredEvents: [EventProjection]) -> some View {
         ScrollViewReader { proxy in
             List(selection: batchSelectionBinding) {
-                scrollOffsetProbe
-
                 ForEach(filteredEvents.indices, id: \.self) { index in
                     let event = filteredEvents[index]
                     Group {
@@ -193,19 +191,6 @@ struct EventListScreen: View {
                 scrollToTopIfNeeded(proxy, filteredEvents: filteredEvents)
             }
         }
-    }
-
-    private var scrollOffsetProbe: some View {
-        GeometryReader { proxy in
-            Color.clear.preference(
-                key: EventListScrollOffsetPreferenceKey.self,
-                value: proxy.frame(in: .named(EventListScrollMetrics.coordinateSpaceName)).minY
-            )
-        }
-        .frame(height: 0)
-        .listRowInsets(EdgeInsets())
-        .listRowSeparator(.hidden)
-        .accessibilityHidden(true)
     }
 
     private func overlayState(for filteredEvents: [EventProjection]) -> OverlayState? {
@@ -811,8 +796,8 @@ private struct EventListTopObserverModifier: ViewModifier {
                 )
             } else {
                 content
-                    .onPreferenceChange(EventListScrollOffsetPreferenceKey.self) { minY in
-                        onChange(-minY)
+                    .legacyScrollViewOffsetObserver { offsetY in
+                        onChange(offsetY)
                     }
             }
         } else {
@@ -827,14 +812,6 @@ private enum EventListTopMetrics {
 
 private enum EventListScrollMetrics {
     static let coordinateSpaceName = "event-list-scroll"
-}
-
-private struct EventListScrollOffsetPreferenceKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
 }
 
 struct EventListRow: View {

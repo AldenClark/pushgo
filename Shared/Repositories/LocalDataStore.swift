@@ -5111,12 +5111,16 @@ private actor GRDBStore {
                     \(Self.storedEpoch(event.updatedAt))
                 )
                 ON CONFLICT(event_id) DO UPDATE SET
-                    title = excluded.title,
-                    summary = excluded.summary,
-                    state = excluded.state,
-                    severity = excluded.severity,
-                    decryption_state = excluded.decryption_state,
-                    image_url = excluded.image_url,
+                    title = CASE
+                        WHEN TRIM(excluded.title) = '' OR excluded.title = watch_light_events.event_id
+                            THEN watch_light_events.title
+                        ELSE excluded.title
+                    END,
+                    summary = COALESCE(excluded.summary, watch_light_events.summary),
+                    state = COALESCE(excluded.state, watch_light_events.state),
+                    severity = COALESCE(excluded.severity, watch_light_events.severity),
+                    decryption_state = COALESCE(excluded.decryption_state, watch_light_events.decryption_state),
+                    image_url = COALESCE(excluded.image_url, watch_light_events.image_url),
                     updated_at = excluded.updated_at;
                 """
         )
@@ -5137,11 +5141,20 @@ private actor GRDBStore {
                     \(Self.storedEpoch(thing.updatedAt))
                 )
                 ON CONFLICT(thing_id) DO UPDATE SET
-                    title = excluded.title,
-                    summary = excluded.summary,
-                    attrs_json = excluded.attrs_json,
-                    decryption_state = excluded.decryption_state,
-                    image_url = excluded.image_url,
+                    title = CASE
+                        WHEN TRIM(excluded.title) = '' OR excluded.title = watch_light_things.thing_id
+                            THEN watch_light_things.title
+                        ELSE excluded.title
+                    END,
+                    summary = COALESCE(excluded.summary, watch_light_things.summary),
+                    attrs_json = CASE
+                        WHEN excluded.attrs_json IS NULL THEN watch_light_things.attrs_json
+                        WHEN json_valid(excluded.attrs_json) = 0 THEN excluded.attrs_json
+                        WHEN watch_light_things.attrs_json IS NULL OR json_valid(watch_light_things.attrs_json) = 0 THEN excluded.attrs_json
+                        ELSE json_patch(watch_light_things.attrs_json, excluded.attrs_json)
+                    END,
+                    decryption_state = COALESCE(excluded.decryption_state, watch_light_things.decryption_state),
+                    image_url = COALESCE(excluded.image_url, watch_light_things.image_url),
                     updated_at = excluded.updated_at;
                 """
         )

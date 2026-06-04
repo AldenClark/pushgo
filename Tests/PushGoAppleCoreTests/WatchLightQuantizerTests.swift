@@ -187,6 +187,63 @@ struct WatchLightQuantizerTests {
         let quantized = WatchLightQuantizer.quantizeMessages([message])
         #expect(quantized.isEmpty)
     }
+
+    @Test
+    func mirrorEventPatchKeepsExistingProfileFieldsWhenPatchOmitsThem() throws {
+        let create = makeMessage(from: [
+            "entity_type": "event",
+            "entity_id": "evt-patch-001",
+            "event_id": "evt-patch-001",
+            "event_time": "1710000000000",
+            "title": "Original event",
+            "description": "Original summary",
+            "severity": "high",
+            "images": #"["https://example.com/event.png"]"#,
+        ])
+        let metadataOnlyUpdate = makeMessage(from: [
+            "entity_type": "event",
+            "entity_id": "evt-patch-001",
+            "event_id": "evt-patch-001",
+            "event_time": "1710000001000",
+            "metadata": #"{"stage":"metadata-only"}"#,
+        ])
+
+        let event = try #require(WatchLightQuantizer.quantizeEvents([create, metadataOnlyUpdate]).first)
+
+        #expect(event.title == "Original event")
+        #expect(event.summary == "Original summary")
+        #expect(event.severity == "high")
+        #expect(event.imageURL?.absoluteString == "https://example.com/event.png")
+    }
+
+    @Test
+    func mirrorThingPatchMergesAttributesAndKeepsProfileFields() throws {
+        let create = makeMessage(from: [
+            "entity_type": "thing",
+            "entity_id": "thing-patch-001",
+            "thing_id": "thing-patch-001",
+            "observed_at": "1710000000000",
+            "title": "Original thing",
+            "description": "Original summary",
+            "attrs": #"{"temperature":"20","pressure":"ok"}"#,
+            "primary_image": "https://example.com/thing.png",
+        ])
+        let attrsPatch = makeMessage(from: [
+            "entity_type": "thing",
+            "entity_id": "thing-patch-001",
+            "thing_id": "thing-patch-001",
+            "observed_at": "1710000001000",
+            "attrs": #"{"temperature":null,"rpm":"50"}"#,
+        ])
+
+        let thing = try #require(WatchLightQuantizer.quantizeThings([create, attrsPatch]).first)
+        let attrs = try #require(normalizedJSONObjectString(thing.attrsJSON))
+
+        #expect(thing.title == "Original thing")
+        #expect(thing.summary == "Original summary")
+        #expect(thing.imageURL?.absoluteString == "https://example.com/thing.png")
+        #expect(attrs == #"{"pressure":"ok","rpm":"50"}"#)
+    }
 }
 
 private func loadFixture() throws -> [String: Any] {

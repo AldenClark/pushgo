@@ -125,8 +125,6 @@ struct ThingListScreen: View {
     private func thingList(filteredThings: [ThingProjection]) -> some View {
         ScrollViewReader { proxy in
             List(selection: batchSelectionBinding) {
-                scrollOffsetProbe
-
                 ForEach(filteredThings.indices, id: \.self) { index in
                     let thing = filteredThings[index]
                     Group {
@@ -190,19 +188,6 @@ struct ThingListScreen: View {
                 scrollToTopIfNeeded(proxy, filteredThings: filteredThings)
             }
         }
-    }
-
-    private var scrollOffsetProbe: some View {
-        GeometryReader { proxy in
-            Color.clear.preference(
-                key: ThingListScrollOffsetPreferenceKey.self,
-                value: proxy.frame(in: .named(ThingListScrollMetrics.coordinateSpaceName)).minY
-            )
-        }
-        .frame(height: 0)
-        .listRowInsets(EdgeInsets())
-        .listRowSeparator(.hidden)
-        .accessibilityHidden(true)
     }
 
     private func overlayState(for filteredThings: [ThingProjection]) -> OverlayState? {
@@ -794,8 +779,8 @@ private struct ThingListTopObserverModifier: ViewModifier {
                 )
             } else {
                 content
-                    .onPreferenceChange(ThingListScrollOffsetPreferenceKey.self) { minY in
-                        onChange(-minY)
+                    .legacyScrollViewOffsetObserver { offsetY in
+                        onChange(offsetY)
                     }
             }
         } else {
@@ -810,14 +795,6 @@ private enum ThingListTopMetrics {
 
 private enum ThingListScrollMetrics {
     static let coordinateSpaceName = "thing-list-scroll"
-}
-
-private struct ThingListScrollOffsetPreferenceKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
 }
 
 private func thingSortPriority(_ thing: ThingProjection) -> Int {

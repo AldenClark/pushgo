@@ -625,6 +625,80 @@ struct LocalDataStoreTests {
     }
 
     @Test
+    func watchLightEntityUpsertsApplyPatchSemantics() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            try await store.upsertWatchLightPayload(
+                .event(
+                    WatchLightEvent(
+                        eventId: "evt-watch-patch",
+                        title: "Original event",
+                        summary: "Original summary",
+                        state: "OPEN",
+                        severity: "high",
+                        decryptionState: nil,
+                        imageURL: URL(string: "https://example.com/event.png"),
+                        updatedAt: Date(timeIntervalSince1970: 10)
+                    )
+                )
+            )
+            try await store.upsertWatchLightPayload(
+                .event(
+                    WatchLightEvent(
+                        eventId: "evt-watch-patch",
+                        title: "evt-watch-patch",
+                        summary: nil,
+                        state: nil,
+                        severity: nil,
+                        decryptionState: nil,
+                        imageURL: nil,
+                        updatedAt: Date(timeIntervalSince1970: 11)
+                    )
+                )
+            )
+
+            let event = try #require(await store.loadWatchLightEvent(eventId: "evt-watch-patch"))
+            #expect(event.title == "Original event")
+            #expect(event.summary == "Original summary")
+            #expect(event.state == "OPEN")
+            #expect(event.severity == "high")
+            #expect(event.imageURL?.absoluteString == "https://example.com/event.png")
+
+            try await store.upsertWatchLightPayload(
+                .thing(
+                    WatchLightThing(
+                        thingId: "thing-watch-patch",
+                        title: "Original thing",
+                        summary: "Original summary",
+                        attrsJSON: #"{"temperature":"20","pressure":"ok"}"#,
+                        decryptionState: nil,
+                        imageURL: URL(string: "https://example.com/thing.png"),
+                        updatedAt: Date(timeIntervalSince1970: 20)
+                    )
+                )
+            )
+            try await store.upsertWatchLightPayload(
+                .thing(
+                    WatchLightThing(
+                        thingId: "thing-watch-patch",
+                        title: "thing-watch-patch",
+                        summary: nil,
+                        attrsJSON: #"{"temperature":null,"rpm":"50"}"#,
+                        decryptionState: nil,
+                        imageURL: nil,
+                        updatedAt: Date(timeIntervalSince1970: 21)
+                    )
+                )
+            )
+
+            let thing = try #require(await store.loadWatchLightThing(thingId: "thing-watch-patch"))
+            #expect(thing.title == "Original thing")
+            #expect(thing.summary == "Original summary")
+            #expect(normalizedJSON(thing.attrsJSON) == #"{"pressure":"ok","rpm":"50"}"#)
+            #expect(thing.imageURL?.absoluteString == "https://example.com/thing.png")
+        }
+    }
+
+    @Test
     func localDataStoreUsesCurrentDatabaseArtifactNameInAutomationContainer() async throws {
         try await withIsolatedAutomationStorage { _, appGroupIdentifier in
             let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
@@ -3338,6 +3412,18 @@ struct LocalDataStoreTests {
             throw CocoaError(.fileWriteUnknown)
         }
         return json
+    }
+
+    private func normalizedJSON(_ raw: String?) -> String? {
+        guard let raw,
+              let data = raw.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              JSONSerialization.isValidJSONObject(object),
+              let normalized = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+        else {
+            return raw
+        }
+        return String(data: normalized, encoding: .utf8)
     }
 
     private func normalizeJSONObject(_ value: Any) throws -> Any {

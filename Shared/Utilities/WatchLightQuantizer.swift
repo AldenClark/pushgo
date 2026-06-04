@@ -60,7 +60,7 @@ enum WatchLightQuantizer {
             guard let latest = entries.max(by: { eventUpdatedAt(for: $0) < eventUpdatedAt(for: $1) }) else {
                 return nil
             }
-            let profile = latestEventProfile(from: entries)
+            let profile = mergedEventProfile(from: entries)
             let title = nonEmpty(profile?.title) ?? nonEmpty(latest.title) ?? eventId
             let summary = nonEmpty(profile?.description) ?? nonEmpty(latest.resolvedBody.rawText)
             return WatchLightEvent(
@@ -86,7 +86,7 @@ enum WatchLightQuantizer {
         return grouped.compactMap { thingId, pairs in
             let entries = pairs.map(\.1).sorted { thingUpdatedAt(for: $0) < thingUpdatedAt(for: $1) }
             guard let latest = entries.last else { return nil }
-            let profile = latestThingProfile(from: entries)
+            let profile = mergedThingProfile(from: entries)
             let title = nonEmpty(profile?.title) ?? nonEmpty(latest.title) ?? thingId
             let summary = nonEmpty(profile?.description)
             return WatchLightThing(
@@ -263,18 +263,58 @@ enum WatchLightQuantizer {
             ?? message.receivedAt
     }
 
-    private static func latestEventProfile(from messages: [PushMessage]) -> WatchLightProfile? {
-        messages
-            .sorted { eventUpdatedAt(for: $0) > eventUpdatedAt(for: $1) }
-            .compactMap { profile(from: $0.rawPayload, kind: "event") }
-            .first
+    private static func mergedEventProfile(from messages: [PushMessage]) -> WatchLightProfile? {
+        mergedProfile(
+            from: messages.sorted { eventUpdatedAt(for: $0) < eventUpdatedAt(for: $1) },
+            kind: "event"
+        )
     }
 
-    private static func latestThingProfile(from messages: [PushMessage]) -> WatchLightProfile? {
-        messages
-            .sorted { thingUpdatedAt(for: $0) > thingUpdatedAt(for: $1) }
-            .compactMap { profile(from: $0.rawPayload, kind: "thing") }
-            .first
+    private static func mergedThingProfile(from messages: [PushMessage]) -> WatchLightProfile? {
+        mergedProfile(
+            from: messages.sorted { thingUpdatedAt(for: $0) < thingUpdatedAt(for: $1) },
+            kind: "thing"
+        )
+    }
+
+    private static func mergedProfile(
+        from messages: [PushMessage],
+        kind: String
+    ) -> WatchLightProfile? {
+        var title: String?
+        var description: String?
+        var severity: String?
+        var imageURL: URL?
+
+        for message in messages {
+            let payload = message.rawPayload
+            let snapshot = profile(from: payload, kind: kind)
+            if payloadHasKey("title", in: payload), let value = snapshot?.title {
+                title = value
+            }
+            if payloadHasKey("description", in: payload) {
+                description = snapshot?.description
+            }
+            if payloadHasKey("severity", in: payload) {
+                severity = snapshot?.severity
+            }
+            if payloadHasKey("image", in: payload)
+                || payloadHasKey("primary_image", in: payload)
+                || payloadHasKey("images", in: payload)
+            {
+                imageURL = snapshot?.imageURL
+            }
+        }
+
+        guard title != nil || description != nil || severity != nil || imageURL != nil else {
+            return nil
+        }
+        return WatchLightProfile(
+            title: title,
+            description: description,
+            severity: severity,
+            imageURL: imageURL
+        )
     }
 
     private static func mergedThingAttributes(_ messages: [PushMessage]) -> String? {
@@ -283,15 +323,11 @@ enum WatchLightQuantizer {
             guard let attrsObject = jsonObject(fromPayload: message.rawPayload, key: "attrs") else {
                 continue
             }
-            if normalizedEntityType(message.entityType) == "thing" {
-                attrs = attrsObject.filter { ($0.value is NSNull) == false }
-            } else {
-                for (key, value) in attrsObject {
-                    if value is NSNull {
-                        attrs.removeValue(forKey: key)
-                    } else {
-                        attrs[key] = value
-                    }
+            for (key, value) in attrsObject {
+                if value is NSNull {
+                    attrs.removeValue(forKey: key)
+                } else {
+                    attrs[key] = value
                 }
             }
         }
@@ -306,7 +342,7 @@ enum WatchLightQuantizer {
 
     private static func profile(from payload: [String: AnyCodable], kind: String) -> WatchLightProfile? {
         var object: [String: Any] = [:]
-        for key in ["title", "description", "severity", "image", "primary_image"] {
+        for key in ["title", "description", "severity", "image", "primary_image", "images"] {
             if let value = payload[key]?.value {
                 object[key] = value
             }
@@ -320,7 +356,31 @@ enum WatchLightQuantizer {
             description: nonEmpty(object["description"] as? String),
             severity: nonEmpty(object["severity"] as? String),
             imageURL: sanitizedURL(object["image"] as? String)
+                ?? sanitizedURL(object["primary_image"] as? String)
+                ?? firstImageURL(from: object["images"])
         )
+    }
+
+    private static func payloadHasKey(_ key: String, in payload: [String: AnyCodable]) -> Bool {
+        payload[key] != nil
+    }
+
+    private static func firstImageURL(from value: Any?) -> URL? {
+        if let values = value as? [Any] {
+            for value in values {
+                if let url = sanitizedURL(value as? String) {
+                    return url
+                }
+            }
+        }
+        if let text = value as? String,
+           let data = text.data(using: .utf8),
+           let rawArray = try? JSONSerialization.jsonObject(with: data),
+           let values = rawArray as? [Any]
+        {
+            return firstImageURL(from: values)
+        }
+        return nil
     }
 
     private static func jsonObject(from rawJSON: String?) -> [String: Any]? {

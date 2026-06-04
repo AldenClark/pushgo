@@ -3,6 +3,7 @@ import Foundation
 struct EventTimelinePoint: Identifiable, Hashable {
     let id: UUID
     let title: String
+    let profileTitle: String?
     let displayTitle: String?
     let summary: String?
     let displaySummary: String?
@@ -16,6 +17,8 @@ struct EventTimelinePoint: Identifiable, Hashable {
     let decryptionState: PushMessage.DecryptionState?
     let imageURL: URL?
     let imageURLs: [URL]
+    let hasTagsPatch: Bool
+    let hasImagesPatch: Bool
     let metadata: [String: String]
     let attrsJSON: String?
     let happenedAt: Date

@@ -113,6 +113,20 @@ extension View {
     }
 
     @ViewBuilder
+    func legacyScrollViewOffsetObserver(
+        onOffsetChange: @escaping @MainActor (CGFloat) -> Void
+    ) -> some View {
+#if os(iOS)
+        self.background(
+            LegacyScrollViewOffsetObserver(onOffsetChange: onOffsetChange)
+                .frame(width: 0, height: 0)
+        )
+#else
+        self
+#endif
+    }
+
+    @ViewBuilder
     func pushgoImagePreviewOverlay<Item: Identifiable>(
         previewItem: Binding<Item?>,
         imageURL: @escaping (Item) -> URL,
@@ -138,6 +152,113 @@ extension View {
 #endif
     }
 }
+
+#if os(iOS)
+private struct LegacyScrollViewOffsetObserver: UIViewRepresentable {
+    let onOffsetChange: @MainActor (CGFloat) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onOffsetChange: onOffsetChange)
+    }
+
+    func makeUIView(context: Context) -> ObserverView {
+        let view = ObserverView()
+        view.isUserInteractionEnabled = false
+        view.coordinator = context.coordinator
+        return view
+    }
+
+    func updateUIView(_ uiView: ObserverView, context: Context) {
+        context.coordinator.onOffsetChange = onOffsetChange
+        uiView.coordinator = context.coordinator
+        uiView.bindIfNeeded()
+    }
+
+    @MainActor
+    final class Coordinator: NSObject {
+        var onOffsetChange: @MainActor (CGFloat) -> Void
+        private weak var scrollView: UIScrollView?
+        private var displayLink: CADisplayLink?
+        private var lastOffsetY: CGFloat?
+
+        init(onOffsetChange: @escaping @MainActor (CGFloat) -> Void) {
+            self.onOffsetChange = onOffsetChange
+        }
+
+        func bind(to scrollView: UIScrollView) {
+            guard self.scrollView !== scrollView else { return }
+            self.scrollView = scrollView
+            lastOffsetY = nil
+            restartDisplayLinkIfNeeded()
+            publishCurrentOffset()
+        }
+
+        nonisolated deinit {
+            MainActor.assumeIsolated {
+                displayLink?.invalidate()
+            }
+        }
+
+        @objc
+        func handleDisplayLinkTick() {
+            publishCurrentOffset()
+        }
+
+        private func restartDisplayLinkIfNeeded() {
+            displayLink?.invalidate()
+            let displayLink = CADisplayLink(target: self, selector: #selector(handleDisplayLinkTick))
+            displayLink.add(to: .main, forMode: .common)
+            self.displayLink = displayLink
+        }
+
+        private func publishCurrentOffset() {
+            guard let scrollView else {
+                displayLink?.invalidate()
+                displayLink = nil
+                return
+            }
+            let offsetY = scrollView.contentOffset.y
+            guard lastOffsetY != offsetY else { return }
+            lastOffsetY = offsetY
+            onOffsetChange(offsetY)
+        }
+    }
+
+    final class ObserverView: UIView {
+        weak var coordinator: Coordinator?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            bindIfNeeded()
+        }
+
+        override func didMoveToSuperview() {
+            super.didMoveToSuperview()
+            bindIfNeeded()
+        }
+
+        func bindIfNeeded() {
+            guard let coordinator else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                guard let scrollView = self.enclosingScrollView() else { return }
+                coordinator.bind(to: scrollView)
+            }
+        }
+
+        private func enclosingScrollView() -> UIScrollView? {
+            var candidate = superview
+            while let view = candidate {
+                if let scrollView = view as? UIScrollView {
+                    return scrollView
+                }
+                candidate = view.superview
+            }
+            return nil
+        }
+    }
+}
+#endif
 
 private struct PushgoImagePreviewOverlay: View {
     let imageURL: URL

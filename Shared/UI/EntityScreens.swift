@@ -25,6 +25,19 @@ private enum EntityProfileKind {
     case thing
 }
 
+private struct MergedEventFields {
+    let title: String
+    let summary: String?
+    let status: String?
+    let message: String?
+    let severity: String?
+    let tags: [String]
+    let state: String?
+    let thingId: String?
+    let imageURL: URL?
+    let imageURLs: [URL]
+}
+
 @MainActor
 @Observable
 final class EntityProjectionViewModel {
@@ -266,6 +279,7 @@ final class EntityProjectionViewModel {
             let point = EventTimelinePoint(
                 id: message.id,
                 title: title,
+                profileTitle: profile?.title,
                 displayTitle: displayTitle,
                 summary: summary,
                 displaySummary: displaySummary,
@@ -279,6 +293,8 @@ final class EntityProjectionViewModel {
                 decryptionState: message.decryptionState,
                 imageURL: profile?.imageURL,
                 imageURLs: profile?.imageURLs ?? [],
+                hasTagsPatch: payloadHasKey("tags", payload: message.rawPayload),
+                hasImagesPatch: payloadHasKey("images", payload: message.rawPayload),
                 metadata: message.metadata,
                 attrsJSON: payloadJSONText(key: "attrs", payload: message.rawPayload),
                 happenedAt: eventHappenedAt(for: message)
@@ -291,21 +307,21 @@ final class EntityProjectionViewModel {
             let timeline = values.map(\.1).sorted { $0.happenedAt > $1.happenedAt }
             guard let latest = timeline.first else { return nil }
             let mergedAttrsJSON = mergedEventAttributesJSON(from: timeline)
-            let imageURLs = deduplicatedURLs(timeline.flatMap(\.imageURLs))
+            let fields = mergedEventFields(eventId: eventId, timeline: timeline)
             return EventProjection(
                 id: eventId,
-                title: latest.title,
-                summary: latest.summary,
-                status: latest.status,
-                message: latest.message,
-                severity: latest.severity,
-                tags: latest.tags,
-                state: latest.state,
-                thingId: latest.thingId,
+                title: fields.title,
+                summary: fields.summary,
+                status: fields.status,
+                message: fields.message,
+                severity: fields.severity,
+                tags: fields.tags,
+                state: fields.state,
+                thingId: fields.thingId,
                 channelId: latest.channelId,
                 decryptionState: latest.decryptionState,
-                imageURL: latest.imageURL,
-                imageURLs: imageURLs,
+                imageURL: fields.imageURL,
+                imageURLs: fields.imageURLs,
                 attrsJSON: mergedAttrsJSON,
                 updatedAt: latest.happenedAt,
                 timeline: timeline
@@ -325,25 +341,63 @@ final class EntityProjectionViewModel {
             guard !entries.isEmpty else { return nil }
 
             var attrs: [String: Any] = [:]
-            var lastProfile: EntityProfileSnapshot?
+            var title: String?
+            var summary: String?
+            var tags: [String] = []
+            var state: String?
+            var createdAt: Date?
+            var deletedAt: Date?
+            var locationType: String?
+            var locationValue: String?
+            var externalIDs: [String: String] = [:]
+            var imageURL: URL?
+            var imageURLs: [URL] = []
 
             for entry in entries {
-                if let profile = profileSnapshot(fromPayload: entry.rawPayload, kind: .thing) {
-                    lastProfile = profile
+                let profile = profileSnapshot(fromPayload: entry.rawPayload, kind: .thing)
+                if payloadHasKey("title", payload: entry.rawPayload), let value = profile?.title {
+                    title = value
+                }
+                if payloadHasKey("description", payload: entry.rawPayload) {
+                    summary = profile?.description
+                }
+                if payloadHasKey("tags", payload: entry.rawPayload) {
+                    tags = profile?.tags ?? []
+                }
+                if payloadHasKey("state", payload: entry.rawPayload) {
+                    state = profile?.state
+                }
+                if payloadHasKey("created_at", payload: entry.rawPayload), let value = profile?.createdAt {
+                    createdAt = value
+                }
+                if payloadHasKey("deleted_at", payload: entry.rawPayload) {
+                    deletedAt = profile?.deletedAt
+                }
+                if payloadHasKey("location_type", payload: entry.rawPayload) || payloadHasKey("location", payload: entry.rawPayload) {
+                    locationType = profile?.locationType
+                }
+                if payloadHasKey("location_value", payload: entry.rawPayload) || payloadHasKey("location", payload: entry.rawPayload) {
+                    locationValue = profile?.locationValue
+                }
+                if let externalPatch = payloadJSONObject(key: "external_ids", payload: entry.rawPayload) {
+                    for (key, value) in externalPatch {
+                        if value is NSNull {
+                            externalIDs.removeValue(forKey: key)
+                        } else if let text = scalarDisplayValue(value) {
+                            externalIDs[key] = text
+                        }
+                    }
+                }
+                if payloadHasKey("primary_image", payload: entry.rawPayload) || payloadHasKey("images", payload: entry.rawPayload) {
+                    imageURL = profile?.imageURL
+                    imageURLs = profile?.imageURLs ?? []
                 }
                 if let attrsObject = payloadJSONObject(key: "attrs", payload: entry.rawPayload) {
-                    if entry.entityType == "thing" {
-                        attrs = [:]
-                        for (key, value) in attrsObject where (value is NSNull) == false {
+                    for (key, value) in attrsObject {
+                        if value is NSNull {
+                            attrs.removeValue(forKey: key)
+                        } else {
                             attrs[key] = value
-                        }
-                    } else {
-                        for (key, value) in attrsObject {
-                            if value is NSNull {
-                                attrs.removeValue(forKey: key)
-                            } else {
-                                attrs[key] = value
-                            }
                         }
                     }
                 }
@@ -383,26 +437,22 @@ final class EntityProjectionViewModel {
             guard let latest = entries.max(by: { thingStreamHappenedAt(for: $0) < thingStreamHappenedAt(for: $1) }) else {
                 return nil
             }
-            let title = lastProfile?.title
-                ?? nonEmpty(latest.title)
-                ?? thingId
-            let summary = lastProfile?.description
             let attrsJSON = formattedJSON(attrs)
             return ThingProjection(
                 id: thingId,
-                title: title,
+                title: title ?? nonEmpty(latest.title) ?? thingId,
                 summary: summary,
-                tags: lastProfile?.tags ?? [],
-                state: lastProfile?.state,
-                createdAt: lastProfile?.createdAt,
-                deletedAt: lastProfile?.deletedAt,
+                tags: tags,
+                state: state,
+                createdAt: createdAt,
+                deletedAt: deletedAt,
                 channelId: nonEmpty(latest.channel),
                 decryptionState: latest.decryptionState,
-                locationType: lastProfile?.locationType,
-                locationValue: lastProfile?.locationValue,
-                externalIDs: lastProfile?.externalIDs ?? [:],
-                imageURL: lastProfile?.imageURL,
-                imageURLs: lastProfile?.imageURLs ?? [],
+                locationType: locationType,
+                locationValue: locationValue,
+                externalIDs: externalIDs,
+                imageURL: imageURL,
+                imageURLs: imageURLs,
                 metadata: [:],
                 attrsJSON: attrsJSON,
                 attrsCount: attrs.count,
@@ -449,20 +499,21 @@ final class EntityProjectionViewModel {
             .sorted { $0.happenedAt > $1.happenedAt }
             .uniqued(on: \.id)
         guard let latest = mergedTimeline.first else { return current }
+        let fields = mergedEventFields(eventId: current.id, timeline: mergedTimeline)
         return EventProjection(
             id: current.id,
-            title: latest.title,
-            summary: latest.summary,
-            status: latest.status,
-            message: latest.message,
-            severity: latest.severity,
-            tags: latest.tags,
-            state: latest.state,
-            thingId: latest.thingId,
+            title: fields.title,
+            summary: fields.summary,
+            status: fields.status,
+            message: fields.message,
+            severity: fields.severity,
+            tags: fields.tags,
+            state: fields.state,
+            thingId: fields.thingId,
             channelId: latest.channelId,
             decryptionState: latest.decryptionState,
-            imageURL: latest.imageURL,
-            imageURLs: deduplicatedURLs(mergedTimeline.flatMap(\.imageURLs)),
+            imageURL: fields.imageURL,
+            imageURLs: fields.imageURLs,
             attrsJSON: mergedEventAttributesJSON(from: mergedTimeline),
             updatedAt: latest.happenedAt,
             timeline: mergedTimeline
@@ -663,6 +714,13 @@ final class EntityProjectionViewModel {
         nonEmpty(payload[key]?.value as? String)
     }
 
+    private func payloadHasKey(
+        _ key: String,
+        payload: [String: AnyCodable]
+    ) -> Bool {
+        payload[key] != nil
+    }
+
     private func payloadJSONObject(
         key: String,
         payload: [String: AnyCodable]
@@ -840,6 +898,68 @@ final class EntityProjectionViewModel {
             return nil
         }
         return String(data: data, encoding: .utf8)
+    }
+
+    private func mergedEventFields(
+        eventId: String,
+        timeline: [EventTimelinePoint]
+    ) -> MergedEventFields {
+        let ordered = timeline.sorted { $0.happenedAt < $1.happenedAt }
+        let latest = timeline.first
+        var title: String?
+        var summary: String?
+        var status: String?
+        var message: String?
+        var severity: String?
+        var tags: [String] = []
+        var state: String?
+        var thingId: String?
+        var imageURL: URL?
+        var imageURLs: [URL] = []
+
+        for point in ordered {
+            if let value = point.profileTitle {
+                title = value
+            }
+            if let value = point.summary {
+                summary = value
+            }
+            if let value = point.status {
+                status = value
+            }
+            if let value = point.message {
+                message = value
+            }
+            if let value = point.severity {
+                severity = value
+            }
+            if point.hasTagsPatch {
+                tags = point.tags
+            }
+            if let value = point.state {
+                state = value
+            }
+            if let value = point.thingId {
+                thingId = value
+            }
+            if point.hasImagesPatch {
+                imageURL = point.imageURL
+                imageURLs = point.imageURLs
+            }
+        }
+
+        return MergedEventFields(
+            title: title ?? latest?.title ?? eventId,
+            summary: summary,
+            status: status,
+            message: message,
+            severity: severity,
+            tags: tags,
+            state: state,
+            thingId: thingId,
+            imageURL: imageURL,
+            imageURLs: imageURLs
+        )
     }
 
     private func mergedEventAttributesJSON(from timeline: [EventTimelinePoint]) -> String? {
