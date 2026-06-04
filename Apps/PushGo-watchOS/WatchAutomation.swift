@@ -539,7 +539,11 @@ final class PushGoWatchAutomationRuntime {
                 }
                 await environment.handleNotificationOpen(entityType: entityType, entityId: entityId)
             case "gateway.set_server":
-                try await updateGatewayConfig(request: request, environment: environment)
+                let expectedConfig = try await updateGatewayConfig(request: request, environment: environment)
+                _ = await waitForAutomationState(environment: environment, timeout: 2.5) { state in
+                    state.gatewayBaseURL == expectedConfig.normalizedBaseURL.absoluteString
+                        && state.gatewayTokenPresent == (self.normalizedIdentifier(expectedConfig.token) != nil)
+                }
             case "fixture.import":
                 try await importFixture(request: request, environment: environment)
             case "fixture.seed_messages":
@@ -631,6 +635,7 @@ final class PushGoWatchAutomationRuntime {
         let unreadMessageCount = messages.filter { !$0.isRead }.count
         let eventCount = (try? await environment.dataStore.loadWatchLightEvents().count) ?? 0
         let thingCount = (try? await environment.dataStore.loadWatchLightThings().count) ?? 0
+        let serverConfig = await automationServerConfig(environment: environment)
         let openedMessageDecryptionState = await resolvedAutomationMessageDecryptionState(
             messageId: openedMessageId,
             environment: environment
@@ -640,7 +645,7 @@ final class PushGoWatchAutomationRuntime {
         let privateRoute = providerTokenPresent ? "provider" : "idle"
         let privateStage = deviceKeyPresent ? "ready" : (providerTokenPresent ? "route_pending" : "idle")
         let privateDetail: String? = {
-            if environment.serverConfig == nil {
+            if serverConfig == nil {
                 return "server configuration missing"
             }
             if !providerTokenPresent {
@@ -667,8 +672,8 @@ final class PushGoWatchAutomationRuntime {
             totalMessageCount: totalMessageCount,
             eventCount: eventCount,
             thingCount: thingCount,
-            gatewayBaseURL: state.gatewayBaseURL,
-            gatewayTokenPresent: state.gatewayTokenPresent,
+            gatewayBaseURL: state.gatewayBaseURL ?? serverConfig?.normalizedBaseURL.absoluteString,
+            gatewayTokenPresent: state.gatewayTokenPresent || normalizedIdentifier(serverConfig?.token) != nil,
             providerMode: state.providerMode,
             providerTokenPresent: providerTokenPresent,
             deviceKeyPresent: deviceKeyPresent,
@@ -697,6 +702,13 @@ final class PushGoWatchAutomationRuntime {
     ) async -> String? {
         guard normalizedIdentifier(messageId) != nil else { return nil }
         return nil
+    }
+
+    private func automationServerConfig(environment: AppEnvironment) async -> ServerConfig? {
+        if let config = environment.serverConfig?.normalized() {
+            return config
+        }
+        return try? await environment.dataStore.loadWatchProvisioningServerConfig()?.normalized()
     }
 
     private func resolvedAutomationMessageIdentifier(
@@ -1040,7 +1052,7 @@ final class PushGoWatchAutomationRuntime {
         return nil
     }
 
-    private func updateGatewayConfig(request: PushGoWatchAutomationRequest, environment: AppEnvironment) async throws {
+    private func updateGatewayConfig(request: PushGoWatchAutomationRequest, environment: AppEnvironment) async throws -> ServerConfig {
         let trimmedBaseURL = normalizedIdentifier(request.args?.baseURL) ?? environment.serverConfig?.normalizedBaseURL.absoluteString
         let trimmedToken = request.args?.token?.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let baseURLString = trimmedBaseURL, let baseURL = URL(string: baseURLString) else {
@@ -1053,8 +1065,9 @@ final class PushGoWatchAutomationRuntime {
             token: trimmedToken?.nilIfEmpty,
             notificationKeyMaterial: environment.currentNotificationMaterial,
             updatedAt: Date()
-        )
-        try await environment.updateServerConfig(config.normalized())
+        ).normalized()
+        try await environment.updateServerConfig(config)
+        return config
     }
 
     private func resetLocalState(environment: AppEnvironment) async throws {
@@ -1142,7 +1155,7 @@ final class PushGoWatchAutomationRuntime {
         }
         let data = try Data(contentsOf: URL(fileURLWithPath: path))
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .pushGoWatchAutomationISO8601
         return try decoder.decode(PushGoWatchAutomationFixtureBundle.self, from: data)
     }
 
@@ -1278,6 +1291,7 @@ final class PushGoWatchAutomationRuntime {
         let visibleScreen = environment.pendingMessageToOpen != nil
             ? "screen.message.detail"
             : environment.activeMainTab.automationVisibleScreen
+        let serverConfig = await automationServerConfig(environment: environment)
         let baseState = PushGoWatchAutomationState(
             platform: platformIdentifier,
             buildMode: "debug",
@@ -1294,8 +1308,8 @@ final class PushGoWatchAutomationRuntime {
             totalMessageCount: environment.totalMessageCount,
             eventCount: 0,
             thingCount: 0,
-            gatewayBaseURL: environment.serverConfig?.normalizedBaseURL.absoluteString,
-            gatewayTokenPresent: normalizedIdentifier(environment.serverConfig?.token) != nil,
+            gatewayBaseURL: serverConfig?.normalizedBaseURL.absoluteString,
+            gatewayTokenPresent: normalizedIdentifier(serverConfig?.token) != nil,
             providerMode: "provider",
             providerTokenPresent: false,
             deviceKeyPresent: false,
@@ -1575,6 +1589,36 @@ private enum PushGoWatchAutomationError: Error, CustomStringConvertible {
         case let .unsupportedCommand(name):
             return "Unsupported automation command: \(name)"
         }
+    }
+}
+
+private extension JSONDecoder.DateDecodingStrategy {
+    static var pushGoWatchAutomationISO8601: JSONDecoder.DateDecodingStrategy {
+        .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let value = try container.decode(String.self)
+            if let date = PushGoWatchAutomationDateDecoding.date(from: value) {
+                return date
+            }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid ISO8601 date: \(value)"
+            )
+        }
+    }
+}
+
+private enum PushGoWatchAutomationDateDecoding {
+    static func date(from value: String) -> Date? {
+        let fractionalFormatter = ISO8601DateFormatter()
+        fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractionalFormatter.date(from: value) {
+            return date
+        }
+
+        let standardFormatter = ISO8601DateFormatter()
+        standardFormatter.formatOptions = [.withInternetDateTime]
+        return standardFormatter.date(from: value)
     }
 }
 

@@ -125,17 +125,22 @@ final class EntityProjectionViewModel {
         }
     }
 
-    func ensureEventDetailsLoaded(eventId: String) async {
+    @discardableResult
+    func ensureEventDetailsLoaded(eventId: String) async -> EventProjection? {
         let normalized = eventId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return }
-        guard !hydratedEventIDs.contains(normalized) else { return }
+        guard !normalized.isEmpty else { return nil }
+        if hydratedEventIDs.contains(normalized) {
+            return events.first(where: { $0.id == normalized })
+        }
         do {
             let messages = try await dataStore.loadEventMessagesForProjection(eventId: normalized)
             events = mergeEventProjections(events, buildEvents(messages))
-            if events.contains(where: { $0.id == normalized }) {
+            let projection = events.first(where: { $0.id == normalized })
+            if projection != nil {
                 hydratedEventIDs.insert(normalized)
             }
             self.error = nil
+            return projection
         } catch let appError as AppError {
             self.error = appError
         } catch {
@@ -145,19 +150,25 @@ final class EntityProjectionViewModel {
                 code: "entity_event_details_load_failed"
             )
         }
+        return nil
     }
 
-    func ensureThingDetailsLoaded(thingId: String) async {
+    @discardableResult
+    func ensureThingDetailsLoaded(thingId: String) async -> ThingProjection? {
         let normalized = thingId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return }
-        guard !hydratedThingIDs.contains(normalized) else { return }
+        guard !normalized.isEmpty else { return nil }
+        if hydratedThingIDs.contains(normalized) {
+            return things.first(where: { $0.id == normalized })
+        }
         do {
             let messages = try await dataStore.loadThingMessagesForProjection(thingId: normalized)
             things = mergeThingProjections(things, buildThings(messages))
-            if things.contains(where: { $0.id == normalized }) {
+            let projection = things.first(where: { $0.id == normalized })
+            if projection != nil {
                 hydratedThingIDs.insert(normalized)
             }
             self.error = nil
+            return projection
         } catch let appError as AppError {
             self.error = appError
         } catch {
@@ -167,6 +178,7 @@ final class EntityProjectionViewModel {
                 code: "entity_thing_details_load_failed"
             )
         }
+        return nil
     }
 
     private func resetPaginationState() {

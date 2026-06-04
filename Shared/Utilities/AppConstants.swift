@@ -236,7 +236,11 @@ enum PushGoDocumentationPage {
 }
 
 enum AppConstants {
+    #if os(macOS)
+    static let appGroupIdentifier = "W6H9P5MVUB.group.ethan.pushgo.messages"
+    #else
     static let appGroupIdentifier = "group.ethan.pushgo.messages"
+    #endif
     static let serverConfigFilename = "server_config.json"
     static let messagesFilename = "messages.json"
     // Schema version is independent from on-disk filename.
@@ -290,7 +294,23 @@ enum AppConstants {
         if let automationURL = PushGoAutomationContext.appGroupContainerURL(identifier: identifier) {
             return automationURL
         }
-        return fileManager.containerURL(forSecurityApplicationGroupIdentifier: identifier)
+        guard let containerURL = fileManager.containerURL(forSecurityApplicationGroupIdentifier: identifier) else {
+            return nil
+        }
+        #if os(macOS)
+        var isDirectory: ObjCBool = false
+        if fileManager.fileExists(atPath: containerURL.path, isDirectory: &isDirectory) {
+            return isDirectory.boolValue ? containerURL : nil
+        }
+        do {
+            try fileManager.createDirectory(at: containerURL, withIntermediateDirectories: true)
+            return containerURL
+        } catch {
+            return nil
+        }
+        #else
+        return containerURL
+        #endif
     }
 
     static func appLocalContainerURL(

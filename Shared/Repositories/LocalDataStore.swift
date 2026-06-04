@@ -1285,6 +1285,17 @@ actor LocalDataStore {
         )
     }
 
+    func loadNotificationSoundSettings() async -> NotificationSoundSettings? {
+        NotificationSoundSharedState.loadSettings(suiteName: appGroupIdentifier)
+    }
+
+    func saveNotificationSoundSettings(_ settings: NotificationSoundSettings?) async {
+        NotificationSoundSharedState.saveSettings(
+            settings,
+            suiteName: appGroupIdentifier
+        )
+    }
+
     func loadManualKeyPreferences() async -> String? {
         let prefs = (try? localConfigStore.loadManualKeyPreferences())
             ?? ManualKeyPreferences(encoding: nil)

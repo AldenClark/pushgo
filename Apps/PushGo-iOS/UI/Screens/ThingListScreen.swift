@@ -21,7 +21,7 @@ struct ThingListScreen: View {
     @State private var selectedTags: Set<String> = []
     @State private var isFilterPopoverPresented = false
     @State private var isBatchModeActive = false
-    @State private var pendingOpenThingClearTask: Task<Void, Never>?
+    @State private var hydrationRequestedThingIDs: Set<String> = []
 
     var body: some View {
         let filteredThingsSnapshot = filteredThings
@@ -59,7 +59,6 @@ struct ThingListScreen: View {
 #endif
         }
         .onChange(of: selectedThing?.id) { _, _ in
-            schedulePendingOpenThingClearIfNeeded()
 #if DEBUG
             publishAutomationState()
 #endif
@@ -126,6 +125,8 @@ struct ThingListScreen: View {
     private func thingList(filteredThings: [ThingProjection]) -> some View {
         ScrollViewReader { proxy in
             List(selection: batchSelectionBinding) {
+                scrollOffsetProbe
+
                 ForEach(filteredThings.indices, id: \.self) { index in
                     let thing = filteredThings[index]
                     Group {
@@ -184,10 +185,24 @@ struct ThingListScreen: View {
             .environment(\.editMode, isBatchMode ? .constant(.active) : .constant(.inactive))
             .scrollContentBackground(.hidden)
             .background(EntityVisualTokens.pageBackground)
+            .coordinateSpace(name: ThingListScrollMetrics.coordinateSpaceName)
             .onChange(of: scrollToTopToken) { _, _ in
                 scrollToTopIfNeeded(proxy, filteredThings: filteredThings)
             }
         }
+    }
+
+    private var scrollOffsetProbe: some View {
+        GeometryReader { proxy in
+            Color.clear.preference(
+                key: ThingListScrollOffsetPreferenceKey.self,
+                value: proxy.frame(in: .named(ThingListScrollMetrics.coordinateSpaceName)).minY
+            )
+        }
+        .frame(height: 0)
+        .listRowInsets(EdgeInsets())
+        .listRowSeparator(.hidden)
+        .accessibilityHidden(true)
     }
 
     private func overlayState(for filteredThings: [ThingProjection]) -> OverlayState? {
@@ -417,50 +432,36 @@ struct ThingListScreen: View {
         let target = openThingId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !target.isEmpty else { return }
         if let matched = viewModel.things.first(where: { $0.id == target }) {
-            if let channelId = normalizedChannel(matched.channelId) {
-                selectedChannelIDs = [channelId]
-            }
-            if !selectedTags.isEmpty {
-                selectedTags.removeAll()
-            }
-            if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                searchQuery = ""
-            }
-            selectThing(matched)
+            openThing(matched, target: target)
             return
         }
 
+        guard !hydrationRequestedThingIDs.contains(target) else { return }
+        hydrationRequestedThingIDs.insert(target)
         Task { @MainActor in
-            for _ in 0..<8 {
-                await viewModel.ensureThingDetailsLoaded(thingId: target)
-                if let hydrated = viewModel.things.first(where: { $0.id == target }) {
-                    if let channelId = normalizedChannel(hydrated.channelId) {
-                        selectedChannelIDs = [channelId]
-                    }
-                    if !selectedTags.isEmpty {
-                        selectedTags.removeAll()
-                    }
-                    if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        searchQuery = ""
-                    }
-                    selectThing(hydrated)
-                    return
-                }
-                try? await Task.sleep(for: .milliseconds(120))
-            }
+            let hydrated = await viewModel.ensureThingDetailsLoaded(thingId: target)
+            hydrationRequestedThingIDs.remove(target)
+            guard let hydrated else { return }
+            openThing(hydrated, target: target)
         }
     }
 
-    private func schedulePendingOpenThingClearIfNeeded() {
-        pendingOpenThingClearTask?.cancel()
-        guard let selectedId = selectedThing?.id else { return }
-        let target = openThingId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !target.isEmpty, selectedId == target else { return }
-        pendingOpenThingClearTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(250))
-            guard !Task.isCancelled, selectedThing?.id == target else { return }
-            onOpenThingHandled?()
+    private func openThing(_ thing: ThingProjection, target: String) {
+        if let channelId = normalizedChannel(thing.channelId) {
+            selectedChannelIDs = [channelId]
         }
+        if !selectedTags.isEmpty {
+            selectedTags.removeAll()
+        }
+        if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            searchQuery = ""
+        }
+        selectThing(thing)
+#if DEBUG
+        publishAutomationState()
+#endif
+        hydrationRequestedThingIDs.remove(target)
+        onOpenThingHandled?()
     }
 
     private func selectThing(_ thing: ThingProjection) {
@@ -793,8 +794,8 @@ private struct ThingListTopObserverModifier: ViewModifier {
                 )
             } else {
                 content
-                    .onAppear {
-                        onChange(0)
+                    .onPreferenceChange(ThingListScrollOffsetPreferenceKey.self) { minY in
+                        onChange(-minY)
                     }
             }
         } else {
@@ -805,6 +806,18 @@ private struct ThingListTopObserverModifier: ViewModifier {
 
 private enum ThingListTopMetrics {
     static let topTolerance: CGFloat = 2
+}
+
+private enum ThingListScrollMetrics {
+    static let coordinateSpaceName = "thing-list-scroll"
+}
+
+private struct ThingListScrollOffsetPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
 }
 
 private func thingSortPriority(_ thing: ThingProjection) -> Int {

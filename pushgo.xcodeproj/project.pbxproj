@@ -206,6 +206,27 @@
 		D1C100000000000000000012 /* Shared/Application/ChannelSubscriptionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000012 /* Shared/Application/ChannelSubscriptionController.swift */; };
 		D1C100000000000000000013 /* Shared/Application/NotificationIngressController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000013 /* Shared/Application/NotificationIngressController.swift */; };
 		D1C100000000000000000014 /* AutomationRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000014 /* AutomationRuntime.swift */; };
+		D2B100000000000000000001 /* NotificationSoundSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000001 /* NotificationSoundSettings.swift */; };
+		D2B100000000000000000002 /* NotificationSoundManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000002 /* NotificationSoundManager.swift */; };
+		D2B100000000000000000003 /* NotificationSoundPreviewPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000003 /* NotificationSoundPreviewPlayer.swift */; };
+		D2B100000000000000000004 /* NotificationSoundEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000004 /* NotificationSoundEditorView.swift */; };
+		D2B100000000000000000005 /* NotificationSoundResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000005 /* NotificationSoundResolver.swift */; };
+		D2B100000000000000000006 /* NotificationSoundSharedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000006 /* NotificationSoundSharedState.swift */; };
+		D2C100000000000000000001 /* NotificationSoundSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000001 /* NotificationSoundSettings.swift */; };
+		D2C100000000000000000002 /* NotificationSoundManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000002 /* NotificationSoundManager.swift */; };
+		D2C100000000000000000003 /* NotificationSoundPreviewPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000003 /* NotificationSoundPreviewPlayer.swift */; };
+		D2C100000000000000000004 /* NotificationSoundEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000004 /* NotificationSoundEditorView.swift */; };
+		D2C100000000000000000005 /* NotificationSoundResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000005 /* NotificationSoundResolver.swift */; };
+		D2C100000000000000000006 /* NotificationSoundSharedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000006 /* NotificationSoundSharedState.swift */; };
+		D2D100000000000000000001 /* NotificationSoundSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000001 /* NotificationSoundSettings.swift */; };
+		D2D100000000000000000002 /* NotificationSoundResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000005 /* NotificationSoundResolver.swift */; };
+		D2D100000000000000000003 /* NotificationSoundSharedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000006 /* NotificationSoundSharedState.swift */; };
+		D2E100000000000000000001 /* NotificationSoundSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000001 /* NotificationSoundSettings.swift */; };
+		D2E100000000000000000002 /* NotificationSoundResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000005 /* NotificationSoundResolver.swift */; };
+		D2E100000000000000000003 /* NotificationSoundSharedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000006 /* NotificationSoundSharedState.swift */; };
+		D2F100000000000000000001 /* NotificationSoundSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000001 /* NotificationSoundSettings.swift */; };
+		D2F100000000000000000002 /* NotificationSoundResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000005 /* NotificationSoundResolver.swift */; };
+		D2F100000000000000000003 /* NotificationSoundSharedState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A100000000000000000006 /* NotificationSoundSharedState.swift */; };
 		D80B500FD9AD4C54B7A7F003 /* SharedImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C352EF2359D00AD1834 /* SharedImageCache.swift */; };
 		DCF33C971B121AABEEEE708F /* PushMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1E2EF2359D00AD1834 /* PushMessage.swift */; };
 		E75A2C6D9F284EE9ADB39B99 /* MessageDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9015282D012D481CA0B5DEE7 /* MessageDetailViewModel.swift */; };
@@ -440,6 +461,12 @@
 		D1A100000000000000000012 /* Shared/Application/ChannelSubscriptionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Application/ChannelSubscriptionController.swift; sourceTree = SOURCE_ROOT; };
 		D1A100000000000000000013 /* Shared/Application/NotificationIngressController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Application/NotificationIngressController.swift; sourceTree = SOURCE_ROOT; };
 		D1A100000000000000000014 /* AutomationRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutomationRuntime.swift; sourceTree = "<group>"; };
+		D2A100000000000000000001 /* NotificationSoundSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationSoundSettings.swift; sourceTree = "<group>"; };
+		D2A100000000000000000002 /* NotificationSoundManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationSoundManager.swift; sourceTree = "<group>"; };
+		D2A100000000000000000003 /* NotificationSoundPreviewPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationSoundPreviewPlayer.swift; sourceTree = "<group>"; };
+		D2A100000000000000000004 /* NotificationSoundEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationSoundEditorView.swift; sourceTree = "<group>"; };
+		D2A100000000000000000005 /* NotificationSoundResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationSoundResolver.swift; sourceTree = "<group>"; };
+		D2A100000000000000000006 /* NotificationSoundSharedState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationSoundSharedState.swift; sourceTree = "<group>"; };
 		D90000112F7F000100A10001 /* PushGo-iOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "PushGo-iOSUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		D90000212F7F000100A10001 /* PushGo-macOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "PushGo-macOSUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		DE35C72B5C899D0FCCBAF070 /* NotificationServiceExtensionWatch.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NotificationServiceExtensionWatch.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -491,8 +518,15 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Sounds/alert.caf,
+				"Sounds/arcade-sound.caf",
 				"Sounds/bubble-pop.caf",
+				"Sounds/cartoon-blinking.caf",
+				"Sounds/cute-chime.caf",
+				"Sounds/festive-chime.caf",
 				"Sounds/level-up.caf",
+				"Sounds/notification-sound.caf",
+				Sounds/pop.caf,
+				"Sounds/quick-whoosh.caf",
 			);
 			target = CF8A576C8ED05746DC334102 /* PushGoNSE-watchOS */;
 		};
@@ -528,12 +562,35 @@
 			);
 			target = AA240E502EF1BEA400F812DA /* PushGo-macOS */;
 		};
+		AA8426D92FCEDFC200AEE6F3 /* Exceptions for "Resources" folder in "PushGoNSE-macOS" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Sounds/alert.caf,
+				"Sounds/arcade-sound.caf",
+				"Sounds/bubble-pop.caf",
+				"Sounds/cartoon-blinking.caf",
+				"Sounds/cute-chime.caf",
+				"Sounds/festive-chime.caf",
+				"Sounds/level-up.caf",
+				"Sounds/notification-sound.caf",
+				Sounds/pop.caf,
+				"Sounds/quick-whoosh.caf",
+			);
+			target = AACFE15A2F28511200701BB4 /* PushGoNSE-macOS */;
+		};
 		AA8E2B552EF2292800AD1834 /* Exceptions for "Resources" folder in "PushGoNSE-iOS" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Sounds/alert.caf,
+				"Sounds/arcade-sound.caf",
 				"Sounds/bubble-pop.caf",
+				"Sounds/cartoon-blinking.caf",
+				"Sounds/cute-chime.caf",
+				"Sounds/festive-chime.caf",
 				"Sounds/level-up.caf",
+				"Sounds/notification-sound.caf",
+				Sounds/pop.caf,
+				"Sounds/quick-whoosh.caf",
 			);
 			target = AA49A19B2EE3E46C00C1EBF2 /* PushGoNSE-iOS */;
 		};
@@ -541,6 +598,16 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				AppIcon.icon,
+				Sounds/alert.caf,
+				"Sounds/arcade-sound.caf",
+				"Sounds/bubble-pop.caf",
+				"Sounds/cartoon-blinking.caf",
+				"Sounds/cute-chime.caf",
+				"Sounds/festive-chime.caf",
+				"Sounds/level-up.caf",
+				"Sounds/notification-sound.caf",
+				Sounds/pop.caf,
+				"Sounds/quick-whoosh.caf",
 			);
 			target = AAFB52C02F0CA5F0009E61C5 /* PushGo-watchOS */;
 		};
@@ -599,6 +666,7 @@
 				AA8E2B552EF2292800AD1834 /* Exceptions for "Resources" folder in "PushGoNSE-iOS" target */,
 				AA32F1D22F276B4200D55065 /* Exceptions for "Resources" folder in "PushGoNSE-watchOS" target */,
 				AAC56DE52F0CC0AC000B8099 /* Exceptions for "Resources" folder in "PushGo-watchOS" target */,
+				AA8426D92FCEDFC200AEE6F3 /* Exceptions for "Resources" folder in "PushGoNSE-macOS" target */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -712,6 +780,7 @@
 				3B3E6B01F1EF4D8FA6446875 /* LiquidGlassEffect.swift */,
 				4D54A0FAE6A44ADDB88F3B98 /* PlatformColor.swift */,
 				D1A100000000000000000008 /* Shared/UI/PendingLocalDeletionBar.swift */,
+				D2A100000000000000000004 /* NotificationSoundEditorView.swift */,
 				4145756AA5A340C3AC329C64 /* PushGoMarkdownView.swift */,
 				2955959BFE8246FEB0B03EDA /* RemoteImageView.swift */,
 				40915CA9B3604BF1991DC27A /* ToastView.swift */,
@@ -774,6 +843,7 @@
 			children = (
 				AA8E2C1C2EF2359D00AD1834 /* AppError.swift */,
 				AA8E2C1D2EF2359D00AD1834 /* MessageFilter.swift */,
+				D2A100000000000000000001 /* NotificationSoundSettings.swift */,
 				AA8E2C1E2EF2359D00AD1834 /* PushMessage.swift */,
 				36B8C43824CA496F9D0EDDC7 /* PushMessageSummary.swift */,
 				AA8E2C1F2EF2359D00AD1834 /* ServerConfig.swift */,
@@ -800,8 +870,10 @@
 				F0A1B2C3D4E5F60718293A10 /* ChannelSubscriptionSyncStore.swift */,
 				C0A1B2C3D4E5F60718293A71 /* ChannelSubscriptionService.swift */,
 				C0A1B2C3D4E5F60718293C21 /* MessageStateCoordinator.swift */,
+				D2A100000000000000000002 /* NotificationSoundManager.swift */,
 				AA8E2C262EF2359D00AD1834 /* PushRegistrationService.swift */,
 				0AC200102F90000100C0FFEE /* NotificationContentPreparer.swift */,
+				D2A100000000000000000003 /* NotificationSoundPreviewPlayer.swift */,
 				25CF4B72C6499CEADC594FC9 /* NotificationServiceProcessor.swift */,
 				6ADFF5A76CA49E94408B363E /* NotificationHandling.swift */,
 				F1B2C3D4E5F60718293A4B5C /* NotificationIngressInbox.swift */,
@@ -824,6 +896,8 @@
 				C1D2E3F40102030405060702 /* ManualNotificationKeyValidator.swift */,
 				C1D2E3F40102030405060701 /* NotificationPayloadSemantics.swift */,
 				F2B2C3D4E5F60718293A4B5C /* NotificationContextSnapshot.swift */,
+				D2A100000000000000000005 /* NotificationSoundResolver.swift */,
+				D2A100000000000000000006 /* NotificationSoundSharedState.swift */,
 				C1D2E3F40102030405060704 /* ProjectionSemantics.swift */,
 				AA8E2C322EF2359D00AD1834 /* PushGoMarkdownCore.swift */,
 				AA8E2C332EF2359D00AD1834 /* PushGoNotificationNames.swift */,
@@ -1246,6 +1320,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				457FB44314B7060E66E9D464 /* NotificationService.swift in Sources */,
+				D2F100000000000000000001 /* NotificationSoundSettings.swift in Sources */,
+				D2F100000000000000000002 /* NotificationSoundResolver.swift in Sources */,
+				D2F100000000000000000003 /* NotificationSoundSharedState.swift in Sources */,
 				F1B2C3D4E5F60718293A4B65 /* NotificationIngressInbox.swift in Sources */,
 				F4B2C3D4E5F60718293A4B65 /* ProviderDeliveryAckFailureStore.swift in Sources */,
 				0AC200012F90000100C0FFEE /* WatchNotificationServiceProcessor.swift in Sources */,
@@ -1294,6 +1371,7 @@
 				C1D2E3F40102030405060814 /* ProjectionSemantics.swift in Sources */,
 				C1D2E3F40102030405060815 /* PushRegistrationSemantics.swift in Sources */,
 				C0A1B2C3D4E5F60718293C23 /* MessageStateCoordinator.swift in Sources */,
+				D2C100000000000000000001 /* NotificationSoundSettings.swift in Sources */,
 				AA8E2C7C2EF2359D00AD1834 /* ServerConfig.swift in Sources */,
 				AA8E2C7E2EF2359D00AD1834 /* KeychainStore.swift in Sources */,
 				F0A1B2C3D4E5F60718293A12 /* ChannelSubscriptionSyncStore.swift in Sources */,
@@ -1313,11 +1391,15 @@
 				C0A1B2C3D4E5F60718293B16 /* ChannelNameValidator.swift in Sources */,
 				C0A1B2C3D4E5F60718293B19 /* ChannelPasswordValidator.swift in Sources */,
 				AA8E2C8D2EF2359D00AD1834 /* AppConstants.swift in Sources */,
+				D2C100000000000000000005 /* NotificationSoundResolver.swift in Sources */,
+				D2C100000000000000000006 /* NotificationSoundSharedState.swift in Sources */,
 				AA8E2C962EF2359D00AD1834 /* PushMessage.swift in Sources */,
 				719988127D194612AFC29EC2 /* PushMessageSummary.swift in Sources */,
 				AA8E2C972EF2359D00AD1834 /* UserInfoSanitizer.swift in Sources */,
 				AA8E2C9B2EF2359D00AD1834 /* PushGoNotificationNames.swift in Sources */,
 				AA8E2C9F2EF2359D00AD1834 /* BadgeManager.swift in Sources */,
+				D2C100000000000000000002 /* NotificationSoundManager.swift in Sources */,
+				D2C100000000000000000003 /* NotificationSoundPreviewPlayer.swift in Sources */,
 				2B986C78E6B4496CBE7B2B02 /* LiquidGlassEffect.swift in Sources */,
 				94597579D3464B37971D63B0 /* PushGoMarkdownView.swift in Sources */,
 				6D2F01C44A114051A8C20752 /* ToastView.swift in Sources */,
@@ -1333,6 +1415,7 @@
 				E75A2C6D9F284EE9ADB39B99 /* MessageDetailViewModel.swift in Sources */,
 				B1E7D1124F8A4C3DA9E8F102 /* EntityScreens.swift in Sources */,
 				B1E7D1134F8A4C3DA9E8F102 /* EntityProjectionModels.swift in Sources */,
+				D2C100000000000000000004 /* NotificationSoundEditorView.swift in Sources */,
 				FEE100022F80000100C0FFEE /* WatchLightModels.swift in Sources */,
 				FEE100032F80000100C0FFEE /* WatchLightQuantizer.swift in Sources */,
 			);
@@ -1366,6 +1449,7 @@
 				C1D2E3F40102030405060804 /* ProjectionSemantics.swift in Sources */,
 				C1D2E3F40102030405060805 /* PushRegistrationSemantics.swift in Sources */,
 				C0A1B2C3D4E5F60718293C22 /* MessageStateCoordinator.swift in Sources */,
+				D2B100000000000000000001 /* NotificationSoundSettings.swift in Sources */,
 				AA8E2C502EF2359D00AD1834 /* ServerConfig.swift in Sources */,
 				AA8E2C522EF2359D00AD1834 /* KeychainStore.swift in Sources */,
 				F0A1B2C3D4E5F60718293A11 /* ChannelSubscriptionSyncStore.swift in Sources */,
@@ -1385,11 +1469,15 @@
 				C0A1B2C3D4E5F60718293B17 /* ChannelNameValidator.swift in Sources */,
 				C0A1B2C3D4E5F60718293B1A /* ChannelPasswordValidator.swift in Sources */,
 				AA8E2C612EF2359D00AD1834 /* AppConstants.swift in Sources */,
+				D2B100000000000000000005 /* NotificationSoundResolver.swift in Sources */,
+				D2B100000000000000000006 /* NotificationSoundSharedState.swift in Sources */,
 				AA8E2C6A2EF2359D00AD1834 /* PushMessage.swift in Sources */,
 				6B632AA574864D54BB58B2BD /* PushMessageSummary.swift in Sources */,
 				AA8E2C6B2EF2359D00AD1834 /* UserInfoSanitizer.swift in Sources */,
 				AA8E2C6F2EF2359D00AD1834 /* PushGoNotificationNames.swift in Sources */,
 				AA8E2C732EF2359D00AD1834 /* BadgeManager.swift in Sources */,
+				D2B100000000000000000002 /* NotificationSoundManager.swift in Sources */,
+				D2B100000000000000000003 /* NotificationSoundPreviewPlayer.swift in Sources */,
 				86B89463FB334808B21CED01 /* LiquidGlassEffect.swift in Sources */,
 				5A31804E304B439B8C4792C6 /* PushGoMarkdownView.swift in Sources */,
 				59F7B3A12BEE41D0B3E3AA94 /* ToastView.swift in Sources */,
@@ -1405,6 +1493,7 @@
 				07C9B74592F74D57BA86DC45 /* MessageDetailViewModel.swift in Sources */,
 				B1E7D1124F8A4C3DA9E8F101 /* EntityScreens.swift in Sources */,
 				B1E7D1134F8A4C3DA9E8F101 /* EntityProjectionModels.swift in Sources */,
+				D2B100000000000000000004 /* NotificationSoundEditorView.swift in Sources */,
 				FEE100042F80000100C0FFEE /* WatchLightModels.swift in Sources */,
 				FEE100052F80000100C0FFEE /* WatchLightQuantizer.swift in Sources */,
 			);
@@ -1418,6 +1507,9 @@
 				F4B2C3D4E5F60718293A4B63 /* ProviderDeliveryAckFailureStore.swift in Sources */,
 				0637F07C839C0C2D397AB069 /* NotificationServiceProcessor.swift in Sources */,
 				0AC200042F90000100C0FFEE /* NotificationContentPreparer.swift in Sources */,
+				D2D100000000000000000001 /* NotificationSoundSettings.swift in Sources */,
+				D2D100000000000000000002 /* NotificationSoundResolver.swift in Sources */,
+				D2D100000000000000000003 /* NotificationSoundSharedState.swift in Sources */,
 				A1E2D3C4B5A6978877665544 /* NotificationHandling.swift in Sources */,
 				C1D2E3F40102030405060821 /* NotificationPayloadSemantics.swift in Sources */,
 				F2B2C3D4E5F60718293A4B63 /* NotificationContextSnapshot.swift in Sources */,
@@ -1451,6 +1543,9 @@
 				F4B2C3D4E5F60718293A4B64 /* ProviderDeliveryAckFailureStore.swift in Sources */,
 				54A6F2A3A28360343812D0B3 /* NotificationServiceProcessor.swift in Sources */,
 				0AC200052F90000100C0FFEE /* NotificationContentPreparer.swift in Sources */,
+				D2E100000000000000000001 /* NotificationSoundSettings.swift in Sources */,
+				D2E100000000000000000002 /* NotificationSoundResolver.swift in Sources */,
+				D2E100000000000000000003 /* NotificationSoundSharedState.swift in Sources */,
 				A1E2D3C4B5A6978877665545 /* NotificationHandling.swift in Sources */,
 				C1D2E3F40102030405060831 /* NotificationPayloadSemantics.swift in Sources */,
 				F2B2C3D4E5F60718293A4B64 /* NotificationContextSnapshot.swift in Sources */,
@@ -1581,7 +1676,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-watchOS/pushgowatch NotificationServiceExtension.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 79;
+				CURRENT_PROJECT_VERSION = 80;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				"EXCLUDED_ARCHS[sdk=watchsimulator*]" = x86_64;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
@@ -1594,7 +1689,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.2.4;
+				MARKETING_VERSION = 1.2.5;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.watchkitapp.NotificationServiceExtension;
 				PRODUCT_NAME = NotificationServiceExtensionWatch;
@@ -1626,7 +1721,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 79;
+				CURRENT_PROJECT_VERSION = 80;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -1657,11 +1752,11 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.2.4;
+				MARKETING_VERSION = 1.2.5;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo;
 				PRODUCT_NAME = PushGo;
 				PROVISIONING_PROFILE_SPECIFIER = "";
-				PUSHGO_DISPLAY_VERSION = v1.2.3;
+				PUSHGO_DISPLAY_VERSION = v1.2.5;
 				REGISTER_APP_GROUPS = YES;
 				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
 				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
@@ -1691,7 +1786,7 @@
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 79;
+				CURRENT_PROJECT_VERSION = 80;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -1722,11 +1817,11 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.2.4;
+				MARKETING_VERSION = 1.2.5;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo;
 				PRODUCT_NAME = PushGo;
 				PROVISIONING_PROFILE_SPECIFIER = "PushGo mac";
-				PUSHGO_DISPLAY_VERSION = v1.2.3;
+				PUSHGO_DISPLAY_VERSION = v1.2.5;
 				REGISTER_APP_GROUPS = YES;
 				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;
 				RUNTIME_EXCEPTION_ALLOW_JIT = NO;
@@ -1807,7 +1902,7 @@
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
-				PUSHGO_DISPLAY_VERSION = v1.2.3;
+				PUSHGO_DISPLAY_VERSION = v1.2.5;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1872,7 +1967,7 @@
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
-				PUSHGO_DISPLAY_VERSION = v1.2.3;
+				PUSHGO_DISPLAY_VERSION = v1.2.5;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1890,7 +1985,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-iOS/pushgo.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 79;
+				CURRENT_PROJECT_VERSION = 80;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -1922,11 +2017,11 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.2.4;
+				MARKETING_VERSION = 1.2.5;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo;
 				PRODUCT_NAME = PushGo;
 				PROVISIONING_PROFILE_SPECIFIER = "";
-				PUSHGO_DISPLAY_VERSION = v1.2.3;
+				PUSHGO_DISPLAY_VERSION = v1.2.5;
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -1953,7 +2048,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 79;
+				CURRENT_PROJECT_VERSION = 80;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = W6H9P5MVUB;
@@ -1986,12 +2081,12 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.2.4;
+				MARKETING_VERSION = 1.2.5;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo;
 				PRODUCT_NAME = PushGo;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = PushGo;
-				PUSHGO_DISPLAY_VERSION = v1.2.3;
+				PUSHGO_DISPLAY_VERSION = v1.2.5;
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -2015,7 +2110,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-iOS/NotificationServiceExtension.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 79;
+				CURRENT_PROJECT_VERSION = 80;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -2042,7 +2137,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.2.4;
+				MARKETING_VERSION = 1.2.5;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.NotificationServiceExtension;
 				PRODUCT_NAME = NotificationServiceExtension;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -2071,7 +2166,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-iOS/NotificationServiceExtension.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 79;
+				CURRENT_PROJECT_VERSION = 80;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -2085,7 +2180,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.2.4;
+				MARKETING_VERSION = 1.2.5;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.NotificationServiceExtension;
 				PRODUCT_NAME = NotificationServiceExtension;
 				PROVISIONING_PROFILE_SPECIFIER = "PushGo NSE";
@@ -2116,7 +2211,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 79;
+				CURRENT_PROJECT_VERSION = 80;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -2143,7 +2238,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.2.4;
+				MARKETING_VERSION = 1.2.5;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.NotificationServiceExtension;
 				PRODUCT_NAME = PushgoNotificationServiceExtension;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -2174,7 +2269,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 79;
+				CURRENT_PROJECT_VERSION = 80;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -2201,7 +2296,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.2.4;
+				MARKETING_VERSION = 1.2.5;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.NotificationServiceExtension;
 				PRODUCT_NAME = PushgoNotificationServiceExtension;
 				PROVISIONING_PROFILE_SPECIFIER = "PushGo mac NSE";
@@ -2233,7 +2328,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-watchOS/pushgowatch Watch App.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 79;
+				CURRENT_PROJECT_VERSION = 80;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_PREVIEWS = YES;
 				"EXCLUDED_ARCHS[sdk=watchsimulator*]" = x86_64;
@@ -2260,7 +2355,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2.4;
+				MARKETING_VERSION = 1.2.5;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.watchkitapp;
 				PRODUCT_NAME = PushGoWatch;
@@ -2289,7 +2384,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-watchOS/pushgowatch Watch App.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 79;
+				CURRENT_PROJECT_VERSION = 80;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_PREVIEWS = YES;
 				"EXCLUDED_ARCHS[sdk=watchsimulator*]" = x86_64;
@@ -2316,7 +2411,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2.4;
+				MARKETING_VERSION = 1.2.5;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.watchkitapp;
 				PRODUCT_NAME = PushGoWatch;
@@ -2348,7 +2443,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "3rd Party Mac Developer Application";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 79;
+				CURRENT_PROJECT_VERSION = 80;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=macosx*]" = W6H9P5MVUB;
@@ -2379,12 +2474,12 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.2.4;
+				MARKETING_VERSION = 1.2.5;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo;
 				PRODUCT_NAME = PushGo;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = "PushGo mac";
-				PUSHGO_DISPLAY_VERSION = v1.2.3;
+				PUSHGO_DISPLAY_VERSION = v1.2.5;
 				PUSHGO_SPARKLE_FEED_URL = "https://update.pushgo.cn/macos/appcast.xml";
 				PUSHGO_SPARKLE_PUBLIC_ED_KEY = "ut67b8ASsqDF2alt6TVH01piYBQTnytxuHxSPje5ODc=";
 				PUSHGO_SPARKLE_SCHEDULED_CHECK_INTERVAL = 21600;
@@ -2508,7 +2603,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 79;
+				CURRENT_PROJECT_VERSION = 80;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -2538,11 +2633,11 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.2.4;
+				MARKETING_VERSION = 1.2.5;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo;
 				PRODUCT_NAME = PushGo;
 				PROVISIONING_PROFILE_SPECIFIER = "";
-				PUSHGO_DISPLAY_VERSION = v1.2.3;
+				PUSHGO_DISPLAY_VERSION = v1.2.5;
 				PUSHGO_SPARKLE_FEED_URL = "https://update.pushgo.cn/macos/appcast.xml";
 				PUSHGO_SPARKLE_PUBLIC_ED_KEY = "ut67b8ASsqDF2alt6TVH01piYBQTnytxuHxSPje5ODc=";
 				PUSHGO_SPARKLE_SCHEDULED_CHECK_INTERVAL = 21600;
@@ -2572,7 +2667,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-watchOS/pushgowatch NotificationServiceExtension.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 79;
+				CURRENT_PROJECT_VERSION = 80;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				"EXCLUDED_ARCHS[sdk=watchsimulator*]" = x86_64;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
@@ -2585,7 +2680,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.2.4;
+				MARKETING_VERSION = 1.2.5;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.watchkitapp.NotificationServiceExtension;
 				PRODUCT_NAME = NotificationServiceExtensionWatch;

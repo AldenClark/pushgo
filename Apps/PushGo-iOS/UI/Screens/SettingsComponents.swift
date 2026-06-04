@@ -6,6 +6,7 @@ import UIKit
 enum SettingsSheet: Identifiable {
     case manualKey
     case serverManagement
+    case notificationSounds
 
     var id: String {
         switch self {
@@ -13,6 +14,8 @@ enum SettingsSheet: Identifiable {
             "manualKey"
         case .serverManagement:
             "serverManagement"
+        case .notificationSounds:
+            "notificationSounds"
         }
     }
 }
@@ -39,6 +42,23 @@ struct ServerManagementSheet: View {
             ServerManagementContentView(viewModel: viewModel)
                 .navigationTitle(localizationManager.localized("server_management"))
         }
+    }
+}
+
+struct NotificationSoundSettingsSheet: View {
+    @Bindable var viewModel: SettingsViewModel
+    @Environment(LocalizationManager.self) private var localizationManager
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        navigationContainer {
+            NotificationSoundSettingsContentView(
+                viewModel: viewModel,
+                dismissAction: { dismiss() }
+            )
+                .navigationTitle(localizationManager.localized("Notification Sounds"))
+        }
+        .accessibilityIdentifier("screen.settings.notification_sounds")
     }
 }
 

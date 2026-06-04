@@ -201,10 +201,20 @@ final class NotificationContentPreparer {
             return content
         }
 
-        content.interruptionLevel = interruptionLevel(for: level)
+        let sound = resolvedSound(for: level, isCritical: profile.isCritical)
+        content.interruptionLevel = interruptionLevel(for: level, sound: sound)
 
-        if let filename = soundFilename(for: level) {
-            return applySound(named: filename, isCritical: profile.isCritical, to: content)
+        if let sound {
+            if sound.usesSystemDefault {
+                return applySystemDefaultSound(to: content)
+            }
+            if let filename = sound.filename {
+                return applySound(
+                    named: filename,
+                    useCriticalSoundAPI: sound.prefersCriticalSoundAPI,
+                    to: content
+                )
+            }
         }
 
         var aps = (content.userInfo["aps"] as? [String: Any]) ?? [:]
@@ -223,7 +233,7 @@ final class NotificationContentPreparer {
 
     private func applySound(
         named filename: String,
-        isCritical: Bool,
+        useCriticalSoundAPI: Bool,
         to content: UNMutableNotificationContent
     ) -> UNMutableNotificationContent {
         var aps = (content.userInfo["aps"] as? [String: Any]) ?? [:]
@@ -231,7 +241,7 @@ final class NotificationContentPreparer {
         content.userInfo["aps"] = aps
 
         #if os(iOS)
-        if isCritical {
+        if useCriticalSoundAPI {
             content.sound = UNNotificationSound.criticalSoundNamed(
                 UNNotificationSoundName(filename),
                 withAudioVolume: 1.0
@@ -242,10 +252,33 @@ final class NotificationContentPreparer {
         #elseif os(watchOS)
         // watchOS relies on aps["sound"]; UNNotificationSound(named:) is unavailable.
         #else
-        content.sound = UNNotificationSound(named: UNNotificationSoundName(filename))
+        let systemSoundName = systemNotificationSoundName(for: filename)
+        content.sound = UNNotificationSound(named: UNNotificationSoundName(systemSoundName))
         #endif
 
         return content
+    }
+
+    private func applySystemDefaultSound(
+        to content: UNMutableNotificationContent
+    ) -> UNMutableNotificationContent {
+        var aps = (content.userInfo["aps"] as? [String: Any]) ?? [:]
+        aps["sound"] = "default"
+        content.userInfo["aps"] = aps
+        #if os(watchOS)
+        // watchOS relies on aps["sound"].
+        #else
+        content.sound = .default
+        #endif
+        return content
+    }
+
+    private func systemNotificationSoundName(for filename: String) -> String {
+        #if os(macOS)
+        (filename as NSString).deletingPathExtension
+        #else
+        filename
+        #endif
     }
 
     private func isPayloadExpired(_ userInfo: [AnyHashable: Any]) -> Bool {
@@ -271,31 +304,38 @@ final class NotificationContentPreparer {
         return "normal"
     }
 
-    private func interruptionLevel(for level: String) -> UNNotificationInterruptionLevel {
+    private func interruptionLevel(
+        for level: String,
+        sound: NotificationSoundResolution?
+    ) -> UNNotificationInterruptionLevel {
         switch level {
         case "critical":
             return .critical
         case "high":
             return .timeSensitive
         case "low":
-            return .passive
+            return sound == nil ? .passive : .active
         default:
             return .active
         }
     }
 
-    private func soundFilename(for level: String) -> String? {
+    private func resolvedSound(for level: String, isCritical: Bool) -> NotificationSoundResolution? {
+        if let resolvedLevel = NotificationSoundLevel(rawValue: level),
+           let configured = NotificationSoundResolver.resolve(for: resolvedLevel) {
+            return configured
+        }
         switch level {
         case "critical":
-            return "alert.caf"
+            return .named("alert.caf", prefersCriticalSoundAPI: isCritical)
         case "high":
-            return "level-up.caf"
+            return .named("level-up.caf")
         case "normal":
-            return "bubble-pop.caf"
+            return .named("bubble-pop.caf")
         case "low":
             return nil
         default:
-            return "bubble-pop.caf"
+            return .named("bubble-pop.caf")
         }
     }
 

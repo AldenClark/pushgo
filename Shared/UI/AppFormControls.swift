@@ -186,25 +186,25 @@ struct AppInlineFeedbackBanner: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .center, spacing: 10) {
             Image(systemName: iconName)
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(tone.foreground)
-                .frame(width: 20, height: 20)
+                .frame(width: 20, height: 20, alignment: .center)
                 .accessibilityHidden(true)
 
             Text(message)
                 .font(.footnote)
                 .foregroundStyle(Color.appTextPrimary)
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
 
             if let dismissAction {
                 Button(action: dismissAction) {
                     Image(systemName: "xmark")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Color.appTextSecondary)
-                        .frame(width: 20, height: 20)
+                        .frame(width: 20, height: 20, alignment: .center)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(LocalizedStringKey("close"))
@@ -735,7 +735,7 @@ struct SettingsActionRow<Trailing: View>: View {
 
     let iconName: String
     let title: LocalizedStringKey
-    let detail: LocalizedStringKey?
+    let detail: Text?
     let style: Style
     private let trailing: () -> Trailing
     @Environment(\.isEnabled) private var isEnabled
@@ -749,7 +749,21 @@ struct SettingsActionRow<Trailing: View>: View {
     ) {
         self.iconName = iconName
         self.title = title
-        self.detail = detail
+        self.detail = detail.map { Text($0) }
+        self.style = style
+        self.trailing = trailing
+    }
+
+    init(
+        iconName: String,
+        title: LocalizedStringKey,
+        detailText: String?,
+        style: Style = .plain,
+        @ViewBuilder trailing: @escaping () -> Trailing,
+    ) {
+        self.iconName = iconName
+        self.title = title
+        self.detail = detailText.map { Text(verbatim: $0) }
         self.style = style
         self.trailing = trailing
     }
@@ -785,7 +799,7 @@ struct SettingsActionRow<Trailing: View>: View {
                     .minimumScaleFactor(0.85)
 
                 if let detail {
-                    Text(detail)
+                    detail
                         .font(.footnote)
                         .foregroundStyle(Color.appTextSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -812,6 +826,17 @@ extension SettingsActionRow where Trailing == EmptyView {
         style: Style = .plain,
     ) {
         self.init(iconName: iconName, title: title, detail: detail, style: style) {
+            EmptyView()
+        }
+    }
+
+    init(
+        iconName: String,
+        title: LocalizedStringKey,
+        detailText: String?,
+        style: Style = .plain,
+    ) {
+        self.init(iconName: iconName, title: title, detailText: detailText, style: style) {
             EmptyView()
         }
     }

@@ -44,22 +44,6 @@ final class NotificationServiceProcessor {
     ) async -> UNNotificationContent {
         let sanitizedPayload = UserInfoSanitizer.sanitize(request.content.userInfo)
         let ingress = await resolveNotificationIngressWithoutDatabase(from: sanitizedPayload)
-        let unresolvedReason: String?
-        if case .unresolvedWakeup = ingress {
-            unresolvedReason = unresolvedWakeupReasonWithoutDatabase(from: sanitizedPayload)
-        } else if case .claimedByPeer = ingress {
-            unresolvedReason = "peer_process_claimed_pull"
-        } else {
-            unresolvedReason = nil
-        }
-        NSEPersistenceDiagnostics.record(
-            phase: "ingress_resolved",
-            requestIdentifier: request.identifier,
-            payload: sanitizedPayload,
-            ingressType: Self.ingressTypeName(ingress),
-            outcome: nil,
-            error: unresolvedReason
-        )
         let content = await prepareContentForPersistence(content: content, ingress: ingress)
         await markAckPreparingIfNeeded(ingress)
         let enqueued = await enqueueIngressInboxEntry(
@@ -107,14 +91,6 @@ final class NotificationServiceProcessor {
         }
 
         if case .claimedByPeer = ingress {
-            NSEPersistenceDiagnostics.record(
-                phase: "inbox_skipped_peer_claim",
-                requestIdentifier: request.identifier,
-                payload: preparedContent.userInfo,
-                ingressType: Self.ingressTypeName(ingress),
-                outcome: nil,
-                error: nil
-            )
             return false
         }
 
@@ -123,14 +99,6 @@ final class NotificationServiceProcessor {
             codablePayload: codablePayload,
             requestIdentifier: requestIdentifier ?? request.identifier,
             source: "nse"
-        )
-        NSEPersistenceDiagnostics.record(
-            phase: enqueued ? "inbox_enqueued" : "inbox_enqueue_failed",
-            requestIdentifier: request.identifier,
-            payload: preparedContent.userInfo,
-            ingressType: Self.ingressTypeName(ingress),
-            outcome: nil,
-            error: enqueued ? nil : "enqueue_failed"
         )
         return enqueued
     }
@@ -552,120 +520,4 @@ final class NotificationServiceProcessor {
         return parts.joined(separator: " ")
     }
 
-    private static func ingressTypeName(_ ingress: NotificationIngressResolution) -> String {
-        switch ingress {
-        case .direct:
-            return "direct"
-        case .pulled:
-            return "pulled"
-        case .claimedByPeer:
-            return "claimedByPeerWakeup"
-        case .unresolvedWakeup:
-            return "unresolvedWakeup"
-        }
-    }
-}
-
-private enum NSEPersistenceDiagnostics {
-    private struct Entry: Codable {
-        let timestampISO8601: String
-        let process: String
-        let pid: Int32
-        let phase: String
-        let requestIdentifier: String
-        let ingressType: String
-        let deliveryId: String?
-        let operationId: String?
-        let entityType: String?
-        let entityId: String?
-        let messageId: String?
-        let eventId: String?
-        let thingId: String?
-        let decryptionState: String?
-        let outcome: String?
-        let error: String?
-    }
-
-    private static let lock = NSLock()
-
-    static func record(
-        phase: String,
-        requestIdentifier: String,
-        payload: [AnyHashable: Any],
-        ingressType: String,
-        outcome: String?,
-        error: String?
-    ) {
-        let requestId = normalizedText(requestIdentifier) ?? UUID().uuidString
-        let entry = Entry(
-            timestampISO8601: ISO8601DateFormatter().string(from: Date()),
-            process: ProcessInfo.processInfo.processName,
-            pid: ProcessInfo.processInfo.processIdentifier,
-            phase: phase,
-            requestIdentifier: requestId,
-            ingressType: ingressType,
-            deliveryId: normalizedText(payload["delivery_id"]),
-            operationId: normalizedText(payload["op_id"]),
-            entityType: normalizedText(payload["entity_type"]),
-            entityId: normalizedText(payload["entity_id"]),
-            messageId: normalizedText(payload["message_id"]),
-            eventId: normalizedText(payload["event_id"]),
-            thingId: normalizedText(payload["thing_id"]),
-            decryptionState: normalizedText(payload["decryption_state"]),
-            outcome: normalizedText(outcome),
-            error: normalizedText(error)
-        )
-        append(entry)
-    }
-
-    private static func append(_ entry: Entry) {
-        guard let data = try? JSONEncoder().encode(entry),
-              var line = String(data: data, encoding: .utf8)
-        else {
-            return
-        }
-        line.append("\n")
-        guard let lineData = line.data(using: .utf8),
-              let fileURL = diagnosticsLogURL()
-        else {
-            return
-        }
-
-        lock.lock()
-        defer { lock.unlock() }
-        do {
-            let directory = fileURL.deletingLastPathComponent()
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            if !FileManager.default.fileExists(atPath: fileURL.path) {
-                try lineData.write(to: fileURL, options: .atomic)
-            } else {
-                let handle = try FileHandle(forWritingTo: fileURL)
-                defer { try? handle.close() }
-                try handle.seekToEnd()
-                try handle.write(contentsOf: lineData)
-            }
-            NSLog("NSEPersistenceDiagnostics %@", line.trimmingCharacters(in: .whitespacesAndNewlines))
-        } catch {
-            NSLog("NSEPersistenceDiagnostics write_failed %@", String(describing: error))
-        }
-    }
-
-    private static func diagnosticsLogURL() -> URL? {
-        guard let container = AppConstants.appGroupContainerURL(
-            fileManager: .default,
-            identifier: AppConstants.appGroupIdentifier
-        ) else {
-            return nil
-        }
-        return container
-            .appendingPathComponent("Library", isDirectory: true)
-            .appendingPathComponent("Application Support", isDirectory: true)
-            .appendingPathComponent("storage-diagnostics", isDirectory: true)
-            .appendingPathComponent("nse_persistence.jsonl", isDirectory: false)
-    }
-
-    private static func normalizedText(_ value: Any?) -> String? {
-        let text = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return text.isEmpty ? nil : text
-    }
 }

@@ -258,6 +258,9 @@ final class AppEnvironment {
         Task(priority: .utility) {
             await store.warmCachesIfNeeded()
         }
+        Task(priority: .utility) {
+            await NotificationSoundManager.shared.reconcileCompiledSounds()
+        }
     }
 
     private static func makeDefaultServerConfig() -> ServerConfig? {

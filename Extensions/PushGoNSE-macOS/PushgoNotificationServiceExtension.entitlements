@@ -6,7 +6,7 @@
 	<true/>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.ethan.pushgo.messages</string>
+		<string>W6H9P5MVUB.group.ethan.pushgo.messages</string>
 	</array>
 	<key>com.apple.security.network.client</key>
 	<true/>

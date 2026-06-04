@@ -21,7 +21,7 @@ struct EventListScreen: View {
     @State private var selectedTags: Set<String> = []
     @State private var isFilterPopoverPresented = false
     @State private var isBatchModeActive = false
-    @State private var pendingOpenEventClearTask: Task<Void, Never>?
+    @State private var hydrationRequestedEventIDs: Set<String> = []
 
     var body: some View {
         let filteredEventsSnapshot = filteredEvents
@@ -59,7 +59,6 @@ struct EventListScreen: View {
 #endif
         }
         .onChange(of: selectedEvent?.id) { _, _ in
-            schedulePendingOpenEventClearIfNeeded()
 #if DEBUG
             publishAutomationState()
 #endif
@@ -129,6 +128,8 @@ struct EventListScreen: View {
     private func eventList(filteredEvents: [EventProjection]) -> some View {
         ScrollViewReader { proxy in
             List(selection: batchSelectionBinding) {
+                scrollOffsetProbe
+
                 ForEach(filteredEvents.indices, id: \.self) { index in
                     let event = filteredEvents[index]
                     Group {
@@ -187,10 +188,24 @@ struct EventListScreen: View {
             .environment(\.editMode, isBatchMode ? .constant(.active) : .constant(.inactive))
             .scrollContentBackground(.hidden)
             .background(EntityVisualTokens.pageBackground)
+            .coordinateSpace(name: EventListScrollMetrics.coordinateSpaceName)
             .onChange(of: scrollToTopToken) { _, _ in
                 scrollToTopIfNeeded(proxy, filteredEvents: filteredEvents)
             }
         }
+    }
+
+    private var scrollOffsetProbe: some View {
+        GeometryReader { proxy in
+            Color.clear.preference(
+                key: EventListScrollOffsetPreferenceKey.self,
+                value: proxy.frame(in: .named(EventListScrollMetrics.coordinateSpaceName)).minY
+            )
+        }
+        .frame(height: 0)
+        .listRowInsets(EdgeInsets())
+        .listRowSeparator(.hidden)
+        .accessibilityHidden(true)
     }
 
     private func overlayState(for filteredEvents: [EventProjection]) -> OverlayState? {
@@ -421,50 +436,36 @@ struct EventListScreen: View {
         let target = openEventId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !target.isEmpty else { return }
         if let matched = viewModel.events.first(where: { $0.id == target }) {
-            if let channelId = normalizedChannel(matched.channelId) {
-                selectedChannelIDs = [channelId]
-            }
-            if !selectedTags.isEmpty {
-                selectedTags.removeAll()
-            }
-            if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                searchQuery = ""
-            }
-            selectEvent(matched)
+            openEvent(matched, target: target)
             return
         }
 
+        guard !hydrationRequestedEventIDs.contains(target) else { return }
+        hydrationRequestedEventIDs.insert(target)
         Task { @MainActor in
-            for _ in 0..<8 {
-                await viewModel.ensureEventDetailsLoaded(eventId: target)
-                if let hydrated = viewModel.events.first(where: { $0.id == target }) {
-                    if let channelId = normalizedChannel(hydrated.channelId) {
-                        selectedChannelIDs = [channelId]
-                    }
-                    if !selectedTags.isEmpty {
-                        selectedTags.removeAll()
-                    }
-                    if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        searchQuery = ""
-                    }
-                    selectEvent(hydrated)
-                    return
-                }
-                try? await Task.sleep(for: .milliseconds(120))
-            }
+            let hydrated = await viewModel.ensureEventDetailsLoaded(eventId: target)
+            hydrationRequestedEventIDs.remove(target)
+            guard let hydrated else { return }
+            openEvent(hydrated, target: target)
         }
     }
 
-    private func schedulePendingOpenEventClearIfNeeded() {
-        pendingOpenEventClearTask?.cancel()
-        guard let selectedId = selectedEvent?.id else { return }
-        let target = openEventId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !target.isEmpty, selectedId == target else { return }
-        pendingOpenEventClearTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(250))
-            guard !Task.isCancelled, selectedEvent?.id == target else { return }
-            onOpenEventHandled?()
+    private func openEvent(_ event: EventProjection, target: String) {
+        if let channelId = normalizedChannel(event.channelId) {
+            selectedChannelIDs = [channelId]
         }
+        if !selectedTags.isEmpty {
+            selectedTags.removeAll()
+        }
+        if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            searchQuery = ""
+        }
+        selectEvent(event)
+#if DEBUG
+        publishAutomationState()
+#endif
+        hydrationRequestedEventIDs.remove(target)
+        onOpenEventHandled?()
     }
 
     private func selectEvent(_ event: EventProjection) {
@@ -810,8 +811,8 @@ private struct EventListTopObserverModifier: ViewModifier {
                 )
             } else {
                 content
-                    .onAppear {
-                        onChange(0)
+                    .onPreferenceChange(EventListScrollOffsetPreferenceKey.self) { minY in
+                        onChange(-minY)
                     }
             }
         } else {
@@ -822,6 +823,18 @@ private struct EventListTopObserverModifier: ViewModifier {
 
 private enum EventListTopMetrics {
     static let topTolerance: CGFloat = 2
+}
+
+private enum EventListScrollMetrics {
+    static let coordinateSpaceName = "event-list-scroll"
+}
+
+private struct EventListScrollOffsetPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
 }
 
 struct EventListRow: View {

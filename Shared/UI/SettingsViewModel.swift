@@ -1,5 +1,8 @@
 import Foundation
 import Observation
+#if os(macOS)
+import AppKit
+#endif
 
 @MainActor
 @Observable
@@ -34,11 +37,21 @@ final class SettingsViewModel {
         didSet { persistManualKeyPreferences(oldValue: oldValue) }
     }
     var gatewayInput = GatewayInput()
+    var notificationSoundSettings = NotificationSoundSettings()
 
     var isSaving: Bool = false
     var isSavingServerConfig: Bool = false
     var shouldDismissServerManagement: Bool = false
     var isClearingMessages: Bool = false
+    var isLoadingNotificationSounds: Bool = false
+    var isSavingNotificationSounds: Bool = false
+    var notificationSoundBusyLevel: NotificationSoundLevel?
+    var isImportingNotificationSound: Bool = false
+    var notificationSoundPreviewID: String?
+#if os(macOS)
+    var hasMacOSNotificationSoundDirectoryAccess: Bool = false
+    var isRequestingMacOSNotificationSoundDirectoryAccess: Bool = false
+#endif
     var error: AppError?
     var successMessage: String?
 
@@ -50,6 +63,7 @@ final class SettingsViewModel {
     private let environment: AppEnvironment
     private let localizationManager: LocalizationManager
     private let dataStore: LocalDataStore
+    @ObservationIgnored private let notificationSoundManager = NotificationSoundManager.shared
     @ObservationIgnored private var isInitializing = true
     @ObservationIgnored private var isRefreshingLaunchAtLogin = false
     var launchAtLoginEnabled: Bool = false {
@@ -164,6 +178,10 @@ final class SettingsViewModel {
 #else
             launchAtLoginEnabled = false
 #endif
+            notificationSoundSettings = await notificationSoundManager.loadSettings()
+#if os(macOS)
+            hasMacOSNotificationSoundDirectoryAccess = await notificationSoundManager.hasMacOSUserSoundsDirectoryAccess()
+#endif
             isInitializing = false
         }
     }
@@ -193,6 +211,333 @@ final class SettingsViewModel {
 
     func clearError() {
         error = nil
+    }
+
+    var hasImportedNotificationSounds: Bool {
+        !notificationSoundSettings.customAssets.isEmpty
+    }
+
+    func refreshNotificationSoundSettings() async {
+        isLoadingNotificationSounds = true
+        defer { isLoadingNotificationSounds = false }
+        notificationSoundSettings = await notificationSoundManager.loadSettings()
+#if os(macOS)
+        hasMacOSNotificationSoundDirectoryAccess = await notificationSoundManager.hasMacOSUserSoundsDirectoryAccess()
+#endif
+    }
+
+#if os(macOS)
+    func refreshMacOSNotificationSoundDirectoryAccess() async {
+        hasMacOSNotificationSoundDirectoryAccess = await notificationSoundManager.hasMacOSUserSoundsDirectoryAccess()
+    }
+
+    func requestMacOSNotificationSoundDirectoryAccess() async {
+        guard !isRequestingMacOSNotificationSoundDirectoryAccess else { return }
+        error = nil
+        isRequestingMacOSNotificationSoundDirectoryAccess = true
+        defer { isRequestingMacOSNotificationSoundDirectoryAccess = false }
+
+        let targetURL = await notificationSoundManager.macOSUserSoundsDirectoryURL()
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        try? FileManager.default.createDirectory(at: targetURL, withIntermediateDirectories: true)
+        panel.directoryURL = targetURL
+        panel.prompt = localizationManager.localized("Grant Access")
+        panel.message = localizationManager.localized("Select the ~/Library/Sounds folder so PushGo can save custom notification sounds.")
+
+        guard panel.runModal() == .OK, let selectedURL = panel.url else {
+            await refreshMacOSNotificationSoundDirectoryAccess()
+            return
+        }
+
+        do {
+            try await notificationSoundManager.authorizeMacOSUserSoundsDirectory(selectedURL)
+            await refreshMacOSNotificationSoundDirectoryAccess()
+            successMessage = localizationManager.localized("Sound folder access granted.")
+        } catch {
+            await refreshMacOSNotificationSoundDirectoryAccess()
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: error.localizedDescription,
+                code: "notification_sound_directory_access_failed",
+                category: .validation
+            )
+        }
+    }
+#endif
+
+    func updateNotificationSoundMode(
+        _ mode: NotificationSoundMode,
+        for level: NotificationSoundLevel
+    ) async {
+        let previousSettings = notificationSoundSettings
+        var settings = notificationSoundSettings
+        var rule = settings.rule(for: level)
+        rule.mode = mode
+        switch mode {
+        case .systemDefault:
+            rule.builtinSoundID = nil
+            rule.customAssetID = nil
+            rule.durationSeconds = nil
+            rule.gain = 1
+        case .silent:
+            if level == .low {
+                rule.builtinSoundID = level.defaultBuiltinSoundID
+            } else {
+                rule = .default(for: level)
+            }
+            rule.customAssetID = nil
+        case .builtin:
+            rule.builtinSoundID = rule.builtinSoundID ?? level.defaultBuiltinSoundID
+            rule.customAssetID = nil
+        case .custom:
+            if let firstCustom = settings.customAssets.first {
+                rule.customAssetID = rule.customAssetID ?? firstCustom.id
+            } else {
+                error = .typedLocal(
+                    code: "notification_sound_custom_missing",
+                    category: .validation,
+                    message: localizationManager.localized("Import a custom sound first."),
+                    detail: "custom sound selection requires at least one imported asset"
+                )
+                return
+            }
+        }
+        rule.updatedAt = Date()
+        settings.rules[level] = rule
+        await persistNotificationSoundSettings(settings, previousSettings: previousSettings)
+    }
+
+    func updateNotificationBuiltinSound(
+        _ builtinSoundID: String,
+        for level: NotificationSoundLevel
+    ) async {
+        let previousSettings = notificationSoundSettings
+        var settings = notificationSoundSettings
+        var rule = settings.rule(for: level)
+        rule.mode = .builtin
+        rule.builtinSoundID = builtinSoundID
+        rule.customAssetID = nil
+        rule.updatedAt = Date()
+        settings.rules[level] = rule
+        await persistNotificationSoundSettings(settings, previousSettings: previousSettings)
+    }
+
+    func updateNotificationCustomSound(
+        _ assetID: String,
+        for level: NotificationSoundLevel
+    ) async {
+        let previousSettings = notificationSoundSettings
+        var settings = notificationSoundSettings
+        var rule = settings.rule(for: level)
+        rule.mode = .custom
+        rule.customAssetID = assetID
+        rule.updatedAt = Date()
+        settings.rules[level] = rule
+        await persistNotificationSoundSettings(settings, previousSettings: previousSettings)
+    }
+
+    func updateNotificationSoundDuration(
+        _ durationSeconds: Double,
+        for level: NotificationSoundLevel
+    ) async {
+        let previousSettings = notificationSoundSettings
+        var settings = notificationSoundSettings
+        var rule = settings.rule(for: level)
+        rule.durationSeconds = durationSeconds
+        rule.updatedAt = Date()
+        settings.rules[level] = rule
+        await persistNotificationSoundSettings(settings, previousSettings: previousSettings)
+    }
+
+    func updateNotificationSoundGain(
+        _ gain: Double,
+        for level: NotificationSoundLevel
+    ) async {
+        let previousSettings = notificationSoundSettings
+        var settings = notificationSoundSettings
+        var rule = settings.rule(for: level)
+        rule.gain = gain
+        rule.updatedAt = Date()
+        settings.rules[level] = rule
+        await persistNotificationSoundSettings(settings, previousSettings: previousSettings)
+    }
+
+    @discardableResult
+    func commitNotificationSoundSettings(_ settings: NotificationSoundSettings) async -> Bool {
+        await persistNotificationSoundSettings(settings, previousSettings: notificationSoundSettings)
+    }
+
+    func importNotificationSound(from url: URL) async {
+        error = nil
+        isImportingNotificationSound = true
+        defer { isImportingNotificationSound = false }
+
+        let didAccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if didAccess {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        do {
+            notificationSoundSettings = try await notificationSoundManager.importCustomSound(from: url)
+            successMessage = localizationManager.localized("Sound imported.")
+        } catch let appError as AppError {
+            error = appError
+        } catch {
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: error.localizedDescription,
+                code: "notification_sound_import_failed",
+                category: .validation
+            )
+        }
+    }
+
+    func removeNotificationCustomSound(assetID: String) async {
+        error = nil
+        isSavingNotificationSounds = true
+        defer { isSavingNotificationSounds = false }
+        do {
+            notificationSoundSettings = try await notificationSoundManager.removeCustomSound(assetID: assetID)
+            successMessage = localizationManager.localized("Custom sound removed.")
+        } catch {
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: error.localizedDescription,
+                code: "notification_sound_remove_failed",
+                category: .validation
+            )
+        }
+    }
+
+    func previewNotificationSound(for level: NotificationSoundLevel) async {
+        await previewNotificationSound(for: level, settings: notificationSoundSettings)
+    }
+
+    @MainActor
+    func stopNotificationSoundPreview() {
+        NotificationSoundPreviewPlayer.shared.stop()
+        notificationSoundPreviewID = nil
+    }
+
+    func previewNotificationSound(
+        for level: NotificationSoundLevel,
+        settings: NotificationSoundSettings
+    ) async {
+        let previewID = "priority:\(level.rawValue)"
+        if notificationSoundPreviewID == previewID, NotificationSoundPreviewPlayer.shared.isPlaying {
+            stopNotificationSoundPreview()
+            return
+        }
+        error = nil
+        guard let url = await notificationSoundManager.previewURL(
+            for: level,
+            settings: settings
+        ) else {
+            error = .typedLocal(
+                code: "notification_sound_preview_missing",
+                category: .validation,
+                message: localizationManager.localized("No preview is available for this selection."),
+                detail: "notification sound preview URL could not be resolved"
+            )
+            return
+        }
+        do {
+            try NotificationSoundPreviewPlayer.shared.play(url: url) { [weak self] in
+                guard self?.notificationSoundPreviewID == previewID else { return }
+                self?.notificationSoundPreviewID = nil
+            }
+            notificationSoundPreviewID = previewID
+        } catch {
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: localizationManager.localized("Unable to preview this sound."),
+                code: "notification_sound_preview_failed",
+                category: .validation
+            )
+            notificationSoundPreviewID = nil
+        }
+    }
+
+    func previewNotificationBuiltinSound(_ builtinSoundID: String) async {
+        let previewID = "builtin:\(builtinSoundID)"
+        if notificationSoundPreviewID == previewID, NotificationSoundPreviewPlayer.shared.isPlaying {
+            stopNotificationSoundPreview()
+            return
+        }
+        error = nil
+        guard let url = await notificationSoundManager.previewBuiltinSoundURL(soundID: builtinSoundID) else {
+            error = .typedLocal(
+                code: "notification_sound_builtin_preview_missing",
+                category: .validation,
+                message: localizationManager.localized("Unable to preview this built-in sound."),
+                detail: "built-in notification sound preview URL could not be resolved"
+            )
+            return
+        }
+        do {
+            try NotificationSoundPreviewPlayer.shared.play(url: url) { [weak self] in
+                guard self?.notificationSoundPreviewID == previewID else { return }
+                self?.notificationSoundPreviewID = nil
+            }
+            notificationSoundPreviewID = previewID
+        } catch {
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: localizationManager.localized("Unable to preview this sound."),
+                code: "notification_sound_builtin_preview_failed",
+                category: .validation
+            )
+            notificationSoundPreviewID = nil
+        }
+    }
+
+    func previewNotificationCustomSound(_ assetID: String) async {
+        await previewNotificationCustomSound(assetID, settings: notificationSoundSettings)
+    }
+
+    func previewNotificationCustomSound(
+        _ assetID: String,
+        settings: NotificationSoundSettings
+    ) async {
+        let previewID = "custom:\(assetID)"
+        if notificationSoundPreviewID == previewID, NotificationSoundPreviewPlayer.shared.isPlaying {
+            stopNotificationSoundPreview()
+            return
+        }
+        error = nil
+        guard let url = await notificationSoundManager.previewCustomSoundURL(
+            assetID: assetID,
+            settings: settings
+        ) else {
+            error = .typedLocal(
+                code: "notification_sound_custom_preview_missing",
+                category: .validation,
+                message: localizationManager.localized("Unable to preview this custom sound."),
+                detail: "custom notification sound preview URL could not be resolved"
+            )
+            return
+        }
+        do {
+            try NotificationSoundPreviewPlayer.shared.play(url: url) { [weak self] in
+                guard self?.notificationSoundPreviewID == previewID else { return }
+                self?.notificationSoundPreviewID = nil
+            }
+            notificationSoundPreviewID = previewID
+        } catch {
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: localizationManager.localized("Unable to preview this sound."),
+                code: "notification_sound_custom_preview_failed",
+                category: .validation
+            )
+            notificationSoundPreviewID = nil
+        }
     }
 
     func saveServerConfig() async {
@@ -468,6 +813,32 @@ final class SettingsViewModel {
         }
         Task { @MainActor in
             await dataStore.saveManualKeyPreferences(encoding: manualKeyInput.encoding.rawValue)
+        }
+    }
+
+    @discardableResult
+    private func persistNotificationSoundSettings(
+        _ settings: NotificationSoundSettings,
+        previousSettings: NotificationSoundSettings
+    ) async -> Bool {
+        error = nil
+        notificationSoundSettings = settings
+        isSavingNotificationSounds = true
+        defer {
+            isSavingNotificationSounds = false
+        }
+        do {
+            _ = try await notificationSoundManager.persistSettings(settings)
+            return true
+        } catch {
+            notificationSoundSettings = previousSettings
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: error.localizedDescription,
+                code: "notification_sound_save_failed",
+                category: .validation
+            )
+            return false
         }
     }
 

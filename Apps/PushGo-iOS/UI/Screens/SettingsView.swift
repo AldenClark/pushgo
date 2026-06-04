@@ -88,6 +88,11 @@ struct SettingsView: View {
                     .toastOverlay(environment: environment, showsPendingDeletionBar: false)
                     .presentationDetents([.medium])
                     .presentationDragIndicator(.visible)
+            case .notificationSounds:
+                NotificationSoundSettingsSheet(viewModel: viewModel)
+                    .toastOverlay(environment: environment, showsPendingDeletionBar: false)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             }
         }
         .alert(
@@ -188,7 +193,7 @@ struct SettingsView: View {
                 SettingsActionRow(
                     iconName: "link",
                     title: "server_management",
-                    detail: serverConfigSubtitle,
+                    detailText: serverConfigSubtitle,
                 ) {
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
@@ -218,6 +223,25 @@ struct SettingsView: View {
                 thingIsOn: $bindableEnvironment.thingPageEnabled
             )
             .accessibilityIdentifier("group.settings.page_visibility")
+            .listRowInsets(rowInsets)
+            .listRowBackground(Color.clear)
+
+            Button {
+                viewModel.clearError()
+                activeSheet = .notificationSounds
+            } label: {
+                SettingsActionRow(
+                    iconName: "speaker.wave.3",
+                    title: LocalizedStringKey("Notification Sounds"),
+                    detailText: notificationSoundsSubtitle,
+                ) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.appTextSecondary)
+                }
+            }
+            .buttonStyle(.appPlain)
+            .accessibilityIdentifier("action.settings.notification_sounds")
             .listRowInsets(rowInsets)
             .listRowBackground(Color.clear)
 
@@ -540,9 +564,18 @@ struct SettingsView: View {
         return LocalizedStringKey(localizationManager.localized("not_configured"))
     }
 
-    private var serverConfigSubtitle: LocalizedStringKey {
-        let value = environment.serverConfig?.baseURL.absoluteString ?? AppConstants.defaultServerAddress
-        return LocalizedStringKey(value)
+    private var serverConfigSubtitle: String {
+        environment.serverConfig?.baseURL.absoluteString ?? AppConstants.defaultServerAddress
+    }
+
+    private var notificationSoundsSubtitle: String {
+        let settings = viewModel.notificationSoundSettings
+        let customCount = settings.customAssets.count
+        let activeLevels = NotificationSoundLevel.allCases.filter { settings.rule(for: $0).mode != .silent }.count
+        if customCount == 0 {
+            return localizationManager.localized("%d priorities active, built-in defaults ready", activeLevels)
+        }
+        return localizationManager.localized("%d custom sounds, %d priorities active", customCount, activeLevels)
     }
 
     private var messageCountSubtitle: LocalizedStringKey {

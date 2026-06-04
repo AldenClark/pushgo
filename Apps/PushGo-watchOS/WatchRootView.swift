@@ -53,13 +53,6 @@ struct WatchRootView: View {
                 selection = tab
             }
         }
-        .task(id: automationStateVersion) {
-            PushGoWatchAutomationRuntime.shared.publishState(
-                environment: environment,
-                activeTab: selection.automationIdentifier,
-                visibleScreen: selection.automationVisibleScreen
-            )
-        }
 #endif
     }
 
@@ -73,17 +66,6 @@ struct WatchRootView: View {
         }
     }
 
-    private var automationStateVersion: String {
-        [
-            selection.automationIdentifier,
-            environment.pendingMessageToOpen ?? "",
-            environment.pendingEventToOpen ?? "",
-            environment.pendingThingToOpen ?? "",
-            String(environment.unreadMessageCount),
-            String(environment.totalMessageCount),
-            environment.watchMode.rawValue,
-        ].joined(separator: "|")
-    }
 }
 
 #Preview {

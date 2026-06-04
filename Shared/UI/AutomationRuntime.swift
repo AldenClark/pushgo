@@ -678,6 +678,15 @@ final class PushGoAutomationRuntime {
                 guard let tab = normalizedIdentifier(request.args?.tab) else {
                     throw PushGoAutomationError.missingArgument("tab")
                 }
+                #if os(iOS)
+                if tab == "settings" {
+                    environment.pendingSettingsPresentation = .settings
+                    _ = await waitForAutomationState(environment: environment, timeout: 2.5) { state in
+                        state.visibleScreen == "screen.settings"
+                    }
+                    break
+                }
+                #endif
                 try? await Task.sleep(for: .milliseconds(300))
                 NotificationCenter.default.post(name: .pushgoAutomationSelectTab, object: tab)
             case "message.open":
@@ -1034,17 +1043,13 @@ final class PushGoAutomationRuntime {
         guard let latestState else {
             return refreshed
         }
-        let usesLatestMessageDetailScreen = refreshed.activeTab == "messages"
-            && refreshed.visibleScreen == "screen.messages.list"
-            && latestState.activeTab == "messages"
-            && latestState.visibleScreen == "screen.message.detail"
-            && normalizedIdentifier(latestState.openedMessageId) != nil
-        let visibleScreen = usesLatestMessageDetailScreen ? latestState.visibleScreen : refreshed.visibleScreen
+        let usesLatestPresentedDetail = shouldPreservePresentedDetail(refreshed: refreshed, latest: latestState)
+        let visibleScreen = usesLatestPresentedDetail ? latestState.visibleScreen : refreshed.visibleScreen
         let openedMessageId: String? = {
             if let refreshedOpened = normalizedIdentifier(refreshed.openedMessageId) {
                 return refreshedOpened
             }
-            if usesLatestMessageDetailScreen {
+            if usesLatestPresentedDetail {
                 return normalizedIdentifier(latestState.openedMessageId)
             }
             return normalizedIdentifier(latestState.openedMessageId)
@@ -1106,6 +1111,24 @@ final class PushGoAutomationRuntime {
             residentMemoryBytes: refreshed.residentMemoryBytes,
             mainThreadMaxStallMilliseconds: refreshed.mainThreadMaxStallMilliseconds
         )
+    }
+
+    private func shouldPreservePresentedDetail(
+        refreshed: PushGoAutomationState,
+        latest: PushGoAutomationState
+    ) -> Bool {
+        switch (refreshed.activeTab, refreshed.visibleScreen, latest.activeTab, latest.visibleScreen) {
+        case ("messages", "screen.messages.list", "messages", "screen.message.detail"):
+            return normalizedIdentifier(latest.openedMessageId) != nil
+        case ("events", "screen.events.list", "events", "screen.events.detail"):
+            return latest.openedEntityType == "event"
+                && normalizedIdentifier(latest.openedEntityId) != nil
+        case ("things", "screen.things.list", "things", "screen.things.detail"):
+            return latest.openedEntityType == "thing"
+                && normalizedIdentifier(latest.openedEntityId) != nil
+        default:
+            return false
+        }
     }
 
     private func waitForStatePropagation(after commandName: String) async {
@@ -3359,7 +3382,7 @@ final class PushGoAutomationRuntime {
 
     private func decodeFixtureBundle(data: Data) throws -> PushGoAutomationFixtureBundle {
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .pushGoAutomationISO8601
         return try decoder.decode(PushGoAutomationFixtureBundle.self, from: data)
     }
 
@@ -3488,6 +3511,36 @@ private enum PushGoAutomationNotificationAction {
     case markRead
     case delete
     case copy
+}
+
+private extension JSONDecoder.DateDecodingStrategy {
+    static var pushGoAutomationISO8601: JSONDecoder.DateDecodingStrategy {
+        .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let value = try container.decode(String.self)
+            if let date = PushGoAutomationDateDecoding.date(from: value) {
+                return date
+            }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid ISO8601 date: \(value)"
+            )
+        }
+    }
+}
+
+private enum PushGoAutomationDateDecoding {
+    static func date(from value: String) -> Date? {
+        let fractionalFormatter = ISO8601DateFormatter()
+        fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractionalFormatter.date(from: value) {
+            return date
+        }
+
+        let standardFormatter = ISO8601DateFormatter()
+        standardFormatter.formatOptions = [.withInternetDateTime]
+        return standardFormatter.date(from: value)
+    }
 }
 
 private enum PushGoAutomationError: LocalizedError {

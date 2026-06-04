@@ -76,6 +76,14 @@ struct SettingsView: View {
             ServerManagementContentView(viewModel: viewModel)
                 .frame(width: 520)
                 .toastOverlay(environment: environment)
+        case .notificationSounds:
+            NotificationSoundSettingsContentView(
+                viewModel: viewModel,
+                dismissAction: closeMacOverlay,
+                showsInlineTitle: true
+            )
+            .frame(width: 900, height: 720)
+            .toastOverlay(environment: environment)
         }
     }
 
@@ -149,7 +157,7 @@ struct SettingsView: View {
                         SettingsActionRow(
                             iconName: "link",
                             title: "server_management",
-                            detail: serverConfigSubtitle,
+                            detailText: serverConfigSubtitle,
                         ) {
                             Image(systemName: "chevron.right")
                                 .font(.caption.weight(.semibold))
@@ -170,6 +178,23 @@ struct SettingsView: View {
                         thingIsOn: $bindableEnvironment.thingPageEnabled
                     )
                     .accessibilityIdentifier("group.settings.page_visibility")
+                    SettingsRowDivider()
+                    Button {
+                        viewModel.clearError()
+                        macOverlay = .notificationSounds
+                    } label: {
+                        SettingsActionRow(
+                            iconName: "speaker.wave.3",
+                            title: LocalizedStringKey("Notification Sounds"),
+                            detailText: notificationSoundsSubtitle,
+                        ) {
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Color.appTextSecondary)
+                        }
+                    }
+                    .buttonStyle(.appPlain)
+                    .accessibilityIdentifier("action.settings.notification_sounds")
                     SettingsRowDivider()
                     Button {
                         viewModel.clearError()
@@ -303,9 +328,18 @@ struct SettingsView: View {
         return LocalizedStringKey(localizationManager.localized("not_configured"))
     }
 
-    private var serverConfigSubtitle: LocalizedStringKey {
-        let value = environment.serverConfig?.baseURL.absoluteString ?? AppConstants.defaultServerAddress
-        return LocalizedStringKey(value)
+    private var serverConfigSubtitle: String {
+        environment.serverConfig?.baseURL.absoluteString ?? AppConstants.defaultServerAddress
+    }
+
+    private var notificationSoundsSubtitle: String {
+        let settings = viewModel.notificationSoundSettings
+        let customCount = settings.customAssets.count
+        let activeLevels = NotificationSoundLevel.allCases.filter { settings.rule(for: $0).mode != .silent }.count
+        if customCount == 0 {
+            return localizationManager.localized("%d priorities active, built-in defaults ready", activeLevels)
+        }
+        return localizationManager.localized("%d custom sounds, %d priorities active", customCount, activeLevels)
     }
 
     @ViewBuilder
@@ -739,6 +773,7 @@ private enum ManualSheetField: Hashable {
 private enum MacOverlay: String, Identifiable, Equatable {
     case manualKey
     case serverManagement
+    case notificationSounds
 
     var id: String { rawValue }
 
@@ -748,6 +783,8 @@ private enum MacOverlay: String, Identifiable, Equatable {
             "message_decryption"
         case .serverManagement:
             "server_management"
+        case .notificationSounds:
+            "Notification Sounds"
         }
     }
 }
