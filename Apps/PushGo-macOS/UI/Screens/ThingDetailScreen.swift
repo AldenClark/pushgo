@@ -187,6 +187,7 @@ private struct ThingDetailPanel: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                .transientPresentationSelectionControl()
 
                 tabSection
             }
@@ -201,6 +202,7 @@ private struct ThingDetailPanel: View {
                 EventDetailScreen(event: event)
             }
             .toastOverlay(environment: environment)
+            .transientPresentationRoot()
         }
         .sheet(item: $selectedMessage) { message in
             ThingSecondaryDetailSheet {
@@ -211,12 +213,14 @@ private struct ThingDetailPanel: View {
                 )
             }
             .toastOverlay(environment: environment)
+            .transientPresentationRoot()
         }
         .sheet(item: $selectedUpdate) { update in
             ThingSecondaryDetailSheet {
                 ThingRelatedUpdateDetailScreen(update: update)
             }
             .toastOverlay(environment: environment)
+            .transientPresentationRoot()
         }
         .sheet(isPresented: $showMetadataSheet) {
             ThingMetadataSheet(
@@ -224,6 +228,7 @@ private struct ThingDetailPanel: View {
                 entries: metadataEntries
             )
             .toastOverlay(environment: environment)
+            .transientPresentationRoot()
         }
     }
 
@@ -701,6 +706,7 @@ private struct ThingSecondaryDetailSheet<Content: View>: View {
                     dismiss()
                 }
                 .keyboardShortcut(.cancelAction)
+                .transientPresentationActionControl()
             }
         }
     }

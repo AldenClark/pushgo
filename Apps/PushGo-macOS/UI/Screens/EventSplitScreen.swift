@@ -469,6 +469,7 @@ struct EventSplitScreen: View {
             }
             .buttonStyle(.plain)
             .padding(.vertical, 2)
+            .transientPresentationActionControl()
 
             if !channelOptions.isEmpty {
                 Rectangle()
@@ -523,6 +524,7 @@ struct EventSplitScreen: View {
         .padding(.vertical, 14)
         .frame(width: 316, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
+        .transientPresentationRoot()
     }
 
     private var availableTags: [String] {
@@ -592,6 +594,7 @@ struct EventSplitScreen: View {
                 )
         }
         .buttonStyle(.plain)
+        .transientPresentationActionControl()
     }
 
     private func filterMenuSelectionRow(title: String, systemImage: String, isSelected: Bool) -> some View {

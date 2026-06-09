@@ -1,5 +1,57 @@
 import SwiftUI
 
+private struct TransientPresentationFocusDisabledKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var transientPresentationFocusDisabled: Bool {
+        get { self[TransientPresentationFocusDisabledKey.self] }
+        set { self[TransientPresentationFocusDisabledKey.self] = newValue }
+    }
+}
+
+extension View {
+    @ViewBuilder
+    func transientPresentationRoot() -> some View {
+#if os(macOS)
+        environment(\.transientPresentationFocusDisabled, true)
+            .focusEffectDisabled()
+#else
+        self
+#endif
+    }
+
+    @ViewBuilder
+    func transientPresentationFocusEffectDisabled() -> some View {
+#if os(macOS)
+        focusEffectDisabled()
+#else
+        self
+#endif
+    }
+
+    @ViewBuilder
+    func transientPresentationActionControl() -> some View {
+#if os(macOS)
+        focusable(false)
+            .focusEffectDisabled()
+#else
+        self
+#endif
+    }
+
+    @ViewBuilder
+    func transientPresentationSelectionControl() -> some View {
+#if os(macOS)
+        focusable(false)
+            .focusEffectDisabled()
+#else
+        self
+#endif
+    }
+}
+
 enum AppControlMetrics {
     static let fieldHeight: CGFloat = 48
     static let multilineMinHeight: CGFloat = 80
@@ -315,9 +367,10 @@ struct AppFormAccessoryButton: View {
     let systemName: String
     let action: () -> Void
     var accessibilityLabel: Text? = nil
+    @Environment(\.transientPresentationFocusDisabled) private var transientPresentationFocusDisabled
 
     var body: some View {
-        Button(action: action) {
+        let button = Button(action: action) {
             Image(systemName: systemName)
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(Color.appTextSecondary)
@@ -330,6 +383,12 @@ struct AppFormAccessoryButton: View {
         .buttonStyle(.plain)
         .contentShape(Rectangle())
         .accessibilityLabel(accessibilityLabel ?? Text(systemName))
+
+        if transientPresentationFocusDisabled {
+            button.transientPresentationActionControl()
+        } else {
+            button
+        }
     }
 }
 
@@ -340,6 +399,7 @@ enum AppActionButtonVariant {
 }
 
 struct AppActionButton<Label: View>: View {
+    @Environment(\.transientPresentationFocusDisabled) private var transientPresentationFocusDisabled
     let variant: AppActionButtonVariant
     let role: ButtonRole?
     let isLoading: Bool
@@ -421,7 +481,7 @@ struct AppActionButton<Label: View>: View {
     }
 
     var body: some View {
-        let button = Button(role: role, action: action) {
+        let baseButton = Button(role: role, action: action) {
             ZStack {
                 label
                     .opacity(isLoading ? 0 : 1)
@@ -434,6 +494,10 @@ struct AppActionButton<Label: View>: View {
             .frame(maxWidth: fullWidth ? .infinity : nil)
         }
         .disabled(isLoading)
+
+        let button = transientPresentationFocusDisabled
+            ? AnyView(baseButton.transientPresentationActionControl())
+            : AnyView(baseButton)
 
         switch variant {
         case .primary:
@@ -479,20 +543,36 @@ enum AppButtonMetrics {
 }
 
 struct AppPlainButtonStyle: ButtonStyle {
+    @Environment(\.transientPresentationFocusDisabled) private var transientPresentationFocusDisabled
+
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
+        let label = configuration.label
             .frame(minHeight: AppButtonMetrics.baseHeight)
             .contentShape(Rectangle())
             .opacity(configuration.isPressed ? 0.7 : 1)
+
+        if transientPresentationFocusDisabled {
+            label.transientPresentationActionControl()
+        } else {
+            label
+        }
     }
 }
 
 struct AppBorderlessButtonStyle: ButtonStyle {
+    @Environment(\.transientPresentationFocusDisabled) private var transientPresentationFocusDisabled
+
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
+        let label = configuration.label
             .frame(minHeight: AppButtonMetrics.baseHeight)
             .contentShape(Rectangle())
             .opacity(configuration.isPressed ? 0.7 : 1)
+
+        if transientPresentationFocusDisabled {
+            label.transientPresentationActionControl()
+        } else {
+            label
+        }
     }
 }
 

@@ -128,6 +128,7 @@ struct ChannelManagementView: View {
         ) {
             channelEntrySheet
                 .toastOverlay(environment: environment)
+                .transientPresentationRoot()
         }
     }
 
@@ -352,6 +353,7 @@ struct ChannelManagementView: View {
                     .tag(ChannelEntryMode.subscribe)
             }
             .pickerStyle(.segmented)
+            .transientPresentationSelectionControl()
             .accessibilityIdentifier("select.channels.entry.mode")
             .disabled(isChannelEntrySubmitting)
 
@@ -374,6 +376,7 @@ struct ChannelManagementView: View {
         .onChange(of: channelEntryMode) { _, _ in
             channelEntryErrorMessage = nil
         }
+        .transientPresentationRoot()
     }
 
     private func presentChannelEntrySheet() {

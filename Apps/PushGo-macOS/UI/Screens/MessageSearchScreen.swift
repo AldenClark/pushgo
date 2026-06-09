@@ -58,6 +58,7 @@ private struct MessageSearchScreenModern: View {
         .sheet(item: $selectedMessage) { message in
             MessageDetailScreen(messageId: message.id, message: nil)
                 .toastOverlay(environment: environment)
+                .transientPresentationRoot()
         }
     }
 

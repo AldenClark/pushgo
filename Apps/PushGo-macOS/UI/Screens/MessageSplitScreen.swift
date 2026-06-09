@@ -568,6 +568,7 @@ struct MessageSplitScreen: View {
             }
             .buttonStyle(.plain)
             .padding(.vertical, 2)
+            .transientPresentationActionControl()
 
             Button {
                 messageListViewModel.toggleUnreadOnlyFilter()
@@ -580,6 +581,7 @@ struct MessageSplitScreen: View {
             }
             .buttonStyle(.plain)
             .padding(.vertical, 2)
+            .transientPresentationActionControl()
 
             if !displayedChannelSummaries.isEmpty {
                 Rectangle()
@@ -624,6 +626,7 @@ struct MessageSplitScreen: View {
         .padding(.vertical, 14)
         .frame(width: 316, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
+        .transientPresentationRoot()
     }
 
     private var isFilterMenuHighlighted: Bool {
@@ -670,6 +673,7 @@ struct MessageSplitScreen: View {
                 )
         }
         .buttonStyle(.plain)
+        .transientPresentationActionControl()
     }
 
     private func filterMenuSelectionRow(title: String, systemImage: String, isSelected: Bool) -> some View {

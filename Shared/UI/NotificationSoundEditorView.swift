@@ -76,6 +76,7 @@ struct NotificationSoundSettingsContentView: View {
                                     )
                             }
                             .buttonStyle(.plain)
+                            .transientPresentationActionControl()
                             .disabled(isCommittingDraft)
                             .accessibilityLabel(localizationManager.localized("Close notification sound settings"))
                         }
@@ -220,6 +221,7 @@ struct NotificationSoundSettingsContentView: View {
                         )
                 }
                 .buttonStyle(.plain)
+                .transientPresentationActionControl()
                 .disabled(viewModel.isRequestingMacOSNotificationSoundDirectoryAccess)
             }
             .padding(12)
@@ -316,6 +318,7 @@ struct NotificationSoundSettingsContentView: View {
                 )
         }
         .buttonStyle(.plain)
+        .transientPresentationActionControl()
         .disabled(viewModel.isImportingNotificationSound)
         .accessibilityLabel(localizationManager.localized("Import Sound"))
     }
@@ -636,6 +639,7 @@ private struct NotificationSoundPriorityRow: View {
             )
         }
         .buttonStyle(.plain)
+        .transientPresentationActionControl()
         .accessibilityLabel(localizationManager.localized("Sound for %@", localizedLevelName))
     }
 
@@ -796,6 +800,7 @@ private struct NotificationSoundIntegerField: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .transientPresentationActionControl()
     }
 
     private func refreshDraft() {

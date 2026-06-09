@@ -72,10 +72,12 @@ struct SettingsView: View {
             ManualKeySettingsContentView(viewModel: viewModel)
                 .frame(width: 520)
                 .toastOverlay(environment: environment)
+                .transientPresentationRoot()
         case .serverManagement:
             ServerManagementContentView(viewModel: viewModel)
                 .frame(width: 520)
                 .toastOverlay(environment: environment)
+                .transientPresentationRoot()
         case .notificationSounds:
             NotificationSoundSettingsContentView(
                 viewModel: viewModel,
@@ -84,6 +86,7 @@ struct SettingsView: View {
             )
             .frame(width: 900, height: 720)
             .toastOverlay(environment: environment)
+            .transientPresentationRoot()
         }
     }
 
@@ -667,6 +670,7 @@ private struct ManualKeySettingsContentView: View {
                 }
             }
             .pickerStyle(.segmented)
+            .transientPresentationSelectionControl()
             .labelsHidden()
             .accessibilityLabel(Text(localizationManager.localized("key_format")))
         }
