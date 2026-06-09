@@ -1258,5 +1258,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: pushgo-dmg-diagnostics-${{ github.run_id }}
-          path: artifacts/release/**
+          path: |
+            release/appcast.xml
+            artifacts/release/*.dmg
+            artifacts/release/*.txt
           if-no-files-found: warn

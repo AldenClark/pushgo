@@ -1113,8 +1113,10 @@ platform :ios do
       /kex_exchange_identification/i,
       /TLS/i,
       /SSL/i,
+      /status code 50[0-9]\b/i,
+      /internal server error/i,
       /HTTP(?:\/\d\.\d)?\s+50[0-9]\b/i,
-      /\b502\b|\b503\b|\b504\b/
+      /\b500\b|\b502\b|\b503\b|\b504\b/
     ]
 
     patterns.any? { |pattern| message.match?(pattern) }

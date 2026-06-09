@@ -537,9 +537,23 @@ else
   fi
 fi
 
-invalid_url_count="$(xmllint --xpath "count(${track_item_xpath}/*[local-name()='enclosure'][not(starts-with(@url, '${download_url_prefix}'))])" "$appcast_path" 2>/dev/null || echo 1)"
+validated_item_xpath="${track_item_xpath}"
+if [[ -n "$expected_version" ]]; then
+  validated_item_xpath="${track_item_xpath}[./*[local-name()='enclosure'][contains(@url, '${expected_version}')]]"
+  validated_item_count="$(xmllint --xpath "count(${validated_item_xpath})" "$appcast_path" 2>/dev/null || echo 0)"
+  if [[ "$validated_item_count" == "0" ]]; then
+    echo "Error: generated appcast has no ${track} item for expected version ${expected_version}: $appcast_path" >&2
+    exit 1
+  fi
+fi
+
+invalid_url_count="$(xmllint --xpath "count(${validated_item_xpath}/*[local-name()='enclosure'][not(starts-with(@url, '${download_url_prefix}'))])" "$appcast_path" 2>/dev/null || echo 1)"
 if [[ "$invalid_url_count" != "0" ]]; then
-  echo "Error: generated appcast contains ${track} enclosure URL(s) outside --download-url-prefix=${download_url_prefix}" >&2
+  if [[ -n "$expected_version" ]]; then
+    echo "Error: generated appcast contains ${track} enclosure URL(s) for ${expected_version} outside --download-url-prefix=${download_url_prefix}" >&2
+  else
+    echo "Error: generated appcast contains ${track} enclosure URL(s) outside --download-url-prefix=${download_url_prefix}" >&2
+  fi
   exit 1
 fi
 
