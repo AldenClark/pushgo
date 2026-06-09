@@ -13,6 +13,17 @@ import SDWebImageSwiftUI
 import SDWebImage
 #endif
 
+private struct TransientPresentationFocusDisabledKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var transientPresentationFocusDisabled: Bool {
+        get { self[TransientPresentationFocusDisabledKey.self] }
+        set { self[TransientPresentationFocusDisabledKey.self] = newValue }
+    }
+}
+
 @MainActor
 func dismissKeyboard() {
 #if os(iOS)
@@ -23,7 +34,11 @@ func dismissKeyboard() {
 @MainActor
 @ViewBuilder
 func navigationContainer(@ViewBuilder _ content: () -> some View) -> some View {
+#if os(macOS)
+    content()
+#else
     NavigationStack { content() }
+#endif
 }
 
 enum PushgoSheetSizingStyle {
@@ -33,6 +48,45 @@ enum PushgoSheetSizingStyle {
 }
 
 extension View {
+    @ViewBuilder
+    func transientPresentationRoot() -> some View {
+#if os(macOS)
+        environment(\.transientPresentationFocusDisabled, true)
+            .focusEffectDisabled()
+#else
+        self
+#endif
+    }
+
+    @ViewBuilder
+    func transientPresentationFocusEffectDisabled() -> some View {
+#if os(macOS)
+        focusEffectDisabled()
+#else
+        self
+#endif
+    }
+
+    @ViewBuilder
+    func transientPresentationActionControl() -> some View {
+#if os(macOS)
+        focusable(false)
+            .focusEffectDisabled()
+#else
+        self
+#endif
+    }
+
+    @ViewBuilder
+    func transientPresentationSelectionControl() -> some View {
+#if os(macOS)
+        focusable(false)
+            .focusEffectDisabled()
+#else
+        self
+#endif
+    }
+
     @ViewBuilder
     func pushgoSheetSizing(_ style: PushgoSheetSizingStyle) -> some View {
 #if os(iOS)

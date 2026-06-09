@@ -25,6 +25,7 @@ struct MessageSplitScreen: View {
             messageListPane
             messageDetailPane
         }
+        .navigationTitle(isBatchMode ? "" : localizationManager.localized("messages"))
         .environment(searchViewModel)
         .onAppear {
             if searchFieldText != searchViewModel.query {
@@ -107,7 +108,6 @@ struct MessageSplitScreen: View {
                 placement: .toolbar,
                 prompt: Text(localizationManager.localized("search_messages"))
             )
-            .navigationTitle(isBatchMode ? "" : localizationManager.localized("messages"))
         }
         .pendingLocalDeletionBarHost(environment: environment)
         .toolbar { messageListToolbarContent }

@@ -56,8 +56,8 @@ final class MainWindowController {
         guard !chromeConfiguredWindows.contains(window) else { return }
         chromeConfiguredWindows.add(window)
 
-        if window.titleVisibility != .hidden {
-            window.titleVisibility = .hidden
+        if window.titleVisibility != .visible {
+            window.titleVisibility = .visible
         }
         if window.toolbarStyle != .unified {
             window.toolbarStyle = .unified

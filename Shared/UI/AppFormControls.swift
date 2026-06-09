@@ -1,57 +1,5 @@
 import SwiftUI
 
-private struct TransientPresentationFocusDisabledKey: EnvironmentKey {
-    static let defaultValue = false
-}
-
-extension EnvironmentValues {
-    var transientPresentationFocusDisabled: Bool {
-        get { self[TransientPresentationFocusDisabledKey.self] }
-        set { self[TransientPresentationFocusDisabledKey.self] = newValue }
-    }
-}
-
-extension View {
-    @ViewBuilder
-    func transientPresentationRoot() -> some View {
-#if os(macOS)
-        environment(\.transientPresentationFocusDisabled, true)
-            .focusEffectDisabled()
-#else
-        self
-#endif
-    }
-
-    @ViewBuilder
-    func transientPresentationFocusEffectDisabled() -> some View {
-#if os(macOS)
-        focusEffectDisabled()
-#else
-        self
-#endif
-    }
-
-    @ViewBuilder
-    func transientPresentationActionControl() -> some View {
-#if os(macOS)
-        focusable(false)
-            .focusEffectDisabled()
-#else
-        self
-#endif
-    }
-
-    @ViewBuilder
-    func transientPresentationSelectionControl() -> some View {
-#if os(macOS)
-        focusable(false)
-            .focusEffectDisabled()
-#else
-        self
-#endif
-    }
-}
-
 enum AppControlMetrics {
     static let fieldHeight: CGFloat = 48
     static let multilineMinHeight: CGFloat = 80

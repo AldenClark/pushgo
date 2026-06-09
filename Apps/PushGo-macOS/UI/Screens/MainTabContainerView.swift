@@ -25,6 +25,7 @@ struct MainTabContainerView: View {
         NavigationSplitView {
             sidebarMenu
                 .navigationSplitViewColumnWidth(min: 220, ideal: 220, max: 240)
+                .toolbar(removing: .sidebarToggle)
         } detail: {
             detailContent
         }
