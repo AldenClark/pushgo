@@ -12,7 +12,10 @@ struct NotificationPayloadSemanticsTests {
             contextSnapshot: snapshot,
             localizeTypeLabel: { $0 == "event" ? "Event" : "Thing" },
             localizeThingAttributeUpdateBody: { details in "Attribute update || \(details)" },
-            localizeThingAttributePair: { name, value in "\(name): \(value)" }
+            localizeThingAttributePair: { name, value in "\(name): \(value)" },
+            localizeThingUpdatedBody: { "Updated" },
+            localizeThingArchivedBody: { "Archived" },
+            localizeThingDeletedBody: { "Deleted" }
         )
     }
 
@@ -36,19 +39,19 @@ struct NotificationPayloadSemanticsTests {
     }
 
     @Test
-    func eventFallbackUsesLocalizedLabelAndStateWhenProfileIsMissing() {
+    func eventFallbackUsesStatusAsTitleWhenProfileAndSnapshotAreMissing() {
         let payload: [AnyHashable: Any] = [
             "entity_type": "event",
             "event_id": "evt-404",
             "entity_id": "evt-404",
-            "event_state": "open",
+            "status": "closed",
         ]
 
         let normalized = normalize(payload)
 
         #expect(normalized?.entityType == "event")
-        #expect(normalized?.title == "Event evt-404")
-        #expect(normalized?.body == "open")
+        #expect(normalized?.title == "closed")
+        #expect(normalized?.body == "closed")
     }
 
     @Test
@@ -82,6 +85,89 @@ struct NotificationPayloadSemanticsTests {
 
         #expect(normalized?.title == "Snapshot Event Title")
         #expect(normalized?.body == "Snapshot Event Body")
+    }
+
+    @Test
+    func entityFallbackDisplayDoesNotBackfillPatchFieldsIntoRawPayload() {
+        let eventPayload: [AnyHashable: Any] = [
+            "entity_type": "event",
+            "event_id": "evt-patch-only-001",
+            "entity_id": "evt-patch-only-001",
+            "metadata": #"{"stage":"patch"}"#,
+        ]
+        let thingPayload: [AnyHashable: Any] = [
+            "entity_type": "thing",
+            "thing_id": "thing-patch-only-001",
+            "entity_id": "thing-patch-only-001",
+            "attrs": #"{"temperature":"24"}"#,
+        ]
+
+        let event = normalize(eventPayload)
+        let thing = normalize(thingPayload)
+
+        #expect(event?.title == "Event evt-patch-only-001")
+        #expect(event?.body == NotificationPayloadSemantics.gatewayFallbackEventBody)
+        #expect(event?.rawPayload["title"] == nil)
+        #expect(event?.rawPayload["body"] == nil)
+        #expect(event?.rawPayload["metadata"] as? String == #"{"stage":"patch"}"#)
+
+        #expect(thing?.title == "Thing thing-patch-only-001")
+        #expect(thing?.body == "Attribute update || temperature: 24")
+        #expect(thing?.rawPayload["title"] == nil)
+        #expect(thing?.rawPayload["body"] == nil)
+        #expect(thing?.rawPayload["attrs"] as? String == #"{"temperature":"24"}"#)
+    }
+
+    @Test
+    func thingFallbackTitlePrefersSnapshotAndBodyUsesOperationSemantics() {
+        let snapshot = NotificationContextSnapshot(
+            schemaVersion: NotificationContextSnapshot.schemaVersion,
+            generatedAtEpochMs: 1_742_000_000_000,
+            source: "tests",
+            events: [:],
+            things: [
+                "thing-snapshot-001": NotificationContextSnapshot.ThingContext(
+                    thingId: "thing-snapshot-001",
+                    title: "Snapshot Thing Title",
+                    body: "Snapshot body",
+                    state: "active",
+                    channel: "objects",
+                    eventId: nil,
+                    messageId: "msg-snapshot-thing",
+                    primaryImage: nil,
+                    images: [],
+                    decryptionStateRaw: nil,
+                    updatedAtEpochMs: 1_742_000_000_000
+                ),
+            ]
+        )
+        let payload: [AnyHashable: Any] = [
+            "entity_type": "thing",
+            "thing_id": "thing-snapshot-001",
+            "entity_id": "thing-snapshot-001",
+            "action": "archive",
+            "attrs": #"{"name":"Payload Name"}"#,
+        ]
+
+        let normalized = normalize(payload, snapshot: snapshot)
+
+        #expect(normalized?.title == "Snapshot Thing Title")
+        #expect(normalized?.body == "Archived")
+    }
+
+    @Test
+    func thingDeleteFallbackBodyUsesDeleteSemanticLabel() {
+        let payload: [AnyHashable: Any] = [
+            "entity_type": "thing",
+            "thing_id": "thing-delete-001",
+            "entity_id": "thing-delete-001",
+            "endpoint": "/thing/delete",
+        ]
+
+        let normalized = normalize(payload)
+
+        #expect(normalized?.title == "Thing thing-delete-001")
+        #expect(normalized?.body == "Deleted")
     }
 
     @Test

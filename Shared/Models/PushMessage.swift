@@ -274,12 +274,15 @@ extension PushMessage {
     }
 
     private static func decodeMetadataMap(from raw: Any) -> Metadata {
-        guard let text = raw as? String else { return [:] }
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let data = trimmed.data(using: .utf8) else { return [:] }
-        guard let decoded = try? JSONSerialization.jsonObject(with: data, options: []) else {
+        if let object = raw as? [String: Any] {
+            return decodeMetadataMap(fromJSONObject: object)
+        }
+        guard let text = raw as? String else {
             return [:]
         }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let data = trimmed.data(using: .utf8) else { return [:] }
+        guard let decoded = try? JSONSerialization.jsonObject(with: data, options: []) else { return [:] }
         return decodeMetadataMap(fromJSONObject: decoded)
     }
 

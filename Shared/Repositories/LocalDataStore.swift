@@ -19,6 +19,23 @@ struct EntityProjectionPageCursor: Hashable, Sendable {
     let id: UUID
 }
 
+struct EntityProjectionDetail: Sendable {
+    let head: PushMessage?
+    let history: [PushMessage]
+
+    var messages: [PushMessage] {
+        guard let head else {
+            return history
+        }
+        return ([head] + history.filter { $0.id != head.id }).sorted {
+            if $0.receivedAt == $1.receivedAt {
+                return $0.id.uuidString > $1.id.uuidString
+            }
+            return $0.receivedAt > $1.receivedAt
+        }
+    }
+}
+
 enum MessageListSortMode: String, CaseIterable, Equatable, Hashable, Sendable {
     case timeDescending = "time_desc"
     case unreadFirst = "unread_first"
@@ -1595,16 +1612,28 @@ actor LocalDataStore {
         )
     }
 
-    func loadEventMessagesForProjection(eventId: String) async throws -> [PushMessage] {
+    func loadEventProjectionDetail(eventId: String) async throws -> EntityProjectionDetail {
         let normalized = eventId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return [] }
+        guard !normalized.isEmpty else {
+            return EntityProjectionDetail(head: nil, history: [])
+        }
         let backend = try requireBackend()
-        let messages = try await backend.loadEventMessagesForProjection(eventId: normalized)
-        return applyPendingProjectionMessages(
-            to: messages,
+        let detail = try await backend.loadEventProjectionDetail(eventId: normalized)
+        let headMessages = applyPendingProjectionMessages(
+            to: detail.head.map { [$0] } ?? [],
             includePending: true,
             limit: nil,
             where: { $0.eventId == normalized }
+        )
+        let history = applyPendingProjectionMessages(
+            to: detail.history,
+            includePending: true,
+            limit: nil,
+            where: { $0.eventId == normalized }
+        )
+        return EntityProjectionDetail(
+            head: headMessages.first,
+            history: history
         )
     }
 
@@ -1633,16 +1662,28 @@ actor LocalDataStore {
         )
     }
 
-    func loadThingMessagesForProjection(thingId: String) async throws -> [PushMessage] {
+    func loadThingProjectionDetail(thingId: String) async throws -> EntityProjectionDetail {
         let normalized = thingId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return [] }
+        guard !normalized.isEmpty else {
+            return EntityProjectionDetail(head: nil, history: [])
+        }
         let backend = try requireBackend()
-        let messages = try await backend.loadThingMessagesForProjection(thingId: normalized)
-        return applyPendingProjectionMessages(
-            to: messages,
+        let detail = try await backend.loadThingProjectionDetail(thingId: normalized)
+        let headMessages = applyPendingProjectionMessages(
+            to: detail.head.map { [$0] } ?? [],
             includePending: true,
             limit: nil,
             where: { $0.thingId == normalized }
+        )
+        let history = applyPendingProjectionMessages(
+            to: detail.history,
+            includePending: true,
+            limit: nil,
+            where: { $0.thingId == normalized }
+        )
+        return EntityProjectionDetail(
+            head: headMessages.first,
+            history: history
         )
     }
 
@@ -3729,11 +3770,102 @@ private actor GRDBStore {
         migrator.registerMigration("v14_provider_delivery_ack_outbox") { db in
             _ = db
         }
-        migrator.registerMigration("v15_drop_provider_delivery_ack_outbox") { db in
-            try db.execute(sql: "DROP TABLE IF EXISTS provider_delivery_ack_outbox;")
-        }
-        return migrator
-    }()
+	        migrator.registerMigration("v15_drop_provider_delivery_ack_outbox") { db in
+	            try db.execute(sql: "DROP TABLE IF EXISTS provider_delivery_ack_outbox;")
+	        }
+		        migrator.registerMigration("v16_entity_projection_heads") { db in
+		            try GRDBStore.createEntityProjectionHeadTables(db)
+		            try GRDBStore.rebuildEntityProjectionHeads(db)
+		        }
+	        return migrator
+	    }()
+
+	    private static func createEntityProjectionHeadTables(_ db: Database) throws {
+	        try db.execute(sql: """
+	            CREATE TABLE IF NOT EXISTS event_projection_heads (
+	                event_id TEXT PRIMARY KEY NOT NULL,
+	                id TEXT NOT NULL,
+	                message_id TEXT NOT NULL,
+	                title TEXT NOT NULL,
+	                body TEXT NOT NULL,
+	                channel TEXT,
+	                url TEXT,
+	                is_read INTEGER NOT NULL,
+	                received_at REAL NOT NULL,
+	                raw_payload_json TEXT NOT NULL,
+	                status TEXT NOT NULL,
+	                decryption_state TEXT,
+	                notification_request_id TEXT,
+	                delivery_id TEXT,
+	                operation_id TEXT,
+	                entity_type TEXT NOT NULL,
+	                entity_id TEXT,
+	                thing_id TEXT,
+	                projection_destination TEXT,
+	                event_state TEXT,
+	                event_time_epoch INTEGER,
+	                observed_time_epoch INTEGER,
+	                occurred_at_epoch INTEGER,
+	                is_top_level_message INTEGER NOT NULL,
+	                CHECK (length(trim(event_id)) > 0),
+	                CHECK (length(trim(message_id)) > 0)
+	            );
+	            """)
+	        try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_event_projection_heads_order ON event_projection_heads(COALESCE(event_time_epoch, received_at) DESC, received_at DESC, id DESC);")
+	        try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_event_projection_heads_channel ON event_projection_heads(channel);")
+
+	        try db.execute(sql: """
+	            CREATE TABLE IF NOT EXISTS thing_projection_heads (
+	                thing_id TEXT PRIMARY KEY NOT NULL,
+	                id TEXT NOT NULL,
+	                message_id TEXT NOT NULL,
+	                title TEXT NOT NULL,
+	                body TEXT NOT NULL,
+	                channel TEXT,
+	                url TEXT,
+	                is_read INTEGER NOT NULL,
+	                received_at REAL NOT NULL,
+	                raw_payload_json TEXT NOT NULL,
+	                status TEXT NOT NULL,
+	                decryption_state TEXT,
+	                notification_request_id TEXT,
+	                delivery_id TEXT,
+	                operation_id TEXT,
+	                entity_type TEXT NOT NULL,
+	                entity_id TEXT,
+	                event_id TEXT,
+	                projection_destination TEXT,
+	                event_state TEXT,
+	                event_time_epoch INTEGER,
+	                observed_time_epoch INTEGER,
+	                occurred_at_epoch INTEGER,
+	                is_top_level_message INTEGER NOT NULL,
+	                CHECK (length(trim(thing_id)) > 0),
+	                CHECK (length(trim(message_id)) > 0)
+	            );
+	            """)
+	        try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_thing_projection_heads_order ON thing_projection_heads(COALESCE(observed_time_epoch, event_time_epoch, received_at) DESC, received_at DESC, id DESC);")
+	        try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_thing_projection_heads_channel ON thing_projection_heads(channel);")
+	    }
+
+	    private static func rebuildEntityProjectionHeads(_ db: Database) throws {
+	        try db.execute(sql: "DELETE FROM event_projection_heads;")
+	        try db.execute(sql: "DELETE FROM thing_projection_heads;")
+	        let rows = try Row.fetchAll(
+	            db,
+	            sql: """
+	                SELECT *
+	                FROM messages
+	                WHERE entity_type IN ('event', 'thing')
+	                ORDER BY COALESCE(occurred_at_epoch, event_time_epoch, observed_time_epoch, CAST(received_at AS INTEGER)) ASC,
+	                         received_at ASC,
+	                         id ASC;
+	                """
+	        )
+	        for row in rows {
+	            try upsertEntityProjectionHeadIfNeeded(GRDBMessageRecord(row: row), db: db)
+	        }
+	    }
 
     private static func sqlQuoted(_ value: String) -> String {
         "'\(value.replacingOccurrences(of: "'", with: "''"))'"
@@ -3772,14 +3904,134 @@ private actor GRDBStore {
         return value ? "1" : "0"
     }
 
-    private static func normalizeOptional(_ value: String?) -> String? {
-        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmed.isEmpty ? nil : trimmed
-    }
+	    private static func normalizeOptional(_ value: String?) -> String? {
+	        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+	        return trimmed.isEmpty ? nil : trimmed
+	    }
 
-    private static func normalizeGateway(_ value: String) -> String {
-        value.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
+	    private static let objectPatchPayloadKeys: Set<String> = ["attrs", "metadata", "external_ids"]
+	    private static let blankTextPatchPayloadKeys: Set<String> = ["title", "body", "description", "message"]
+
+	    private static func jsonObject(fromJSONString raw: String?) -> [String: Any]? {
+	        let text = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+	        guard !text.isEmpty,
+	              let data = text.data(using: .utf8),
+	              let value = try? JSONSerialization.jsonObject(with: data),
+	              let object = value as? [String: Any]
+	        else {
+	            return nil
+	        }
+	        return object
+	    }
+
+	    private static func jsonString(from object: [String: Any]) -> String? {
+	        guard JSONSerialization.isValidJSONObject(object),
+	              let data = try? JSONSerialization.data(
+	                  withJSONObject: object,
+	                  options: [.sortedKeys, .withoutEscapingSlashes]
+	              )
+	        else {
+	            return nil
+	        }
+	        return String(data: data, encoding: .utf8)
+	    }
+
+	    private static func mergeEntityPayloadJSON(existingRaw: String?, incomingRaw: String) -> String {
+	        guard let incoming = jsonObject(fromJSONString: incomingRaw) else {
+	            return incomingRaw
+	        }
+	        var merged = jsonObject(fromJSONString: existingRaw) ?? [:]
+	        for (key, value) in incoming {
+	            if blankTextPatchPayloadKeys.contains(key),
+	               let text = value as? String,
+	               text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+	            {
+	                continue
+	            }
+	            if objectPatchPayloadKeys.contains(key) {
+	                if value is NSNull {
+	                    merged.removeValue(forKey: key)
+	                    continue
+	                }
+	                if let patch = patchObject(from: value) {
+	                    var base = patchObject(from: merged[key]) ?? [:]
+	                    applyObjectPatch(base: &base, patch: patch)
+	                    merged[key] = base
+	                } else {
+	                    merged[key] = value
+	                }
+	            } else if value is NSNull {
+	                merged.removeValue(forKey: key)
+	            } else {
+	                merged[key] = value
+	            }
+	        }
+	        return jsonString(from: merged) ?? incomingRaw
+	    }
+
+	    private static func patchObject(from value: Any?) -> [String: Any]? {
+	        switch value {
+	        case let object as [String: Any]:
+	            return object
+	        case let text as String:
+	            return jsonObject(fromJSONString: text)
+	        default:
+	            return nil
+	        }
+	    }
+
+	    private static func applyObjectPatch(base: inout [String: Any], patch: [String: Any]) {
+	        for (key, value) in patch {
+	            if value is NSNull {
+	                base.removeValue(forKey: key)
+	            } else {
+	                base[key] = value
+	            }
+	        }
+	    }
+
+	    private static func textStringFromPatch(
+	        incomingPayload: [String: Any]?,
+	        keys: [String],
+	        incoming: String,
+	        existing: String?
+	    ) -> String {
+	        for key in keys where incomingPayload?[key] != nil {
+	            if let value = normalizedPatchText(incomingPayload?[key]) {
+	                return value
+	            }
+	            return existing ?? ""
+	        }
+	        return existing ?? incoming
+	    }
+
+	    private static func textOptionalFromPatch(
+	        incomingPayload: [String: Any]?,
+	        keys: [String],
+	        incoming: String?,
+	        existing: String?
+	    ) -> String? {
+	        for key in keys where incomingPayload?[key] != nil {
+	            return normalizedPatchText(incomingPayload?[key]) ?? incoming
+	        }
+	        return existing ?? incoming
+	    }
+
+	    private static func normalizedPatchText(_ value: Any?) -> String? {
+	        switch value {
+	        case let text as String:
+	            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+	            return trimmed.isEmpty ? nil : trimmed
+	        case let number as NSNumber:
+	            return number.stringValue
+	        default:
+	            return nil
+	        }
+	    }
+
+	    private static func normalizeGateway(_ value: String) -> String {
+	        value.trimmingCharacters(in: .whitespacesAndNewlines)
+	    }
 
     private static func normalizeChannelIdentifierForMatch(_ raw: String) -> String? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -4108,11 +4360,11 @@ private actor GRDBStore {
         }
     }
 
-    private func insertOrUpdateMessage(
-        _ record: GRDBMessageRecord,
-        db: Database,
-        updateOnConflict: Bool
-    ) throws {
+	    private func insertOrUpdateMessage(
+	        _ record: GRDBMessageRecord,
+	        db: Database,
+	        updateOnConflict: Bool
+	    ) throws {
         let baseInsertSQL = """
             INSERT INTO messages (
                 id, message_id, title, body, channel, url, is_read, received_at,
@@ -4177,10 +4429,219 @@ private actor GRDBStore {
                 WHERE excluded.received_at >= messages.received_at;
                 """
             try db.execute(sql: sql)
-        } else {
-            try db.execute(sql: baseInsertSQL + " ON CONFLICT(message_id) DO NOTHING;")
-        }
-    }
+	        } else {
+	            try db.execute(sql: baseInsertSQL + " ON CONFLICT(message_id) DO NOTHING;")
+	        }
+	        try Self.upsertEntityProjectionHeadIfNeeded(record, db: db)
+	    }
+
+	    private static func upsertEntityProjectionHeadIfNeeded(
+	        _ record: GRDBMessageRecord,
+	        db: Database
+	    ) throws {
+	        if record.entityType == "event",
+	           let eventId = normalizeEntityReference(record.eventId ?? record.entityId),
+	           ProjectionSemantics.isTopLevelEventProjection(
+	               entityType: record.entityType,
+	               eventId: eventId,
+	               thingId: normalizeEntityReference(record.thingId),
+	               projectionDestination: record.projectionDestination
+	           )
+	        {
+	            let existing = try loadProjectionHeadRecord(
+	                table: "event_projection_heads",
+	                keyColumn: "event_id",
+	                key: eventId,
+	                db: db
+	            )
+	            let merged = mergedProjectionHeadRecord(existing: existing, incoming: record)
+	            try upsertEventProjectionHead(eventId: eventId, record: merged, db: db)
+	        }
+
+	        if record.entityType == "thing",
+	           let thingId = normalizeEntityReference(record.thingId ?? record.entityId)
+	        {
+	            let existing = try loadProjectionHeadRecord(
+	                table: "thing_projection_heads",
+	                keyColumn: "thing_id",
+	                key: thingId,
+	                db: db
+	            )
+	            let merged = mergedProjectionHeadRecord(existing: existing, incoming: record)
+	            try upsertThingProjectionHead(thingId: thingId, record: merged, db: db)
+	        }
+	    }
+
+	    private static func loadProjectionHeadRecord(
+	        table: String,
+	        keyColumn: String,
+	        key: String,
+	        db: Database
+	    ) throws -> GRDBMessageRecord? {
+	        let sql = "SELECT * FROM \(table) WHERE \(keyColumn) = \(Self.sqlQuoted(key)) LIMIT 1;"
+	        return try Row.fetchOne(db, sql: sql).map(GRDBMessageRecord.init(row:))
+	    }
+
+	    private static func mergedProjectionHeadRecord(
+	        existing: GRDBMessageRecord?,
+	        incoming: GRDBMessageRecord
+	    ) -> GRDBMessageRecord {
+	        let incomingPayload = Self.jsonObject(fromJSONString: incoming.rawPayloadJSON)
+	        let mergedPayloadJSON = Self.mergeEntityPayloadJSON(
+	            existingRaw: existing?.rawPayloadJSON,
+	            incomingRaw: incoming.rawPayloadJSON
+	        )
+	        return GRDBMessageRecord(
+	            id: incoming.id,
+	            messageId: incoming.messageId,
+	            title: Self.textStringFromPatch(
+	                incomingPayload: incomingPayload,
+	                keys: ["title"],
+	                incoming: incoming.title,
+	                existing: existing?.title
+	            ),
+	            body: Self.textStringFromPatch(
+	                incomingPayload: incomingPayload,
+	                keys: ["body", "description", "message"],
+	                incoming: incoming.body,
+	                existing: existing?.body
+	            ),
+	            channel: incoming.channel ?? existing?.channel,
+	            url: incoming.url ?? existing?.url,
+	            isRead: incoming.isRead,
+	            receivedAt: incoming.receivedAt,
+	            rawPayloadJSON: mergedPayloadJSON,
+	            status: incoming.status,
+	            decryptionState: incoming.decryptionState ?? existing?.decryptionState,
+	            notificationRequestId: incoming.notificationRequestId ?? existing?.notificationRequestId,
+	            deliveryId: incoming.deliveryId ?? existing?.deliveryId,
+	            operationId: incoming.operationId ?? existing?.operationId,
+	            entityType: incoming.entityType,
+	            entityId: incoming.entityId ?? existing?.entityId,
+	            eventId: incoming.eventId ?? existing?.eventId,
+	            thingId: incoming.thingId ?? existing?.thingId,
+	            projectionDestination: incoming.projectionDestination ?? existing?.projectionDestination,
+	            eventState: Self.textOptionalFromPatch(
+	                incomingPayload: incomingPayload,
+	                keys: ["event_state", "state"],
+	                incoming: incoming.eventState,
+	                existing: existing?.eventState
+	            ),
+	            eventTimeEpoch: incoming.eventTimeEpoch ?? existing?.eventTimeEpoch,
+	            observedTimeEpoch: incoming.observedTimeEpoch ?? existing?.observedTimeEpoch,
+	            occurredAtEpoch: incoming.occurredAtEpoch ?? existing?.occurredAtEpoch,
+	            topLevelMessage: incoming.topLevelMessage
+	        )
+	    }
+
+	    private static func upsertEventProjectionHead(
+	        eventId: String,
+	        record: GRDBMessageRecord,
+	        db: Database
+	    ) throws {
+	        try db.execute(sql: projectionHeadInsertSQL(
+	            table: "event_projection_heads",
+	            keyColumn: "event_id",
+	            key: eventId,
+	            record: record
+	        ))
+	    }
+
+	    private static func upsertThingProjectionHead(
+	        thingId: String,
+	        record: GRDBMessageRecord,
+	        db: Database
+	    ) throws {
+	        try db.execute(sql: projectionHeadInsertSQL(
+	            table: "thing_projection_heads",
+	            keyColumn: "thing_id",
+	            key: thingId,
+	            record: record
+	        ))
+	    }
+
+	    private static func projectionHeadInsertSQL(
+	        table: String,
+	        keyColumn: String,
+	        key: String,
+	        record: GRDBMessageRecord
+	    ) -> String {
+	        let relationshipColumns: String
+	        let relationshipValues: String
+	        let relationshipUpdates: String
+	        if keyColumn == "event_id" {
+	            relationshipColumns = "entity_id, thing_id"
+	            relationshipValues = "\(Self.sqlOptionalText(record.entityId)), \(Self.sqlOptionalText(record.thingId))"
+	            relationshipUpdates = """
+	                entity_id = excluded.entity_id,
+	                thing_id = excluded.thing_id,
+	            """
+	        } else {
+	            relationshipColumns = "entity_id, event_id"
+	            relationshipValues = "\(Self.sqlOptionalText(record.entityId)), \(Self.sqlOptionalText(record.eventId))"
+	            relationshipUpdates = """
+	                entity_id = excluded.entity_id,
+	                event_id = excluded.event_id,
+	            """
+	        }
+	        return """
+	            INSERT INTO \(table) (
+	                \(keyColumn), id, message_id, title, body, channel, url, is_read,
+	                received_at, raw_payload_json, status, decryption_state,
+	                notification_request_id, delivery_id, operation_id, entity_type,
+	                \(relationshipColumns), projection_destination, event_state,
+	                event_time_epoch, observed_time_epoch, occurred_at_epoch,
+	                is_top_level_message
+	            ) VALUES (
+	                \(Self.sqlQuoted(key)),
+	                \(Self.sqlQuoted(record.id.uuidString)),
+	                \(Self.sqlQuoted(record.messageId)),
+	                \(Self.sqlQuoted(record.title)),
+	                \(Self.sqlQuoted(record.body)),
+	                \(Self.sqlOptionalText(record.channel)),
+	                \(Self.sqlOptionalText(record.url)),
+	                \(record.isRead ? 1 : 0),
+	                \(Self.storedEpoch(record.receivedAt)),
+	                \(Self.sqlQuoted(record.rawPayloadJSON)),
+	                \(Self.sqlQuoted(record.status)),
+	                \(Self.sqlOptionalText(record.decryptionState)),
+	                \(Self.sqlOptionalText(record.notificationRequestId)),
+	                \(Self.sqlOptionalText(record.deliveryId)),
+	                \(Self.sqlOptionalText(record.operationId)),
+	                \(Self.sqlQuoted(record.entityType)),
+	                \(relationshipValues),
+	                \(Self.sqlOptionalText(record.projectionDestination)),
+	                \(Self.sqlOptionalText(record.eventState)),
+	                \(Self.sqlOptionalInt64(record.eventTimeEpoch)),
+	                \(Self.sqlOptionalInt64(record.observedTimeEpoch)),
+	                \(Self.sqlOptionalInt64(record.occurredAtEpoch)),
+	                \(record.topLevelMessage ? 1 : 0)
+	            )
+	            ON CONFLICT(\(keyColumn)) DO UPDATE SET
+	                id = excluded.id,
+	                message_id = excluded.message_id,
+	                title = excluded.title,
+	                body = excluded.body,
+	                channel = excluded.channel,
+	                url = excluded.url,
+	                is_read = excluded.is_read,
+	                received_at = excluded.received_at,
+	                raw_payload_json = excluded.raw_payload_json,
+	                status = excluded.status,
+	                decryption_state = excluded.decryption_state,
+	                notification_request_id = excluded.notification_request_id,
+	                delivery_id = excluded.delivery_id,
+	                operation_id = excluded.operation_id,
+	                entity_type = excluded.entity_type,
+	                \(relationshipUpdates)
+	                projection_destination = excluded.projection_destination,
+	                event_state = excluded.event_state,
+	                event_time_epoch = excluded.event_time_epoch,
+	                observed_time_epoch = excluded.observed_time_epoch,
+	                occurred_at_epoch = excluded.occurred_at_epoch,
+	                is_top_level_message = excluded.is_top_level_message;
+	            """
+	    }
 
     private func loadMessageRecord(where condition: String, db: Database) throws -> GRDBMessageRecord? {
         let sql = "SELECT * FROM messages WHERE \(condition) ORDER BY received_at DESC, id DESC LIMIT 1;"
@@ -5374,96 +5835,122 @@ private actor GRDBStore {
         try await loadMessages(ids: ids).map(PushMessageSummary.init(message:))
     }
 
-    func loadEventMessagesForProjection() async throws -> [PushMessage] {
-        try loadEntityProjectionMessages(entityConditions: ["entity_type = 'event'"], cursor: nil, limit: nil)
-            .filter(isTopLevelEventProjection)
-    }
+	    func loadEventMessagesForProjection() async throws -> [PushMessage] {
+	        try loadProjectionHeadMessages(
+	            table: "event_projection_heads",
+	            conditions: [],
+	            cursor: nil,
+	            limit: nil,
+	            orderBy: "COALESCE(event_time_epoch, received_at) DESC, received_at DESC, id DESC"
+	        )
+	    }
 
-    func loadEventMessagesForProjection(eventId: String) async throws -> [PushMessage] {
-        let normalized = eventId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return [] }
-        return try loadEntityProjectionMessages(
-            entityConditions: [
-                "entity_type = 'event'",
-                "event_id = \(Self.sqlQuoted(normalized))",
-            ],
-            cursor: nil,
-            limit: nil
-        ).filter { $0.eventId == normalized }
-    }
+	    func loadEventProjectionDetail(eventId: String) async throws -> EntityProjectionDetail {
+	        let normalized = eventId.trimmingCharacters(in: .whitespacesAndNewlines)
+	        guard !normalized.isEmpty else {
+	            return EntityProjectionDetail(head: nil, history: [])
+	        }
+	        let history = try loadEntityProjectionMessages(
+	            entityConditions: [
+	                "entity_type = 'event'",
+	                "event_id = \(Self.sqlQuoted(normalized))",
+	            ],
+	            cursor: nil,
+	            limit: nil
+	        ).filter { $0.eventId == normalized }
+	        let head = try loadProjectionHeadMessages(
+	            table: "event_projection_heads",
+	            conditions: ["event_id = \(Self.sqlQuoted(normalized))"],
+	            cursor: nil,
+	            limit: 1,
+	            orderBy: "COALESCE(event_time_epoch, received_at) DESC, received_at DESC, id DESC"
+	        )
+	        return EntityProjectionDetail(head: head.first, history: history)
+	    }
 
-    func loadEventMessagesForProjectionPage(
-        before cursor: EntityProjectionPageCursor?,
-        limit: Int
-    ) async throws -> [PushMessage] {
-        guard limit > 0 else { return [] }
-        var collected: [PushMessage] = []
-        var pageCursor = cursor
-        let fetchBatchSize = max(limit * 2, 80)
-        while collected.count < limit {
-            let batch = try loadEntityProjectionMessages(
-                entityConditions: ["entity_type = 'event'"],
-                cursor: pageCursor,
-                limit: fetchBatchSize
-            )
-            if batch.isEmpty { break }
-            for message in batch where isTopLevelEventProjection(message) {
-                collected.append(message)
-                if collected.count == limit { break }
-            }
-            guard let last = batch.last else { break }
-            pageCursor = EntityProjectionPageCursor(receivedAt: last.receivedAt, id: last.id)
-            if batch.count < fetchBatchSize { break }
-        }
-        return collected
-    }
+	    func loadEventMessagesForProjectionPage(
+	        before cursor: EntityProjectionPageCursor?,
+	        limit: Int
+	    ) async throws -> [PushMessage] {
+	        guard limit > 0 else { return [] }
+	        return try loadProjectionHeadMessages(
+	            table: "event_projection_heads",
+	            conditions: [],
+	            cursor: cursor,
+	            limit: limit,
+	            orderBy: "COALESCE(event_time_epoch, received_at) DESC, received_at DESC, id DESC"
+	        )
+	    }
 
-    func loadThingMessagesForProjection() async throws -> [PushMessage] {
-        try loadEntityProjectionMessages(
-            entityConditions: ["((thing_id IS NOT NULL AND trim(thing_id) <> '') OR entity_type = 'thing')"],
-            cursor: nil,
-            limit: nil
-        ).filter { $0.thingId != nil }
-    }
+	    func loadThingMessagesForProjection() async throws -> [PushMessage] {
+	        try loadProjectionHeadMessages(
+	            table: "thing_projection_heads",
+	            conditions: [],
+	            cursor: nil,
+	            limit: nil,
+	            orderBy: "COALESCE(observed_time_epoch, event_time_epoch, received_at) DESC, received_at DESC, id DESC"
+	        )
+	    }
 
-    func loadThingMessagesForProjection(thingId: String) async throws -> [PushMessage] {
-        let normalized = thingId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalized.isEmpty else { return [] }
+	    func loadThingProjectionDetail(thingId: String) async throws -> EntityProjectionDetail {
+	        let normalized = thingId.trimmingCharacters(in: .whitespacesAndNewlines)
+	        guard !normalized.isEmpty else {
+	            return EntityProjectionDetail(head: nil, history: [])
+	        }
         let raw = try loadEntityProjectionMessages(
             entityConditions: [
                 "((thing_id = \(Self.sqlQuoted(normalized))) OR (entity_type = 'thing' AND entity_id = \(Self.sqlQuoted(normalized))))",
             ],
-            cursor: nil,
-            limit: nil
-        )
-        return raw.filter { $0.thingId == normalized }
-    }
+	            cursor: nil,
+	            limit: nil
+	        )
+	        let history = raw.filter { $0.thingId == normalized }
+	        let head = try loadProjectionHeadMessages(
+	            table: "thing_projection_heads",
+	            conditions: ["thing_id = \(Self.sqlQuoted(normalized))"],
+	            cursor: nil,
+	            limit: 1,
+	            orderBy: "COALESCE(observed_time_epoch, event_time_epoch, received_at) DESC, received_at DESC, id DESC"
+	        )
+	        return EntityProjectionDetail(head: head.first, history: history)
+	    }
 
-    func loadThingMessagesForProjectionPage(
-        before cursor: EntityProjectionPageCursor?,
-        limit: Int
-    ) async throws -> [PushMessage] {
-        guard limit > 0 else { return [] }
-        var collected: [PushMessage] = []
-        var pageCursor = cursor
-        let fetchBatchSize = max(limit * 2, 80)
-        while collected.count < limit {
-            let batch = try loadEntityProjectionMessages(
-                entityConditions: ["((thing_id IS NOT NULL AND trim(thing_id) <> '') OR entity_type = 'thing')"],
-                cursor: pageCursor,
-                limit: fetchBatchSize
-            )
-            if batch.isEmpty { break }
-            for message in batch where message.thingId != nil {
-                collected.append(message)
-                if collected.count == limit { break }
-            }
-            guard let last = batch.last else { break }
-            pageCursor = EntityProjectionPageCursor(receivedAt: last.receivedAt, id: last.id)
-            if batch.count < fetchBatchSize { break }
-        }
-        return collected
-    }
+	    func loadThingMessagesForProjectionPage(
+	        before cursor: EntityProjectionPageCursor?,
+	        limit: Int
+	    ) async throws -> [PushMessage] {
+	        guard limit > 0 else { return [] }
+	        return try loadProjectionHeadMessages(
+	            table: "thing_projection_heads",
+	            conditions: [],
+	            cursor: cursor,
+	            limit: limit,
+	            orderBy: "COALESCE(observed_time_epoch, event_time_epoch, received_at) DESC, received_at DESC, id DESC"
+	        )
+	    }
+
+	    private func loadProjectionHeadMessages(
+	        table: String,
+	        conditions: [String],
+	        cursor: EntityProjectionPageCursor?,
+	        limit: Int?,
+	        orderBy: String
+	    ) throws -> [PushMessage] {
+	        try read { db in
+	            var resolvedConditions = conditions
+	            if let cursor {
+	                resolvedConditions.append(
+	                    "(received_at < \(Self.storedEpoch(cursor.receivedAt)) OR (received_at = \(Self.storedEpoch(cursor.receivedAt)) AND id < \(Self.sqlQuoted(cursor.id.uuidString))))"
+	                )
+	            }
+	            let whereClause = resolvedConditions.isEmpty ? "" : "WHERE \(resolvedConditions.joined(separator: " AND "))"
+	            let limitClause = limit.map { " LIMIT \($0)" } ?? ""
+	            let sql = "SELECT * FROM \(table) \(whereClause) ORDER BY \(orderBy)\(limitClause);"
+	            return try Row.fetchAll(db, sql: sql)
+	                .map(GRDBMessageRecord.init(row:))
+	                .map { $0.toPushMessage(decoder: decoder) }
+	        }
+	    }
 
     func loadMessage(id: UUID) async throws -> PushMessage? {
         try read { db in
@@ -5747,11 +6234,12 @@ private actor GRDBStore {
         }
     }
 
-    func deleteMessage(id: UUID) async throws {
-        try write { db in
-            try db.execute(sql: "DELETE FROM messages WHERE id = \(Self.sqlQuoted(id.uuidString));")
-        }
-    }
+	    func deleteMessage(id: UUID) async throws {
+	        try write { db in
+	            try db.execute(sql: "DELETE FROM messages WHERE id = \(Self.sqlQuoted(id.uuidString));")
+	            try Self.rebuildEntityProjectionHeads(db)
+	        }
+	    }
 
     func deleteMessages(ids: [UUID]) async throws -> [UUID] {
         let uniqueIds = Array(Set(ids))
@@ -5765,34 +6253,40 @@ private actor GRDBStore {
                 let raw: String? = row["id"]
                 return raw.flatMap(UUID.init(uuidString:))
             }
-            guard !existing.isEmpty else { return [] }
-            let existingJoined = existing.map { Self.sqlQuoted($0.uuidString) }.joined(separator: ",")
-            try db.execute(sql: "DELETE FROM messages WHERE id IN (\(existingJoined));")
-            return existing
-        }
-    }
+	            guard !existing.isEmpty else { return [] }
+	            let existingJoined = existing.map { Self.sqlQuoted($0.uuidString) }.joined(separator: ",")
+	            try db.execute(sql: "DELETE FROM messages WHERE id IN (\(existingJoined));")
+	            try Self.rebuildEntityProjectionHeads(db)
+	            return existing
+	        }
+	    }
 
     func deleteMessage(notificationRequestId: String) async throws {
         let normalized = notificationRequestId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return }
-        try write { db in
-            let whereClause = "notification_request_id = \(Self.sqlQuoted(normalized))"
-            try db.execute(sql: "DELETE FROM messages WHERE \(whereClause);")
-        }
-    }
+	        try write { db in
+	            let whereClause = "notification_request_id = \(Self.sqlQuoted(normalized))"
+	            try db.execute(sql: "DELETE FROM messages WHERE \(whereClause);")
+	            try Self.rebuildEntityProjectionHeads(db)
+	        }
+	    }
 
-    func deleteAllMessages() async throws {
-        try write { db in
-            try db.execute(sql: "DELETE FROM messages;")
-        }
-    }
+	    func deleteAllMessages() async throws {
+	        try write { db in
+	            try db.execute(sql: "DELETE FROM messages;")
+	            try db.execute(sql: "DELETE FROM event_projection_heads;")
+	            try db.execute(sql: "DELETE FROM thing_projection_heads;")
+	        }
+	    }
 
-    func deleteAllEntityRecords() async throws {
-        try write { db in
-            try db.execute(sql: "DELETE FROM messages WHERE is_top_level_message = 0 OR entity_type <> 'message';")
-            try db.execute(sql: "DELETE FROM operation_ledger;")
-        }
-    }
+	    func deleteAllEntityRecords() async throws {
+	        try write { db in
+	            try db.execute(sql: "DELETE FROM messages WHERE is_top_level_message = 0 OR entity_type <> 'message';")
+	            try db.execute(sql: "DELETE FROM event_projection_heads;")
+	            try db.execute(sql: "DELETE FROM thing_projection_heads;")
+	            try db.execute(sql: "DELETE FROM operation_ledger;")
+	        }
+	    }
 
     func deleteEventRecords(eventId: String) async throws -> Int {
         let normalized = eventId.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -5802,18 +6296,19 @@ private actor GRDBStore {
                 SELECT id
                 FROM messages
                 WHERE event_id = \(Self.sqlQuoted(normalized))
-                  AND (entity_type = 'event' OR entity_type = 'message');
+                  AND entity_type = 'event';
                 """
             let ids = try Row.fetchAll(db, sql: idsSQL).compactMap { row -> String? in
                 let id: String? = row["id"]
                 return id
             }
-            guard !ids.isEmpty else { return 0 }
-            let joined = ids.map(Self.sqlQuoted).joined(separator: ",")
-            try db.execute(sql: "DELETE FROM messages WHERE id IN (\(joined));")
-            return ids.count
-        }
-    }
+	            guard !ids.isEmpty else { return 0 }
+	            let joined = ids.map(Self.sqlQuoted).joined(separator: ",")
+	            try db.execute(sql: "DELETE FROM messages WHERE id IN (\(joined));")
+	            try db.execute(sql: "DELETE FROM event_projection_heads WHERE event_id = \(Self.sqlQuoted(normalized));")
+	            return ids.count
+	        }
+	    }
 
     func deleteEventRecords(eventIds: [String]) async throws -> Int {
         let normalized = Array(
@@ -5830,18 +6325,19 @@ private actor GRDBStore {
                 SELECT id
                 FROM messages
                 WHERE event_id IN (\(inClause))
-                  AND (entity_type = 'event' OR entity_type = 'message');
+                  AND entity_type = 'event';
                 """
             let ids = try Row.fetchAll(db, sql: idsSQL).compactMap { row -> String? in
                 let id: String? = row["id"]
                 return id
             }
-            guard !ids.isEmpty else { return 0 }
-            let joined = ids.map(Self.sqlQuoted).joined(separator: ",")
-            try db.execute(sql: "DELETE FROM messages WHERE id IN (\(joined));")
-            return ids.count
-        }
-    }
+	            guard !ids.isEmpty else { return 0 }
+	            let joined = ids.map(Self.sqlQuoted).joined(separator: ",")
+	            try db.execute(sql: "DELETE FROM messages WHERE id IN (\(joined));")
+	            try db.execute(sql: "DELETE FROM event_projection_heads WHERE event_id IN (\(inClause));")
+	            return ids.count
+	        }
+	    }
 
     func deleteEventRecords(channel: String?) async throws -> Int {
         let normalized = channel?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -5857,12 +6353,13 @@ private actor GRDBStore {
                 let id: String? = row["id"]
                 return id
             }
-            guard !ids.isEmpty else { return 0 }
-            let joined = ids.map(Self.sqlQuoted).joined(separator: ",")
-            try db.execute(sql: "DELETE FROM messages WHERE id IN (\(joined));")
-            return ids.count
-        }
-    }
+	            guard !ids.isEmpty else { return 0 }
+	            let joined = ids.map(Self.sqlQuoted).joined(separator: ",")
+	            try db.execute(sql: "DELETE FROM messages WHERE id IN (\(joined));")
+	            try db.execute(sql: "DELETE FROM event_projection_heads WHERE \(channelCondition);")
+	            return ids.count
+	        }
+	    }
 
     func deleteThingRecords(thingId: String) async throws -> Int {
         let normalized = thingId.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -5878,12 +6375,20 @@ private actor GRDBStore {
                 let id: String? = row["id"]
                 return id
             }
-            guard !ids.isEmpty else { return 0 }
-            let joined = ids.map(Self.sqlQuoted).joined(separator: ",")
-            try db.execute(sql: "DELETE FROM messages WHERE id IN (\(joined));")
-            return ids.count
-        }
-    }
+            let pendingCount = try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM pending_inbound_messages WHERE thing_id = \(Self.sqlQuoted(normalized));"
+            ) ?? 0
+	            guard !ids.isEmpty || pendingCount > 0 else { return 0 }
+            if !ids.isEmpty {
+                let joined = ids.map(Self.sqlQuoted).joined(separator: ",")
+                try db.execute(sql: "DELETE FROM messages WHERE id IN (\(joined));")
+            }
+	            try db.execute(sql: "DELETE FROM thing_projection_heads WHERE thing_id = \(Self.sqlQuoted(normalized));")
+            try db.execute(sql: "DELETE FROM pending_inbound_messages WHERE thing_id = \(Self.sqlQuoted(normalized));")
+	            return ids.count + pendingCount
+	        }
+	    }
 
     func deleteThingRecords(thingIds: [String]) async throws -> Int {
         let normalized = Array(
@@ -5906,12 +6411,20 @@ private actor GRDBStore {
                 let id: String? = row["id"]
                 return id
             }
-            guard !ids.isEmpty else { return 0 }
-            let joined = ids.map(Self.sqlQuoted).joined(separator: ",")
-            try db.execute(sql: "DELETE FROM messages WHERE id IN (\(joined));")
-            return ids.count
-        }
-    }
+            let pendingCount = try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM pending_inbound_messages WHERE thing_id IN (\(inClause));"
+            ) ?? 0
+	            guard !ids.isEmpty || pendingCount > 0 else { return 0 }
+            if !ids.isEmpty {
+                let joined = ids.map(Self.sqlQuoted).joined(separator: ",")
+                try db.execute(sql: "DELETE FROM messages WHERE id IN (\(joined));")
+            }
+	            try db.execute(sql: "DELETE FROM thing_projection_heads WHERE thing_id IN (\(inClause));")
+            try db.execute(sql: "DELETE FROM pending_inbound_messages WHERE thing_id IN (\(inClause));")
+	            return ids.count + pendingCount
+	        }
+	    }
 
     func deleteThingRecords(channel: String?) async throws -> Int {
         let normalized = channel?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -5927,12 +6440,20 @@ private actor GRDBStore {
                 let id: String? = row["id"]
                 return id
             }
-            guard !ids.isEmpty else { return 0 }
-            let joined = ids.map(Self.sqlQuoted).joined(separator: ",")
-            try db.execute(sql: "DELETE FROM messages WHERE id IN (\(joined));")
-            return ids.count
-        }
-    }
+            let pendingCount = try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM pending_inbound_messages WHERE \(channelCondition);"
+            ) ?? 0
+	            guard !ids.isEmpty || pendingCount > 0 else { return 0 }
+            if !ids.isEmpty {
+                let joined = ids.map(Self.sqlQuoted).joined(separator: ",")
+                try db.execute(sql: "DELETE FROM messages WHERE id IN (\(joined));")
+            }
+	            try db.execute(sql: "DELETE FROM thing_projection_heads WHERE \(channelCondition);")
+            try db.execute(sql: "DELETE FROM pending_inbound_messages WHERE \(channelCondition);")
+	            return ids.count + pendingCount
+	        }
+	    }
 
     func deleteMessages(
         readState: Bool?,

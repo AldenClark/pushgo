@@ -4,6 +4,8 @@ import UserNotifications
 import UIKit
 
 final class PushGoAppDelegate: NSObject, UIApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate {
+    private let channelSubscriptionService = ChannelSubscriptionService()
+
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions _: [UIApplication.LaunchOptionsKey: Any]? = nil,
@@ -71,7 +73,25 @@ final class PushGoAppDelegate: NSObject, UIApplicationDelegate, @preconcurrency 
 
     func applicationDidEnterBackground(_: UIApplication) {}
 
-    func applicationWillEnterForeground(_: UIApplication) {}
+    func applicationWillEnterForeground(_: UIApplication) {
+        Task { @MainActor in
+            _ = await AppEnvironment.shared.mergeNotificationIngressInbox(
+                reason: "ios_will_enter_foreground",
+                allowFallbackPull: true
+            )
+        }
+    }
+
+    func application(
+        _: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        Task { @MainActor in
+            let result = await handleRemoteNotification(userInfo)
+            completionHandler(result)
+        }
+    }
 
     func userNotificationCenter(
         _: UNUserNotificationCenter,
@@ -138,4 +158,63 @@ final class PushGoAppDelegate: NSObject, UIApplicationDelegate, @preconcurrency 
         NotificationHandling.extractMessageId(from: userInfo)
     }
 
+    private func handleRemoteNotification(_ payload: [AnyHashable: Any]) async -> UIBackgroundFetchResult {
+        let environment = AppEnvironment.shared
+        let inboxApplied = await environment.mergeNotificationIngressInbox(
+            reason: "ios_remote_notification",
+            allowFallbackPull: true
+        )
+        let sanitizedPayload = UserInfoSanitizer.sanitize(payload)
+        let ingress = await NotificationHandling.resolveNotificationIngress(
+            from: sanitizedPayload,
+            dataStore: environment.dataStore,
+            fallbackServerConfig: environment.serverConfig,
+            channelSubscriptionService: channelSubscriptionService
+        )
+        switch ingress {
+        case .claimedByPeer:
+            return inboxApplied > 0 ? .newData : .noData
+        case let .unresolvedWakeup(resolvedPayload, requestIdentifier):
+            guard !environment.shouldDeferStartupWakeupPulls else {
+                return inboxApplied > 0 ? .newData : .noData
+            }
+            let unresolvedDeliveryId = requestIdentifier
+                ?? NotificationHandling.providerWakeupPullDeliveryId(from: resolvedPayload)
+            guard let unresolvedDeliveryId else {
+                return inboxApplied > 0 ? .newData : .noData
+            }
+            let pulled = await environment.syncProviderIngress(
+                deliveryId: unresolvedDeliveryId,
+                reason: "ios_remote_notification_unresolved",
+                skipInboxMerge: true
+            )
+            return (inboxApplied + pulled) > 0 ? .newData : .noData
+        case let .pulled(resolvedPayload, requestIdentifier):
+            let outcome = await environment.persistRemotePayloadIfNeeded(
+                resolvedPayload,
+                requestIdentifier: requestIdentifier
+            )
+            return remoteFetchResult(inboxApplied: inboxApplied, persistenceOutcome: outcome)
+        case let .direct(resolvedPayload, requestIdentifier):
+            let outcome = await environment.persistRemotePayloadIfNeeded(
+                resolvedPayload,
+                requestIdentifier: requestIdentifier
+            )
+            return remoteFetchResult(inboxApplied: inboxApplied, persistenceOutcome: outcome)
+        }
+    }
+
+    private func remoteFetchResult(
+        inboxApplied: Int,
+        persistenceOutcome: NotificationPersistenceOutcome
+    ) -> UIBackgroundFetchResult {
+        switch persistenceOutcome {
+        case .persistedMain, .persistedPending:
+            return .newData
+        case .duplicate, .rejected:
+            return inboxApplied > 0 ? .newData : .noData
+        case .failed:
+            return .failed
+        }
+    }
 }

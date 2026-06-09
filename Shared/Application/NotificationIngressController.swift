@@ -28,6 +28,7 @@ final class NotificationIngressController {
         channelSubscriptionService: channelSubscriptionService,
         notificationIngressInbox: notificationIngressInbox,
         ackMarkerStore: ackFailureStore,
+        wakeupPullClaimStore: .shared,
         hooks: ProviderIngressCoordinator.Hooks(
             isEnabled: { true },
             serverConfig: { [serverConfigProvider] in serverConfigProvider() },
@@ -64,9 +65,9 @@ final class NotificationIngressController {
         beforePersistMessage: @escaping BeforePersistMessage,
         scheduleCountsRefresh: @escaping CountsRefreshScheduler,
         recordProviderError: @escaping ProviderErrorRecorder,
-        shouldDeferStartupWakeupPulls: @escaping StartupWakeupPullDeferPredicate = { false },
-        notificationIngressInbox: NotificationIngressInbox = .shared,
-        ackFailureStore: ProviderDeliveryAckFailureStore = .shared
+        shouldDeferStartupWakeupPulls: @escaping StartupWakeupPullDeferPredicate,
+        notificationIngressInbox: NotificationIngressInbox,
+        ackFailureStore: ProviderDeliveryAckFailureStore
     ) {
         self.platformSuffix = platformSuffix
         self.dataStore = dataStore

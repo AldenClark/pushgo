@@ -108,32 +108,7 @@ final class AppEnvironment {
             self?.recordAutomationRuntimeMessage(message, source: source, category: "watch")
         }
     )
-    @ObservationIgnored private(set) lazy var notificationIngressController = NotificationIngressController(
-        platformSuffix: platformIdentifier(),
-        dataStore: dataStore,
-        channelSubscriptionService: channelSubscriptionService,
-        serverConfigProvider: { [weak self] in
-            self?.serverConfig
-        },
-        cachedDeviceKeyProvider: { [weak self] in
-            guard let self else { return nil }
-            return await self.providerRouteController.cachedProviderPullDeviceKey()
-        },
-        beforePersistMessage: { [weak self] message in
-            await MainActor.run {
-                self?.autoEnableDataPageIfNeeded(for: message)
-            }
-        },
-        scheduleCountsRefresh: { [weak self] in
-            self?.scheduleCountsRefresh()
-        },
-        recordProviderError: { [weak self] error, source in
-            self?.recordAutomationRuntimeError(error, source: source, category: "provider")
-        },
-        shouldDeferStartupWakeupPulls: { [weak self] in
-            self?.shouldDeferStartupWakeupPulls ?? false
-        }
-    )
+    @ObservationIgnored private(set) lazy var notificationIngressController = makeNotificationIngressController()
     @ObservationIgnored private(set) lazy var notificationOpenController = NotificationOpenController(
         dataStore: dataStore,
         localizationManager: localizationManager,
@@ -242,6 +217,37 @@ final class AppEnvironment {
             }
         }
         registerDefaultNotificationCategories()
+    }
+
+    private func makeNotificationIngressController() -> NotificationIngressController {
+        NotificationIngressController(
+            platformSuffix: platformIdentifier(),
+            dataStore: dataStore,
+            channelSubscriptionService: channelSubscriptionService,
+            serverConfigProvider: { [weak self] in
+                self?.serverConfig
+            },
+            cachedDeviceKeyProvider: { [weak self] in
+                guard let self else { return nil }
+                return await self.providerRouteController.cachedProviderPullDeviceKey()
+            },
+            beforePersistMessage: { [weak self] message in
+                await MainActor.run {
+                    self?.autoEnableDataPageIfNeeded(for: message)
+                }
+            },
+            scheduleCountsRefresh: { [weak self] in
+                self?.scheduleCountsRefresh()
+            },
+            recordProviderError: { [weak self] error, source in
+                self?.recordAutomationRuntimeError(error, source: source, category: "provider")
+            },
+            shouldDeferStartupWakeupPulls: { [weak self] in
+                self?.shouldDeferStartupWakeupPulls ?? false
+            },
+            notificationIngressInbox: .shared,
+            ackFailureStore: .shared
+        )
     }
 
     func bootstrap() async {
@@ -1145,6 +1151,10 @@ final class AppEnvironment {
             syncBadgeWithUnreadCount()
             scheduleMessageListRefresh()
             Task { @MainActor in
+                _ = await mergeNotificationIngressInbox(
+                    reason: "ios_scene_active",
+                    allowFallbackPull: true
+                )
                 await refreshChannelSubscriptions()
             }
         case .background, .inactive:
@@ -1268,11 +1278,23 @@ final class AppEnvironment {
         providerIngressBootstrapRecoveryInFlight
     }
 
+    @discardableResult
+    func persistRemotePayloadIfNeeded(
+        _ payload: [AnyHashable: Any],
+        requestIdentifier: String? = nil
+    ) async -> NotificationPersistenceOutcome {
+        await notificationIngressController.persistRemotePayloadIfNeeded(
+            payload,
+            requestIdentifier: requestIdentifier
+        )
+    }
+
     func updateLaunchAtLogin(isEnabled: Bool) {
         Task { @MainActor in
             await dataStore.saveLaunchAtLoginPreference(isEnabled)
         }
     }
+
     @discardableResult
     func persistNotificationIfNeeded(_ notification: UNNotification) async -> NotificationPersistenceOutcome {
         await notificationIngressController.persistNotificationIfNeeded(notification)

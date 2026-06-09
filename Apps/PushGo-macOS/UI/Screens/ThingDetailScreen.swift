@@ -556,14 +556,28 @@ private struct ThingAttributeStateCard: View {
 }
 
 private struct ThingMetadataSheet: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     let title: String
     let entries: [EntityDisplayAttribute]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(.headline)
+            HStack(spacing: 12) {
+                Text(title)
+                    .font(.headline)
+                Spacer(minLength: 16)
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .symbolRenderingMode(.hierarchical)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.appTextSecondary)
+                .accessibilityLabel(localizationManager.localized("Done"))
+            }
             if entries.isEmpty {
                 Text(localizationManager.localized("thing_detail_no_metadata"))
                     .font(.subheadline)

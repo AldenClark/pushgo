@@ -142,10 +142,10 @@ enum NotificationPersistenceCoordinator {
         messageId: String?,
         dataStore: LocalDataStore,
         beforeSave: (@Sendable (PushMessage) async -> Void)? = nil
-    ) async -> NotificationPersistenceOutcome {
-        let now = Date()
-        var resolvedTitle = title
-        var resolvedRawPayload = rawPayload
+	    ) async -> NotificationPersistenceOutcome {
+	        let now = Date()
+	        var resolvedTitle = title
+	        let resolvedRawPayload = rawPayload
         if !hasExplicitTitle,
            let storedTitle = await resolveStoredEntityTitle(
                from: resolvedRawPayload,
@@ -153,7 +153,6 @@ enum NotificationPersistenceCoordinator {
            )
         {
             resolvedTitle = storedTitle
-            resolvedRawPayload["title"] = AnyCodable(storedTitle)
         }
 
         let receivedAt = PayloadTimeParser.date(from: resolvedRawPayload["sent_at"]) ?? now
@@ -200,8 +199,8 @@ enum NotificationPersistenceCoordinator {
         {
             let normalizedThingId = thingId.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !normalizedThingId.isEmpty else { return nil }
-            let messages = try? await dataStore.loadThingMessagesForProjection(thingId: normalizedThingId)
-            return messages?
+            let detail = try? await dataStore.loadThingProjectionDetail(thingId: normalizedThingId)
+            return detail?.messages
                 .lazy
                 .map { $0.title.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .first(where: { !$0.isEmpty })
@@ -212,11 +211,17 @@ enum NotificationPersistenceCoordinator {
         {
             let normalizedEventId = eventId.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !normalizedEventId.isEmpty else { return nil }
-            let messages = try? await dataStore.loadEventMessagesForProjection(eventId: normalizedEventId)
-            return messages?
+            let detail = try? await dataStore.loadEventProjectionDetail(eventId: normalizedEventId)
+            return detail?.messages
                 .lazy
                 .map { $0.title.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .first(where: { !$0.isEmpty })
+                .first(where: {
+                    !$0.isEmpty && !isSyntheticEntityFallbackTitle(
+                        $0,
+                        entityType: "event",
+                        entityId: normalizedEventId
+                    )
+                })
         }
 
         if let messageId = payloadText(payload, keys: ["message_id"]) {
@@ -230,6 +235,29 @@ enum NotificationPersistenceCoordinator {
         }
 
         return nil
+    }
+
+    private static func isSyntheticEntityFallbackTitle(
+        _ title: String,
+        entityType: String,
+        entityId: String
+    ) -> Bool {
+        let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedEntityId = entityId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedTitle.isEmpty, !normalizedEntityId.isEmpty else { return false }
+        let typeLabels: [String]
+        switch entityType {
+        case "event":
+            typeLabels = ["Event", LocalizationProvider.localized("push_type_event")]
+        case "thing":
+            typeLabels = ["Thing", LocalizationProvider.localized("push_type_thing")]
+        default:
+            typeLabels = []
+        }
+        return typeLabels.contains { label in
+            let normalizedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
+            return !normalizedLabel.isEmpty && normalizedTitle == "\(normalizedLabel) \(normalizedEntityId)"
+        }
     }
 
     private static func payloadText(
@@ -707,6 +735,15 @@ enum NotificationHandling {
                     name,
                     value
                 )
+            },
+            localizeThingUpdatedBody: {
+                LocalizationProvider.localized("Updated")
+            },
+            localizeThingArchivedBody: {
+                LocalizationProvider.localized("Archived")
+            },
+            localizeThingDeletedBody: {
+                LocalizationProvider.localized("Deleted")
             }
         ) else {
             return nil

@@ -67,6 +67,7 @@ final class AppEnvironment {
         channelSubscriptionService: channelSubscriptionService,
         notificationIngressInbox: notificationIngressInbox,
         ackMarkerStore: ackFailureStore,
+        wakeupPullClaimStore: .shared,
         hooks: ProviderIngressCoordinator.Hooks(
             isEnabled: { [weak self] in self?.isStandaloneMode == true },
             serverConfig: { [weak self] in self?.serverConfig },
@@ -350,7 +351,7 @@ final class AppEnvironment {
     func openSystemNotificationSettings() {
         guard !PushGoAutomationContext.blocksCrossAppDataAccess else { return }
         guard let url = URL(string: "app-settings:") else { return }
-        WKExtension.shared().openSystemURL(url)
+        WKApplication.shared().openSystemURL(url)
     }
 
     private func presentNotificationPermissionAlertIfNeeded() {
@@ -1459,7 +1460,7 @@ final class AppEnvironment {
     func requestRemoteNotificationsIfNeeded() {
         guard isStandaloneMode else { return }
         guard pushRegistrationService.apnsToken == nil else { return }
-        WKExtension.shared().registerForRemoteNotifications()
+        WKApplication.shared().registerForRemoteNotifications()
     }
 
     private func prepareStandalonePayloadForPersistence(

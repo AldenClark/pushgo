@@ -410,7 +410,7 @@ struct RuntimeQualityLargeScaleTests {
             let eventMessage = try #require(dataset.messages.first { $0.eventId != nil && $0.thingId == nil })
             let eventID = try #require(eventMessage.eventId)
             let eventDetail = try await RuntimeQualityMetric.measure("core.detail.eventTimeline", count: 1) {
-                try await store.loadEventMessagesForProjection(eventId: eventID)
+                try await store.loadEventProjectionDetail(eventId: eventID).messages
             }
             #expect(!eventDetail.value.isEmpty)
             #expect(eventDetail.value.allSatisfy { $0.eventId == eventID })
@@ -419,7 +419,7 @@ struct RuntimeQualityLargeScaleTests {
             let thingMessage = try #require(dataset.messages.first { $0.thingId != nil })
             let thingID = try #require(thingMessage.thingId)
             let thingDetail = try await RuntimeQualityMetric.measure("core.detail.thingTimeline", count: 1) {
-                try await store.loadThingMessagesForProjection(thingId: thingID)
+                try await store.loadThingProjectionDetail(thingId: thingID).messages
             }
             #expect(!thingDetail.value.isEmpty)
             #expect(thingDetail.value.allSatisfy { $0.thingId == thingID })

@@ -18,7 +18,10 @@ final class NotificationPayloadSemanticsURLSafetyTests: XCTestCase {
             payload,
             localizeTypeLabel: { $0 },
             localizeThingAttributeUpdateBody: { $0 },
-            localizeThingAttributePair: { "\($0): \($1)" }
+            localizeThingAttributePair: { "\($0): \($1)" },
+            localizeThingUpdatedBody: { "Updated" },
+            localizeThingArchivedBody: { "Archived" },
+            localizeThingDeletedBody: { "Deleted" }
         )
         XCTAssertNotNil(normalized)
         guard let normalized else { return }
@@ -56,7 +59,10 @@ final class NotificationPayloadSemanticsURLSafetyTests: XCTestCase {
             payload,
             localizeTypeLabel: { $0 },
             localizeThingAttributeUpdateBody: { $0 },
-            localizeThingAttributePair: { "\($0): \($1)" }
+            localizeThingAttributePair: { "\($0): \($1)" },
+            localizeThingUpdatedBody: { "Updated" },
+            localizeThingArchivedBody: { "Archived" },
+            localizeThingDeletedBody: { "Deleted" }
         )
         XCTAssertNotNil(normalized)
         guard let normalized else { return }
@@ -79,7 +85,10 @@ final class NotificationPayloadSemanticsURLSafetyTests: XCTestCase {
             payload,
             localizeTypeLabel: { $0 },
             localizeThingAttributeUpdateBody: { $0 },
-            localizeThingAttributePair: { "\($0): \($1)" }
+            localizeThingAttributePair: { "\($0): \($1)" },
+            localizeThingUpdatedBody: { "Updated" },
+            localizeThingArchivedBody: { "Archived" },
+            localizeThingDeletedBody: { "Deleted" }
         )
         XCTAssertNotNil(normalized)
         XCTAssertEqual(normalized?.title, "")
@@ -101,7 +110,10 @@ final class NotificationPayloadSemanticsURLSafetyTests: XCTestCase {
             payload,
             localizeTypeLabel: { $0 },
             localizeThingAttributeUpdateBody: { $0 },
-            localizeThingAttributePair: { "\($0): \($1)" }
+            localizeThingAttributePair: { "\($0): \($1)" },
+            localizeThingUpdatedBody: { "Updated" },
+            localizeThingArchivedBody: { "Archived" },
+            localizeThingDeletedBody: { "Deleted" }
         )
         XCTAssertNotNil(normalized)
         XCTAssertEqual(normalized?.body, richBody)

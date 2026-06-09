@@ -428,7 +428,7 @@ struct EventListScreen: View {
         guard !hydrationRequestedEventIDs.contains(target) else { return }
         hydrationRequestedEventIDs.insert(target)
         Task { @MainActor in
-            let hydrated = await viewModel.ensureEventDetailsLoaded(eventId: target)
+            let hydrated = await viewModel.ensureEventDetailsLoaded(eventId: target, forceRefresh: true)
             hydrationRequestedEventIDs.remove(target)
             guard let hydrated else { return }
             openEvent(hydrated, target: target)
@@ -457,8 +457,11 @@ struct EventListScreen: View {
         guard !isBatchMode else { return }
         selectedEvent = event
         Task { @MainActor in
-            await viewModel.ensureEventDetailsLoaded(eventId: event.id)
-            syncSelectedEventSnapshot()
+            if let hydrated = await viewModel.ensureEventDetailsLoaded(eventId: event.id, forceRefresh: true) {
+                selectedEvent = hydrated
+            } else if selectedEvent?.id == event.id {
+                selectedEvent = nil
+            }
         }
     }
 
@@ -466,6 +469,8 @@ struct EventListScreen: View {
         guard let selectedId = selectedEvent?.id else { return }
         if let refreshed = viewModel.events.first(where: { $0.id == selectedId }) {
             selectedEvent = refreshed
+        } else {
+            selectedEvent = nil
         }
     }
 
@@ -815,7 +820,6 @@ private enum EventListScrollMetrics {
 }
 
 struct EventListRow: View {
-    @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     let event: EventProjection
@@ -894,14 +898,6 @@ struct EventListRow: View {
                     Label(String(thingId.prefix(20)), systemImage: "cube")
                         .font(.caption2)
                         .foregroundStyle(Color.appTextSecondary)
-                }
-                if let channelId = event.channelId?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !channelId.isEmpty
-                {
-                    EntityMetaChip(
-                        systemImage: "bubble.left.and.bubble.right",
-                        text: environment.channelDisplayName(for: channelId) ?? channelId
-                    )
                 }
                 if let descriptor = entityDecryptionBadgeDescriptor(
                     state: event.decryptionState,

@@ -133,8 +133,8 @@ final class NotificationServiceProcessor {
                 content.userInfo = UserInfoSanitizer.sanitize(payload)
                 applyUnresolvedWakeupNotice(to: content)
             }
-        case .direct:
-            break
+        case let .direct(payload, _):
+            NotificationHandling.applyResolvedPayload(payload, to: content)
         }
     }
 

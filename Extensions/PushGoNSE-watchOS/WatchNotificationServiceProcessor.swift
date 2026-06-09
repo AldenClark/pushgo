@@ -357,6 +357,15 @@ final class WatchNotificationServiceProcessor {
             },
             localizeThingAttributePair: { name, value in
                 "\(name): \(value)"
+            },
+            localizeThingUpdatedBody: {
+                "已更新"
+            },
+            localizeThingArchivedBody: {
+                "已归档"
+            },
+            localizeThingDeletedBody: {
+                "已删除"
             }
         )
     }

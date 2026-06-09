@@ -44,9 +44,9 @@ struct LocalDataStoreTests {
     }
 
     @Test
-    func persistNotificationMessageSkipsSecondWriteWhenOperationScopeAlreadyExists() async throws {
-        try await withIsolatedLocalDataStore { store, _ in
-            let first = makeMessage(
+	    func persistNotificationMessageSkipsSecondWriteWhenOperationScopeAlreadyExists() async throws {
+	        try await withIsolatedLocalDataStore { store, _ in
+	            let first = makeMessage(
                 messageId: "msg-op-scope-001",
                 notificationRequestId: "req-op-scope-001",
                 title: "First operation title",
@@ -84,11 +84,101 @@ struct LocalDataStoreTests {
             #expect(stored?.title == "First operation title")
             #expect(stored?.body == "First operation body")
             #expect(try await store.loadMessage(notificationRequestId: "req-op-scope-002") == nil)
-        }
-    }
+	        }
+	    }
 
-    @Test
-    func dataPageVisibilityPersistsAcrossStoreReload() async throws {
+	    @Test
+	    func entityProjectionHeadsApplyPatchSemanticsAtPersistenceLayer() async throws {
+	        try await withIsolatedLocalDataStore { store, _ in
+	            let eventCreate = makeMessage(
+	                messageId: "evt-head-patch-create",
+	                notificationRequestId: "req-evt-head-patch-create",
+	                title: "Fallback event create",
+	                body: "Fallback event body",
+	                receivedAt: Date(timeIntervalSince1970: 1_800_010_000),
+	                rawPayload: [
+	                    "entity_type": "event",
+	                    "entity_id": "evt-head-patch-001",
+	                    "event_id": "evt-head-patch-001",
+	                    "title": "Original event",
+	                    "description": "Original event body",
+	                    "attrs": #"{"temperature":"20","rack":"r1"}"#,
+	                    "metadata": #"{"source":"create"}"#,
+	                    "event_time": "1800010000000",
+	                ]
+	            )
+	            let eventPatch = makeMessage(
+	                messageId: "evt-head-patch-update",
+	                notificationRequestId: "req-evt-head-patch-update",
+	                title: "Patch fallback must not overwrite",
+	                body: "",
+	                receivedAt: Date(timeIntervalSince1970: 1_800_010_010),
+	                rawPayload: [
+	                    "entity_type": "event",
+	                    "entity_id": "evt-head-patch-001",
+	                    "event_id": "evt-head-patch-001",
+	                    "attrs": #"{"temperature":"21","rack":null}"#,
+	                    "metadata": #"{"stage":"update"}"#,
+	                    "event_time": "1800010010000",
+	                ]
+	            )
+	            let thingCreate = makeMessage(
+	                messageId: "thing-head-patch-create",
+	                notificationRequestId: "req-thing-head-patch-create",
+	                title: "Fallback thing create",
+	                body: "Fallback thing body",
+	                receivedAt: Date(timeIntervalSince1970: 1_800_010_000),
+	                rawPayload: [
+	                    "entity_type": "thing",
+	                    "entity_id": "thing-head-patch-001",
+	                    "thing_id": "thing-head-patch-001",
+	                    "title": "Original thing",
+	                    "description": "Original thing body",
+	                    "attrs": #"{"pressure":"ok","rpm":"40"}"#,
+	                    "metadata": #"{"owner":"ops","site":"sha"}"#,
+	                    "observed_at": "1800010000000",
+	                ]
+	            )
+	            let thingPatch = makeMessage(
+	                messageId: "thing-head-patch-update",
+	                notificationRequestId: "req-thing-head-patch-update",
+	                title: "Patch fallback must not overwrite",
+	                body: "",
+	                receivedAt: Date(timeIntervalSince1970: 1_800_010_020),
+	                rawPayload: [
+	                    "entity_type": "thing",
+	                    "entity_id": "thing-head-patch-001",
+	                    "thing_id": "thing-head-patch-001",
+	                    "attrs": #"{"pressure":null,"rpm":"50"}"#,
+	                    "metadata": #"{"owner":"noc","site":null}"#,
+	                    "observed_at": "1800010020000",
+	                ]
+	            )
+
+	            try await store.saveEntityRecords([eventCreate, eventPatch, thingCreate, thingPatch])
+
+	            let eventHeads = try await store.loadEventMessagesForProjection()
+	            let thingHeads = try await store.loadThingMessagesForProjection()
+	            #expect(eventHeads.count == 1)
+	            #expect(thingHeads.count == 1)
+	            let eventHead = try #require(eventHeads.first)
+	            let thingHead = try #require(thingHeads.first)
+
+	            #expect(eventHead.title == "Original event")
+	            #expect(eventHead.body == "Original event body")
+	            #expect(normalizedPayloadJSONObject(eventHead.rawPayload["attrs"]?.value) == #"{"temperature":"21"}"#)
+	            #expect(normalizedPayloadJSONObject(eventHead.rawPayload["metadata"]?.value) == #"{"source":"create","stage":"update"}"#)
+	            #expect(eventHead.metadata["stage"] == "update")
+	            #expect(thingHead.title == "Original thing")
+	            #expect(thingHead.body == "Original thing body")
+	            #expect(normalizedPayloadJSONObject(thingHead.rawPayload["attrs"]?.value) == #"{"rpm":"50"}"#)
+	            #expect(normalizedPayloadJSONObject(thingHead.rawPayload["metadata"]?.value) == #"{"owner":"noc"}"#)
+	            #expect(thingHead.metadata["owner"] == "noc")
+	        }
+	    }
+
+	    @Test
+	    func dataPageVisibilityPersistsAcrossStoreReload() async throws {
         await withIsolatedAutomationStorage { _, appGroupIdentifier in
             let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
             let defaultVisibility = await store.loadDataPageVisibility()
@@ -1492,7 +1582,7 @@ struct LocalDataStoreTests {
             try await store.saveEntityRecords([thingParent, eventHead])
 
             let topLevelEvents = try await store.loadEventMessagesForProjection()
-            let thingMessages = try await store.loadThingMessagesForProjection(thingId: "thing-event-head-001")
+            let thingMessages = try await store.loadThingProjectionDetail(thingId: "thing-event-head-001").messages
 
             #expect(topLevelEvents.count == 1)
             #expect(topLevelEvents.first?.eventId == "evt-event-head-001")
@@ -1534,11 +1624,14 @@ struct LocalDataStoreTests {
             try await store.saveEntityRecords([thingParent, subEvent])
 
             let topLevelEvents = try await store.loadEventMessagesForProjection()
-            let thingMessages = try await store.loadThingMessagesForProjection(thingId: "thing-sub-001")
+            let thingMessages = try await store.loadThingProjectionDetail(thingId: "thing-sub-001").messages
+            let eventDetail = try await store.loadEventProjectionDetail(eventId: "evt-thing-sub-001").messages
             let subEventMessages = thingMessages.filter { $0.eventId == "evt-thing-sub-001" }
 
             #expect(topLevelEvents.isEmpty)
             #expect(subEventMessages.count == 1)
+            #expect(eventDetail.count == 1)
+            #expect(eventDetail.first?.thingId == "thing-sub-001")
         }
     }
 
@@ -1632,7 +1725,7 @@ struct LocalDataStoreTests {
             try await store.saveEntityRecords([thingParent, first, duplicate])
 
             let topLevelEvents = try await store.loadEventMessagesForProjection()
-            let thingMessages = try await store.loadThingMessagesForProjection(thingId: "thing-scope-001")
+            let thingMessages = try await store.loadThingProjectionDetail(thingId: "thing-scope-001").messages
             let subEventMessages = thingMessages.filter { $0.eventId == "evt-scope-thing-001" }
 
             #expect(topLevelEvents.isEmpty)
@@ -1881,8 +1974,21 @@ struct LocalDataStoreTests {
                     "channel_id": channel,
                 ]
             )
+            let referencedMessage = makeMessage(
+                messageId: "message-referencing-\(targetTopLevelEventId)",
+                notificationRequestId: "req-message-referencing-\(targetTopLevelEventId)",
+                title: "Message referencing target event",
+                body: "Message body should remain when event entity is deleted",
+                rawPayload: [
+                    "entity_type": "message",
+                    "entity_id": "message-referencing-\(targetTopLevelEventId)",
+                    "event_id": targetTopLevelEventId,
+                    "channel_id": channel,
+                ]
+            )
 
             try await store.saveEntityRecords([thingParent, targetTopLevelEvent, targetThingScopedEvent, keepEvent])
+            try await store.saveMessages([referencedMessage])
 
             let deleted = try await store.deleteEventRecords(
                 eventIds: [targetTopLevelEventId, targetThingScopedEventId, targetTopLevelEventId]
@@ -1895,6 +2001,7 @@ struct LocalDataStoreTests {
             #expect(remainingEvents.contains(targetTopLevelEventId) == false)
             #expect(remainingThingEvents.contains(targetThingScopedEventId) == false)
             #expect(remainingEvents.contains(keepEventId) == true)
+            #expect(try await store.loadMessage(id: referencedMessage.id) != nil)
         }
     }
 
@@ -1956,6 +2063,53 @@ struct LocalDataStoreTests {
             let remainingThings = try await store.loadThingMessagesForProjection().map(\.thingId)
             #expect(remainingThings.contains(targetThingId) == false)
             #expect(remainingThings.contains(keepThingId) == true)
+        }
+    }
+
+    @Test
+    func deleteThingRecordsRemovesPendingInboundForMissingThing() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let thingId = "thing-pending-delete-001"
+            let pendingMessage = makeMessage(
+                messageId: "msg-\(thingId)",
+                notificationRequestId: "req-msg-\(thingId)",
+                title: "Pending thing message",
+                body: "Pending body",
+                rawPayload: [
+                    "entity_type": "message",
+                    "entity_id": "msg-\(thingId)",
+                    "thing_id": thingId,
+                    "message": "Pending body",
+                    "channel_id": "pending-delete",
+                ]
+            )
+
+            try await store.saveMessages([pendingMessage])
+            #expect(try await store.loadMessage(messageId: "msg-\(thingId)") == nil)
+
+            let deleted = try await store.deleteThingRecords(thingId: thingId)
+            #expect(deleted == 1)
+
+            let thingHead = makeMessage(
+                messageId: "thing-\(thingId)",
+                notificationRequestId: "req-thing-\(thingId)",
+                title: "Recreated thing",
+                body: "Recreated body",
+                rawPayload: [
+                    "entity_type": "thing",
+                    "entity_id": thingId,
+                    "thing_id": thingId,
+                    "title": "Recreated thing",
+                    "description": "Recreated body",
+                    "projection_destination": "thing_head",
+                    "channel_id": "pending-delete",
+                ]
+            )
+            try await store.saveEntityRecords([thingHead])
+
+            let detail = try await store.loadThingProjectionDetail(thingId: thingId).messages
+            #expect(detail.contains(where: { $0.messageId == "msg-\(thingId)" }) == false)
+            #expect(detail.count == 1)
         }
     }
 
@@ -3145,16 +3299,16 @@ struct LocalDataStoreTests {
         #expect(tagCounts.first(where: { $0.tag == "legacy-fixture" })?.totalCount == fixture.topLevelIDs.count)
         #expect(tagCounts.contains(where: { $0.tag == "shadow-alpha" }) == false)
 
-        let eventPage = try await store.loadEventMessagesForProjectionPage(before: nil, limit: 10)
-        #expect(eventPage.map(\.id) == fixture.eventTimelineIDs)
+	        let eventPage = try await store.loadEventMessagesForProjectionPage(before: nil, limit: 10)
+	        #expect(eventPage.map(\.id) == fixture.eventPageIDs)
 
-        let eventTimeline = try await store.loadEventMessagesForProjection(eventId: fixture.eventID)
-        #expect(eventTimeline.map(\.id) == fixture.eventTimelineIDs)
+	        let eventTimeline = try await store.loadEventProjectionDetail(eventId: fixture.eventID).messages
+	        #expect(eventTimeline.map(\.id) == fixture.eventTimelineIDs)
 
-        let thingPage = try await store.loadThingMessagesForProjectionPage(before: nil, limit: 10)
-        #expect(thingPage.map(\.id) == fixture.thingTimelineIDs)
+	        let thingPage = try await store.loadThingMessagesForProjectionPage(before: nil, limit: 10)
+	        #expect(thingPage.map(\.id) == fixture.thingPageIDs)
 
-        let thingTimeline = try await store.loadThingMessagesForProjection(thingId: fixture.thingID)
+        let thingTimeline = try await store.loadThingProjectionDetail(thingId: fixture.thingID).messages
         #expect(thingTimeline.map(\.id) == fixture.thingTimelineIDs)
 
         let detail = try #require(try await store.loadMessage(id: fixture.topLevelIDs[0]))
@@ -3348,13 +3502,15 @@ struct LocalDataStoreTests {
 
         return LegacyCompatibilityFixture(
             messages: messages,
-            topLevelIDs: [topAlpha.id, topBeta.id],
-            eventID: "legacy-event-001",
-            eventTimelineIDs: [eventUpdated.id, eventOpened.id],
-            thingID: "legacy-thing-001",
-            thingTimelineIDs: [thingDetail.id, thingHead.id],
-            detailTitle: topAlpha.title,
-            snapshot: snapshot
+	            topLevelIDs: [topAlpha.id, topBeta.id],
+	            eventID: "legacy-event-001",
+	            eventPageIDs: [eventUpdated.id],
+	            eventTimelineIDs: [eventUpdated.id, eventOpened.id],
+	            thingID: "legacy-thing-001",
+	            thingPageIDs: [thingHead.id],
+	            thingTimelineIDs: [thingDetail.id, thingHead.id],
+	            detailTitle: topAlpha.title,
+	            snapshot: snapshot
         )
     }
 
@@ -3426,6 +3582,23 @@ struct LocalDataStoreTests {
         return String(data: normalized, encoding: .utf8)
     }
 
+    private func normalizedPayloadJSONObject(_ raw: Any?) -> String? {
+        let object: Any?
+        if let raw = raw as? String,
+           let data = raw.data(using: .utf8) {
+            object = try? JSONSerialization.jsonObject(with: data)
+        } else {
+            object = raw
+        }
+        guard let object,
+              JSONSerialization.isValidJSONObject(object),
+              let normalized = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+        else {
+            return nil
+        }
+        return String(data: normalized, encoding: .utf8)
+    }
+
     private func normalizeJSONObject(_ value: Any) throws -> Any {
         switch value {
         case let dictionary as [String: Any]:
@@ -3486,15 +3659,17 @@ struct LocalDataStoreTests {
             .appendingPathComponent(AppConstants.databaseStoreFilename, isDirectory: false)
     }
 
-    private struct LegacyCompatibilityFixture {
-        let messages: [PushMessage]
-        let topLevelIDs: [UUID]
-        let eventID: String
-        let eventTimelineIDs: [UUID]
-        let thingID: String
-        let thingTimelineIDs: [UUID]
-        let detailTitle: String
-        let snapshot: NotificationContextSnapshot
+	    private struct LegacyCompatibilityFixture {
+	        let messages: [PushMessage]
+	        let topLevelIDs: [UUID]
+	        let eventID: String
+	        let eventPageIDs: [UUID]
+	        let eventTimelineIDs: [UUID]
+	        let thingID: String
+	        let thingPageIDs: [UUID]
+	        let thingTimelineIDs: [UUID]
+	        let detailTitle: String
+	        let snapshot: NotificationContextSnapshot
     }
 
     private struct LegacyCompatibilityProbe: Equatable {

@@ -16,6 +16,12 @@ struct NotificationPayloadSemantics {
         let pairs: [(name: String, value: String)]
     }
 
+    enum ThingNotificationOperation {
+        case update
+        case archive
+        case delete
+    }
+
     struct EntityOpenTargetComponents: Equatable {
         let entityType: String
         let entityId: String
@@ -63,7 +69,10 @@ struct NotificationPayloadSemantics {
         contextSnapshot: NotificationContextSnapshot? = nil,
         localizeTypeLabel: (String) -> String,
         localizeThingAttributeUpdateBody: (String) -> String,
-        localizeThingAttributePair: (String, String) -> String
+        localizeThingAttributePair: (String, String) -> String,
+        localizeThingUpdatedBody: () -> String,
+        localizeThingArchivedBody: () -> String,
+        localizeThingDeletedBody: () -> String
     ) -> NormalizedPayload? {
         var sanitized = UserInfoSanitizer.sanitize(userInfo)
         let entityType = normalizedEntityType(sanitized["entity_type"] as? String)
@@ -85,12 +94,27 @@ struct NotificationPayloadSemantics {
                 body = apsAlert.body ?? ""
             }
         }
+        let hasSyntheticEntityFallbackTitle = isSyntheticEntityFallbackTitle(
+            title,
+            entityType: entityType,
+            payload: sanitized,
+            localizeTypeLabel: localizeTypeLabel
+        )
+        if hasSyntheticEntityFallbackTitle {
+            title = ""
+            if body.trimmingCharacters(in: .whitespacesAndNewlines) == gatewayFallbackBody(entityType: entityType) {
+                body = ""
+            }
+        }
         let hasExplicitTitle = !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
         if entityType == "event" || entityType == "thing" {
             let profile = profilePayload(entityType: entityType, payload: sanitized)
             let thingAttributes = entityType == "thing"
                 ? parseThingAttributesSnapshot(payload: sanitized)
+                : nil
+            let thingOperation = entityType == "thing"
+                ? resolvedThingOperation(payload: sanitized)
                 : nil
             let eventContext = entityType == "event"
                 ? contextSnapshot?.eventContext(
@@ -103,6 +127,12 @@ struct NotificationPayloadSemantics {
                 )
                 : nil
 
+            if entityType == "thing",
+               let snapshotTitle = thingContext?.title,
+               !snapshotTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
+                title = snapshotTitle
+            }
             if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 title = resolvedEntityFallbackTitle(
                     entityType: entityType,
@@ -121,10 +151,14 @@ struct NotificationPayloadSemantics {
                     payload: sanitized,
                     profile: profile,
                     thingAttributes: thingAttributes,
+                    thingOperation: thingOperation,
                     eventContext: eventContext,
                     thingContext: thingContext,
                     localizeThingAttributeUpdateBody: localizeThingAttributeUpdateBody,
-                    localizeThingAttributePair: localizeThingAttributePair
+                    localizeThingAttributePair: localizeThingAttributePair,
+                    localizeThingUpdatedBody: localizeThingUpdatedBody,
+                    localizeThingArchivedBody: localizeThingArchivedBody,
+                    localizeThingDeletedBody: localizeThingDeletedBody
                 ) ?? body
             }
         }
@@ -159,10 +193,11 @@ struct NotificationPayloadSemantics {
         let operationId = stringValue(forKeys: ["op_id"], in: sanitized)
 
         var payload = sanitized
-        if payload["title"] == nil {
+        let shouldBackfillDisplayTextIntoPayload = identity.entityType == "message"
+        if shouldBackfillDisplayTextIntoPayload, payload["title"] == nil {
             payload["title"] = trimmedTitle
         }
-        if payload["body"] == nil {
+        if shouldBackfillDisplayTextIntoPayload, payload["body"] == nil {
             payload["body"] = trimmedBody
         }
         payload["entity_type"] = identity.entityType
@@ -219,7 +254,16 @@ struct NotificationPayloadSemantics {
     ) -> Bool {
         let normalizedTitle = title?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedBody = body?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let fallbackBody: String? = switch entityType {
+        let fallbackBody = gatewayFallbackBody(entityType: entityType)
+
+        guard let fallbackBody else { return false }
+        guard normalizedBody == fallbackBody else { return false }
+        guard let normalizedTitle else { return true }
+        return normalizedTitle.isEmpty || normalizedTitle == gatewayFallbackAlertTitle
+    }
+
+    private static func gatewayFallbackBody(entityType: String) -> String? {
+        switch entityType {
         case "event":
             gatewayFallbackEventBody
         case "thing":
@@ -227,11 +271,6 @@ struct NotificationPayloadSemantics {
         default:
             nil
         }
-
-        guard let fallbackBody else { return false }
-        guard normalizedBody == fallbackBody else { return false }
-        guard let normalizedTitle else { return true }
-        return normalizedTitle.isEmpty || normalizedTitle == gatewayFallbackAlertTitle
     }
 
     private static func alertText(from rawAlert: Any?) -> (title: String?, body: String?) {
@@ -490,13 +529,19 @@ struct NotificationPayloadSemantics {
         localizeTypeLabel: (String) -> String
     ) -> String {
         if entityType == "thing",
+           let title = thingContext?.title,
+           !title.isEmpty
+        {
+            return title
+        }
+        if let title = profile?.title, !title.isEmpty {
+            return title
+        }
+        if entityType == "thing",
            let thingName = thingAttributes?.thingName,
            !thingName.isEmpty
         {
             return thingName
-        }
-        if let title = profile?.title, !title.isEmpty {
-            return title
         }
         if entityType == "event",
            let title = eventContext?.title,
@@ -504,11 +549,11 @@ struct NotificationPayloadSemantics {
         {
             return title
         }
-        if entityType == "thing",
-           let title = thingContext?.title,
-           !title.isEmpty
+        if entityType == "event",
+           let eventStatus = stringValue(forKeys: ["status", "event_state"], in: payload),
+           !eventStatus.isEmpty
         {
-            return title
+            return eventStatus
         }
         let fallbackId = stringValue(
             forKeys: entityType == "event" ? ["event_id", "entity_id"] : ["thing_id", "entity_id"],
@@ -517,18 +562,56 @@ struct NotificationPayloadSemantics {
         return "\(localizeTypeLabel(entityType)) \(fallbackId)"
     }
 
+    private static func isSyntheticEntityFallbackTitle(
+        _ title: String,
+        entityType: String,
+        payload: [String: Any],
+        localizeTypeLabel: (String) -> String
+    ) -> Bool {
+        guard entityType == "event" || entityType == "thing" else { return false }
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTitle.isEmpty else { return false }
+        let entityId = stringValue(
+            forKeys: entityType == "event" ? ["event_id", "entity_id"] : ["thing_id", "entity_id"],
+            in: payload
+        )
+        guard let entityId, !entityId.isEmpty else { return false }
+        let labels = [
+            entityType == "event" ? "Event" : "Thing",
+            localizeTypeLabel(entityType),
+        ]
+        return labels.contains { label in
+            let trimmedLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
+            return !trimmedLabel.isEmpty && trimmedTitle == "\(trimmedLabel) \(entityId)"
+        }
+    }
+
     private static func resolvedEntityFallbackBody(
         entityType: String,
         payload: [String: Any],
         profile: ProfileSnapshot?,
         thingAttributes: ThingAttributesSnapshot?,
+        thingOperation: ThingNotificationOperation?,
         eventContext: NotificationContextSnapshot.EventContext?,
         thingContext: NotificationContextSnapshot.ThingContext?,
         localizeThingAttributeUpdateBody: (String) -> String,
-        localizeThingAttributePair: (String, String) -> String
+        localizeThingAttributePair: (String, String) -> String,
+        localizeThingUpdatedBody: () -> String,
+        localizeThingArchivedBody: () -> String,
+        localizeThingDeletedBody: () -> String
     ) -> String? {
         if let message = profile?.message, !message.isEmpty {
             return message
+        }
+        if entityType == "thing" {
+            switch thingOperation {
+            case .archive:
+                return localizeThingArchivedBody()
+            case .delete:
+                return localizeThingDeletedBody()
+            case .update, .none:
+                break
+            }
         }
         if entityType == "thing",
            let formatted = formatThingAttributeUpdateBody(
@@ -579,6 +662,9 @@ struct NotificationPayloadSemantics {
         {
             return thingState
         }
+        if entityType == "thing", thingOperation == .update {
+            return localizeThingUpdatedBody()
+        }
         switch entityType {
         case "event":
             return gatewayFallbackEventBody
@@ -587,6 +673,42 @@ struct NotificationPayloadSemantics {
         default:
             return nil
         }
+    }
+
+    private static func resolvedThingOperation(payload: [String: Any]) -> ThingNotificationOperation {
+        let operationFields = [
+            "operation",
+            "action",
+            "entity_action",
+            "thing_action",
+            "endpoint",
+            "path",
+            "request_path",
+            "route",
+        ]
+        let operationText = operationFields
+            .compactMap { stringValue(forKeys: [$0], in: payload)?.lowercased() }
+            .joined(separator: " ")
+        let stateText = stringValue(forKeys: ["state", "status"], in: payload)?.lowercased() ?? ""
+        let text = "\(operationText) \(stateText)"
+
+        if text.contains("/thing/delete") ||
+            text.contains("thing.delete") ||
+            text.contains("thing_delete") ||
+            text.contains("delete") ||
+            text.contains("deleted")
+        {
+            return .delete
+        }
+        if text.contains("/thing/archive") ||
+            text.contains("thing.archive") ||
+            text.contains("thing_archive") ||
+            text.contains("archive") ||
+            text.contains("archived")
+        {
+            return .archive
+        }
+        return .update
     }
 
     private static func nonEmptyString(_ value: Any?) -> String? {

@@ -123,7 +123,7 @@ final class ProviderIngressCoordinator {
         channelSubscriptionService: ChannelSubscriptionService,
         notificationIngressInbox: NotificationIngressInbox,
         ackMarkerStore: ProviderDeliveryAckFailureStore,
-        wakeupPullClaimStore: ProviderWakeupPullClaimStore = .shared,
+        wakeupPullClaimStore: ProviderWakeupPullClaimStore,
         hooks: Hooks
     ) {
         self.platformSuffix = platformSuffix

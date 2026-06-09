@@ -139,18 +139,20 @@ final class EntityProjectionViewModel {
     }
 
     @discardableResult
-    func ensureEventDetailsLoaded(eventId: String) async -> EventProjection? {
+    func ensureEventDetailsLoaded(eventId: String, forceRefresh: Bool = false) async -> EventProjection? {
         let normalized = eventId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return nil }
-        if hydratedEventIDs.contains(normalized) {
+        if !forceRefresh, hydratedEventIDs.contains(normalized) {
             return events.first(where: { $0.id == normalized })
         }
         do {
-            let messages = try await dataStore.loadEventMessagesForProjection(eventId: normalized)
-            events = mergeEventProjections(events, buildEvents(messages))
-            let projection = events.first(where: { $0.id == normalized })
+            let detail = try await dataStore.loadEventProjectionDetail(eventId: normalized)
+            let projection = buildEventProjection(from: detail, eventId: normalized)
             if projection != nil {
+                events = mergeEventProjections(events, [projection!])
                 hydratedEventIDs.insert(normalized)
+            } else {
+                removeCachedEventProjection(id: normalized)
             }
             self.error = nil
             return projection
@@ -167,18 +169,20 @@ final class EntityProjectionViewModel {
     }
 
     @discardableResult
-    func ensureThingDetailsLoaded(thingId: String) async -> ThingProjection? {
+    func ensureThingDetailsLoaded(thingId: String, forceRefresh: Bool = false) async -> ThingProjection? {
         let normalized = thingId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return nil }
-        if hydratedThingIDs.contains(normalized) {
+        if !forceRefresh, hydratedThingIDs.contains(normalized) {
             return things.first(where: { $0.id == normalized })
         }
         do {
-            let messages = try await dataStore.loadThingMessagesForProjection(thingId: normalized)
-            things = mergeThingProjections(things, buildThings(messages))
-            let projection = things.first(where: { $0.id == normalized })
+            let detail = try await dataStore.loadThingProjectionDetail(thingId: normalized)
+            let projection = buildThingProjection(from: detail, thingId: normalized)
             if projection != nil {
+                things = mergeThingProjections(things, [projection!])
                 hydratedThingIDs.insert(normalized)
+            } else {
+                removeCachedThingProjection(id: normalized)
             }
             self.error = nil
             return projection
@@ -192,6 +196,16 @@ final class EntityProjectionViewModel {
             )
         }
         return nil
+    }
+
+    private func removeCachedEventProjection(id: String) {
+        events.removeAll { $0.id == id }
+        hydratedEventIDs.remove(id)
+    }
+
+    private func removeCachedThingProjection(id: String) {
+        things.removeAll { $0.id == id }
+        hydratedThingIDs.remove(id)
     }
 
     private func resetPaginationState() {
@@ -255,6 +269,76 @@ final class EntityProjectionViewModel {
         hasMoreThings = page.count >= thingPageSize
         let pageThings = buildThings(page)
         things = reset ? pageThings : mergeThingProjections(things, pageThings)
+    }
+
+    private func buildEventProjection(
+        from detail: EntityProjectionDetail,
+        eventId: String
+    ) -> EventProjection? {
+        let full = buildEvents(detail.messages, includeSecondaryEvents: true)
+            .first(where: { $0.id == eventId })
+        guard let head = detail.head,
+              let headProjection = buildEvents([head], includeSecondaryEvents: true)
+                .first(where: { $0.id == eventId })
+        else {
+            return full
+        }
+        guard let full else { return headProjection }
+        return EventProjection(
+            id: headProjection.id,
+            title: headProjection.title,
+            summary: headProjection.summary,
+            status: headProjection.status,
+            message: headProjection.message,
+            severity: headProjection.severity,
+            tags: headProjection.tags,
+            state: headProjection.state,
+            thingId: headProjection.thingId,
+            channelId: headProjection.channelId,
+            decryptionState: headProjection.decryptionState,
+            imageURL: headProjection.imageURL,
+            imageURLs: deduplicatedURLs(headProjection.imageURLs + full.imageURLs),
+            attrsJSON: headProjection.attrsJSON,
+            updatedAt: max(headProjection.updatedAt, full.updatedAt),
+            timeline: full.timeline
+        )
+    }
+
+    private func buildThingProjection(
+        from detail: EntityProjectionDetail,
+        thingId: String
+    ) -> ThingProjection? {
+        let full = buildThings(detail.messages)
+            .first(where: { $0.id == thingId })
+        guard let head = detail.head,
+              let headProjection = buildThings([head]).first(where: { $0.id == thingId })
+        else {
+            return full
+        }
+        guard let full else { return headProjection }
+        return ThingProjection(
+            id: headProjection.id,
+            title: headProjection.title,
+            summary: headProjection.summary,
+            tags: headProjection.tags,
+            state: headProjection.state,
+            createdAt: headProjection.createdAt,
+            deletedAt: headProjection.deletedAt,
+            channelId: headProjection.channelId,
+            decryptionState: headProjection.decryptionState,
+            locationType: headProjection.locationType,
+            locationValue: headProjection.locationValue,
+            externalIDs: headProjection.externalIDs,
+            imageURL: headProjection.imageURL,
+            imageURLs: headProjection.imageURLs,
+            metadata: headProjection.metadata,
+            attrsJSON: headProjection.attrsJSON,
+            attrsCount: headProjection.attrsCount,
+            updatedAt: max(headProjection.updatedAt, full.updatedAt),
+            relatedEvents: full.relatedEvents,
+            relatedMessages: full.relatedMessages,
+            relatedUpdates: full.relatedUpdates
+        )
     }
 
     private func buildEvents(
@@ -350,6 +434,7 @@ final class EntityProjectionViewModel {
             var locationType: String?
             var locationValue: String?
             var externalIDs: [String: String] = [:]
+            var metadata: [String: String] = [:]
             var imageURL: URL?
             var imageURLs: [URL] = []
 
@@ -385,6 +470,15 @@ final class EntityProjectionViewModel {
                             externalIDs.removeValue(forKey: key)
                         } else if let text = scalarDisplayValue(value) {
                             externalIDs[key] = text
+                        }
+                    }
+                }
+                if let metadataPatch = payloadJSONObject(key: "metadata", payload: entry.rawPayload) {
+                    for (key, value) in metadataPatch {
+                        if value is NSNull {
+                            metadata.removeValue(forKey: key)
+                        } else if let text = scalarDisplayValue(value) {
+                            metadata[key] = text
                         }
                     }
                 }
@@ -453,7 +547,7 @@ final class EntityProjectionViewModel {
                 externalIDs: externalIDs,
                 imageURL: imageURL,
                 imageURLs: imageURLs,
-                metadata: [:],
+                metadata: metadata,
                 attrsJSON: attrsJSON,
                 attrsCount: attrs.count,
                 updatedAt: thingStreamHappenedAt(for: latest),
@@ -577,7 +671,7 @@ final class EntityProjectionViewModel {
             externalIDs: older.externalIDs.merging(latest.externalIDs) { _, latestValue in latestValue },
             imageURL: latest.imageURL,
             imageURLs: deduplicatedURLs(current.imageURLs + incoming.imageURLs),
-            metadata: [:],
+            metadata: older.metadata.merging(latest.metadata) { _, latestValue in latestValue },
             attrsJSON: mergeJSONObjectStrings(base: older.attrsJSON, overlay: latest.attrsJSON),
             attrsCount: max(current.attrsCount, incoming.attrsCount),
             updatedAt: latest.updatedAt,
@@ -804,10 +898,10 @@ final class EntityProjectionViewModel {
         var urls: [URL] = []
         switch kind {
         case .event:
-            appendResolvedURLs(from: object["images"] as? [Any], into: &urls)
+            appendResolvedURLs(from: object["images"], into: &urls)
         case .thing:
             appendResolvedURL(from: nonEmpty(object["primary_image"] as? String), into: &urls)
-            appendResolvedURLs(from: object["images"] as? [Any], into: &urls)
+            appendResolvedURLs(from: object["images"], into: &urls)
         }
         return deduplicatedURLs(urls)
     }
@@ -817,8 +911,15 @@ final class EntityProjectionViewModel {
         target.append(resolved)
     }
 
-    private func appendResolvedURLs(from raw: [Any]?, into target: inout [URL]) {
-        guard let raw else { return }
+    private func appendResolvedURLs(from raw: Any?, into target: inout [URL]) {
+        for item in stringArray(from: raw) {
+            if let resolved = URLSanitizer.resolveHTTPSURL(from: item) {
+                target.append(resolved)
+            }
+        }
+    }
+
+    private func appendResolvedURLs(from raw: [Any], into target: inout [URL]) {
         for item in raw {
             guard let text = nonEmpty(item as? String) else { continue }
             if let resolved = URLSanitizer.resolveHTTPSURL(from: text) {
@@ -840,7 +941,17 @@ final class EntityProjectionViewModel {
     }
 
     private func stringArray(from value: Any?) -> [String] {
-        guard let raw = value as? [Any] else { return [] }
+        let raw: [Any]
+        if let array = value as? [Any] {
+            raw = array
+        } else if let text = nonEmpty(value as? String),
+                  let data = text.data(using: .utf8),
+                  let array = try? JSONSerialization.jsonObject(with: data) as? [Any]
+        {
+            raw = array
+        } else {
+            return []
+        }
         var out: [String] = []
         for item in raw {
             guard let text = nonEmpty(item as? String) else { continue }

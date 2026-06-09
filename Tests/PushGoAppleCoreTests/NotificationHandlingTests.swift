@@ -226,7 +226,7 @@ struct NotificationHandlingTests {
 
         #expect(normalized?.entityType == "event")
         #expect(normalized?.entityId == "evt-crypto-001")
-        #expect(normalized?.title.contains("evt-crypto-001") == true)
+        #expect(normalized?.title == "open")
         #expect(normalized?.body == "open")
         #expect(normalized?.decryptionState == .decryptOk)
     }
@@ -506,8 +506,83 @@ struct NotificationHandlingTests {
             }
             #expect(stored.title == "Stored event title from DB")
             #expect(stored.body == "profile body")
-            #expect(stored.rawPayload["title"]?.value as? String == "Stored event title from DB")
+            #expect(stored.rawPayload["title"]?.value == nil)
+            #expect(stored.rawPayload["message"]?.value as? String == "profile body")
         }
+    }
+
+    @Test
+    func persistIfNeededUsesEventStatusWhenStoredTitleIsSyntheticFallback() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let seededEvent = makeEntityRecord(
+                messageId: "evt-status-title-seed-001",
+                notificationRequestId: "req-status-title-seed-001",
+                title: "Event evt-status-title-001",
+                body: "seed body",
+                rawPayload: [
+                    "entity_type": "event",
+                    "entity_id": "evt-status-title-001",
+                    "event_id": "evt-status-title-001",
+                    "projection_destination": "event_head",
+                ]
+            )
+            try await store.saveEntityRecords([seededEvent])
+
+            let content = UNMutableNotificationContent()
+            content.title = ""
+            content.body = ""
+            content.userInfo = [
+                "message_id": "msg-status-title-001",
+                "entity_type": "event",
+                "entity_id": "evt-status-title-001",
+                "event_id": "evt-status-title-001",
+                "status": "closed",
+            ]
+            let request = UNNotificationRequest(
+                identifier: "req-status-title-001",
+                content: content,
+                trigger: nil
+            )
+
+            let outcome = await NotificationPersistenceCoordinator.persistIfNeeded(
+                request: request,
+                content: content,
+                dataStore: store
+            )
+
+            guard case let .persistedMain(stored) = outcome else {
+                Issue.record("Expected event status fallback payload to persist.")
+                return
+            }
+            #expect(stored.title == "closed")
+            #expect(stored.rawPayload["title"]?.value == nil)
+            #expect(stored.rawPayload["status"]?.value as? String == "closed")
+        }
+    }
+
+    @Test
+    func applyResolvedPayloadUsesEventStatusInsteadOfSyntheticFallbackTitle() {
+        let payload: [AnyHashable: Any] = [
+            "entity_type": "event",
+            "entity_id": "evt-direct-status-title-001",
+            "event_id": "evt-direct-status-title-001",
+            "status": "closed",
+            "aps": [
+                "alert": [
+                    "title": "Event evt-direct-status-title-001",
+                    "body": "Event updated.",
+                ],
+            ],
+        ]
+        let content = UNMutableNotificationContent()
+        content.title = "Event evt-direct-status-title-001"
+        content.body = "Event updated."
+        content.userInfo = payload
+
+        NotificationHandling.applyResolvedPayload(payload, to: content)
+
+        #expect(content.title == "closed")
+        #expect(content.body == "closed")
     }
 
     @Test
@@ -555,7 +630,8 @@ struct NotificationHandlingTests {
                 return
             }
             #expect(stored.title == "Stored thing title from DB")
-            #expect(stored.rawPayload["title"]?.value as? String == "Stored thing title from DB")
+            #expect(stored.rawPayload["title"]?.value == nil)
+            #expect(stored.rawPayload["attrs"]?.value as? String == "{\"temperature\":\"24\"}")
         }
     }
 
@@ -581,7 +657,7 @@ struct NotificationHandlingTests {
                 Issue.record("Expected event pull payload without message_id to persist.")
                 return
             }
-            let events = try await store.loadEventMessagesForProjection(eventId: "evt-pull-001")
+            let events = try await store.loadEventProjectionDetail(eventId: "evt-pull-001").messages
             #expect(events.count == 1)
             #expect(events.first?.eventId == "evt-pull-001")
             #expect(events.first?.notificationRequestId == "delivery-event-001")
@@ -771,6 +847,7 @@ struct NotificationHandlingTests {
         #expect(explicit?.title == "Explicit event title")
         #expect(fallback?.hasExplicitTitle == false)
         #expect(fallback?.title == "push_type_event evt-fallback-title-001")
+        #expect(fallback?.rawPayload["title"] == nil)
     }
 
     @Test
@@ -791,8 +868,12 @@ struct NotificationHandlingTests {
 
         #expect(normalizedEvent?.title == "push_type_event evt-fallback-body-001")
         #expect(normalizedEvent?.body == NotificationPayloadSemantics.gatewayFallbackEventBody)
+        #expect(normalizedEvent?.rawPayload["title"] == nil)
+        #expect(normalizedEvent?.rawPayload["body"] == nil)
         #expect(normalizedThing?.title == "push_type_thing thing-fallback-body-001")
         #expect(normalizedThing?.body == NotificationPayloadSemantics.gatewayFallbackThingBody)
+        #expect(normalizedThing?.rawPayload["title"] == nil)
+        #expect(normalizedThing?.rawPayload["body"] == nil)
     }
 
     @Test

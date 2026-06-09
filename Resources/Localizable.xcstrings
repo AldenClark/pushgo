@@ -10901,6 +10901,58 @@
         }
       }
     },
+    "Grant Access" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zugriff erlauben"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grant Access"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conceder acceso"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autoriser l’accès"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アクセスを許可"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "접근 허용"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "授予权限"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "授予權限"
+          }
+        }
+      }
+    },
     "hide_key" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11326,6 +11378,7 @@
       }
     },
     "Images" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -19004,6 +19057,58 @@
         }
       }
     },
+    "PushGo needs read and write access to ~/Library/Sounds before custom notification sounds can be saved." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PushGo benötigt Lese- und Schreibzugriff auf ~/Library/Sounds, bevor eigene Benachrichtigungstöne gespeichert werden können."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PushGo needs read and write access to ~/Library/Sounds before custom notification sounds can be saved."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PushGo necesita acceso de lectura y escritura a ~/Library/Sounds para guardar sonidos de notificación personalizados."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PushGo a besoin d’un accès en lecture et écriture à ~/Library/Sounds pour enregistrer les sons de notification personnalisés."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カスタム通知サウンドを保存するには、PushGo に ~/Library/Sounds の読み書き権限が必要です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용자 지정 알림 사운드를 저장하려면 PushGo에 ~/Library/Sounds 읽기 및 쓰기 권한이 필요합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存自定义通知铃声前，PushGo 需要 ~/Library/Sounds 的读写权限。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "儲存自訂通知鈴聲前，PushGo 需要 ~/Library/Sounds 的讀寫權限。"
+          }
+        }
+      }
+    },
     "pushgo_markdown_limits" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -20595,6 +20700,58 @@
         }
       }
     },
+    "Select the ~/Library/Sounds folder so PushGo can save custom notification sounds." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wähle den Ordner ~/Library/Sounds aus, damit PushGo eigene Benachrichtigungstöne speichern kann."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select the ~/Library/Sounds folder so PushGo can save custom notification sounds."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selecciona la carpeta ~/Library/Sounds para que PushGo pueda guardar sonidos de notificación personalizados."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sélectionnez le dossier ~/Library/Sounds afin que PushGo puisse enregistrer les sons de notification personnalisés."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PushGo がカスタム通知サウンドを保存できるよう、~/Library/Sounds フォルダを選択してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PushGo가 사용자 지정 알림 사운드를 저장할 수 있도록 ~/Library/Sounds 폴더를 선택하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请选择 ~/Library/Sounds 文件夹，以便 PushGo 保存自定义通知铃声。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請選擇 ~/Library/Sounds 資料夾，以便 PushGo 儲存自訂通知鈴聲。"
+          }
+        }
+      }
+    },
     "select_a_message_to_view_details" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -21737,110 +21894,6 @@
         }
       }
     },
-    "Sound for %@" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ton für %@"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sound for %@"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sonido para %@"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Son pour %@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ のサウンド"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@용 사운드"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ 的铃声"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ 的鈴聲"
-          }
-        }
-      }
-    },
-    "Sound imported." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ton importiert."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sound imported."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sonido importado."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Son importé."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "サウンドを読み込みました。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "사운드를 가져왔습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "铃声已导入。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "鈴聲已匯入。"
-          }
-        }
-      }
-    },
     "Sound folder access granted." : {
       "localizations" : {
         "de" : {
@@ -21945,158 +21998,106 @@
         }
       }
     },
-    "Grant Access" : {
+    "Sound for %@" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zugriff erlauben"
+            "value" : "Ton für %@"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Grant Access"
+            "value" : "Sound for %@"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Conceder acceso"
+            "value" : "Sonido para %@"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Autoriser l’accès"
+            "value" : "Son pour %@"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "アクセスを許可"
+            "value" : "%@ のサウンド"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "접근 허용"
+            "value" : "%@용 사운드"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "授予权限"
+            "value" : "%@ 的铃声"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "授予權限"
+            "value" : "%@ 的鈴聲"
           }
         }
       }
     },
-    "PushGo needs read and write access to ~/Library/Sounds before custom notification sounds can be saved." : {
+    "Sound imported." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "PushGo benötigt Lese- und Schreibzugriff auf ~/Library/Sounds, bevor eigene Benachrichtigungstöne gespeichert werden können."
+            "value" : "Ton importiert."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "PushGo needs read and write access to ~/Library/Sounds before custom notification sounds can be saved."
+            "value" : "Sound imported."
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "PushGo necesita acceso de lectura y escritura a ~/Library/Sounds para guardar sonidos de notificación personalizados."
+            "value" : "Sonido importado."
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "PushGo a besoin d’un accès en lecture et écriture à ~/Library/Sounds pour enregistrer les sons de notification personnalisés."
+            "value" : "Son importé."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "カスタム通知サウンドを保存するには、PushGo に ~/Library/Sounds の読み書き権限が必要です。"
+            "value" : "サウンドを読み込みました。"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "사용자 지정 알림 사운드를 저장하려면 PushGo에 ~/Library/Sounds 읽기 및 쓰기 권한이 필요합니다."
+            "value" : "사운드를 가져왔습니다."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "保存自定义通知铃声前，PushGo 需要 ~/Library/Sounds 的读写权限。"
+            "value" : "铃声已导入。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "儲存自訂通知鈴聲前，PushGo 需要 ~/Library/Sounds 的讀寫權限。"
-          }
-        }
-      }
-    },
-    "Select the ~/Library/Sounds folder so PushGo can save custom notification sounds." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wähle den Ordner ~/Library/Sounds aus, damit PushGo eigene Benachrichtigungstöne speichern kann."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Select the ~/Library/Sounds folder so PushGo can save custom notification sounds."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Selecciona la carpeta ~/Library/Sounds para que PushGo pueda guardar sonidos de notificación personalizados."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sélectionnez le dossier ~/Library/Sounds afin que PushGo puisse enregistrer les sons de notification personnalisés."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "PushGo がカスタム通知サウンドを保存できるよう、~/Library/Sounds フォルダを選択してください。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "PushGo가 사용자 지정 알림 사운드를 저장할 수 있도록 ~/Library/Sounds 폴더를 선택하세요."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "请选择 ~/Library/Sounds 文件夹，以便 PushGo 保存自定义通知铃声。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "請選擇 ~/Library/Sounds 資料夾，以便 PushGo 儲存自訂通知鈴聲。"
+            "value" : "鈴聲已匯入。"
           }
         }
       }
@@ -22149,58 +22150,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "鈴聲庫"
-          }
-        }
-      }
-    },
-    "System Default" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Systemstandard"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "System Default"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Predeterminado del sistema"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Son par défaut du système"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "システム標準"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "시스템 기본값"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "系统默认"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "系統預設"
           }
         }
       }
@@ -22959,6 +22908,58 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "同步失敗：%@"
+          }
+        }
+      }
+    },
+    "System Default" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Systemstandard"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System Default"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Predeterminado del sistema"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Son par défaut du système"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "システム標準"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시스템 기본값"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系统默认"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "系統預設"
           }
         }
       }

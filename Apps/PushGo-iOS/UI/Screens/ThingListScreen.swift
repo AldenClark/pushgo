@@ -424,7 +424,7 @@ struct ThingListScreen: View {
         guard !hydrationRequestedThingIDs.contains(target) else { return }
         hydrationRequestedThingIDs.insert(target)
         Task { @MainActor in
-            let hydrated = await viewModel.ensureThingDetailsLoaded(thingId: target)
+            let hydrated = await viewModel.ensureThingDetailsLoaded(thingId: target, forceRefresh: true)
             hydrationRequestedThingIDs.remove(target)
             guard let hydrated else { return }
             openThing(hydrated, target: target)
@@ -453,8 +453,11 @@ struct ThingListScreen: View {
         guard !isBatchMode else { return }
         selectedThing = thing
         Task { @MainActor in
-            await viewModel.ensureThingDetailsLoaded(thingId: thing.id)
-            syncSelectedThingSnapshot()
+            if let hydrated = await viewModel.ensureThingDetailsLoaded(thingId: thing.id, forceRefresh: true) {
+                selectedThing = hydrated
+            } else if selectedThing?.id == thing.id {
+                selectedThing = nil
+            }
         }
     }
 
@@ -468,6 +471,8 @@ struct ThingListScreen: View {
         guard let selectedId = selectedThing?.id else { return }
         if let refreshed = viewModel.things.first(where: { $0.id == selectedId }) {
             selectedThing = refreshed
+        } else {
+            selectedThing = nil
         }
     }
 

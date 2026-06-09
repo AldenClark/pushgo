@@ -65,7 +65,13 @@ struct ThingSplitScreen: View {
         .onChange(of: selection) { _, id in
             guard !isBatchMode else { return }
             guard let id else { return }
-            Task { await viewModel.ensureThingDetailsLoaded(thingId: id) }
+            Task { @MainActor in
+                let hydrated = await viewModel.ensureThingDetailsLoaded(thingId: id, forceRefresh: true)
+                if hydrated == nil, selection == id {
+                    selection = nil
+                    syncSelection()
+                }
+            }
         }
         .onChange(of: environment.pendingLocalDeletionController.pendingDeletion) { _, _ in
             let visibleIDs = Set(filteredThings.map(\.id))
@@ -369,6 +375,15 @@ struct ThingSplitScreen: View {
         if let target = openThingId?.trimmingCharacters(in: .whitespacesAndNewlines),
            !target.isEmpty
         {
+            if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                searchQuery = ""
+                searchFieldText = ""
+                return
+            }
+            if !selectedChannelIDs.isEmpty {
+                selectedChannelIDs.removeAll()
+                return
+            }
             if !selectedTags.isEmpty {
                 selectedTags.removeAll()
                 return
@@ -382,7 +397,8 @@ struct ThingSplitScreen: View {
             if !hydrationRequestedThingIDs.contains(target) {
                 hydrationRequestedThingIDs.insert(target)
                 Task { @MainActor in
-                    await viewModel.ensureThingDetailsLoaded(thingId: target)
+                    await viewModel.ensureThingDetailsLoaded(thingId: target, forceRefresh: true)
+                    hydrationRequestedThingIDs.remove(target)
                     syncSelection()
                 }
                 return

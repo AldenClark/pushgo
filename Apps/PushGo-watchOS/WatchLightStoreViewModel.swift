@@ -13,7 +13,12 @@ final class WatchLightStoreViewModel {
     private(set) var things: [WatchLightThing] = []
     var error: AppError?
 
-    init(environment: AppEnvironment = .shared) {
+    init() {
+        self.environment = AppEnvironment.shared
+        dataStore = AppEnvironment.shared.dataStore
+    }
+
+    init(environment: AppEnvironment) {
         self.environment = environment
         dataStore = environment.dataStore
     }

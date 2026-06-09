@@ -1,6 +1,7 @@
 import SwiftUI
 import Observation
 
+@MainActor
 struct MessageListScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager

@@ -46,7 +46,6 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "AAFB52C02F0CA5F0009E61C5"
             BuildableName = "PushGoWatch.app"
-            BlueprintName = "PushGo-watchOS"
             ReferencedContainer = "container:pushgo.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -63,7 +62,6 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "AAFB52C02F0CA5F0009E61C5"
             BuildableName = "PushGoWatch.app"
-            BlueprintName = "PushGo-watchOS"
             ReferencedContainer = "container:pushgo.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

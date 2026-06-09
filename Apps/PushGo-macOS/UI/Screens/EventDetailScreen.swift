@@ -142,10 +142,7 @@ private struct EventDetailPanel: View {
 
                     if !imageAttachments.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Images")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(Color.appTextSecondary)
-                            EventAttachmentImageGrid(
+                            EventAttachmentImageStrip(
                                 urls: imageAttachments,
                                 onTap: { previewImageItem = EventImagePreviewItem(url: $0) }
                             )
@@ -188,14 +185,24 @@ private struct EventImagePreviewItem: Identifiable {
     var id: String { url.absoluteString }
 }
 
-private struct EventAttachmentImageGrid: View {
+private struct EventAttachmentImageStrip: View {
     let urls: [URL]
     let onTap: (URL) -> Void
 
-    private let columns = Array(repeating: GridItem(.flexible(minimum: 60), spacing: 8), count: 3)
+    private static let thumbnailWidth: CGFloat = 104
+    private static let thumbnailHeight: CGFloat = 82
+    private static let columnSpacing: CGFloat = 8
+
+    private let columns = Array(
+        repeating: GridItem(
+            .flexible(minimum: 60, maximum: Self.thumbnailWidth),
+            spacing: Self.columnSpacing
+        ),
+        count: 3
+    )
 
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 8) {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: Self.columnSpacing) {
             ForEach(urls, id: \.absoluteString) { url in
                 RemoteImageView(url: url, rendition: .listThumbnail) { image in
                     Button {
@@ -204,18 +211,24 @@ private struct EventAttachmentImageGrid: View {
                         image
                             .resizable()
                             .scaledToFill()
-                            .frame(height: 84)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: Self.thumbnailHeight)
                             .clipShape(RoundedRectangle(cornerRadius: EntityVisualTokens.radiusSmall, style: .continuous))
                     }
                     .buttonStyle(.plain)
                 } placeholder: {
                     Rectangle()
                         .fill(EntityVisualTokens.secondarySurface)
-                        .frame(height: 84)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: Self.thumbnailHeight)
                         .clipShape(RoundedRectangle(cornerRadius: EntityVisualTokens.radiusSmall, style: .continuous))
                 }
             }
         }
+        .frame(
+            maxWidth: Self.thumbnailWidth * 3 + Self.columnSpacing * 2,
+            alignment: .leading
+        )
     }
 }
 

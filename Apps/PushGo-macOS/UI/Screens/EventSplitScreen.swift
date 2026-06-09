@@ -12,6 +12,7 @@ struct EventSplitScreen: View {
     @State private var selectedChannelIDs: Set<String> = []
     @State private var selectedTags: Set<String> = []
     @State private var hydrationRequestedEventIDs: Set<String> = []
+    @State private var hydratedSelectedEvent: EventProjection?
     @State private var showCloseConfirmation = false
     @State private var isBatchMode: Bool = false
     @State private var batchSelection: Set<String> = []
@@ -43,6 +44,9 @@ struct EventSplitScreen: View {
                 searchFieldText = searchQuery
             }
             syncSelection()
+            if let selection {
+                requestSelectedEventHydration(selection)
+            }
         }
         .onChange(of: searchFieldText) { _, newValue in
             guard !isBatchMode else { return }
@@ -63,8 +67,12 @@ struct EventSplitScreen: View {
         }
         .onChange(of: selection) { _, id in
             guard !isBatchMode else { return }
-            guard let id else { return }
-            Task { await viewModel.ensureEventDetailsLoaded(eventId: id) }
+            guard let id else {
+                hydratedSelectedEvent = nil
+                return
+            }
+            hydratedSelectedEvent = nil
+            requestSelectedEventHydration(id)
         }
         .onChange(of: environment.pendingLocalDeletionController.pendingDeletion) { _, _ in
             let visibleIDs = Set(filteredEvents.map(\.id))
@@ -164,6 +172,9 @@ struct EventSplitScreen: View {
     private var selectedEvent: EventProjection? {
         guard !isBatchMode else { return nil }
         guard let selection else { return nil }
+        if hydratedSelectedEvent?.id == selection {
+            return hydratedSelectedEvent
+        }
         return filteredEvents.first(where: { $0.id == selection })
     }
 
@@ -364,25 +375,39 @@ struct EventSplitScreen: View {
     private func syncSelection() {
         if isBatchMode {
             selection = nil
+            hydratedSelectedEvent = nil
             return
         }
         if let target = openEventId?.trimmingCharacters(in: .whitespacesAndNewlines),
            !target.isEmpty
         {
+            if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                searchQuery = ""
+                searchFieldText = ""
+                return
+            }
+            if !selectedChannelIDs.isEmpty {
+                selectedChannelIDs.removeAll()
+                return
+            }
             if !selectedTags.isEmpty {
                 selectedTags.removeAll()
                 return
             }
             if filteredEvents.contains(where: { $0.id == target }) {
                 selection = target
-                hydrationRequestedEventIDs.remove(target)
+                requestSelectedEventHydration(target)
                 onOpenEventHandled?()
                 return
             }
             if !hydrationRequestedEventIDs.contains(target) {
                 hydrationRequestedEventIDs.insert(target)
                 Task { @MainActor in
-                    await viewModel.ensureEventDetailsLoaded(eventId: target)
+                    let hydrated = await viewModel.ensureEventDetailsLoaded(eventId: target, forceRefresh: true)
+                    hydrationRequestedEventIDs.remove(target)
+                    if selection == target {
+                        hydratedSelectedEvent = hydrated
+                    }
                     syncSelection()
                 }
                 return
@@ -398,9 +423,36 @@ struct EventSplitScreen: View {
 
         if let selection,
            filteredEvents.contains(where: { $0.id == selection }) {
+            requestSelectedEventHydration(selection)
             return
         }
         selection = filteredEvents.first?.id
+        if let selection {
+            requestSelectedEventHydration(selection)
+        } else {
+            hydratedSelectedEvent = nil
+        }
+    }
+
+    private func requestSelectedEventHydration(_ eventId: String) {
+        let normalized = eventId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return }
+        guard !hydrationRequestedEventIDs.contains(normalized) else { return }
+        if hydratedSelectedEvent?.id == normalized, (hydratedSelectedEvent?.timeline.count ?? 0) > 1 {
+            return
+        }
+        hydrationRequestedEventIDs.insert(normalized)
+        Task { @MainActor in
+            let hydrated = await viewModel.ensureEventDetailsLoaded(eventId: normalized, forceRefresh: true)
+            hydrationRequestedEventIDs.remove(normalized)
+            if selection == normalized {
+                hydratedSelectedEvent = hydrated
+                if hydrated == nil, !filteredEvents.contains(where: { $0.id == normalized }) {
+                    selection = nil
+                    syncSelection()
+                }
+            }
+        }
     }
 
     private var filterPopoverContent: some View {

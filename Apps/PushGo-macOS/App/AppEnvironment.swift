@@ -80,32 +80,7 @@ final class AppEnvironment {
             )
         }
     )
-    @ObservationIgnored private(set) lazy var notificationIngressController = NotificationIngressController(
-        platformSuffix: platformIdentifier(),
-        dataStore: dataStore,
-        channelSubscriptionService: channelSubscriptionService,
-        serverConfigProvider: { [weak self] in
-            self?.serverConfig
-        },
-        cachedDeviceKeyProvider: { [weak self] in
-            guard let self else { return nil }
-            return await self.providerRouteController.cachedProviderPullDeviceKey()
-        },
-        beforePersistMessage: { [weak self] message in
-            await MainActor.run {
-                self?.autoEnableDataPageIfNeeded(for: message)
-            }
-        },
-        scheduleCountsRefresh: { [weak self] in
-            self?.scheduleCountsRefresh()
-        },
-        recordProviderError: { [weak self] error, source in
-            self?.showAutomationErrorToastIfNeeded(error, source: source)
-        },
-        shouldDeferStartupWakeupPulls: { [weak self] in
-            self?.shouldDeferStartupWakeupPulls ?? false
-        }
-    )
+    @ObservationIgnored private(set) lazy var notificationIngressController = makeNotificationIngressController()
     @ObservationIgnored private let localStoreFailureStreakThreshold = 3
     @ObservationIgnored private let localStoreFailureStreakKey = "pushgo.local_store.failure_streak"
     @ObservationIgnored private let localStoreFailureDefaults = AppConstants.sharedUserDefaults()
@@ -212,6 +187,37 @@ final class AppEnvironment {
             }
         }
         registerDefaultNotificationCategories()
+    }
+
+    private func makeNotificationIngressController() -> NotificationIngressController {
+        NotificationIngressController(
+            platformSuffix: platformIdentifier(),
+            dataStore: dataStore,
+            channelSubscriptionService: channelSubscriptionService,
+            serverConfigProvider: { [weak self] in
+                self?.serverConfig
+            },
+            cachedDeviceKeyProvider: { [weak self] in
+                guard let self else { return nil }
+                return await self.providerRouteController.cachedProviderPullDeviceKey()
+            },
+            beforePersistMessage: { [weak self] message in
+                await MainActor.run {
+                    self?.autoEnableDataPageIfNeeded(for: message)
+                }
+            },
+            scheduleCountsRefresh: { [weak self] in
+                self?.scheduleCountsRefresh()
+            },
+            recordProviderError: { [weak self] error, source in
+                self?.showAutomationErrorToastIfNeeded(error, source: source)
+            },
+            shouldDeferStartupWakeupPulls: { [weak self] in
+                self?.shouldDeferStartupWakeupPulls ?? false
+            },
+            notificationIngressInbox: .shared,
+            ackFailureStore: .shared
+        )
     }
 
     func bootstrap() async {
@@ -1116,6 +1122,10 @@ final class AppEnvironment {
             syncBadgeWithUnreadCount()
             scheduleMessageListRefresh()
             Task { @MainActor in
+                _ = await mergeNotificationIngressInbox(
+                    reason: "macos_scene_active",
+                    allowFallbackPull: true
+                )
                 await refreshLaunchAtLoginStatus()
                 await refreshChannelSubscriptions()
                 await syncPrivateChannelState()
