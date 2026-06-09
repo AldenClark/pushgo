@@ -107,6 +107,12 @@ final class MessageListViewModel {
         let hasMorePages: Bool
     }
 
+    private struct VisiblePageSnapshot {
+        let messages: [PushMessageSummary]
+        let nextCursor: MessagePageCursor?
+        let hasMorePages: Bool
+    }
+
     init(environment: AppEnvironment? = nil) {
         if let environment {
             self.environment = environment
@@ -541,47 +547,23 @@ final class MessageListViewModel {
     private func loadRefreshSnapshot(targetCount: Int) async throws -> RefreshSnapshot {
         var results: [PushMessageSummary] = []
         var cursor: MessagePageCursor?
-        var lastPageCount = 0
+        var hasMorePages = false
 
         while results.count < targetCount {
-            let page = try await dataStore.loadMessageSummariesPage(
-                before: cursor,
-                limit: pageSize,
-                filter: mapFilter(selectedFilter),
-                channel: nil,
-                tag: nil,
-                sortMode: sortMode
-            )
-            lastPageCount = page.count
-
-            if page.isEmpty {
+            let needed = targetCount - results.count
+            let pageSnapshot = try await loadVisiblePage(after: cursor, targetVisibleCount: needed)
+            if pageSnapshot.messages.isEmpty {
+                cursor = pageSnapshot.nextCursor
+                hasMorePages = pageSnapshot.hasMorePages
                 break
             }
-            let scopedPage = applyFacetSelections(to: page)
-
-            if results.count + scopedPage.count <= targetCount {
-                results.append(contentsOf: scopedPage)
-                cursor = page.last.map {
-                    MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
-                }
-                if page.count < pageSize {
-                    return RefreshSnapshot(messages: results, nextCursor: cursor, hasMorePages: false)
-                }
-            } else {
-                let needed = targetCount - results.count
-                results.append(contentsOf: scopedPage.prefix(needed))
-                cursor = results.last.map {
-                    MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
-                }
-                return RefreshSnapshot(messages: results, nextCursor: cursor, hasMorePages: true)
-            }
+            results.append(contentsOf: pageSnapshot.messages)
+            cursor = pageSnapshot.nextCursor
+            hasMorePages = pageSnapshot.hasMorePages
+            guard pageSnapshot.hasMorePages else { break }
         }
 
-        let next = results.last.map {
-            MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
-        }
-        let mayHaveMore = results.count >= targetCount && lastPageCount == pageSize
-        return RefreshSnapshot(messages: results, nextCursor: next, hasMorePages: mayHaveMore)
+        return RefreshSnapshot(messages: results, nextCursor: cursor, hasMorePages: hasMorePages)
     }
 
     private func loadNextPage() async {
@@ -590,22 +572,13 @@ final class MessageListViewModel {
         defer { isLoadingPage = false }
 
         do {
-            let page = try await dataStore.loadMessageSummariesPage(
-                before: nextCursor,
-                limit: pageSize,
-                filter: mapFilter(selectedFilter),
-                channel: nil,
-                tag: nil,
-                sortMode: sortMode
-            )
+            let page = try await loadVisiblePage(after: nextCursor, targetVisibleCount: pageSize)
             if resetStaleSelectionIfNeeded() {
                 return
             }
-            filteredMessages.append(contentsOf: applyFacetSelections(to: page))
-            nextCursor = page.last.map {
-                MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
-            }
-            hasMorePages = page.count == pageSize
+            filteredMessages.append(contentsOf: page.messages)
+            nextCursor = page.nextCursor
+            hasMorePages = page.hasMorePages
             trimCachedMessagesIfNeeded()
         } catch let appError as AppError {
             self.error = appError
@@ -787,20 +760,20 @@ final class MessageListViewModel {
     }
 
     private func applyFacetSelections(to messages: [PushMessageSummary]) -> [PushMessageSummary] {
-        messages.filter(matchesCurrentFacetSelections)
+        messages.filter { self.matchesCurrentFacetSelections($0) && !self.isLocallySuppressed($0) }
     }
 
     private func loadCurrentScopeUnreadCount() async throws -> Int {
         let unreadCandidates = try await dataStore.loadMessages(filter: currentQueryFilter(), channel: nil)
         return unreadCandidates.lazy.filter { message in
-            !message.isRead && matchesCurrentFacetSelections(message)
+            !message.isRead && self.matchesCurrentFacetSelections(message)
         }.count
     }
 
     private func unreadMessageIDsInCurrentScope() async throws -> [UUID] {
         let messages = try await dataStore.loadMessages(filter: currentQueryFilter(), channel: nil)
         return messages.compactMap { message in
-            guard !message.isRead, matchesCurrentFacetSelections(message) else { return nil }
+            guard !message.isRead, self.matchesCurrentFacetSelections(message) else { return nil }
             return message.id
         }
     }
@@ -874,6 +847,51 @@ final class MessageListViewModel {
 
     private func resetStaleSelectionIfNeeded() -> Bool {
         false
+    }
+
+    private func loadVisiblePage(
+        after cursor: MessagePageCursor?,
+        targetVisibleCount: Int
+    ) async throws -> VisiblePageSnapshot {
+        guard targetVisibleCount > 0 else {
+            return VisiblePageSnapshot(messages: [], nextCursor: cursor, hasMorePages: false)
+        }
+
+        var results: [PushMessageSummary] = []
+        var currentCursor = cursor
+
+        while results.count < targetVisibleCount {
+            let page = try await dataStore.loadMessageSummariesPage(
+                before: currentCursor,
+                limit: pageSize,
+                filter: mapFilter(selectedFilter),
+                channel: nil,
+                tag: nil,
+                sortMode: sortMode
+            )
+
+            guard !page.isEmpty else {
+                return VisiblePageSnapshot(messages: results, nextCursor: currentCursor, hasMorePages: false)
+            }
+
+            currentCursor = page.last.map {
+                MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
+            }
+
+            let visiblePage = applyFacetSelections(to: page)
+            let needed = targetVisibleCount - results.count
+            results.append(contentsOf: visiblePage.prefix(needed))
+
+            if page.count < pageSize {
+                return VisiblePageSnapshot(messages: results, nextCursor: currentCursor, hasMorePages: false)
+            }
+        }
+
+        return VisiblePageSnapshot(messages: results, nextCursor: currentCursor, hasMorePages: true)
+    }
+
+    private func isLocallySuppressed(_ message: PushMessageSummary) -> Bool {
+        environment.pendingLocalDeletionController.suppressesMessage(id: message.id, channelId: message.channel)
     }
 
     private func messageIDsChanged(

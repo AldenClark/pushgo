@@ -72,7 +72,7 @@ struct MessageSplitScreen: View {
         .onChange(of: openMessageId) { _, _ in
             openPendingMessageIfNeeded()
         }
-        .onChange(of: environment.pendingLocalDeletionController.pendingDeletion) { _, _ in
+        .onChange(of: environment.pendingLocalDeletionController.effectiveScope) { _, _ in
             if let selectedMessageSnapshot,
                isPendingLocalDeletion(selectedMessageSnapshot.id, channelId: selectedMessageSnapshot.channel)
             {
@@ -82,6 +82,7 @@ struct MessageSplitScreen: View {
             let visibleIDs = Set((searchViewModel.hasSearched ? visibleSearchResults : visibleFilteredMessages).map(\.id))
             batchSelection = batchSelection.intersection(visibleIDs)
             ensureMessagesSelectionIfNeeded()
+            Task { await refreshVisibleMessageData() }
         }
     }
 
@@ -90,6 +91,9 @@ struct MessageSplitScreen: View {
         navigationContainer {
             MessageListScreen(
                 viewModel: messageListViewModel,
+                messages: visibleFilteredMessages,
+                searchResults: visibleSearchResults,
+                isShowingSearchResults: searchViewModel.hasSearched,
                 selection: $selection,
                 batchSelection: $batchSelection,
                 isBatchMode: $isBatchMode
@@ -166,14 +170,19 @@ struct MessageSplitScreen: View {
     @MainActor
     private func handleProviderIngressPullRefresh() async {
         _ = await environment.syncProviderIngress(reason: "messages_pull_to_refresh")
+        await refreshVisibleMessageData()
+    }
+
+    @MainActor
+    private func refreshVisibleMessageData() async {
         if messageListViewModel.isUnreadOnlyFilterActive {
             await messageListViewModel.reconcileUnreadFilterSession()
-            searchViewModel.refreshMessagesIfNeeded()
-            ensureMessagesSelectionIfNeeded()
-            await syncSelectedMessageSnapshot(for: selection, markRead: false)
         } else {
-            await refreshMessagesIfNeeded()
+            await messageListViewModel.refresh()
         }
+        searchViewModel.refreshMessagesImmediatelyIfNeeded()
+        ensureMessagesSelectionIfNeeded()
+        await syncSelectedMessageSnapshot(for: selection, markRead: false)
     }
 
     private func ensureMessagesSelectionIfNeeded() {

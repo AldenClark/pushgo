@@ -101,12 +101,13 @@ struct MessageListScreen: View {
                     openPendingMessageIfNeeded()
                 }
             }
-            .onChange(of: environment.pendingLocalDeletionController.pendingDeletion) { _, _ in
+            .onChange(of: environment.pendingLocalDeletionController.effectiveScope) { _, _ in
                 if let selectedMessage, isPendingLocalDeletion(selectedMessage) {
                     self.selectedMessage = nil
                 }
                 let visibleIDs = Set(displayedMessages.map(\.id))
                 selectedMessageIDs = selectedMessageIDs.intersection(visibleIDs)
+                Task { await refreshVisibleMessageData() }
             }
     }
 
@@ -242,12 +243,17 @@ struct MessageListScreen: View {
 
     private func handlePullToRefresh() async {
         _ = await environment.syncProviderIngress(reason: "messages_pull_to_refresh")
+        await refreshVisibleMessageData()
+    }
+
+    @MainActor
+    private func refreshVisibleMessageData() async {
         if viewModel.isUnreadOnlyFilterActive {
             await viewModel.reconcileUnreadFilterSession()
         } else {
             await viewModel.refresh()
         }
-        searchViewModel.refreshMessagesIfNeeded()
+        searchViewModel.refreshMessagesImmediatelyIfNeeded()
     }
 
     @ViewBuilder

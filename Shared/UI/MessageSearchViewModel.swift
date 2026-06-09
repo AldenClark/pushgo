@@ -60,6 +60,14 @@ final class MessageSearchViewModel {
         guard !trimmed.isEmpty else { return }
         scheduleSearch(with: trimmed)
     }
+
+    func refreshMessagesImmediatelyIfNeeded() {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        debounceTask?.cancel()
+        lastIssuedQuery = trimmed
+        performSearch(with: trimmed)
+    }
     func loadMoreIfNeeded(currentItem: PushMessageSummary) {
         guard hasMoreResults, !isLoading else { return }
         guard displayedResults.last?.id == currentItem.id else { return }
@@ -119,19 +127,16 @@ final class MessageSearchViewModel {
 
         do {
             let count = try await dataStore.searchMessagesCount(query: trimmedQuery)
-            let page = try await dataStore.searchMessageSummariesPage(
-                query: trimmedQuery,
+            let page = try await loadVisiblePage(
+                trimmedQuery: trimmedQuery,
                 before: nil,
-                limit: pageSize,
-                sortMode: sortMode
+                targetVisibleCount: pageSize
             )
             guard !Task.isCancelled else { return }
             totalResults = count
-            displayedResults = page
-            nextCursor = page.last.map {
-                MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
-            }
-            hasMoreResults = displayedResults.count < totalResults
+            displayedResults = page.messages
+            nextCursor = page.nextCursor
+            hasMoreResults = page.hasMoreResults
         } catch {
             totalResults = 0
             displayedResults = []
@@ -144,23 +149,19 @@ final class MessageSearchViewModel {
         isLoading = true
         defer { isLoading = false }
         do {
-            let page = try await dataStore.searchMessageSummariesPage(
-                query: trimmedQuery,
+            let page = try await loadVisiblePage(
+                trimmedQuery: trimmedQuery,
                 before: nextCursor,
-                limit: pageSize,
-                sortMode: sortMode
+                targetVisibleCount: pageSize
             )
-            guard !page.isEmpty else {
+            guard !page.messages.isEmpty else {
                 hasMoreResults = false
                 return
             }
-            displayedResults.append(contentsOf: page)
-            nextCursor = page.last.map {
-                MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
-            }
-            hasMoreResults = displayedResults.count < totalResults
+            displayedResults.append(contentsOf: page.messages)
+            nextCursor = page.nextCursor
             trimCachedResultsIfNeeded()
-            hasMoreResults = displayedResults.count < totalResults
+            hasMoreResults = page.hasMoreResults
         } catch {
             hasMoreResults = false
         }
@@ -170,6 +171,49 @@ final class MessageSearchViewModel {
         let overflow = displayedResults.count - maxCachedResults
         guard overflow > 0 else { return }
         displayedResults.removeFirst(overflow)
+    }
+
+    private func loadVisiblePage(
+        trimmedQuery: String,
+        before cursor: MessagePageCursor?,
+        targetVisibleCount: Int
+    ) async throws -> (messages: [PushMessageSummary], nextCursor: MessagePageCursor?, hasMoreResults: Bool) {
+        guard targetVisibleCount > 0 else {
+            return ([], cursor, false)
+        }
+
+        var results: [PushMessageSummary] = []
+        var currentCursor = cursor
+
+        while results.count < targetVisibleCount {
+            let page = try await dataStore.searchMessageSummariesPage(
+                query: trimmedQuery,
+                before: currentCursor,
+                limit: pageSize,
+                sortMode: sortMode
+            )
+            guard !page.isEmpty else {
+                return (results, currentCursor, false)
+            }
+
+            currentCursor = page.last.map {
+                MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
+            }
+
+            let visiblePage = page.filter(self.isVisible)
+            let needed = targetVisibleCount - results.count
+            results.append(contentsOf: visiblePage.prefix(needed))
+
+            if page.count < pageSize {
+                return (results, currentCursor, false)
+            }
+        }
+
+        return (results, currentCursor, true)
+    }
+
+    private func isVisible(_ message: PushMessageSummary) -> Bool {
+        !environment.pendingLocalDeletionController.suppressesMessage(id: message.id, channelId: message.channel)
     }
 
     private func messageIDsChanged(

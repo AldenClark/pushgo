@@ -67,6 +67,7 @@ final class PendingLocalDeletionController {
     @ObservationIgnored private var scheduledDeletion: ScheduledDeletion?
 
     private(set) var pendingDeletion: PendingDeletion?
+    private(set) var effectiveScope: Scope = Scope()
 
     init(timeout: TimeInterval = 5) {
         self.timeout = timeout
@@ -98,6 +99,7 @@ final class PendingLocalDeletionController {
             onCompletion: onCompletion
         )
         pendingDeletion = deletion
+        effectiveScope = scope
         armCommitTask(for: deletion)
     }
 
@@ -143,6 +145,7 @@ final class PendingLocalDeletionController {
         commitTask = nil
         scheduledDeletion = nil
         pendingDeletion = nil
+        effectiveScope = Scope()
     }
 
     func commitCurrentIfNeeded() async {
@@ -151,15 +154,15 @@ final class PendingLocalDeletionController {
     }
 
     func suppressesMessage(id: UUID, channelId: String?) -> Bool {
-        pendingDeletion?.scope.suppressesMessage(id: id, channelId: channelId) ?? false
+        effectiveScope.suppressesMessage(id: id, channelId: channelId)
     }
 
     func suppressesEvent(id: String, channelId: String?) -> Bool {
-        pendingDeletion?.scope.suppressesEvent(id: id, channelId: channelId) ?? false
+        effectiveScope.suppressesEvent(id: id, channelId: channelId)
     }
 
     func suppressesThing(id: String, channelId: String?) -> Bool {
-        pendingDeletion?.scope.suppressesThing(id: id, channelId: channelId) ?? false
+        effectiveScope.suppressesThing(id: id, channelId: channelId)
     }
 
     private func armCommitTask(for deletion: PendingDeletion) {
@@ -177,6 +180,7 @@ final class PendingLocalDeletionController {
 
         commitTask?.cancel()
         commitTask = nil
+        pendingDeletion = nil
 
         do {
             try await scheduledDeletion.commit()
@@ -192,6 +196,7 @@ final class PendingLocalDeletionController {
         guard scheduledDeletion?.deletion.id == expectedID else { return }
         scheduledDeletion = nil
         pendingDeletion = nil
+        effectiveScope = Scope()
     }
 
     private func uniquePreservingOrder<Item, ID: Hashable>(

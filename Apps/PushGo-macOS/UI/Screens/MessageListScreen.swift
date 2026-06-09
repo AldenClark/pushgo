@@ -7,6 +7,9 @@ struct MessageListScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let viewModel: MessageListViewModel
+    let messages: [PushMessageSummary]
+    let searchResults: [PushMessageSummary]
+    let isShowingSearchResults: Bool
     @Binding var selection: UUID?
     @Binding var batchSelection: Set<UUID>
     @Binding var isBatchMode: Bool
@@ -47,10 +50,6 @@ struct MessageListScreen: View {
         return baseView
     }
 
-    private var isShowingSearchResults: Bool {
-        searchViewModel.hasSearched
-    }
-
     @ViewBuilder
     private var activeListView: some View {
         if isShowingSearchResults {
@@ -67,7 +66,7 @@ struct MessageListScreen: View {
     }
 
     private var showsEmptyState: Bool {
-        !isShowingSearchResults && viewModel.filteredMessages.isEmpty
+        !isShowingSearchResults && messages.isEmpty
     }
 
     private var showsUnreadFilterEmptyState: Bool {
@@ -77,7 +76,7 @@ struct MessageListScreen: View {
     private var messagesList: some View {
         ScrollViewReader { proxy in
             List {
-                ForEach(viewModel.filteredMessages) { message in
+                ForEach(messages) { message in
                     Button {
                         selection = message.id
                     } label: {
@@ -115,7 +114,7 @@ struct MessageListScreen: View {
 
     private var messagesBatchList: some View {
         List {
-            ForEach(viewModel.filteredMessages) { message in
+            ForEach(messages) { message in
                 Button {
                     toggleBatchSelection(message.id)
                 } label: {
@@ -149,11 +148,11 @@ struct MessageListScreen: View {
     private var searchResultsList: some View {
         ScrollViewReader { proxy in
             List {
-                if searchViewModel.displayedResults.isEmpty {
+                if searchResults.isEmpty {
                     searchPlaceholderRow
                 } else {
                     Section {
-                        ForEach(searchViewModel.displayedResults) { message in
+                        ForEach(searchResults) { message in
                             Button {
                                 selection = message.id
                             } label: {
@@ -203,11 +202,11 @@ struct MessageListScreen: View {
 
     private var searchResultsBatchList: some View {
         List {
-            if searchViewModel.displayedResults.isEmpty {
+            if searchResults.isEmpty {
                 searchPlaceholderRow
             } else {
                 Section {
-                    ForEach(searchViewModel.displayedResults) { message in
+                    ForEach(searchResults) { message in
                         Button {
                             toggleBatchSelection(message.id)
                         } label: {
@@ -286,8 +285,8 @@ struct MessageListScreen: View {
 
     private func scrollToSelectionIfNeeded(_ proxy: ScrollViewProxy) {
         guard let target = pendingScrollTarget ?? selection else { return }
-        let existsInMessages = viewModel.filteredMessages.contains { $0.id == target }
-        let existsInSearch = searchViewModel.displayedResults.contains { $0.id == target }
+        let existsInMessages = messages.contains { $0.id == target }
+        let existsInSearch = searchResults.contains { $0.id == target }
         guard existsInMessages || existsInSearch else { return }
         if reduceMotion {
             proxy.scrollTo(target, anchor: .center)

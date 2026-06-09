@@ -61,6 +61,7 @@ struct PendingLocalDeletionControllerTests {
 
         #expect(await recorder.count == 1)
         #expect(controller.pendingDeletion == nil)
+        #expect(controller.effectiveScope.messageIDs.isEmpty)
     }
 
     @Test
@@ -109,6 +110,7 @@ struct PendingLocalDeletionControllerTests {
 
         #expect(await recorder.count == 0)
         #expect(controller.pendingDeletion == nil)
+        #expect(controller.effectiveScope.messageIDs.isEmpty)
     }
 
     @Test
@@ -132,6 +134,34 @@ struct PendingLocalDeletionControllerTests {
         #expect(completed)
         #expect(await recorder.count == 1)
         #expect(controller.pendingDeletion == nil)
+        #expect(controller.effectiveScope.messageIDs.isEmpty)
+    }
+
+    @Test
+    func effectiveScopeRemainsActiveUntilCommitFinishes() async {
+        let controller = PendingLocalDeletionController(timeout: 5)
+        let messageID = UUID()
+
+        await controller.schedule(
+            summary: "message",
+            undoLabel: "undo",
+            scope: PendingLocalDeletionController.Scope(messageIDs: [messageID])
+        ) {
+            try? await Task.sleep(for: .milliseconds(80))
+        }
+
+        let commitTask = Task {
+            await controller.commitCurrentIfNeeded()
+        }
+
+        try? await Task.sleep(for: .milliseconds(20))
+
+        #expect(controller.pendingDeletion == nil)
+        #expect(controller.effectiveScope.messageIDs == Set([messageID]))
+
+        await commitTask.value
+
+        #expect(controller.effectiveScope.messageIDs.isEmpty)
     }
 
     @Test
