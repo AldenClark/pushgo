@@ -13,6 +13,24 @@ PushGo policy:
 ## [Unreleased]
 
 
+## [v1.2.5] - 2026-06-09
+
+### Changed
+- Finalized Apple release display version to `v1.2.5` across release targets.
+- Bumped Apple build number by `+1` for release packaging (`CURRENT_PROJECT_VERSION: 80 -> 81`).
+- Added versioned release note source file: `release/update-notes/v1.2.5.json`.
+- Lowered Apple deployment targets to `iOS 17.0`, `macOS 14.0`, and `watchOS 10.0`.
+
+### Improved
+- Added customizable notification sounds across Apple apps with shared settings, preview, and delivery-state handling.
+- Improved entity, event, and message projection behavior after patch application and notification-driven refreshes.
+- Improved message-list refresh behavior during pending deletion and mark-all-read flows so visible state stays in sync more reliably.
+- Polished macOS custom presentation focus styling, message titles, sidebar toolbar behavior, and settings interactions.
+
+### Fixed
+- Fixed iOS 17 and watchOS state-sync regressions that surfaced during Apple deployment-target downleveling.
+- Fixed entity patch merge edge cases that could leave object or event details out of date after local updates.
+
 ## [v1.2.4] - 2026-05-26
 
 ### Changed

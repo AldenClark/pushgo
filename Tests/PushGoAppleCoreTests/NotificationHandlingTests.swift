@@ -871,7 +871,7 @@ struct NotificationHandlingTests {
         #expect(normalizedEvent?.rawPayload["title"] == nil)
         #expect(normalizedEvent?.rawPayload["body"] == nil)
         #expect(normalizedThing?.title == "push_type_thing thing-fallback-body-001")
-        #expect(normalizedThing?.body == NotificationPayloadSemantics.gatewayFallbackThingBody)
+        #expect(normalizedThing?.body == LocalizationProvider.localized("Updated"))
         #expect(normalizedThing?.rawPayload["title"] == nil)
         #expect(normalizedThing?.rawPayload["body"] == nil)
     }

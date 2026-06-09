@@ -690,7 +690,58 @@
         }
       }
     },
-    "close": {},
+    "close": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schliessen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cerrar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fermer"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "閉じる"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "닫기"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "關閉"
+          }
+        }
+      }
+    },
     "contains_links": {
       "extractionState": "manual",
       "localizations": {
@@ -903,7 +954,6 @@
       }
     },
     "events_empty_title": {
-      "extractionState": "stale",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -1408,13 +1458,13 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Keychain operation failed: %d"
+            "value": "Keychain の操作に失敗しました: %d"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "Keychain operation failed: %d"
+            "value": "Keychain 작업에 실패했습니다: %d"
           }
         },
         "zh-Hans": {
@@ -1461,13 +1511,13 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Keychain data is invalid"
+            "value": "Keychain のデータが不正です"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "Keychain data is invalid"
+            "value": "Keychain 데이터가 올바르지 않습니다"
           }
         },
         "zh-Hans": {
@@ -2891,13 +2941,13 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Gateway address is required"
+            "value": "ゲートウェイのアドレスは必須です"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "Gateway address is required"
+            "value": "게이트웨이 주소는 필수입니다"
           }
         },
         "zh-Hans": {
@@ -3050,13 +3100,13 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Gateway configuration saved"
+            "value": "ゲートウェイ設定を保存しました"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "Gateway configuration saved"
+            "value": "게이트웨이 구성을 저장했습니다"
           }
         },
         "zh-Hans": {
@@ -3551,7 +3601,6 @@
       }
     },
     "things_empty_title": {
-      "extractionState": "stale",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -4206,6 +4255,36 @@
             "state": "translated",
             "value": "頻道密碼不正確，請檢查後重試。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Kanalpasswort ist falsch. Bitte pruefen und erneut versuchen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La contrasena del canal es incorrecta. Revisala e intentalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le mot de passe du canal est incorrect. Verifiez-le puis reessayez."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "チャネルのパスワードが正しくありません。確認してからもう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "채널 비밀번호가 올바르지 않습니다. 확인한 뒤 다시 시도해 주세요."
+          }
         }
       }
     },
@@ -4228,6 +4307,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "目前裝置註冊已失效，請重試。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Geraeteregistrierung ist abgelaufen. Bitte erneut versuchen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El registro del dispositivo ha caducado. Intentalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'enregistrement de l'appareil a expire. Veuillez reessayer."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デバイス登録の有効期限が切れています。もう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "기기 등록이 만료되었습니다. 다시 시도해 주세요."
           }
         }
       }
@@ -4252,6 +4361,36 @@
             "state": "translated",
             "value": "目前裝置路由已失效，請重試。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Geraeteroute ist abgelaufen. Bitte erneut versuchen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La ruta del dispositivo ha caducado. Intentalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La route de l'appareil a expire. Veuillez reessayer."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デバイスルートの有効期限が切れています。もう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "기기 경로가 만료되었습니다. 다시 시도해 주세요."
+          }
         }
       }
     },
@@ -4274,6 +4413,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "目前閘道未開啟此功能。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Funktion ist auf dem Gateway derzeit nicht verfuegbar."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esta funcion no esta disponible actualmente en el gateway."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette fonctionnalite n'est pas disponible actuellement sur la passerelle."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この機能は現在ゲートウェイで利用できません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 기능은 현재 게이트웨이에서 사용할 수 없습니다."
           }
         }
       }
@@ -4298,6 +4467,36 @@
             "state": "translated",
             "value": "目前操作沒有權限，請檢查閘道設定後重試。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zugriff verweigert. Bitte pruefe die Gateway-Einstellungen und versuche es erneut."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permiso denegado. Revisa la configuracion del gateway e intentalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permission refusee. Verifiez les reglages de la passerelle puis reessayez."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "権限がありません。ゲートウェイ設定を確認してからもう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "권한이 없습니다. 게이트웨이 설정을 확인한 뒤 다시 시도해 주세요."
+          }
         }
       }
     },
@@ -4320,6 +4519,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "此頻道已達 32 個訂閱者上限，請先移除不再使用的裝置。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Kanal hat bereits 32 Abonnenten. Entferne ein ungenutztes Geraet, bevor du ein weiteres hinzufuegst."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este canal ya tiene 32 suscriptores. Elimina un dispositivo que no uses antes de anadir otro."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce canal compte deja 32 abonnes. Supprimez un appareil inutilise avant d'en ajouter un autre."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このチャネルは既に 32 個の購読枠を使っています。別の端末を追加する前に、使っていない端末を削除してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 채널에는 이미 32명의 구독자가 있습니다. 다른 기기를 추가하기 전에 사용하지 않는 기기를 제거해 주세요."
           }
         }
       }
@@ -4344,6 +4573,36 @@
             "state": "translated",
             "value": "請求過於頻繁，請稍後再試。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zu viele Anfragen. Bitte warte einen Moment und versuche es erneut."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demasiadas solicitudes. Espera un momento e intentalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trop de requetes. Attendez un instant puis reessayez."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リクエストが多すぎます。少し待ってからもう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."
+          }
         }
       }
     },
@@ -4366,6 +4625,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "目標不存在，或已失效。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das angeforderte Element wurde nicht gefunden oder ist abgelaufen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se encontro el elemento solicitado o ya ha caducado."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'element demande est introuvable ou a expire."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "対象が見つからないか、期限切れです。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "요청한 항목을 찾을 수 없거나 이미 만료되었습니다."
           }
         }
       }
@@ -4390,6 +4679,36 @@
             "state": "translated",
             "value": "目前閘道不存在該 API 路由。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Gateway unterstuetzt die angeforderte API-Route nicht."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este gateway no admite la ruta de API solicitada."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette passerelle ne prend pas en charge la route d'API demandee."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このゲートウェイは要求された API ルートをサポートしていません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 게이트웨이는 요청한 API 경로를 지원하지 않습니다."
+          }
         }
       }
     },
@@ -4412,6 +4731,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "服務暫時不可用，請稍後重試。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Dienst ist voruebergehend nicht verfuegbar. Bitte versuche es spaeter erneut."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El servicio no esta disponible temporalmente. Intentalo de nuevo mas tarde."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le service est temporairement indisponible. Veuillez reessayer plus tard."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サービスは一時的に利用できません。しばらくしてからもう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "서비스를 일시적으로 사용할 수 없습니다. 나중에 다시 시도해 주세요."
           }
         }
       }
@@ -4436,6 +4785,36 @@
             "state": "translated",
             "value": "上游投遞服務暫時不可用，請稍後重試。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der vorgeschaltete Zustelldienst ist nicht verfuegbar. Bitte versuche es spaeter erneut."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El servicio de entrega ascendente no esta disponible. Intentalo de nuevo mas tarde."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le service de livraison en amont est indisponible. Veuillez reessayer plus tard."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上流の配信サービスは利用できません。しばらくしてからもう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "상위 전달 서비스가 현재 사용할 수 없습니다. 나중에 다시 시도해 주세요."
+          }
         }
       }
     },
@@ -4458,6 +4837,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "請求內容有誤，請檢查輸入後重試。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Anfrageinhalt ist ungueltig. Bitte pruefe deine Eingaben und versuche es erneut."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El contenido de la solicitud no es valido. Revisa la informacion e intentalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le contenu de la requete est invalide. Verifiez votre saisie puis reessayez."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リクエスト内容が正しくありません。入力内容を確認してからもう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "요청 내용이 올바르지 않습니다. 입력값을 확인한 뒤 다시 시도해 주세요."
           }
         }
       }
@@ -4482,6 +4891,36 @@
             "state": "translated",
             "value": "頻道訂閱未完成，請稍後重試。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Kanalabonnement konnte nicht abgeschlossen werden. Bitte erneut versuchen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La suscripcion al canal no se completo. Intentalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'abonnement au canal ne s'est pas termine correctement. Veuillez reessayer."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "チャネルの購読を完了できませんでした。もう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "채널 구독을 완료하지 못했습니다. 다시 시도해 주세요."
+          }
         }
       }
     },
@@ -4504,6 +4943,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "目前裝置推送通道尚未就緒，請重新整理裝置路由後重試。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Push-Route dieses Geraets ist noch nicht bereit. Aktualisiere die Geraeteroute und versuche es erneut."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La ruta push de este dispositivo aun no esta lista. Actualiza la ruta del dispositivo e intentalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La route push de cet appareil n'est pas encore prete. Actualisez la route de l'appareil puis reessayez."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このデバイスのプッシュ経路はまだ準備できていません。デバイスルートを更新してからもう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 기기의 푸시 경로가 아직 준비되지 않았습니다. 기기 경로를 새로고침한 뒤 다시 시도해 주세요."
           }
         }
       }
@@ -4528,6 +4997,36 @@
             "state": "translated",
             "value": "無法載入所需詳情，請稍後重試。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die angeforderten Details konnten nicht geladen werden. Bitte erneut versuchen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudieron cargar los detalles solicitados. Intentalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de charger les details demandes. Veuillez reessayer."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "必要な詳細を読み込めませんでした。もう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "요청한 세부 정보를 불러오지 못했습니다. 다시 시도해 주세요."
+          }
         }
       }
     },
@@ -4550,6 +5049,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "事件 ID 不能為空。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine Ereignis-ID ist erforderlich."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se requiere un ID de evento."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un identifiant d'evenement est requis."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "イベント ID は必須です。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이벤트 ID는 필수입니다."
           }
         }
       }
@@ -4574,6 +5103,36 @@
             "state": "translated",
             "value": "伺服器回應異常，請稍後重試。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Serverantwort ist ungueltig. Bitte versuche es spaeter erneut."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La respuesta del servidor no es valida. Intentalo de nuevo mas tarde."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La reponse du serveur est invalide. Veuillez reessayer plus tard."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーの応答が不正です。しばらくしてからもう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "서버 응답이 올바르지 않습니다. 나중에 다시 시도해 주세요."
+          }
         }
       }
     },
@@ -4596,6 +5155,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ 的 Keychain 存取群組未正確設定。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Keychain-Zugriffsgruppe ist fuer %@ nicht konfiguriert."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El grupo de acceso al llavero no esta configurado para %@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le groupe d'acces au trousseau n'est pas configure pour %@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ の Keychain アクセスグループが設定されていません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@에 대한 Keychain 접근 그룹이 설정되어 있지 않습니다."
           }
         }
       }
@@ -4620,6 +5209,36 @@
             "state": "translated",
             "value": "無法儲存本機裝置註冊狀態，請稍後重試。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der lokale Registrierungsstatus dieses Geraets konnte nicht gespeichert werden. Bitte erneut versuchen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo guardar el estado local de registro del dispositivo. Intentalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible d'enregistrer l'etat local d'inscription de l'appareil. Veuillez reessayer."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ローカルのデバイス登録状態を保存できませんでした。もう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "로컬 기기 등록 상태를 저장하지 못했습니다. 다시 시도해 주세요."
+          }
         }
       }
     },
@@ -4642,6 +5261,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "無法載入訊息，請稍後重試。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nachrichten konnten nicht geladen werden. Bitte erneut versuchen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudieron cargar los mensajes. Intentalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de charger les messages. Veuillez reessayer."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "メッセージを読み込めませんでした。もう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "메시지를 불러오지 못했습니다. 다시 시도해 주세요."
           }
         }
       }
@@ -4666,6 +5315,36 @@
             "state": "translated",
             "value": "無法移除訊息，請稍後重試。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nachrichten konnten nicht entfernt werden. Bitte erneut versuchen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudieron eliminar los mensajes. Intentalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de supprimer les messages. Veuillez reessayer."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "メッセージを削除できませんでした。もう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "메시지를 제거하지 못했습니다. 다시 시도해 주세요."
+          }
         }
       }
     },
@@ -4688,6 +5367,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "無法更新訊息狀態，請稍後重試。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Nachrichtenstatus konnte nicht aktualisiert werden. Bitte erneut versuchen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo actualizar el estado del mensaje. Intentalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de mettre a jour l'etat du message. Veuillez reessayer."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "メッセージ状態を更新できませんでした。もう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "메시지 상태를 업데이트하지 못했습니다. 다시 시도해 주세요."
           }
         }
       }
@@ -4712,6 +5421,36 @@
             "state": "translated",
             "value": "對象 ID 不能為空。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine Objekt-ID ist erforderlich."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se requiere un ID de objeto."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un identifiant d'objet est requis."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オブジェクト ID は必須です。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "객체 ID는 필수입니다."
+          }
         }
       }
     },
@@ -4734,6 +5473,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "此事件缺少頻道 ID。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diesem Ereignis fehlt die Kanal-ID."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A este evento le falta el ID del canal."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'identifiant du canal manque pour cet evenement."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このイベントにはチャネル ID がありません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 이벤트에는 채널 ID가 없습니다."
           }
         }
       }
@@ -4758,6 +5527,36 @@
             "state": "translated",
             "value": "Apple Watch 模式切換失敗，請重試。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Apple Watch-Modus konnte nicht geaendert werden. Bitte erneut versuchen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo cambiar el modo del Apple Watch. Intentalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le changement de mode Apple Watch a echoue. Veuillez reessayer."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Watch モードの切り替えに失敗しました。もう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Watch 모드 전환에 실패했습니다. 다시 시도해 주세요."
+          }
         }
       }
     },
@@ -4780,6 +5579,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "無法儲存伺服器設定，請重試。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Gateway-Konfiguration konnte nicht gespeichert werden. Bitte erneut versuchen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo guardar la configuracion del gateway. Intentalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible d'enregistrer la configuration de la passerelle. Veuillez reessayer."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ゲートウェイ設定を保存できませんでした。もう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "게이트웨이 구성을 저장하지 못했습니다. 다시 시도해 주세요."
           }
         }
       }
@@ -4804,6 +5633,36 @@
             "state": "translated",
             "value": "無法更新通知權限，請重試。"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Benachrichtigungsberechtigung konnte nicht aktualisiert werden. Bitte erneut versuchen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo actualizar el permiso de notificaciones. Intentalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de mettre a jour l'autorisation de notification. Veuillez reessayer."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通知権限を更新できませんでした。もう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "알림 권한을 업데이트하지 못했습니다. 다시 시도해 주세요."
+          }
         }
       }
     },
@@ -4826,6 +5685,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "無法匯入測試資料，請重試。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Testdaten konnten nicht importiert werden. Bitte erneut versuchen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudieron importar los datos de prueba. Intentalo de nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible d'importer les donnees de test. Veuillez reessayer."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "テストデータを読み込めませんでした。もう一度お試しください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "테스트 데이터를 가져오지 못했습니다. 다시 시도해 주세요."
           }
         }
       }

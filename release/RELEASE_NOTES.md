@@ -11,6 +11,14 @@ Policy:
 ## [Unreleased]
 
 
+## [v1.2.5]
+
+### Improved
+- Added customizable notification sounds across iPhone, Mac, and Apple Watch.
+- Message lists now refresh more reliably during mark-all-read and pending deletion flows.
+- Event, message, and object details stay more accurate after patch and notification updates.
+- Expanded Apple compatibility to iOS 17, macOS 14, and watchOS 10, with additional macOS presentation polish.
+
 ## [v1.2.4]
 
 ### Improved
