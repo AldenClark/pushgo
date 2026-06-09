@@ -76,6 +76,7 @@ final class MessageListViewModel {
     private(set) var hasLoadedOnce: Bool = false
     private(set) var totalMessageCount: Int = 0
     private(set) var unreadMessageCount: Int = 0
+    private(set) var currentScopeUnreadCount: Int = 0
     private(set) var unreadSessionRetainedReadCount: Int = 0
     private(set) var hasMorePages: Bool = false
     private(set) var isLoadingPage: Bool = false
@@ -205,6 +206,10 @@ final class MessageListViewModel {
         isUnreadOnlyFilterActive && unreadSessionRetainedReadCount > 0
     }
 
+    var hasUnreadMessagesInCurrentScope: Bool {
+        currentScopeUnreadCount > 0
+    }
+
     func toggleUnreadOnlyFilter() {
         setFilter(isUnreadOnlyFilterActive ? .all : .unread)
     }
@@ -280,14 +285,25 @@ final class MessageListViewModel {
         guard selectedChannels.count == 1 else { return nil }
         return selectedChannels.first?.rawChannelValue
     }
-    func markCurrentChannelAsRead() async -> Int {
+    func markCurrentScopeAsRead() async -> Int {
         do {
-            let changed = try await environment.messageStateCoordinator.markMessagesRead(
-                filter: currentQueryFilter(),
-                channel: currentChannelRawValue()
-            )
+            let unreadMessageIDs = try await unreadMessageIDsInCurrentScope()
+            guard !unreadMessageIDs.isEmpty else { return 0 }
+
+            let changed: Int
+            if selectedTags.isEmpty, selectedChannels.count <= 1 {
+                changed = try await environment.messageStateCoordinator.markMessagesRead(
+                    filter: currentQueryFilter(),
+                    channel: currentChannelRawValue()
+                )
+            } else {
+                changed = try await environment.messageStateCoordinator.markRead(messageIds: unreadMessageIDs)
+            }
             guard changed > 0 else { return 0 }
-            for index in filteredMessages.indices {
+
+            let unreadIDSet = Set(unreadMessageIDs)
+            for index in filteredMessages.indices
+            where unreadIDSet.contains(filteredMessages[index].id) {
                 filteredMessages[index].isRead = true
                 retainUnreadSessionMessageIfNeeded(filteredMessages[index])
             }
@@ -607,9 +623,11 @@ final class MessageListViewModel {
             let counts = try await dataStore.messageCounts()
             totalMessageCount = counts.total
             unreadMessageCount = counts.unread
+            currentScopeUnreadCount = 0
         } catch {
             totalMessageCount = 0
             unreadMessageCount = 0
+            currentScopeUnreadCount = 0
         }
     }
 
@@ -635,6 +653,11 @@ final class MessageListViewModel {
                     tagSummaries = try await dataStore.messageTagCounts()
                     let knownKeys = Set(channelSummaries.map(\.key))
                     selectedChannels = selectedChannels.intersection(knownKeys)
+                }
+                do {
+                    currentScopeUnreadCount = try await loadCurrentScopeUnreadCount()
+                } catch {
+                    currentScopeUnreadCount = 0
                 }
             } catch {
                 await refreshCounts()
@@ -764,13 +787,42 @@ final class MessageListViewModel {
     }
 
     private func applyFacetSelections(to messages: [PushMessageSummary]) -> [PushMessageSummary] {
-        guard !selectedChannels.isEmpty else {
-            return messages
+        messages.filter(matchesCurrentFacetSelections)
+    }
+
+    private func loadCurrentScopeUnreadCount() async throws -> Int {
+        let unreadCandidates = try await dataStore.loadMessages(filter: currentQueryFilter(), channel: nil)
+        return unreadCandidates.lazy.filter { message in
+            !message.isRead && matchesCurrentFacetSelections(message)
+        }.count
+    }
+
+    private func unreadMessageIDsInCurrentScope() async throws -> [UUID] {
+        let messages = try await dataStore.loadMessages(filter: currentQueryFilter(), channel: nil)
+        return messages.compactMap { message in
+            guard !message.isRead, matchesCurrentFacetSelections(message) else { return nil }
+            return message.id
         }
-        return messages.filter { message in
-            let messageChannel = MessageChannelKey.from(message.channel)
-            return selectedChannels.contains(messageChannel)
+    }
+
+    private func matchesCurrentFacetSelections(_ message: PushMessageSummary) -> Bool {
+        matchesCurrentFacetSelections(channel: message.channel, tags: message.tags)
+    }
+
+    private func matchesCurrentFacetSelections(_ message: PushMessage) -> Bool {
+        matchesCurrentFacetSelections(channel: message.channel, tags: message.tags)
+    }
+
+    private func matchesCurrentFacetSelections(channel: String?, tags: [String]) -> Bool {
+        if !selectedChannels.isEmpty {
+            let messageChannel = MessageChannelKey.from(channel)
+            guard selectedChannels.contains(messageChannel) else { return false }
         }
+        if !selectedTags.isEmpty {
+            let normalizedTags = Set(tags.compactMap(Self.normalizedTag))
+            guard selectedTags.contains(where: normalizedTags.contains) else { return false }
+        }
+        return true
     }
 
     private static func normalizedTag(_ rawTag: String) -> String? {

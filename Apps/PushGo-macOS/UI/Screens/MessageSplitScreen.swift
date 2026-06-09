@@ -441,6 +441,21 @@ struct MessageSplitScreen: View {
         }
     }
 
+    @MainActor
+    private func markAllCurrentScopeMessagesAsRead() async {
+        let changed = await messageListViewModel.markCurrentScopeAsRead()
+        guard changed > 0 else { return }
+        environment.showToast(
+            message: localizationManager.localized(
+                "placeholder_number_items_read",
+                localizationManager.localized("messages"),
+                changed
+            ),
+            style: .success,
+            duration: 2
+        )
+    }
+
     @ToolbarContentBuilder
     private var messageListToolbarContent: some ToolbarContent {
         if isBatchMode {
@@ -483,6 +498,15 @@ struct MessageSplitScreen: View {
                 .help(localizationManager.localized("done"))
                 .accessibilityLabel(localizationManager.localized("done"))
             } else {
+                if !searchViewModel.hasSearched && messageListViewModel.hasUnreadMessagesInCurrentScope {
+                    Button {
+                        Task { await markAllCurrentScopeMessagesAsRead() }
+                    } label: {
+                        Image(systemName: "envelope.open.fill")
+                    }
+                    .help(localizationManager.localized("mark_all_as_read"))
+                    .accessibilityLabel(localizationManager.localized("mark_all_as_read"))
+                }
                 Button {
                     isFilterPopoverPresented = true
                 } label: {

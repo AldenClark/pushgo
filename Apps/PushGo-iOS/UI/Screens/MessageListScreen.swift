@@ -604,9 +604,9 @@ private extension MessageListScreen {
                 }
                 .accessibilityLabel(localizationManager.localized("done"))
             } else {
-                if !unreadDisplayedMessages.isEmpty {
+                if !isShowingSearchResults && viewModel.hasUnreadMessagesInCurrentScope {
                     Button {
-                        Task { await markAllDisplayedMessagesAsRead() }
+                        Task { await markAllCurrentScopeMessagesAsRead() }
                     } label: {
                         Image(systemName: "envelope.open.fill")
                     }
@@ -914,10 +914,6 @@ private extension MessageListScreen {
         return visibleFilteredMessages
     }
 
-    private var unreadDisplayedMessages: [PushMessageSummary] {
-        displayedMessages.filter { !$0.isRead }
-    }
-
     private func scroll(_ proxy: ScrollViewProxy, to targetId: UUID, anchor: UnitPoint) {
         if reduceMotion {
             proxy.scrollTo(targetId, anchor: anchor)
@@ -945,15 +941,14 @@ private extension MessageListScreen {
         selectedMessageIDs.removeAll()
     }
 
-    private func markAllDisplayedMessagesAsRead() async {
-        let unreadMessages = unreadDisplayedMessages
-        guard !unreadMessages.isEmpty else { return }
-        await viewModel.markRead(unreadMessages)
+    private func markAllCurrentScopeMessagesAsRead() async {
+        let changed = await viewModel.markCurrentScopeAsRead()
+        guard changed > 0 else { return }
         environment.showToast(
             message: localizationManager.localized(
                 "placeholder_number_items_read",
                 localizationManager.localized("messages"),
-                unreadMessages.count
+                changed
             ),
             style: .success,
             duration: 2
