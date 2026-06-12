@@ -25,7 +25,7 @@ struct PendingLocalDeletionBar: View {
                 .foregroundStyle(.primary)
                 .lineLimit(1)
 
-            Text("· \(remainingSeconds)s")
+            Text(verbatim: "· \(remainingSeconds)s")
                 .font(.footnote.monospacedDigit())
                 .foregroundStyle(.secondary)
 

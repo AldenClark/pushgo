@@ -58,7 +58,7 @@ struct NotificationSoundSettingsContentView: View {
             VStack(alignment: .leading, spacing: isCompactLayout ? 16 : 18) {
                 if showsInlineTitle {
                     HStack(spacing: 12) {
-                        Text(localizationManager.localized("Notification Sounds"))
+                        Text(localizationManager.localized("notification_sounds"))
                             .font(.title3.weight(.semibold))
                             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -78,7 +78,7 @@ struct NotificationSoundSettingsContentView: View {
                             .buttonStyle(.plain)
                             .transientPresentationActionControl()
                             .disabled(isCommittingDraft)
-                            .accessibilityLabel(localizationManager.localized("Close notification sound settings"))
+                            .accessibilityLabel(localizationManager.localized("close_notification_sound_settings"))
                         }
                     }
                 }
@@ -131,14 +131,14 @@ struct NotificationSoundSettingsContentView: View {
             case let .failure(error):
                 viewModel.error = AppError.wrap(
                     error,
-                    fallbackMessage: localizationManager.localized("Unable to import this sound."),
+                    fallbackMessage: localizationManager.localized("unable_to_import_this_sound"),
                     code: "notification_sound_file_import_failed",
                     category: .validation
                 )
             }
         }
-        .alert(localizationManager.localized("Remove Custom Sound?"), isPresented: removalConfirmationBinding) {
-            Button(localizationManager.localized("Delete"), role: .destructive) {
+        .alert(localizationManager.localized("remove_custom_sound_confirm_title"), isPresented: removalConfirmationBinding) {
+            Button(localizationManager.localized("delete"), role: .destructive) {
                 guard let asset = pendingRemovalAsset else { return }
                 Task { await removeCustomSound(asset) }
             }
@@ -146,7 +146,7 @@ struct NotificationSoundSettingsContentView: View {
                 pendingRemovalAsset = nil
             }
         } message: {
-            Text(localizationManager.localized("This removes the imported sound. Priorities using it will return to their defaults."))
+            Text(localizationManager.localized("remove_custom_sound_confirm_message"))
         }
     }
 
@@ -195,9 +195,9 @@ struct NotificationSoundSettingsContentView: View {
                     .frame(width: 28)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(localizationManager.localized("Sound folder permission required"))
+                    Text(localizationManager.localized("sound_folder_permission_required"))
                         .font(.subheadline.weight(.semibold))
-                    Text(localizationManager.localized("PushGo needs read and write access to ~/Library/Sounds before custom notification sounds can be saved."))
+                    Text(localizationManager.localized("sound_folder_permission_explanation"))
                         .font(.caption)
                         .foregroundStyle(Color.appTextSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -210,7 +210,7 @@ struct NotificationSoundSettingsContentView: View {
                         await viewModel.requestMacOSNotificationSoundDirectoryAccess()
                     }
                 } label: {
-                    Text(localizationManager.localized("Grant Access"))
+                    Text(localizationManager.localized("grant_access"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Color.white)
                         .padding(.horizontal, 12)
@@ -238,7 +238,7 @@ struct NotificationSoundSettingsContentView: View {
             ViewThatFits(in: .horizontal) {
                 soundLibraryHeader
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(localizationManager.localized("Sound Library"))
+                    Text(localizationManager.localized("sound_library"))
                         .font(.headline)
                     importButton
                 }
@@ -264,7 +264,7 @@ struct NotificationSoundSettingsContentView: View {
                                             .foregroundStyle(AppSemanticTone.danger.foreground)
                                     }
                                     .buttonStyle(.appPlain)
-                                    .accessibilityLabel(localizationManager.localized("Remove %@", asset.displayName))
+                                    .accessibilityLabel(localizationManager.localized("remove_item_placeholder", asset.displayName))
                                 }
                             )
                             if asset.id != (draftSettings.customAssets.last?.id ?? "") {
@@ -297,7 +297,7 @@ struct NotificationSoundSettingsContentView: View {
 
     private var soundLibraryHeader: some View {
         HStack(alignment: .center, spacing: 12) {
-            Text(localizationManager.localized("Sound Library"))
+            Text(localizationManager.localized("sound_library"))
                 .font(.headline)
             Spacer(minLength: 12)
             importButton
@@ -320,7 +320,7 @@ struct NotificationSoundSettingsContentView: View {
         .buttonStyle(.plain)
         .transientPresentationActionControl()
         .disabled(viewModel.isImportingNotificationSound)
-        .accessibilityLabel(localizationManager.localized("Import Sound"))
+        .accessibilityLabel(localizationManager.localized("import_sound"))
     }
 
     private var removalConfirmationBinding: Binding<Bool> {
@@ -542,7 +542,7 @@ private struct NotificationSoundPriorityRow: View {
 
     private var lengthField: some View {
         NotificationSoundIntegerField(
-            title: localizationManager.localized("Length"),
+            title: localizationManager.localized("length"),
             value: Int((rule.durationSeconds ?? 5).rounded()),
             range: Int(NotificationSoundCompiler.minimumDurationSeconds.rounded())...Int(NotificationSoundCompiler.maximumDurationSeconds.rounded()),
             step: 5,
@@ -564,7 +564,7 @@ private struct NotificationSoundPriorityRow: View {
 
     private var volumeField: some View {
         NotificationSoundIntegerField(
-            title: localizationManager.localized("Volume"),
+            title: localizationManager.localized("volume"),
             value: Int((rule.gain * 100).rounded()),
             range: Int((NotificationSoundCompiler.minimumGain * 100).rounded())...Int((NotificationSoundCompiler.maximumGain * 100).rounded()),
             step: 5,
@@ -591,7 +591,7 @@ private struct NotificationSoundPriorityRow: View {
     private var soundPicker: some View {
         Menu {
             #if os(macOS)
-            Button(localizationManager.localized("System Default")) {
+            Button(localizationManager.localized("notification_sound_system_default")) {
                 onOptionChanged(.systemDefault)
             }
 
@@ -599,7 +599,7 @@ private struct NotificationSoundPriorityRow: View {
             #endif
 
             if allowsSilentOption {
-                Button(localizationManager.localized("None")) {
+                Button(localizationManager.localized("none")) {
                     onOptionChanged(.none)
                 }
 
@@ -640,7 +640,7 @@ private struct NotificationSoundPriorityRow: View {
         }
         .buttonStyle(.plain)
         .transientPresentationActionControl()
-        .accessibilityLabel(localizationManager.localized("Sound for %@", localizedLevelName))
+        .accessibilityLabel(localizationManager.localized("sound_for_priority_placeholder", localizedLevelName))
     }
 
     private var previewButton: some View {
@@ -657,8 +657,8 @@ private struct NotificationSoundPriorityRow: View {
         .opacity(!canPreviewSound ? 0.35 : 1)
         .accessibilityLabel(
             isPreviewing
-                ? localizationManager.localized("Stop %@ sound preview", localizedLevelName)
-                : localizationManager.localized("Preview %@ sound", localizedLevelName)
+                ? localizationManager.localized("stop_sound_preview_placeholder", localizedLevelName)
+                : localizationManager.localized("preview_sound_placeholder", localizedLevelName)
         )
     }
 
@@ -682,7 +682,7 @@ private struct NotificationSoundPriorityRow: View {
         case .high:
             return localizationManager.localized("message_severity_high")
         case .normal:
-            return localizationManager.localized("Normal")
+            return localizationManager.localized("normal")
         case .low:
             return localizationManager.localized("message_severity_low")
         }
@@ -691,9 +691,9 @@ private struct NotificationSoundPriorityRow: View {
     private var selectedOptionTitle: String {
         switch selectedOption {
         case .systemDefault:
-            return localizationManager.localized("System Default")
+            return localizationManager.localized("notification_sound_system_default")
         case .none:
-            return localizationManager.localized("None")
+            return localizationManager.localized("none")
         case let .custom(asset):
             return asset.displayName
         case let .builtin(sound):
@@ -909,8 +909,8 @@ private struct NotificationSoundLibraryRow<TrailingAction: View>: View {
             .buttonStyle(.appPlain)
             .accessibilityLabel(
                 isPreviewing
-                    ? localizationManager.localized("Stop %@ preview", title)
-                    : localizationManager.localized("Preview %@", title)
+                    ? localizationManager.localized("stop_preview_item_placeholder", title)
+                    : localizationManager.localized("preview_item_placeholder", title)
             )
 
             trailingAction

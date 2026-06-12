@@ -737,13 +737,13 @@ enum NotificationHandling {
                 )
             },
             localizeThingUpdatedBody: {
-                LocalizationProvider.localized("Updated")
+                LocalizationProvider.localized("updated")
             },
             localizeThingArchivedBody: {
-                LocalizationProvider.localized("Archived")
+                LocalizationProvider.localized("archived")
             },
             localizeThingDeletedBody: {
-                LocalizationProvider.localized("Deleted")
+                LocalizationProvider.localized("deleted")
             }
         ) else {
             return nil

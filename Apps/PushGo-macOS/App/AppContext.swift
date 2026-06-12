@@ -65,11 +65,11 @@ private struct DynamicLocaleWrapper<Content: View>: View {
                 presenting: environment.localStoreRecoveryState
             ) { state in
                 if state.canRebuild {
-                    Button("重建数据库并退出", role: .destructive) {
+                    Button(localizationManager.localized("rebuild_database_and_exit"), role: .destructive) {
                         environment.rebuildLocalStoreForRecoveryAndTerminate()
                     }
                 }
-                Button("退出应用", role: .destructive) {
+                Button(localizationManager.localized("exit_app"), role: .destructive) {
                     environment.terminateForLocalStoreFailure()
                 }
             } message: { state in

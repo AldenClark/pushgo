@@ -246,7 +246,7 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency 
         } else {
             button.image = NSImage(
                 systemSymbolName: "bell.badge",
-                accessibilityDescription: "PushGo"
+                accessibilityDescription: LocalizationProvider.localized("pushgo_app_name")
             )
         }
         button.action = #selector(handleStatusItemClick(_:))

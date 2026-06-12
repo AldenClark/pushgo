@@ -11,6 +11,13 @@ Policy:
 ## [Unreleased]
 
 
+## [v1.2.6]
+
+### Fixed
+- Fixed message detail text selection on iOS and macOS so titles and markdown bodies can be selected without crashes.
+- Markdown message bodies now keep markdown rendering while using stable native text selection.
+- Cleaned up Apple localization string keys to reduce string-catalog warnings.
+
 ## [v1.2.5]
 
 ### Improved

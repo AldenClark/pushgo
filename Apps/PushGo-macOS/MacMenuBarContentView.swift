@@ -157,7 +157,7 @@ struct MacMenuBarContentView: View {
 
     private var header: some View {
         HStack {
-            Text("PushGo")
+            Text("pushgo_app_name")
                 .font(.headline)
             
             Spacer()

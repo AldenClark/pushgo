@@ -12,6 +12,7 @@ struct MarkdownRenderer: View {
     var font: Font = .body
     var foreground: Color = .primary
     var attachmentWidthHint: CGFloat? = nil
+    var selectionEnabled: Bool = false
 #if canImport(Textual) && !os(watchOS)
     @State private var previewingImage: MarkdownImagePreviewItem?
 #endif
@@ -36,18 +37,82 @@ struct MarkdownRenderer: View {
     }
 
     var body: some View {
+        if selectionEnabled {
+            selectableMarkdownContent
+        } else {
         #if canImport(Textual) && !os(watchOS)
-        markdownContent
-            .pushgoImagePreviewOverlay(
-                previewItem: $previewingImage,
-                imageURL: \.url
-            )
+            markdownContent
+                .pushgoImagePreviewOverlay(
+                    previewItem: $previewingImage,
+                    imageURL: \.url
+                )
         #else
+            fallbackPlainTextContent(displayText: displayText)
+        #endif
+        }
+    }
+
+    @ViewBuilder
+    private var selectableMarkdownContent: some View {
+        let currentDisplayText = displayText
+        let renderPreparation = markdownRenderPreparation(for: currentDisplayText)
+        nativeMarkdownText(
+            renderPreparation.normalizedText,
+            displayMode: renderPreparation.displayMode
+        )
+            .platformTextSelectionEnabled()
+    }
+
+    @ViewBuilder
+    private func nativeMarkdownText(
+        _ markdown: String,
+        displayMode: PushGoMarkdownDisplayMode
+    ) -> some View {
+        if let attributedText = try? AttributedString(
+            markdown: markdown,
+            options: nativeMarkdownParsingOptions(for: displayMode)
+        ) {
+            Text(attributedText)
+                .font(font)
+                .foregroundStyle(foreground)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            fallbackPlainTextContent(displayText: markdown)
+        }
+    }
+
+    private func fallbackPlainTextContent(displayText: String) -> some View {
         Text(displayText)
             .font(font)
             .foregroundStyle(foreground)
             .lineLimit(nil)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func nativeMarkdownParsingOptions(
+        for displayMode: PushGoMarkdownDisplayMode
+    ) -> AttributedString.MarkdownParsingOptions {
+        let interpretedSyntax: AttributedString.MarkdownParsingOptions.InterpretedSyntax = switch displayMode {
+        case .inlineText:
+            .inlineOnlyPreservingWhitespace
+        case .structuredText, .plainText:
+            .full
+        }
+        return .init(
+            interpretedSyntax: interpretedSyntax,
+            failurePolicy: .returnPartiallyParsedIfPossible
+        )
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func platformTextSelectionEnabled() -> some View {
+        #if os(watchOS)
+        self
+        #else
+        self.textSelection(.enabled)
         #endif
     }
 }
@@ -146,6 +211,7 @@ extension MarkdownRenderer {
         recordMarkdownPlainTextSegmentsMetric()
         return segments
     }
+
 }
 
 private struct MarkdownRendererLayoutMode: ViewModifier {

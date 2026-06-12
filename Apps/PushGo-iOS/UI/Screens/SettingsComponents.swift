@@ -56,7 +56,7 @@ struct NotificationSoundSettingsSheet: View {
                 viewModel: viewModel,
                 dismissAction: { dismiss() }
             )
-                .navigationTitle(localizationManager.localized("Notification Sounds"))
+                .navigationTitle(localizationManager.localized("notification_sounds"))
         }
         .accessibilityIdentifier("screen.settings.notification_sounds")
     }

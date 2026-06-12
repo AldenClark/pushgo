@@ -751,7 +751,7 @@ private struct DataPageToggleChip: View {
         }
         .buttonStyle(.appPlain)
         .accessibilityIdentifier(accessibilityID)
-        .accessibilityValue(isOn ? Text("On") : Text("Off"))
+        .accessibilityValue(isOn ? Text("on") : Text("off"))
     }
 }
 

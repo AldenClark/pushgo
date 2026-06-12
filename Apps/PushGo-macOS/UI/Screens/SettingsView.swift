@@ -188,7 +188,7 @@ struct SettingsView: View {
                     } label: {
                         SettingsActionRow(
                             iconName: "speaker.wave.3",
-                            title: LocalizedStringKey("Notification Sounds"),
+                            title: LocalizedStringKey("notification_sounds"),
                             detailText: notificationSoundsSubtitle,
                         ) {
                             Image(systemName: "chevron.right")
@@ -222,8 +222,8 @@ struct SettingsView: View {
                         } label: {
                             SettingsActionRow(
                                 iconName: "arrow.triangle.2.circlepath.circle",
-                                title: "检查更新",
-                                detail: "检查并安装可用的新版本",
+                                title: "check_for_updates",
+                                detail: "check_for_and_install_available_updates",
                             ) {
                                 Image(systemName: "chevron.right")
                                     .font(.caption.weight(.semibold))
@@ -235,8 +235,8 @@ struct SettingsView: View {
                         SettingsRowDivider()
                         SettingsControlRow(
                             iconName: "flask",
-                            title: "启用 beta 版本",
-                            detail: "启用后将接收 sparkle:channel=beta 的更新；开启时会立即后台检查一次。",
+                            title: "enable_beta_updates",
+                            detail: "enable_beta_updates_detail",
                             useFormField: false
                         ) {
                             Toggle("", isOn: $betaChannelEnabled)
@@ -340,9 +340,9 @@ struct SettingsView: View {
         let customCount = settings.customAssets.count
         let activeLevels = NotificationSoundLevel.allCases.filter { settings.rule(for: $0).mode != .silent }.count
         if customCount == 0 {
-            return localizationManager.localized("%d priorities active, built-in defaults ready", activeLevels)
+            return localizationManager.localized("priorities_active_built_in_defaults_ready_count", activeLevels)
         }
-        return localizationManager.localized("%d custom sounds, %d priorities active", customCount, activeLevels)
+        return localizationManager.localized("custom_sounds_priorities_active_count", customCount, activeLevels)
     }
 
     @ViewBuilder
@@ -788,7 +788,7 @@ private enum MacOverlay: String, Identifiable, Equatable {
         case .serverManagement:
             "server_management"
         case .notificationSounds:
-            "Notification Sounds"
+            "notification_sounds"
         }
     }
 }

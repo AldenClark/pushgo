@@ -9,7 +9,7 @@ struct pushgomacApp: App {
     @State private var localizationManager = LocalizationManager.shared
 
     var body: some Scene {
-        Window("PushGo", id: "main") {
+        Window("pushgo_app_name", id: "main") {
             ContentView()
                 .environment(environment)
                 .environment(localizationManager)

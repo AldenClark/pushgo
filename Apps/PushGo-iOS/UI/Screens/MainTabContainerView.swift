@@ -142,7 +142,7 @@ struct MainTabContainerView: View {
                     Label(LocalizationManager.localizedSync("messages"), systemImage: "tray.full")
                 }
                 .tag(MainTab.messages)
-                .badge(unreadCount > 0 ? Text("\(unreadCount)") : nil)
+                .badge(unreadCount > 0 ? Text(verbatim: "\(unreadCount)") : nil)
             }
 
             if showsEventsTab {

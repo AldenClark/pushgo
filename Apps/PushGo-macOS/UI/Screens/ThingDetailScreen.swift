@@ -129,11 +129,11 @@ private struct ThingDetailPanel: View {
     private var lifecycleTimeLabel: String {
         switch lifecycleStateToken {
         case "ARCHIVED":
-            return localizationManager.localized("Archived")
+            return localizationManager.localized("archived")
         case "DELETED":
-            return localizationManager.localized("Deleted")
+            return localizationManager.localized("deleted")
         default:
-            return localizationManager.localized("Updated")
+            return localizationManager.localized("updated")
         }
     }
 
@@ -325,7 +325,7 @@ private struct ThingDetailPanel: View {
                 if let createdAt = thing.createdAt {
                     Label(
                         String(
-                            format: localizationManager.localized("Created %@"),
+                            format: localizationManager.localized("created_at_placeholder"),
                             EntityDateFormatter.text(createdAt)
                         ),
                         systemImage: "calendar"
@@ -581,7 +581,7 @@ private struct ThingMetadataSheet: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Color.appTextSecondary)
-                .accessibilityLabel(localizationManager.localized("Done"))
+                .accessibilityLabel(localizationManager.localized("done"))
             }
             if entries.isEmpty {
                 Text(localizationManager.localized("thing_detail_no_metadata"))
@@ -746,7 +746,7 @@ private struct ThingRelatedUpdateDetailScreen: View {
                 if let state = update.state, !state.isEmpty {
                     Text(
                         String(
-                            format: localizationManager.localized("State: %@"),
+                            format: localizationManager.localized("state_value_placeholder"),
                             normalizedThingState(state)
                         )
                     )

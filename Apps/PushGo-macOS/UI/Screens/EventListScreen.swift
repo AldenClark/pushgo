@@ -247,7 +247,7 @@ struct EventListRow: View {
                         .clipShape(RoundedRectangle(cornerRadius: EntityVisualTokens.radiusSmall, style: .continuous))
                     }
                     if remainingImageAttachmentCount > 0 {
-                        Text("+\(remainingImageAttachmentCount)")
+                        Text(verbatim: "+\(remainingImageAttachmentCount)")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(Color.appTextSecondary)
                             .padding(.leading, 4)

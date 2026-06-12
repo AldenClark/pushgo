@@ -39,12 +39,12 @@ struct WatchThingDetailScreen: View {
                     .padding(.vertical, WatchEntityVisualTokens.rowVerticalPadding)
                 }
 
-                Section(localizationManager.localized("Attributes")) {
+                Section(localizationManager.localized("attributes")) {
                     if let attrsJSON = thing.attrsJSON, !attrsJSON.isEmpty {
                         Text(attrsJSON)
                             .font(.system(.caption2, design: .monospaced))
                     } else {
-                        Text(localizationManager.localized("No attributes"))
+                        Text(localizationManager.localized("no_attributes"))
                             .font(.footnote)
                             .foregroundStyle(Color.appTextSecondary)
                     }

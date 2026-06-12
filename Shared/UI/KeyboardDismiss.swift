@@ -418,7 +418,7 @@ private struct PushgoImagePreviewOverlay: View {
                             }
                             .buttonStyle(.plain)
                             .pushgoMacPreviewActionChrome()
-                            .accessibilityLabel("Save")
+                            .accessibilityLabel(Text("save"))
                             Button {
                                 dismiss()
                             } label: {
@@ -1013,7 +1013,7 @@ private struct PushGoMacShareButton: NSViewRepresentable {
         button.image = Self.shareIcon()
         button.imageScaling = .scaleProportionallyDown
         button.contentTintColor = .white
-        button.toolTip = NSLocalizedString("Share", comment: "Share image")
+        button.toolTip = LocalizationProvider.localized("share_image")
         button.isEnabled = fileURL != nil
         button.target = context.coordinator
         button.action = #selector(Coordinator.shareTapped(_:))
@@ -1032,7 +1032,7 @@ private struct PushGoMacShareButton: NSViewRepresentable {
     private static func shareIcon() -> NSImage? {
         let icon = NSImage(
             systemSymbolName: "square.and.arrow.up",
-            accessibilityDescription: NSLocalizedString("Share", comment: "Share image"),
+            accessibilityDescription: LocalizationProvider.localized("share_image"),
         )
         let configuration = NSImage.SymbolConfiguration(
             pointSize: macPreviewOverlayActionIconSize,

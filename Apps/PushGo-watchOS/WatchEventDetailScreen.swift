@@ -40,7 +40,12 @@ struct WatchEventDetailScreen: View {
                                 )
                             }
                         }
-                        Text("Last updated: \(watchDateText(event.updatedAt))")
+                        Text(
+                            String(
+                                format: LocalizationManager.shared.localized("last_updated_placeholder"),
+                                watchDateText(event.updatedAt)
+                            )
+                        )
                             .font(.caption2)
                             .foregroundStyle(Color.appTextSecondary)
                     }
@@ -48,7 +53,7 @@ struct WatchEventDetailScreen: View {
                 }
 
                 if let imageURL = event.imageURL {
-                    Section("Image") {
+                    Section(LocalizationManager.shared.localized("image")) {
                         AsyncImage(url: imageURL) { phase in
                             switch phase {
                             case let .success(image):

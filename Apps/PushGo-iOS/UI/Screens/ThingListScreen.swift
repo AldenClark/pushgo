@@ -562,7 +562,7 @@ struct ThingListScreen: View {
                     .frame(height: 0.5)
                     .padding(.vertical, 2)
 
-                Text("Channels")
+                Text("channels")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
 
@@ -594,7 +594,7 @@ struct ThingListScreen: View {
                     .frame(height: 0.5)
                     .padding(.vertical, 2)
 
-                Text("Tags")
+                Text("tags")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
 
@@ -947,7 +947,7 @@ private struct ThingListRow: View {
                             )
                         }
                         if previewImageAttachments.count > visibleCount {
-                            Text("+\(previewImageAttachments.count - visibleCount)")
+                            Text(verbatim: "+\(previewImageAttachments.count - visibleCount)")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(Color.appTextSecondary)
                                 .padding(.leading, 4)

@@ -232,7 +232,7 @@ struct SettingsView: View {
             } label: {
                 SettingsActionRow(
                     iconName: "speaker.wave.3",
-                    title: LocalizedStringKey("Notification Sounds"),
+                    title: LocalizedStringKey("notification_sounds"),
                     detailText: notificationSoundsSubtitle,
                 ) {
                     Image(systemName: "chevron.right")
@@ -419,7 +419,7 @@ struct SettingsView: View {
     private var watchStandaloneModeRow: some View {
         SettingsControlRow(
             iconName: "applewatch.radiowaves.left.and.right",
-            title: LocalizedStringKey(localizationManager.localized("Apple Watch Standalone Mode")),
+            title: LocalizedStringKey(localizationManager.localized("watch_standalone_mode_title")),
             detail: watchStandaloneModeDetail,
             useFormField: false
         ) {
@@ -427,7 +427,7 @@ struct SettingsView: View {
                 .labelsHidden()
                 .disabled(!viewModel.isWatchCompanionAvailable || viewModel.isSwitchingWatchMode)
                 .accessibilityIdentifier("toggle.settings.watch_standalone_mode")
-                .accessibilityLabel(Text(localizationManager.localized("Apple Watch Standalone Mode")))
+                .accessibilityLabel(Text(localizationManager.localized("watch_standalone_mode_title")))
         }
         .accessibilityIdentifier("row.settings.watch_standalone_mode")
     }
@@ -438,20 +438,20 @@ struct SettingsView: View {
         }
         if viewModel.watchMode == .mirror {
             if viewModel.effectiveWatchMode != .mirror {
-                return "Waiting for Apple Watch to switch back to mirror mode."
+                return "waiting_for_watch_to_switch_to_mirror_mode"
             }
-            return "Mirror mode follows your iPhone. iPhone continues syncing messages to Apple Watch."
+            return "watch_mirror_mode_description"
         }
         if viewModel.effectiveWatchMode != .standalone {
             if viewModel.watchModeSwitchStatus == .timedOut {
-                return "Still waiting for Apple Watch to confirm standalone mode. PushGo will keep trying in the background."
+                return "watch_standalone_mode_still_waiting_message"
             }
-            return "Waiting for Apple Watch to confirm standalone mode."
+            return "waiting_for_watch_to_confirm_standalone_mode"
         }
         if !viewModel.standaloneReady {
-            return "Apple Watch has switched to standalone mode and is preparing direct reception. iPhone will keep syncing messages until the watch is ready."
+            return "watch_standalone_mode_switched_message"
         }
-        return "Standalone mode is active. Apple Watch can receive messages independently when it has network access."
+        return "watch_standalone_mode_active_description"
     }
 
     @ViewBuilder
@@ -465,15 +465,15 @@ struct SettingsView: View {
                     .scaleEffect(1.1)
                 Text(
                     viewModel.standaloneModeEnabled
-                        ? "Switching Apple Watch to standalone mode"
-                        : "Switching Apple Watch to mirror mode"
+                        ? "switching_watch_to_standalone_mode"
+                        : "switching_watch_to_mirror_mode"
                 )
                 .font(.headline)
                 .multilineTextAlignment(.center)
                 Text(
                     viewModel.standaloneModeEnabled
-                        ? "Waiting for Apple Watch to accept standalone mode. This request will time out automatically if the watch does not respond."
-                        : "Waiting for Apple Watch to switch back to mirror mode. This request will time out automatically if the watch does not respond."
+                        ? "waiting_for_watch_to_accept_standalone_mode_timeout"
+                        : "waiting_for_watch_to_switch_to_mirror_mode_timeout"
                 )
                 .font(.footnote)
                 .foregroundStyle(Color.appTextSecondary)
@@ -573,9 +573,9 @@ struct SettingsView: View {
         let customCount = settings.customAssets.count
         let activeLevels = NotificationSoundLevel.allCases.filter { settings.rule(for: $0).mode != .silent }.count
         if customCount == 0 {
-            return localizationManager.localized("%d priorities active, built-in defaults ready", activeLevels)
+            return localizationManager.localized("priorities_active_built_in_defaults_ready_count", activeLevels)
         }
-        return localizationManager.localized("%d custom sounds, %d priorities active", customCount, activeLevels)
+        return localizationManager.localized("custom_sounds_priorities_active_count", customCount, activeLevels)
     }
 
     private var messageCountSubtitle: LocalizedStringKey {

@@ -13,6 +13,20 @@ PushGo policy:
 ## [Unreleased]
 
 
+## [v1.2.6] - 2026-06-12
+
+### Changed
+- Finalized Apple release display version to `v1.2.6` across release targets.
+- Bumped Apple build number for release packaging (`CURRENT_PROJECT_VERSION: 82 -> 83`).
+- Added versioned release note source file: `release/update-notes/v1.2.6.json`.
+- Normalized newly generated Apple localization keys to snake_case identifiers.
+
+### Fixed
+- Fixed iOS message detail text selection crashes caused by the rich-text selection path.
+- Fixed macOS message detail text selection so selectable title and body text work consistently.
+- Preserved markdown rendering for selectable message bodies by routing selectable detail text through native SwiftUI text selection.
+- Updated the Textual dependency pin to the cleaned-up selection hardening commit.
+
 ## [v1.2.5] - 2026-06-09
 
 ### Changed

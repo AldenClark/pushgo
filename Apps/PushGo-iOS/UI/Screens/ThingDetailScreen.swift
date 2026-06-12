@@ -164,11 +164,11 @@ private struct ThingDetailPanel: View {
     private var lifecycleTimeLabel: String {
         switch lifecycleState {
         case .archived:
-            return localizationManager.localized("Archived")
+            return localizationManager.localized("archived")
         case .deleted:
-            return localizationManager.localized("Deleted")
+            return localizationManager.localized("deleted")
         default:
-            return localizationManager.localized("Updated")
+            return localizationManager.localized("updated")
         }
     }
 
@@ -336,7 +336,7 @@ private struct ThingDetailPanel: View {
                 if let createdAt = thing.createdAt {
                     Label(
                         String(
-                            format: localizationManager.localized("Created %@"),
+                            format: localizationManager.localized("created_at_placeholder"),
                             EntityDateFormatter.text(createdAt)
                         ),
                         systemImage: "calendar"
@@ -595,7 +595,7 @@ private struct ThingMetadataSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(localizationManager.localized("Done")) { dismiss() }
+                    Button(localizationManager.localized("done")) { dismiss() }
                 }
             }
         }
@@ -730,7 +730,7 @@ private struct ThingRelatedUpdateDetailScreen: View {
                     if let state = update.state, !state.isEmpty {
                         Text(
                             String(
-                                format: localizationManager.localized("State: %@"),
+                                format: localizationManager.localized("state_value_placeholder"),
                                 normalizedThingState(state)
                             )
                         )

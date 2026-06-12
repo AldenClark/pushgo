@@ -138,7 +138,7 @@ struct WatchEntityMissingState: View {
         VStack(spacing: 6) {
             Image(systemName: "exclamationmark.triangle")
                 .foregroundStyle(Color.appTextSecondary)
-            Text("Entry not found")
+            Text(LocalizationManager.shared.localized("entry_not_found"))
                 .font(.footnote)
                 .foregroundStyle(Color.appTextSecondary)
         }

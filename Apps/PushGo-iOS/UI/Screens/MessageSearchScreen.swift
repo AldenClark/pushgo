@@ -383,10 +383,10 @@ private struct HighlightedText: View {
             range: NSRange(location: 0, length: nsText.length),
         )
         guard !matches.isEmpty else {
-            return Text(text)
+            return Text(verbatim: text)
         }
 
-        var result = Text("")
+        var result = Text(verbatim: "")
         var currentLocation = 0
 
         for match in matches {
@@ -396,11 +396,11 @@ private struct HighlightedText: View {
                     length: match.range.location - currentLocation,
                 )
                 let substring = nsText.substring(with: range)
-                result = Text("\(result)\(substring)")
+                result = result + Text(verbatim: substring)
             }
 
             let highlight = nsText.substring(with: match.range)
-            result = Text("\(result)\(highlight)")
+            result = result + Text(verbatim: highlight)
                 .foregroundStyle(Color.appAccentPrimary)
                 .fontWeight(.semibold)
 
@@ -413,7 +413,7 @@ private struct HighlightedText: View {
                 length: nsText.length - currentLocation,
             )
             let substring = nsText.substring(with: range)
-            result = Text("\(result)\(substring)")
+            result = result + Text(verbatim: substring)
         }
 
         return result

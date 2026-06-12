@@ -66,15 +66,11 @@ struct NotificationSoundSettingsTests {
     }
 
     @Test
-    func effectiveSettingsManifestRoundTripsThroughAppGroupStorage() throws {
-        let storageRoot = FileManager.default.temporaryDirectory
-            .appendingPathComponent("pushgo-sound-manifest-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: storageRoot, withIntermediateDirectories: true)
-        defer {
-            try? FileManager.default.removeItem(at: storageRoot)
-        }
-        try withAutomationStorageRoot(storageRoot) {
-            let appGroupIdentifier = "group.ethan.pushgo.tests.\(UUID().uuidString.lowercased())"
+    func effectiveSettingsManifestRoundTripsThroughAppGroupStorage() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            defer {
+                try? FileManager.default.removeItem(at: root)
+            }
             var settings = NotificationSoundSettings()
             var high = settings.rule(for: .high)
             high.mode = .builtin
@@ -184,20 +180,4 @@ struct NotificationSoundSettingsTests {
             .deletingLastPathComponent()
     }
 
-    private func withAutomationStorageRoot<T>(
-        _ storageRoot: URL,
-        operation: () throws -> T
-    ) throws -> T {
-        let key = "PUSHGO_AUTOMATION_STORAGE_ROOT"
-        let original = getenv(key).map { String(cString: $0) }
-        setenv(key, storageRoot.path, 1)
-        defer {
-            if let original {
-                setenv(key, original, 1)
-            } else {
-                unsetenv(key)
-            }
-        }
-        return try operation()
-    }
 }

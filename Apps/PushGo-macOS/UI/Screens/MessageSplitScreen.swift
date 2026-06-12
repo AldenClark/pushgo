@@ -589,7 +589,7 @@ struct MessageSplitScreen: View {
                     .frame(height: 0.5)
                     .padding(.vertical, 2)
 
-                Text("Channels")
+                Text("channels")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
 
@@ -611,7 +611,7 @@ struct MessageSplitScreen: View {
                     .frame(height: 0.5)
                     .padding(.vertical, 2)
 
-                Text("Tags")
+                Text("tags")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
 

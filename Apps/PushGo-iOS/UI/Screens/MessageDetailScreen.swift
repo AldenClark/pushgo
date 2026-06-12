@@ -1,8 +1,5 @@
 import SwiftUI
 import UIKit
-#if canImport(Textual)
-import Textual
-#endif
 
 struct MessageDetailScreen: View {
     @Environment(\.dismiss) private var dismiss
@@ -142,10 +139,10 @@ struct MessageDetailScreen: View {
                                     text: message.title,
                                     font: .title2.weight(.semibold),
                                     foreground: .primary,
-                                    attachmentWidthHint: markdownWidthHint
+                                    attachmentWidthHint: markdownWidthHint,
+                                    selectionEnabled: isTextSelectionEnabled
                                 )
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .compatTextSelectionEnabled(isTextSelectionEnabled)
                                 encryptionBadge(for: message)
                             }
 
@@ -176,10 +173,10 @@ struct MessageDetailScreen: View {
                         text: resolvedBody.rawText,
                         font: .body,
                         foreground: .primary,
-                        attachmentWidthHint: markdownWidthHint
+                        attachmentWidthHint: markdownWidthHint,
+                        selectionEnabled: isTextSelectionEnabled
                     )
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .compatTextSelectionEnabled(isTextSelectionEnabled)
 
                     if let url = message.url,
                        let safeOpenURL = URLSanitizer.sanitizeExternalOpenURL(url)
@@ -590,13 +587,6 @@ private struct ChannelTagView: View {
     }
 }
 
-private extension View {
-    @ViewBuilder
-    func compatTextSelectionEnabled(_ enabled: Bool) -> some View {
-        modifier(DeferredTextSelectionEnabledModifier(enabled: enabled))
-    }
-}
-
 private extension Date {
     func pushgoDetailTimestamp() -> String {
 #if DEBUG
@@ -605,24 +595,5 @@ private extension Date {
         }
 #endif
         return formatted(date: .complete, time: .standard)
-    }
-}
-
-private struct DeferredTextSelectionEnabledModifier: ViewModifier {
-    let enabled: Bool
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if enabled {
-#if canImport(Textual)
-            content
-                .textual.textSelection(.enabled)
-#else
-            content
-                .textSelection(.enabled)
-#endif
-        } else {
-            content
-        }
     }
 }

@@ -105,7 +105,7 @@ private struct EventDetailPanel: View {
 
                     HStack(spacing: 8) {
                         if let thingId = event.thingId, !thingId.isEmpty {
-                            Text(String(format: localizationManager.localized("Object %@"), thingId))
+                            Text(String(format: localizationManager.localized("object_id_placeholder"), thingId))
                                 .lineLimit(1)
                         }
                         if let channelId = event.channelId?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -153,7 +153,7 @@ private struct EventDetailPanel: View {
                 if orderedTimeline.isEmpty {
                     EntityEmptyView(
                         iconName: "clock.arrow.circlepath",
-                        title: "No history records.",
+                        title: "no_history_records",
                         subtitle: "Updates will appear here when this event receives new actions.",
                         fillsAvailableSpace: false,
                         topPadding: 12
@@ -291,7 +291,7 @@ private struct EventTimelineRow: View {
 
                 HStack(spacing: 8) {
                     if let thingId = point.thingId, !thingId.isEmpty {
-                        Text(String(format: localizationManager.localized("Object %@"), thingId))
+                        Text(String(format: localizationManager.localized("object_id_placeholder"), thingId))
                             .lineLimit(1)
                     }
                     if !point.tags.isEmpty {

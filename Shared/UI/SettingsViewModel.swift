@@ -245,8 +245,8 @@ final class SettingsViewModel {
         panel.canCreateDirectories = true
         try? FileManager.default.createDirectory(at: targetURL, withIntermediateDirectories: true)
         panel.directoryURL = targetURL
-        panel.prompt = localizationManager.localized("Grant Access")
-        panel.message = localizationManager.localized("Select the ~/Library/Sounds folder so PushGo can save custom notification sounds.")
+        panel.prompt = localizationManager.localized("grant_access")
+        panel.message = localizationManager.localized("select_sound_folder_permission_prompt")
 
         guard panel.runModal() == .OK, let selectedURL = panel.url else {
             await refreshMacOSNotificationSoundDirectoryAccess()
@@ -256,7 +256,7 @@ final class SettingsViewModel {
         do {
             try await notificationSoundManager.authorizeMacOSUserSoundsDirectory(selectedURL)
             await refreshMacOSNotificationSoundDirectoryAccess()
-            successMessage = localizationManager.localized("Sound folder access granted.")
+            successMessage = localizationManager.localized("sound_folder_access_granted")
         } catch {
             await refreshMacOSNotificationSoundDirectoryAccess()
             self.error = AppError.wrap(
@@ -300,7 +300,7 @@ final class SettingsViewModel {
                 error = .typedLocal(
                     code: "notification_sound_custom_missing",
                     category: .validation,
-                    message: localizationManager.localized("Import a custom sound first."),
+                    message: localizationManager.localized("import_custom_sound_first"),
                     detail: "custom sound selection requires at least one imported asset"
                 )
                 return
@@ -385,7 +385,7 @@ final class SettingsViewModel {
 
         do {
             notificationSoundSettings = try await notificationSoundManager.importCustomSound(from: url)
-            successMessage = localizationManager.localized("Sound imported.")
+            successMessage = localizationManager.localized("sound_imported")
         } catch let appError as AppError {
             error = appError
         } catch {
@@ -404,7 +404,7 @@ final class SettingsViewModel {
         defer { isSavingNotificationSounds = false }
         do {
             notificationSoundSettings = try await notificationSoundManager.removeCustomSound(assetID: assetID)
-            successMessage = localizationManager.localized("Custom sound removed.")
+            successMessage = localizationManager.localized("custom_sound_removed")
         } catch {
             self.error = AppError.wrap(
                 error,
@@ -442,7 +442,7 @@ final class SettingsViewModel {
             error = .typedLocal(
                 code: "notification_sound_preview_missing",
                 category: .validation,
-                message: localizationManager.localized("No preview is available for this selection."),
+                message: localizationManager.localized("no_preview_available_for_selection"),
                 detail: "notification sound preview URL could not be resolved"
             )
             return
@@ -456,7 +456,7 @@ final class SettingsViewModel {
         } catch {
             self.error = AppError.wrap(
                 error,
-                fallbackMessage: localizationManager.localized("Unable to preview this sound."),
+                fallbackMessage: localizationManager.localized("unable_to_preview_this_sound"),
                 code: "notification_sound_preview_failed",
                 category: .validation
             )
@@ -475,7 +475,7 @@ final class SettingsViewModel {
             error = .typedLocal(
                 code: "notification_sound_builtin_preview_missing",
                 category: .validation,
-                message: localizationManager.localized("Unable to preview this built-in sound."),
+                message: localizationManager.localized("unable_to_preview_built_in_sound"),
                 detail: "built-in notification sound preview URL could not be resolved"
             )
             return
@@ -489,7 +489,7 @@ final class SettingsViewModel {
         } catch {
             self.error = AppError.wrap(
                 error,
-                fallbackMessage: localizationManager.localized("Unable to preview this sound."),
+                fallbackMessage: localizationManager.localized("unable_to_preview_this_sound"),
                 code: "notification_sound_builtin_preview_failed",
                 category: .validation
             )
@@ -518,7 +518,7 @@ final class SettingsViewModel {
             error = .typedLocal(
                 code: "notification_sound_custom_preview_missing",
                 category: .validation,
-                message: localizationManager.localized("Unable to preview this custom sound."),
+                message: localizationManager.localized("unable_to_preview_custom_sound"),
                 detail: "custom notification sound preview URL could not be resolved"
             )
             return
@@ -532,7 +532,7 @@ final class SettingsViewModel {
         } catch {
             self.error = AppError.wrap(
                 error,
-                fallbackMessage: localizationManager.localized("Unable to preview this sound."),
+                fallbackMessage: localizationManager.localized("unable_to_preview_this_sound"),
                 code: "notification_sound_custom_preview_failed",
                 category: .validation
             )

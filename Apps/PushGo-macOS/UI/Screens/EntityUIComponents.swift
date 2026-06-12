@@ -582,7 +582,7 @@ struct EntityKeyValueRows: View {
         VStack(spacing: 0) {
             ForEach(entries.indices, id: \.self) { index in
                 let entry = entries[index]
-                Text("\(entry.displayLabel) - \(entry.value)")
+                Text(verbatim: "\(entry.displayLabel) - \(entry.value)")
                     .font(.caption.monospaced())
                     .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)

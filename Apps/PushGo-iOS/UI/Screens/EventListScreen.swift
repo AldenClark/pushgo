@@ -579,7 +579,7 @@ struct EventListScreen: View {
                     .frame(height: 0.5)
                     .padding(.vertical, 2)
 
-                Text("Channels")
+                Text("channels")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
 
@@ -611,7 +611,7 @@ struct EventListScreen: View {
                     .frame(height: 0.5)
                     .padding(.vertical, 2)
 
-                Text("Tags")
+                Text("tags")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
 
@@ -926,7 +926,7 @@ struct EventListRow: View {
                         .clipShape(RoundedRectangle(cornerRadius: EntityVisualTokens.radiusSmall, style: .continuous))
                     }
                     if remainingImageAttachmentCount > 0 {
-                        Text("+\(remainingImageAttachmentCount)")
+                        Text(verbatim: "+\(remainingImageAttachmentCount)")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(Color.appTextSecondary)
                             .padding(.leading, 4)

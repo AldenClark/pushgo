@@ -275,7 +275,7 @@ private struct ThingListRow: View {
                             )
                         }
                         if previewImageAttachments.count > visibleCount {
-                            Text("+\(previewImageAttachments.count - visibleCount)")
+                            Text(verbatim: "+\(previewImageAttachments.count - visibleCount)")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(Color.appTextSecondary)
                                 .padding(.leading, 4)
