@@ -141,7 +141,7 @@ struct NotificationView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                MarkdownRenderer(
+                WatchPlainTextMessageBodyView(
                     text: model.body.isEmpty ? " " : model.body,
                     font: .body,
                     foreground: .primary

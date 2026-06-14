@@ -125,7 +125,6 @@
 		B1E7D1134F8A4C3DA9E8F101 /* EntityProjectionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1E7D1134F8A4C3DA9E8F001 /* EntityProjectionModels.swift */; };
 		B1E7D1134F8A4C3DA9E8F102 /* EntityProjectionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1E7D1134F8A4C3DA9E8F001 /* EntityProjectionModels.swift */; };
 		B2324A7F4E3B490A99C149D4 /* KeyboardDismiss.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85E1D5231456472CB97116B9 /* KeyboardDismiss.swift */; };
-		B49E95D553179EBD36CAE0AD /* PushGoMarkdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4145756AA5A340C3AC329C64 /* PushGoMarkdownView.swift */; };
 		B53BB245539441F3AF39A52F /* KeyboardDismiss.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85E1D5231456472CB97116B9 /* KeyboardDismiss.swift */; };
 		B5A80ED6449C41E48D6DD1BA /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 735E34FAF86E4F5A8F14A966 /* RootView.swift */; };
 		BEA519ACCE4649DA809B3E07 /* PlatformColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D54A0FAE6A44ADDB88F3B98 /* PlatformColor.swift */; };
@@ -1597,7 +1596,6 @@
 				F7A96C4E69FDC176051175F9 /* PushRegistrationService.swift in Sources */,
 				C0A1B2C3D4E5F60718293B18 /* ChannelNameValidator.swift in Sources */,
 				C0A1B2C3D4E5F60718293B1B /* ChannelPasswordValidator.swift in Sources */,
-				B49E95D553179EBD36CAE0AD /* PushGoMarkdownView.swift in Sources */,
 				6176829B302E1663E05959E7 /* ToastView.swift in Sources */,
 				EE139F8339CFDFCA5E04BA38 /* AnyCodable.swift in Sources */,
 				1FC9840AEFDBEC3CA02971E2 /* AppConstants.swift in Sources */,

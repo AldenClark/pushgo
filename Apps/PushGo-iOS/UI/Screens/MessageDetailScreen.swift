@@ -8,7 +8,6 @@ struct MessageDetailScreen: View {
     @State private var viewModel: MessageDetailViewModel
     @State private var isShowingRuntimeAlert = false
     @State private var previewingImage: ImagePreview?
-    @State private var isTextSelectionEnabled = true
     @State private var didLoad: Bool = false
     private let onCommitDelete: (@MainActor () async throws -> Void)?
     private let onPrepareDelete: (() -> Void)?
@@ -135,14 +134,11 @@ struct MessageDetailScreen: View {
                     HStack(alignment: .center, spacing: 12) {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack(alignment: .top, spacing: 8) {
-                                MarkdownRenderer(
-                                    text: message.title,
-                                    font: .title2.weight(.semibold),
-                                    foreground: .primary,
-                                    attachmentWidthHint: markdownWidthHint,
-                                    selectionEnabled: isTextSelectionEnabled
-                                )
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                                Text(message.title)
+                                    .font(.title2.weight(.semibold))
+                                    .foregroundStyle(.primary)
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
                                 encryptionBadge(for: message)
                             }
 
@@ -173,8 +169,7 @@ struct MessageDetailScreen: View {
                         text: resolvedBody.rawText,
                         font: .body,
                         foreground: .primary,
-                        attachmentWidthHint: markdownWidthHint,
-                        selectionEnabled: isTextSelectionEnabled
+                        attachmentWidthHint: markdownWidthHint
                     )
                         .frame(maxWidth: .infinity, alignment: .leading)
 

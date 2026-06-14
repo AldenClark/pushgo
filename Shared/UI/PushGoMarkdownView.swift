@@ -1,9 +1,6 @@
 import Foundation
 import SwiftUI
-
-#if canImport(Textual) && !os(watchOS)
 import Textual
-#endif
 
 struct MarkdownRenderer: View {
     private static let textualScale: CGFloat = 0.92
@@ -12,10 +9,7 @@ struct MarkdownRenderer: View {
     var font: Font = .body
     var foreground: Color = .primary
     var attachmentWidthHint: CGFloat? = nil
-    var selectionEnabled: Bool = false
-#if canImport(Textual) && !os(watchOS)
     @State private var previewingImage: MarkdownImagePreviewItem?
-#endif
 
     private var displayText: String {
         guard let max = maxNewlines else { return text }
@@ -23,115 +17,38 @@ struct MarkdownRenderer: View {
     }
 
     private func markdownRenderPreparation(for displayText: String) -> (
-        displayMode: PushGoMarkdownDisplayMode,
+        presentationStyle: MarkdownPresentationStyle,
         normalizedText: String
     ) {
-        let mode = pushGoMarkdownDisplayMode(for: displayText)
-        #if !os(watchOS)
+        let style = markdownPresentationStyle(for: displayText)
         recordMarkdownDisplayModeEvaluationMetric()
-        #endif
         return (
-            displayMode: mode,
+            presentationStyle: style,
             normalizedText: normalizeMarkdown(displayText)
         )
     }
 
     var body: some View {
-        if selectionEnabled {
-            selectableMarkdownContent
-        } else {
-        #if canImport(Textual) && !os(watchOS)
-            markdownContent
-                .pushgoImagePreviewOverlay(
-                    previewItem: $previewingImage,
-                    imageURL: \.url
-                )
-        #else
-            fallbackPlainTextContent(displayText: displayText)
-        #endif
-        }
-    }
-
-    @ViewBuilder
-    private var selectableMarkdownContent: some View {
-        let currentDisplayText = displayText
-        let renderPreparation = markdownRenderPreparation(for: currentDisplayText)
-        nativeMarkdownText(
-            renderPreparation.normalizedText,
-            displayMode: renderPreparation.displayMode
-        )
-            .platformTextSelectionEnabled()
-    }
-
-    @ViewBuilder
-    private func nativeMarkdownText(
-        _ markdown: String,
-        displayMode: PushGoMarkdownDisplayMode
-    ) -> some View {
-        if let attributedText = try? AttributedString(
-            markdown: markdown,
-            options: nativeMarkdownParsingOptions(for: displayMode)
-        ) {
-            Text(attributedText)
-                .font(font)
-                .foregroundStyle(foreground)
-                .lineLimit(nil)
-                .fixedSize(horizontal: false, vertical: true)
-        } else {
-            fallbackPlainTextContent(displayText: markdown)
-        }
-    }
-
-    private func fallbackPlainTextContent(displayText: String) -> some View {
-        Text(displayText)
-            .font(font)
-            .foregroundStyle(foreground)
-            .lineLimit(nil)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private func nativeMarkdownParsingOptions(
-        for displayMode: PushGoMarkdownDisplayMode
-    ) -> AttributedString.MarkdownParsingOptions {
-        let interpretedSyntax: AttributedString.MarkdownParsingOptions.InterpretedSyntax = switch displayMode {
-        case .inlineText:
-            .inlineOnlyPreservingWhitespace
-        case .structuredText, .plainText:
-            .full
-        }
-        return .init(
-            interpretedSyntax: interpretedSyntax,
-            failurePolicy: .returnPartiallyParsedIfPossible
-        )
+        markdownContent
+            .pushgoImagePreviewOverlay(
+                previewItem: $previewingImage,
+                imageURL: \.url
+            )
     }
 }
 
-private extension View {
-    @ViewBuilder
-    func platformTextSelectionEnabled() -> some View {
-        #if os(watchOS)
-        self
-        #else
-        self.textSelection(.enabled)
-        #endif
-    }
-}
-
-#if canImport(Textual) && !os(watchOS)
 extension MarkdownRenderer {
     private var markdownContent: some View {
         let currentDisplayText = displayText
         let renderPreparation = markdownRenderPreparation(for: currentDisplayText)
         return Group {
-            if renderPreparation.displayMode == .structuredText {
+            if renderPreparation.presentationStyle == .structuredText {
                 StructuredText(markdown: renderPreparation.normalizedText)
                     .textual.structuredTextStyle(.gitHub)
                     .textual.tableCellStyle(PushGoRefinedTableCellStyle())
                     .textual.tableStyle(PushGoRefinedTableStyle())
-            } else if renderPreparation.displayMode == .inlineText {
-                InlineText(markdown: renderPreparation.normalizedText)
             } else {
-                plainTextContent(displayText: currentDisplayText)
+                InlineText(markdown: renderPreparation.normalizedText)
             }
         }
         .transaction { transaction in
@@ -175,6 +92,7 @@ extension MarkdownRenderer {
         .attachmentRenderingMode(.interactive)
         .textual.fontScale(Self.textualScale)
         .textual.inlineStyle(.gitHub)
+        .textual.textSelection(.enabled)
         .environment(\.openURL, OpenURLAction { incoming in
             guard let safeURL = URLSanitizer.sanitizeExternalOpenURL(incoming) else {
                 return .discarded
@@ -183,54 +101,43 @@ extension MarkdownRenderer {
         })
         .font(font)
         .foregroundStyle(foreground)
-        .modifier(MarkdownRendererLayoutMode(displayMode: renderPreparation.displayMode))
+        .modifier(MarkdownRendererLayoutMode(presentationStyle: renderPreparation.presentationStyle))
     }
-
-    @ViewBuilder
-    private func plainTextContent(displayText: String) -> some View {
-        #if os(macOS)
-        let plainTextSegments = plainTextDisplaySegments(for: displayText)
-        if plainTextSegments.count > 1 {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(plainTextSegments.enumerated()), id: \.offset) { _, segment in
-                    Text(segment)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        } else {
-            Text(displayText)
-        }
-        #else
-        Text(displayText)
-        #endif
-    }
-
-    private func plainTextDisplaySegments(for displayText: String) -> [String] {
-        let segments = pushGoPlainTextDisplaySegments(for: displayText)
-        recordMarkdownPlainTextSegmentsMetric()
-        return segments
-    }
-
 }
 
 private struct MarkdownRendererLayoutMode: ViewModifier {
-    let displayMode: PushGoMarkdownDisplayMode
+    let presentationStyle: MarkdownPresentationStyle
 
     func body(content: Content) -> some View {
         #if os(macOS)
-        if displayMode == .plainText {
-            content.frame(maxWidth: .infinity, alignment: .leading)
-        } else {
+        if presentationStyle == .structuredText {
             content
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
+        } else {
+            content.frame(maxWidth: .infinity, alignment: .leading)
         }
         #else
         content
             .lineLimit(nil)
             .fixedSize(horizontal: false, vertical: true)
         #endif
+    }
+}
+
+private enum MarkdownPresentationStyle {
+    case inlineText
+    case structuredText
+}
+
+private func markdownPresentationStyle(for text: String) -> MarkdownPresentationStyle {
+    switch pushGoMarkdownDisplayMode(for: text) {
+    case .structuredText:
+        return .structuredText
+    case .inlineText:
+        return .inlineText
+    case .plainText:
+        return text.contains("\n") ? .structuredText : .inlineText
     }
 }
 
@@ -305,15 +212,6 @@ private func recordMarkdownDisplayModeEvaluationMetric() {
     #endif
 }
 
-private func recordMarkdownPlainTextSegmentsMetric() {
-    #if DEBUG
-    Task { @MainActor in
-        PushGoAutomationRuntime.shared.recordMarkdownPlainTextSegmentsBuilt()
-    }
-    #endif
-}
-
-
 enum MarkdownImageURLExtractor {
     static func extractURLs(from markdown: String) -> [URL] {
         guard !markdown.isEmpty else { return [] }
@@ -367,16 +265,12 @@ enum MarkdownImageURLExtractor {
         return token
     }
 }
-#endif
 
-#if canImport(Textual) && !os(watchOS)
 private struct MarkdownImagePreviewItem: Identifiable {
     let id = UUID()
     let url: URL
 }
-#endif
 
-#if canImport(Textual) && !os(watchOS)
 private struct PushGoRefinedTableCellStyle: StructuredText.TableCellStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -386,9 +280,7 @@ private struct PushGoRefinedTableCellStyle: StructuredText.TableCellStyle {
             .textual.lineSpacing(.fontScaled(0.25))
     }
 }
-#endif
 
-#if canImport(Textual) && !os(watchOS)
 private struct PushGoRefinedTableStyle: StructuredText.TableStyle {
     private static let borderWidth: CGFloat = 1
     private static let cornerRadius: CGFloat = 10
@@ -463,7 +355,6 @@ private struct PushGoRefinedTableStyle: StructuredText.TableStyle {
         .textual.blockSpacing(.fontScaled(top: 1.4, bottom: 1.6))
     }
 }
-#endif
 
 private func normalizeMarkdown(_ markdown: String) -> String {
     // Foundation's markdown parser does not render [![...]](...) as an image.
