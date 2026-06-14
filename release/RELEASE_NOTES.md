@@ -11,6 +11,14 @@ Policy:
 ## [Unreleased]
 
 
+## [v1.2.7]
+
+### Improved
+- Improved message detail rendering reliability across iPhone, Mac, and Apple Watch.
+- iPhone and Mac now keep selectable message titles while using platform-specific markdown body rendering.
+- Apple Watch message notifications and details now use a lightweight plain-text body path for steadier display.
+- Refreshed Apple localization catalogs after the markdown rendering update.
+
 ## [v1.2.6]
 
 ### Fixed

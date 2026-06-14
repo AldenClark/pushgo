@@ -13,6 +13,19 @@ PushGo policy:
 ## [Unreleased]
 
 
+## [v1.2.7] - 2026-06-15
+
+### Changed
+- Finalized Apple release display version to `v1.2.7` across release targets.
+- Bumped Apple build number for release packaging (`CURRENT_PROJECT_VERSION: 84 -> 85`).
+- Added versioned release note source file: `release/update-notes/v1.2.7.json`.
+- Updated the Textual dependency pin to the platform markdown-rendering cleanup commit.
+
+### Improved
+- Split Apple markdown detail rendering by platform so iOS and macOS keep selectable titles while message bodies use the shared renderer path.
+- Added a watchOS-specific plain-text message body view for notification hosting and message detail display.
+- Refreshed Apple string catalogs after removing obsolete markdown-selection state and updating watchOS detail text.
+
 ## [v1.2.6] - 2026-06-12
 
 ### Changed
