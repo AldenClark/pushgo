@@ -4,8 +4,8 @@
         <title>PushGo</title>
         <item>
             <title>1.2.7</title>
-            <pubDate>Mon, 15 Jun 2026 18:40:21 +0000</pubDate>
-            <sparkle:version>85</sparkle:version>
+            <pubDate>Mon, 15 Jun 2026 23:58:07 +0000</pubDate>
+            <sparkle:version>86</sparkle:version>
             <sparkle:shortVersionString>1.2.7</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <sparkle:releaseNotesLink>https://update.pushgo.cn/macos/stable/v1.2.7/PushGo-macOS-v1.2.7.txt</sparkle:releaseNotesLink>
@@ -16,7 +16,7 @@
             <sparkle:releaseNotesLink xml:lang="ja">https://update.pushgo.cn/macos/stable/v1.2.7/PushGo-macOS-v1.2.7.ja.txt</sparkle:releaseNotesLink>
             <sparkle:releaseNotesLink xml:lang="ko">https://update.pushgo.cn/macos/stable/v1.2.7/PushGo-macOS-v1.2.7.ko.txt</sparkle:releaseNotesLink>
             <sparkle:releaseNotesLink xml:lang="zh">https://update.pushgo.cn/macos/stable/v1.2.7/PushGo-macOS-v1.2.7.zh.txt</sparkle:releaseNotesLink>
-            <enclosure url="https://update.pushgo.cn/macos/stable/v1.2.7/PushGo-macOS-v1.2.7.dmg" length="21143044" type="application/octet-stream" sparkle:edSignature="BauZhq5D9VQ6iEUNB9FiX90wy5adKfwktpLLQdrAm8qASl53Y2p1DP7D5ojubZcmF54fHWZtyW/HU8JqjCAeAw=="/>
+            <enclosure url="https://update.pushgo.cn/macos/stable/v1.2.7/PushGo-macOS-v1.2.7.dmg" length="21143096" type="application/octet-stream" sparkle:edSignature="YnMnAvImJkd7DvlGFAeBLuSCxmZMIDxYuRBx5lkFHBu/Cxl9HBOj3wGheJuxl+v2awRrh1WhZG86+8SAEHmfAw=="/>
         </item>
         <item>
             <title>1.2.4</title>
