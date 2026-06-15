@@ -624,6 +624,7 @@ jobs:
       APP_PROJECT: pushgo.xcodeproj
       APP_MACOS_SCHEME: PushGo-macOS
       APP_MACOS_DMG_SCHEME: PushGo-macOS-DMG
+      PUSHGO_DMG_BACKGROUND_PATH: scripts/assets/dmg/pushgo_dmg_bg_680pt_2x.jpg
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}

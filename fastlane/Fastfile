@@ -923,14 +923,14 @@ platform :ios do
       sh("codesign --verify --deep --strict --verbose=2 #{Shellwords.escape(app_path)}")
       verify_developer_id_app_signature!(app_path)
 
-      FileUtils.mkdir_p(staging_dir)
-      sh("cp -R #{Shellwords.escape(app_path)} #{Shellwords.escape(staging_dir)}")
-      FileUtils.ln_s("/Applications", File.join(staging_dir, "Applications"), force: true)
+      FileUtils.rm_rf(staging_dir)
       sh(
-        "hdiutil create " \
-        "-volname #{Shellwords.escape(dmg_name)} " \
-        "-srcfolder #{Shellwords.escape(staging_dir)} " \
-        "-ov -format UDZO #{Shellwords.escape(dmg_path)}"
+        "#{Shellwords.escape(resolve_from_repo("scripts/create_pretty_dmg.sh"))} " \
+        "--no-build " \
+        "--app #{Shellwords.escape(app_path)} " \
+        "--background #{Shellwords.escape(resolve_from_repo(ENV.fetch("PUSHGO_DMG_BACKGROUND_PATH", "scripts/assets/dmg/pushgo_dmg_bg_680pt_2x.jpg")))} " \
+        "--output-name #{Shellwords.escape(dmg_name)} " \
+        "--output #{Shellwords.escape(dmg_path)}"
       )
       sign_path!(
         dmg_path,
