@@ -36,6 +36,20 @@ enum SharedImageCache {
         let memoryEnabled: Bool
     }
 
+    private struct CacheMetadata: Codable {
+        let expiresAtEpochMillis: Int64
+    }
+
+    private actor MaintenanceState {
+        private var didStart = false
+
+        func claimStart() -> Bool {
+            guard !didStart else { return false }
+            didStart = true
+            return true
+        }
+    }
+
     private actor MetadataSnapshotCache {
         private var entries: [NSURL: ImageAssetMetadata] = [:]
 
@@ -172,18 +186,14 @@ enum SharedImageCache {
         }
 
         func readData(for url: URL, rendition: Rendition) -> Data? {
-            guard let fileURL = SharedImageCache.fileURL(for: url, rendition: rendition) else { return nil }
-            var isDir: ObjCBool = false
-            guard fileManager.fileExists(atPath: fileURL.path, isDirectory: &isDir), !isDir.boolValue else {
-                return nil
-            }
+            guard let fileURL = SharedImageCache.validCachedFileURL(for: url, rendition: rendition) else { return nil }
             guard let data = try? Data(contentsOf: fileURL) else { return nil }
             try? fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: fileURL.path)
             return data
         }
 
         @discardableResult
-        func store(data: Data, for url: URL, rendition: Rendition) -> URL? {
+        func store(data: Data, for url: URL, rendition: Rendition, expiresAtEpochMillis: Int64) -> URL? {
             guard let destination = SharedImageCache.fileURL(for: url, rendition: rendition) else { return nil }
             do {
                 let directory = destination.deletingLastPathComponent()
@@ -191,10 +201,14 @@ enum SharedImageCache {
                     try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
                 }
                 try data.write(to: destination, options: [.atomic])
+                let metadata = CacheMetadata(expiresAtEpochMillis: expiresAtEpochMillis)
+                let metadataData = try JSONEncoder().encode(metadata)
+                try metadataData.write(to: SharedImageCache.metadataFileURL(for: destination), options: [.atomic])
                 try fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: destination.path)
                 enforceDiskLimitIfNeeded()
                 return destination
             } catch {
+                SharedImageCache.removeCachedPair(fileURL: destination, fileManager: fileManager)
                 return nil
             }
         }
@@ -202,8 +216,8 @@ enum SharedImageCache {
         func purge(urls: [URL], renditions: [Rendition]) {
             for url in urls {
                 for rendition in renditions {
-                    guard let fileURL = SharedImageCache.cachedFileURL(for: url, rendition: rendition) else { continue }
-                    try? fileManager.removeItem(at: fileURL)
+                    guard let fileURL = SharedImageCache.fileURL(for: url, rendition: rendition) else { continue }
+                    SharedImageCache.removeCachedPair(fileURL: fileURL, fileManager: fileManager)
                 }
             }
         }
@@ -211,6 +225,30 @@ enum SharedImageCache {
         func purgeAll() {
             guard let directory = SharedImageCache.cacheDirectory() else { return }
             try? fileManager.removeItem(at: directory)
+        }
+
+        func purgeExpired(nowEpochMillis: Int64 = SharedImageCache.currentEpochMillis()) -> Int {
+            guard let directory = SharedImageCache.cacheDirectory() else { return 0 }
+            guard let enumerator = fileManager.enumerator(
+                at: directory,
+                includingPropertiesForKeys: [.isRegularFileKey],
+                options: [.skipsHiddenFiles],
+                errorHandler: nil
+            ) else { return 0 }
+
+            var removed = 0
+            for case let fileURL as URL in enumerator {
+                guard fileURL.pathExtension != "json" else { continue }
+                var isDir: ObjCBool = false
+                guard fileManager.fileExists(atPath: fileURL.path, isDirectory: &isDir), !isDir.boolValue else {
+                    continue
+                }
+                if !SharedImageCache.cacheEntryIsFresh(fileURL: fileURL, nowEpochMillis: nowEpochMillis) {
+                    SharedImageCache.removeCachedPair(fileURL: fileURL, fileManager: fileManager)
+                    removed += 1
+                }
+            }
+            return removed
         }
 
         private func enforceDiskLimitIfNeeded() {
@@ -226,6 +264,7 @@ enum SharedImageCache {
             var total: Int64 = 0
 
             for case let fileURL as URL in enumerator {
+                guard fileURL.pathExtension != "json" else { continue }
                 let resource = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
                 let size = Int64(resource?.fileSize ?? 0)
                 let date = resource?.contentModificationDate ?? Date.distantPast
@@ -238,7 +277,7 @@ enum SharedImageCache {
             var remaining = total
             for item in sorted {
                 if remaining <= diskLimitBytes { break }
-                try? fileManager.removeItem(at: item.url)
+                SharedImageCache.removeCachedPair(fileURL: item.url, fileManager: fileManager)
                 remaining -= item.size
             }
         }
@@ -299,6 +338,10 @@ enum SharedImageCache {
     private static let inflight = InflightRequests()
     private static let metadataStore = ImageAssetMetadataStore.shared
     private static let metadataSnapshots = MetadataSnapshotCache()
+    private static let defaultCacheTTLMillis: Int64 = 7 * 24 * 60 * 60 * 1000
+    private static let maxCacheTTLMillis: Int64 = 30 * 24 * 60 * 60 * 1000
+    private static let maintenanceIntervalNanoseconds: UInt64 = 6 * 60 * 60 * 1_000_000_000
+    private static let maintenanceState = MaintenanceState()
 
     static func cachedData(for url: URL, rendition: Rendition = .original) async -> Data? {
         guard URLSanitizer.isAllowedRemoteURL(url) else { return nil }
@@ -314,12 +357,7 @@ enum SharedImageCache {
     }
 
     static func cachedFileURL(for url: URL, rendition: Rendition = .original) -> URL? {
-        guard let target = fileURL(for: url, rendition: rendition) else { return nil }
-        var isDir: ObjCBool = false
-        if FileManager.default.fileExists(atPath: target.path, isDirectory: &isDir), !isDir.boolValue {
-            return target
-        }
-        return nil
+        validCachedFileURL(for: url, rendition: rendition)
     }
 
     static func fetchData(
@@ -358,7 +396,8 @@ enum SharedImageCache {
                         await metadataStore.upsert(metadata)
                         await metadataSnapshots.set(metadata, for: metadataCacheKeyURL(for: url))
                     }
-                    await store(data: data, for: url, rendition: .original)
+                    let expiresAt = cacheExpirationEpochMillis(from: response)
+                    await store(data: data, for: url, rendition: .original, expiresAtEpochMillis: expiresAt)
                     return data
                 case .listThumbnail:
                     let originalData = try await fetchData(
@@ -368,7 +407,9 @@ enum SharedImageCache {
                         timeout: timeout
                     )
                     let thumbnailData = Self.makeListThumbnailData(from: originalData) ?? originalData
-                    await store(data: thumbnailData, for: url, rendition: .listThumbnail)
+                    let expiresAt = cacheExpirationEpochMillis(for: url, rendition: .original)
+                        ?? currentEpochMillis() + defaultCacheTTLMillis
+                    await store(data: thumbnailData, for: url, rendition: .listThumbnail, expiresAtEpochMillis: expiresAt)
                     return thumbnailData
                 }
             }
@@ -377,12 +418,22 @@ enum SharedImageCache {
     }
 
     @discardableResult
-    static func store(data: Data, for url: URL, rendition: Rendition = .original) async -> URL? {
+    static func store(
+        data: Data,
+        for url: URL,
+        rendition: Rendition = .original,
+        expiresAtEpochMillis: Int64? = nil
+    ) async -> URL? {
         let cacheKey = cacheKeyURL(for: url, rendition: rendition)
         if profile.memoryEnabled {
             await memory.set(data, for: cacheKey)
         }
-        return await disk.store(data: data, for: url, rendition: rendition)
+        return await disk.store(
+            data: data,
+            for: url,
+            rendition: rendition,
+            expiresAtEpochMillis: expiresAtEpochMillis ?? currentEpochMillis() + defaultCacheTTLMillis
+        )
     }
 
     static func purge(urls: [URL]) async {
@@ -407,6 +458,24 @@ enum SharedImageCache {
         await metadataSnapshots.removeAll()
         await metadataStore.purgeAll()
         await disk.purgeAll()
+    }
+
+    @discardableResult
+    static func purgeExpired() async -> Int {
+        if profile.memoryEnabled {
+            await memory.removeAll()
+        }
+        return await disk.purgeExpired()
+    }
+
+    static func startMaintenance() {
+        Task.detached(priority: .utility) {
+            guard await maintenanceState.claimStart() else { return }
+            while !Task.isCancelled {
+                _ = await purgeExpired()
+                try? await Task.sleep(nanoseconds: maintenanceIntervalNanoseconds)
+            }
+        }
     }
 
     static func metadata(for url: URL) async -> ImageAssetMetadata? {
@@ -599,6 +668,112 @@ enum SharedImageCache {
         components.fragment = nil
         let base = components.url?.absoluteString ?? url.absoluteString
         return "\(base)#rendition=\(rendition.keySuffix)"
+    }
+
+    private static func validCachedFileURL(for url: URL, rendition: Rendition) -> URL? {
+        guard let target = fileURL(for: url, rendition: rendition) else { return nil }
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: target.path, isDirectory: &isDir), !isDir.boolValue else {
+            return nil
+        }
+        guard cacheEntryIsFresh(fileURL: target) else {
+            removeCachedPair(fileURL: target, fileManager: .default)
+            return nil
+        }
+        return target
+    }
+
+    private static func metadataFileURL(for fileURL: URL) -> URL {
+        fileURL.appendingPathExtension("meta.json")
+    }
+
+    private static func cacheEntryIsFresh(
+        fileURL: URL,
+        nowEpochMillis: Int64 = currentEpochMillis()
+    ) -> Bool {
+        let metadataURL = metadataFileURL(for: fileURL)
+        guard let data = try? Data(contentsOf: metadataURL),
+              let metadata = try? JSONDecoder().decode(CacheMetadata.self, from: data)
+        else {
+            return false
+        }
+        return metadata.expiresAtEpochMillis > nowEpochMillis
+    }
+
+    private static func cacheExpirationEpochMillis(for url: URL, rendition: Rendition) -> Int64? {
+        guard let fileURL = fileURL(for: url, rendition: rendition) else { return nil }
+        let metadataURL = metadataFileURL(for: fileURL)
+        guard let data = try? Data(contentsOf: metadataURL),
+              let metadata = try? JSONDecoder().decode(CacheMetadata.self, from: data)
+        else {
+            return nil
+        }
+        return metadata.expiresAtEpochMillis
+    }
+
+    private static func removeCachedPair(fileURL: URL, fileManager: FileManager) {
+        try? fileManager.removeItem(at: fileURL)
+        try? fileManager.removeItem(at: metadataFileURL(for: fileURL))
+    }
+
+    private static func cacheExpirationEpochMillis(from response: URLResponse?) -> Int64 {
+        let now = currentEpochMillis()
+        guard let http = response as? HTTPURLResponse else {
+            return now + defaultCacheTTLMillis
+        }
+        if let cacheControl = headerValue("Cache-Control", in: http.allHeaderFields) {
+            if hasCacheControlDirective(cacheControl, directive: "no-store")
+                || hasCacheControlDirective(cacheControl, directive: "no-cache")
+            {
+                return now
+            }
+            if let maxAge = cacheControlMaxAge(cacheControl) {
+                let ttl = min(Int64(maxAge) * 1000, maxCacheTTLMillis)
+                return now + max(0, ttl)
+            }
+        }
+        if let expires = headerValue("Expires", in: http.allHeaderFields),
+           let expiresDate = httpDateFormatter.date(from: expires)
+        {
+            let expiresAt = Int64(expiresDate.timeIntervalSince1970 * 1000)
+            return min(max(expiresAt, now), now + maxCacheTTLMillis)
+        }
+        return now + defaultCacheTTLMillis
+    }
+
+    private static func headerValue(_ name: String, in headers: [AnyHashable: Any]) -> String? {
+        headers.first { key, _ in
+            String(describing: key).caseInsensitiveCompare(name) == .orderedSame
+        }.map { String(describing: $0.value) }
+    }
+
+    private static func hasCacheControlDirective(_ value: String, directive: String) -> Bool {
+        value.split(separator: ",").contains { part in
+            let name = part.split(separator: "=", maxSplits: 1).first?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return name?.caseInsensitiveCompare(directive) == .orderedSame
+        }
+    }
+
+    private static func cacheControlMaxAge(_ value: String) -> Int? {
+        value.split(separator: ",").compactMap { part -> Int? in
+            let pieces = part.split(separator: "=", maxSplits: 1)
+            guard pieces.count == 2,
+                  pieces[0].trimmingCharacters(in: .whitespacesAndNewlines).caseInsensitiveCompare("max-age") == .orderedSame
+            else { return nil }
+            return Int(pieces[1].trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "\"")))
+        }.first
+    }
+
+    private static let httpDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "EEE',' dd MMM yyyy HH':'mm':'ss z"
+        return formatter
+    }()
+
+    private static func currentEpochMillis() -> Int64 {
+        Int64(Date().timeIntervalSince1970 * 1000)
     }
 
     private static func sha256(_ text: String) -> String {

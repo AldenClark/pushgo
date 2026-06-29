@@ -172,6 +172,7 @@ final class AppEnvironment {
         self.localizationManager = localizationManager ?? LocalizationManager.shared
         self.appUpdateManager = AppUpdateManagerFactory.make()
         self.betaChannelEnabled = appUpdateManager.isBetaChannelEnabled
+        SharedImageCache.startMaintenance()
         messageSyncObserver = DarwinNotificationObserver(name: AppConstants.messageSyncNotificationName) { [weak self] in
             guard let self else { return }
             Task { @MainActor in

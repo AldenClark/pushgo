@@ -200,6 +200,7 @@ final class AppEnvironment {
         self.dataStore = dataStore
         self.pushRegistrationService = pushRegistrationService ?? PushRegistrationService.shared
         self.localizationManager = localizationManager ?? LocalizationManager.shared
+        SharedImageCache.startMaintenance()
         messageSyncObserver = DarwinNotificationObserver(name: AppConstants.messageSyncNotificationName) { [weak self] in
             guard let self else { return }
             Task { @MainActor in
