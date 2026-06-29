@@ -340,6 +340,7 @@ enum SharedImageCache {
     private static let metadataSnapshots = MetadataSnapshotCache()
     private static let defaultCacheTTLMillis: Int64 = 7 * 24 * 60 * 60 * 1000
     private static let maxCacheTTLMillis: Int64 = 30 * 24 * 60 * 60 * 1000
+    private static let minimumRenderTTLMillis: Int64 = 10 * 60 * 1000
     private static let maintenanceIntervalNanoseconds: UInt64 = 6 * 60 * 60 * 1_000_000_000
     private static let maintenanceState = MaintenanceState()
 
@@ -725,18 +726,18 @@ enum SharedImageCache {
             if hasCacheControlDirective(cacheControl, directive: "no-store")
                 || hasCacheControlDirective(cacheControl, directive: "no-cache")
             {
-                return now
+                return now + minimumRenderTTLMillis
             }
             if let maxAge = cacheControlMaxAge(cacheControl) {
                 let ttl = min(Int64(maxAge) * 1000, maxCacheTTLMillis)
-                return now + max(0, ttl)
+                return now + max(minimumRenderTTLMillis, ttl)
             }
         }
         if let expires = headerValue("Expires", in: http.allHeaderFields),
            let expiresDate = httpDateFormatter.date(from: expires)
         {
             let expiresAt = Int64(expiresDate.timeIntervalSince1970 * 1000)
-            return min(max(expiresAt, now), now + maxCacheTTLMillis)
+            return min(max(expiresAt, now + minimumRenderTTLMillis), now + maxCacheTTLMillis)
         }
         return now + defaultCacheTTLMillis
     }
