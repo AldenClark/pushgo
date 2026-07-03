@@ -143,6 +143,19 @@ struct ThingListScreen: View {
                     }
                     .id(thing.id)
                     .accessibilityIdentifier("thing.row.\(thing.id)")
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(Text(PushGoSystemSummaryBuilder.summary(for: thing).accessibilityLabel))
+                    .accessibilityValue(Text(PushGoSystemSummaryBuilder.summary(for: thing).accessibilityValue ?? ""))
+                    .accessibilityAction(named: Text(localizationManager.localized("open_link"))) {
+                        selectThing(thing)
+                    }
+                    .accessibilityAction(named: Text(localizationManager.localized("copy_content"))) {
+                        PushGoSystemInteraction.copyTextToPasteboard(thing.id)
+                        environment.showToast(message: localizationManager.localized("copied"), style: .success, duration: 1.6)
+                    }
+                    .accessibilityAction(named: Text(localizationManager.localized("delete"))) {
+                        Task { await scheduleDeletion(for: [thing]) }
+                    }
                     .tag(thing.id)
                     .listRowInsets(EdgeInsets(
                         top: EntityVisualTokens.listRowInsetVertical,

@@ -311,19 +311,9 @@ final class AppEnvironment {
     }
 
     private func registerDefaultNotificationCategories() {
-        let category = UNNotificationCategory(
-            identifier: AppConstants.notificationDefaultCategoryIdentifier,
-            actions: [],
-            intentIdentifiers: [],
-            options: []
+        UNUserNotificationCenter.current().setNotificationCategories(
+            PushGoNotificationActionPolicy.categories()
         )
-        let entityReminderCategory = UNNotificationCategory(
-            identifier: AppConstants.notificationEntityReminderCategoryIdentifier,
-            actions: [],
-            intentIdentifiers: [],
-            options: []
-        )
-        UNUserNotificationCenter.current().setNotificationCategories([category, entityReminderCategory])
     }
 
     func updateServerConfig(_ config: ServerConfig?) async throws {
@@ -1312,6 +1302,16 @@ final class AppEnvironment {
     func handleNotificationOpen(entityType: String, entityId: String) async {
         await notificationOpenController.handleNotificationOpen(entityType: entityType, entityId: entityId)
     }
+
+    func openSystemTarget(_ target: PushGoSystemOpenTarget) async {
+        await notificationOpenController.openSystemTarget(target)
+    }
+
+    func openDeepLink(_ url: URL) async {
+        guard let target = PushGoDeepLink.parse(url) else { return }
+        await openSystemTarget(target)
+    }
+
     func handleNotificationOpenFromCopy(notificationRequestId: String) async {
         await handleNotificationOpen(notificationRequestId: notificationRequestId)
     }

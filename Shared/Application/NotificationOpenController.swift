@@ -62,6 +62,41 @@ final class NotificationOpenController {
         )
     }
 
+    func openSystemTarget(_ target: PushGoSystemOpenTarget) async {
+        switch target.kind {
+        case .message:
+            if let localMessageID = target.localMessageID {
+                await handleNotificationOpenInternal(
+                    localMessageID: localMessageID,
+                    markAsReadInStore: false,
+                    removeFromNotificationCenter: false
+                )
+                return
+            }
+            if let uuid = UUID(uuidString: target.identifier) {
+                await handleNotificationOpenInternal(
+                    localMessageID: uuid,
+                    markAsReadInStore: false,
+                    removeFromNotificationCenter: false
+                )
+                return
+            }
+            await handleNotificationOpenInternal(
+                messageId: target.identifier,
+                markAsReadInStore: false,
+                removeFromNotificationCenter: false
+            )
+        case .event:
+            await handleEntityOpenTarget(
+                EntityOpenTarget(entityType: "event", entityId: target.identifier)
+            )
+        case .thing:
+            await handleEntityOpenTarget(
+                EntityOpenTarget(entityType: "thing", entityId: target.identifier)
+            )
+        }
+    }
+
     private func handleNotificationOpenInternal(
         notificationRequestId: String,
         markAsReadInStore: Bool,
@@ -108,6 +143,34 @@ final class NotificationOpenController {
                 await handleEntityOpenTarget(entityTarget)
                 return
             }
+        } catch {
+            let wrapped = AppError.wrap(
+                error,
+                fallbackMessage: localizationManager.localized("operation_failed"),
+                code: "message_load_failed"
+            )
+            showToast(wrapped.errorDescription ?? localizationManager.localized("operation_failed"))
+        }
+    }
+
+    private func handleNotificationOpenInternal(
+        localMessageID: UUID,
+        markAsReadInStore: Bool,
+        removeFromNotificationCenter: Bool
+    ) async {
+        do {
+            if let target = try await dataStore.loadMessage(id: localMessageID) {
+                await handleNotificationOpenTarget(
+                    target,
+                    markAsReadInStore: markAsReadInStore,
+                    removeFromNotificationCenter: removeFromNotificationCenter
+                )
+                return
+            }
+            autoEnableDataPage("message")
+            pendingEventToOpen = nil
+            pendingThingToOpen = nil
+            pendingMessageToOpen = localMessageID
         } catch {
             let wrapped = AppError.wrap(
                 error,

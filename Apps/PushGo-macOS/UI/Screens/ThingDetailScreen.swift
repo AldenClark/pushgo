@@ -20,6 +20,18 @@ struct ThingDetailScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityIdentifier("screen.things.detail")
+        .userActivity(
+            PushGoUserActivityBuilder.thingActivityType,
+            isActive: thing != nil
+        ) { activity in
+            guard let thing else { return }
+            let settings = SystemIntegrationSettings.loadSharedDefaults()
+            PushGoUserActivityBuilder.configure(
+                activity,
+                for: PushGoSystemSummaryBuilder.summary(for: thing, settings: settings),
+                systemSearchEnabled: settings.systemSearchEnabled
+            )
+        }
     }
 }
 
@@ -156,9 +168,14 @@ private struct ThingDetailPanel: View {
     }
 
     var body: some View {
+        let systemSummary = PushGoSystemSummaryBuilder.summary(for: thing)
         ScrollView {
             VStack(alignment: .leading, spacing: EntityVisualTokens.detailSectionSpacing) {
                 basicInfoSection
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(Text(systemSummary.accessibilityLabel))
+                    .accessibilityValue(Text(systemSummary.accessibilityValue ?? ""))
+                    .accessibilityAddTraits(.isHeader)
 
                 if !thing.tags.isEmpty {
                     ThingTagChipRow(tags: thing.tags)

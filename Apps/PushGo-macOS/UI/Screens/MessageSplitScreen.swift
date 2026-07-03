@@ -97,7 +97,25 @@ struct MessageSplitScreen: View {
                 isShowingSearchResults: searchViewModel.hasSearched,
                 selection: $selection,
                 batchSelection: $batchSelection,
-                isBatchMode: $isBatchMode
+                isBatchMode: $isBatchMode,
+                onOpenMessage: { message in
+                    selection = message.id
+                },
+                onCopyMessageIdentifier: { message in
+                    PushGoSystemInteraction.copyTextToPasteboard(message.messageId ?? message.id.uuidString)
+                    environment.showToast(
+                        message: localizationManager.localized("copied"),
+                        style: .success,
+                        duration: 1.6
+                    )
+                },
+                onMarkMessageRead: { message in
+                    guard !message.isRead else { return }
+                    Task { await messageListViewModel.markRead(message, isRead: true) }
+                },
+                onDeleteMessage: { message in
+                    Task { await scheduleDeletion(for: [message]) }
+                }
             )
             .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
             .refreshable {

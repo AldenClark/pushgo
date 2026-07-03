@@ -19,6 +19,18 @@ struct EventDetailScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityIdentifier("screen.events.detail")
+        .userActivity(
+            PushGoUserActivityBuilder.eventActivityType,
+            isActive: event != nil
+        ) { activity in
+            guard let event else { return }
+            let settings = SystemIntegrationSettings.loadSharedDefaults()
+            PushGoUserActivityBuilder.configure(
+                activity,
+                for: PushGoSystemSummaryBuilder.summary(for: event, settings: settings),
+                systemSearchEnabled: settings.systemSearchEnabled
+            )
+        }
     }
 }
 
@@ -66,6 +78,7 @@ private struct EventDetailPanel: View {
     }
 
     var body: some View {
+        let systemSummary = PushGoSystemSummaryBuilder.summary(for: event)
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 10) {
@@ -149,6 +162,10 @@ private struct EventDetailPanel: View {
                         }
                     }
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(Text(systemSummary.accessibilityLabel))
+                .accessibilityValue(Text(systemSummary.accessibilityValue ?? ""))
+                .accessibilityAddTraits(.isHeader)
 
                 if orderedTimeline.isEmpty {
                     EntityEmptyView(

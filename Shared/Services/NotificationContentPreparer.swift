@@ -202,7 +202,7 @@ final class NotificationContentPreparer {
         }
 
         let sound = resolvedSound(for: level, isCritical: profile.isCritical)
-        content.interruptionLevel = interruptionLevel(for: level, sound: sound)
+        applyPresentationPolicy(to: content, level: level, fallbackSound: sound)
 
         if let sound {
             if sound.usesSystemDefault {
@@ -318,6 +318,28 @@ final class NotificationContentPreparer {
         default:
             return .active
         }
+    }
+
+    private func applyPresentationPolicy(
+        to content: UNMutableNotificationContent,
+        level: String,
+        fallbackSound: NotificationSoundResolution?
+    ) {
+        let settings = SystemIntegrationSettings.loadSharedDefaults()
+        let policy = PushGoNotificationActionPolicy.presentationPolicy(
+            severity: level,
+            settings: settings
+        )
+        let fallbackLevel = interruptionLevel(for: level, sound: fallbackSound)
+        let policyLevel = PushGoNotificationActionPolicy.interruptionLevel(
+            for: policy.interruptionLevel
+        )
+        if fallbackLevel == .critical {
+            content.interruptionLevel = settings.timeSensitiveAlertsEnabled ? fallbackLevel : .active
+        } else {
+            content.interruptionLevel = policyLevel
+        }
+        content.relevanceScore = policy.relevanceScore
     }
 
     private func resolvedSound(for level: String, isCritical: Bool) -> NotificationSoundResolution? {

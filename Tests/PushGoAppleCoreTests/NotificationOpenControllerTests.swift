@@ -85,6 +85,71 @@ struct NotificationOpenControllerTests {
             #expect(opened.2 == nil)
         }
     }
+
+    @Test
+    func openingSystemMessageTargetUsesLocalMessageID() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let message = makeStoredMessage(
+                messageId: "msg-system-001",
+                notificationRequestId: "req-system-001"
+            )
+            try await store.saveMessage(message)
+
+            let openedId = await Task { @MainActor in
+                let controller = NotificationOpenController(
+                    dataStore: store,
+                    localizationManager: LocalizationManager(),
+                    messageStateCoordinatorProvider: { nil },
+                    refreshCountsAndNotify: {},
+                    removeDeliveredNotificationIfNeeded: { _ in },
+                    autoEnableDataPage: { _ in },
+                    showToast: { _ in }
+                )
+                let target = PushGoSystemOpenTarget(
+                    kind: .message,
+                    identifier: message.id.uuidString,
+                    source: .deepLink
+                )
+                await controller.openSystemTarget(target!)
+                return controller.pendingMessageToOpen
+            }.value
+
+            #expect(openedId == message.id)
+        }
+    }
+
+    @Test
+    func openingSystemEntityTargetsRouteThroughPendingEntities() async {
+        await withIsolatedLocalDataStore { store, _ in
+            let opened = await Task { @MainActor in
+                let controller = NotificationOpenController(
+                    dataStore: store,
+                    localizationManager: LocalizationManager(),
+                    messageStateCoordinatorProvider: { nil },
+                    refreshCountsAndNotify: {},
+                    removeDeliveredNotificationIfNeeded: { _ in },
+                    autoEnableDataPage: { _ in },
+                    showToast: { _ in }
+                )
+                await controller.openSystemTarget(
+                    PushGoSystemOpenTarget(kind: .event, identifier: "evt-system-001", source: .deepLink)!
+                )
+                let eventTarget = controller.pendingEventToOpen
+                await controller.openSystemTarget(
+                    PushGoSystemOpenTarget(kind: .thing, identifier: "thing-system-001", source: .spotlight)!
+                )
+                return (
+                    eventTarget,
+                    controller.pendingEventToOpen,
+                    controller.pendingThingToOpen
+                )
+            }.value
+
+            #expect(opened.0 == "evt-system-001")
+            #expect(opened.1 == nil)
+            #expect(opened.2 == "thing-system-001")
+        }
+    }
 }
 
 private func makeStoredMessage(

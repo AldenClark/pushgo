@@ -14,6 +14,10 @@ struct MessageListScreen: View {
     @Binding var batchSelection: Set<UUID>
     @Binding var isBatchMode: Bool
     @State private var pendingScrollTarget: UUID?
+    var onOpenMessage: ((PushMessageSummary) -> Void)? = nil
+    var onCopyMessageIdentifier: ((PushMessageSummary) -> Void)? = nil
+    var onMarkMessageRead: ((PushMessageSummary) -> Void)? = nil
+    var onDeleteMessage: ((PushMessageSummary) -> Void)? = nil
 
     private enum Layout {
         static let rowInsets = EdgeInsets(
@@ -78,7 +82,7 @@ struct MessageListScreen: View {
             List {
                 ForEach(messages) { message in
                     Button {
-                        selection = message.id
+                        openMessage(message)
                     } label: {
                         MessageRowView(message: message)
                             .id(message.rowLayoutKey)
@@ -86,6 +90,7 @@ struct MessageListScreen: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("message.row.\(message.id.uuidString)")
+                    .modifier(messageAccessibilityActions(for: message))
                     .id(message.id)
                     .listRowInsets(Layout.rowInsets)
                     .alignmentGuide(.listRowSeparatorLeading) { dimensions in
@@ -154,7 +159,7 @@ struct MessageListScreen: View {
                     Section {
                         ForEach(searchResults) { message in
                             Button {
-                                selection = message.id
+                                openMessage(message)
                             } label: {
                                 MessageRowView(message: message)
                                     .id(message.rowLayoutKey)
@@ -162,6 +167,7 @@ struct MessageListScreen: View {
                             }
                             .buttonStyle(.plain)
                             .accessibilityIdentifier("message.row.\(message.id.uuidString)")
+                            .modifier(messageAccessibilityActions(for: message))
                             .id(message.id)
                             .listRowInsets(Layout.rowInsets)
                             .alignmentGuide(.listRowSeparatorLeading) { dimensions in
@@ -257,6 +263,28 @@ struct MessageListScreen: View {
         }
     }
 
+    private func openMessage(_ message: PushMessageSummary) {
+        if let onOpenMessage {
+            onOpenMessage(message)
+        } else {
+            selection = message.id
+        }
+    }
+
+    private func messageAccessibilityActions(for message: PushMessageSummary) -> some ViewModifier {
+        MessageListRowAccessibilityActions(
+            message: message,
+            openLabel: localizationManager.localized("open_link"),
+            copyLabel: localizationManager.localized("copy_content"),
+            markReadLabel: localizationManager.localized("mark_as_read"),
+            deleteLabel: localizationManager.localized("delete"),
+            onOpen: { openMessage($0) },
+            onCopy: onCopyMessageIdentifier,
+            onMarkRead: onMarkMessageRead,
+            onDelete: onDeleteMessage
+        )
+    }
+
     private var emptyState: some View {
         Group {
             if showsUnreadFilterEmptyState {
@@ -298,4 +326,33 @@ struct MessageListScreen: View {
         pendingScrollTarget = nil
     }
 
+}
+
+private struct MessageListRowAccessibilityActions: ViewModifier {
+    let message: PushMessageSummary
+    let openLabel: String
+    let copyLabel: String
+    let markReadLabel: String
+    let deleteLabel: String
+    let onOpen: (PushMessageSummary) -> Void
+    let onCopy: ((PushMessageSummary) -> Void)?
+    let onMarkRead: ((PushMessageSummary) -> Void)?
+    let onDelete: ((PushMessageSummary) -> Void)?
+
+    func body(content: Content) -> some View {
+        content
+            .accessibilityAction(named: Text(openLabel)) {
+                onOpen(message)
+            }
+            .accessibilityAction(named: Text(copyLabel)) {
+                onCopy?(message)
+            }
+            .accessibilityAction(named: Text(markReadLabel)) {
+                guard !message.isRead else { return }
+                onMarkRead?(message)
+            }
+            .accessibilityAction(named: Text(deleteLabel)) {
+                onDelete?(message)
+            }
+    }
 }

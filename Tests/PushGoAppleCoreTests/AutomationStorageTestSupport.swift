@@ -58,10 +58,14 @@ func withIsolatedAutomationStorage<T: Sendable>(
 }
 
 func withIsolatedLocalDataStore<T: Sendable>(
+    spotlightIndexer: PushGoSpotlightIndexing? = CoreSpotlightPushGoIndexer(),
     _ body: @Sendable (LocalDataStore, String) async throws -> T
 ) async rethrows -> T {
     try await withIsolatedAutomationStorage { _, appGroupIdentifier in
-        let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+        let store = LocalDataStore(
+            appGroupIdentifier: appGroupIdentifier,
+            spotlightIndexer: spotlightIndexer
+        )
         return try await body(store, appGroupIdentifier)
     }
 }

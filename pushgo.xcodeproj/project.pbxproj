@@ -177,6 +177,56 @@
 		C9F7E726998368ADAA5295EA /* ServerConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1F2EF2359D00AD1834 /* ServerConfig.swift */; };
 		CAE45C474E77474FBD0A94AE /* RemoteImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2955959BFE8246FEB0B03EDA /* RemoteImageView.swift */; };
 		CEAF7737211A4518B56C2730 /* MessageListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5F7201AE9644B8F9A6A4BD8 /* MessageListViewModel.swift */; };
+		F0BB00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift */; };
+		F0CC00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift */; };
+		F0BB00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift */; };
+		F0CC00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift */; };
+		F0BB00000000000000000003 /* Shared/SystemIntegration/PushGoAppEntities.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000003 /* Shared/SystemIntegration/PushGoAppEntities.swift */; };
+		F0CC00000000000000000003 /* Shared/SystemIntegration/PushGoAppEntities.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000003 /* Shared/SystemIntegration/PushGoAppEntities.swift */; };
+		F0BB00000000000000000004 /* Shared/SystemIntegration/PushGoAppEntityQueries.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000004 /* Shared/SystemIntegration/PushGoAppEntityQueries.swift */; };
+		F0CC00000000000000000004 /* Shared/SystemIntegration/PushGoAppEntityQueries.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000004 /* Shared/SystemIntegration/PushGoAppEntityQueries.swift */; };
+		F0BB00000000000000000005 /* Shared/SystemIntegration/PushGoAppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000005 /* Shared/SystemIntegration/PushGoAppIntents.swift */; };
+		F0CC00000000000000000005 /* Shared/SystemIntegration/PushGoAppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000005 /* Shared/SystemIntegration/PushGoAppIntents.swift */; };
+		F0BB00000000000000000006 /* Shared/SystemIntegration/PushGoAppShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000006 /* Shared/SystemIntegration/PushGoAppShortcuts.swift */; };
+		F0CC00000000000000000006 /* Shared/SystemIntegration/PushGoAppShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000006 /* Shared/SystemIntegration/PushGoAppShortcuts.swift */; };
+		F0BB00000000000000000007 /* Shared/SystemIntegration/PushGoDeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000007 /* Shared/SystemIntegration/PushGoDeepLink.swift */; };
+		F0CC00000000000000000007 /* Shared/SystemIntegration/PushGoDeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000007 /* Shared/SystemIntegration/PushGoDeepLink.swift */; };
+		F0BB00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift */; };
+		F0CC00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift */; };
+		F0BB00000000000000000009 /* Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000009 /* Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift */; };
+		F0CC00000000000000000009 /* Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000009 /* Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift */; };
+		F0BB0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift */; };
+		F0CC0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift */; };
+		F0BB0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift */; };
+		F0CC0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift */; };
+		F0BB0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift */; };
+		F0CC0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift */; };
+		F0BB0000000000000000000D /* Shared/SystemIntegration/PushGoSystemIntentRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000D /* Shared/SystemIntegration/PushGoSystemIntentRouter.swift */; };
+		F0CC0000000000000000000D /* Shared/SystemIntegration/PushGoSystemIntentRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000D /* Shared/SystemIntegration/PushGoSystemIntentRouter.swift */; };
+		F0BB0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift */; };
+		F0CC0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift */; };
+		F0BB0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift */; };
+		F0CC0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift */; };
+		F0BB00000000000000000010 /* Shared/SystemIntegration/PushGoSystemRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000010 /* Shared/SystemIntegration/PushGoSystemRouter.swift */; };
+		F0CC00000000000000000010 /* Shared/SystemIntegration/PushGoSystemRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000010 /* Shared/SystemIntegration/PushGoSystemRouter.swift */; };
+		F0BB00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift */; };
+		F0CC00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift */; };
+		F0BB00000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift */; };
+		F0CC00000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift */; };
+		F0BB00000000000000000013 /* Shared/SystemIntegration/PushGoUserActivityBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000013 /* Shared/SystemIntegration/PushGoUserActivityBuilder.swift */; };
+		F0CC00000000000000000013 /* Shared/SystemIntegration/PushGoUserActivityBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000013 /* Shared/SystemIntegration/PushGoUserActivityBuilder.swift */; };
+		F0BB00000000000000000014 /* Shared/UI/SystemIntegrationSettingsGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000014 /* Shared/UI/SystemIntegrationSettingsGroup.swift */; };
+		F0CC00000000000000000014 /* Shared/UI/SystemIntegrationSettingsGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000014 /* Shared/UI/SystemIntegrationSettingsGroup.swift */; };
+		F0BB00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift */; };
+		F0CC00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift */; };
+		F0DD00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift */; };
+		F0DD00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift */; };
+		F0EE00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift */; };
+		F0EE00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift */; };
+		F0FF00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift */; };
+		F0FF00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift */; };
+		F0A000000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift */; };
+		F0A000000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift */; };
 		D1B100000000000000000001 /* Shared/Application/AppNavigationState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000001 /* Shared/Application/AppNavigationState.swift */; };
 		D1B100000000000000000002 /* Shared/Application/DataPageVisibilityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000002 /* Shared/Application/DataPageVisibilityController.swift */; };
 		D1B100000000000000000003 /* Shared/Application/LocalStoreRecoveryController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000003 /* Shared/Application/LocalStoreRecoveryController.swift */; };
@@ -446,6 +496,27 @@
 		C1D2E3F40102030405060703 /* SearchQuerySemantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchQuerySemantics.swift; sourceTree = "<group>"; };
 		C1D2E3F40102030405060704 /* ProjectionSemantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectionSemantics.swift; sourceTree = "<group>"; };
 		C1D2E3F40102030405060705 /* PushRegistrationSemantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushRegistrationSemantics.swift; sourceTree = "<group>"; };
+		F0AA00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Models/SystemIntegrationSettings.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000003 /* Shared/SystemIntegration/PushGoAppEntities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoAppEntities.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000004 /* Shared/SystemIntegration/PushGoAppEntityQueries.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoAppEntityQueries.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000005 /* Shared/SystemIntegration/PushGoAppIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoAppIntents.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000006 /* Shared/SystemIntegration/PushGoAppShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoAppShortcuts.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000007 /* Shared/SystemIntegration/PushGoDeepLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoDeepLink.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoNotificationActionPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000009 /* Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift; sourceTree = SOURCE_ROOT; };
+		F0AA0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSpotlightIdentifier.swift; sourceTree = SOURCE_ROOT; };
+		F0AA0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSpotlightIndexer.swift; sourceTree = SOURCE_ROOT; };
+		F0AA0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemEntityKind.swift; sourceTree = SOURCE_ROOT; };
+		F0AA0000000000000000000D /* Shared/SystemIntegration/PushGoSystemIntentRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemIntentRouter.swift; sourceTree = SOURCE_ROOT; };
+		F0AA0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemOpenTarget.swift; sourceTree = SOURCE_ROOT; };
+		F0AA0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000010 /* Shared/SystemIntegration/PushGoSystemRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemRouter.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemSummary.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000013 /* Shared/SystemIntegration/PushGoUserActivityBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoUserActivityBuilder.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000014 /* Shared/UI/SystemIntegrationSettingsGroup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/UI/SystemIntegrationSettingsGroup.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift; sourceTree = SOURCE_ROOT; };
 		D1A100000000000000000001 /* Shared/Application/AppNavigationState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Application/AppNavigationState.swift; sourceTree = SOURCE_ROOT; };
 		D1A100000000000000000002 /* Shared/Application/DataPageVisibilityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Application/DataPageVisibilityController.swift; sourceTree = SOURCE_ROOT; };
 		D1A100000000000000000003 /* Shared/Application/LocalStoreRecoveryController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Application/LocalStoreRecoveryController.swift; sourceTree = SOURCE_ROOT; };
@@ -912,6 +983,27 @@
 		AA8E2C4D2EF2359D00AD1834 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				F0AA00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift */,
+				F0AA00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift */,
+				F0AA00000000000000000003 /* Shared/SystemIntegration/PushGoAppEntities.swift */,
+				F0AA00000000000000000004 /* Shared/SystemIntegration/PushGoAppEntityQueries.swift */,
+				F0AA00000000000000000005 /* Shared/SystemIntegration/PushGoAppIntents.swift */,
+				F0AA00000000000000000006 /* Shared/SystemIntegration/PushGoAppShortcuts.swift */,
+				F0AA00000000000000000007 /* Shared/SystemIntegration/PushGoDeepLink.swift */,
+				F0AA00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift */,
+				F0AA00000000000000000009 /* Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift */,
+				F0AA0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift */,
+				F0AA0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift */,
+				F0AA0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift */,
+				F0AA0000000000000000000D /* Shared/SystemIntegration/PushGoSystemIntentRouter.swift */,
+				F0AA0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift */,
+				F0AA0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift */,
+				F0AA00000000000000000010 /* Shared/SystemIntegration/PushGoSystemRouter.swift */,
+				F0AA00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift */,
+				F0AA00000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift */,
+				F0AA00000000000000000013 /* Shared/SystemIntegration/PushGoUserActivityBuilder.swift */,
+				F0AA00000000000000000014 /* Shared/UI/SystemIntegrationSettingsGroup.swift */,
+				F0AA00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift */,
 				D1A200000000000000000001 /* Application */,
 				AA8E2C202EF2359D00AD1834 /* Models */,
 				AA8E2C232EF2359D00AD1834 /* Repositories */,
@@ -1321,6 +1413,8 @@
 				D2F100000000000000000001 /* NotificationSoundSettings.swift in Sources */,
 				D2F100000000000000000002 /* NotificationSoundResolver.swift in Sources */,
 				D2F100000000000000000003 /* NotificationSoundSharedState.swift in Sources */,
+				F0DD00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */,
+				F0DD00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */,
 				F1B2C3D4E5F60718293A4B65 /* NotificationIngressInbox.swift in Sources */,
 				F4B2C3D4E5F60718293A4B65 /* ProviderDeliveryAckFailureStore.swift in Sources */,
 				0AC200012F90000100C0FFEE /* WatchNotificationServiceProcessor.swift in Sources */,
@@ -1358,6 +1452,27 @@
 				D1B100000000000000000012 /* Shared/Application/ChannelSubscriptionController.swift in Sources */,
 				D1B100000000000000000013 /* Shared/Application/NotificationIngressController.swift in Sources */,
 				D1B100000000000000000008 /* Shared/UI/PendingLocalDeletionBar.swift in Sources */,
+				F0BB00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */,
+				F0BB00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift in Sources */,
+				F0BB00000000000000000003 /* Shared/SystemIntegration/PushGoAppEntities.swift in Sources */,
+				F0BB00000000000000000004 /* Shared/SystemIntegration/PushGoAppEntityQueries.swift in Sources */,
+				F0BB00000000000000000005 /* Shared/SystemIntegration/PushGoAppIntents.swift in Sources */,
+				F0BB00000000000000000006 /* Shared/SystemIntegration/PushGoAppShortcuts.swift in Sources */,
+				F0BB00000000000000000007 /* Shared/SystemIntegration/PushGoDeepLink.swift in Sources */,
+				F0BB00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */,
+				F0BB00000000000000000009 /* Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift in Sources */,
+				F0BB0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift in Sources */,
+				F0BB0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift in Sources */,
+				F0BB0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift in Sources */,
+				F0BB0000000000000000000D /* Shared/SystemIntegration/PushGoSystemIntentRouter.swift in Sources */,
+				F0BB0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift in Sources */,
+				F0BB0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift in Sources */,
+				F0BB00000000000000000010 /* Shared/SystemIntegration/PushGoSystemRouter.swift in Sources */,
+				F0BB00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift in Sources */,
+				F0BB00000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift in Sources */,
+				F0BB00000000000000000013 /* Shared/SystemIntegration/PushGoUserActivityBuilder.swift in Sources */,
+				F0BB00000000000000000014 /* Shared/UI/SystemIntegrationSettingsGroup.swift in Sources */,
+				F0BB00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift in Sources */,
 				F1B2C3D4E5F60718293A4B61 /* NotificationIngressInbox.swift in Sources */,
 				F4B2C3D4E5F60718293A4B61 /* ProviderDeliveryAckFailureStore.swift in Sources */,
 				F6B2C3D4E5F60718293A4B61 /* ProviderIngressCoordinator.swift in Sources */,
@@ -1436,6 +1551,27 @@
 				D1C100000000000000000012 /* Shared/Application/ChannelSubscriptionController.swift in Sources */,
 				D1C100000000000000000013 /* Shared/Application/NotificationIngressController.swift in Sources */,
 				D1C100000000000000000008 /* Shared/UI/PendingLocalDeletionBar.swift in Sources */,
+				F0CC00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */,
+				F0CC00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift in Sources */,
+				F0CC00000000000000000003 /* Shared/SystemIntegration/PushGoAppEntities.swift in Sources */,
+				F0CC00000000000000000004 /* Shared/SystemIntegration/PushGoAppEntityQueries.swift in Sources */,
+				F0CC00000000000000000005 /* Shared/SystemIntegration/PushGoAppIntents.swift in Sources */,
+				F0CC00000000000000000006 /* Shared/SystemIntegration/PushGoAppShortcuts.swift in Sources */,
+				F0CC00000000000000000007 /* Shared/SystemIntegration/PushGoDeepLink.swift in Sources */,
+				F0CC00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */,
+				F0CC00000000000000000009 /* Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift in Sources */,
+				F0CC0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift in Sources */,
+				F0CC0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift in Sources */,
+				F0CC0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift in Sources */,
+				F0CC0000000000000000000D /* Shared/SystemIntegration/PushGoSystemIntentRouter.swift in Sources */,
+				F0CC0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift in Sources */,
+				F0CC0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift in Sources */,
+				F0CC00000000000000000010 /* Shared/SystemIntegration/PushGoSystemRouter.swift in Sources */,
+				F0CC00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift in Sources */,
+				F0CC00000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift in Sources */,
+				F0CC00000000000000000013 /* Shared/SystemIntegration/PushGoUserActivityBuilder.swift in Sources */,
+				F0CC00000000000000000014 /* Shared/UI/SystemIntegrationSettingsGroup.swift in Sources */,
+				F0CC00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift in Sources */,
 				F1B2C3D4E5F60718293A4B62 /* NotificationIngressInbox.swift in Sources */,
 				F4B2C3D4E5F60718293A4B62 /* ProviderDeliveryAckFailureStore.swift in Sources */,
 				F6B2C3D4E5F60718293A4B62 /* ProviderIngressCoordinator.swift in Sources */,
@@ -1502,6 +1638,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				F1B2C3D4E5F60718293A4B63 /* NotificationIngressInbox.swift in Sources */,
+				F0EE00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */,
+				F0EE00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */,
 				F4B2C3D4E5F60718293A4B63 /* ProviderDeliveryAckFailureStore.swift in Sources */,
 				0637F07C839C0C2D397AB069 /* NotificationServiceProcessor.swift in Sources */,
 				0AC200042F90000100C0FFEE /* NotificationContentPreparer.swift in Sources */,
@@ -1538,6 +1676,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				F1B2C3D4E5F60718293A4B64 /* NotificationIngressInbox.swift in Sources */,
+				F0FF00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */,
+				F0FF00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */,
 				F4B2C3D4E5F60718293A4B64 /* ProviderDeliveryAckFailureStore.swift in Sources */,
 				54A6F2A3A28360343812D0B3 /* NotificationServiceProcessor.swift in Sources */,
 				0AC200052F90000100C0FFEE /* NotificationContentPreparer.swift in Sources */,
@@ -1574,6 +1714,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				F1B2C3D4E5F60718293A4B66 /* NotificationIngressInbox.swift in Sources */,
+				F0A000000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */,
+				F0A000000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */,
 				F4B2C3D4E5F60718293A4B66 /* ProviderDeliveryAckFailureStore.swift in Sources */,
 				F6B2C3D4E5F60718293A4B66 /* ProviderIngressCoordinator.swift in Sources */,
 				F3B4C5D6E7F80910A1B2C3D4 /* NotificationHandling.swift in Sources */,

@@ -377,6 +377,23 @@ struct MessageListScreen: View {
             }
         }
         .accessibilityIdentifier("message.row.\(message.id.uuidString)")
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text(PushGoMessageSummarySystemBridge.summary(for: message).accessibilityLabel))
+        .accessibilityValue(Text(PushGoMessageSummarySystemBridge.summary(for: message).accessibilityValue ?? ""))
+        .accessibilityAction(named: Text(localizationManager.localized("open_link"))) {
+            handleSelect(message)
+        }
+        .accessibilityAction(named: Text(localizationManager.localized("copy_content"))) {
+            PushGoSystemInteraction.copyTextToPasteboard(message.messageId ?? message.id.uuidString)
+            environment.showToast(message: localizationManager.localized("copied"), style: .success, duration: 1.6)
+        }
+        .accessibilityAction(named: Text(localizationManager.localized("mark_as_read"))) {
+            guard !message.isRead else { return }
+            Task { await viewModel.markRead(message, isRead: true) }
+        }
+        .accessibilityAction(named: Text(localizationManager.localized("delete"))) {
+            Task { await scheduleDeletion(for: [message]) }
+        }
         .listRowInsets(EdgeInsets(
             top: EntityVisualTokens.listRowInsetVertical,
             leading: 0,

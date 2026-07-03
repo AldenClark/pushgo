@@ -115,6 +115,32 @@ final class PushGoAppDelegate: NSObject, UIApplicationDelegate, @preconcurrency 
                 }
                 completionHandler()
             }
+        case PushGoNotificationActionPolicy.markReadActionIdentifier:
+            Task {
+                await AppEnvironment.shared.persistNotificationIfNeeded(response.notification)
+                await markNotificationMessageRead(requestId: requestId, messageId: messageId)
+                completionHandler()
+            }
+        case PushGoNotificationActionPolicy.deleteMessageActionIdentifier:
+            Task {
+                await AppEnvironment.shared.persistNotificationIfNeeded(response.notification)
+                await deleteNotificationMessage(requestId: requestId, messageId: messageId)
+                completionHandler()
+            }
+        case PushGoNotificationActionPolicy.openEntityActionIdentifier,
+             PushGoNotificationActionPolicy.openRelatedEntityActionIdentifier:
+            Task {
+                await AppEnvironment.shared.persistNotificationIfNeeded(response.notification)
+                if let entityTarget {
+                    await AppEnvironment.shared.handleNotificationOpen(
+                        entityType: entityTarget.entityType,
+                        entityId: entityTarget.entityId
+                    )
+                } else {
+                    await AppEnvironment.shared.handleNotificationOpen(notificationRequestId: requestId)
+                }
+                completionHandler()
+            }
         case UNNotificationDefaultActionIdentifier:
             Task {
                 await AppEnvironment.shared.persistNotificationIfNeeded(response.notification)
@@ -134,6 +160,23 @@ final class PushGoAppDelegate: NSObject, UIApplicationDelegate, @preconcurrency 
             }
         default:
             completionHandler()
+        }
+    }
+
+    private func markNotificationMessageRead(requestId: String, messageId: String?) async {
+        do {
+            _ = try await AppEnvironment.shared.messageStateCoordinator
+                .markRead(notificationRequestId: requestId, messageId: messageId)
+        } catch {
+        }
+    }
+
+    private func deleteNotificationMessage(requestId: String, messageId: String?) async {
+        do {
+            try await AppEnvironment.shared.messageStateCoordinator
+                .deleteMessage(notificationRequestId: requestId, messageId: messageId)
+        } catch {
+            removeDeliveredNotification(requestId: requestId)
         }
     }
 

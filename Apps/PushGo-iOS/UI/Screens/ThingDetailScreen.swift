@@ -18,6 +18,14 @@ struct ThingDetailScreen: View {
         }
         .pushgoSheetSizing(.detail)
         .accessibilityIdentifier("screen.things.detail")
+        .userActivity(PushGoUserActivityBuilder.thingActivityType) { activity in
+            let settings = SystemIntegrationSettings.loadSharedDefaults()
+            PushGoUserActivityBuilder.configure(
+                activity,
+                for: PushGoSystemSummaryBuilder.summary(for: thing, settings: settings),
+                systemSearchEnabled: settings.systemSearchEnabled
+            )
+        }
     }
 
     @ToolbarContentBuilder
@@ -191,9 +199,14 @@ private struct ThingDetailPanel: View {
     }
 
     var body: some View {
+        let systemSummary = PushGoSystemSummaryBuilder.summary(for: thing)
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 basicInfoSection
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(Text(systemSummary.accessibilityLabel))
+                    .accessibilityValue(Text(systemSummary.accessibilityValue ?? ""))
+                    .accessibilityAddTraits(.isHeader)
 
                 if !thing.tags.isEmpty {
                     ThingTagChipRow(tags: thing.tags)
@@ -275,6 +288,7 @@ private struct ThingDetailPanel: View {
                                 )
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(Text("Image attachment for \(primaryImageURL.lastPathComponent)"))
                     } placeholder: {
                         EntityThumbnail(
                             url: nil,
@@ -490,6 +504,7 @@ private struct ThingAttachmentImageStrip: View {
                                 )
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(Text("Image attachment for \(url.lastPathComponent)"))
                     } placeholder: {
                         Rectangle()
                             .fill(EntityVisualTokens.secondarySurface)

@@ -16,6 +16,9 @@ struct EventListScreen: View {
     @Binding var isBatchMode: Bool
     var isLoadingMore: Bool = false
     var onReachEnd: (() -> Void)? = nil
+    var onOpenEvent: ((EventProjection) -> Void)? = nil
+    var onCopyEventIdentifier: ((EventProjection) -> Void)? = nil
+    var onDeleteEvent: ((EventProjection) -> Void)? = nil
 
     var body: some View {
         ZStack {
@@ -58,6 +61,7 @@ struct EventListScreen: View {
                 .buttonStyle(.plain)
                 .id(event.id)
                 .accessibilityIdentifier("event.row.\(event.id)")
+                .modifier(eventAccessibilityActions(for: event))
                 .listRowInsets(Layout.rowInsets)
                 .alignmentGuide(.listRowSeparatorLeading) { dimensions in
                     dimensions[.leading]
@@ -102,6 +106,7 @@ struct EventListScreen: View {
                 .buttonStyle(.plain)
                 .id(event.id)
                 .accessibilityIdentifier("event.row.\(event.id)")
+                .modifier(eventAccessibilityActions(for: event))
                 .listRowInsets(Layout.rowInsets)
                 .alignmentGuide(.listRowSeparatorLeading) { dimensions in
                     dimensions[.leading]
@@ -139,6 +144,47 @@ struct EventListScreen: View {
         } else {
             batchSelection.insert(eventId)
         }
+    }
+
+    private func eventAccessibilityActions(for event: EventProjection) -> some ViewModifier {
+        EventListRowAccessibilityActions(
+            event: event,
+            openLabel: LocalizationManager.localizedSync("open_link"),
+            copyLabel: LocalizationManager.localizedSync("copy_content"),
+            deleteLabel: LocalizationManager.localizedSync("delete"),
+            onOpen: { event in
+                if let onOpenEvent {
+                    onOpenEvent(event)
+                } else {
+                    selection = event.id
+                }
+            },
+            onCopy: onCopyEventIdentifier,
+            onDelete: onDeleteEvent
+        )
+    }
+}
+
+private struct EventListRowAccessibilityActions: ViewModifier {
+    let event: EventProjection
+    let openLabel: String
+    let copyLabel: String
+    let deleteLabel: String
+    let onOpen: (EventProjection) -> Void
+    let onCopy: ((EventProjection) -> Void)?
+    let onDelete: ((EventProjection) -> Void)?
+
+    func body(content: Content) -> some View {
+        content
+            .accessibilityAction(named: Text(openLabel)) {
+                onOpen(event)
+            }
+            .accessibilityAction(named: Text(copyLabel)) {
+                onCopy?(event)
+            }
+            .accessibilityAction(named: Text(deleteLabel)) {
+                onDelete?(event)
+            }
     }
 }
 
@@ -257,5 +303,8 @@ struct EventListRow: View {
             }
         }
         .padding(.vertical, EntityVisualTokens.rowVerticalPadding)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text(PushGoSystemSummaryBuilder.summary(for: event).accessibilityLabel))
+        .accessibilityValue(Text(PushGoSystemSummaryBuilder.summary(for: event).accessibilityValue ?? ""))
     }
 }

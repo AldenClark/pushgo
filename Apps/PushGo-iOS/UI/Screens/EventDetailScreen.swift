@@ -26,6 +26,14 @@ struct EventDetailScreen: View {
         }
         .pushgoSheetSizing(.detail)
         .accessibilityIdentifier("screen.events.detail")
+        .userActivity(PushGoUserActivityBuilder.eventActivityType) { activity in
+            let settings = SystemIntegrationSettings.loadSharedDefaults()
+            PushGoUserActivityBuilder.configure(
+                activity,
+                for: PushGoSystemSummaryBuilder.summary(for: event, settings: settings),
+                systemSearchEnabled: settings.systemSearchEnabled
+            )
+        }
         .alert(item: $activeConfirmation) { kind in
             switch kind {
             case .close:
@@ -143,6 +151,7 @@ private struct EventDetailPanel: View {
     }
 
     var body: some View {
+        let systemSummary = PushGoSystemSummaryBuilder.summary(for: event)
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 10) {
@@ -226,6 +235,10 @@ private struct EventDetailPanel: View {
                         }
                     }
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(Text(systemSummary.accessibilityLabel))
+                .accessibilityValue(Text(systemSummary.accessibilityValue ?? ""))
+                .accessibilityAddTraits(.isHeader)
 
                 if orderedTimeline.isEmpty {
                     EntityEmptyView(
@@ -242,7 +255,9 @@ private struct EventDetailPanel: View {
                             EventTimelineRow(
                                 point: point,
                                 isFirst: index == 0,
-                                isLast: index == orderedTimeline.count - 1
+                                isLast: index == orderedTimeline.count - 1,
+                                index: index + 1,
+                                totalCount: orderedTimeline.count
                             )
                         }
                     }
@@ -284,6 +299,7 @@ private struct EventAttachmentImageStrip: View {
                             .clipShape(RoundedRectangle(cornerRadius: EntityVisualTokens.radiusSmall, style: .continuous))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(Text("Image attachment for \(url.lastPathComponent)"))
                 } placeholder: {
                     Rectangle()
                         .fill(EntityVisualTokens.secondarySurface)
@@ -302,6 +318,8 @@ private struct EventTimelineRow: View {
     let point: EventTimelinePoint
     let isFirst: Bool
     let isLast: Bool
+    let index: Int
+    let totalCount: Int
 
     private var severity: EventSeverity? {
         normalizedEventSeverity(point.severity)
@@ -402,6 +420,25 @@ private struct EventTimelineRow: View {
             )
         }
         .padding(.bottom, isLast ? 0 : 10)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text(timelineAccessibilityLabel))
+    }
+
+    private var timelineAccessibilityLabel: String {
+        [
+            "Timeline item \(index) of \(totalCount)",
+            EntityDateFormatter.text(point.happenedAt),
+            point.displayTitle,
+            point.displaySummary,
+            point.status,
+            point.severity.map { "\($0) priority" },
+            point.thingId.map { "Object \($0)" },
+        ]
+        .compactMap { value in
+            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        .joined(separator: ". ")
     }
 }
 

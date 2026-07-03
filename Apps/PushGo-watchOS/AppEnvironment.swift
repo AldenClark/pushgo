@@ -187,19 +187,9 @@ final class AppEnvironment {
     }
 
     private func registerDefaultNotificationCategories() {
-        let category = UNNotificationCategory(
-            identifier: AppConstants.notificationDefaultCategoryIdentifier,
-            actions: [],
-            intentIdentifiers: [],
-            options: []
+        UNUserNotificationCenter.current().setNotificationCategories(
+            PushGoNotificationActionPolicy.categories()
         )
-        let entityReminderCategory = UNNotificationCategory(
-            identifier: AppConstants.notificationEntityReminderCategoryIdentifier,
-            actions: [],
-            intentIdentifiers: [],
-            options: []
-        )
-        UNUserNotificationCenter.current().setNotificationCategories([category, entityReminderCategory])
     }
 
     func updateServerConfig(_ config: ServerConfig?) async throws {

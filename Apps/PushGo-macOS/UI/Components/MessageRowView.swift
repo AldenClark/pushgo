@@ -76,6 +76,8 @@ struct MessageRowView: View {
         }
         .padding(.vertical, verticalPadding)
         .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text(PushGoMessageSummarySystemBridge.summary(for: message).accessibilityLabel))
+        .accessibilityValue(Text(PushGoMessageSummarySystemBridge.summary(for: message).accessibilityValue ?? ""))
     }
 
     private var messageImageRow: some View {

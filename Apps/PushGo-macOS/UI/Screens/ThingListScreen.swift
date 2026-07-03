@@ -16,6 +16,9 @@ struct ThingListScreen: View {
     @Binding var isBatchMode: Bool
     var isLoadingMore: Bool = false
     var onReachEnd: (() -> Void)? = nil
+    var onOpenThing: ((ThingProjection) -> Void)? = nil
+    var onCopyThingIdentifier: ((ThingProjection) -> Void)? = nil
+    var onDeleteThing: ((ThingProjection) -> Void)? = nil
 
     var body: some View {
         ZStack {
@@ -58,6 +61,7 @@ struct ThingListScreen: View {
                 .buttonStyle(.plain)
                 .id(thing.id)
                 .accessibilityIdentifier("thing.row.\(thing.id)")
+                .modifier(thingAccessibilityActions(for: thing))
                 .listRowInsets(Layout.rowInsets)
                 .alignmentGuide(.listRowSeparatorLeading) { dimensions in
                     dimensions[.leading]
@@ -102,6 +106,7 @@ struct ThingListScreen: View {
                 .buttonStyle(.plain)
                 .id(thing.id)
                 .accessibilityIdentifier("thing.row.\(thing.id)")
+                .modifier(thingAccessibilityActions(for: thing))
                 .listRowInsets(Layout.rowInsets)
                 .alignmentGuide(.listRowSeparatorLeading) { dimensions in
                     dimensions[.leading]
@@ -139,6 +144,47 @@ struct ThingListScreen: View {
         } else {
             batchSelection.insert(thingId)
         }
+    }
+
+    private func thingAccessibilityActions(for thing: ThingProjection) -> some ViewModifier {
+        ThingListRowAccessibilityActions(
+            thing: thing,
+            openLabel: LocalizationManager.localizedSync("open_link"),
+            copyLabel: LocalizationManager.localizedSync("copy_content"),
+            deleteLabel: LocalizationManager.localizedSync("delete"),
+            onOpen: { thing in
+                if let onOpenThing {
+                    onOpenThing(thing)
+                } else {
+                    selection = thing.id
+                }
+            },
+            onCopy: onCopyThingIdentifier,
+            onDelete: onDeleteThing
+        )
+    }
+}
+
+private struct ThingListRowAccessibilityActions: ViewModifier {
+    let thing: ThingProjection
+    let openLabel: String
+    let copyLabel: String
+    let deleteLabel: String
+    let onOpen: (ThingProjection) -> Void
+    let onCopy: ((ThingProjection) -> Void)?
+    let onDelete: ((ThingProjection) -> Void)?
+
+    func body(content: Content) -> some View {
+        content
+            .accessibilityAction(named: Text(openLabel)) {
+                onOpen(thing)
+            }
+            .accessibilityAction(named: Text(copyLabel)) {
+                onCopy?(thing)
+            }
+            .accessibilityAction(named: Text(deleteLabel)) {
+                onDelete?(thing)
+            }
     }
 }
 
@@ -286,6 +332,9 @@ private struct ThingListRow: View {
             }
         }
         .padding(.vertical, EntityVisualTokens.rowVerticalPadding)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text(PushGoSystemSummaryBuilder.summary(for: thing).accessibilityLabel))
+        .accessibilityValue(Text(PushGoSystemSummaryBuilder.summary(for: thing).accessibilityValue ?? ""))
     }
 
     private func visibleAttachmentCount(for availableWidth: CGFloat) -> Int {

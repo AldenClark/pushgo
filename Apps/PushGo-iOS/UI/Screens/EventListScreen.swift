@@ -146,6 +146,19 @@ struct EventListScreen: View {
                     }
                     .id(event.id)
                     .accessibilityIdentifier("event.row.\(event.id)")
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(Text(PushGoSystemSummaryBuilder.summary(for: event).accessibilityLabel))
+                    .accessibilityValue(Text(PushGoSystemSummaryBuilder.summary(for: event).accessibilityValue ?? ""))
+                    .accessibilityAction(named: Text(localizationManager.localized("open_link"))) {
+                        selectEvent(event)
+                    }
+                    .accessibilityAction(named: Text(localizationManager.localized("copy_content"))) {
+                        PushGoSystemInteraction.copyTextToPasteboard(event.id)
+                        environment.showToast(message: localizationManager.localized("copied"), style: .success, duration: 1.6)
+                    }
+                    .accessibilityAction(named: Text(localizationManager.localized("delete"))) {
+                        Task { await scheduleDeletion(for: [event]) }
+                    }
                     .tag(event.id)
                     .listRowInsets(EdgeInsets(
                         top: EntityVisualTokens.listRowInsetVertical,

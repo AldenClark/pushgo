@@ -182,6 +182,9 @@ struct SettingsView: View {
                     )
                     .accessibilityIdentifier("group.settings.page_visibility")
                     SettingsRowDivider()
+                    SystemIntegrationSettingsGroup(viewModel: viewModel)
+                        .accessibilityIdentifier("group.settings.system_integration")
+                    SettingsRowDivider()
                     Button {
                         viewModel.clearError()
                         macOverlay = .notificationSounds

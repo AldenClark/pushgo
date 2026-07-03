@@ -92,6 +92,20 @@ struct EventSplitScreen: View {
                 isLoadingMore: viewModel.isLoadingMoreEvents,
                 onReachEnd: {
                     Task { await viewModel.loadMoreEvents() }
+                },
+                onOpenEvent: { event in
+                    selection = event.id
+                },
+                onCopyEventIdentifier: { event in
+                    PushGoSystemInteraction.copyTextToPasteboard(event.id)
+                    environment.showToast(
+                        message: localizationManager.localized("copied"),
+                        style: .success,
+                        duration: 1.6
+                    )
+                },
+                onDeleteEvent: { event in
+                    Task { await scheduleDeletion(for: [event]) }
                 }
             )
             .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)

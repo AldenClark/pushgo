@@ -136,6 +136,7 @@ struct AppSettingsSnapshot: Hashable, Sendable {
     var watchProvisioningAppliedAt: Date? = nil
     var watchProvisioningModeRawValue: String? = nil
     var watchProvisioningSourceControlGeneration: Int64? = nil
+    var systemIntegrationSettingsData: Data? = nil
 
     static let empty = AppSettingsSnapshot(
         manualKeyEncoding: nil,
@@ -162,7 +163,8 @@ struct AppSettingsSnapshot: Hashable, Sendable {
         watchProvisioningContentDigest: nil,
         watchProvisioningAppliedAt: nil,
         watchProvisioningModeRawValue: nil,
-        watchProvisioningSourceControlGeneration: nil
+        watchProvisioningSourceControlGeneration: nil,
+        systemIntegrationSettingsData: nil
     )
 }
 
@@ -417,6 +419,7 @@ actor LocalDataStore {
     private let backend: GRDBStore?
     private let searchIndex: MessageSearchIndex?
     private let metadataIndex: MessageMetadataIndex?
+    private let spotlightIndexer: PushGoSpotlightIndexing?
     private let fileManager: FileManager
     private let appGroupIdentifier: String
     private let channelSubscriptionStore = ChannelSubscriptionStore()
@@ -435,6 +438,7 @@ actor LocalDataStore {
     init(
         fileManager: FileManager = .default,
         appGroupIdentifier: String = AppConstants.appGroupIdentifier,
+        spotlightIndexer: PushGoSpotlightIndexing? = CoreSpotlightPushGoIndexer(),
     ) {
         KeychainSharedAccessMigration.migrateLegacyItemsToSharedAccessGroup()
         self.fileManager = fileManager
@@ -448,6 +452,7 @@ actor LocalDataStore {
         storageState = sharedResources.storageState
         searchIndex = sharedResources.searchIndex
         metadataIndex = sharedResources.metadataIndex
+        self.spotlightIndexer = spotlightIndexer
         Self.writeStorageProbe(
             fileManager: fileManager,
             appGroupIdentifier: appGroupIdentifier,
@@ -1356,6 +1361,33 @@ actor LocalDataStore {
         try? await backend.saveAppSettings(settings)
     }
 
+    func loadSystemIntegrationSettings() async -> SystemIntegrationSettings {
+        guard let backend,
+              let settings = try? await backend.loadAppSettings(),
+              let data = settings.systemIntegrationSettingsData,
+              let decoded = try? JSONDecoder().decode(SystemIntegrationSettings.self, from: data),
+              decoded.schemaVersion == SystemIntegrationSettings.schemaVersion
+        else {
+            return SystemIntegrationSettings()
+        }
+        return decoded.normalized
+    }
+
+    func saveSystemIntegrationSettings(_ systemIntegrationSettings: SystemIntegrationSettings) async {
+        guard let backend else { return }
+        let oldSettings = await loadSystemIntegrationSettings()
+        let normalized = systemIntegrationSettings.normalized
+        var settings = (try? await backend.loadAppSettings()) ?? .empty
+        settings.systemIntegrationSettingsData = try? JSONEncoder().encode(normalized)
+        try? await backend.saveAppSettings(settings)
+        SystemIntegrationSettings.saveSharedDefaults(normalized)
+        if oldSettings.systemSearchEnabled, !normalized.systemSearchEnabled {
+            await clearSystemSearchIndex()
+        } else if normalized.systemSearchEnabled {
+            await rebuildSystemSearchIndex(settings: normalized)
+        }
+    }
+
     func loadWatchMode() async -> WatchMode {
         guard let backend else { return .mirror }
         guard let settings = try? await backend.loadAppSettings(),
@@ -2014,6 +2046,7 @@ actor LocalDataStore {
         let searchable = storedMessages.filter(isTopLevelMessage)
         await rebuildSearchIndex(with: searchable)
         await rebuildMetadataIndex(with: searchable)
+        await indexSystemSearchMessages(searchable)
         await mergeNotificationContextSnapshot(with: storedMessages)
     }
 
@@ -2022,6 +2055,7 @@ actor LocalDataStore {
         try await performBackendWrite { backend in
             try await backend.saveEntityRecords(canonicalMessages)
         }
+        await indexSystemSearchEntities(from: canonicalMessages)
         await mergeNotificationContextSnapshot(with: canonicalMessages)
     }
 
@@ -2033,6 +2067,7 @@ actor LocalDataStore {
         let searchable = storedMessages.filter(isTopLevelMessage)
         await rebuildSearchIndex(with: searchable)
         await rebuildMetadataIndex(with: searchable)
+        await indexSystemSearchMessages(searchable)
         await mergeNotificationContextSnapshot(with: storedMessages)
     }
 
@@ -2054,6 +2089,7 @@ actor LocalDataStore {
         }()
         await rebuildSearchIndex(with: searchable)
         await rebuildMetadataIndex(with: searchable)
+        await indexSystemSearchMessages(searchable)
         switch outcome {
         case let .persisted(stored),
              let .persistedPending(stored),
@@ -2073,6 +2109,7 @@ actor LocalDataStore {
         let searchable = storedMessages.filter(isTopLevelMessage)
         await rebuildSearchIndex(with: searchable)
         await rebuildMetadataIndex(with: searchable)
+        await indexSystemSearchMessages(searchable)
         await mergeNotificationContextSnapshot(with: storedMessages)
     }
 
@@ -2107,6 +2144,9 @@ actor LocalDataStore {
         if let metadataIndex {
             try? await metadataIndex.remove(id: id)
         }
+        await deleteSystemSearchItems([
+            PushGoSpotlightIdentifier(kind: .message, identifier: id.uuidString),
+        ].compactMap { $0 })
         await rebuildNotificationContextSnapshot()
     }
 
@@ -2128,6 +2168,9 @@ actor LocalDataStore {
         if let metadataIndex, !deletedIds.isEmpty {
             try? await metadataIndex.bulkRemove(ids: deletedIds)
         }
+        await deleteSystemSearchItems(
+            deletedIds.compactMap { PushGoSpotlightIdentifier(kind: .message, identifier: $0.uuidString) }
+        )
         if deletion.affectsNotificationContextSnapshot {
             await rebuildNotificationContextSnapshot()
         }
@@ -2150,6 +2193,9 @@ actor LocalDataStore {
             if let metadataIndex {
                 try? await metadataIndex.remove(id: deletedMessageId)
             }
+            await deleteSystemSearchItems([
+                PushGoSpotlightIdentifier(kind: .message, identifier: deletedMessageId.uuidString),
+            ].compactMap { $0 })
             await rebuildNotificationContextSnapshot()
         }
     }
@@ -2161,6 +2207,9 @@ actor LocalDataStore {
             try await backend.deleteEventRecords(eventId: normalized)
         }
         if deletedCount > 0 {
+            await deleteSystemSearchItems([
+                PushGoSpotlightIdentifier(kind: .event, identifier: normalized),
+            ].compactMap { $0 })
             await rebuildNotificationContextSnapshot()
         }
         return deletedCount
@@ -2179,6 +2228,9 @@ actor LocalDataStore {
             try await backend.deleteEventRecords(eventIds: normalized)
         }
         if deletedCount > 0 {
+            await deleteSystemSearchItems(
+                normalized.compactMap { PushGoSpotlightIdentifier(kind: .event, identifier: $0) }
+            )
             await rebuildNotificationContextSnapshot()
         }
         return deletedCount
@@ -2190,6 +2242,7 @@ actor LocalDataStore {
             try await backend.deleteEventRecords(channel: normalized)
         }
         if deletedCount > 0 {
+            await rebuildSystemSearchIndex()
             await rebuildNotificationContextSnapshot()
         }
         return deletedCount
@@ -2202,6 +2255,9 @@ actor LocalDataStore {
             try await backend.deleteThingRecords(thingId: normalized)
         }
         if deletedCount > 0 {
+            await deleteSystemSearchItems([
+                PushGoSpotlightIdentifier(kind: .thing, identifier: normalized),
+            ].compactMap { $0 })
             await rebuildNotificationContextSnapshot()
         }
         return deletedCount
@@ -2220,6 +2276,9 @@ actor LocalDataStore {
             try await backend.deleteThingRecords(thingIds: normalized)
         }
         if deletedCount > 0 {
+            await deleteSystemSearchItems(
+                normalized.compactMap { PushGoSpotlightIdentifier(kind: .thing, identifier: $0) }
+            )
             await rebuildNotificationContextSnapshot()
         }
         return deletedCount
@@ -2231,6 +2290,7 @@ actor LocalDataStore {
             try await backend.deleteThingRecords(channel: normalized)
         }
         if deletedCount > 0 {
+            await rebuildSystemSearchIndex()
             await rebuildNotificationContextSnapshot()
         }
         return deletedCount
@@ -2247,6 +2307,7 @@ actor LocalDataStore {
         if let metadataIndex {
             try? await metadataIndex.clear()
         }
+        await clearSystemSearchIndex()
         clearNotificationContextSnapshot()
     }
 
@@ -2263,6 +2324,7 @@ actor LocalDataStore {
             if let metadataIndex {
                 try? await metadataIndex.clear()
             }
+            await clearSystemSearchIndex()
             if total > 0 {
                 await rebuildNotificationContextSnapshot()
             }
@@ -2278,6 +2340,9 @@ actor LocalDataStore {
         if let metadataIndex, !deletedIds.isEmpty {
             try? await metadataIndex.bulkRemove(ids: deletedIds)
         }
+        await deleteSystemSearchItems(
+            deletedIds.compactMap { PushGoSpotlightIdentifier(kind: .message, identifier: $0.uuidString) }
+        )
         if !deletedIds.isEmpty {
             await rebuildNotificationContextSnapshot()
         }
@@ -2294,6 +2359,9 @@ actor LocalDataStore {
         if let metadataIndex, !deletedIds.isEmpty {
             try? await metadataIndex.bulkRemove(ids: deletedIds)
         }
+        await deleteSystemSearchItems(
+            deletedIds.compactMap { PushGoSpotlightIdentifier(kind: .message, identifier: $0.uuidString) }
+        )
         if !deletedIds.isEmpty {
             await rebuildNotificationContextSnapshot()
         }
@@ -2310,6 +2378,9 @@ actor LocalDataStore {
         if let metadataIndex, !deletedIds.isEmpty {
             try? await metadataIndex.bulkRemove(ids: deletedIds)
         }
+        await deleteSystemSearchItems(
+            deletedIds.compactMap { PushGoSpotlightIdentifier(kind: .message, identifier: $0.uuidString) }
+        )
         if !deletedIds.isEmpty {
             await rebuildNotificationContextSnapshot()
         }
@@ -2346,6 +2417,9 @@ actor LocalDataStore {
         if let metadataIndex, !deletedIds.isEmpty {
             try? await metadataIndex.bulkRemove(ids: deletedIds)
         }
+        await deleteSystemSearchItems(
+            deletedIds.compactMap { PushGoSpotlightIdentifier(kind: .message, identifier: $0.uuidString) }
+        )
         if !deletedIds.isEmpty {
             await rebuildNotificationContextSnapshot()
         }
@@ -2379,6 +2453,9 @@ actor LocalDataStore {
         if let metadataIndex {
             try? await metadataIndex.bulkRemove(ids: deletedIds)
         }
+        await deleteSystemSearchItems(
+            deletedIds.compactMap { PushGoSpotlightIdentifier(kind: .message, identifier: $0.uuidString) }
+        )
         await rebuildNotificationContextSnapshot()
         return deletedIds.count
     }
@@ -2451,6 +2528,164 @@ actor LocalDataStore {
             fileManager: fileManager,
             appGroupIdentifier: appGroupIdentifier
         )
+    }
+
+    func rebuildSystemSearchIndex() async {
+        await rebuildSystemSearchIndex(settings: await loadSystemIntegrationSettings())
+    }
+
+    func clearSystemSearchIndexOnly() async {
+        await clearSystemSearchIndex()
+    }
+
+    private func rebuildSystemSearchIndex(settings: SystemIntegrationSettings) async {
+        guard settings.systemSearchEnabled else {
+            await clearSystemSearchIndex()
+            return
+        }
+        guard spotlightIndexer != nil else { return }
+        await clearSystemSearchIndex()
+
+        var messageCursor: MessagePageCursor?
+        while true {
+            let messages = (try? await loadMessagesPage(
+                before: messageCursor,
+                limit: 200,
+                filter: .all,
+                channel: nil,
+                tag: nil,
+                sortMode: .timeDescending
+            )) ?? []
+            guard !messages.isEmpty else { break }
+            await indexSystemSearchMessages(messages.filter(isTopLevelMessage), settings: settings)
+            messageCursor = messages.last.map {
+                MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
+            }
+            if messages.count < 200 { break }
+            await Task.yield()
+        }
+
+        var eventCursor: EntityProjectionPageCursor?
+        while true {
+            let messages = (try? await loadEventMessagesForProjectionPage(before: eventCursor, limit: 200)) ?? []
+            guard !messages.isEmpty else { break }
+            await indexSystemSearchEntities(from: messages, settings: settings)
+            eventCursor = messages.last.map { EntityProjectionPageCursor(receivedAt: $0.receivedAt, id: $0.id) }
+            if messages.count < 200 { break }
+            await Task.yield()
+        }
+
+        var thingCursor: EntityProjectionPageCursor?
+        while true {
+            let messages = (try? await loadThingMessagesForProjectionPage(before: thingCursor, limit: 200)) ?? []
+            guard !messages.isEmpty else { break }
+            await indexSystemSearchEntities(from: messages, settings: settings)
+            thingCursor = messages.last.map { EntityProjectionPageCursor(receivedAt: $0.receivedAt, id: $0.id) }
+            if messages.count < 200 { break }
+            await Task.yield()
+        }
+    }
+
+    private func indexSystemSearchMessages(
+        _ messages: [PushMessage],
+        settings explicitSettings: SystemIntegrationSettings? = nil
+    ) async {
+        guard let spotlightIndexer, !messages.isEmpty else { return }
+        let settings: SystemIntegrationSettings
+        if let explicitSettings {
+            settings = explicitSettings
+        } else {
+            settings = await loadSystemIntegrationSettings()
+        }
+        guard settings.systemSearchEnabled else { return }
+        let summaries = messages
+            .map { PushGoSystemSummaryBuilder.summary(for: $0, settings: settings) }
+            .filter(\.privacy.mayIndexTitle)
+        guard !summaries.isEmpty else { return }
+        try? await spotlightIndexer.index(summaries)
+    }
+
+    private func indexSystemSearchEntities(
+        from messages: [PushMessage],
+        settings explicitSettings: SystemIntegrationSettings? = nil
+    ) async {
+        guard spotlightIndexer != nil, !messages.isEmpty else { return }
+        let settings: SystemIntegrationSettings
+        if let explicitSettings {
+            settings = explicitSettings
+        } else {
+            settings = await loadSystemIntegrationSettings()
+        }
+        guard settings.systemSearchEnabled, settings.indexEventsAndThings else { return }
+
+        let eventIDs = Array(Set(messages.compactMap { message -> String? in
+            guard normalizedEntityType(message) == "event" || message.eventId != nil else { return nil }
+            return normalizeEntityReference(message.eventId ?? message.entityId)
+        }))
+        let thingIDs = Array(Set(messages.compactMap { message -> String? in
+            guard normalizedEntityType(message) == "thing" || message.thingId != nil else { return nil }
+            return normalizeEntityReference(message.thingId ?? message.entityId)
+        }))
+        await indexSystemSearchEvents(eventIDs, settings: settings)
+        await indexSystemSearchThings(thingIDs, settings: settings)
+    }
+
+    private func indexSystemSearchEvents(
+        _ eventIDs: [String],
+        settings: SystemIntegrationSettings
+    ) async {
+        guard let spotlightIndexer, !eventIDs.isEmpty else { return }
+        var summaries: [PushGoSystemSummary] = []
+        for eventID in eventIDs {
+            guard let detail = try? await loadEventProjectionDetail(eventId: eventID),
+                  let summary = PushGoProjectionSummaryBuilder.eventSummary(
+                    from: detail,
+                    eventID: eventID,
+                    settings: settings
+                  ),
+                  summary.privacy.mayIndexTitle
+            else {
+                continue
+            }
+            summaries.append(summary)
+        }
+        guard !summaries.isEmpty else { return }
+        try? await spotlightIndexer.index(summaries)
+    }
+
+    private func indexSystemSearchThings(
+        _ thingIDs: [String],
+        settings: SystemIntegrationSettings
+    ) async {
+        guard let spotlightIndexer, !thingIDs.isEmpty else { return }
+        var summaries: [PushGoSystemSummary] = []
+        for thingID in thingIDs {
+            guard let detail = try? await loadThingProjectionDetail(thingId: thingID),
+                  let summary = PushGoProjectionSummaryBuilder.thingSummary(
+                    from: detail,
+                    thingID: thingID,
+                    settings: settings
+                  ),
+                  summary.privacy.mayIndexTitle
+            else {
+                continue
+            }
+            summaries.append(summary)
+        }
+        guard !summaries.isEmpty else { return }
+        try? await spotlightIndexer.index(summaries)
+    }
+
+    private func deleteSystemSearchItems(_ identifiers: [PushGoSpotlightIdentifier]) async {
+        guard let spotlightIndexer else { return }
+        let unique = Array(Set(identifiers))
+        guard !unique.isEmpty else { return }
+        try? await spotlightIndexer.delete(unique)
+    }
+
+    private func clearSystemSearchIndex() async {
+        guard let spotlightIndexer else { return }
+        try? await spotlightIndexer.deleteAll()
     }
 
     private func makeNotificationContextProjectionInput(
@@ -3280,6 +3515,7 @@ private actor GRDBStore {
                     thing_page_enabled INTEGER,
                     push_token_data_base64 TEXT,
                     watch_mode_raw_value TEXT,
+                    system_integration_settings_data_base64 TEXT,
                     updated_at REAL NOT NULL
                 );
                 """)
@@ -3418,6 +3654,28 @@ private actor GRDBStore {
         }
         migrator.registerMigration("v7_watch_light_notify_columns") { db in
             _ = db
+        }
+        migrator.registerMigration("v7_system_integration_settings_column") { db in
+            try db.execute(sql: """
+                CREATE TABLE IF NOT EXISTS app_settings (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    manual_key_encoding TEXT,
+                    launch_at_login_enabled INTEGER,
+                    message_page_enabled INTEGER,
+                    event_page_enabled INTEGER,
+                    thing_page_enabled INTEGER,
+                    push_token_data_base64 TEXT,
+                    watch_mode_raw_value TEXT,
+                    system_integration_settings_data_base64 TEXT,
+                    updated_at REAL NOT NULL
+                );
+                """)
+            let existingColumns = Set(try Row.fetchAll(db, sql: "PRAGMA table_info(app_settings);").compactMap {
+                $0["name"] as String?
+            })
+            if !existingColumns.contains("system_integration_settings_data_base64") {
+                try db.execute(sql: "ALTER TABLE app_settings ADD COLUMN system_integration_settings_data_base64 TEXT;")
+            }
         }
         migrator.registerMigration("v8_rebuild_snake_case_schema") { db in
             // No backward-compatibility for legacy camelCase local schema.
@@ -3562,6 +3820,7 @@ private actor GRDBStore {
                     watch_provisioning_applied_at REAL,
                     watch_provisioning_mode_raw_value TEXT,
                     watch_provisioning_source_control_generation INTEGER,
+                    system_integration_settings_data_base64 TEXT,
                     updated_at REAL NOT NULL
                 );
                 """)
@@ -4129,6 +4388,7 @@ private actor GRDBStore {
         let watchProvisioningAppliedAtEpoch: Double? = row["watch_provisioning_applied_at"]
         let watchProvisioningModeRawValue: String? = row["watch_provisioning_mode_raw_value"]
         let watchProvisioningSourceControlGeneration: Int64? = row["watch_provisioning_source_control_generation"]
+        let systemIntegrationSettingsDataBase64: String? = row["system_integration_settings_data_base64"]
 
         return AppSettingsSnapshot(
             manualKeyEncoding: manualKeyEncoding,
@@ -4155,13 +4415,15 @@ private actor GRDBStore {
             watchProvisioningContentDigest: watchProvisioningContentDigest,
             watchProvisioningAppliedAt: watchProvisioningAppliedAtEpoch.map(GRDBStore.dateFromStoredEpoch),
             watchProvisioningModeRawValue: watchProvisioningModeRawValue,
-            watchProvisioningSourceControlGeneration: watchProvisioningSourceControlGeneration
+            watchProvisioningSourceControlGeneration: watchProvisioningSourceControlGeneration,
+            systemIntegrationSettingsData: systemIntegrationSettingsDataBase64.flatMap { Data(base64Encoded: $0) }
         )
     }
 
     private func saveAppSettings(_ snapshot: AppSettingsSnapshot, db: Database) throws {
         let pushTokenDataBase64 = snapshot.pushTokenData?.base64EncodedString()
         let watchProvisioningServerConfigDataBase64 = snapshot.watchProvisioningServerConfigData?.base64EncodedString()
+        let systemIntegrationSettingsDataBase64 = snapshot.systemIntegrationSettingsData?.base64EncodedString()
         let sql = """
             INSERT INTO app_settings (
                 id, manual_key_encoding, launch_at_login_enabled, message_page_enabled,
@@ -4174,7 +4436,8 @@ private actor GRDBStore {
                 watch_provisioning_server_config_data_base64, watch_provisioning_schema_version,
                 watch_provisioning_generation, watch_provisioning_content_digest,
                 watch_provisioning_applied_at, watch_provisioning_mode_raw_value,
-                watch_provisioning_source_control_generation, updated_at
+                watch_provisioning_source_control_generation, system_integration_settings_data_base64,
+                updated_at
             ) VALUES (
                 'default',
                 \(Self.sqlOptionalText(snapshot.manualKeyEncoding)),
@@ -4202,6 +4465,7 @@ private actor GRDBStore {
                 \(Self.sqlOptionalDouble(snapshot.watchProvisioningAppliedAt.map(Self.storedEpoch))),
                 \(Self.sqlOptionalText(snapshot.watchProvisioningModeRawValue)),
                 \(Self.sqlOptionalInt64(snapshot.watchProvisioningSourceControlGeneration)),
+                \(Self.sqlOptionalText(systemIntegrationSettingsDataBase64)),
                 \(Self.storedEpoch(Date()))
             )
             ON CONFLICT(id) DO UPDATE SET
@@ -4230,6 +4494,7 @@ private actor GRDBStore {
                 watch_provisioning_applied_at = excluded.watch_provisioning_applied_at,
                 watch_provisioning_mode_raw_value = excluded.watch_provisioning_mode_raw_value,
                 watch_provisioning_source_control_generation = excluded.watch_provisioning_source_control_generation,
+                system_integration_settings_data_base64 = excluded.system_integration_settings_data_base64,
                 updated_at = excluded.updated_at;
             """
         try db.execute(sql: sql)

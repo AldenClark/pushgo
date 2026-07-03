@@ -83,6 +83,18 @@ struct MessageDetailScreen: View {
             )
         }
         .pushgoImagePreviewOverlay(previewItem: $previewingImage, imageURL: \.url)
+        .userActivity(
+            PushGoUserActivityBuilder.messageActivityType,
+            isActive: viewModel.message != nil
+        ) { activity in
+            guard let message = viewModel.message else { return }
+            let settings = SystemIntegrationSettings.loadSharedDefaults()
+            PushGoUserActivityBuilder.configure(
+                activity,
+                for: PushGoSystemSummaryBuilder.summary(for: message, settings: settings),
+                systemSearchEnabled: settings.systemSearchEnabled
+            )
+        }
 #if DEBUG
         .task(id: automationStateSignature) {
             PushGoAutomationRuntime.shared.publishState(

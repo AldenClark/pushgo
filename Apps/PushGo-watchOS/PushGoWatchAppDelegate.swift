@@ -112,6 +112,50 @@ final class PushGoWatchAppDelegate: NSObject, WKApplicationDelegate, @preconcurr
                 } else {
                     removeDeliveredNotification(requestId: requestId)
                 }
+            case PushGoNotificationActionPolicy.markReadActionIdentifier:
+                if let lightMessage {
+                    if AppEnvironment.shared.isStandaloneMode {
+                        _ = try? await AppEnvironment.shared.dataStore.markWatchLightMessageRead(
+                            messageId: lightMessage.messageId
+                        )
+                    } else {
+                        try? await AppEnvironment.shared.enqueueMirrorMessageAction(
+                            kind: .read,
+                            messageId: lightMessage.messageId
+                        )
+                    }
+                    removeDeliveredNotification(requestId: requestId)
+                    await AppEnvironment.shared.refreshWatchLightCountsAndNotify()
+                } else {
+                    removeDeliveredNotification(requestId: requestId)
+                }
+            case PushGoNotificationActionPolicy.deleteMessageActionIdentifier:
+                if let lightMessage {
+                    if AppEnvironment.shared.isStandaloneMode {
+                        try? await AppEnvironment.shared.dataStore.deleteWatchLightMessage(
+                            messageId: lightMessage.messageId
+                        )
+                    } else {
+                        try? await AppEnvironment.shared.enqueueMirrorMessageAction(
+                            kind: .delete,
+                            messageId: lightMessage.messageId
+                        )
+                    }
+                    removeDeliveredNotification(requestId: requestId)
+                    await AppEnvironment.shared.refreshWatchLightCountsAndNotify()
+                } else {
+                    removeDeliveredNotification(requestId: requestId)
+                }
+            case PushGoNotificationActionPolicy.openEntityActionIdentifier,
+                 PushGoNotificationActionPolicy.openRelatedEntityActionIdentifier:
+                if let entityTarget {
+                    await AppEnvironment.shared.handleNotificationOpen(
+                        entityType: entityTarget.entityType,
+                        entityId: entityTarget.entityId
+                    )
+                } else {
+                    await AppEnvironment.shared.handleNotificationOpen(notificationRequestId: requestId)
+                }
             default:
                 if let entityTarget {
                     await AppEnvironment.shared.handleNotificationOpen(

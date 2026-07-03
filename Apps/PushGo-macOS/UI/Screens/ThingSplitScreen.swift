@@ -91,6 +91,20 @@ struct ThingSplitScreen: View {
                 isLoadingMore: viewModel.isLoadingMoreThings,
                 onReachEnd: {
                     Task { await viewModel.loadMoreThings() }
+                },
+                onOpenThing: { thing in
+                    selection = thing.id
+                },
+                onCopyThingIdentifier: { thing in
+                    PushGoSystemInteraction.copyTextToPasteboard(thing.id)
+                    environment.showToast(
+                        message: localizationManager.localized("copied"),
+                        style: .success,
+                        duration: 1.6
+                    )
+                },
+                onDeleteThing: { thing in
+                    Task { await scheduleDeletion(for: [thing]) }
                 }
             )
             .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
