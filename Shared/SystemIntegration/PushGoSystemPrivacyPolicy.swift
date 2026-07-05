@@ -5,13 +5,16 @@ enum PushGoSystemPrivacyPolicy {
         for message: PushMessage,
         settings: SystemIntegrationSettings = SystemIntegrationSettings()
     ) -> PushGoSystemSummary.Privacy {
-        let isSensitive = message.isEncrypted
-            || message.decryptionState == .decryptFailed
+        let hasUnsuccessfulDecryption = message.decryptionState != nil
+            && message.decryptionState != .decryptOk
+        let hasEncryptedPayloadWithoutSuccessfulDecryption = message.decryptionState != .decryptOk
+            && message.isEncrypted
+        let isSensitive = hasUnsuccessfulDecryption
+            || hasEncryptedPayloadWithoutSuccessfulDecryption
             || message.status == .partiallyDecrypted
             || message.status == .missing
-            || settings.excludesChannel(message.channel)
         return PushGoSystemSummary.Privacy(
-            mayIndexTitle: settings.systemSearchEnabled && !settings.excludesChannel(message.channel),
+            mayIndexTitle: settings.systemSearchEnabled,
             mayIndexBody: settings.systemSearchEnabled
                 && settings.includeMessageBodyInSearch
                 && !isSensitive,
@@ -29,11 +32,9 @@ enum PushGoSystemPrivacyPolicy {
         settings: SystemIntegrationSettings = SystemIntegrationSettings()
     ) -> PushGoSystemSummary.Privacy {
         let entityIndexEnabled = kind == .message || settings.indexEventsAndThings
-        let isSensitive = decryptionState == .decryptFailed
-            || settings.excludesChannel(channelID)
+        let isSensitive = decryptionState != nil && decryptionState != .decryptOk
         let canIndex = settings.systemSearchEnabled
             && entityIndexEnabled
-            && !settings.excludesChannel(channelID)
         return PushGoSystemSummary.Privacy(
             mayIndexTitle: canIndex,
             mayIndexBody: canIndex && !isSensitive,

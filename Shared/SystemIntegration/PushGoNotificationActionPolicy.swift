@@ -68,28 +68,73 @@ enum PushGoNotificationActionPolicy {
 
     static func presentationPolicy(
         severity: String?,
-        settings: SystemIntegrationSettings = SystemIntegrationSettings()
+        settings: SystemIntegrationSettings = SystemIntegrationSettings(),
+        focusState: PushGoSystemSurfaceSnapshot.FocusState = .default()
     ) -> PushGoNotificationPresentationPolicy {
-        switch normalizedSeverity(severity) {
+        basePresentationPolicy(
+            severity: normalizedSeverity(severity),
+            settings: settings,
+            focusState: focusState
+        )
+    }
+
+    private static func basePresentationPolicy(
+        severity: String,
+        settings: SystemIntegrationSettings,
+        focusState: PushGoSystemSurfaceSnapshot.FocusState
+    ) -> PushGoNotificationPresentationPolicy {
+        let base: PushGoNotificationPresentationPolicy
+        switch severity {
         case "critical":
-            return PushGoNotificationPresentationPolicy(
+            base = PushGoNotificationPresentationPolicy(
                 interruptionLevel: settings.timeSensitiveAlertsEnabled ? .timeSensitive : .active,
                 relevanceScore: 0.95
             )
         case "high":
-            return PushGoNotificationPresentationPolicy(
+            base = PushGoNotificationPresentationPolicy(
                 interruptionLevel: settings.timeSensitiveAlertsEnabled ? .timeSensitive : .active,
                 relevanceScore: 0.75
             )
         case "low":
-            return PushGoNotificationPresentationPolicy(
+            base = PushGoNotificationPresentationPolicy(
                 interruptionLevel: .passive,
                 relevanceScore: 0.2
             )
         default:
-            return PushGoNotificationPresentationPolicy(
+            base = PushGoNotificationPresentationPolicy(
                 interruptionLevel: .active,
                 relevanceScore: 0.4
+            )
+        }
+        return applyFocusState(focusState, to: base, severity: severity)
+    }
+
+    private static func applyFocusState(
+        _ focusState: PushGoSystemSurfaceSnapshot.FocusState,
+        to policy: PushGoNotificationPresentationPolicy,
+        severity: String
+    ) -> PushGoNotificationPresentationPolicy {
+        switch focusState.mode {
+        case .all:
+            return policy
+        case .priorityOnly:
+            if severity == "critical" || severity == "high" {
+                return policy
+            }
+            return PushGoNotificationPresentationPolicy(
+                interruptionLevel: .passive,
+                relevanceScore: min(policy.relevanceScore, 0.15)
+            )
+        case .quiet:
+            if severity == "critical" {
+                return PushGoNotificationPresentationPolicy(
+                    interruptionLevel: .active,
+                    relevanceScore: min(policy.relevanceScore, 0.6)
+                )
+            }
+            return PushGoNotificationPresentationPolicy(
+                interruptionLevel: .passive,
+                relevanceScore: min(policy.relevanceScore, 0.1)
             )
         }
     }

@@ -62,6 +62,10 @@ final class AppEnvironment {
     var isEventPageEnabled: Bool { dataPageVisibilityController.isEventPageEnabled }
     var isThingPageEnabled: Bool { dataPageVisibilityController.isThingPageEnabled }
     var activeMainTab: MainTab { navigationState.activeMainTab }
+    var pendingSystemListToOpen: MainTab? {
+        get { notificationOpenController.pendingListToOpen }
+        set { notificationOpenController.pendingListToOpen = newValue }
+    }
     var isMessageListAtTop: Bool { navigationState.isMessageListAtTop }
     var isEventListAtTop: Bool { navigationState.isEventListAtTop }
     var isThingListAtTop: Bool { navigationState.isThingListAtTop }
@@ -200,6 +204,9 @@ final class AppEnvironment {
         self.dataStore = dataStore
         self.pushRegistrationService = pushRegistrationService ?? PushRegistrationService.shared
         self.localizationManager = localizationManager ?? LocalizationManager.shared
+        PushGoLiveActivityTokenRegistrationService.configure { [weak self] in
+            self?.serverConfig
+        }
         SharedImageCache.startMaintenance()
         messageSyncObserver = DarwinNotificationObserver(name: AppConstants.messageSyncNotificationName) { [weak self] in
             guard let self else { return }
@@ -297,6 +304,9 @@ final class AppEnvironment {
         }
         Task(priority: .utility) {
             await NotificationSoundManager.shared.reconcileCompiledSounds()
+        }
+        Task(priority: .utility) {
+            await store.ensureSystemSearchIndexHealthy()
         }
     }
 
@@ -617,6 +627,35 @@ final class AppEnvironment {
         guard isRead else { return }
         do {
             _ = try await messageStateCoordinator.markRead(messageId: messageId)
+        } catch {
+            showToast(message: localizationManager.localized(
+                "failed_to_save_message_status_placeholder",
+                userFacingErrorMessage(error),
+            ))
+        }
+    }
+
+    func consumePendingSystemAction() async {
+        guard let action = PushGoSystemPendingActionStore.consume() else { return }
+        switch action {
+        case .markLatestUnreadMessageRead:
+            await markLatestUnreadMessageRead()
+        }
+    }
+
+    private func markLatestUnreadMessageRead() async {
+        do {
+            guard let message = try await dataStore.loadMessagesPage(
+                before: nil,
+                limit: 1,
+                filter: .unreadOnly,
+                channel: nil,
+                tag: nil,
+                sortMode: .timeDescending
+            ).first else {
+                return
+            }
+            _ = try await messageStateCoordinator.markRead(messageId: message.id)
         } catch {
             showToast(message: localizationManager.localized(
                 "failed_to_save_message_status_placeholder",
@@ -1147,6 +1186,9 @@ final class AppEnvironment {
                     allowFallbackPull: true
                 )
                 await refreshChannelSubscriptions()
+            }
+            Task(priority: .utility) {
+                await dataStore.ensureSystemSearchIndexHealthy()
             }
         case .background, .inactive:
             navigationState.setSceneActive(false)

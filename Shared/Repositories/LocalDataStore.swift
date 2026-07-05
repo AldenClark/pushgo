@@ -19,23 +19,6 @@ struct EntityProjectionPageCursor: Hashable, Sendable {
     let id: UUID
 }
 
-struct EntityProjectionDetail: Sendable {
-    let head: PushMessage?
-    let history: [PushMessage]
-
-    var messages: [PushMessage] {
-        guard let head else {
-            return history
-        }
-        return ([head] + history.filter { $0.id != head.id }).sorted {
-            if $0.receivedAt == $1.receivedAt {
-                return $0.id.uuidString > $1.id.uuidString
-            }
-            return $0.receivedAt > $1.receivedAt
-        }
-    }
-}
-
 enum MessageListSortMode: String, CaseIterable, Equatable, Hashable, Sendable {
     case timeDescending = "time_desc"
     case unreadFirst = "unread_first"
@@ -351,6 +334,10 @@ private func canonicalizedMessageForPersistence(_ message: PushMessage) -> PushM
 
 actor LocalDataStore {
     private static let tagMetadataBackfillDefaultsKey = "message_tag_metadata_backfill_v1"
+    static let systemSearchHealthCheckDefaultsKey = "pushgo.system_search.health_check.last_run.v1"
+    private static let systemSearchHealthCheckInterval: TimeInterval = 12 * 60 * 60
+    static let systemSurfaceSnapshotHealthCheckDefaultsKey = "pushgo.system_surface_snapshot.health_check.last_run.v1"
+    private static let systemSurfaceSnapshotHealthCheckInterval: TimeInterval = 60 * 60
 
     private struct SharedResourcesKey: Hashable, Sendable {
         let appGroupIdentifier: String
@@ -1386,6 +1373,7 @@ actor LocalDataStore {
         } else if normalized.systemSearchEnabled {
             await rebuildSystemSearchIndex(settings: normalized)
         }
+        await refreshSystemSurfaceSnapshot(reason: .settingsChanged)
     }
 
     func loadWatchMode() async -> WatchMode {
@@ -2048,6 +2036,8 @@ actor LocalDataStore {
         await rebuildMetadataIndex(with: searchable)
         await indexSystemSearchMessages(searchable)
         await mergeNotificationContextSnapshot(with: storedMessages)
+        await PushGoLiveActivityCoordinator.handlePersistedMessages(storedMessages)
+        await refreshSystemSurfaceSnapshot(reason: .write)
     }
 
     func saveEntityRecords(_ messages: [PushMessage]) async throws {
@@ -2057,6 +2047,8 @@ actor LocalDataStore {
         }
         await indexSystemSearchEntities(from: canonicalMessages)
         await mergeNotificationContextSnapshot(with: canonicalMessages)
+        await PushGoLiveActivityCoordinator.handlePersistedMessages(canonicalMessages)
+        await refreshSystemSurfaceSnapshot(reason: .write)
     }
 
     func saveMessage(_ message: PushMessage) async throws {
@@ -2069,6 +2061,8 @@ actor LocalDataStore {
         await rebuildMetadataIndex(with: searchable)
         await indexSystemSearchMessages(searchable)
         await mergeNotificationContextSnapshot(with: storedMessages)
+        await PushGoLiveActivityCoordinator.handlePersistedMessages(storedMessages)
+        await refreshSystemSurfaceSnapshot(reason: .write)
     }
 
     func persistNotificationMessageIfNeeded(
@@ -2094,9 +2088,11 @@ actor LocalDataStore {
         case let .persisted(stored),
              let .persistedPending(stored),
              let .duplicateRequest(stored),
-             let .duplicateMessage(stored):
+            let .duplicateMessage(stored):
             await mergeNotificationContextSnapshot(with: [stored])
+            await PushGoLiveActivityCoordinator.handlePersistedMessage(stored)
         }
+        await refreshSystemSurfaceSnapshot(reason: .write)
         return outcome
     }
 
@@ -2111,27 +2107,38 @@ actor LocalDataStore {
         await rebuildMetadataIndex(with: searchable)
         await indexSystemSearchMessages(searchable)
         await mergeNotificationContextSnapshot(with: storedMessages)
+        await PushGoLiveActivityCoordinator.handlePersistedMessages(storedMessages)
+        await refreshSystemSurfaceSnapshot(reason: .write)
     }
 
     func setMessageReadState(id: UUID, isRead: Bool) async throws {
         try await performBackendWrite { backend in
             try await backend.setMessageReadState(id: id, isRead: isRead)
         }
+        await refreshSystemSurfaceSnapshot(reason: .write)
     }
 
     func markMessagesRead(
         filter: MessageQueryFilter,
         channel: String?
     ) async throws -> Int {
-        try await performBackendWrite { backend in
+        let changed = try await performBackendWrite { backend in
             try await backend.markMessagesRead(filter: filter, channel: channel)
         }
+        if changed > 0 {
+            await refreshSystemSurfaceSnapshot(reason: .write)
+        }
+        return changed
     }
 
     func markMessagesRead(ids: [UUID]) async throws -> Int {
-        try await performBackendWrite { backend in
+        let changed = try await performBackendWrite { backend in
             try await backend.markMessagesRead(ids: ids)
         }
+        if changed > 0 {
+            await refreshSystemSurfaceSnapshot(reason: .write)
+        }
+        return changed
     }
 
     func deleteMessage(id: UUID) async throws {
@@ -2148,6 +2155,7 @@ actor LocalDataStore {
             PushGoSpotlightIdentifier(kind: .message, identifier: id.uuidString),
         ].compactMap { $0 })
         await rebuildNotificationContextSnapshot()
+        await refreshSystemSurfaceSnapshot(reason: .delete)
     }
 
     func deleteMessages(ids: [UUID]) async throws -> Int {
@@ -2174,6 +2182,9 @@ actor LocalDataStore {
         if deletion.affectsNotificationContextSnapshot {
             await rebuildNotificationContextSnapshot()
         }
+        if !deletedIds.isEmpty {
+            await refreshSystemSurfaceSnapshot(reason: .delete)
+        }
         return deletedIds.count
     }
 
@@ -2197,6 +2208,7 @@ actor LocalDataStore {
                 PushGoSpotlightIdentifier(kind: .message, identifier: deletedMessageId.uuidString),
             ].compactMap { $0 })
             await rebuildNotificationContextSnapshot()
+            await refreshSystemSurfaceSnapshot(reason: .delete)
         }
     }
 
@@ -2211,6 +2223,7 @@ actor LocalDataStore {
                 PushGoSpotlightIdentifier(kind: .event, identifier: normalized),
             ].compactMap { $0 })
             await rebuildNotificationContextSnapshot()
+            await refreshSystemSurfaceSnapshot(reason: .delete)
         }
         return deletedCount
     }
@@ -2232,6 +2245,7 @@ actor LocalDataStore {
                 normalized.compactMap { PushGoSpotlightIdentifier(kind: .event, identifier: $0) }
             )
             await rebuildNotificationContextSnapshot()
+            await refreshSystemSurfaceSnapshot(reason: .delete)
         }
         return deletedCount
     }
@@ -2244,6 +2258,7 @@ actor LocalDataStore {
         if deletedCount > 0 {
             await rebuildSystemSearchIndex()
             await rebuildNotificationContextSnapshot()
+            await refreshSystemSurfaceSnapshot(reason: .delete)
         }
         return deletedCount
     }
@@ -2259,6 +2274,7 @@ actor LocalDataStore {
                 PushGoSpotlightIdentifier(kind: .thing, identifier: normalized),
             ].compactMap { $0 })
             await rebuildNotificationContextSnapshot()
+            await refreshSystemSurfaceSnapshot(reason: .delete)
         }
         return deletedCount
     }
@@ -2280,6 +2296,7 @@ actor LocalDataStore {
                 normalized.compactMap { PushGoSpotlightIdentifier(kind: .thing, identifier: $0) }
             )
             await rebuildNotificationContextSnapshot()
+            await refreshSystemSurfaceSnapshot(reason: .delete)
         }
         return deletedCount
     }
@@ -2292,6 +2309,7 @@ actor LocalDataStore {
         if deletedCount > 0 {
             await rebuildSystemSearchIndex()
             await rebuildNotificationContextSnapshot()
+            await refreshSystemSurfaceSnapshot(reason: .delete)
         }
         return deletedCount
     }
@@ -2309,6 +2327,7 @@ actor LocalDataStore {
         }
         await clearSystemSearchIndex()
         clearNotificationContextSnapshot()
+        clearSystemSurfaceSnapshot()
     }
 
     func deleteMessages(readState: Bool?, before cutoff: Date?) async throws -> Int {
@@ -2327,6 +2346,7 @@ actor LocalDataStore {
             await clearSystemSearchIndex()
             if total > 0 {
                 await rebuildNotificationContextSnapshot()
+                await refreshSystemSurfaceSnapshot(reason: .delete)
             }
             return total
         }
@@ -2345,6 +2365,7 @@ actor LocalDataStore {
         )
         if !deletedIds.isEmpty {
             await rebuildNotificationContextSnapshot()
+            await refreshSystemSurfaceSnapshot(reason: .delete)
         }
         return deletedIds.count
     }
@@ -2364,6 +2385,7 @@ actor LocalDataStore {
         )
         if !deletedIds.isEmpty {
             await rebuildNotificationContextSnapshot()
+            await refreshSystemSurfaceSnapshot(reason: .delete)
         }
         return deletedIds.count
     }
@@ -2383,6 +2405,7 @@ actor LocalDataStore {
         )
         if !deletedIds.isEmpty {
             await rebuildNotificationContextSnapshot()
+            await refreshSystemSurfaceSnapshot(reason: .delete)
         }
         return deletedIds.count
     }
@@ -2457,6 +2480,7 @@ actor LocalDataStore {
             deletedIds.compactMap { PushGoSpotlightIdentifier(kind: .message, identifier: $0.uuidString) }
         )
         await rebuildNotificationContextSnapshot()
+        await refreshSystemSurfaceSnapshot(reason: .delete)
         return deletedIds.count
     }
     func warmCachesIfNeeded() async {
@@ -2467,6 +2491,7 @@ actor LocalDataStore {
         await rebuildMetadataIndexIfNeeded(batchSize: 200, yieldBetweenBatches: true)
         await rebuildTagMetadataIndexIfNeeded(batchSize: 200, yieldBetweenBatches: true)
         await rebuildNotificationContextSnapshot()
+        await refreshSystemSurfaceSnapshot(reason: .warmCache)
     }
 
     private func mergeNotificationContextSnapshot(with messages: [PushMessage]) async {
@@ -2530,12 +2555,185 @@ actor LocalDataStore {
         )
     }
 
+    private func refreshSystemSurfaceSnapshot(
+        reason: PushGoSystemSnapshotRefreshReason,
+        now: Date = Date()
+    ) async {
+        let defaults = AppConstants.sharedUserDefaults(suiteName: appGroupIdentifier)
+        let policy = PushGoSystemSnapshotRefreshPolicy()
+        guard policy.shouldRefresh(now: now, reason: reason, defaults: defaults) else { return }
+        await rebuildSystemSurfaceSnapshot(now: now)
+        policy.recordRefresh(now: now, defaults: defaults)
+    }
+
+    func rebuildSystemSurfaceSnapshot(now: Date = Date()) async {
+        guard backend != nil else {
+            clearSystemSurfaceSnapshot()
+            return
+        }
+        let settings = await loadSystemIntegrationSettings()
+        let countsTuple = (try? await messageCounts()) ?? (total: 0, unread: 0)
+        let recentMessages = ((try? await loadMessagesPage(
+            before: nil,
+            limit: 80,
+            filter: .all,
+            channel: nil,
+            tag: nil,
+            sortMode: .timeDescending
+        )) ?? [])
+            .filter(isTopLevelMessage)
+            .map { PushGoSystemSummaryBuilder.summary(for: $0, settings: settings) }
+
+        var eventSummaries: [PushGoSystemSummary] = []
+        let eventMessages = (try? await loadEventMessagesForProjectionPage(before: nil, limit: 120)) ?? []
+        let eventIDs = orderedEntityIDs(from: eventMessages, kind: .event)
+        for eventID in eventIDs {
+            guard let detail = try? await loadEventProjectionDetail(eventId: eventID),
+                  let summary = PushGoProjectionSummaryBuilder.eventSummary(
+                    from: detail,
+                    eventID: eventID,
+                    settings: settings
+                  )
+            else {
+                continue
+            }
+            eventSummaries.append(summary)
+        }
+
+        var thingSummaries: [PushGoSystemSummary] = []
+        let thingMessages = (try? await loadThingMessagesForProjectionPage(before: nil, limit: 120)) ?? []
+        let thingIDs = orderedEntityIDs(from: thingMessages, kind: .thing)
+        for thingID in thingIDs {
+            guard let detail = try? await loadThingProjectionDetail(thingId: thingID),
+                  let summary = PushGoProjectionSummaryBuilder.thingSummary(
+                    from: detail,
+                    thingID: thingID,
+                    settings: settings
+                  )
+            else {
+                continue
+            }
+            thingSummaries.append(summary)
+        }
+
+        let safeEvents = eventSummaries.compactMap {
+            PushGoSystemSurfaceSnapshot.item(from: $0, source: .automation)
+        }
+        let safeThings = thingSummaries.compactMap {
+            PushGoSystemSurfaceSnapshot.item(from: $0, source: .automation)
+        }
+        let counts = PushGoSystemSurfaceSnapshot.Counts(
+            totalMessages: countsTuple.total,
+            unreadMessages: countsTuple.unread,
+            criticalEvents: safeEvents.filter { item in
+                switch item.severity?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+                case "critical", "high":
+                    return true
+                default:
+                    return false
+                }
+            }.count,
+            objectWarnings: safeThings.filter(PushGoSystemSnapshotProjector.isWarningObject).count
+        )
+        let snapshot = PushGoSystemSnapshotProjector.rebuild(
+            recentMessages: recentMessages,
+            eventSummaries: eventSummaries,
+            thingSummaries: thingSummaries,
+            counts: counts,
+            focusState: PushGoFocusStateStore.load(
+                defaults: AppConstants.sharedUserDefaults(suiteName: appGroupIdentifier)
+            ),
+            source: snapshotSourceIdentifier(),
+            now: now
+        )
+        if counts.totalMessages == 0, snapshot.criticalEvents.isEmpty, snapshot.latestObjectStates.isEmpty {
+            clearSystemSurfaceSnapshot()
+            return
+        }
+        _ = PushGoSystemSnapshotStore.write(
+            snapshot,
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier
+        )
+    }
+
+    private func clearSystemSurfaceSnapshot() {
+        _ = PushGoSystemSnapshotStore.clear(
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier
+        )
+    }
+
+    private func orderedEntityIDs(
+        from messages: [PushMessage],
+        kind: PushGoSystemEntityKind
+    ) -> [String] {
+        var seen = Set<String>()
+        var ids: [String] = []
+        for message in messages {
+            let id: String?
+            switch kind {
+            case .message:
+                id = message.id.uuidString
+            case .event:
+                id = normalizeEntityReference(message.eventId ?? message.entityId)
+            case .thing:
+                id = normalizeEntityReference(message.thingId ?? message.entityId)
+            }
+            guard let id, seen.insert(id).inserted else { continue }
+            ids.append(id)
+        }
+        return ids
+    }
+
     func rebuildSystemSearchIndex() async {
         await rebuildSystemSearchIndex(settings: await loadSystemIntegrationSettings())
     }
 
-    func clearSystemSearchIndexOnly() async {
-        await clearSystemSearchIndex()
+    func ensureSystemSearchIndexHealthy(now: Date = Date()) async {
+        let settings = await loadSystemIntegrationSettings()
+        guard settings.systemSearchEnabled else { return }
+        let defaults = AppConstants.sharedUserDefaults(suiteName: appGroupIdentifier)
+        await ensureSystemSurfaceSnapshotHealthy(now: now)
+        guard spotlightIndexer != nil else { return }
+        let lastRun = defaults.object(forKey: Self.systemSearchHealthCheckDefaultsKey) as? Date
+        if let lastRun, now.timeIntervalSince(lastRun) < Self.systemSearchHealthCheckInterval {
+            return
+        }
+        guard ((try? await messageCounts().total) ?? 0) > 0 else {
+            defaults.set(now, forKey: Self.systemSearchHealthCheckDefaultsKey)
+            return
+        }
+        await rebuildSystemSearchIndex(settings: settings)
+        defaults.set(now, forKey: Self.systemSearchHealthCheckDefaultsKey)
+    }
+
+    private func ensureSystemSurfaceSnapshotHealthy(now: Date = Date()) async {
+        let defaults = AppConstants.sharedUserDefaults(suiteName: appGroupIdentifier)
+        let lastRun = defaults.object(forKey: Self.systemSurfaceSnapshotHealthCheckDefaultsKey) as? Date
+        if let lastRun, now.timeIntervalSince(lastRun) < Self.systemSurfaceSnapshotHealthCheckInterval {
+            return
+        }
+        defer {
+            defaults.set(now, forKey: Self.systemSurfaceSnapshotHealthCheckDefaultsKey)
+        }
+        let snapshot = PushGoSystemSnapshotStore.load(
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier
+        )
+        let total = (try? await messageCounts().total) ?? 0
+        guard total > 0 else {
+            clearSystemSurfaceSnapshot()
+            return
+        }
+        guard let snapshot else {
+            await refreshSystemSurfaceSnapshot(reason: .healthCheck, now: now)
+            return
+        }
+        let age = now.timeIntervalSince(snapshot.generatedAt)
+        if snapshot.counts.totalMessages != total || age > PushGoSystemSnapshotRefreshPolicy.healthCheckMaximumAge {
+            await refreshSystemSurfaceSnapshot(reason: .healthCheck, now: now)
+        }
     }
 
     private func rebuildSystemSearchIndex(settings: SystemIntegrationSettings) async {

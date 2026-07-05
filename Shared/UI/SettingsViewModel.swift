@@ -38,16 +38,12 @@ final class SettingsViewModel {
     }
     var gatewayInput = GatewayInput()
     var notificationSoundSettings = NotificationSoundSettings()
-    var systemIntegrationSettings = SystemIntegrationSettings()
-
     var isSaving: Bool = false
     var isSavingServerConfig: Bool = false
     var shouldDismissServerManagement: Bool = false
     var isClearingMessages: Bool = false
     var isLoadingNotificationSounds: Bool = false
     var isSavingNotificationSounds: Bool = false
-    var isSavingSystemIntegrationSettings: Bool = false
-    var isRebuildingSystemSearchIndex: Bool = false
     var notificationSoundBusyLevel: NotificationSoundLevel?
     var isImportingNotificationSound: Bool = false
     var notificationSoundPreviewID: String?
@@ -182,7 +178,6 @@ final class SettingsViewModel {
             launchAtLoginEnabled = false
 #endif
             notificationSoundSettings = await notificationSoundManager.loadSettings()
-            systemIntegrationSettings = await dataStore.loadSystemIntegrationSettings()
 #if os(macOS)
             hasMacOSNotificationSoundDirectoryAccess = await notificationSoundManager.hasMacOSUserSoundsDirectoryAccess()
 #endif
@@ -215,38 +210,6 @@ final class SettingsViewModel {
 
     func clearError() {
         error = nil
-    }
-
-    func updateSystemIntegrationSettings(_ transform: (inout SystemIntegrationSettings) -> Void) {
-        var settings = systemIntegrationSettings
-        transform(&settings)
-        settings.updatedAt = Date()
-        systemIntegrationSettings = settings.normalized
-        Task { @MainActor in
-            await saveSystemIntegrationSettings()
-        }
-    }
-
-    func saveSystemIntegrationSettings() async {
-        guard !isSavingSystemIntegrationSettings else { return }
-        isSavingSystemIntegrationSettings = true
-        defer { isSavingSystemIntegrationSettings = false }
-        await dataStore.saveSystemIntegrationSettings(systemIntegrationSettings)
-    }
-
-    func clearSystemSearchIndex() async {
-        isRebuildingSystemSearchIndex = true
-        defer { isRebuildingSystemSearchIndex = false }
-        await dataStore.clearSystemSearchIndexOnly()
-        systemIntegrationSettings = await dataStore.loadSystemIntegrationSettings()
-        successMessage = localizationManager.localized("system_search_index_cleared")
-    }
-
-    func rebuildSystemSearchIndex() async {
-        isRebuildingSystemSearchIndex = true
-        defer { isRebuildingSystemSearchIndex = false }
-        await dataStore.rebuildSystemSearchIndex()
-        successMessage = localizationManager.localized("system_search_index_rebuilt")
     }
 
     var hasImportedNotificationSounds: Bool {

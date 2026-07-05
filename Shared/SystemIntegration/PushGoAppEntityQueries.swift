@@ -66,7 +66,6 @@ struct PushGoEventEntityQuery: EntityQuery {
         var seen = Set<String>()
         var output: [PushGoEventEntity] = []
         for message in messages {
-            guard !settings.excludesChannel(message.channel) else { continue }
             guard let eventID = message.eventId,
                   seen.insert(eventID).inserted
             else {
@@ -116,7 +115,6 @@ struct PushGoThingEntityQuery: EntityQuery {
         var seen = Set<String>()
         var output: [PushGoThingEntity] = []
         for message in messages {
-            guard !settings.excludesChannel(message.channel) else { continue }
             guard let thingID = message.thingId,
                   seen.insert(thingID).inserted
             else {

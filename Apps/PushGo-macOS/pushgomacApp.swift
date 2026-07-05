@@ -42,11 +42,11 @@ struct pushgomacApp: App {
                 }
                 #endif
                 .task {
-                    await consumePendingIntentTarget()
+                    await consumePendingSystemWork()
                 }
                 .onChange(of: intentRouter.revision) { _, _ in
                     Task { @MainActor in
-                        await consumePendingIntentTarget()
+                        await consumePendingSystemWork()
                     }
                 }
         }
@@ -76,8 +76,10 @@ struct pushgomacApp: App {
     }
 
     @MainActor
-    private func consumePendingIntentTarget() async {
-        guard let target = PushGoSystemIntentRouter.shared.consumePendingTarget() else { return }
-        await environment.openSystemTarget(target)
+    private func consumePendingSystemWork() async {
+        if let target = PushGoSystemIntentRouter.shared.consumePendingTarget() {
+            await environment.openSystemTarget(target)
+        }
+        await environment.consumePendingSystemAction()
     }
 }

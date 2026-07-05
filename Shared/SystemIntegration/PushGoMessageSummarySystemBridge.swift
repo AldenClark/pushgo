@@ -3,11 +3,12 @@ import Foundation
 enum PushGoMessageSummarySystemBridge {
     static func summary(for message: PushMessageSummary) -> PushGoSystemSummary {
         let bodyPreview = normalized(message.bodyPreview)
+        let isSensitive = message.decryptionState != .decryptOk && message.isEncrypted
         let privacy = PushGoSystemSummary.Privacy(
             mayIndexTitle: true,
-            mayIndexBody: !message.isEncrypted || message.decryptionState == .decryptOk,
+            mayIndexBody: !isSensitive,
             mayExposeMetadata: false,
-            isEncryptedOrSensitive: message.isEncrypted
+            isEncryptedOrSensitive: isSensitive
         )
         let base = PushGoSystemSummary(
             kind: .message,

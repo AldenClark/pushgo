@@ -91,6 +91,11 @@ struct MainTabContainerView: View {
                 openPendingEntityIfNeeded()
             }
         }
+        .onChange(of: environment.pendingSystemListToOpen) { _, tab in
+            guard let tab else { return }
+            openList(tab)
+            environment.pendingSystemListToOpen = nil
+        }
         .onChange(of: sidebarSelection) { oldValue, newValue in
             applySidebarSelection(previous: oldValue, current: newValue)
         }
@@ -271,6 +276,27 @@ struct MainTabContainerView: View {
             environment.pendingThingToOpen = nil
             sidebarSelection = .events
         }
+    }
+
+    private func openList(_ tab: MainTab) {
+        switch tab {
+        case .messages:
+            sidebarSelection = .messagesAll
+            selectedMessageId = nil
+            selectedMessageSnapshot = nil
+        case .events:
+            sidebarSelection = .events
+            selectedEventId = nil
+        case .things:
+            sidebarSelection = .things
+            selectedThingId = nil
+        case .channels:
+            sidebarSelection = .channels
+        case .settings:
+            sidebarSelection = .settings
+        }
+        environment.updateActiveTab(tab)
+        ensureSidebarSelectionIsVisible()
     }
 
     private var messagesSidebarSelection: SidebarSelection {

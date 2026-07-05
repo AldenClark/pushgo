@@ -37,6 +37,8 @@
 	<true/>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Save images</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>PushGoDisplayVersion</key>
 	<string>$(PUSHGO_DISPLAY_VERSION)</string>
 	<key>PushGoKeychainAccessGroup</key>

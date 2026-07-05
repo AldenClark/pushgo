@@ -21,6 +21,7 @@ final class NotificationOpenController {
     var pendingMessageToOpen: UUID?
     var pendingEventToOpen: String?
     var pendingThingToOpen: String?
+    var pendingListToOpen: MainTab?
 
     init(
         dataStore: LocalDataStore,
@@ -63,6 +64,17 @@ final class NotificationOpenController {
     }
 
     func openSystemTarget(_ target: PushGoSystemOpenTarget) async {
+        if target.destination == .list {
+            switch target.kind {
+            case .message:
+                pendingListToOpen = .messages
+            case .event:
+                pendingListToOpen = .events
+            case .thing:
+                pendingListToOpen = .things
+            }
+            return
+        }
         switch target.kind {
         case .message:
             if let localMessageID = target.localMessageID {

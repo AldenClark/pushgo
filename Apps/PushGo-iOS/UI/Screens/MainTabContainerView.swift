@@ -89,6 +89,13 @@ struct MainTabContainerView: View {
                     selection = .things
                 }
             }
+            .onChange(of: environment.pendingSystemListToOpen) { _, tab in
+                guard let tab else { return }
+                selection = tab
+                environment.updateActiveTab(tab)
+                environment.pendingSystemListToOpen = nil
+                ensureSelectionIsVisible()
+            }
             .onChange(of: selection) { _, newValue in
                 environment.updateActiveTab(newValue)
             }

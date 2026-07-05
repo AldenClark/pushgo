@@ -328,7 +328,8 @@ final class NotificationContentPreparer {
         let settings = SystemIntegrationSettings.loadSharedDefaults()
         let policy = PushGoNotificationActionPolicy.presentationPolicy(
             severity: level,
-            settings: settings
+            settings: settings,
+            focusState: PushGoFocusStateStore.load()
         )
         let fallbackLevel = interruptionLevel(for: level, sound: fallbackSound)
         let policyLevel = PushGoNotificationActionPolicy.interruptionLevel(

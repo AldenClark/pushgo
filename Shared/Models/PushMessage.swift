@@ -185,7 +185,14 @@ extension PushMessage {
 
     var isEncrypted: Bool {
         if decryptionState != nil { return true }
-        return rawPayload["ciphertext"] != nil
+        if rawPayload["ciphertext"] != nil { return true }
+        if boolValue(forKeys: ["encrypted", "is_encrypted", "isEncrypted"]) == true { return true }
+        switch stringValue(forKeys: ["encryption_state", "encryptionState", "encrypted"]).map(Self.normalizedFlagText) {
+        case "encrypted", "ciphertext", "sealed", "true", "yes", "1":
+            return true
+        default:
+            return false
+        }
     }
 
     var metadata: Metadata {
@@ -235,6 +242,37 @@ extension PushMessage {
             (rawPayload[key]?.value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         .first(where: { !$0.isEmpty })
+    }
+
+    private func boolValue(forKeys keys: [String]) -> Bool? {
+        keys.compactMap { key -> Bool? in
+            guard let value = rawPayload[key]?.value else { return nil }
+            if let bool = value as? Bool {
+                return bool
+            }
+            if let string = value as? String {
+                switch Self.normalizedFlagText(string) {
+                case "true", "yes", "1", "encrypted":
+                    return true
+                case "false", "no", "0", "plain", "plaintext":
+                    return false
+                default:
+                    return nil
+                }
+            }
+            if let number = value as? NSNumber {
+                return number.boolValue
+            }
+            return nil
+        }
+        .first
+    }
+
+    private static func normalizedFlagText(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .lowercased()
     }
 
     var notificationRequestId: String? {

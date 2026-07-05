@@ -33,6 +33,9 @@ enum PushGoDeepLink {
         else {
             return nil
         }
+        if id == "list" {
+            return PushGoSystemOpenTarget.list(kind: kind, source: source)
+        }
         return PushGoSystemOpenTarget(kind: kind, identifier: id, source: source)
     }
 }

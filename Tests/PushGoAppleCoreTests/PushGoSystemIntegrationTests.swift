@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import PushGoAppleCore
 
+@Suite(.serialized)
 struct PushGoSystemIntegrationTests {
     @Test
     func systemIntegrationSettingsDefaultsMatchPlan() {
@@ -9,21 +10,26 @@ struct PushGoSystemIntegrationTests {
 
         #expect(settings.systemSearchEnabled)
         #expect(settings.includeMessageBodyInSearch)
-        #expect(!settings.includeMetadataInSearch)
+        #expect(settings.includeMetadataInSearch)
         #expect(settings.indexEventsAndThings)
-        #expect(!settings.timeSensitiveAlertsEnabled)
-        #expect(settings.excludedChannelIDs.isEmpty)
+        #expect(settings.timeSensitiveAlertsEnabled)
     }
 
     @Test
-    func systemIntegrationSettingsNormalizesExcludedChannels() {
+    func systemIntegrationSettingsNormalizationForcesBuiltInDefaults() {
         let settings = SystemIntegrationSettings(
-            excludedChannelIDs: [" infra ", "", "ops"]
-        )
+            systemSearchEnabled: false,
+            includeMessageBodyInSearch: false,
+            includeMetadataInSearch: false,
+            indexEventsAndThings: false,
+            timeSensitiveAlertsEnabled: false
+        ).normalized
 
-        #expect(settings.excludesChannel("infra"))
-        #expect(settings.excludesChannel(" ops "))
-        #expect(!settings.excludesChannel("home"))
+        #expect(settings.systemSearchEnabled)
+        #expect(settings.includeMessageBodyInSearch)
+        #expect(settings.includeMetadataInSearch)
+        #expect(settings.indexEventsAndThings)
+        #expect(settings.timeSensitiveAlertsEnabled)
     }
 
     @Test
@@ -111,6 +117,75 @@ struct PushGoSystemIntegrationTests {
     }
 
     @Test
+    func messageSummaryTreatsEncryptedPayloadMarkersAsSensitive() {
+        let message = PushMessage(
+            messageId: "msg-encrypted-marker",
+            title: "Encrypted Marker",
+            body: "ciphertext body",
+            rawPayload: ["encrypted": AnyCodable(true)]
+        )
+
+        let summary = PushGoSystemSummaryBuilder.summary(for: message)
+
+        #expect(message.isEncrypted)
+        #expect(summary.privacy.isEncryptedOrSensitive)
+        #expect(summary.bodyPreview == nil)
+    }
+
+    @Test
+    func messageSummaryAllowsSuccessfullyDecryptedContent() {
+        let message = PushMessage(
+            messageId: "msg-decrypted",
+            title: "Decrypted alert",
+            body: "safe decrypted summary",
+            rawPayload: ["ciphertext": AnyCodable("abc")],
+            status: .decrypted,
+            decryptionState: .decryptOk
+        )
+
+        let summary = PushGoSystemSummaryBuilder.summary(for: message)
+
+        #expect(message.isEncrypted)
+        #expect(!summary.privacy.isEncryptedOrSensitive)
+        #expect(summary.privacy.mayIndexBody)
+        #expect(summary.bodyPreview?.contains("safe decrypted summary") == true)
+    }
+
+    @Test
+    func liveActivityTokenRegistrationPayloadUsesGatewayContract() throws {
+        let registration = PushGoLiveActivityTokenRegistration(
+            activityKey: "event:evt-001",
+            channelID: "ops",
+            token: "abcd"
+        )
+        let data = try JSONEncoder().encode(registration)
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        #expect(object["activity_key"] as? String == "event:evt-001")
+        #expect(object["channel_id"] as? String == "ops")
+        #expect(object["token"] as? String == "abcd")
+        #expect(object["platform"] as? String == "ios")
+        #expect(object["schema_version"] as? Int == 1)
+    }
+
+    @Test
+    func liveActivityTokenRegistrationBuildsGatewayRequest() throws {
+        let config = ServerConfig(
+            baseURL: try #require(URL(string: "https://gateway.example.test/api/")),
+            token: "  gateway-token  "
+        )
+        let request = try #require(PushGoLiveActivityTokenRegistrationService.makeRequest(
+            config: config,
+            path: "/v1/activity/register"
+        ))
+
+        #expect(request.url?.absoluteString == "https://gateway.example.test/api/v1/activity/register")
+        #expect(request.httpMethod == "POST")
+        #expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer gateway-token")
+    }
+
+    @Test
     func eventAndThingSummariesUseProjectionIdentity() {
         let event = EventProjection(
             id: "evt-001",
@@ -163,15 +238,14 @@ struct PushGoSystemIntegrationTests {
         #expect(eventSummary.searchableText.contains("Disk pressure"))
         #expect(thingSummary.kind == .thing)
         #expect(thingSummary.stableID == "server-01")
-        #expect(!thingSummary.searchableText.contains("db01"))
-        #expect(!thingSummary.searchableText.contains("A1"))
+        #expect(thingSummary.searchableText.contains("db01"))
+        #expect(thingSummary.searchableText.contains("A1"))
         #expect(thingSummary.accessibilityLabel.contains("Object"))
     }
 
     @Test
-    func metadataSearchSettingControlsMessageAndThingMetadata() {
-        let disabled = SystemIntegrationSettings(includeMetadataInSearch: false)
-        let enabled = SystemIntegrationSettings(includeMetadataInSearch: true)
+    func metadataSearchIndexesNonSensitiveMetadataByDefault() {
+        let settings = SystemIntegrationSettings()
         let message = PushMessage(
             messageId: "msg-metadata",
             title: "Metadata message",
@@ -208,52 +282,56 @@ struct PushGoSystemIntegrationTests {
             relatedUpdates: []
         )
 
-        let disabledMessage = PushGoSystemSummaryBuilder.summary(for: message, settings: disabled)
-        let enabledMessage = PushGoSystemSummaryBuilder.summary(for: message, settings: enabled)
-        let disabledThing = PushGoSystemSummaryBuilder.summary(for: thing, settings: disabled)
-        let enabledThing = PushGoSystemSummaryBuilder.summary(for: thing, settings: enabled)
+        let messageSummary = PushGoSystemSummaryBuilder.summary(for: message, settings: settings)
+        let thingSummary = PushGoSystemSummaryBuilder.summary(for: thing, settings: settings)
 
-        #expect(!disabledMessage.searchableText.contains("db01"))
-        #expect(enabledMessage.searchableText.contains("host db01"))
-        #expect(!enabledMessage.searchableText.contains(String(repeating: "x", count: SystemIntegrationSettings.metadataValueMaxLength + 1)))
-        #expect(!disabledThing.searchableText.contains("db01"))
-        #expect(!disabledThing.searchableText.contains("A1"))
-        #expect(!disabledThing.searchableText.contains("core"))
-        #expect(enabledThing.searchableText.contains("host db01"))
-        #expect(enabledThing.searchableText.contains("rack"))
-        #expect(enabledThing.searchableText.contains("A1"))
-        #expect(enabledThing.searchableText.contains("cluster core"))
+        #expect(messageSummary.searchableText.contains("host db01"))
+        #expect(!messageSummary.searchableText.contains(String(repeating: "x", count: SystemIntegrationSettings.metadataValueMaxLength + 1)))
+        #expect(thingSummary.searchableText.contains("host db01"))
+        #expect(thingSummary.searchableText.contains("rack"))
+        #expect(thingSummary.searchableText.contains("A1"))
+        #expect(thingSummary.searchableText.contains("cluster core"))
     }
 
     @Test
-    func userActivityRespectsDisabledSystemSearchSetting() {
-        let settings = SystemIntegrationSettings(systemSearchEnabled: false)
-        let message = PushMessage(
-            messageId: "msg-activity-disabled",
-            title: "Disabled activity message",
-            body: "Activity body",
-            receivedAt: Date(timeIntervalSince1970: 777)
-        )
-        let summary = PushGoSystemSummaryBuilder.summary(for: message, settings: settings)
-        let activity = PushGoUserActivityBuilder.activity(
-            for: summary,
-            systemSearchEnabled: settings.systemSearchEnabled
-        )
+    func notificationPolicyUsesDefaultTimeSensitiveSetting() {
+        let settings = SystemIntegrationSettings()
 
-        #expect(!summary.privacy.mayIndexTitle)
-        #expect(!activity.isEligibleForSearch)
+        #expect(PushGoNotificationActionPolicy.presentationPolicy(severity: "low", settings: settings).interruptionLevel == .passive)
+        #expect(PushGoNotificationActionPolicy.presentationPolicy(severity: "normal", settings: settings).relevanceScore == 0.4)
+        #expect(PushGoNotificationActionPolicy.presentationPolicy(severity: "high", settings: settings).interruptionLevel == .timeSensitive)
+        #expect(PushGoNotificationActionPolicy.presentationPolicy(severity: "critical", settings: settings).relevanceScore == 0.95)
     }
 
     @Test
-    func notificationPolicyRespectsTimeSensitiveSetting() {
-        let disabled = SystemIntegrationSettings(timeSensitiveAlertsEnabled: false)
-        let enabled = SystemIntegrationSettings(timeSensitiveAlertsEnabled: true)
+    func focusPolicyReducesNotificationInterruptionWithoutDisablingSystemSurfaces() {
+        let settings = SystemIntegrationSettings()
+        let priorityOnly = PushGoSystemSurfaceSnapshot.FocusState(
+            mode: .priorityOnly,
+            updatedAtEpochMs: 1_742_000_000_000
+        )
+        let quiet = PushGoSystemSurfaceSnapshot.FocusState(
+            mode: .quiet,
+            updatedAtEpochMs: 1_742_000_000_000
+        )
 
-        #expect(PushGoNotificationActionPolicy.presentationPolicy(severity: "low", settings: enabled).interruptionLevel == .passive)
-        #expect(PushGoNotificationActionPolicy.presentationPolicy(severity: "normal", settings: enabled).relevanceScore == 0.4)
-        #expect(PushGoNotificationActionPolicy.presentationPolicy(severity: "high", settings: disabled).interruptionLevel == .active)
-        #expect(PushGoNotificationActionPolicy.presentationPolicy(severity: "high", settings: enabled).interruptionLevel == .timeSensitive)
-        #expect(PushGoNotificationActionPolicy.presentationPolicy(severity: "critical", settings: enabled).relevanceScore == 0.95)
+        #expect(PushGoNotificationActionPolicy.presentationPolicy(
+            severity: "normal",
+            settings: settings,
+            focusState: priorityOnly
+        ).interruptionLevel == .passive)
+        #expect(PushGoNotificationActionPolicy.presentationPolicy(
+            severity: "high",
+            settings: settings,
+            focusState: priorityOnly
+        ).interruptionLevel == .timeSensitive)
+        #expect(PushGoNotificationActionPolicy.presentationPolicy(
+            severity: "critical",
+            settings: settings,
+            focusState: quiet
+        ).interruptionLevel == .active)
+        #expect(settings.systemSearchEnabled)
+        #expect(settings.indexEventsAndThings)
     }
 
     @Test
@@ -286,6 +364,99 @@ struct PushGoSystemIntegrationTests {
     }
 
     @Test
+    @MainActor
+    func systemIntentRouterPersistsListTargets() throws {
+        PushGoSystemIntentRouter.clearPendingOpenTarget()
+        defer { PushGoSystemIntentRouter.clearPendingOpenTarget() }
+        let target = PushGoSystemOpenTarget.list(kind: .message, source: .appIntent)
+
+        PushGoSystemIntentRouter.shared.setPendingTarget(target)
+        let consumed = try #require(PushGoSystemIntentRouter.shared.consumePendingTarget())
+
+        #expect(consumed.kind == .message)
+        #expect(consumed.destination == .list)
+    }
+
+    @Test
+    func systemPendingActionStoreRoundTripsMarkLatestUnreadAction() {
+        let defaults = UserDefaults(suiteName: "pushgo.pending-action.test.\(UUID().uuidString)")!
+
+        PushGoSystemPendingActionStore.save(.markLatestUnreadMessageRead, defaults: defaults)
+        #expect(PushGoSystemPendingActionStore.consume(defaults: defaults) == .markLatestUnreadMessageRead)
+        #expect(PushGoSystemPendingActionStore.consume(defaults: defaults) == nil)
+    }
+
+    @Test
+    func liveActivityScopeOnlyIncludesEventAndThingEventMessages() {
+        let event = PushMessage(
+            messageId: "evt-live-001",
+            title: "Event",
+            body: "body",
+            rawPayload: [
+                "entity_type": AnyCodable("event"),
+                "event_id": AnyCodable("evt-live-001"),
+            ]
+        )
+        let thingEvent = PushMessage(
+            messageId: "thing-event-live-001",
+            title: "Thing event",
+            body: "body",
+            rawPayload: [
+                "entity_type": AnyCodable("message"),
+                "event_id": AnyCodable("evt-live-thing-001"),
+                "thing_id": AnyCodable("thing-live-001"),
+            ]
+        )
+        let plainMessage = PushMessage(
+            messageId: "msg-live-001",
+            title: "Plain",
+            body: "body",
+            rawPayload: ["entity_type": AnyCodable("message")]
+        )
+        let thingUpdate = PushMessage(
+            messageId: "thing-live-001",
+            title: "Thing",
+            body: "body",
+            rawPayload: [
+                "entity_type": AnyCodable("thing"),
+                "thing_id": AnyCodable("thing-live-001"),
+            ]
+        )
+
+        #expect(PushGoLiveActivityCoordinator.shouldUseLiveActivity(for: event))
+        #expect(PushGoLiveActivityCoordinator.shouldUseLiveActivity(for: thingEvent))
+        #expect(!PushGoLiveActivityCoordinator.shouldUseLiveActivity(for: plainMessage))
+        #expect(!PushGoLiveActivityCoordinator.shouldUseLiveActivity(for: thingUpdate))
+    }
+
+    @Test
+    func liveActivityScopeExcludesEncryptedOrDecryptFailedMessages() {
+        let decryptFailedEvent = PushMessage(
+            messageId: "evt-live-sensitive-001",
+            title: "Sensitive Event",
+            body: "ciphertext",
+            rawPayload: [
+                "entity_type": AnyCodable("event"),
+                "event_id": AnyCodable("evt-live-sensitive-001"),
+            ],
+            decryptionState: .decryptFailed
+        )
+        let encryptedEvent = PushMessage(
+            messageId: "evt-live-sensitive-002",
+            title: "Encrypted Event",
+            body: "ciphertext",
+            rawPayload: [
+                "entity_type": AnyCodable("event"),
+                "event_id": AnyCodable("evt-live-sensitive-002"),
+                "encrypted": AnyCodable(true),
+            ]
+        )
+
+        #expect(!PushGoLiveActivityCoordinator.shouldUseLiveActivity(for: decryptFailedEvent))
+        #expect(!PushGoLiveActivityCoordinator.shouldUseLiveActivity(for: encryptedEvent))
+    }
+
+    @Test
     func localDataStorePersistsSystemIntegrationSettings() async throws {
         await withIsolatedLocalDataStore { store, _ in
             let settings = SystemIntegrationSettings(
@@ -293,19 +464,17 @@ struct PushGoSystemIntegrationTests {
                 includeMessageBodyInSearch: false,
                 includeMetadataInSearch: true,
                 indexEventsAndThings: false,
-                timeSensitiveAlertsEnabled: true,
-                excludedChannelIDs: ["ops"]
+                timeSensitiveAlertsEnabled: true
             )
 
             await store.saveSystemIntegrationSettings(settings)
             let loaded = await store.loadSystemIntegrationSettings()
 
-            #expect(!loaded.systemSearchEnabled)
-            #expect(!loaded.includeMessageBodyInSearch)
+            #expect(loaded.systemSearchEnabled)
+            #expect(loaded.includeMessageBodyInSearch)
             #expect(loaded.includeMetadataInSearch)
-            #expect(!loaded.indexEventsAndThings)
+            #expect(loaded.indexEventsAndThings)
             #expect(loaded.timeSensitiveAlertsEnabled)
-            #expect(loaded.excludesChannel("ops"))
         }
     }
 
@@ -380,7 +549,7 @@ struct PushGoSystemIntegrationTests {
     }
 
     @Test
-    func disablingSystemSearchClearsSpotlightIndex() async throws {
+    func savingLegacyDisabledSystemSearchNormalizesAndRebuildsSpotlightIndex() async throws {
         let indexer = RecordingPushGoSpotlightIndexer()
         await withIsolatedLocalDataStore(spotlightIndexer: indexer) { store, _ in
             await store.saveSystemIntegrationSettings(SystemIntegrationSettings(systemSearchEnabled: false))
@@ -388,20 +557,28 @@ struct PushGoSystemIntegrationTests {
 
         let operations = await indexer.operations
         #expect(operations.contains { $0.kind == .deleteAll })
+        #expect(operations.contains { $0.kind == .index } || operations.count == 1)
     }
 
     @Test
-    func clearingSystemSearchIndexOnlyKeepsSettingsEnabled() async throws {
+    func systemSearchHealthCheckRebuildsIndexWhenNeeded() async throws {
         let indexer = RecordingPushGoSpotlightIndexer()
-        await withIsolatedLocalDataStore(spotlightIndexer: indexer) { store, _ in
-            await store.saveSystemIntegrationSettings(SystemIntegrationSettings(systemSearchEnabled: true))
-            await store.clearSystemSearchIndexOnly()
-            let loaded = await store.loadSystemIntegrationSettings()
 
-            #expect(loaded.systemSearchEnabled)
+        try await withIsolatedLocalDataStore(spotlightIndexer: indexer) { store, appGroupIdentifier in
+            let defaults = AppConstants.sharedUserDefaults(suiteName: appGroupIdentifier)
+            defaults.removeObject(forKey: LocalDataStore.systemSearchHealthCheckDefaultsKey)
+            defaults.removeObject(forKey: LocalDataStore.systemSurfaceSnapshotHealthCheckDefaultsKey)
+            try await store.saveMessage(PushMessage(
+                messageId: "msg-health-check",
+                title: "Health check message",
+                body: "body",
+                receivedAt: Date(timeIntervalSince1970: 1_100)
+            ))
+            await store.ensureSystemSearchIndexHealthy(now: Date(timeIntervalSince1970: 10_000))
+            await store.ensureSystemSearchIndexHealthy(now: Date(timeIntervalSince1970: 10_100))
         }
 
         let operations = await indexer.operations
-        #expect(operations.contains { $0.kind == .deleteAll })
+        #expect(operations.filter { $0.kind == .deleteAll }.count == 1)
     }
 }

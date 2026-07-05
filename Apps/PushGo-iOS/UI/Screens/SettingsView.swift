@@ -226,11 +226,6 @@ struct SettingsView: View {
             .listRowInsets(rowInsets)
             .listRowBackground(Color.clear)
 
-            SystemIntegrationSettingsGroup(viewModel: viewModel)
-                .listRowInsets(rowInsets)
-                .listRowBackground(Color.clear)
-                .accessibilityIdentifier("group.settings.system_integration")
-
             Button {
                 viewModel.clearError()
                 activeSheet = .notificationSounds

@@ -4,6 +4,9 @@
     "" : {
 
     },
+    "%@" : {
+
+    },
     "%@ %@" : {
       "localizations" : {
         "en" : {
@@ -2724,59 +2727,6 @@
         }
       }
     },
-    "clean_all_messages_before_30_days" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Alle Nachrichten älter als 30 Tage bereinigen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Clean all messages before 30 days"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Limpiar todos los mensajes de más de 30 días"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nettoyer tous les messages de plus de 30 jours"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "30 日前のすべてのメッセージを削除"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "30일 이전 모든 메시지 삭제"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "清除 30 天前的所有消息"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "清除 30 天前的所有訊息"
-          }
-        }
-      }
-    },
     "clean_all_messages_before_7_days" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2826,6 +2776,59 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "清除 7 天前的所有訊息"
+          }
+        }
+      }
+    },
+    "clean_all_messages_before_30_days" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Nachrichten älter als 30 Tage bereinigen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clean all messages before 30 days"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Limpiar todos los mensajes de más de 30 días"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nettoyer tous les messages de plus de 30 jours"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "30 日前のすべてのメッセージを削除"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "30일 이전 모든 메시지 삭제"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除 30 天前的所有消息"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除 30 天前的所有訊息"
           }
         }
       }
@@ -2883,59 +2886,6 @@
         }
       }
     },
-    "clean_read_messages_before_30_days" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gelesene Nachrichten älter als 30 Tage bereinigen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Clean read messages before 30 days"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Limpiar mensajes leídos de más de 30 días"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nettoyer les messages lus de plus de 30 jours"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "30 日前の既読メッセージを削除"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "30일 이전 읽은 메시지 삭제"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "清除 30 天前的已读消息"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "清除 30 天前的已讀訊息"
-          }
-        }
-      }
-    },
     "clean_read_messages_before_7_days" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2985,6 +2935,59 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "清除 7 天前的已讀訊息"
+          }
+        }
+      }
+    },
+    "clean_read_messages_before_30_days" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gelesene Nachrichten älter als 30 Tage bereinigen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clean read messages before 30 days"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Limpiar mensajes leídos de más de 30 días"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nettoyer les messages lus de plus de 30 jours"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "30 日前の既読メッセージを削除"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "30일 이전 읽은 메시지 삭제"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除 30 天前的已读消息"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除 30 天前的已讀訊息"
           }
         }
       }
@@ -3464,6 +3467,9 @@
           }
         }
       }
+    },
+    "Critical Events" : {
+
     },
     "current_number_messages" : {
       "extractionState" : "manual",
@@ -4521,6 +4527,9 @@
         }
       }
     },
+    "Event" : {
+
+    },
     "event_id_required" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4785,6 +4794,9 @@
           }
         }
       }
+    },
+    "Events" : {
+
     },
     "events_empty_hint" : {
       "extractionState" : "manual",
@@ -5897,6 +5909,9 @@
         }
       }
     },
+    "Image attachment for %@" : {
+
+    },
     "image_attachment" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6954,6 +6969,15 @@
         }
       }
     },
+    "Mark a PushGo message as read without opening the app." : {
+
+    },
+    "Mark PushGo Message as Read" : {
+
+    },
+    "Mark Read" : {
+
+    },
     "mark_all_as_read" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7059,6 +7083,9 @@
           }
         }
       }
+    },
+    "Message" : {
+
     },
     "message_content_copied" : {
       "extractionState" : "manual",
@@ -8014,6 +8041,9 @@
         }
       }
     },
+    "Messages" : {
+
+    },
     "messages_cleaned_placeholder" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8909,6 +8939,9 @@
         }
       }
     },
+    "Object" : {
+
+    },
     "object_id_placeholder" : {
       "localizations" : {
         "de" : {
@@ -8960,6 +8993,9 @@
           }
         }
       }
+    },
+    "Objects" : {
+
     },
     "off" : {
       "localizations" : {
@@ -10178,6 +10214,48 @@
         }
       }
     },
+    "Open a PushGo event detail." : {
+
+    },
+    "Open a PushGo message detail." : {
+
+    },
+    "Open a PushGo object detail." : {
+
+    },
+    "Open PushGo Event" : {
+
+    },
+    "Open PushGo Events" : {
+
+    },
+    "Open PushGo Message" : {
+
+    },
+    "Open PushGo Messages" : {
+
+    },
+    "Open PushGo Object" : {
+
+    },
+    "Open PushGo Objects" : {
+
+    },
+    "Open Recent Critical PushGo Event" : {
+
+    },
+    "Open the most recent high or critical PushGo event." : {
+
+    },
+    "Open the PushGo event list." : {
+
+    },
+    "Open the PushGo message list." : {
+
+    },
+    "Open the PushGo object list." : {
+
+    },
     "open_developer_api_docs" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10814,6 +10892,15 @@
         }
       }
     },
+    "Opening PushGo events." : {
+
+    },
+    "Opening PushGo messages." : {
+
+    },
+    "Opening PushGo objects." : {
+
+    },
     "operation_failed" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11447,6 +11534,15 @@
         }
       }
     },
+    "PushGo Event" : {
+
+    },
+    "PushGo Message" : {
+
+    },
+    "PushGo Object" : {
+
+    },
     "pushgo_app_name" : {
       "localizations" : {
         "de" : {
@@ -11656,6 +11752,9 @@
           }
         }
       }
+    },
+    "Recent Messages" : {
+
     },
     "remove_custom_sound_confirm_message" : {
       "localizations" : {
@@ -13973,6 +14072,24 @@
           }
         }
       }
+    },
+    "Summarize Critical PushGo Events" : {
+
+    },
+    "Summarize recent high or critical PushGo events without opening the app." : {
+
+    },
+    "Summarize Recent PushGo Messages" : {
+
+    },
+    "Summarize recent PushGo messages without opening the app." : {
+
+    },
+    "Summarize Unread PushGo Messages" : {
+
+    },
+    "Summarize unread PushGo messages without opening the app." : {
+
     },
     "switching_watch_to_mirror_mode" : {
       "localizations" : {
@@ -16351,6 +16468,9 @@
           }
         }
       }
+    },
+    "Unread Summary" : {
+
     },
     "unsubscribe_and_delete_history" : {
       "extractionState" : "manual",

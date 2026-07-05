@@ -58,6 +58,10 @@ final class AppEnvironment {
     private(set) var launchAtLoginEnabled: Bool = false
     private(set) var betaChannelEnabled: Bool = false
     var activeMainTab: MainTab { navigationState.activeMainTab }
+    var pendingSystemListToOpen: MainTab? {
+        get { notificationOpenController.pendingListToOpen }
+        set { notificationOpenController.pendingListToOpen = newValue }
+    }
     var channelSubscriptions: [ChannelSubscription] { channelSyncController.channelSubscriptions }
     private(set) var channelListFeedbackMessage: String?
     @ObservationIgnored private let appUpdateManager: any AppUpdateManaging
@@ -267,6 +271,9 @@ final class AppEnvironment {
         }
         Task(priority: .utility) {
             await NotificationSoundManager.shared.reconcileCompiledSounds()
+        }
+        Task(priority: .utility) {
+            await store.ensureSystemSearchIndexHealthy()
         }
     }
 
@@ -519,6 +526,35 @@ final class AppEnvironment {
         guard isRead else { return }
         do {
             _ = try await messageStateCoordinator.markRead(messageId: messageId)
+        } catch {
+            showToast(message: localizationManager.localized(
+                "failed_to_save_message_status_placeholder",
+                userFacingErrorMessage(error),
+            ))
+        }
+    }
+
+    func consumePendingSystemAction() async {
+        guard let action = PushGoSystemPendingActionStore.consume() else { return }
+        switch action {
+        case .markLatestUnreadMessageRead:
+            await markLatestUnreadMessageRead()
+        }
+    }
+
+    private func markLatestUnreadMessageRead() async {
+        do {
+            guard let message = try await dataStore.loadMessagesPage(
+                before: nil,
+                limit: 1,
+                filter: .unreadOnly,
+                channel: nil,
+                tag: nil,
+                sortMode: .timeDescending
+            ).first else {
+                return
+            }
+            _ = try await messageStateCoordinator.markRead(messageId: message.id)
         } catch {
             showToast(message: localizationManager.localized(
                 "failed_to_save_message_status_placeholder",
@@ -1120,6 +1156,9 @@ final class AppEnvironment {
                 await refreshLaunchAtLoginStatus()
                 await refreshChannelSubscriptions()
                 await syncPrivateChannelState()
+            }
+            Task(priority: .utility) {
+                await dataStore.ensureSystemSearchIndexHealthy()
             }
         case .background, .inactive:
             navigationState.setSceneActive(false)

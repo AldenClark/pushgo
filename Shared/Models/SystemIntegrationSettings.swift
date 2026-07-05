@@ -12,17 +12,15 @@ struct SystemIntegrationSettings: Codable, Equatable, Hashable, Sendable {
     var includeMetadataInSearch: Bool
     var indexEventsAndThings: Bool
     var timeSensitiveAlertsEnabled: Bool
-    var excludedChannelIDs: Set<String>
     var updatedAt: Date
 
     init(
         schemaVersion: Int = SystemIntegrationSettings.schemaVersion,
         systemSearchEnabled: Bool = true,
         includeMessageBodyInSearch: Bool = true,
-        includeMetadataInSearch: Bool = false,
+        includeMetadataInSearch: Bool = true,
         indexEventsAndThings: Bool = true,
-        timeSensitiveAlertsEnabled: Bool = false,
-        excludedChannelIDs: Set<String> = [],
+        timeSensitiveAlertsEnabled: Bool = true,
         updatedAt: Date = Date()
     ) {
         self.schemaVersion = schemaVersion
@@ -31,35 +29,19 @@ struct SystemIntegrationSettings: Codable, Equatable, Hashable, Sendable {
         self.includeMetadataInSearch = includeMetadataInSearch
         self.indexEventsAndThings = indexEventsAndThings
         self.timeSensitiveAlertsEnabled = timeSensitiveAlertsEnabled
-        self.excludedChannelIDs = Set(
-            excludedChannelIDs.compactMap(Self.normalizedChannelID)
-        )
         self.updatedAt = updatedAt
     }
 
     var normalized: SystemIntegrationSettings {
         SystemIntegrationSettings(
             schemaVersion: SystemIntegrationSettings.schemaVersion,
-            systemSearchEnabled: systemSearchEnabled,
-            includeMessageBodyInSearch: includeMessageBodyInSearch,
-            includeMetadataInSearch: includeMetadataInSearch,
-            indexEventsAndThings: indexEventsAndThings,
-            timeSensitiveAlertsEnabled: timeSensitiveAlertsEnabled,
-            excludedChannelIDs: excludedChannelIDs,
+            systemSearchEnabled: true,
+            includeMessageBodyInSearch: true,
+            includeMetadataInSearch: true,
+            indexEventsAndThings: true,
+            timeSensitiveAlertsEnabled: true,
             updatedAt: updatedAt
         )
-    }
-
-    func excludesChannel(_ channelID: String?) -> Bool {
-        guard let normalized = Self.normalizedChannelID(channelID) else {
-            return false
-        }
-        return excludedChannelIDs.contains(normalized)
-    }
-
-    static func normalizedChannelID(_ channelID: String?) -> String? {
-        let trimmed = channelID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmed.isEmpty ? nil : trimmed
     }
 
     static func loadSharedDefaults() -> SystemIntegrationSettings {
