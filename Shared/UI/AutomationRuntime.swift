@@ -156,7 +156,7 @@ struct PushGoAutomationState: Encodable, Equatable {
     let notificationKeyEncoding: String?
     let gatewayBaseURL: String?
     let gatewayTokenPresent: Bool
-    let watchMode: String?
+    let watchReceiverState: String?
     let watchCompanionAvailable: Bool
     let providerMode: String
     let providerTokenPresent: Bool
@@ -209,7 +209,7 @@ struct PushGoAutomationState: Encodable, Equatable {
         case notificationKeyEncoding = "notification_key_encoding"
         case gatewayBaseURL = "gateway_base_url"
         case gatewayTokenPresent = "gateway_token_present"
-        case watchMode = "watch_mode"
+        case watchReceiverState = "watch_receiver_state"
         case watchCompanionAvailable = "watch_companion_available"
         case providerMode = "provider_mode"
         case providerTokenPresent = "provider_token_present"
@@ -590,7 +590,7 @@ final class PushGoAutomationRuntime {
             notificationKeyEncoding: nil,
             gatewayBaseURL: environment.serverConfig?.normalizedBaseURL.absoluteString,
             gatewayTokenPresent: normalizedIdentifier(environment.serverConfig?.token) != nil,
-            watchMode: watchModeIdentifier(environment: environment),
+            watchReceiverState: watchReceiverStateIdentifier(environment: environment),
             watchCompanionAvailable: watchCompanionAvailable(environment: environment),
             providerMode: providerMode,
             providerTokenPresent: false,
@@ -755,11 +755,8 @@ final class PushGoAutomationRuntime {
                 }
             case "settings.set_decryption_key":
                 try await updateNotificationKey(request: request, environment: environment)
-            case "watch.set_mode":
-                guard let mode = normalizedIdentifier(request.args?.mode) else {
-                    throw PushGoAutomationError.missingArgument("mode")
-                }
-                try await updateWatchMode(mode: mode, environment: environment)
+            case "watch.resync_receiver":
+                try await resyncWatchReceiver(environment: environment)
             case "gateway.set_server":
                 try await updateGatewayConfig(request: request, environment: environment)
             case "notification.open":
@@ -1081,7 +1078,7 @@ final class PushGoAutomationRuntime {
             notificationKeyEncoding: refreshed.notificationKeyEncoding,
             gatewayBaseURL: refreshed.gatewayBaseURL,
             gatewayTokenPresent: refreshed.gatewayTokenPresent,
-            watchMode: refreshed.watchMode,
+            watchReceiverState: refreshed.watchReceiverState,
             watchCompanionAvailable: refreshed.watchCompanionAvailable,
             providerMode: refreshed.providerMode,
             providerTokenPresent: refreshed.providerTokenPresent,
@@ -1134,7 +1131,7 @@ final class PushGoAutomationRuntime {
     private func waitForStatePropagation(after commandName: String) async {
         await Task.yield()
         switch commandName {
-        case "nav.switch_tab", "message.open", "entity.open", "settings.open_decryption", "settings.set_page_visibility", "settings.set_decryption_key", "watch.set_mode":
+        case "nav.switch_tab", "message.open", "entity.open", "settings.open_decryption", "settings.set_page_visibility", "settings.set_decryption_key", "watch.resync_receiver":
             try? await Task.sleep(for: .milliseconds(200))
             await Task.yield()
         default:
@@ -1898,7 +1895,7 @@ final class PushGoAutomationRuntime {
             notificationKeyEncoding: nil,
             gatewayBaseURL: environment.serverConfig?.normalizedBaseURL.absoluteString,
             gatewayTokenPresent: normalizedIdentifier(environment.serverConfig?.token) != nil,
-            watchMode: watchModeIdentifier(environment: environment),
+            watchReceiverState: watchReceiverStateIdentifier(environment: environment),
             watchCompanionAvailable: watchCompanionAvailable(environment: environment),
             providerMode: providerMode,
             providerTokenPresent: false,
@@ -3010,7 +3007,7 @@ final class PushGoAutomationRuntime {
             notificationKeyEncoding: normalizedIdentifier(notificationKeyEncoding),
             gatewayBaseURL: state.gatewayBaseURL,
             gatewayTokenPresent: state.gatewayTokenPresent,
-            watchMode: watchModeIdentifier(environment: environment),
+            watchReceiverState: watchReceiverStateIdentifier(environment: environment),
             watchCompanionAvailable: watchCompanionAvailable(environment: environment),
             providerMode: state.providerMode,
             providerTokenPresent: providerTokenPresent,
@@ -3061,9 +3058,24 @@ final class PushGoAutomationRuntime {
         }
     }
 
-    private func watchModeIdentifier(environment: AppEnvironment) -> String? {
+    private func watchReceiverStateIdentifier(environment: AppEnvironment) -> String? {
         #if os(iOS)
-        environment.effectiveWatchMode.rawValue
+        if !environment.isWatchCompanionAvailable {
+            return WatchReceiverState.offline.rawValue
+        }
+        if environment.watchModeSwitchStatus == .switching {
+            return WatchReceiverState.provisioning.rawValue
+        }
+        if environment.watchModeSwitchStatus == .failed || environment.watchModeSwitchStatus == .timedOut {
+            return WatchReceiverState.degraded.rawValue
+        }
+        if environment.effectiveWatchMode == .standalone, environment.standaloneReady {
+            return WatchReceiverState.ready.rawValue
+        }
+        if environment.effectiveWatchMode == .standalone {
+            return WatchReceiverState.degraded.rawValue
+        }
+        return WatchReceiverState.unprovisioned.rawValue
         #else
         nil
         #endif
@@ -3077,20 +3089,19 @@ final class PushGoAutomationRuntime {
         #endif
     }
 
-    private func updateWatchMode(mode: String, environment: AppEnvironment) async throws {
+    private func resyncWatchReceiver(environment: AppEnvironment) async throws {
         #if os(iOS)
-        guard let nextMode = WatchMode(rawValue: mode) else {
-            throw PushGoAutomationError.invalidArgument("mode")
-        }
-        try await environment.requestWatchModeChangeConfirmed(nextMode)
+        try await environment.resyncWatchReceiverProvisioning()
         let applied = await waitForAutomationState(environment: environment, timeout: 4.0) { state in
-            state.watchMode == nextMode.rawValue
+            state.watchReceiverState == WatchReceiverState.ready.rawValue
+                || state.watchReceiverState == WatchReceiverState.degraded.rawValue
+                || state.watchReceiverState == WatchReceiverState.provisioning.rawValue
         }
         guard applied else {
-            throw PushGoAutomationError.invalidArgument("mode")
+            throw PushGoAutomationError.invalidArgument("watch.resync_receiver")
         }
         #else
-        throw PushGoAutomationError.unsupportedCommand("watch.set_mode")
+        throw PushGoAutomationError.unsupportedCommand("watch.resync_receiver")
         #endif
     }
 

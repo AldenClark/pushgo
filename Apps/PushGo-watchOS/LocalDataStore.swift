@@ -25,8 +25,8 @@ struct WatchModeControlPersistenceState: Codable, Hashable, Sendable {
     var lastObservedReportedGeneration: Int64
 
     static let initial = WatchModeControlPersistenceState(
-        desiredMode: .mirror,
-        effectiveMode: .mirror,
+        desiredMode: .standalone,
+        effectiveMode: .standalone,
         standaloneReady: false,
         switchStatus: .idle,
         lastConfirmedControlGeneration: 0,
@@ -69,7 +69,7 @@ private struct WatchLocalSettings: Codable, Sendable {
     var launchAtLoginEnabled: Bool?
 
     static let `default` = WatchLocalSettings(
-        watchMode: .mirror,
+        watchMode: .standalone,
         watchSyncGenerations: .zero,
         watchPublicationState: .empty,
         watchModeControlState: .initial,
@@ -516,6 +516,16 @@ actor LocalDataStore {
         try sqliteStore.upsertWatchLightPayload(payload)
     }
 
+    func ingestWatchDelivery(_ record: WatchDeliveryIngestRecord) async throws -> WatchDeliveryIngestResult {
+        let sqliteStore = try requireSQLiteStore()
+        return try sqliteStore.ingestWatchDelivery(record)
+    }
+
+    func loadWatchDeliveryRecords() async throws -> [WatchDeliveryRecord] {
+        let sqliteStore = try requireSQLiteStore()
+        return try sqliteStore.loadWatchDeliveryRecords()
+    }
+
     func markWatchLightMessageRead(messageId: String) async throws -> WatchLightMessage? {
         let sqliteStore = try requireSQLiteStore()
         return try sqliteStore.markWatchLightMessageRead(messageId: messageId)
@@ -614,6 +624,10 @@ actor LocalDataStore {
 }
 
 private final class WatchLocalSQLiteStore {
+    private struct TableColumn {
+        let name: String
+    }
+
     private enum StoreError: Error {
         case missingAppGroup(String)
         case sqliteOpenFailed(code: Int32)
@@ -737,6 +751,7 @@ private final class WatchLocalSQLiteStore {
             try execute("DELETE FROM watch_light_events;")
             try execute("DELETE FROM watch_light_things;")
             try execute("DELETE FROM watch_mirror_action_queue;")
+            try execute("DELETE FROM watch_delivery_records;")
         }
         DarwinNotificationPoster.post(name: AppConstants.messageSyncNotificationName)
     }
@@ -819,6 +834,79 @@ private final class WatchLocalSQLiteStore {
             }
         }
         DarwinNotificationPoster.post(name: AppConstants.messageSyncNotificationName)
+    }
+
+    func ingestWatchDelivery(_ record: WatchDeliveryIngestRecord) throws -> WatchDeliveryIngestResult {
+        let identity = Self.watchBusinessIdentity(for: record.payload)
+        let result: WatchDeliveryIngestResult = try writeTransaction {
+            if let existing = try loadWatchDeliveryRecord(
+                gatewayKey: record.metadata.gatewayKey,
+                deliveryId: record.metadata.deliveryId
+            ) {
+                let projectionPayload = Self.payloadForDuplicateDelivery(
+                    record.payload,
+                    existing: existing
+                )
+                let projectionIdentity = Self.watchBusinessIdentity(for: projectionPayload)
+                switch projectionPayload {
+                case let .message(message):
+                    try upsertWatchLightMessage(message)
+                case let .event(event):
+                    try upsertWatchLightEvent(event)
+                case let .thing(thing):
+                    try upsertWatchLightThing(thing)
+                }
+                let merged = Self.mergedWatchDeliveryRecord(
+                    existing: existing,
+                    incoming: record.metadata,
+                    identity: projectionIdentity
+                )
+                try upsertWatchDeliveryRecord(merged)
+                return WatchDeliveryIngestResult(
+                    disposition: .duplicateDelivery,
+                    deliveryRecord: merged
+                )
+            }
+
+            switch record.payload {
+            case let .message(message):
+                try upsertWatchLightMessage(message)
+            case let .event(event):
+                try upsertWatchLightEvent(event)
+            case let .thing(thing):
+                try upsertWatchLightThing(thing)
+            }
+
+            let deliveryRecord = WatchDeliveryRecord(
+                deliveryId: record.metadata.deliveryId,
+                gatewayKey: record.metadata.gatewayKey,
+                watchDeviceKey: record.metadata.watchDeviceKey,
+                messageId: identity.messageId,
+                entityType: identity.entityType,
+                entityId: identity.entityId,
+                ingressSource: record.metadata.ingressSource,
+                contentDigest: record.metadata.contentDigest,
+                persistedAt: record.metadata.persistedAt,
+                serverAckState: record.metadata.serverAckState
+            )
+            try upsertWatchDeliveryRecord(deliveryRecord)
+            return WatchDeliveryIngestResult(
+                disposition: .inserted,
+                deliveryRecord: deliveryRecord
+            )
+        }
+        DarwinNotificationPoster.post(name: AppConstants.messageSyncNotificationName)
+        return result
+    }
+
+    func loadWatchDeliveryRecords() throws -> [WatchDeliveryRecord] {
+        let statement = try prepare("SELECT gateway_key, delivery_id, watch_device_key, message_id, entity_type, entity_id, ingress_source, content_digest, persisted_at, server_ack_state FROM watch_delivery_records ORDER BY persisted_at DESC, gateway_key ASC, delivery_id ASC;")
+        defer { sqlite3_finalize(statement) }
+        var records: [WatchDeliveryRecord] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            records.append(Self.decodeWatchDeliveryRecord(statement))
+        }
+        return records
     }
 
     func markWatchLightMessageRead(messageId: String) throws -> WatchLightMessage? {
@@ -914,15 +1002,58 @@ private final class WatchLocalSQLiteStore {
         try stepDone(statement)
     }
 
-    private func writeTransaction(_ body: () throws -> Void) throws {
+    @discardableResult
+    private func writeTransaction<T>(_ body: () throws -> T) throws -> T {
         try execute("BEGIN IMMEDIATE TRANSACTION;")
         do {
-            try body()
+            let result = try body()
             try execute("COMMIT;")
+            return result
         } catch {
             try? execute("ROLLBACK;")
             throw error
         }
+    }
+
+    private func loadWatchDeliveryRecord(
+        gatewayKey: String,
+        deliveryId: String
+    ) throws -> WatchDeliveryRecord? {
+        let statement = try prepare("SELECT gateway_key, delivery_id, watch_device_key, message_id, entity_type, entity_id, ingress_source, content_digest, persisted_at, server_ack_state FROM watch_delivery_records WHERE gateway_key = ? AND delivery_id = ? LIMIT 1;")
+        defer { sqlite3_finalize(statement) }
+        try bindText(statement, index: 1, value: gatewayKey)
+        try bindText(statement, index: 2, value: deliveryId)
+        return sqlite3_step(statement) == SQLITE_ROW ? Self.decodeWatchDeliveryRecord(statement) : nil
+    }
+
+    private func upsertWatchDeliveryRecord(_ record: WatchDeliveryRecord) throws {
+        let statement = try prepare("""
+            INSERT INTO watch_delivery_records (
+                gateway_key, delivery_id, watch_device_key, message_id, entity_type, entity_id,
+                ingress_source, content_digest, persisted_at, server_ack_state
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(gateway_key, delivery_id) DO UPDATE SET
+                watch_device_key = COALESCE(excluded.watch_device_key, watch_delivery_records.watch_device_key),
+                message_id = COALESCE(excluded.message_id, watch_delivery_records.message_id),
+                entity_type = COALESCE(excluded.entity_type, watch_delivery_records.entity_type),
+                entity_id = COALESCE(excluded.entity_id, watch_delivery_records.entity_id),
+                ingress_source = excluded.ingress_source,
+                content_digest = COALESCE(excluded.content_digest, watch_delivery_records.content_digest),
+                persisted_at = MIN(watch_delivery_records.persisted_at, excluded.persisted_at),
+                server_ack_state = excluded.server_ack_state;
+            """)
+        defer { sqlite3_finalize(statement) }
+        try bindText(statement, index: 1, value: record.gatewayKey)
+        try bindText(statement, index: 2, value: record.deliveryId)
+        try bindText(statement, index: 3, value: record.watchDeviceKey)
+        try bindText(statement, index: 4, value: record.messageId)
+        try bindText(statement, index: 5, value: record.entityType)
+        try bindText(statement, index: 6, value: record.entityId)
+        try bindText(statement, index: 7, value: record.ingressSource.rawValue)
+        try bindText(statement, index: 8, value: record.contentDigest)
+        sqlite3_bind_double(statement, 9, record.persistedAt.timeIntervalSince1970)
+        try bindText(statement, index: 10, value: record.serverAckState.rawValue)
+        try stepDone(statement)
     }
 
     private func upsertWatchLightMessage(_ message: WatchLightMessage) throws {
@@ -1069,6 +1200,122 @@ private final class WatchLocalSQLiteStore {
         )
     }
 
+    private static func decodeWatchDeliveryRecord(_ statement: OpaquePointer?) -> WatchDeliveryRecord {
+        let ingressSource = WatchIngressSource(rawValue: columnText(statement, index: 6) ?? "") ?? .watchAPNS
+        let serverAckState = WatchServerAckState(rawValue: columnText(statement, index: 9) ?? "") ?? .pending
+        return WatchDeliveryRecord(
+            deliveryId: columnText(statement, index: 1) ?? "",
+            gatewayKey: columnText(statement, index: 0) ?? "",
+            watchDeviceKey: columnText(statement, index: 2),
+            messageId: columnText(statement, index: 3),
+            entityType: columnText(statement, index: 4),
+            entityId: columnText(statement, index: 5),
+            ingressSource: ingressSource,
+            contentDigest: columnText(statement, index: 7),
+            persistedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 8)),
+            serverAckState: serverAckState
+        )
+    }
+
+    private static func watchBusinessIdentity(
+        for payload: WatchLightPayload
+    ) -> (messageId: String?, entityType: String?, entityId: String?) {
+        switch payload {
+        case let .message(message):
+            return (
+                messageId: normalizeOptional(message.messageId),
+                entityType: normalizeOptional(message.entityType) ?? "message",
+                entityId: normalizeOptional(message.entityId) ?? normalizeOptional(message.messageId)
+            )
+        case let .event(event):
+            return (
+                messageId: nil,
+                entityType: "event",
+                entityId: normalizeOptional(event.eventId)
+            )
+        case let .thing(thing):
+            return (
+                messageId: nil,
+                entityType: "thing",
+                entityId: normalizeOptional(thing.thingId)
+            )
+        }
+    }
+
+    private static func mergedWatchDeliveryRecord(
+        existing: WatchDeliveryRecord,
+        incoming: WatchDeliveryMetadata,
+        identity: (messageId: String?, entityType: String?, entityId: String?)
+    ) -> WatchDeliveryRecord {
+        WatchDeliveryRecord(
+            deliveryId: existing.deliveryId,
+            gatewayKey: existing.gatewayKey,
+            watchDeviceKey: incoming.watchDeviceKey ?? existing.watchDeviceKey,
+            messageId: identity.messageId ?? existing.messageId,
+            entityType: identity.entityType ?? existing.entityType,
+            entityId: identity.entityId ?? existing.entityId,
+            ingressSource: incoming.ingressSource,
+            contentDigest: incoming.contentDigest ?? existing.contentDigest,
+            persistedAt: min(existing.persistedAt, incoming.persistedAt),
+            serverAckState: incoming.serverAckState
+        )
+    }
+
+    private static func payloadForDuplicateDelivery(
+        _ payload: WatchLightPayload,
+        existing: WatchDeliveryRecord
+    ) -> WatchLightPayload {
+        switch payload {
+        case let .message(message):
+            let messageId = normalizeOptional(existing.messageId) ?? message.messageId
+            return .message(
+                WatchLightMessage(
+                    messageId: messageId,
+                    title: message.title,
+                    body: message.body,
+                    imageURL: message.imageURL,
+                    url: message.url,
+                    severity: message.severity,
+                    receivedAt: message.receivedAt,
+                    isRead: message.isRead,
+                    entityType: normalizeOptional(existing.entityType) ?? message.entityType,
+                    entityId: normalizeOptional(existing.entityId) ?? message.entityId,
+                    notificationRequestId: message.notificationRequestId
+                )
+            )
+        case let .event(event):
+            return .event(
+                WatchLightEvent(
+                    eventId: normalizeOptional(existing.entityId) ?? event.eventId,
+                    title: event.title,
+                    summary: event.summary,
+                    state: event.state,
+                    severity: event.severity,
+                    decryptionState: event.decryptionState,
+                    imageURL: event.imageURL,
+                    updatedAt: event.updatedAt
+                )
+            )
+        case let .thing(thing):
+            return .thing(
+                WatchLightThing(
+                    thingId: normalizeOptional(existing.entityId) ?? thing.thingId,
+                    title: thing.title,
+                    summary: thing.summary,
+                    attrsJSON: thing.attrsJSON,
+                    decryptionState: thing.decryptionState,
+                    imageURL: thing.imageURL,
+                    updatedAt: thing.updatedAt
+                )
+            )
+        }
+    }
+
+    private static func normalizeOptional(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     private static func createSchemaIfNeeded(db: OpaquePointer) throws {
         try execute(
             """
@@ -1133,6 +1380,7 @@ private final class WatchLocalSQLiteStore {
             db: db
         )
         try execute("CREATE INDEX IF NOT EXISTS idx_watch_mirror_action_queue_issued_at ON watch_mirror_action_queue(issued_at ASC, action_id ASC);", db: db)
+        try ensureWatchDeliveryRecordsSchema(db: db)
         try execute(
             """
             CREATE TABLE IF NOT EXISTS app_settings (
@@ -1170,6 +1418,118 @@ private final class WatchLocalSQLiteStore {
         )
     }
 
+    private static var watchDeliveryRecordColumns: [String] {
+        [
+            "gateway_key",
+            "delivery_id",
+            "watch_device_key",
+            "message_id",
+            "entity_type",
+            "entity_id",
+            "ingress_source",
+            "content_digest",
+            "persisted_at",
+            "server_ack_state",
+        ]
+    }
+
+    private static func ensureWatchDeliveryRecordsSchema(db: OpaquePointer) throws {
+        let existingColumns = try tableColumns(table: "watch_delivery_records", db: db)
+        guard !existingColumns.isEmpty else {
+            try createWatchDeliveryRecordsTable(db: db)
+            return
+        }
+
+        let expected = Set(watchDeliveryRecordColumns)
+        let actual = Set(existingColumns.map(\.name))
+        guard actual == expected else {
+            try rebuildWatchDeliveryRecordsTable(fromColumns: actual, db: db)
+            return
+        }
+
+        try createWatchDeliveryRecordIndexes(db: db)
+    }
+
+    private static func rebuildWatchDeliveryRecordsTable(
+        fromColumns sourceColumns: Set<String>,
+        db: OpaquePointer
+    ) throws {
+        let legacyTable = "watch_delivery_records_legacy_migration"
+        try execute("DROP TABLE IF EXISTS \(legacyTable);", db: db)
+        try execute("DROP INDEX IF EXISTS idx_watch_delivery_records_business_identity;", db: db)
+        try execute("DROP INDEX IF EXISTS idx_watch_delivery_records_persisted_at;", db: db)
+        try execute("ALTER TABLE watch_delivery_records RENAME TO \(legacyTable);", db: db)
+        try createWatchDeliveryRecordsTable(db: db)
+
+        let selectExpressions = watchDeliveryRecordColumns
+            .map { legacyWatchDeliveryExpression(for: $0, sourceColumns: sourceColumns) }
+            .joined(separator: ", ")
+        let insertColumns = watchDeliveryRecordColumns.joined(separator: ", ")
+        try execute(
+            """
+            INSERT OR IGNORE INTO watch_delivery_records (\(insertColumns))
+            SELECT \(selectExpressions)
+            FROM \(legacyTable);
+            """,
+            db: db
+        )
+        try execute("DROP TABLE IF EXISTS \(legacyTable);", db: db)
+    }
+
+    private static func legacyWatchDeliveryExpression(
+        for column: String,
+        sourceColumns: Set<String>
+    ) -> String {
+        let hasColumn = sourceColumns.contains(column)
+        switch column {
+        case "gateway_key":
+            return hasColumn ? "COALESCE(NULLIF(trim(gateway_key), ''), 'default')" : "'default'"
+        case "delivery_id":
+            return hasColumn ? "COALESCE(NULLIF(trim(delivery_id), ''), printf('legacy-%lld', rowid))" : "printf('legacy-%lld', rowid)"
+        case "watch_device_key", "message_id", "entity_type", "entity_id", "content_digest":
+            return hasColumn ? "NULLIF(\(column), '')" : "NULL"
+        case "ingress_source":
+            guard hasColumn else { return "'watch_apns'" }
+            return "CASE ingress_source WHEN 'watch_apns' THEN ingress_source WHEN 'watch_pull' THEN ingress_source ELSE 'watch_apns' END"
+        case "persisted_at":
+            return hasColumn ? "COALESCE(persisted_at, strftime('%s', 'now'))" : "strftime('%s', 'now')"
+        case "server_ack_state":
+            guard hasColumn else { return "'pending'" }
+            return "CASE server_ack_state WHEN 'pending' THEN server_ack_state WHEN 'acked_direct' THEN server_ack_state WHEN 'unknown' THEN server_ack_state ELSE 'pending' END"
+        default:
+            return "NULL"
+        }
+    }
+
+    private static func createWatchDeliveryRecordsTable(db: OpaquePointer) throws {
+        try execute(
+            """
+            CREATE TABLE IF NOT EXISTS watch_delivery_records (
+                gateway_key TEXT NOT NULL,
+                delivery_id TEXT NOT NULL,
+                watch_device_key TEXT,
+                message_id TEXT,
+                entity_type TEXT,
+                entity_id TEXT,
+                ingress_source TEXT NOT NULL,
+                content_digest TEXT,
+                persisted_at REAL NOT NULL,
+                server_ack_state TEXT NOT NULL,
+                PRIMARY KEY (gateway_key, delivery_id),
+                CHECK (length(trim(gateway_key)) > 0),
+                CHECK (length(trim(delivery_id)) > 0)
+            );
+            """,
+            db: db
+        )
+        try createWatchDeliveryRecordIndexes(db: db)
+    }
+
+    private static func createWatchDeliveryRecordIndexes(db: OpaquePointer) throws {
+        try execute("CREATE INDEX IF NOT EXISTS idx_watch_delivery_records_business_identity ON watch_delivery_records(entity_type, entity_id, message_id);", db: db)
+        try execute("CREATE INDEX IF NOT EXISTS idx_watch_delivery_records_persisted_at ON watch_delivery_records(persisted_at DESC);", db: db)
+    }
+
     private static func ensureColumn(_ name: String, type: String, db: OpaquePointer) throws {
         let statement = try prepare("PRAGMA table_info(app_settings);", db: db)
         defer { sqlite3_finalize(statement) }
@@ -1203,6 +1563,18 @@ private final class WatchLocalSQLiteStore {
         if !exists {
             try execute("ALTER TABLE \(table) ADD COLUMN \(column) \(type);", db: db)
         }
+    }
+
+    private static func tableColumns(table: String, db: OpaquePointer) throws -> [TableColumn] {
+        let statement = try prepare("PRAGMA table_info(\(table));", db: db)
+        defer { sqlite3_finalize(statement) }
+        var columns: [TableColumn] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            if let name = columnText(statement, index: 1) {
+                columns.append(TableColumn(name: name))
+            }
+        }
+        return columns
     }
 
     private static func prepare(_ sql: String, db: OpaquePointer) throws -> OpaquePointer? {

@@ -52,7 +52,7 @@ final class AppEnvironment {
     var pendingThingToOpen: String?
     private(set) var activeMainTab: MainTab = .messages
     private(set) var isMessageListAtTop: Bool = true
-    private(set) var watchMode: WatchMode = .mirror
+    private(set) var watchMode: WatchMode = .standalone
     private(set) var standaloneReady = false
     @ObservationIgnored private var watchSyncGenerations: WatchSyncGenerationState = .zero
     private(set) var channelSubscriptions: [ChannelSubscription] = []
@@ -94,7 +94,8 @@ final class AppEnvironment {
                     requestIdentifier: requestIdentifier,
                     fallbackRequestIdentifier: requestIdentifier,
                     fallbackTitle: "",
-                    fallbackBody: ""
+                    fallbackBody: "",
+                    ingressSource: .watchPull
                 )
                 return persisted ? .persisted : .failed
             },
@@ -409,8 +410,9 @@ final class AppEnvironment {
 
     func applyWatchControlContextFromPhone(_ context: WatchControlContext) async {
         guard context.controlGeneration > watchSyncGenerations.controlGeneration else { return }
+        let receiverMode: WatchMode = .standalone
         let previousMode = watchMode
-        if previousMode == context.mode {
+        if previousMode == receiverMode {
             watchSyncGenerations.controlGeneration = context.controlGeneration
             await dataStore.saveWatchSyncGenerationState(watchSyncGenerations)
             publishCurrentEffectiveModeStatus(
@@ -419,11 +421,11 @@ final class AppEnvironment {
             )
             return
         }
-        watchMode = context.mode
+        watchMode = receiverMode
         watchSyncGenerations.controlGeneration = context.controlGeneration
-        await dataStore.saveWatchMode(context.mode)
+        await dataStore.saveWatchMode(receiverMode)
         await dataStore.saveWatchSyncGenerationState(watchSyncGenerations)
-        await handleWatchModeTransition(from: previousMode, to: context.mode)
+        await handleWatchModeTransition(from: previousMode, to: receiverMode)
         publishCurrentEffectiveModeStatus(
             sourceControlGeneration: context.controlGeneration,
             noop: false
@@ -580,14 +582,14 @@ final class AppEnvironment {
         guard previousMode != nextMode else { return }
         await refreshChannelSubscriptions()
         if previousMode == .standalone {
-            await deactivateStandaloneRuntime(reason: "watch_mode_transition")
+            await deactivateStandaloneRuntime(reason: "watch_receiver_transition")
         }
         if nextMode == .standalone {
             lastWakeupRouteSyncAt = .distantPast
             lastWakeupDeviceRegisterAt = .distantPast
             updateStandaloneReadiness(false, failureReason: nil, publish: false)
             requestStandaloneRuntimeReconcile(
-                reason: "watch_mode_transition",
+                reason: "watch_receiver_transition",
                 presentDeniedPrompt: true
             )
         } else {
@@ -912,11 +914,11 @@ final class AppEnvironment {
     }
 
     private func resetWatchConnectivityStateForMigration(previousMode: WatchMode) async {
-        watchMode = .mirror
+        watchMode = .standalone
         standaloneReady = false
         standaloneReadinessFailureReason = nil
         watchSyncGenerations = .zero
-        await dataStore.saveWatchMode(.mirror)
+        await dataStore.saveWatchMode(.standalone)
         await dataStore.saveWatchSyncGenerationState(.zero)
         cancelStandaloneRuntimeReconcile()
         let pendingActions = (try? await dataStore.loadWatchMirrorActions()) ?? []
@@ -929,6 +931,7 @@ final class AppEnvironment {
         await refreshChannelSubscriptions()
         await refreshWatchLightCountsAndNotify()
         publishCurrentEffectiveModeStatus(noop: false)
+        requestStandaloneRuntimeReconcile(reason: "watch_connectivity_migration")
     }
 
     func refreshPushAuthorization(
@@ -1419,6 +1422,7 @@ final class AppEnvironment {
         bodyOverride: String?,
         urlOverride: URL?,
         notificationRequestId: String?,
+        ingressSource: WatchIngressSource,
         ignoreSkipPersistence: Bool = false
     ) async -> Bool {
         let bridgedPayload: [AnyHashable: Any] = payload.reduce(into: [:]) { result, pair in
@@ -1439,13 +1443,56 @@ final class AppEnvironment {
             return false
         }
         do {
-            try await dataStore.upsertWatchLightPayload(lightPayload)
+            if let metadata = await watchDeliveryMetadata(
+                from: payload,
+                notificationRequestId: notificationRequestId,
+                ingressSource: ingressSource
+            ) {
+                _ = try await dataStore.ingestWatchDelivery(
+                    WatchDeliveryIngestRecord(
+                        payload: lightPayload,
+                        metadata: metadata
+                    )
+                )
+            } else {
+                try await dataStore.upsertWatchLightPayload(lightPayload)
+            }
             await refreshWatchLightCountsAndNotify()
             return true
         } catch {
             recordAutomationRuntimeError(error, source: "watch.persist_light_payload")
             return false
         }
+    }
+
+    private func watchDeliveryMetadata(
+        from payload: [String: String],
+        notificationRequestId: String?,
+        ingressSource: WatchIngressSource
+    ) async -> WatchDeliveryMetadata? {
+        let deliveryId = normalizedText(payload["delivery_id"])
+            ?? normalizedText(payload["provider_delivery_id"])
+            ?? normalizedText(notificationRequestId)
+        guard let deliveryId else { return nil }
+        let gatewayKey = normalizedText(payload["gateway_key"])
+            ?? normalizedText(payload["gateway"])
+            ?? serverConfig?.gatewayKey
+            ?? "default"
+        let deviceKey = await dataStore.cachedDeviceKey(for: platformIdentifier())?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return WatchDeliveryMetadata(
+            deliveryId: deliveryId,
+            gatewayKey: gatewayKey,
+            watchDeviceKey: deviceKey?.isEmpty == false ? deviceKey : nil,
+            ingressSource: ingressSource,
+            contentDigest: normalizedText(payload["content_digest"]),
+            serverAckState: ingressSource == .watchPull ? .ackedDirect : .pending
+        )
+    }
+
+    private func normalizedText(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     func requestRemoteNotificationsIfNeeded() {
@@ -1987,7 +2034,8 @@ final class AppEnvironment {
         requestIdentifier: String?,
         fallbackRequestIdentifier: String?,
         fallbackTitle: String,
-        fallbackBody: String
+        fallbackBody: String,
+        ingressSource: WatchIngressSource
     ) async -> Bool {
         let prepared = await prepareStandalonePayloadForPersistence(
             payload,
@@ -2004,7 +2052,8 @@ final class AppEnvironment {
             titleOverride: display.title,
             bodyOverride: display.body,
             urlOverride: nil,
-            notificationRequestId: requestIdentifier ?? fallbackRequestIdentifier
+            notificationRequestId: requestIdentifier ?? fallbackRequestIdentifier,
+            ingressSource: ingressSource
         )
     }
 
@@ -2052,7 +2101,8 @@ final class AppEnvironment {
                 requestIdentifier: requestIdentifier,
                 fallbackRequestIdentifier: fallbackRequestIdentifier,
                 fallbackTitle: title,
-                fallbackBody: body
+                fallbackBody: body,
+                ingressSource: .watchPull
             )
             return persisted
         case let .direct(payload, requestIdentifier):
@@ -2061,7 +2111,8 @@ final class AppEnvironment {
                 requestIdentifier: requestIdentifier,
                 fallbackRequestIdentifier: fallbackRequestIdentifier,
                 fallbackTitle: title,
-                fallbackBody: body
+                fallbackBody: body,
+                ingressSource: .watchAPNS
             )
             if persisted {
                 await ackStandaloneProviderIngressIfNeeded(
@@ -2161,11 +2212,7 @@ final class AppEnvironment {
         let targetId = target.messageId
 
         if markAsReadInStore {
-            if watchMode == .mirror {
-                try? await enqueueMirrorMessageAction(kind: .read, messageId: target.messageId)
-            } else {
-                _ = try? await dataStore.markWatchLightMessageRead(messageId: target.messageId)
-            }
+            _ = try? await dataStore.markWatchLightMessageRead(messageId: target.messageId)
         } else {
             await refreshMessageCountsAndNotify()
         }

@@ -10,6 +10,84 @@ enum WatchMode: String, Codable, Hashable, Sendable {
     case standalone
 }
 
+enum WatchReceiverState: String, Codable, Hashable, Sendable {
+    case unprovisioned
+    case provisioning
+    case ready
+    case degraded
+    case offline
+    case disabled
+}
+
+enum WatchIngressSource: String, Codable, Hashable, Sendable {
+    case watchAPNS = "watch_apns"
+    case watchPull = "watch_pull"
+}
+
+enum WatchServerAckState: String, Codable, Hashable, Sendable {
+    case pending
+    case ackedDirect = "acked_direct"
+    case unknown
+}
+
+struct WatchDeliveryMetadata: Codable, Hashable, Sendable {
+    let deliveryId: String
+    let gatewayKey: String
+    let watchDeviceKey: String?
+    let ingressSource: WatchIngressSource
+    let contentDigest: String?
+    let serverAckState: WatchServerAckState
+    let persistedAt: Date
+
+    init(
+        deliveryId: String,
+        gatewayKey: String,
+        watchDeviceKey: String? = nil,
+        ingressSource: WatchIngressSource,
+        contentDigest: String? = nil,
+        serverAckState: WatchServerAckState = .pending,
+        persistedAt: Date = Date()
+    ) {
+        self.deliveryId = deliveryId
+        self.gatewayKey = gatewayKey
+        self.watchDeviceKey = watchDeviceKey
+        self.ingressSource = ingressSource
+        self.contentDigest = contentDigest
+        self.serverAckState = serverAckState
+        self.persistedAt = persistedAt
+    }
+}
+
+struct WatchDeliveryRecord: Codable, Hashable, Identifiable, Sendable {
+    let deliveryId: String
+    let gatewayKey: String
+    let watchDeviceKey: String?
+    let messageId: String?
+    let entityType: String?
+    let entityId: String?
+    let ingressSource: WatchIngressSource
+    let contentDigest: String?
+    let persistedAt: Date
+    let serverAckState: WatchServerAckState
+
+    var id: String { "\(gatewayKey)|\(deliveryId)" }
+}
+
+struct WatchDeliveryIngestRecord: Sendable {
+    let payload: WatchLightPayload
+    let metadata: WatchDeliveryMetadata
+}
+
+enum WatchDeliveryIngestDisposition: String, Codable, Hashable, Sendable {
+    case inserted
+    case duplicateDelivery = "duplicate_delivery"
+}
+
+struct WatchDeliveryIngestResult: Codable, Hashable, Sendable {
+    let disposition: WatchDeliveryIngestDisposition
+    let deliveryRecord: WatchDeliveryRecord
+}
+
 struct WatchLightMessage: Codable, Hashable, Identifiable, Sendable {
     let messageId: String
     let title: String
@@ -80,8 +158,8 @@ struct WatchModeControlState: Codable, Hashable, Sendable {
     var lastObservedReportedGeneration: Int64
 
     static let initial = WatchModeControlState(
-        desiredMode: .mirror,
-        effectiveMode: .mirror,
+        desiredMode: .standalone,
+        effectiveMode: .standalone,
         switchStatus: .idle,
         lastConfirmedControlGeneration: 0,
         lastObservedReportedGeneration: 0
@@ -301,7 +379,7 @@ enum WatchConnectivityPayloadKey: String, CaseIterable, Sendable {
 }
 
 enum WatchConnectivitySchema {
-    static let currentVersion = 7
+    static let currentVersion = 8
 }
 
 enum WatchTransportKind: String, Codable, Hashable, Sendable {

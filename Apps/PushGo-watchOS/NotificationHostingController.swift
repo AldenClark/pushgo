@@ -72,12 +72,8 @@ final class NotificationViewModel: ObservableObject {
         Task { @MainActor in
             guard let message = await resolveLightMessage(for: notification) else { return }
             let dataStore = AppEnvironment.shared.dataStore
-            if AppEnvironment.shared.watchMode == .mirror {
-                try? await AppEnvironment.shared.enqueueMirrorMessageAction(kind: .read, messageId: message.messageId)
-            } else {
-                _ = try? await dataStore.markWatchLightMessageRead(messageId: message.messageId)
-                await AppEnvironment.shared.refreshWatchLightCountsAndNotify()
-            }
+            _ = try? await dataStore.markWatchLightMessageRead(messageId: message.messageId)
+            await AppEnvironment.shared.refreshWatchLightCountsAndNotify()
         }
     }
 

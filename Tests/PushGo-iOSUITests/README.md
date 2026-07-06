@@ -28,7 +28,7 @@ This suite validates iOS startup automation, deep-page navigation, tab routing, 
 | `testNotificationDeleteCommandUpdatesCounts` | `notification.delete` 删除消息并发布动作事件 |
 | `testGatewaySetServerCommandUpdatesConfigurationState` | `gateway.set_server` 更新 server config 与 settings.changed 事件 |
 | `testBaselineAutomationStateHasNoRuntimeErrors` | 启动基线正确性（`runtime_error_count == 0`） |
-| `testWatchSetModeMirrorCommandPublishesMirrorState` | `watch.set_mode` 成功应用 mirror 模式 |
+| `testWatchResyncReceiverCommandPublishesReceiverState` | `watch.resync_receiver` 使用 `watch_receiver_state`，不再把 receiver 状态当作 mirror/standalone 用户模式 |
 
 ## Run Command
 

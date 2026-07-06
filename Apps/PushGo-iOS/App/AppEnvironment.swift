@@ -1045,24 +1045,18 @@ final class AppEnvironment {
         requestNetworkPermissionOnLaunch()
     }
 
-    func setWatchMode(_ mode: WatchMode) async {
-        await watchSyncController.setWatchMode(mode)
-    }
-
-    func requestWatchModeChangeApplied(_ mode: WatchMode) async throws -> WatchModeSwitchRequestResult {
-        try await watchSyncController.requestWatchModeChangeApplied(mode)
-    }
-
-    func requestWatchModeChangeConfirmed(_ mode: WatchMode) async throws {
-        let result = try await requestWatchModeChangeApplied(mode)
-        if result == .timedOut {
+    func resyncWatchReceiverProvisioning() async throws {
+        await refreshWatchCompanionAvailability()
+        guard isWatchCompanionAvailable else {
             throw AppError.typedLocal(
-                code: "watch_mode_change_not_confirmed",
-                category: .local,
-                message: localizationManager.localized("operation_failed"),
-                detail: "apple watch mode change was not confirmed"
+                code: "watch_companion_not_available",
+                category: .validation,
+                message: localizationManager.localized("watch_companion_not_available"),
+                detail: "watch companion unavailable when resyncing receiver provisioning"
             )
         }
+        _ = try await watchSyncController.requestWatchModeChangeApplied(.standalone)
+        requestWatchStandaloneProvisioningSync(immediate: true)
     }
 
     func handleWatchSessionStateDidChange() async {

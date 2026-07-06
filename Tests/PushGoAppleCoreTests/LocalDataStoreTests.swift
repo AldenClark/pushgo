@@ -200,7 +200,7 @@ struct LocalDataStoreTests {
     func watchModePersistsAcrossStoreReload() async throws {
         await withIsolatedAutomationStorage { _, appGroupIdentifier in
             let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
-            #expect(await store.loadWatchMode() == .mirror)
+            #expect(await store.loadWatchMode() == .standalone)
 
             await store.saveWatchMode(.standalone)
 
@@ -785,6 +785,189 @@ struct LocalDataStoreTests {
             #expect(thing.summary == "Original summary")
             #expect(normalizedJSON(thing.attrsJSON) == #"{"pressure":"ok","rpm":"50"}"#)
             #expect(thing.imageURL?.absoluteString == "https://example.com/thing.png")
+        }
+    }
+
+    @Test
+    func watchDeliveryIngestDedupesAPNSAndPullMessageByDeliveryId() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let direct = WatchDeliveryIngestRecord(
+                payload: .message(
+                    WatchLightMessage(
+                        messageId: "watch-msg-direct-1",
+                        title: "Direct title",
+                        body: "Direct body",
+                        imageURL: nil,
+                        url: nil,
+                        severity: "normal",
+                        receivedAt: Date(timeIntervalSince1970: 100),
+                        isRead: false,
+                        entityType: "message",
+                        entityId: "watch-msg-direct-1",
+                        notificationRequestId: "direct-request-1"
+                    )
+                ),
+                metadata: WatchDeliveryMetadata(
+                    deliveryId: "delivery-direct-1",
+                    gatewayKey: "gateway-a",
+                    watchDeviceKey: "watch-device-a",
+                    ingressSource: .watchAPNS,
+                    contentDigest: "digest-a",
+                    serverAckState: .pending,
+                    persistedAt: Date(timeIntervalSince1970: 101)
+                )
+            )
+            let pullReplay = WatchDeliveryIngestRecord(
+                payload: .message(
+                    WatchLightMessage(
+                        messageId: "watch-msg-pull-1",
+                        title: "Pull replay must not create a second row",
+                        body: "Pull replay body",
+                        imageURL: nil,
+                        url: nil,
+                        severity: "high",
+                        receivedAt: Date(timeIntervalSince1970: 102),
+                        isRead: false,
+                        entityType: "message",
+                        entityId: "watch-msg-pull-1",
+                        notificationRequestId: "pull-request-1"
+                    )
+                ),
+                metadata: WatchDeliveryMetadata(
+                    deliveryId: "delivery-direct-1",
+                    gatewayKey: "gateway-a",
+                    watchDeviceKey: "watch-device-a",
+                    ingressSource: .watchPull,
+                    contentDigest: "digest-a",
+                    serverAckState: .ackedDirect,
+                    persistedAt: Date(timeIntervalSince1970: 102)
+                )
+            )
+
+            let first = try await store.ingestWatchDelivery(direct)
+            let second = try await store.ingestWatchDelivery(pullReplay)
+            let messages = try await store.loadWatchLightMessages()
+            let records = try await store.loadWatchDeliveryRecords()
+
+            #expect(first.disposition == .inserted)
+            #expect(second.disposition == .duplicateDelivery)
+            #expect(messages.map(\.messageId) == ["watch-msg-direct-1"])
+            #expect(messages.first?.title == "Pull replay must not create a second row")
+            #expect(messages.first?.body == "Pull replay body")
+            #expect(messages.first?.severity == "high")
+            #expect(records.count == 1)
+            #expect(records.first?.serverAckState == .ackedDirect)
+            #expect(records.first?.ingressSource == .watchPull)
+        }
+    }
+
+    @Test
+    func watchDeliveryIngestDedupesEventAndThingBusinessIdentities() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            _ = try await store.ingestWatchDelivery(
+                WatchDeliveryIngestRecord(
+                    payload: .event(
+                        WatchLightEvent(
+                            eventId: "event-watch-1",
+                            title: "Created",
+                            summary: "first",
+                            state: "OPEN",
+                            severity: "normal",
+                            decryptionState: nil,
+                            imageURL: nil,
+                            updatedAt: Date(timeIntervalSince1970: 200)
+                        )
+                    ),
+                    metadata: WatchDeliveryMetadata(
+                        deliveryId: "delivery-event-1",
+                        gatewayKey: "gateway-a",
+                        ingressSource: .watchAPNS,
+                        contentDigest: "event-digest-1",
+                        persistedAt: Date(timeIntervalSince1970: 201)
+                    )
+                )
+            )
+            _ = try await store.ingestWatchDelivery(
+                WatchDeliveryIngestRecord(
+                    payload: .event(
+                        WatchLightEvent(
+                            eventId: "event-watch-1",
+                            title: "Updated",
+                            summary: "second",
+                            state: "ACKED",
+                            severity: "critical",
+                            decryptionState: nil,
+                            imageURL: nil,
+                            updatedAt: Date(timeIntervalSince1970: 202)
+                        )
+                    ),
+                    metadata: WatchDeliveryMetadata(
+                        deliveryId: "delivery-event-2",
+                        gatewayKey: "gateway-a",
+                        ingressSource: .watchAPNS,
+                        contentDigest: "event-digest-2",
+                        serverAckState: .ackedDirect,
+                        persistedAt: Date(timeIntervalSince1970: 203)
+                    )
+                )
+            )
+            _ = try await store.ingestWatchDelivery(
+                WatchDeliveryIngestRecord(
+                    payload: .thing(
+                        WatchLightThing(
+                            thingId: "thing-watch-1",
+                            title: "Thing",
+                            summary: "first",
+                            attrsJSON: #"{"temp":"20"}"#,
+                            decryptionState: nil,
+                            imageURL: nil,
+                            updatedAt: Date(timeIntervalSince1970: 300)
+                        )
+                    ),
+                    metadata: WatchDeliveryMetadata(
+                        deliveryId: "delivery-thing-1",
+                        gatewayKey: "gateway-a",
+                        ingressSource: .watchAPNS,
+                        contentDigest: "thing-digest-1",
+                        persistedAt: Date(timeIntervalSince1970: 301)
+                    )
+                )
+            )
+            _ = try await store.ingestWatchDelivery(
+                WatchDeliveryIngestRecord(
+                    payload: .thing(
+                        WatchLightThing(
+                            thingId: "thing-watch-1",
+                            title: "thing-watch-1",
+                            summary: nil,
+                            attrsJSON: #"{"rpm":"50"}"#,
+                            decryptionState: nil,
+                            imageURL: nil,
+                            updatedAt: Date(timeIntervalSince1970: 302)
+                        )
+                    ),
+                    metadata: WatchDeliveryMetadata(
+                        deliveryId: "delivery-thing-2",
+                        gatewayKey: "gateway-a",
+                        ingressSource: .watchPull,
+                        contentDigest: "thing-digest-2",
+                        serverAckState: .ackedDirect,
+                        persistedAt: Date(timeIntervalSince1970: 303)
+                    )
+                )
+            )
+
+            let events = try await store.loadWatchLightEvents()
+            let things = try await store.loadWatchLightThings()
+            let records = try await store.loadWatchDeliveryRecords()
+
+            #expect(events.count == 1)
+            #expect(events.first?.eventId == "event-watch-1")
+            #expect(events.first?.state == "ACKED")
+            #expect(things.count == 1)
+            #expect(things.first?.thingId == "thing-watch-1")
+            #expect(normalizedJSON(things.first?.attrsJSON) == #"{"rpm":"50","temp":"20"}"#)
+            #expect(records.count == 4)
         }
     }
 

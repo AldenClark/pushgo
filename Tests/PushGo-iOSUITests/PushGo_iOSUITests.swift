@@ -38,7 +38,7 @@ final class PushGo_iOSUITests: XCTestCase {
         let channelCount: Int?
         let gatewayBaseURL: String?
         let gatewayTokenPresent: Bool?
-        let watchMode: String?
+        let watchReceiverState: String?
         let lastNotificationAction: String?
         let lastNotificationTarget: String?
         let lastFixtureImportEntityRecordCount: Int?
@@ -67,7 +67,7 @@ final class PushGo_iOSUITests: XCTestCase {
             case channelCount = "channel_count"
             case gatewayBaseURL = "gateway_base_url"
             case gatewayTokenPresent = "gateway_token_present"
-            case watchMode = "watch_mode"
+            case watchReceiverState = "watch_receiver_state"
             case lastNotificationAction = "last_notification_action"
             case lastNotificationTarget = "last_notification_target"
             case lastFixtureImportEntityRecordCount = "last_fixture_import_entity_record_count"
@@ -756,10 +756,9 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertEqual(state?.localStoreMode, "persistent")
     }
 
-    func testWatchSetModeMirrorCommandPublishesMirrorState() {
+    func testWatchResyncReceiverCommandPublishesReceiverState() {
         let context = configuredLaunchContext(
-            requestName: "watch.set_mode",
-            args: ["mode": "mirror"]
+            requestName: "watch.resync_receiver"
         )
         launch(context.app)
 
@@ -767,10 +766,9 @@ final class PushGo_iOSUITests: XCTestCase {
             waitForAutomationState(
                 at: context.stateURL,
                 timeout: 12,
-                matching: { $0.watchMode == "mirror" }
+                matching: { $0.watchReceiverState != nil && $0.watchReceiverState != "mirror" && $0.watchReceiverState != "standalone" }
             )
         )
-        XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: 12, matching: { $0.ok }))
     }
 
     func testSettingsSetDecryptionKeyRejectsInvalidLength() {

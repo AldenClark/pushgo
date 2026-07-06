@@ -16,6 +16,9 @@ struct WatchRootView: View {
 
             WatchThingListScreen(viewModel: viewModel)
                 .tag(MainTab.things)
+
+            WatchReceiverHealthScreen()
+                .tag(MainTab.health)
         }
         .tabViewStyle(.page(indexDisplayMode: .automatic))
         .onAppear {

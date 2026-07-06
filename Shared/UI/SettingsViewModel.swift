@@ -27,11 +27,12 @@ final class SettingsViewModel {
     private(set) var notificationKeyMaterial: ServerConfig.NotificationKeyMaterial?
     private(set) var isWatchCompanionAvailable: Bool = false
 #if os(iOS)
-    private(set) var watchMode: WatchMode = .mirror
-    private(set) var effectiveWatchMode: WatchMode = .mirror
+    private(set) var watchMode: WatchMode = .standalone
+    private(set) var effectiveWatchMode: WatchMode = .standalone
     private(set) var standaloneReady: Bool = false
     private(set) var watchModeSwitchStatus: WatchModeSwitchStatus = .idle
     private(set) var isSwitchingWatchMode: Bool = false
+    private(set) var watchReceiverState: WatchReceiverState = .unprovisioned
 #endif
     var manualKeyInput = ManualKeyInput() {
         didSet { persistManualKeyPreferences(oldValue: oldValue) }
@@ -96,6 +97,12 @@ final class SettingsViewModel {
         standaloneReady = environment.standaloneReady
         watchModeSwitchStatus = environment.watchModeSwitchStatus
         isWatchCompanionAvailable = environment.isWatchCompanionAvailable
+        watchReceiverState = Self.receiverState(
+            companionAvailable: isWatchCompanionAvailable,
+            effectiveMode: effectiveWatchMode,
+            standaloneReady: standaloneReady,
+            switchStatus: watchModeSwitchStatus
+        )
 #else
         isWatchCompanionAvailable = false
 #endif
@@ -114,37 +121,67 @@ final class SettingsViewModel {
         }
     }
 
-    var standaloneModeEnabled: Bool {
+    var watchReceiverStatusKey: String {
 #if os(iOS)
-        watchMode == .standalone
+        switch watchReceiverState {
+        case .unprovisioned:
+            "watch_receiver_status_unprovisioned"
+        case .provisioning:
+            "watch_receiver_status_provisioning"
+        case .ready:
+            "watch_receiver_status_ready"
+        case .degraded:
+            "watch_receiver_status_degraded"
+        case .offline:
+            "watch_receiver_status_offline"
+        case .disabled:
+            "watch_receiver_status_disabled"
+        }
 #else
-        false
+        "watch_receiver_status_disabled"
 #endif
     }
 
-    func setStandaloneModeEnabled(_ isEnabled: Bool) async {
+    var watchReceiverDetailKey: String {
+#if os(iOS)
+        switch watchReceiverState {
+        case .unprovisioned:
+            "watch_receiver_detail_unprovisioned"
+        case .provisioning:
+            "watch_receiver_detail_provisioning"
+        case .ready:
+            "watch_receiver_detail_ready"
+        case .degraded:
+            "watch_receiver_detail_degraded"
+        case .offline:
+            "watch_receiver_detail_offline"
+        case .disabled:
+            "watch_receiver_detail_disabled"
+        }
+#else
+        "watch_receiver_detail_disabled"
+#endif
+    }
+
+    func resyncWatchReceiver() async {
 #if os(iOS)
         await environment.refreshWatchCompanionAvailability()
-        if isEnabled, !environment.isWatchCompanionAvailable {
+        guard environment.isWatchCompanionAvailable else {
             refresh()
             error = .typedLocal(
                 code: "watch_companion_not_available",
                 category: .validation,
                 message: localizationManager.localized("watch_companion_not_available"),
-                detail: "watch companion unavailable when enabling standalone mode"
+                detail: "watch companion unavailable when resyncing receiver provisioning"
             )
             return
         }
         isSwitchingWatchMode = true
         defer { isSwitchingWatchMode = false }
         do {
-            let result = try await environment.requestWatchModeChangeApplied(isEnabled ? .standalone : .mirror)
+            try await environment.resyncWatchReceiverProvisioning()
             refresh()
-            if result == .applied {
-                successMessage = localizationManager.localized(
-                    isEnabled ? "watch_standalone_mode_enabled_success" : "watch_mirror_mode_enabled_success"
-                )
-            }
+            successMessage = localizationManager.localized("watch_receiver_resync_started")
         } catch let appError as AppError {
             refresh()
             error = appError
@@ -153,13 +190,35 @@ final class SettingsViewModel {
             error = AppError.wrap(
                 underlying,
                 fallbackMessage: localizationManager.localized("operation_failed"),
-                code: "watch_mode_change_failed"
+                code: "watch_receiver_resync_failed"
             )
         }
-#else
-        _ = isEnabled
 #endif
     }
+
+#if os(iOS)
+    private static func receiverState(
+        companionAvailable: Bool,
+        effectiveMode: WatchMode,
+        standaloneReady: Bool,
+        switchStatus: WatchModeSwitchStatus
+    ) -> WatchReceiverState {
+        guard companionAvailable else { return .offline }
+        if switchStatus == .switching {
+            return .provisioning
+        }
+        if switchStatus == .failed || switchStatus == .timedOut {
+            return .degraded
+        }
+        if effectiveMode == .standalone, standaloneReady {
+            return .ready
+        }
+        if effectiveMode == .standalone {
+            return .degraded
+        }
+        return .unprovisioned
+    }
+#endif
 
     private func loadPersistedPreferences() {
         Task { @MainActor in

@@ -4,6 +4,7 @@ enum MainTab: Hashable {
     case messages
     case events
     case things
+    case health
 
     init?(automationIdentifier: String) {
         switch automationIdentifier {
@@ -13,6 +14,8 @@ enum MainTab: Hashable {
             self = .events
         case "things", "tab.things":
             self = .things
+        case "health", "tab.health", "receiver", "tab.receiver":
+            self = .health
         default:
             return nil
         }
@@ -26,6 +29,8 @@ enum MainTab: Hashable {
             return "tab.events"
         case .things:
             return "tab.things"
+        case .health:
+            return "tab.health"
         }
     }
 
@@ -37,6 +42,8 @@ enum MainTab: Hashable {
             return "screen.events.list"
         case .things:
             return "screen.things.list"
+        case .health:
+            return "screen.receiver.health"
         }
     }
 }

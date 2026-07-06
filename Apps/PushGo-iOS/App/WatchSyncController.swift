@@ -55,8 +55,8 @@ final class WatchSyncController {
     @ObservationIgnored private var lastWatchStandaloneProvisioningAck: WatchStandaloneProvisioningAck?
     @ObservationIgnored private var lastWatchStandaloneProvisioningNack: WatchStandaloneProvisioningNack?
 
-    private(set) var watchMode: WatchMode = .mirror
-    private(set) var effectiveWatchMode: WatchMode = .mirror
+    private(set) var watchMode: WatchMode = .standalone
+    private(set) var effectiveWatchMode: WatchMode = .standalone
     private(set) var standaloneReady = false
     private(set) var watchModeSwitchStatus: WatchModeSwitchStatus = .idle
     private(set) var isWatchCompanionAvailable = false
@@ -95,11 +95,11 @@ final class WatchSyncController {
         lastConfirmedWatchModeControlGeneration = persistedWatchModeControlState.lastConfirmedControlGeneration
         lastObservedWatchModeControlGeneration = persistedWatchModeControlState.lastObservedReportedGeneration
         isWatchCompanionAvailable = WatchTokenReceiver.shared.refreshCompanionAvailability()
-        if watchMode == .standalone, !isWatchCompanionAvailable {
-            watchMode = .mirror
-            effectiveWatchMode = .mirror
+        if watchMode != .standalone {
+            watchMode = .standalone
             standaloneReady = false
-            watchModeSwitchStatus = .idle
+            watchModeSwitchStatus = isWatchCompanionAvailable ? .switching : .idle
+            watchControlGeneration = nextWatchGeneration()
             await persistWatchModeControlState()
         }
     }
@@ -109,12 +109,10 @@ final class WatchSyncController {
         if watchMode == .standalone {
             requestWatchStandaloneProvisioningSync(immediate: true)
         }
-        requestWatchMirrorSnapshotSync(immediate: watchMode == .standalone)
+        if watchMode == .mirror {
+            requestWatchMirrorSnapshotSync(immediate: true)
+        }
         scheduleWatchModeReplayIfNeeded(reason: "bootstrap", immediate: true)
-    }
-
-    func setWatchMode(_ mode: WatchMode) async {
-        await applyDesiredWatchMode(mode, switchStatus: mode == effectiveWatchMode ? .confirmed : .switching)
     }
 
     func requestWatchModeChangeApplied(_ mode: WatchMode) async throws -> WatchModeSwitchRequestResult {
@@ -135,11 +133,10 @@ final class WatchSyncController {
             cancelWatchStandaloneProvisioningAckRetry()
             cancelWatchModeReplay()
         }
-        if watchMode == .standalone, !isWatchCompanionAvailable {
-            effectiveWatchMode = .mirror
+        if !isWatchCompanionAvailable {
             standaloneReady = false
             watchModeSwitchStatus = .idle
-            await setWatchMode(.mirror)
+            await persistWatchModeControlState()
             return
         }
         if availabilityChanged {
@@ -147,7 +144,9 @@ final class WatchSyncController {
             if watchMode == .standalone {
                 requestWatchStandaloneProvisioningSync(immediate: true)
             }
-            requestWatchMirrorSnapshotSync(immediate: true)
+            if watchMode == .mirror {
+                requestWatchMirrorSnapshotSync(immediate: true)
+            }
             scheduleWatchModeReplayIfNeeded(reason: "session_state_changed", immediate: true)
         } else {
             WatchTokenReceiver.shared.replayLatestManifestIfPossible()
@@ -159,11 +158,10 @@ final class WatchSyncController {
         let latestAvailability = WatchTokenReceiver.shared.refreshCompanionAvailability()
         guard latestAvailability != isWatchCompanionAvailable else { return }
         isWatchCompanionAvailable = latestAvailability
-        if watchMode == .standalone, !latestAvailability {
-            effectiveWatchMode = .mirror
+        if !latestAvailability {
             standaloneReady = false
             watchModeSwitchStatus = .idle
-            await setWatchMode(.mirror)
+            await persistWatchModeControlState()
             return
         }
         scheduleWatchModeReplayIfNeeded(reason: "refresh_companion_availability", immediate: true)
@@ -175,8 +173,8 @@ final class WatchSyncController {
         cancelWatchMirrorSnapshotAckRetry()
         cancelWatchStandaloneProvisioningAckRetry()
         cancelWatchModeReplay()
-        watchMode = .mirror
-        effectiveWatchMode = .mirror
+        watchMode = .standalone
+        effectiveWatchMode = .standalone
         standaloneReady = false
         watchModeSwitchStatus = .idle
         isWatchCompanionAvailable = WatchTokenReceiver.shared.refreshCompanionAvailability()
@@ -268,7 +266,6 @@ final class WatchSyncController {
                 requestWatchMirrorSnapshotSync(immediate: true)
             } else {
                 requestWatchStandaloneProvisioningSync(immediate: true)
-                requestWatchMirrorSnapshotSync(immediate: true)
             }
             await persistWatchModeControlState()
             return
@@ -313,10 +310,6 @@ final class WatchSyncController {
         effectiveWatchMode = status.effectiveMode
         standaloneReady = nextReady
 
-        if watchMode == .standalone {
-            requestWatchMirrorSnapshotSync(immediate: !standaloneReady)
-        }
-
         await persistWatchModeControlState()
     }
 
@@ -337,7 +330,7 @@ final class WatchSyncController {
 
     func requestWatchMirrorSnapshotSync(immediate: Bool = false) {
         guard isWatchCompanionAvailable,
-              (watchMode == .mirror || !standaloneReady)
+              watchMode == .mirror
         else {
             pendingWatchMirrorSnapshotTask?.cancel()
             return
@@ -428,8 +421,9 @@ final class WatchSyncController {
         await publishWatchControlContext(force: true)
         if mode == .standalone {
             requestWatchStandaloneProvisioningSync(immediate: true)
+        } else {
+            requestWatchMirrorSnapshotSync(immediate: true)
         }
-        requestWatchMirrorSnapshotSync(immediate: true)
         scheduleWatchModeReplayIfNeeded(reason: "mode_change", immediate: false)
     }
 
@@ -580,6 +574,7 @@ final class WatchSyncController {
     }
 
     private func publishWatchMirrorSnapshot() async {
+        guard watchMode == .mirror, isWatchCompanionAvailable else { return }
         do {
             let messages = try await dataStore.loadMessages()
             let eventMessages = try await dataStore.loadEventMessagesForProjection()

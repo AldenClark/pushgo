@@ -12,9 +12,6 @@ struct SettingsView: View {
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @State private var viewModel = SettingsViewModel()
     @State private var activeSheet: SettingsSheet?
-    @State private var watchStandaloneToggleValue = false
-    @State private var pendingWatchStandaloneToggleTarget: Bool?
-    @State private var isPresentingWatchStandaloneConfirmation = false
 
     init(embedInNavigationContainer: Bool = true, openDecryptionOnAppear: Bool = false) {
         self.embedInNavigationContainer = embedInNavigationContainer
@@ -23,11 +20,6 @@ struct SettingsView: View {
 
     var body: some View {
         settingsRoot
-        .overlay {
-            if viewModel.isSwitchingWatchMode {
-                watchModeSwitchingOverlay
-            }
-        }
         .accessibilityIdentifier("screen.settings")
         .task {
             await environment.refreshWatchCompanionAvailability()
@@ -45,11 +37,6 @@ struct SettingsView: View {
         }
         .onChange(of: watchStateRefreshSignature) { _, _ in
             refreshViewModelState()
-        }
-        .onChange(of: watchStandaloneToggleValue) { _, newValue in
-            guard newValue != viewModel.standaloneModeEnabled else { return }
-            pendingWatchStandaloneToggleTarget = newValue
-            isPresentingWatchStandaloneConfirmation = true
         }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
@@ -94,37 +81,6 @@ struct SettingsView: View {
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
             }
-        }
-        .alert(
-            localizationManager.localized(
-                (pendingWatchStandaloneToggleTarget ?? false)
-                    ? "watch_standalone_confirm_enable_title"
-                    : "watch_standalone_confirm_disable_title"
-            ),
-            isPresented: $isPresentingWatchStandaloneConfirmation,
-        ) {
-            Button(localizationManager.localized("cancel"), role: .cancel) {
-                cancelWatchStandaloneModeChange()
-            }
-            Button(
-                localizationManager.localized(
-                    (pendingWatchStandaloneToggleTarget ?? false)
-                        ? "watch_standalone_confirm_enable_action"
-                        : "watch_standalone_confirm_disable_action"
-                )
-            ) {
-                guard let target = pendingWatchStandaloneToggleTarget else {
-                    cancelWatchStandaloneModeChange()
-                    return
-                }
-                Task {
-                    await viewModel.setStandaloneModeEnabled(target)
-                    refreshViewModelState()
-                    pendingWatchStandaloneToggleTarget = nil
-                }
-            }
-        } message: {
-            Text(localizationManager.localized("watch_standalone_confirm_message"))
         }
     }
 
@@ -206,11 +162,9 @@ struct SettingsView: View {
             .listRowSeparator(viewModel.notificationStatus == .authorized ? .hidden : .visible, edges: .top)
             .listRowBackground(Color.clear)
 
-            if viewModel.isWatchCompanionAvailable {
-                watchStandaloneModeRow
-                    .listRowInsets(rowInsets)
-                    .listRowBackground(Color.clear)
-            }
+            watchReceiverManagementRow
+                .listRowInsets(rowInsets)
+                .listRowBackground(Color.clear)
 
             DataPageToggleGroupRow(
                 iconName: "square.3.layers.3d.top.filled",
@@ -416,84 +370,32 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
-    private var watchStandaloneModeRow: some View {
+    private var watchReceiverManagementRow: some View {
         SettingsControlRow(
             iconName: "applewatch.radiowaves.left.and.right",
-            title: LocalizedStringKey(localizationManager.localized("watch_standalone_mode_title")),
-            detail: watchStandaloneModeDetail,
+            title: LocalizedStringKey(localizationManager.localized("watch_receiver_title")),
+            detail: LocalizedStringKey(localizationManager.localized(viewModel.watchReceiverDetailKey)),
             useFormField: false
         ) {
-            Toggle("", isOn: $watchStandaloneToggleValue)
-                .labelsHidden()
-                .disabled(!viewModel.isWatchCompanionAvailable || viewModel.isSwitchingWatchMode)
-                .accessibilityIdentifier("toggle.settings.watch_standalone_mode")
-                .accessibilityLabel(Text(localizationManager.localized("watch_standalone_mode_title")))
-        }
-        .accessibilityIdentifier("row.settings.watch_standalone_mode")
-    }
-
-    private var watchStandaloneModeDetail: LocalizedStringKey {
-        if !viewModel.isWatchCompanionAvailable {
-            return LocalizedStringKey(localizationManager.localized("watch_companion_not_available"))
-        }
-        if viewModel.watchMode == .mirror {
-            if viewModel.effectiveWatchMode != .mirror {
-                return "waiting_for_watch_to_switch_to_mirror_mode"
+            Button {
+                Task {
+                    await viewModel.resyncWatchReceiver()
+                    refreshViewModelState()
+                }
+            } label: {
+                if viewModel.isSwitchingWatchMode {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Text(localizationManager.localized(viewModel.watchReceiverStatusKey))
+                        .font(.footnote.weight(.semibold))
+                }
             }
-            return "watch_mirror_mode_description"
+            .buttonStyle(.bordered)
+            .disabled(!viewModel.isWatchCompanionAvailable || viewModel.isSwitchingWatchMode)
+            .accessibilityIdentifier("button.settings.watch_receiver_resync")
         }
-        if viewModel.effectiveWatchMode != .standalone {
-            if viewModel.watchModeSwitchStatus == .timedOut {
-                return "watch_standalone_mode_still_waiting_message"
-            }
-            return "waiting_for_watch_to_confirm_standalone_mode"
-        }
-        if !viewModel.standaloneReady {
-            return "watch_standalone_mode_switched_message"
-        }
-        return "watch_standalone_mode_active_description"
-    }
-
-    @ViewBuilder
-    private var watchModeSwitchingOverlay: some View {
-        ZStack {
-            Color.appOverlayScrim
-                .ignoresSafeArea()
-            VStack(spacing: 14) {
-                ProgressView()
-                    .progressViewStyle(.circular)
-                    .scaleEffect(1.1)
-                Text(
-                    viewModel.standaloneModeEnabled
-                        ? "switching_watch_to_standalone_mode"
-                        : "switching_watch_to_mirror_mode"
-                )
-                .font(.headline)
-                .multilineTextAlignment(.center)
-                Text(
-                    viewModel.standaloneModeEnabled
-                        ? "waiting_for_watch_to_accept_standalone_mode_timeout"
-                        : "waiting_for_watch_to_switch_to_mirror_mode_timeout"
-                )
-                .font(.footnote)
-                .foregroundStyle(Color.appTextSecondary)
-                .multilineTextAlignment(.center)
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 18)
-            .frame(maxWidth: 300)
-                .background(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(Color.appSurfaceRaised)
-                )
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(Color.appCardBorder, lineWidth: 1)
-            )
-            .shadow(color: Color.appOverlayShadow, radius: 16, x: 0, y: 10)
-        }
-        .transition(.opacity)
-        .allowsHitTesting(true)
+        .accessibilityIdentifier("row.settings.watch_receiver")
     }
 
     private func cardHeader<Trailing: View>(
@@ -624,12 +526,6 @@ struct SettingsView: View {
 
     private func refreshViewModelState() {
         viewModel.refresh()
-        watchStandaloneToggleValue = viewModel.standaloneModeEnabled
-    }
-
-    private func cancelWatchStandaloneModeChange() {
-        pendingWatchStandaloneToggleTarget = nil
-        watchStandaloneToggleValue = viewModel.standaloneModeEnabled
     }
 
     private var watchStateRefreshSignature: String {

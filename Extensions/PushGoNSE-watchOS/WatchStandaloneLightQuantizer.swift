@@ -218,7 +218,7 @@ enum WatchStandaloneLightQuantizer {
     }
 }
 
-enum WatchLightPayload: Sendable {
+enum WatchLightPayload: Codable, Hashable, Sendable {
     case message(WatchLightMessage)
     case event(WatchLightEvent)
     case thing(WatchLightThing)

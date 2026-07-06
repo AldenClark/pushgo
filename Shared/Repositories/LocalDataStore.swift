@@ -172,8 +172,8 @@ struct WatchModeControlPersistenceState: Hashable, Sendable {
     var lastObservedReportedGeneration: Int64
 
     static let initial = WatchModeControlPersistenceState(
-        desiredMode: .mirror,
-        effectiveMode: .mirror,
+        desiredMode: .standalone,
+        effectiveMode: .standalone,
         standaloneReady: false,
         switchStatus: .idle,
         lastConfirmedControlGeneration: 0,
@@ -1377,12 +1377,12 @@ actor LocalDataStore {
     }
 
     func loadWatchMode() async -> WatchMode {
-        guard let backend else { return .mirror }
+        guard let backend else { return .standalone }
         guard let settings = try? await backend.loadAppSettings(),
               let rawValue = settings.watchModeRawValue,
               let mode = WatchMode(rawValue: rawValue)
         else {
-            return .mirror
+            return .standalone
         }
         return mode
     }
@@ -1400,7 +1400,7 @@ actor LocalDataStore {
         else {
             return .initial
         }
-        let desiredMode = settings.watchModeRawValue.flatMap { WatchMode(rawValue: $0) } ?? .mirror
+        let desiredMode = settings.watchModeRawValue.flatMap { WatchMode(rawValue: $0) } ?? .standalone
         let effectiveMode = settings.watchEffectiveModeRawValue.flatMap { WatchMode(rawValue: $0) } ?? desiredMode
         let standaloneReady = settings.watchStandaloneReady ?? false
         let switchStatus = settings.watchModeSwitchStatusRawValue
@@ -1570,6 +1570,16 @@ actor LocalDataStore {
     func upsertWatchLightPayload(_ payload: WatchLightPayload) async throws {
         let backend = try requireBackend()
         try await backend.upsertWatchLightPayload(payload)
+    }
+
+    func ingestWatchDelivery(_ record: WatchDeliveryIngestRecord) async throws -> WatchDeliveryIngestResult {
+        let backend = try requireBackend()
+        return try await backend.ingestWatchDelivery(record)
+    }
+
+    func loadWatchDeliveryRecords() async throws -> [WatchDeliveryRecord] {
+        let backend = try requireBackend()
+        return try await backend.loadWatchDeliveryRecords()
     }
 
     func markWatchLightMessageRead(messageId: String) async throws -> WatchLightMessage? {
@@ -3775,8 +3785,9 @@ private actor GRDBStore {
                     CHECK (length(trim(action_id)) > 0),
                     CHECK (length(trim(message_id)) > 0)
                 );
-                """)
+            """)
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_watch_mirror_action_queue_issued_at ON watch_mirror_action_queue(issued_at ASC, action_id ASC);")
+            try GRDBStore.createWatchDeliveryRecordsTable(db)
         }
         migrator.registerMigration("v2_watch_sync_state_columns") { db in
             let existingColumns = Set(try Row.fetchAll(db, sql: "PRAGMA table_info(app_settings);").compactMap {
@@ -4080,8 +4091,9 @@ private actor GRDBStore {
                     CHECK (length(trim(action_id)) > 0),
                     CHECK (length(trim(message_id)) > 0)
                 );
-                """)
+            """)
             try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_watch_mirror_action_queue_issued_at ON watch_mirror_action_queue(issued_at ASC, action_id ASC);")
+            try GRDBStore.createWatchDeliveryRecordsTable(db)
         }
         migrator.registerMigration("v9_message_occurred_at_epoch") { db in
             let existingColumns = Set(try Row.fetchAll(db, sql: "PRAGMA table_info(messages);").compactMap {
@@ -4234,6 +4246,9 @@ private actor GRDBStore {
 		            try GRDBStore.createEntityProjectionHeadTables(db)
 		            try GRDBStore.rebuildEntityProjectionHeads(db)
 		        }
+        migrator.registerMigration("v17_watch_delivery_records") { db in
+            try GRDBStore.createWatchDeliveryRecordsTable(db)
+        }
 	        return migrator
 	    }()
 
@@ -4359,6 +4374,142 @@ private actor GRDBStore {
     private static func sqlOptionalBool(_ value: Bool?) -> String {
         guard let value else { return "NULL" }
         return value ? "1" : "0"
+    }
+
+    private static func createWatchDeliveryRecordsTable(_ db: Database) throws {
+        try db.execute(sql: """
+            CREATE TABLE IF NOT EXISTS watch_delivery_records (
+                gateway_key TEXT NOT NULL,
+                delivery_id TEXT NOT NULL,
+                watch_device_key TEXT,
+                message_id TEXT,
+                entity_type TEXT,
+                entity_id TEXT,
+                ingress_source TEXT NOT NULL,
+                content_digest TEXT,
+                persisted_at REAL NOT NULL,
+                server_ack_state TEXT NOT NULL,
+                PRIMARY KEY (gateway_key, delivery_id),
+                CHECK (length(trim(gateway_key)) > 0),
+                CHECK (length(trim(delivery_id)) > 0)
+            );
+            """)
+        try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_watch_delivery_records_business_identity ON watch_delivery_records(entity_type, entity_id, message_id);")
+        try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_watch_delivery_records_persisted_at ON watch_delivery_records(persisted_at DESC);")
+    }
+
+    private static func watchBusinessIdentity(
+        for payload: WatchLightPayload
+    ) -> (messageId: String?, entityType: String?, entityId: String?) {
+        switch payload {
+        case let .message(message):
+            return (
+                messageId: normalizeOptional(message.messageId),
+                entityType: normalizeOptional(message.entityType) ?? "message",
+                entityId: normalizeOptional(message.entityId) ?? normalizeOptional(message.messageId)
+            )
+        case let .event(event):
+            return (
+                messageId: nil,
+                entityType: "event",
+                entityId: normalizeOptional(event.eventId)
+            )
+        case let .thing(thing):
+            return (
+                messageId: nil,
+                entityType: "thing",
+                entityId: normalizeOptional(thing.thingId)
+            )
+        }
+    }
+
+    private static func watchDeliveryRecord(_ row: Row) -> WatchDeliveryRecord {
+        let deliveryId: String = row["delivery_id"] ?? ""
+        let gatewayKey: String = row["gateway_key"] ?? ""
+        let ingressSourceRaw: String = row["ingress_source"] ?? WatchIngressSource.watchAPNS.rawValue
+        let serverAckRaw: String = row["server_ack_state"] ?? WatchServerAckState.pending.rawValue
+        let persistedAtEpoch: Double = row["persisted_at"] ?? 0
+        return WatchDeliveryRecord(
+            deliveryId: deliveryId,
+            gatewayKey: gatewayKey,
+            watchDeviceKey: row["watch_device_key"],
+            messageId: row["message_id"],
+            entityType: row["entity_type"],
+            entityId: row["entity_id"],
+            ingressSource: WatchIngressSource(rawValue: ingressSourceRaw) ?? .watchAPNS,
+            contentDigest: row["content_digest"],
+            persistedAt: dateFromStoredEpoch(persistedAtEpoch),
+            serverAckState: WatchServerAckState(rawValue: serverAckRaw) ?? .pending
+        )
+    }
+
+    private static func mergedWatchDeliveryRecord(
+        existing: WatchDeliveryRecord,
+        incoming: WatchDeliveryMetadata,
+        identity: (messageId: String?, entityType: String?, entityId: String?)
+    ) -> WatchDeliveryRecord {
+        WatchDeliveryRecord(
+            deliveryId: existing.deliveryId,
+            gatewayKey: existing.gatewayKey,
+            watchDeviceKey: incoming.watchDeviceKey ?? existing.watchDeviceKey,
+            messageId: identity.messageId ?? existing.messageId,
+            entityType: identity.entityType ?? existing.entityType,
+            entityId: identity.entityId ?? existing.entityId,
+            ingressSource: incoming.ingressSource,
+            contentDigest: incoming.contentDigest ?? existing.contentDigest,
+            persistedAt: min(existing.persistedAt, incoming.persistedAt),
+            serverAckState: incoming.serverAckState
+        )
+    }
+
+    private static func payloadForDuplicateDelivery(
+        _ payload: WatchLightPayload,
+        existing: WatchDeliveryRecord
+    ) -> WatchLightPayload {
+        switch payload {
+        case let .message(message):
+            let messageId = normalizeOptional(existing.messageId) ?? message.messageId
+            return .message(
+                WatchLightMessage(
+                    messageId: messageId,
+                    title: message.title,
+                    body: message.body,
+                    imageURL: message.imageURL,
+                    url: message.url,
+                    severity: message.severity,
+                    receivedAt: message.receivedAt,
+                    isRead: message.isRead,
+                    entityType: normalizeOptional(existing.entityType) ?? message.entityType,
+                    entityId: normalizeOptional(existing.entityId) ?? message.entityId,
+                    notificationRequestId: message.notificationRequestId
+                )
+            )
+        case let .event(event):
+            return .event(
+                WatchLightEvent(
+                    eventId: normalizeOptional(existing.entityId) ?? event.eventId,
+                    title: event.title,
+                    summary: event.summary,
+                    state: event.state,
+                    severity: event.severity,
+                    decryptionState: event.decryptionState,
+                    imageURL: event.imageURL,
+                    updatedAt: event.updatedAt
+                )
+            )
+        case let .thing(thing):
+            return .thing(
+                WatchLightThing(
+                    thingId: normalizeOptional(existing.entityId) ?? thing.thingId,
+                    title: thing.title,
+                    summary: thing.summary,
+                    attrsJSON: thing.attrsJSON,
+                    decryptionState: thing.decryptionState,
+                    imageURL: thing.imageURL,
+                    updatedAt: thing.updatedAt
+                )
+            )
+        }
     }
 
 	    private static func normalizeOptional(_ value: String?) -> String? {
@@ -5770,6 +5921,7 @@ private actor GRDBStore {
             try db.execute(sql: "DELETE FROM watch_light_events;")
             try db.execute(sql: "DELETE FROM watch_light_things;")
             try db.execute(sql: "DELETE FROM watch_mirror_action_queue;")
+            try db.execute(sql: "DELETE FROM watch_delivery_records;")
         }
     }
 
@@ -5898,6 +6050,81 @@ private actor GRDBStore {
         }
     }
 
+    func ingestWatchDelivery(_ record: WatchDeliveryIngestRecord) async throws -> WatchDeliveryIngestResult {
+        let identity = Self.watchBusinessIdentity(for: record.payload)
+        return try write { db in
+            if let existing = try loadWatchDeliveryRecord(
+                gatewayKey: record.metadata.gatewayKey,
+                deliveryId: record.metadata.deliveryId,
+                db: db
+            ) {
+                let projectionPayload = Self.payloadForDuplicateDelivery(
+                    record.payload,
+                    existing: existing
+                )
+                let projectionIdentity = Self.watchBusinessIdentity(for: projectionPayload)
+                switch projectionPayload {
+                case let .message(message):
+                    try upsertWatchLightMessage(message, db: db)
+                case let .event(event):
+                    try upsertWatchLightEvent(event, db: db)
+                case let .thing(thing):
+                    try upsertWatchLightThing(thing, db: db)
+                }
+                let merged = Self.mergedWatchDeliveryRecord(
+                    existing: existing,
+                    incoming: record.metadata,
+                    identity: projectionIdentity
+                )
+                try upsertWatchDeliveryRecord(merged, db: db)
+                return WatchDeliveryIngestResult(
+                    disposition: .duplicateDelivery,
+                    deliveryRecord: merged
+                )
+            }
+
+            switch record.payload {
+            case let .message(message):
+                try upsertWatchLightMessage(message, db: db)
+            case let .event(event):
+                try upsertWatchLightEvent(event, db: db)
+            case let .thing(thing):
+                try upsertWatchLightThing(thing, db: db)
+            }
+
+            let deliveryRecord = WatchDeliveryRecord(
+                deliveryId: record.metadata.deliveryId,
+                gatewayKey: record.metadata.gatewayKey,
+                watchDeviceKey: record.metadata.watchDeviceKey,
+                messageId: identity.messageId,
+                entityType: identity.entityType,
+                entityId: identity.entityId,
+                ingressSource: record.metadata.ingressSource,
+                contentDigest: record.metadata.contentDigest,
+                persistedAt: record.metadata.persistedAt,
+                serverAckState: record.metadata.serverAckState
+            )
+            try upsertWatchDeliveryRecord(deliveryRecord, db: db)
+            return WatchDeliveryIngestResult(
+                disposition: .inserted,
+                deliveryRecord: deliveryRecord
+            )
+        }
+    }
+
+    func loadWatchDeliveryRecords() async throws -> [WatchDeliveryRecord] {
+        try read { db in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT * FROM watch_delivery_records
+                    ORDER BY persisted_at DESC, gateway_key ASC, delivery_id ASC;
+                    """
+            )
+            return rows.map(Self.watchDeliveryRecord)
+        }
+    }
+
     func markWatchLightMessageRead(messageId: String) async throws -> WatchLightMessage? {
         let normalizedMessageId = messageId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedMessageId.isEmpty else { return nil }
@@ -5983,6 +6210,57 @@ private actor GRDBStore {
                     """
             )
         }
+    }
+
+    private func loadWatchDeliveryRecord(
+        gatewayKey: String,
+        deliveryId: String,
+        db: Database
+    ) throws -> WatchDeliveryRecord? {
+        let row = try Row.fetchOne(
+            db,
+            sql: """
+                SELECT * FROM watch_delivery_records
+                WHERE gateway_key = \(Self.sqlQuoted(gatewayKey))
+                  AND delivery_id = \(Self.sqlQuoted(deliveryId))
+                LIMIT 1;
+                """
+        )
+        return row.map(Self.watchDeliveryRecord)
+    }
+
+    private func upsertWatchDeliveryRecord(
+        _ record: WatchDeliveryRecord,
+        db: Database
+    ) throws {
+        try db.execute(
+            sql: """
+                INSERT INTO watch_delivery_records (
+                    gateway_key, delivery_id, watch_device_key, message_id, entity_type, entity_id,
+                    ingress_source, content_digest, persisted_at, server_ack_state
+                ) VALUES (
+                    \(Self.sqlQuoted(record.gatewayKey)),
+                    \(Self.sqlQuoted(record.deliveryId)),
+                    \(Self.sqlOptionalText(record.watchDeviceKey)),
+                    \(Self.sqlOptionalText(record.messageId)),
+                    \(Self.sqlOptionalText(record.entityType)),
+                    \(Self.sqlOptionalText(record.entityId)),
+                    \(Self.sqlQuoted(record.ingressSource.rawValue)),
+                    \(Self.sqlOptionalText(record.contentDigest)),
+                    \(Self.storedEpoch(record.persistedAt)),
+                    \(Self.sqlQuoted(record.serverAckState.rawValue))
+                )
+                ON CONFLICT(gateway_key, delivery_id) DO UPDATE SET
+                    watch_device_key = COALESCE(excluded.watch_device_key, watch_delivery_records.watch_device_key),
+                    message_id = COALESCE(excluded.message_id, watch_delivery_records.message_id),
+                    entity_type = COALESCE(excluded.entity_type, watch_delivery_records.entity_type),
+                    entity_id = COALESCE(excluded.entity_id, watch_delivery_records.entity_id),
+                    ingress_source = excluded.ingress_source,
+                    content_digest = COALESCE(excluded.content_digest, watch_delivery_records.content_digest),
+                    persisted_at = MIN(watch_delivery_records.persisted_at, excluded.persisted_at),
+                    server_ack_state = excluded.server_ack_state;
+                """
+        )
     }
 
     private func upsertWatchLightMessage(_ message: WatchLightMessage, db: Database) throws {

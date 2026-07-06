@@ -75,12 +75,8 @@ final class WatchLightStoreViewModel {
 
     func markMessageRead(_ message: WatchLightMessage) async {
         do {
-            if environment.watchMode == .mirror {
-                try await environment.enqueueMirrorMessageAction(kind: .read, messageId: message.messageId)
-            } else {
-                _ = try await dataStore.markWatchLightMessageRead(messageId: message.messageId)
-                await environment.refreshWatchLightCountsAndNotify()
-            }
+            _ = try await dataStore.markWatchLightMessageRead(messageId: message.messageId)
+            await environment.refreshWatchLightCountsAndNotify()
             await reload()
         } catch let appError as AppError {
             error = appError
@@ -96,12 +92,8 @@ final class WatchLightStoreViewModel {
 
     func deleteMessage(_ message: WatchLightMessage) async {
         do {
-            if environment.watchMode == .mirror {
-                try await environment.enqueueMirrorMessageAction(kind: .delete, messageId: message.messageId)
-            } else {
-                try await dataStore.deleteWatchLightMessage(messageId: message.messageId)
-                await environment.refreshWatchLightCountsAndNotify()
-            }
+            try await dataStore.deleteWatchLightMessage(messageId: message.messageId)
+            await environment.refreshWatchLightCountsAndNotify()
             await reload()
         } catch let appError as AppError {
             error = appError
