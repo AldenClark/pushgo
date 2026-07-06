@@ -8,7 +8,7 @@ Rules:
 - Keep values as plain text with `\n` line breaks; no Markdown headings.
 - Keep content user-facing; engineering details stay in `release/CHANGELOG.md`.
 - Required locale keys:
-  `en`, `de`, `es`, `fr`, `ja`, `ko`, `zh-CN`, `zh-TW`
+  `en`, `zh-CN`, `zh-TW`
 
 During `scripts/release_appcast.sh`, the matching version file is copied into the archives
 directory as same-basename localized `.txt` files so Sparkle `generate_appcast` can attach them
@@ -16,4 +16,4 @@ to the corresponding archive item.
 
 Sparkle `generate_appcast` only scans base language identifiers for localized release notes.
 That means `zh-CN` and `zh-TW` are both kept in the JSON source for cross-platform parity, but
-the generated appcast can currently emit only one generic `zh.txt`.
+the generated appcast currently emits one generic `zh.txt` from `zh-CN`.

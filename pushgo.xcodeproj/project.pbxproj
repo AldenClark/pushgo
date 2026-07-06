@@ -1564,14 +1564,12 @@
 			buildConfigurationList = AA49A1852EE3E31500C1EBF2 /* Build configuration list for PBXProject "pushgo" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
-			knownRegions = (
-				en,
-				Base,
-				ja,
-				"zh-Hans",
-				"zh-Hant",
-				ko,
-			);
+				knownRegions = (
+					en,
+					Base,
+					"zh-Hans",
+					"zh-Hant",
+				);
 			mainGroup = AA49A1812EE3E31500C1EBF2;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (

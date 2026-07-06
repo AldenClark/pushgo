@@ -149,11 +149,6 @@ final class PushGo_iOSUITests: XCTestCase {
     private let seedMessageId = "msg_p2_seed_001"
     private let localizationSpecs: [LocalizationSpec] = [
         .init(code: "en", localeIdentifier: "en_US"),
-        .init(code: "de", localeIdentifier: "de_DE"),
-        .init(code: "es", localeIdentifier: "es_ES"),
-        .init(code: "fr", localeIdentifier: "fr_FR"),
-        .init(code: "ja", localeIdentifier: "ja_JP"),
-        .init(code: "ko", localeIdentifier: "ko_KR"),
         .init(code: "zh-CN", localeIdentifier: "zh_CN"),
         .init(code: "zh-TW", localeIdentifier: "zh_TW"),
     ]

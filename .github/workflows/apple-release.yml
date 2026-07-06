@@ -245,14 +245,9 @@ jobs:
 
           source = pathlib.Path(sys.argv[1])
           output = pathlib.Path(sys.argv[2])
-          required = ["en", "de", "es", "fr", "ja", "ko", "zh-CN", "zh-TW"]
+          required = ["en", "zh-CN", "zh-TW"]
           key_to_env = {
               "en": "APP_STORE_RELEASE_NOTES_EN_US",
-              "de": "APP_STORE_RELEASE_NOTES_DE_DE",
-              "es": "APP_STORE_RELEASE_NOTES_ES_ES",
-              "fr": "APP_STORE_RELEASE_NOTES_FR_FR",
-              "ja": "APP_STORE_RELEASE_NOTES_JA_JP",
-              "ko": "APP_STORE_RELEASE_NOTES_KO_KR",
               "zh-CN": "APP_STORE_RELEASE_NOTES_ZH_HANS",
               "zh-TW": "APP_STORE_RELEASE_NOTES_ZH_HANT",
           }
@@ -273,41 +268,21 @@ jobs:
           output.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
           PY
 
-          notes_json="$(cat "$notes_json_file")"
-          en_notes="$(printf '%s' "$notes_json" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["APP_STORE_RELEASE_NOTES_EN_US"])')"
-          de_notes="$(printf '%s' "$notes_json" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["APP_STORE_RELEASE_NOTES_DE_DE"])')"
-          es_notes="$(printf '%s' "$notes_json" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["APP_STORE_RELEASE_NOTES_ES_ES"])')"
-          fr_notes="$(printf '%s' "$notes_json" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["APP_STORE_RELEASE_NOTES_FR_FR"])')"
-          ja_notes="$(printf '%s' "$notes_json" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["APP_STORE_RELEASE_NOTES_JA_JP"])')"
-          ko_notes="$(printf '%s' "$notes_json" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["APP_STORE_RELEASE_NOTES_KO_KR"])')"
-          zh_hans_notes="$(printf '%s' "$notes_json" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["APP_STORE_RELEASE_NOTES_ZH_HANS"])')"
-          zh_hant_notes="$(printf '%s' "$notes_json" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["APP_STORE_RELEASE_NOTES_ZH_HANT"])')"
+	          notes_json="$(cat "$notes_json_file")"
+	          en_notes="$(printf '%s' "$notes_json" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["APP_STORE_RELEASE_NOTES_EN_US"])')"
+	          zh_hans_notes="$(printf '%s' "$notes_json" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["APP_STORE_RELEASE_NOTES_ZH_HANS"])')"
+	          zh_hant_notes="$(printf '%s' "$notes_json" | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["APP_STORE_RELEASE_NOTES_ZH_HANT"])')"
 
           {
             echo "TESTFLIGHT_CHANGELOG<<__PUSHGO_CHANGELOG_EOF__"
             printf "%s\n" "$en_notes"
             echo "__PUSHGO_CHANGELOG_EOF__"
-            echo "APP_STORE_RELEASE_NOTES_EN_US<<__PUSHGO_RELEASE_NOTES_EN_EOF__"
-            printf "%s\n" "$en_notes"
-            echo "__PUSHGO_RELEASE_NOTES_EN_EOF__"
-            echo "APP_STORE_RELEASE_NOTES_DE_DE<<__PUSHGO_RELEASE_NOTES_DE_EOF__"
-            printf "%s\n" "$de_notes"
-            echo "__PUSHGO_RELEASE_NOTES_DE_EOF__"
-            echo "APP_STORE_RELEASE_NOTES_ES_ES<<__PUSHGO_RELEASE_NOTES_ES_EOF__"
-            printf "%s\n" "$es_notes"
-            echo "__PUSHGO_RELEASE_NOTES_ES_EOF__"
-            echo "APP_STORE_RELEASE_NOTES_FR_FR<<__PUSHGO_RELEASE_NOTES_FR_EOF__"
-            printf "%s\n" "$fr_notes"
-            echo "__PUSHGO_RELEASE_NOTES_FR_EOF__"
-            echo "APP_STORE_RELEASE_NOTES_JA_JP<<__PUSHGO_RELEASE_NOTES_JA_EOF__"
-            printf "%s\n" "$ja_notes"
-            echo "__PUSHGO_RELEASE_NOTES_JA_EOF__"
-            echo "APP_STORE_RELEASE_NOTES_KO_KR<<__PUSHGO_RELEASE_NOTES_KO_EOF__"
-            printf "%s\n" "$ko_notes"
-            echo "__PUSHGO_RELEASE_NOTES_KO_EOF__"
-            echo "APP_STORE_RELEASE_NOTES_ZH_HANS<<__PUSHGO_RELEASE_NOTES_ZH_EOF__"
-            printf "%s\n" "$zh_hans_notes"
-            echo "__PUSHGO_RELEASE_NOTES_ZH_EOF__"
+	            echo "APP_STORE_RELEASE_NOTES_EN_US<<__PUSHGO_RELEASE_NOTES_EN_EOF__"
+	            printf "%s\n" "$en_notes"
+	            echo "__PUSHGO_RELEASE_NOTES_EN_EOF__"
+	            echo "APP_STORE_RELEASE_NOTES_ZH_HANS<<__PUSHGO_RELEASE_NOTES_ZH_EOF__"
+	            printf "%s\n" "$zh_hans_notes"
+	            echo "__PUSHGO_RELEASE_NOTES_ZH_EOF__"
             echo "APP_STORE_RELEASE_NOTES_ZH_HANT<<__PUSHGO_RELEASE_NOTES_ZH_HANT_EOF__"
             printf "%s\n" "$zh_hant_notes"
             echo "__PUSHGO_RELEASE_NOTES_ZH_HANT_EOF__"
@@ -332,16 +307,11 @@ jobs:
 
           source = pathlib.Path(sys.argv[1])
           output_root = pathlib.Path(sys.argv[2])
-          locale_to_fastlane = {
-              "en-US": "en-US",
-              "de-DE": "de-DE",
-              "es-ES": "es-ES",
-              "fr-FR": "fr-FR",
-              "ja-JP": "ja",
-              "ko-KR": "ko",
-              "zh-Hans": "zh-Hans",
-              "zh-Hant": "zh-Hant",
-          }
+	          locale_to_fastlane = {
+	              "en-US": "en-US",
+	              "zh-Hans": "zh-Hans",
+	              "zh-Hant": "zh-Hant",
+	          }
           fields = {
               "promotional_text": ("promotional_text.txt", 170),
               "keywords": ("keywords.txt", 100),

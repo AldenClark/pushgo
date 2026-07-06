@@ -811,17 +811,12 @@ platform :ios do
     pkg_path
   end
 
-  def release_notes_payload
-    locale_env_map = {
-      "en-US" => "APP_STORE_RELEASE_NOTES_EN_US",
-      "de-DE" => "APP_STORE_RELEASE_NOTES_DE_DE",
-      "es-ES" => "APP_STORE_RELEASE_NOTES_ES_ES",
-      "fr-FR" => "APP_STORE_RELEASE_NOTES_FR_FR",
-      "ja" => "APP_STORE_RELEASE_NOTES_JA_JP",
-      "ko" => "APP_STORE_RELEASE_NOTES_KO_KR",
-      "zh-Hans" => "APP_STORE_RELEASE_NOTES_ZH_HANS",
-      "zh-Hant" => "APP_STORE_RELEASE_NOTES_ZH_HANT"
-    }
+	  def release_notes_payload
+	    locale_env_map = {
+	      "en-US" => "APP_STORE_RELEASE_NOTES_EN_US",
+	      "zh-Hans" => "APP_STORE_RELEASE_NOTES_ZH_HANS",
+	      "zh-Hant" => "APP_STORE_RELEASE_NOTES_ZH_HANT"
+	    }
 
     payload = {}
     locale_env_map.each do |locale, env_key|

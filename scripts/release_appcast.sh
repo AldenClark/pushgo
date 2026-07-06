@@ -326,23 +326,13 @@ import sys
 
 source_json = pathlib.Path(sys.argv[1])
 output_base = pathlib.Path(sys.argv[2])
-required_locales = ["en", "de", "es", "fr", "ja", "ko", "zh-CN", "zh-TW"]
+required_locales = ["en", "zh-CN", "zh-TW"]
 direct_locale_map = {
     "en": "en",
-    "de": "de",
-    "es": "es",
-    "fr": "fr",
-    "ja": "ja",
-    "ko": "ko",
 }
 managed_suffixes = [
     "txt",
     "en.txt",
-    "de.txt",
-    "es.txt",
-    "fr.txt",
-    "ja.txt",
-    "ko.txt",
     "zh.txt",
 ]
 
@@ -360,7 +350,7 @@ missing = []
 for locale in required_locales:
     value = payload.get(locale)
     if not isinstance(value, str) or not value.strip():
-      missing.append(locale)
+        missing.append(locale)
 
 if missing:
     print(

@@ -225,6 +225,8 @@ cat > "$staging_dir/.localized/en.strings" <<'EOF'
 EOF
 cp "$staging_dir/.localized/en.strings" "$staging_dir/.localized/zh_CN.strings"
 cp "$staging_dir/.localized/en.strings" "$staging_dir/.localized/zh_Hans.strings"
+cp "$staging_dir/.localized/en.strings" "$staging_dir/.localized/zh_TW.strings"
+cp "$staging_dir/.localized/en.strings" "$staging_dir/.localized/zh_Hant.strings"
 cp "$finder_background" "$staging_dir/.background/pushgo_dmg_bg_680pt_2x.png"
 cp "$volume_icon" "$staging_dir/.VolumeIcon.icns"
 SetFile -a V "$staging_dir/.background"
