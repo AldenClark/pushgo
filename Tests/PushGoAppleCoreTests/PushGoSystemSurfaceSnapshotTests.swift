@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import UserNotifications
 @testable import PushGoAppleCore
 
 struct PushGoSystemSurfaceSnapshotTests {
@@ -109,6 +110,146 @@ struct PushGoSystemSurfaceSnapshotTests {
 
         #expect(snapshot.recentMessages.map(\.title) == ["Decrypted alert"])
         #expect(snapshot.recentMessages.first?.bodyPreview?.contains("safe decrypted body") == true)
+    }
+
+    @Test
+    func nseProjectionMergesUnreadMessageIntoSnapshot() {
+        let content = UNMutableNotificationContent()
+        content.title = "Build failed"
+        content.body = "iOS release build failed on signing"
+        content.userInfo = [
+            "message_id": "msg-nse-projection-001",
+            "delivery_id": "delivery-nse-projection-001",
+            "entity_type": "message",
+            "title": "Build failed",
+            "body": "iOS release build failed on signing",
+            "channel_id": "ci",
+            "severity": "high",
+        ]
+
+        let update = PushGoNotificationProjectionUpdater.makeUpdate(
+            content: content,
+            requestIdentifier: "req-nse-projection-001",
+            existingSnapshot: .empty(source: "tests", now: Date(timeIntervalSince1970: 100)),
+            now: Date(timeIntervalSince1970: 200)
+        )
+
+        #expect(update?.snapshot.counts.totalMessages == 1)
+        #expect(update?.snapshot.counts.unreadMessages == 1)
+        #expect(update?.snapshot.recentMessages.first?.title == "Build failed")
+        #expect(update?.snapshot.recentMessages.first?.bodyPreview?.contains("signing") == true)
+        #expect(update?.snapshot.recentMessages.first?.openTarget?.identifier == "msg-nse-projection-001")
+        #expect(update?.summary?.stableID == "msg-nse-projection-001")
+    }
+
+    @Test
+    func widgetSnapshotSchemaDecodesNotificationProjectionSnapshot() throws {
+        let localMessageID = UUID(uuidString: "00000000-0000-0000-0000-000000000321")!
+        let item = PushGoSystemSurfaceSnapshot.Item(
+            id: "message:msg-widget-compat",
+            kind: .message,
+            title: "Widget compatibility",
+            subtitle: "ops",
+            bodyPreview: "Unread message should be visible",
+            status: "unread",
+            severity: "high",
+            channelID: "ops",
+            eventID: nil,
+            thingID: nil,
+            updatedAtEpochMs: 1_742_000_000_000,
+            imageURL: nil,
+            accessibilityLabel: "Unread message, Widget compatibility",
+            accessibilityValue: nil,
+            openTarget: PushGoSystemOpenTarget.message(
+                identifier: "msg-widget-compat",
+                localMessageID: localMessageID,
+                source: .notification
+            )
+        )
+        let snapshot = PushGoSystemSurfaceSnapshot(
+            schemaVersion: PushGoSystemSurfaceSnapshot.schemaVersion,
+            generatedAtEpochMs: 1_742_000_000_000,
+            source: "nse-projection",
+            counts: .init(totalMessages: 1, unreadMessages: 1, criticalEvents: 0, objectWarnings: 0),
+            focusState: .default(now: Date(timeIntervalSince1970: 1_742_000_000)),
+            recentMessages: [item],
+            unreadMessages: [item],
+            criticalEvents: [],
+            objectWarnings: [],
+            latestObjectStates: []
+        )
+        let encoder = PropertyListEncoder()
+        encoder.outputFormat = .binary
+        let data = try encoder.encode(snapshot)
+
+        let decoded = try PropertyListDecoder().decode(WidgetSnapshotCompatibility.self, from: data)
+
+        #expect(decoded.schemaVersion == PushGoSystemSurfaceSnapshot.schemaVersion)
+        #expect(decoded.counts.unreadMessages == 1)
+        #expect(decoded.unreadMessages.first?.title == "Widget compatibility")
+        #expect(decoded.unreadMessages.first?.openTarget?.identifier == "msg-widget-compat")
+        #expect(decoded.unreadMessages.first?.openTarget?.localMessageID == localMessageID)
+        #expect(decoded.unreadMessages.first?.openTarget?.source == .notification)
+    }
+
+    @Test
+    func nseProjectionDeduplicatesExistingUnreadMessage() {
+        let content = UNMutableNotificationContent()
+        content.title = "Duplicate alert"
+        content.body = "Second delivery attempt"
+        content.userInfo = [
+            "message_id": "msg-nse-projection-dedupe",
+            "entity_type": "message",
+            "title": "Duplicate alert",
+            "body": "Second delivery attempt",
+        ]
+        let first = PushGoNotificationProjectionUpdater.makeUpdate(
+            content: content,
+            requestIdentifier: "req-dedupe-1",
+            existingSnapshot: .empty(source: "tests"),
+            now: Date(timeIntervalSince1970: 300)
+        )
+        let second = PushGoNotificationProjectionUpdater.makeUpdate(
+            content: content,
+            requestIdentifier: "req-dedupe-2",
+            existingSnapshot: first?.snapshot,
+            now: Date(timeIntervalSince1970: 301)
+        )
+
+        #expect(first?.insertedUnread == true)
+        #expect(second?.insertedUnread == false)
+        #expect(second?.snapshot.counts.totalMessages == 1)
+        #expect(second?.snapshot.counts.unreadMessages == 1)
+        #expect(second?.snapshot.unreadMessages.count == 1)
+    }
+
+    @Test
+    func nseProjectionRedactsDecryptFailedContentButStillCountsUnread() {
+        let content = UNMutableNotificationContent()
+        content.title = "Encrypted alert"
+        content.body = "raw secret should not leak"
+        content.userInfo = [
+            "message_id": "msg-nse-sensitive-001",
+            "entity_type": "message",
+            "title": "Encrypted alert",
+            "body": "raw secret should not leak",
+            "ciphertext": "abc",
+            "decryption_state": "decryptFailed",
+        ]
+
+        let update = PushGoNotificationProjectionUpdater.makeUpdate(
+            content: content,
+            requestIdentifier: "req-sensitive-001",
+            existingSnapshot: .empty(source: "tests"),
+            now: Date(timeIntervalSince1970: 400)
+        )
+
+        #expect(update?.snapshot.counts.unreadMessages == 1)
+        #expect(update?.snapshot.recentMessages.first?.title == "PushGo message")
+        #expect(update?.snapshot.recentMessages.first?.bodyPreview == nil)
+        #expect(update?.summary == nil)
+        let snapshotDescription = String(describing: update?.snapshot)
+        #expect(!snapshotDescription.contains("raw secret should not leak"))
     }
 
     @Test
@@ -273,5 +414,78 @@ struct PushGoSystemSurfaceSnapshotTests {
             relatedMessages: [],
             relatedUpdates: []
         ))
+    }
+
+    private struct WidgetSnapshotCompatibility: Codable {
+        struct Counts: Codable {
+            let totalMessages: Int
+            let unreadMessages: Int
+            let criticalEvents: Int
+            let objectWarnings: Int
+        }
+
+        struct FocusState: Codable {
+            let mode: String
+            let updatedAtEpochMs: Int64
+        }
+
+        struct Item: Codable {
+            let id: String
+            let kind: EntityKind
+            let title: String
+            let subtitle: String?
+            let bodyPreview: String?
+            let status: String?
+            let severity: String?
+            let channelID: String?
+            let eventID: String?
+            let thingID: String?
+            let updatedAtEpochMs: Int64
+            let imageURL: String?
+            let accessibilityLabel: String
+            let accessibilityValue: String?
+            let openTarget: OpenTarget?
+        }
+
+        enum EntityKind: String, Codable {
+            case message
+            case event
+            case thing
+        }
+
+        struct OpenTarget: Codable {
+            enum Source: String, Codable {
+                case notification
+                case spotlight
+                case appIntent
+                case shortcut
+                case userActivity
+                case widget
+                case deepLink
+                case automation
+            }
+
+            enum Destination: String, Codable {
+                case detail
+                case list
+            }
+
+            let kind: EntityKind
+            let identifier: String
+            let localMessageID: UUID?
+            let source: Source
+            let destination: Destination
+        }
+
+        let schemaVersion: Int
+        let generatedAtEpochMs: Int64
+        let source: String
+        let counts: Counts
+        let focusState: FocusState
+        let recentMessages: [Item]
+        let unreadMessages: [Item]
+        let criticalEvents: [Item]
+        let objectWarnings: [Item]
+        let latestObjectStates: [Item]
     }
 }

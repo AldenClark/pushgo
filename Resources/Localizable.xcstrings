@@ -398,6 +398,9 @@
         }
       }
     },
+    "Adjust how PushGo notifications behave while a Focus is active." : {
+
+    },
     "aes_gcm_configured" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -503,6 +506,9 @@
           }
         }
       }
+    },
+    "All PushGo updates" : {
+
     },
     "all_groups" : {
       "extractionState" : "manual",
@@ -663,6 +669,9 @@
         }
       }
     },
+    "Any priority" : {
+
+    },
     "app_version" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -821,6 +830,12 @@
           }
         }
       }
+    },
+    "Ask PushGo about recent messages, unread messages, critical events or object status." : {
+
+    },
+    "Ask PushGo for a safe status summary for a specific object." : {
+
     },
     "attrs" : {
       "localizations" : {
@@ -3468,7 +3483,13 @@
         }
       }
     },
+    "Critical events" : {
+
+    },
     "Critical Events" : {
+
+    },
+    "Critical only" : {
 
     },
     "current_number_messages" : {
@@ -5751,6 +5772,15 @@
         }
       }
     },
+    "Get PushGo Critical Event Count" : {
+
+    },
+    "Get PushGo Object Warning Count" : {
+
+    },
+    "Get PushGo Unread Count" : {
+
+    },
     "grant_access" : {
       "localizations" : {
         "de" : {
@@ -5855,6 +5885,9 @@
           }
         }
       }
+    },
+    "High priority" : {
+
     },
     "image" : {
       "extractionState" : "manual",
@@ -6599,6 +6632,9 @@
         }
       }
     },
+    "Last 24 hours" : {
+
+    },
     "last_updated_placeholder" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6651,6 +6687,9 @@
           }
         }
       }
+    },
+    "Latest" : {
+
     },
     "launch_at_login" : {
       "extractionState" : "manual",
@@ -6973,9 +7012,6 @@
 
     },
     "Mark PushGo Message as Read" : {
-
-    },
-    "Mark Read" : {
 
     },
     "mark_all_as_read" : {
@@ -8150,6 +8186,9 @@
         }
       }
     },
+    "Mode" : {
+
+    },
     "network_permission_denied_cannot_subscribe" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8940,6 +8979,15 @@
       }
     },
     "Object" : {
+
+    },
+    "Object Query" : {
+
+    },
+    "Object status" : {
+
+    },
+    "Object Status" : {
 
     },
     "object_id_placeholder" : {
@@ -10217,10 +10265,19 @@
     "Open a PushGo event detail." : {
 
     },
+    "Open a PushGo list section." : {
+
+    },
     "Open a PushGo message detail." : {
 
     },
     "Open a PushGo object detail." : {
+
+    },
+    "Open Best Matching PushGo Item" : {
+
+    },
+    "Open Match" : {
 
     },
     "Open PushGo Event" : {
@@ -10241,7 +10298,13 @@
     "Open PushGo Objects" : {
 
     },
+    "Open PushGo Section" : {
+
+    },
     "Open Recent Critical PushGo Event" : {
+
+    },
+    "Open the best matching PushGo message, event or object, falling back to the matching list." : {
 
     },
     "Open the most recent high or critical PushGo event." : {
@@ -11322,6 +11385,12 @@
         }
       }
     },
+    "Priority" : {
+
+    },
+    "Priority PushGo updates" : {
+
+    },
     "push_type_event" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11537,10 +11606,28 @@
     "PushGo Event" : {
 
     },
+    "PushGo Focus Mode" : {
+
+    },
+    "PushGo Focus mode updated." : {
+
+    },
     "PushGo Message" : {
 
     },
     "PushGo Object" : {
+
+    },
+    "PushGo Priority" : {
+
+    },
+    "PushGo Query" : {
+
+    },
+    "PushGo Section" : {
+
+    },
+    "PushGo Time Range" : {
 
     },
     "pushgo_app_name" : {
@@ -11594,6 +11681,18 @@
           }
         }
       }
+    },
+    "Query" : {
+
+    },
+    "Query PushGo Object Status" : {
+
+    },
+    "Query PushGo Status" : {
+
+    },
+    "Quiet PushGo mode" : {
+
     },
     "quit_application" : {
       "extractionState" : "manual",
@@ -11752,6 +11851,9 @@
           }
         }
       }
+    },
+    "Recent messages" : {
+
     },
     "Recent Messages" : {
 
@@ -12124,6 +12226,15 @@
         }
       }
     },
+    "Return the number of PushGo objects that need attention." : {
+
+    },
+    "Return the PushGo high priority event count." : {
+
+    },
+    "Return the PushGo unread message count." : {
+
+    },
     "save" : {
       "localizations" : {
         "de" : {
@@ -12493,6 +12604,9 @@
           }
         }
       }
+    },
+    "Section" : {
+
     },
     "select_a_message_to_view_details" : {
       "extractionState" : "manual",
@@ -13181,6 +13295,9 @@
           }
         }
       }
+    },
+    "Set PushGo Focus Mode" : {
+
     },
     "settings" : {
       "extractionState" : "manual",
@@ -14074,6 +14191,12 @@
       }
     },
     "Summarize Critical PushGo Events" : {
+
+    },
+    "Summarize PushGo object states without opening the app." : {
+
+    },
+    "Summarize PushGo Object Status" : {
 
     },
     "Summarize recent high or critical PushGo events without opening the app." : {
@@ -15678,6 +15801,9 @@
         }
       }
     },
+    "Time Range" : {
+
+    },
     "title" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -15783,6 +15909,9 @@
           }
         }
       }
+    },
+    "Today" : {
+
     },
     "try_changing_a_keyword_or_adjusting_the_filter_conditions" : {
       "extractionState" : "manual",
@@ -16468,6 +16597,12 @@
           }
         }
       }
+    },
+    "Unread Count" : {
+
+    },
+    "Unread messages" : {
+
     },
     "Unread Summary" : {
 

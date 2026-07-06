@@ -17,6 +17,7 @@ struct PushGoObjectStatusWidget: Widget {
         #else
         .supportedFamilies([.systemSmall, .systemMedium, .accessoryCircular, .accessoryRectangular])
         #endif
+        .contentMarginsDisabled()
     }
 }
 
@@ -42,11 +43,14 @@ struct PushGoObjectStatusWidgetView: View {
                 Text("\(entry.snapshot.counts.objectWarnings) need attention")
             }
         default:
-            PushGoWidgetPanel(title: "Objects", systemImage: "shippingbox") {
-                PushGoWidgetCountBadge(count: entry.snapshot.counts.objectWarnings, label: "need attention")
-                PushGoWidgetItemList(items: objectItems, emptyTitle: "No object warnings")
-            }
-            .padding()
+            PushGoWidgetSystemListPanel(
+                title: "Objects",
+                systemImage: "shippingbox",
+                count: entry.snapshot.counts.objectWarnings,
+                countLabel: "warnings",
+                items: objectItems,
+                emptyTitle: "No object warnings"
+            )
         }
     }
 }

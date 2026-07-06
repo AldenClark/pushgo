@@ -8,8 +8,14 @@ enum PushGoWidgetEntityKind: String, Codable {
 
 struct PushGoWidgetOpenTarget: Codable, Hashable {
     enum Source: String, Codable, Hashable {
+        case notification
+        case spotlight
+        case appIntent
+        case shortcut
+        case userActivity
         case widget
         case deepLink
+        case automation
     }
 
     enum Destination: String, Codable, Hashable {
@@ -19,6 +25,7 @@ struct PushGoWidgetOpenTarget: Codable, Hashable {
 
     let kind: PushGoWidgetEntityKind
     let identifier: String
+    let localMessageID: UUID?
     let source: Source
     let destination: Destination
 
@@ -34,7 +41,13 @@ struct PushGoWidgetOpenTarget: Codable, Hashable {
     }
 
     static func list(kind: PushGoWidgetEntityKind) -> PushGoWidgetOpenTarget {
-        PushGoWidgetOpenTarget(kind: kind, identifier: "list", source: .widget, destination: .list)
+        PushGoWidgetOpenTarget(
+            kind: kind,
+            identifier: "list",
+            localMessageID: nil,
+            source: .widget,
+            destination: .list
+        )
     }
 }
 

@@ -39,6 +39,7 @@ struct PushGoEventLiveActivityWidget: Widget {
         PushGoWidgetOpenTarget(
             kind: .event,
             identifier: eventID,
+            localMessageID: nil,
             source: .widget,
             destination: .detail
         ).url()

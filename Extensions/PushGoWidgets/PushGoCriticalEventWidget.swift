@@ -17,6 +17,7 @@ struct PushGoCriticalEventWidget: Widget {
         #else
         .supportedFamilies([.systemSmall, .systemMedium, .accessoryCircular, .accessoryRectangular])
         #endif
+        .contentMarginsDisabled()
     }
 }
 
@@ -38,11 +39,14 @@ struct PushGoCriticalEventWidgetView: View {
                 Text("\(entry.snapshot.counts.criticalEvents) active")
             }
         default:
-            PushGoWidgetPanel(title: "Critical Events", systemImage: "bolt.badge.exclamationmark") {
-                PushGoWidgetCountBadge(count: entry.snapshot.counts.criticalEvents, label: "events")
-                PushGoWidgetItemList(items: entry.snapshot.criticalEvents, emptyTitle: "No high priority events")
-            }
-            .padding()
+            PushGoWidgetSystemListPanel(
+                title: "Critical",
+                systemImage: "bolt.badge.exclamationmark",
+                count: entry.snapshot.counts.criticalEvents,
+                countLabel: "events",
+                items: entry.snapshot.criticalEvents,
+                emptyTitle: "No high priority events"
+            )
         }
     }
 }

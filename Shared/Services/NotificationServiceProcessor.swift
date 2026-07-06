@@ -53,6 +53,10 @@ final class NotificationServiceProcessor {
         )
         if enqueued {
             await markAckInboxDurableIfNeeded(ingress)
+            _ = await PushGoNotificationProjectionUpdater.update(
+                content: content,
+                requestIdentifier: requestIdentifier(for: request, ingress: ingress)
+            )
             DarwinNotificationPoster.post(name: AppConstants.notificationIngressChangedNotificationName)
             await ackIngressIfNeeded(ingress)
         }
@@ -78,6 +82,23 @@ final class NotificationServiceProcessor {
         ingress: NotificationIngressResolution,
         preparedContent: UNMutableNotificationContent
     ) async -> Bool {
+        if case .claimedByPeer = ingress {
+            return false
+        }
+
+        let codablePayload = codablePayloadDictionary(from: preparedContent.userInfo)
+        let enqueued = await notificationIngressInbox.enqueue(
+            codablePayload: codablePayload,
+            requestIdentifier: requestIdentifier(for: request, ingress: ingress),
+            source: "nse"
+        )
+        return enqueued
+    }
+
+    private func requestIdentifier(
+        for request: UNNotificationRequest,
+        ingress: NotificationIngressResolution
+    ) -> String {
         let requestIdentifier: String?
         switch ingress {
         case let .direct(_, ingressRequestIdentifier):
@@ -89,18 +110,7 @@ final class NotificationServiceProcessor {
         case let .unresolvedWakeup(_, ingressRequestIdentifier):
             requestIdentifier = ingressRequestIdentifier
         }
-
-        if case .claimedByPeer = ingress {
-            return false
-        }
-
-        let codablePayload = codablePayloadDictionary(from: preparedContent.userInfo)
-        let enqueued = await notificationIngressInbox.enqueue(
-            codablePayload: codablePayload,
-            requestIdentifier: requestIdentifier ?? request.identifier,
-            source: "nse"
-        )
-        return enqueued
+        return requestIdentifier ?? request.identifier
     }
 
     private func codablePayloadDictionary(

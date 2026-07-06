@@ -2,7 +2,7 @@ import Foundation
 
 struct PushGoSystemSnapshotRefreshPolicy: Sendable {
     static let defaultsKey = "pushgo.system_surface_snapshot.last_refresh.v1"
-    static let defaultMinimumInterval: TimeInterval = 10
+    static let defaultMinimumInterval: TimeInterval = 0
     static let healthCheckMaximumAge: TimeInterval = 60 * 60 * 6
 
     let minimumInterval: TimeInterval
@@ -22,6 +22,9 @@ struct PushGoSystemSnapshotRefreshPolicy: Sendable {
         case .delete, .settingsChanged, .warmCache:
             return true
         case .write:
+            guard minimumInterval > 0 else {
+                return true
+            }
             guard let lastRun = defaults.object(forKey: Self.defaultsKey) as? Date else {
                 return true
             }

@@ -1,8 +1,17 @@
 import Foundation
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
 
 enum PushGoSystemSnapshotStore {
     private static let directoryName = "system-surface-snapshot"
     private static let fileName = "snapshot.bin"
+    private static let widgetKinds = [
+        "io.ethan.pushgo.widgets.unread",
+        "io.ethan.pushgo.widgets.critical-events",
+        "io.ethan.pushgo.widgets.object-status",
+        "io.ethan.pushgo.widgets.watch-summary",
+    ]
 
     static func snapshotFileURL(
         fileManager: FileManager = .default,
@@ -66,7 +75,11 @@ enum PushGoSystemSnapshotStore {
         ) else {
             return false
         }
-        return write(snapshot, to: fileURL, fileManager: fileManager)
+        let didWrite = write(snapshot, to: fileURL, fileManager: fileManager)
+        if didWrite {
+            reloadWidgets()
+        }
+        return didWrite
     }
 
     @discardableResult
@@ -113,7 +126,11 @@ enum PushGoSystemSnapshotStore {
         ) else {
             return false
         }
-        return clear(at: fileURL, fileManager: fileManager)
+        let didClear = clear(at: fileURL, fileManager: fileManager)
+        if didClear {
+            reloadWidgets()
+        }
+        return didClear
     }
 
     @discardableResult
@@ -128,5 +145,14 @@ enum PushGoSystemSnapshotStore {
         } catch {
             return false
         }
+    }
+
+    private static func reloadWidgets() {
+        #if canImport(WidgetKit)
+        for kind in widgetKinds {
+            WidgetCenter.shared.reloadTimelines(ofKind: kind)
+        }
+        WidgetCenter.shared.reloadAllTimelines()
+        #endif
     }
 }

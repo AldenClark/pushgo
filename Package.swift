@@ -25,7 +25,6 @@ let package = Package(
             path: "Shared",
             exclude: [
                 "Services/ChannelSubscriptionSyncStore.swift",
-                "Services/BadgeManager.swift",
                 "Services/NotificationContentPreparer.swift",
                 "Services/NotificationSoundPreviewPlayer.swift",
                 "Services/NotificationServiceProcessor.swift",
@@ -86,6 +85,7 @@ let package = Package(
                 "SystemIntegration/PushGoLiveActivityModels.swift",
                 "SystemIntegration/PushGoLiveActivityTokenRegistrationService.swift",
                 "SystemIntegration/PushGoNotificationActionPolicy.swift",
+                "SystemIntegration/PushGoNotificationProjectionUpdater.swift",
                 "SystemIntegration/PushGoMessageSummarySystemBridge.swift",
                 "SystemIntegration/PushGoProjectionSummaryBuilder.swift",
                 "SystemIntegration/PushGoSpotlightIndexer.swift",
@@ -107,6 +107,7 @@ let package = Package(
                 "UI/EntityProjectionModels.swift",
                 "Services/NotificationHandling.swift",
                 "Services/NotificationIngressInbox.swift",
+                "Services/BadgeManager.swift",
                 "Services/NotificationSoundManager.swift",
                 "Services/ProviderDeliveryAckFailureStore.swift",
                 "Services/ChannelSubscriptionService.swift",

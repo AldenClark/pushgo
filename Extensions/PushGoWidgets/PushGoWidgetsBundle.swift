@@ -12,12 +12,22 @@ struct PushGoWidgetsBundle: WidgetBundle {
         #if os(watchOS)
         PushGoWatchComplicationWidget()
         #endif
-        #if os(iOS) || os(macOS)
-        PushGoOpenMessagesControl()
-        PushGoOpenEventsControl()
-        PushGoOpenObjectsControl()
-        PushGoOpenRecentCriticalEventControl()
-        PushGoMarkLatestMessageReadControl()
+        #if os(iOS)
+        if #available(iOS 18.0, *) {
+            PushGoOpenMessagesControl()
+            PushGoOpenEventsControl()
+            PushGoOpenObjectsControl()
+            PushGoOpenRecentCriticalEventControl()
+            PushGoMarkLatestMessageReadControl()
+        }
+        #elseif os(macOS)
+        if #available(macOS 26.0, *) {
+            PushGoOpenMessagesControl()
+            PushGoOpenEventsControl()
+            PushGoOpenObjectsControl()
+            PushGoOpenRecentCriticalEventControl()
+            PushGoMarkLatestMessageReadControl()
+        }
         #endif
         #if os(iOS)
         PushGoEventLiveActivityWidget()
