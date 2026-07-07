@@ -209,6 +209,9 @@ jobs:
           [[ -z "${APPLE_DISTRIBUTION_P12_PASSWORD:-}" ]] && missing+=("APPLE_DISTRIBUTION_P12_PASSWORD")
           [[ -z "${MAC_INSTALLER_DISTRIBUTION_P12_BASE64:-}" ]] && missing+=("MAC_INSTALLER_DISTRIBUTION_P12_BASE64")
           [[ -z "${MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD:-}" ]] && missing+=("MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD")
+          [[ -z "${APP_STORE_PROFILE_IOS_WIDGET_BASE64:-}" ]] && missing+=("APP_STORE_PROFILE_IOS_WIDGET_BASE64")
+          [[ -z "${APP_STORE_PROFILE_WATCH_WIDGET_BASE64:-}" ]] && missing+=("APP_STORE_PROFILE_WATCH_WIDGET_BASE64")
+          [[ -z "${APP_STORE_PROFILE_MACOS_WIDGET_BASE64:-}" ]] && missing+=("APP_STORE_PROFILE_MACOS_WIDGET_BASE64")
           if (( ${#missing[@]} > 0 )); then
             printf 'Missing required secrets: %s\n' "${missing[*]}"
             exit 1
@@ -218,6 +221,9 @@ jobs:
           APPLE_DISTRIBUTION_P12_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_P12_PASSWORD }}
           MAC_INSTALLER_DISTRIBUTION_P12_BASE64: ${{ secrets.MAC_INSTALLER_DISTRIBUTION_P12_BASE64 }}
           MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD: ${{ secrets.MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD }}
+          APP_STORE_PROFILE_IOS_WIDGET_BASE64: ${{ secrets.APP_STORE_PROFILE_IOS_WIDGET_BASE64 }}
+          APP_STORE_PROFILE_WATCH_WIDGET_BASE64: ${{ secrets.APP_STORE_PROFILE_WATCH_WIDGET_BASE64 }}
+          APP_STORE_PROFILE_MACOS_WIDGET_BASE64: ${{ secrets.APP_STORE_PROFILE_MACOS_WIDGET_BASE64 }}
 
       - name: Resolve Swift packages
         shell: bash
@@ -488,16 +494,6 @@ jobs:
           api-key-id: ${{ secrets.ASC_KEY_ID }}
           api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
 
-      - name: Download iOS widget App Store profile
-        id: profile_ios_widget
-        uses: Apple-Actions/download-provisioning-profiles@v5
-        with:
-          bundle-id: io.ethan.pushgo.widgets
-          profile-type: IOS_APP_STORE
-          issuer-id: ${{ secrets.ASC_ISSUER_ID }}
-          api-key-id: ${{ secrets.ASC_KEY_ID }}
-          api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
-
       - name: Download watch App Store profile
         id: profile_watch_app
         uses: Apple-Actions/download-provisioning-profiles@v5
@@ -518,31 +514,11 @@ jobs:
           api-key-id: ${{ secrets.ASC_KEY_ID }}
           api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
 
-      - name: Download watch widget App Store profile
-        id: profile_watch_widget
-        uses: Apple-Actions/download-provisioning-profiles@v5
-        with:
-          bundle-id: io.ethan.pushgo.watchkitapp.widgets
-          profile-type: IOS_APP_STORE
-          issuer-id: ${{ secrets.ASC_ISSUER_ID }}
-          api-key-id: ${{ secrets.ASC_KEY_ID }}
-          api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
-
       - name: Download macOS App Store profile
         id: profile_macos_app
         uses: Apple-Actions/download-provisioning-profiles@v5
         with:
           bundle-id: io.ethan.pushgo
-          profile-type: MAC_APP_STORE
-          issuer-id: ${{ secrets.ASC_ISSUER_ID }}
-          api-key-id: ${{ secrets.ASC_KEY_ID }}
-          api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
-
-      - name: Download macOS widget App Store profile
-        id: profile_macos_widget
-        uses: Apple-Actions/download-provisioning-profiles@v5
-        with:
-          bundle-id: io.ethan.pushgo.widgets.mac
           profile-type: MAC_APP_STORE
           issuer-id: ${{ secrets.ASC_ISSUER_ID }}
           api-key-id: ${{ secrets.ASC_KEY_ID }}
@@ -557,6 +533,97 @@ jobs:
           issuer-id: ${{ secrets.ASC_ISSUER_ID }}
           api-key-id: ${{ secrets.ASC_KEY_ID }}
           api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
+
+      - name: Install widget App Store profiles from secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          profiles_dir="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$profiles_dir"
+          temp_dir="$(mktemp -d)"
+
+          install_profile_from_secret() {
+            local base64_payload="$1"
+            local expected_bundle_id="$2"
+            local uuid_env="$3"
+            local name_env="$4"
+            local label="$5"
+            local expected_platform="$6"
+            local temp_profile="$temp_dir/${label// /_}.profile"
+            local plist_path="$temp_dir/${label// /_}.plist"
+            local platform extension uuid name app_identifier bundle_id destination
+
+            printf '%s' "$base64_payload" | base64 --decode > "$temp_profile"
+            security cms -D -i "$temp_profile" > "$plist_path"
+
+            uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$plist_path")"
+            name="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$plist_path")"
+            app_identifier="$(
+              /usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$plist_path" 2>/dev/null \
+                || /usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.application-identifier' "$plist_path"
+            )"
+            platform="$(
+              /usr/libexec/PlistBuddy -c 'Print :Platform:0' "$plist_path" 2>/dev/null || true
+            )"
+
+            bundle_id="${app_identifier#*.}"
+            if [[ -z "$uuid" || -z "$name" || -z "$bundle_id" ]]; then
+              echo "${label} profile metadata is incomplete" >&2
+              exit 1
+            fi
+            if [[ "$bundle_id" != "$expected_bundle_id" ]]; then
+              echo "${label} profile bundle id mismatch: expected ${expected_bundle_id}, got ${bundle_id}" >&2
+              exit 1
+            fi
+            if [[ "$platform" != "$expected_platform" ]]; then
+              echo "${label} profile platform mismatch: expected ${expected_platform}, got ${platform:-<empty>}" >&2
+              exit 1
+            fi
+
+            if [[ "$platform" == "OSX" ]]; then
+              extension="provisionprofile"
+            else
+              extension="mobileprovision"
+            fi
+            destination="$profiles_dir/$uuid.$extension"
+            cp "$temp_profile" "$destination"
+
+            {
+              echo "${uuid_env}=${uuid}"
+              echo "${name_env}=${name}"
+            } >> "$GITHUB_ENV"
+
+            echo "Installed ${label} profile ${name} (${uuid}) for ${bundle_id}"
+          }
+
+          install_profile_from_secret \
+            "${APP_STORE_PROFILE_IOS_WIDGET_BASE64}" \
+            "io.ethan.pushgo.widgets" \
+            "APP_STORE_PROFILE_IOS_WIDGET_UUID" \
+            "APP_STORE_PROFILE_IOS_WIDGET_NAME" \
+            "iOS widget" \
+            "iOS"
+
+          install_profile_from_secret \
+            "${APP_STORE_PROFILE_WATCH_WIDGET_BASE64}" \
+            "io.ethan.pushgo.watchkitapp.widgets" \
+            "APP_STORE_PROFILE_WATCH_WIDGET_UUID" \
+            "APP_STORE_PROFILE_WATCH_WIDGET_NAME" \
+            "watch widget" \
+            "iOS"
+
+          install_profile_from_secret \
+            "${APP_STORE_PROFILE_MACOS_WIDGET_BASE64}" \
+            "io.ethan.pushgo.widgets.mac" \
+            "APP_STORE_PROFILE_MACOS_WIDGET_UUID" \
+            "APP_STORE_PROFILE_MACOS_WIDGET_NAME" \
+            "macOS widget" \
+            "OSX"
+        env:
+          APP_STORE_PROFILE_IOS_WIDGET_BASE64: ${{ secrets.APP_STORE_PROFILE_IOS_WIDGET_BASE64 }}
+          APP_STORE_PROFILE_WATCH_WIDGET_BASE64: ${{ secrets.APP_STORE_PROFILE_WATCH_WIDGET_BASE64 }}
+          APP_STORE_PROFILE_MACOS_WIDGET_BASE64: ${{ secrets.APP_STORE_PROFILE_MACOS_WIDGET_BASE64 }}
 
       - name: Resolve downloaded provisioning profiles
         shell: bash
@@ -605,12 +672,9 @@ jobs:
 
           export_profile_metadata '${{ steps.profile_ios_app.outputs.profiles }}' 'PushGo' 'APP_STORE_PROFILE_IOS_APP_UUID' 'APP_STORE_PROFILE_IOS_APP_NAME' 'iOS app'
           export_profile_metadata '${{ steps.profile_ios_nse.outputs.profiles }}' 'PushGo NSE' 'APP_STORE_PROFILE_IOS_NSE_UUID' 'APP_STORE_PROFILE_IOS_NSE_NAME' 'iOS NSE'
-          export_profile_metadata '${{ steps.profile_ios_widget.outputs.profiles }}' 'PushGo Widgets' 'APP_STORE_PROFILE_IOS_WIDGET_UUID' 'APP_STORE_PROFILE_IOS_WIDGET_NAME' 'iOS widget'
           export_profile_metadata '${{ steps.profile_watch_app.outputs.profiles }}' 'PushGo watch' 'APP_STORE_PROFILE_WATCH_APP_UUID' 'APP_STORE_PROFILE_WATCH_APP_NAME' 'watch app'
           export_profile_metadata '${{ steps.profile_watch_nse.outputs.profiles }}' 'PushGo watch NSE' 'APP_STORE_PROFILE_WATCH_NSE_UUID' 'APP_STORE_PROFILE_WATCH_NSE_NAME' 'watch NSE'
-          export_profile_metadata '${{ steps.profile_watch_widget.outputs.profiles }}' 'PushGo Widgets watchOS' 'APP_STORE_PROFILE_WATCH_WIDGET_UUID' 'APP_STORE_PROFILE_WATCH_WIDGET_NAME' 'watch widget'
           export_profile_metadata '${{ steps.profile_macos_app.outputs.profiles }}' 'PushGo mac' 'APP_STORE_PROFILE_MACOS_APP_UUID' 'APP_STORE_PROFILE_MACOS_APP_NAME' 'macOS app'
-          export_profile_metadata '${{ steps.profile_macos_widget.outputs.profiles }}' 'PushGo Widgets macOS' 'APP_STORE_PROFILE_MACOS_WIDGET_UUID' 'APP_STORE_PROFILE_MACOS_WIDGET_NAME' 'macOS widget'
           export_profile_metadata '${{ steps.profile_macos_nse.outputs.profiles }}' 'PushGo mac NSE' 'APP_STORE_PROFILE_MACOS_NSE_UUID' 'APP_STORE_PROFILE_MACOS_NSE_NAME' 'macOS NSE'
 
       - name: Run fastlane beta upload
@@ -753,6 +817,7 @@ jobs:
           [[ -z "${ASC_KEY_P8:-}" ]] && missing+=("ASC_KEY_P8")
           [[ -z "${DEVELOPER_ID_APPLICATION_P12_BASE64:-}" ]] && missing+=("DEVELOPER_ID_APPLICATION_P12_BASE64")
           [[ -z "${DEVELOPER_ID_APPLICATION_P12_PASSWORD:-}" ]] && missing+=("DEVELOPER_ID_APPLICATION_P12_PASSWORD")
+          [[ -z "${DEVELOPER_ID_PROFILE_MACOS_WIDGET_BASE64:-}" ]] && missing+=("DEVELOPER_ID_PROFILE_MACOS_WIDGET_BASE64")
           [[ -z "${PUSHGO_SPARKLE_BASE_URL:-}" ]] && missing+=("PUSHGO_SPARKLE_BASE_URL")
           if (( ${#missing[@]} > 0 )); then
             printf 'Missing required secrets/vars: %s\n' "${missing[*]}"
@@ -761,6 +826,7 @@ jobs:
         env:
           DEVELOPER_ID_APPLICATION_P12_BASE64: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_BASE64 }}
           DEVELOPER_ID_APPLICATION_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_PASSWORD }}
+          DEVELOPER_ID_PROFILE_MACOS_WIDGET_BASE64: ${{ secrets.DEVELOPER_ID_PROFILE_MACOS_WIDGET_BASE64 }}
 
       - name: Normalize App Store Connect private key for Apple Actions
         id: normalize_asc_key
@@ -797,15 +863,49 @@ jobs:
           api-key-id: ${{ secrets.ASC_KEY_ID }}
           api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
 
-      - name: Download macOS direct-distribution widget profile
-        id: profile_direct_macos_widget
-        uses: Apple-Actions/download-provisioning-profiles@v5
-        with:
-          bundle-id: io.ethan.pushgo.widgets.mac
-          profile-type: MAC_APP_DIRECT
-          issuer-id: ${{ secrets.ASC_ISSUER_ID }}
-          api-key-id: ${{ secrets.ASC_KEY_ID }}
-          api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
+      - name: Install macOS direct-distribution widget profile from secret
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          profiles_dir="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$profiles_dir"
+          temp_profile="$(mktemp)"
+          plist_path="$(mktemp)"
+
+          printf '%s' "${DEVELOPER_ID_PROFILE_MACOS_WIDGET_BASE64}" | base64 --decode > "$temp_profile"
+          security cms -D -i "$temp_profile" > "$plist_path"
+
+          uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$plist_path")"
+          name="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$plist_path")"
+          app_identifier="$(
+            /usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$plist_path" 2>/dev/null \
+              || /usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.application-identifier' "$plist_path"
+          )"
+          platform="$(
+            /usr/libexec/PlistBuddy -c 'Print :Platform:0' "$plist_path" 2>/dev/null || true
+          )"
+          bundle_id="${app_identifier#*.}"
+
+          if [[ "$bundle_id" != "io.ethan.pushgo.widgets.mac" ]]; then
+            echo "macOS widget direct-distribution profile bundle id mismatch: ${bundle_id}" >&2
+            exit 1
+          fi
+          if [[ "$platform" != "OSX" ]]; then
+            echo "macOS widget direct-distribution profile platform mismatch: expected OSX, got ${platform:-<empty>}" >&2
+            exit 1
+          fi
+
+          cp "$temp_profile" "$profiles_dir/$uuid.provisionprofile"
+
+          {
+            echo "DEVELOPER_ID_PROFILE_MACOS_WIDGET_UUID=$uuid"
+            echo "DEVELOPER_ID_PROFILE_MACOS_WIDGET_NAME=$name"
+          } >> "$GITHUB_ENV"
+
+          echo "Installed macOS widget direct-distribution profile ${name} (${uuid})"
+        env:
+          DEVELOPER_ID_PROFILE_MACOS_WIDGET_BASE64: ${{ secrets.DEVELOPER_ID_PROFILE_MACOS_WIDGET_BASE64 }}
 
       - name: Resolve direct-distribution provisioning profiles
         shell: bash
@@ -853,7 +953,6 @@ jobs:
 
           export_profile_metadata '${{ steps.profile_direct_macos_app.outputs.profiles }}' 'PushGo mac direct' 'DEVELOPER_ID_PROFILE_MACOS_APP_UUID' 'DEVELOPER_ID_PROFILE_MACOS_APP_NAME' 'macOS app'
           export_profile_metadata '${{ steps.profile_direct_macos_nse.outputs.profiles }}' 'PushGo mac NSE direct' 'DEVELOPER_ID_PROFILE_MACOS_NSE_UUID' 'DEVELOPER_ID_PROFILE_MACOS_NSE_NAME' 'macOS NSE'
-          export_profile_metadata '${{ steps.profile_direct_macos_widget.outputs.profiles }}' 'PushGo Widgets macOS direct' 'DEVELOPER_ID_PROFILE_MACOS_WIDGET_UUID' 'DEVELOPER_ID_PROFILE_MACOS_WIDGET_NAME' 'macOS widget'
 
       - name: Resolve Swift packages
         shell: bash
