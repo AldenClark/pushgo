@@ -155,4 +155,29 @@ enum PushGoSystemSnapshotStore {
         WidgetCenter.shared.reloadAllTimelines()
         #endif
     }
+
+    static func waitForWidgetReloadRequestDelivery(timeout: Duration = .milliseconds(350)) async {
+        #if canImport(WidgetKit)
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                await widgetCenterConfigurationsHandshake()
+            }
+            group.addTask {
+                try? await Task.sleep(for: timeout)
+            }
+            await group.next()
+            group.cancelAll()
+        }
+        #endif
+    }
+
+    #if canImport(WidgetKit)
+    private static func widgetCenterConfigurationsHandshake() async {
+        await withCheckedContinuation { continuation in
+            WidgetCenter.shared.getCurrentConfigurations { _ in
+                continuation.resume()
+            }
+        }
+    }
+    #endif
 }

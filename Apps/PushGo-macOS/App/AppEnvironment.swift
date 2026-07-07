@@ -176,6 +176,9 @@ final class AppEnvironment {
         self.localizationManager = localizationManager ?? LocalizationManager.shared
         self.appUpdateManager = AppUpdateManagerFactory.make()
         self.betaChannelEnabled = appUpdateManager.isBetaChannelEnabled
+        PushGoWidgetPushRegistrationService.configure { [weak self] in
+            self?.serverConfig
+        }
         SharedImageCache.startMaintenance()
         messageSyncObserver = DarwinNotificationObserver(name: AppConstants.messageSyncNotificationName) { [weak self] in
             guard let self else { return }
@@ -1009,6 +1012,7 @@ final class AppEnvironment {
         await dataStore.saveCachedPushToken(token, for: platform)
         guard let config = serverConfig else { return }
         await providerRouteController.syncProviderPullRoute(config: config, providerToken: token)
+        await syncWidgetPushRegistration()
     }
 
     func refreshChannelSubscriptions() async {
@@ -1156,6 +1160,7 @@ final class AppEnvironment {
                 await refreshLaunchAtLoginStatus()
                 await refreshChannelSubscriptions()
                 await syncPrivateChannelState()
+                await syncWidgetPushRegistration()
             }
             Task(priority: .utility) {
                 await dataStore.ensureSystemSearchIndexHealthy()
@@ -1178,6 +1183,13 @@ final class AppEnvironment {
 
     private func syncPrivateChannelState() async {
         await channelSyncController.refreshPrivateChannelRouteState()
+    }
+
+    private func syncWidgetPushRegistration() async {
+        await PushGoWidgetPushRegistrationService.syncPendingRegistration(
+            deviceKey: await providerRouteController.cachedProviderPullDeviceKey(),
+            platform: platformIdentifier()
+        )
     }
 
     func updateMainWindowVisibility(isVisible: Bool) {

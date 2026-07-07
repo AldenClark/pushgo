@@ -18,6 +18,7 @@ struct PushGoCriticalEventWidget: Widget {
         .supportedFamilies([.systemSmall, .systemMedium, .accessoryCircular, .accessoryRectangular])
         #endif
         .contentMarginsDisabled()
+        .pushHandler(PushGoWidgetPushHandler.self)
     }
 }
 

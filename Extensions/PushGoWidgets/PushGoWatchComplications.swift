@@ -13,6 +13,7 @@ struct PushGoWatchComplicationWidget: Widget {
         .configurationDisplayName("PushGo Summary")
         .description("Shows unread messages and priority events.")
         .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline])
+        .pushHandler(PushGoWidgetPushHandler.self)
     }
 
     private func watchURL(for snapshot: PushGoWidgetSnapshot) -> URL? {

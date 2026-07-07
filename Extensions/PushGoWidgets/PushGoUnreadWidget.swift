@@ -18,6 +18,7 @@ struct PushGoUnreadWidget: Widget {
         .supportedFamilies([.systemSmall, .systemMedium, .accessoryCircular, .accessoryRectangular])
         #endif
         .contentMarginsDisabled()
+        .pushHandler(PushGoWidgetPushHandler.self)
     }
 }
 

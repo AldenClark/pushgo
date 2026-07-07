@@ -8,5 +8,7 @@
 	<array>
 		<string>W6H9P5MVUB.group.ethan.pushgo.messages</string>
 	</array>
+	<key>com.apple.developer.aps-environment</key>
+	<string>development</string>
 </dict>
 </plist>

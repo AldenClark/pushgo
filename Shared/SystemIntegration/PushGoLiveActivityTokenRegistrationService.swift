@@ -56,6 +56,41 @@ struct PushGoLiveActivityTokenUnregistration: Codable, Equatable, Sendable {
     }
 }
 
+struct PushGoWidgetPushRegistration: Codable, Equatable, Sendable {
+    struct Widget: Codable, Equatable, Sendable {
+        let kind: String
+        let family: String
+    }
+
+    let deviceKey: String
+    let platform: String
+    let token: String
+    let widgets: [Widget]
+    let schemaVersion: Int
+
+    init(
+        deviceKey: String,
+        platform: String,
+        token: String,
+        widgets: [Widget],
+        schemaVersion: Int = 1
+    ) {
+        self.deviceKey = deviceKey
+        self.platform = platform
+        self.token = token
+        self.widgets = widgets
+        self.schemaVersion = schemaVersion
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case deviceKey = "device_key"
+        case platform
+        case token
+        case widgets
+        case schemaVersion = "schema_version"
+    }
+}
+
 enum PushGoLiveActivityTokenRegistrationService {
     typealias ServerConfigProvider = @MainActor @Sendable () -> ServerConfig?
 
@@ -145,5 +180,64 @@ enum PushGoLiveActivityTokenRegistrationService {
     static func normalizedToken(_ token: String?) -> String? {
         let trimmed = token?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+enum PushGoWidgetPushRegistrationService {
+    typealias ServerConfigProvider = @MainActor @Sendable () -> ServerConfig?
+
+    private static let encoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return encoder
+    }()
+
+    @MainActor private static var serverConfigProvider: ServerConfigProvider?
+    private static let urlSession = URLSession.shared
+
+    @MainActor
+    static func configure(serverConfigProvider provider: @escaping ServerConfigProvider) {
+        serverConfigProvider = provider
+    }
+
+    static func syncPendingRegistration(deviceKey rawDeviceKey: String?, platform rawPlatform: String) async {
+        guard let record = PushGoWidgetPushTokenStore.load() else { return }
+        let deviceKey = rawDeviceKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !deviceKey.isEmpty else { return }
+        let platform = rawPlatform.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !platform.isEmpty else { return }
+        let config = await MainActor.run { serverConfigProvider?() }?.normalized()
+        guard let config else { return }
+        let registration = PushGoWidgetPushRegistration(
+            deviceKey: deviceKey,
+            platform: platform,
+            token: record.token,
+            widgets: record.widgets.map {
+                PushGoWidgetPushRegistration.Widget(kind: $0.kind, family: $0.family)
+            }
+        )
+        let fingerprint = PushGoWidgetPushTokenStore.syncFingerprint(
+            gatewayKey: config.gatewayKey,
+            deviceKey: deviceKey,
+            platform: platform,
+            token: record.token,
+            widgets: record.widgets
+        )
+        let defaults = AppConstants.sharedUserDefaults()
+        guard defaults.string(forKey: PushGoWidgetPushTokenStore.lastSyncedFingerprintKey) != fingerprint else { return }
+        guard var request = PushGoLiveActivityTokenRegistrationService.makeRequest(
+            config: config,
+            path: "/v1/widget-push/subscription"
+        ) else { return }
+        do {
+            request.httpBody = try encoder.encode(registration)
+            let (_, response) = try await urlSession.data(for: request)
+            guard let http = response as? HTTPURLResponse,
+                  (200...299).contains(http.statusCode)
+            else { return }
+            defaults.set(fingerprint, forKey: PushGoWidgetPushTokenStore.lastSyncedFingerprintKey)
+        } catch {
+            return
+        }
     }
 }

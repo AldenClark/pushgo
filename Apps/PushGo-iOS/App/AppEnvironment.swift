@@ -207,6 +207,9 @@ final class AppEnvironment {
         PushGoLiveActivityTokenRegistrationService.configure { [weak self] in
             self?.serverConfig
         }
+        PushGoWidgetPushRegistrationService.configure { [weak self] in
+            self?.serverConfig
+        }
         SharedImageCache.startMaintenance()
         messageSyncObserver = DarwinNotificationObserver(name: AppConstants.messageSyncNotificationName) { [weak self] in
             guard let self else { return }
@@ -1161,6 +1164,7 @@ final class AppEnvironment {
         await dataStore.saveCachedPushToken(token, for: platform)
         guard let config = serverConfig else { return }
         await syncProviderPullRoute(config: config, providerToken: token)
+        await syncWidgetPushRegistration()
     }
 
     private func platformIdentifier() -> String {
@@ -1180,6 +1184,7 @@ final class AppEnvironment {
                     allowFallbackPull: true
                 )
                 await refreshChannelSubscriptions()
+                await syncWidgetPushRegistration()
             }
             Task(priority: .utility) {
                 await dataStore.ensureSystemSearchIndexHealthy()
@@ -1232,6 +1237,13 @@ final class AppEnvironment {
 
     private func syncProviderPullRoute(config: ServerConfig, providerToken: String) async {
         await providerRouteController.syncProviderPullRoute(config: config, providerToken: providerToken)
+    }
+
+    private func syncWidgetPushRegistration() async {
+        await PushGoWidgetPushRegistrationService.syncPendingRegistration(
+            deviceKey: await providerRouteController.cachedProviderPullDeviceKey(),
+            platform: platformIdentifier()
+        )
     }
 
     private func persistPushTokenAndRotateRoute(config: ServerConfig, token: String) async {

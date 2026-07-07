@@ -117,6 +117,9 @@ final class AppEnvironment {
         self.dataStore = dataStore
         self.pushRegistrationService = pushRegistrationService ?? PushRegistrationService.shared
         self.localizationManager = localizationManager ?? LocalizationManager.shared
+        PushGoWidgetPushRegistrationService.configure { [weak self] in
+            self?.serverConfig
+        }
         SharedImageCache.startMaintenance()
         messageSyncObserver = DarwinNotificationObserver(name: AppConstants.messageSyncNotificationName) { [weak self] in
             guard let self else { return }
@@ -990,6 +993,7 @@ final class AppEnvironment {
         guard let config = await loadPersistedStandaloneServerConfig() else { return }
         _ = await ensureProviderDeviceKey(config: config, platform: platform)
         await syncProviderPullRoute(config: config, providerToken: token)
+        await syncWidgetPushRegistration()
     }
 
     private func platformIdentifier() -> String {
@@ -1014,6 +1018,7 @@ final class AppEnvironment {
                     reason: "scene_active",
                     allowFallbackPull: false
                 )
+                await self.syncWidgetPushRegistration()
             }
             if isStandaloneMode {
                 requestStandaloneRuntimeReconcile(reason: "scene_phase_active", presentDeniedPrompt: true)
@@ -1307,6 +1312,7 @@ final class AppEnvironment {
         await persistPushTokenAndRotateRoute(config: config, token: token)
         await syncProviderPullRoute(config: config, providerToken: token)
         _ = await ensureProviderDeviceKey(config: config, platform: platformIdentifier())
+        await syncWidgetPushRegistration()
     }
 
     private func schedulePreviousGatewayDeviceCleanup(
@@ -1360,6 +1366,15 @@ final class AppEnvironment {
             )
             lastWakeupRouteSyncAt = now
         }
+    }
+
+    private func syncWidgetPushRegistration() async {
+        guard isStandaloneMode else { return }
+        let platform = platformIdentifier()
+        await PushGoWidgetPushRegistrationService.syncPendingRegistration(
+            deviceKey: await dataStore.cachedDeviceKey(for: platform),
+            platform: platform
+        )
     }
 
     private func persistPushTokenAndRotateRoute(config: ServerConfig, token: String) async {

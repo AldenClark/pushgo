@@ -39,6 +39,8 @@ enum PushGoNotificationProjectionUpdater {
             return nil
         }
 
+        await PushGoSystemSnapshotStore.waitForWidgetReloadRequestDelivery()
+
         if let summary = update.summary {
             try? await spotlightIndexer?.index([summary])
         }

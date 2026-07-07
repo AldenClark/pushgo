@@ -71,10 +71,6 @@
 		AA0138372F8746690028BAE6 /* PushgoNotificationServiceExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AACFE15B2F28511200701BB4 /* PushgoNotificationServiceExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AA01383B2F8746780028BAE6 /* PushgoNotificationServiceExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AACFE15B2F28511200701BB4 /* PushgoNotificationServiceExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AA49A1A32EE3E46C00C1EBF2 /* NotificationServiceExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA49A19C2EE3E46C00C1EBF2 /* NotificationServiceExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		ABCD00012F90000100ABC001 /* PushGoWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = ABCD00012F90000100ABC002 /* PushGoWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		ABCD00012F90000200ABC001 /* PushGoWidgetsMac.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = ABCD00012F90000200ABC002 /* PushGoWidgetsMac.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		ABCD00012F90000200ABC008 /* PushGoWidgetsMac.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = ABCD00012F90000200ABC002 /* PushGoWidgetsMac.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		ABCD00012F90000300ABC001 /* PushGoWidgetsWatch.appex in Embed Watch Extensions */ = {isa = PBXBuildFile; fileRef = ABCD00012F90000300ABC002 /* PushGoWidgetsWatch.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AA6603852F1A8AA20087E0F0 /* PushGoWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = AAFB52C12F0CA5F0009E61C5 /* PushGoWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		AA8E2C502EF2359D00AD1834 /* ServerConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1F2EF2359D00AD1834 /* ServerConfig.swift */; };
 		AA8E2C522EF2359D00AD1834 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2E2EF2359D00AD1834 /* KeychainStore.swift */; };
@@ -123,6 +119,16 @@
 		AAFD8FA12F85E635003CF9B4 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0015 /* Textual */; };
 		AAFD8FA22F85E635003CF9B4 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A0AA00012F70000100AA0035 /* GRDB */; };
 		ABB5C85DDC69BE814D6B8875 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2E2EF2359D00AD1834 /* KeychainStore.swift */; };
+		ABCD00012F90000100ABC001 /* PushGoWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = ABCD00012F90000100ABC002 /* PushGoWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		ABCD00012F90000100ABC022 /* Shared/SystemIntegration/PushGoLiveActivityModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001F /* Shared/SystemIntegration/PushGoLiveActivityModels.swift */; };
+		ABCD00012F90000100ABC023 /* Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000023 /* Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift */; };
+		ABCD00012F90000200ABC001 /* PushGoWidgetsMac.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = ABCD00012F90000200ABC002 /* PushGoWidgetsMac.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		ABCD00012F90000200ABC008 /* PushGoWidgetsMac.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = ABCD00012F90000200ABC002 /* PushGoWidgetsMac.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		ABCD00012F90000200ABC022 /* Shared/SystemIntegration/PushGoLiveActivityModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001F /* Shared/SystemIntegration/PushGoLiveActivityModels.swift */; };
+		ABCD00012F90000200ABC023 /* Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000023 /* Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift */; };
+		ABCD00012F90000300ABC001 /* PushGoWidgetsWatch.appex in Embed Watch Extensions */ = {isa = PBXBuildFile; fileRef = ABCD00012F90000300ABC002 /* PushGoWidgetsWatch.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		ABCD00012F90000300ABC022 /* Shared/SystemIntegration/PushGoLiveActivityModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001F /* Shared/SystemIntegration/PushGoLiveActivityModels.swift */; };
+		ABCD00012F90000300ABC023 /* Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000023 /* Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift */; };
 		ACD50E96683A0EBE5AF671D6 /* UserInfoSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C362EF2359D00AD1834 /* UserInfoSanitizer.swift */; };
 		B1E7D1124F8A4C3DA9E8F101 /* EntityScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1E7D1124F8A4C3DA9E8F001 /* EntityScreens.swift */; };
 		B1E7D1124F8A4C3DA9E8F102 /* EntityScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1E7D1124F8A4C3DA9E8F001 /* EntityScreens.swift */; };
@@ -182,129 +188,6 @@
 		C9F7E726998368ADAA5295EA /* ServerConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1F2EF2359D00AD1834 /* ServerConfig.swift */; };
 		CAE45C474E77474FBD0A94AE /* RemoteImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2955959BFE8246FEB0B03EDA /* RemoteImageView.swift */; };
 		CEAF7737211A4518B56C2730 /* MessageListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5F7201AE9644B8F9A6A4BD8 /* MessageListViewModel.swift */; };
-		F0BB00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift */; };
-		F0CC00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift */; };
-		F0BB0000000000000000001B /* Shared/Models/EntityProjectionDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001B /* Shared/Models/EntityProjectionDetail.swift */; };
-		F0CC0000000000000000001B /* Shared/Models/EntityProjectionDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001B /* Shared/Models/EntityProjectionDetail.swift */; };
-		F0BB00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift */; };
-		F0CC00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift */; };
-		F0BB0000000000000000001C /* Shared/SystemIntegration/PushGoAdvancedSiriIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001C /* Shared/SystemIntegration/PushGoAdvancedSiriIntents.swift */; };
-		F0CC0000000000000000001C /* Shared/SystemIntegration/PushGoAdvancedSiriIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001C /* Shared/SystemIntegration/PushGoAdvancedSiriIntents.swift */; };
-		F0BB00000000000000000003 /* Shared/SystemIntegration/PushGoAppEntities.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000003 /* Shared/SystemIntegration/PushGoAppEntities.swift */; };
-		F0CC00000000000000000003 /* Shared/SystemIntegration/PushGoAppEntities.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000003 /* Shared/SystemIntegration/PushGoAppEntities.swift */; };
-		F0BB00000000000000000004 /* Shared/SystemIntegration/PushGoAppEntityQueries.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000004 /* Shared/SystemIntegration/PushGoAppEntityQueries.swift */; };
-		F0CC00000000000000000004 /* Shared/SystemIntegration/PushGoAppEntityQueries.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000004 /* Shared/SystemIntegration/PushGoAppEntityQueries.swift */; };
-		F0BB00000000000000000005 /* Shared/SystemIntegration/PushGoAppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000005 /* Shared/SystemIntegration/PushGoAppIntents.swift */; };
-		F0CC00000000000000000005 /* Shared/SystemIntegration/PushGoAppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000005 /* Shared/SystemIntegration/PushGoAppIntents.swift */; };
-		F0BB00000000000000000006 /* Shared/SystemIntegration/PushGoAppShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000006 /* Shared/SystemIntegration/PushGoAppShortcuts.swift */; };
-		F0CC00000000000000000006 /* Shared/SystemIntegration/PushGoAppShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000006 /* Shared/SystemIntegration/PushGoAppShortcuts.swift */; };
-		F0BB00000000000000000007 /* Shared/SystemIntegration/PushGoDeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000007 /* Shared/SystemIntegration/PushGoDeepLink.swift */; };
-		F0CC00000000000000000007 /* Shared/SystemIntegration/PushGoDeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000007 /* Shared/SystemIntegration/PushGoDeepLink.swift */; };
-		F0BB00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift */; };
-		F0CC00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift */; };
-		F0BB00000000000000000009 /* Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000009 /* Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift */; };
-		F0CC00000000000000000009 /* Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000009 /* Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift */; };
-		F0BB0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift */; };
-		F0CC0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift */; };
-		F0BB0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift */; };
-		F0CC0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift */; };
-		F0BB0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift */; };
-		F0CC0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift */; };
-		F0BB0000000000000000000D /* Shared/SystemIntegration/PushGoSystemIntentRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000D /* Shared/SystemIntegration/PushGoSystemIntentRouter.swift */; };
-		F0CC0000000000000000000D /* Shared/SystemIntegration/PushGoSystemIntentRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000D /* Shared/SystemIntegration/PushGoSystemIntentRouter.swift */; };
-		F0BB0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift */; };
-		F0CC0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift */; };
-		F0BB0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift */; };
-		F0CC0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift */; };
-		F0BB00000000000000000010 /* Shared/SystemIntegration/PushGoSystemRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000010 /* Shared/SystemIntegration/PushGoSystemRouter.swift */; };
-		F0CC00000000000000000010 /* Shared/SystemIntegration/PushGoSystemRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000010 /* Shared/SystemIntegration/PushGoSystemRouter.swift */; };
-		F0BB00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift */; };
-		F0CC00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift */; };
-		F0BB00000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift */; };
-		F0CC00000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift */; };
-		F0BB00000000000000000013 /* Shared/SystemIntegration/PushGoUserActivityBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000013 /* Shared/SystemIntegration/PushGoUserActivityBuilder.swift */; };
-		F0CC00000000000000000013 /* Shared/SystemIntegration/PushGoUserActivityBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000013 /* Shared/SystemIntegration/PushGoUserActivityBuilder.swift */; };
-		F0BB00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift */; };
-		F0CC00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift */; };
-		F0BB00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift */; };
-		F0CC00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift */; };
-		F0BB00000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift */; };
-		F0CC00000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift */; };
-		F0BB00000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift */; };
-		F0CC00000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift */; };
-		F0BB00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift */; };
-		F0CC00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift */; };
-		F0BB0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift */; };
-		F0CC0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift */; };
-		F0BB0000000000000000001D /* Shared/SystemIntegration/PushGoSystemPendingActionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001D /* Shared/SystemIntegration/PushGoSystemPendingActionStore.swift */; };
-		F0CC0000000000000000001D /* Shared/SystemIntegration/PushGoSystemPendingActionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001D /* Shared/SystemIntegration/PushGoSystemPendingActionStore.swift */; };
-		F0BB0000000000000000001E /* Shared/SystemIntegration/PushGoLiveActivityCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001E /* Shared/SystemIntegration/PushGoLiveActivityCoordinator.swift */; };
-		F0CC0000000000000000001E /* Shared/SystemIntegration/PushGoLiveActivityCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001E /* Shared/SystemIntegration/PushGoLiveActivityCoordinator.swift */; };
-		F0BB0000000000000000001F /* Shared/SystemIntegration/PushGoLiveActivityModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001F /* Shared/SystemIntegration/PushGoLiveActivityModels.swift */; };
-		F0CC0000000000000000001F /* Shared/SystemIntegration/PushGoLiveActivityModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001F /* Shared/SystemIntegration/PushGoLiveActivityModels.swift */; };
-		F0BB00000000000000000020 /* Shared/SystemIntegration/PushGoLiveActivityTokenRegistrationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000020 /* Shared/SystemIntegration/PushGoLiveActivityTokenRegistrationService.swift */; };
-		F0CC00000000000000000020 /* Shared/SystemIntegration/PushGoLiveActivityTokenRegistrationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000020 /* Shared/SystemIntegration/PushGoLiveActivityTokenRegistrationService.swift */; };
-		F0BB00000000000000000021 /* Shared/SystemIntegration/PushGoShortcutOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000021 /* Shared/SystemIntegration/PushGoShortcutOutput.swift */; };
-		F0CC00000000000000000021 /* Shared/SystemIntegration/PushGoShortcutOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000021 /* Shared/SystemIntegration/PushGoShortcutOutput.swift */; };
-		F0BB00000000000000000022 /* Shared/SystemIntegration/PushGoNotificationProjectionUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000022 /* Shared/SystemIntegration/PushGoNotificationProjectionUpdater.swift */; };
-		F0CC00000000000000000022 /* Shared/SystemIntegration/PushGoNotificationProjectionUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000022 /* Shared/SystemIntegration/PushGoNotificationProjectionUpdater.swift */; };
-		F0EE00000000000000000022 /* Shared/SystemIntegration/PushGoNotificationProjectionUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000022 /* Shared/SystemIntegration/PushGoNotificationProjectionUpdater.swift */; };
-		F0FF00000000000000000022 /* Shared/SystemIntegration/PushGoNotificationProjectionUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000022 /* Shared/SystemIntegration/PushGoNotificationProjectionUpdater.swift */; };
-		F0EE00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift */; };
-		F0FF00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift */; };
-		F0EE0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift */; };
-		F0FF0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift */; };
-		F0EE0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift */; };
-		F0FF0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift */; };
-		F0EE0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift */; };
-		F0FF0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift */; };
-		F0EE00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift */; };
-		F0FF00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift */; };
-		F0EE00000000000000000073 /* BadgeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C242EF2359D00AD1834 /* BadgeManager.swift */; };
-		F0FF00000000000000000073 /* BadgeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C242EF2359D00AD1834 /* BadgeManager.swift */; };
-		F0A000000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift */; };
-		F0A000000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift */; };
-		F0A000000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift */; };
-		F0A00000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift */; };
-		F0A00000000000000000001D /* Shared/SystemIntegration/PushGoSystemPendingActionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001D /* Shared/SystemIntegration/PushGoSystemPendingActionStore.swift */; };
-		F0A00000000000000000001E /* Shared/SystemIntegration/PushGoLiveActivityCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001E /* Shared/SystemIntegration/PushGoLiveActivityCoordinator.swift */; };
-		F0A00000000000000000001F /* Shared/SystemIntegration/PushGoLiveActivityModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001F /* Shared/SystemIntegration/PushGoLiveActivityModels.swift */; };
-		F0A000000000000000000020 /* Shared/SystemIntegration/PushGoLiveActivityTokenRegistrationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000020 /* Shared/SystemIntegration/PushGoLiveActivityTokenRegistrationService.swift */; };
-		F0A000000000000000000021 /* Shared/SystemIntegration/PushGoShortcutOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000021 /* Shared/SystemIntegration/PushGoShortcutOutput.swift */; };
-		ABCD00012F90000100ABC022 /* Shared/SystemIntegration/PushGoLiveActivityModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001F /* Shared/SystemIntegration/PushGoLiveActivityModels.swift */; };
-		ABCD00012F90000200ABC022 /* Shared/SystemIntegration/PushGoLiveActivityModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001F /* Shared/SystemIntegration/PushGoLiveActivityModels.swift */; };
-		ABCD00012F90000300ABC022 /* Shared/SystemIntegration/PushGoLiveActivityModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001F /* Shared/SystemIntegration/PushGoLiveActivityModels.swift */; };
-		F0A000000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift */; };
-		F0A000000000000000000009 /* Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000009 /* Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift */; };
-		F0A00000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift */; };
-		F0A00000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift */; };
-		F0A00000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift */; };
-		F0A000000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift */; };
-		F0A000000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift */; };
-		F0A00000000000000000001B /* Shared/Models/EntityProjectionDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001B /* Shared/Models/EntityProjectionDetail.swift */; };
-		F0DD00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift */; };
-		F0DD00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift */; };
-		F0EE00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift */; };
-		F0EE00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift */; };
-		F0FF00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift */; };
-		F0FF00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift */; };
-		F0DD00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift */; };
-		F0DD0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift */; };
-		F0DD0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift */; };
-		F0DD0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift */; };
-		F0DD00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift */; };
-		F0EE00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift */; };
-		F0EE0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift */; };
-		F0EE0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift */; };
-		F0EE0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift */; };
-		F0EE00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift */; };
-		F0FF00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift */; };
-		F0FF0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift */; };
-		F0FF0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift */; };
-		F0FF0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift */; };
-		F0FF00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift */; };
-		F0A000000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift */; };
-		F0A000000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift */; };
 		D1B100000000000000000001 /* Shared/Application/AppNavigationState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000001 /* Shared/Application/AppNavigationState.swift */; };
 		D1B100000000000000000002 /* Shared/Application/DataPageVisibilityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000002 /* Shared/Application/DataPageVisibilityController.swift */; };
 		D1B100000000000000000003 /* Shared/Application/LocalStoreRecoveryController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A100000000000000000003 /* Shared/Application/LocalStoreRecoveryController.swift */; };
@@ -361,9 +244,132 @@
 		E8B28E450BED486DEF29C10F /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C1C2EF2359D00AD1834 /* AppError.swift */; };
 		EE139F8339CFDFCA5E04BA38 /* AnyCodable.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C282EF2359D00AD1834 /* AnyCodable.swift */; };
 		EFD9BB707D214FEC819105B4 /* PushMessageSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36B8C43824CA496F9D0EDDC7 /* PushMessageSummary.swift */; };
+		F0A000000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift */; };
+		F0A000000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift */; };
+		F0A000000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift */; };
+		F0A000000000000000000009 /* Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000009 /* Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift */; };
+		F0A00000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift */; };
+		F0A00000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift */; };
+		F0A00000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift */; };
+		F0A000000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift */; };
+		F0A000000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift */; };
+		F0A000000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift */; };
+		F0A000000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift */; };
+		F0A000000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift */; };
+		F0A00000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift */; };
+		F0A00000000000000000001B /* Shared/Models/EntityProjectionDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001B /* Shared/Models/EntityProjectionDetail.swift */; };
+		F0A00000000000000000001D /* Shared/SystemIntegration/PushGoSystemPendingActionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001D /* Shared/SystemIntegration/PushGoSystemPendingActionStore.swift */; };
+		F0A00000000000000000001E /* Shared/SystemIntegration/PushGoLiveActivityCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001E /* Shared/SystemIntegration/PushGoLiveActivityCoordinator.swift */; };
+		F0A00000000000000000001F /* Shared/SystemIntegration/PushGoLiveActivityModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001F /* Shared/SystemIntegration/PushGoLiveActivityModels.swift */; };
+		F0A000000000000000000020 /* Shared/SystemIntegration/PushGoLiveActivityTokenRegistrationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000020 /* Shared/SystemIntegration/PushGoLiveActivityTokenRegistrationService.swift */; };
+		F0A000000000000000000021 /* Shared/SystemIntegration/PushGoShortcutOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000021 /* Shared/SystemIntegration/PushGoShortcutOutput.swift */; };
+		F0A000000000000000000023 /* Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000023 /* Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift */; };
 		F0A1B2C3D4E5F60718293A11 /* ChannelSubscriptionSyncStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A1B2C3D4E5F60718293A10 /* ChannelSubscriptionSyncStore.swift */; };
 		F0A1B2C3D4E5F60718293A12 /* ChannelSubscriptionSyncStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A1B2C3D4E5F60718293A10 /* ChannelSubscriptionSyncStore.swift */; };
 		F0A1B2C3D4E5F60718293A13 /* ChannelSubscriptionSyncStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0A1B2C3D4E5F60718293A10 /* ChannelSubscriptionSyncStore.swift */; };
+		F0BB00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift */; };
+		F0BB00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift */; };
+		F0BB00000000000000000003 /* Shared/SystemIntegration/PushGoAppEntities.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000003 /* Shared/SystemIntegration/PushGoAppEntities.swift */; };
+		F0BB00000000000000000004 /* Shared/SystemIntegration/PushGoAppEntityQueries.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000004 /* Shared/SystemIntegration/PushGoAppEntityQueries.swift */; };
+		F0BB00000000000000000005 /* Shared/SystemIntegration/PushGoAppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000005 /* Shared/SystemIntegration/PushGoAppIntents.swift */; };
+		F0BB00000000000000000006 /* Shared/SystemIntegration/PushGoAppShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000006 /* Shared/SystemIntegration/PushGoAppShortcuts.swift */; };
+		F0BB00000000000000000007 /* Shared/SystemIntegration/PushGoDeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000007 /* Shared/SystemIntegration/PushGoDeepLink.swift */; };
+		F0BB00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift */; };
+		F0BB00000000000000000009 /* Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000009 /* Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift */; };
+		F0BB0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift */; };
+		F0BB0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift */; };
+		F0BB0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift */; };
+		F0BB0000000000000000000D /* Shared/SystemIntegration/PushGoSystemIntentRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000D /* Shared/SystemIntegration/PushGoSystemIntentRouter.swift */; };
+		F0BB0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift */; };
+		F0BB0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift */; };
+		F0BB00000000000000000010 /* Shared/SystemIntegration/PushGoSystemRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000010 /* Shared/SystemIntegration/PushGoSystemRouter.swift */; };
+		F0BB00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift */; };
+		F0BB00000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift */; };
+		F0BB00000000000000000013 /* Shared/SystemIntegration/PushGoUserActivityBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000013 /* Shared/SystemIntegration/PushGoUserActivityBuilder.swift */; };
+		F0BB00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift */; };
+		F0BB00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift */; };
+		F0BB00000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift */; };
+		F0BB00000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift */; };
+		F0BB00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift */; };
+		F0BB0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift */; };
+		F0BB0000000000000000001B /* Shared/Models/EntityProjectionDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001B /* Shared/Models/EntityProjectionDetail.swift */; };
+		F0BB0000000000000000001C /* Shared/SystemIntegration/PushGoAdvancedSiriIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001C /* Shared/SystemIntegration/PushGoAdvancedSiriIntents.swift */; };
+		F0BB0000000000000000001D /* Shared/SystemIntegration/PushGoSystemPendingActionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001D /* Shared/SystemIntegration/PushGoSystemPendingActionStore.swift */; };
+		F0BB0000000000000000001E /* Shared/SystemIntegration/PushGoLiveActivityCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001E /* Shared/SystemIntegration/PushGoLiveActivityCoordinator.swift */; };
+		F0BB0000000000000000001F /* Shared/SystemIntegration/PushGoLiveActivityModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001F /* Shared/SystemIntegration/PushGoLiveActivityModels.swift */; };
+		F0BB00000000000000000020 /* Shared/SystemIntegration/PushGoLiveActivityTokenRegistrationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000020 /* Shared/SystemIntegration/PushGoLiveActivityTokenRegistrationService.swift */; };
+		F0BB00000000000000000021 /* Shared/SystemIntegration/PushGoShortcutOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000021 /* Shared/SystemIntegration/PushGoShortcutOutput.swift */; };
+		F0BB00000000000000000022 /* Shared/SystemIntegration/PushGoNotificationProjectionUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000022 /* Shared/SystemIntegration/PushGoNotificationProjectionUpdater.swift */; };
+		F0BB00000000000000000023 /* Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000023 /* Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift */; };
+		F0CC00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift */; };
+		F0CC00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift */; };
+		F0CC00000000000000000003 /* Shared/SystemIntegration/PushGoAppEntities.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000003 /* Shared/SystemIntegration/PushGoAppEntities.swift */; };
+		F0CC00000000000000000004 /* Shared/SystemIntegration/PushGoAppEntityQueries.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000004 /* Shared/SystemIntegration/PushGoAppEntityQueries.swift */; };
+		F0CC00000000000000000005 /* Shared/SystemIntegration/PushGoAppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000005 /* Shared/SystemIntegration/PushGoAppIntents.swift */; };
+		F0CC00000000000000000006 /* Shared/SystemIntegration/PushGoAppShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000006 /* Shared/SystemIntegration/PushGoAppShortcuts.swift */; };
+		F0CC00000000000000000007 /* Shared/SystemIntegration/PushGoDeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000007 /* Shared/SystemIntegration/PushGoDeepLink.swift */; };
+		F0CC00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift */; };
+		F0CC00000000000000000009 /* Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000009 /* Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift */; };
+		F0CC0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift */; };
+		F0CC0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift */; };
+		F0CC0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift */; };
+		F0CC0000000000000000000D /* Shared/SystemIntegration/PushGoSystemIntentRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000D /* Shared/SystemIntegration/PushGoSystemIntentRouter.swift */; };
+		F0CC0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift */; };
+		F0CC0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift */; };
+		F0CC00000000000000000010 /* Shared/SystemIntegration/PushGoSystemRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000010 /* Shared/SystemIntegration/PushGoSystemRouter.swift */; };
+		F0CC00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift */; };
+		F0CC00000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift */; };
+		F0CC00000000000000000013 /* Shared/SystemIntegration/PushGoUserActivityBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000013 /* Shared/SystemIntegration/PushGoUserActivityBuilder.swift */; };
+		F0CC00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift */; };
+		F0CC00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift */; };
+		F0CC00000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift */; };
+		F0CC00000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift */; };
+		F0CC00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift */; };
+		F0CC0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift */; };
+		F0CC0000000000000000001B /* Shared/Models/EntityProjectionDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001B /* Shared/Models/EntityProjectionDetail.swift */; };
+		F0CC0000000000000000001C /* Shared/SystemIntegration/PushGoAdvancedSiriIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001C /* Shared/SystemIntegration/PushGoAdvancedSiriIntents.swift */; };
+		F0CC0000000000000000001D /* Shared/SystemIntegration/PushGoSystemPendingActionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001D /* Shared/SystemIntegration/PushGoSystemPendingActionStore.swift */; };
+		F0CC0000000000000000001E /* Shared/SystemIntegration/PushGoLiveActivityCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001E /* Shared/SystemIntegration/PushGoLiveActivityCoordinator.swift */; };
+		F0CC0000000000000000001F /* Shared/SystemIntegration/PushGoLiveActivityModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001F /* Shared/SystemIntegration/PushGoLiveActivityModels.swift */; };
+		F0CC00000000000000000020 /* Shared/SystemIntegration/PushGoLiveActivityTokenRegistrationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000020 /* Shared/SystemIntegration/PushGoLiveActivityTokenRegistrationService.swift */; };
+		F0CC00000000000000000021 /* Shared/SystemIntegration/PushGoShortcutOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000021 /* Shared/SystemIntegration/PushGoShortcutOutput.swift */; };
+		F0CC00000000000000000022 /* Shared/SystemIntegration/PushGoNotificationProjectionUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000022 /* Shared/SystemIntegration/PushGoNotificationProjectionUpdater.swift */; };
+		F0CC00000000000000000023 /* Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000023 /* Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift */; };
+		F0DD00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift */; };
+		F0DD00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift */; };
+		F0DD0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift */; };
+		F0DD0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift */; };
+		F0DD00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift */; };
+		F0DD00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift */; };
+		F0DD0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift */; };
+		F0EE00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift */; };
+		F0EE00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift */; };
+		F0EE00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift */; };
+		F0EE0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift */; };
+		F0EE0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift */; };
+		F0EE0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift */; };
+		F0EE0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift */; };
+		F0EE0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift */; };
+		F0EE00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift */; };
+		F0EE00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift */; };
+		F0EE00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift */; };
+		F0EE0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift */; };
+		F0EE00000000000000000022 /* Shared/SystemIntegration/PushGoNotificationProjectionUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000022 /* Shared/SystemIntegration/PushGoNotificationProjectionUpdater.swift */; };
+		F0EE00000000000000000073 /* BadgeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C242EF2359D00AD1834 /* BadgeManager.swift */; };
+		F0FF00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift */; };
+		F0FF00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift */; };
+		F0FF00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift */; };
+		F0FF0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift */; };
+		F0FF0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift */; };
+		F0FF0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift */; };
+		F0FF0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift */; };
+		F0FF0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift */; };
+		F0FF00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift */; };
+		F0FF00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift */; };
+		F0FF00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift */; };
+		F0FF0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift */; };
+		F0FF00000000000000000022 /* Shared/SystemIntegration/PushGoNotificationProjectionUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AA00000000000000000022 /* Shared/SystemIntegration/PushGoNotificationProjectionUpdater.swift */; };
+		F0FF00000000000000000073 /* BadgeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C242EF2359D00AD1834 /* BadgeManager.swift */; };
 		F1A0C4A13B2E4F7E9D1C2B3A /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8E2C2E2EF2359D00AD1834 /* KeychainStore.swift */; };
 		F1B2C3D4E5F60718293A4B61 /* NotificationIngressInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1B2C3D4E5F60718293A4B5C /* NotificationIngressInbox.swift */; };
 		F1B2C3D4E5F60718293A4B62 /* NotificationIngressInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1B2C3D4E5F60718293A4B5C /* NotificationIngressInbox.swift */; };
@@ -435,6 +441,13 @@
 			remoteGlobalIDString = AA49A19B2EE3E46C00C1EBF2;
 			remoteInfo = "PushGoNSE-iOS";
 		};
+		AA6603832F1A8AA20087E0F0 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA49A1822EE3E31500C1EBF2 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AAFB52C02F0CA5F0009E61C5;
+			remoteInfo = "PushGo-watchOS";
+		};
 		ABCD00012F90000100ABC003 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = AA49A1822EE3E31500C1EBF2 /* Project object */;
@@ -455,13 +468,6 @@
 			proxyType = 1;
 			remoteGlobalIDString = ABCD00012F90000300ABC010;
 			remoteInfo = "PushGoWidgets-watchOS";
-		};
-		AA6603832F1A8AA20087E0F0 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = AA49A1822EE3E31500C1EBF2 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = AAFB52C02F0CA5F0009E61C5;
-			remoteInfo = "PushGo-watchOS";
 		};
 		D90000112F7F000100A10008 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -565,9 +571,6 @@
 		AA240E512EF1BEA400F812DA /* PushGo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PushGo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA49A18A2EE3E31500C1EBF2 /* PushGo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PushGo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA49A19C2EE3E46C00C1EBF2 /* NotificationServiceExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NotificationServiceExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		ABCD00012F90000100ABC002 /* PushGoWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PushGoWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		ABCD00012F90000200ABC002 /* PushGoWidgetsMac.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PushGoWidgetsMac.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		ABCD00012F90000300ABC002 /* PushGoWidgetsWatch.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PushGoWidgetsWatch.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA49A1AF2EE3E4BF00C1EBF2 /* UserNotifications.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotifications.framework; path = System/Library/Frameworks/UserNotifications.framework; sourceTree = SDKROOT; };
 		AA49A1B12EE3E4BF00C1EBF2 /* UserNotificationsUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotificationsUI.framework; path = System/Library/Frameworks/UserNotificationsUI.framework; sourceTree = SDKROOT; };
 		AA8E2C1C2EF2359D00AD1834 /* AppError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppError.swift; sourceTree = "<group>"; };
@@ -588,6 +591,9 @@
 		AA8E2C362EF2359D00AD1834 /* UserInfoSanitizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserInfoSanitizer.swift; sourceTree = "<group>"; };
 		AACFE15B2F28511200701BB4 /* PushgoNotificationServiceExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PushgoNotificationServiceExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		AAFB52C12F0CA5F0009E61C5 /* PushGoWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PushGoWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		ABCD00012F90000100ABC002 /* PushGoWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PushGoWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		ABCD00012F90000200ABC002 /* PushGoWidgetsMac.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PushGoWidgetsMac.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		ABCD00012F90000300ABC002 /* PushGoWidgetsWatch.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PushGoWidgetsWatch.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B1E7D1124F8A4C3DA9E8F001 /* EntityScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntityScreens.swift; sourceTree = "<group>"; };
 		B1E7D1134F8A4C3DA9E8F001 /* EntityProjectionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntityProjectionModels.swift; sourceTree = "<group>"; };
 		BE7F5A81433F49309DB30D36 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = text; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
@@ -602,39 +608,6 @@
 		C1D2E3F40102030405060703 /* SearchQuerySemantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchQuerySemantics.swift; sourceTree = "<group>"; };
 		C1D2E3F40102030405060704 /* ProjectionSemantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectionSemantics.swift; sourceTree = "<group>"; };
 		C1D2E3F40102030405060705 /* PushRegistrationSemantics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushRegistrationSemantics.swift; sourceTree = "<group>"; };
-		F0AA00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Models/SystemIntegrationSettings.swift; sourceTree = SOURCE_ROOT; };
-		F0AA0000000000000000001B /* Shared/Models/EntityProjectionDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Models/EntityProjectionDetail.swift; sourceTree = SOURCE_ROOT; };
-		F0AA00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift; sourceTree = SOURCE_ROOT; };
-		F0AA0000000000000000001C /* Shared/SystemIntegration/PushGoAdvancedSiriIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoAdvancedSiriIntents.swift; sourceTree = SOURCE_ROOT; };
-		F0AA00000000000000000003 /* Shared/SystemIntegration/PushGoAppEntities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoAppEntities.swift; sourceTree = SOURCE_ROOT; };
-		F0AA00000000000000000004 /* Shared/SystemIntegration/PushGoAppEntityQueries.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoAppEntityQueries.swift; sourceTree = SOURCE_ROOT; };
-		F0AA00000000000000000005 /* Shared/SystemIntegration/PushGoAppIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoAppIntents.swift; sourceTree = SOURCE_ROOT; };
-		F0AA00000000000000000006 /* Shared/SystemIntegration/PushGoAppShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoAppShortcuts.swift; sourceTree = SOURCE_ROOT; };
-		F0AA00000000000000000007 /* Shared/SystemIntegration/PushGoDeepLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoDeepLink.swift; sourceTree = SOURCE_ROOT; };
-		F0AA00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoNotificationActionPolicy.swift; sourceTree = SOURCE_ROOT; };
-		F0AA00000000000000000009 /* Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift; sourceTree = SOURCE_ROOT; };
-		F0AA0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSpotlightIdentifier.swift; sourceTree = SOURCE_ROOT; };
-		F0AA0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSpotlightIndexer.swift; sourceTree = SOURCE_ROOT; };
-		F0AA0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemEntityKind.swift; sourceTree = SOURCE_ROOT; };
-		F0AA0000000000000000000D /* Shared/SystemIntegration/PushGoSystemIntentRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemIntentRouter.swift; sourceTree = SOURCE_ROOT; };
-		F0AA0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemOpenTarget.swift; sourceTree = SOURCE_ROOT; };
-		F0AA0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift; sourceTree = SOURCE_ROOT; };
-		F0AA00000000000000000010 /* Shared/SystemIntegration/PushGoSystemRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemRouter.swift; sourceTree = SOURCE_ROOT; };
-		F0AA00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemSummary.swift; sourceTree = SOURCE_ROOT; };
-		F0AA00000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift; sourceTree = SOURCE_ROOT; };
-		F0AA00000000000000000013 /* Shared/SystemIntegration/PushGoUserActivityBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoUserActivityBuilder.swift; sourceTree = SOURCE_ROOT; };
-		F0AA00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift; sourceTree = SOURCE_ROOT; };
-		F0AA00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoFocusStateStore.swift; sourceTree = SOURCE_ROOT; };
-		F0AA00000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift; sourceTree = SOURCE_ROOT; };
-		F0AA00000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift; sourceTree = SOURCE_ROOT; };
-		F0AA00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemSnapshotStore.swift; sourceTree = SOURCE_ROOT; };
-		F0AA0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift; sourceTree = SOURCE_ROOT; };
-		F0AA0000000000000000001D /* Shared/SystemIntegration/PushGoSystemPendingActionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemPendingActionStore.swift; sourceTree = SOURCE_ROOT; };
-		F0AA0000000000000000001E /* Shared/SystemIntegration/PushGoLiveActivityCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoLiveActivityCoordinator.swift; sourceTree = SOURCE_ROOT; };
-		F0AA0000000000000000001F /* Shared/SystemIntegration/PushGoLiveActivityModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoLiveActivityModels.swift; sourceTree = SOURCE_ROOT; };
-		F0AA00000000000000000020 /* Shared/SystemIntegration/PushGoLiveActivityTokenRegistrationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoLiveActivityTokenRegistrationService.swift; sourceTree = SOURCE_ROOT; };
-		F0AA00000000000000000021 /* Shared/SystemIntegration/PushGoShortcutOutput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoShortcutOutput.swift; sourceTree = SOURCE_ROOT; };
-		F0AA00000000000000000022 /* Shared/SystemIntegration/PushGoNotificationProjectionUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoNotificationProjectionUpdater.swift; sourceTree = SOURCE_ROOT; };
 		D1A100000000000000000001 /* Shared/Application/AppNavigationState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Application/AppNavigationState.swift; sourceTree = SOURCE_ROOT; };
 		D1A100000000000000000002 /* Shared/Application/DataPageVisibilityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Application/DataPageVisibilityController.swift; sourceTree = SOURCE_ROOT; };
 		D1A100000000000000000003 /* Shared/Application/LocalStoreRecoveryController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Application/LocalStoreRecoveryController.swift; sourceTree = SOURCE_ROOT; };
@@ -660,6 +633,40 @@
 		DE35C72B5C899D0FCCBAF070 /* NotificationServiceExtensionWatch.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NotificationServiceExtensionWatch.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		EB2905A5569B461FA7E13E89 /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
 		F0A1B2C3D4E5F60718293A10 /* ChannelSubscriptionSyncStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelSubscriptionSyncStore.swift; sourceTree = "<group>"; };
+		F0AA00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Models/SystemIntegrationSettings.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000003 /* Shared/SystemIntegration/PushGoAppEntities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoAppEntities.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000004 /* Shared/SystemIntegration/PushGoAppEntityQueries.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoAppEntityQueries.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000005 /* Shared/SystemIntegration/PushGoAppIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoAppIntents.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000006 /* Shared/SystemIntegration/PushGoAppShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoAppShortcuts.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000007 /* Shared/SystemIntegration/PushGoDeepLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoDeepLink.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoNotificationActionPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000009 /* Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoProjectionSummaryBuilder.swift; sourceTree = SOURCE_ROOT; };
+		F0AA0000000000000000000A /* Shared/SystemIntegration/PushGoSpotlightIdentifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSpotlightIdentifier.swift; sourceTree = SOURCE_ROOT; };
+		F0AA0000000000000000000B /* Shared/SystemIntegration/PushGoSpotlightIndexer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSpotlightIndexer.swift; sourceTree = SOURCE_ROOT; };
+		F0AA0000000000000000000C /* Shared/SystemIntegration/PushGoSystemEntityKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemEntityKind.swift; sourceTree = SOURCE_ROOT; };
+		F0AA0000000000000000000D /* Shared/SystemIntegration/PushGoSystemIntentRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemIntentRouter.swift; sourceTree = SOURCE_ROOT; };
+		F0AA0000000000000000000E /* Shared/SystemIntegration/PushGoSystemOpenTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemOpenTarget.swift; sourceTree = SOURCE_ROOT; };
+		F0AA0000000000000000000F /* Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemPrivacyPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000010 /* Shared/SystemIntegration/PushGoSystemRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemRouter.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemSummary.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000012 /* Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemSummaryBuilder.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000013 /* Shared/SystemIntegration/PushGoUserActivityBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoUserActivityBuilder.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000015 /* Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoMessageSummarySystemBridge.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000016 /* Shared/SystemIntegration/PushGoFocusStateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoFocusStateStore.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000017 /* Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemSnapshotProjector.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000018 /* Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemSnapshotRefreshPolicy.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000019 /* Shared/SystemIntegration/PushGoSystemSnapshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemSnapshotStore.swift; sourceTree = SOURCE_ROOT; };
+		F0AA0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift; sourceTree = SOURCE_ROOT; };
+		F0AA0000000000000000001B /* Shared/Models/EntityProjectionDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Models/EntityProjectionDetail.swift; sourceTree = SOURCE_ROOT; };
+		F0AA0000000000000000001C /* Shared/SystemIntegration/PushGoAdvancedSiriIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoAdvancedSiriIntents.swift; sourceTree = SOURCE_ROOT; };
+		F0AA0000000000000000001D /* Shared/SystemIntegration/PushGoSystemPendingActionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoSystemPendingActionStore.swift; sourceTree = SOURCE_ROOT; };
+		F0AA0000000000000000001E /* Shared/SystemIntegration/PushGoLiveActivityCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoLiveActivityCoordinator.swift; sourceTree = SOURCE_ROOT; };
+		F0AA0000000000000000001F /* Shared/SystemIntegration/PushGoLiveActivityModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoLiveActivityModels.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000020 /* Shared/SystemIntegration/PushGoLiveActivityTokenRegistrationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoLiveActivityTokenRegistrationService.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000021 /* Shared/SystemIntegration/PushGoShortcutOutput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoShortcutOutput.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000022 /* Shared/SystemIntegration/PushGoNotificationProjectionUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoNotificationProjectionUpdater.swift; sourceTree = SOURCE_ROOT; };
+		F0AA00000000000000000023 /* Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift; sourceTree = SOURCE_ROOT; };
 		F1B2C3D4E5F60718293A4B5C /* NotificationIngressInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationIngressInbox.swift; sourceTree = "<group>"; };
 		F2B2C3D4E5F60718293A4B5C /* NotificationContextSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationContextSnapshot.swift; sourceTree = "<group>"; };
 		F4B2C3D4E5F60718293A4B5C /* ProviderDeliveryAckFailureStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderDeliveryAckFailureStore.swift; sourceTree = "<group>"; };
@@ -869,16 +876,6 @@
 			path = "Extensions/PushGoNSE-iOS";
 			sourceTree = "<group>";
 		};
-		ABCD00012F90000100ABC020 /* Extensions/PushGoWidgets */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				ABCD00012F90000100ABC021 /* Exceptions for "Extensions/PushGoWidgets" folder in "PushGoWidgets-iOS" target */,
-				ABCD00012F90000200ABC021 /* Exceptions for "Extensions/PushGoWidgets" folder in "PushGoWidgets-macOS" target */,
-				ABCD00012F90000300ABC021 /* Exceptions for "Extensions/PushGoWidgets" folder in "PushGoWidgets-watchOS" target */,
-			);
-			path = "Extensions/PushGoWidgets";
-			sourceTree = "<group>";
-		};
 		AA8E2B3C2EF2292800AD1834 /* Resources */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -901,6 +898,16 @@
 		AAFB52C52F0CA5F0009E61C5 /* Apps/PushGo-watchOS */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "Apps/PushGo-watchOS";
+			sourceTree = "<group>";
+		};
+		ABCD00012F90000100ABC020 /* Extensions/PushGoWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				ABCD00012F90000100ABC021 /* Exceptions for "Extensions/PushGoWidgets" folder in "PushGoWidgets-iOS" target */,
+				ABCD00012F90000200ABC021 /* Exceptions for "Extensions/PushGoWidgets" folder in "PushGoWidgets-macOS" target */,
+				ABCD00012F90000300ABC021 /* Exceptions for "Extensions/PushGoWidgets" folder in "PushGoWidgets-watchOS" target */,
+			);
+			path = Extensions/PushGoWidgets;
 			sourceTree = "<group>";
 		};
 		D90000112F7F000100A10002 /* Tests/PushGo-iOSUITests */ = {
@@ -951,6 +958,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AACFE1582F28511200701BB4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AAFB52BE2F0CA5F0009E61C5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		ABCD00012F90000100ABC012 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -966,20 +987,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		ABCD00012F90000300ABC012 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		AACFE1582F28511200701BB4 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		AAFB52BE2F0CA5F0009E61C5 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -1190,6 +1197,7 @@
 				F0AA0000000000000000001F /* Shared/SystemIntegration/PushGoLiveActivityModels.swift */,
 				F0AA00000000000000000020 /* Shared/SystemIntegration/PushGoLiveActivityTokenRegistrationService.swift */,
 				F0AA00000000000000000021 /* Shared/SystemIntegration/PushGoShortcutOutput.swift */,
+				F0AA00000000000000000023 /* Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift */,
 				D1A200000000000000000001 /* Application */,
 				AA8E2C202EF2359D00AD1834 /* Models */,
 				AA8E2C232EF2359D00AD1834 /* Repositories */,
@@ -1341,6 +1349,53 @@
 			productReference = AA49A19C2EE3E46C00C1EBF2 /* NotificationServiceExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		AACFE15A2F28511200701BB4 /* PushGoNSE-macOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AACFE1632F28511200701BB4 /* Build configuration list for PBXNativeTarget "PushGoNSE-macOS" */;
+			buildPhases = (
+				AACFE1572F28511200701BB4 /* Sources */,
+				AACFE1582F28511200701BB4 /* Frameworks */,
+				AACFE1592F28511200701BB4 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AACFE15C2F28511200701BB4 /* Extensions/PushGoNSE-macOS */,
+			);
+			name = "PushGoNSE-macOS";
+			packageProductDependencies = (
+			);
+			productName = PushgoNotificationServiceExtension;
+			productReference = AACFE15B2F28511200701BB4 /* PushgoNotificationServiceExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		AAFB52C02F0CA5F0009E61C5 /* PushGo-watchOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AAFB52D12F0CA5F1009E61C5 /* Build configuration list for PBXNativeTarget "PushGo-watchOS" */;
+			buildPhases = (
+				AAFB52BD2F0CA5F0009E61C5 /* Sources */,
+				AAFB52BE2F0CA5F0009E61C5 /* Frameworks */,
+				AAFB52BF2F0CA5F0009E61C5 /* Resources */,
+				BEED039A5EBC20654A6A74FC /* Embed Watch Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B1C85A66EF56429F56398B06 /* PBXTargetDependency */,
+				ABCD00012F90000300ABC004 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				AAFB52C52F0CA5F0009E61C5 /* Apps/PushGo-watchOS */,
+			);
+			name = "PushGo-watchOS";
+			packageProductDependencies = (
+			);
+			productName = PushGo;
+			productReference = AAFB52C12F0CA5F0009E61C5 /* PushGoWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
 		ABCD00012F90000100ABC010 /* PushGoWidgets-iOS */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = ABCD00012F90000100ABC013 /* Build configuration list for PBXNativeTarget "PushGoWidgets-iOS" */;
@@ -1406,53 +1461,6 @@
 			productName = PushGoWidgetsWatch;
 			productReference = ABCD00012F90000300ABC002 /* PushGoWidgetsWatch.appex */;
 			productType = "com.apple.product-type.app-extension";
-		};
-		AACFE15A2F28511200701BB4 /* PushGoNSE-macOS */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = AACFE1632F28511200701BB4 /* Build configuration list for PBXNativeTarget "PushGoNSE-macOS" */;
-			buildPhases = (
-				AACFE1572F28511200701BB4 /* Sources */,
-				AACFE1582F28511200701BB4 /* Frameworks */,
-				AACFE1592F28511200701BB4 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				AACFE15C2F28511200701BB4 /* Extensions/PushGoNSE-macOS */,
-			);
-			name = "PushGoNSE-macOS";
-			packageProductDependencies = (
-			);
-			productName = PushgoNotificationServiceExtension;
-			productReference = AACFE15B2F28511200701BB4 /* PushgoNotificationServiceExtension.appex */;
-			productType = "com.apple.product-type.app-extension";
-		};
-		AAFB52C02F0CA5F0009E61C5 /* PushGo-watchOS */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = AAFB52D12F0CA5F1009E61C5 /* Build configuration list for PBXNativeTarget "PushGo-watchOS" */;
-			buildPhases = (
-				AAFB52BD2F0CA5F0009E61C5 /* Sources */,
-				AAFB52BE2F0CA5F0009E61C5 /* Frameworks */,
-				AAFB52BF2F0CA5F0009E61C5 /* Resources */,
-				BEED039A5EBC20654A6A74FC /* Embed Watch Extensions */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				B1C85A66EF56429F56398B06 /* PBXTargetDependency */,
-				ABCD00012F90000300ABC004 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				AAFB52C52F0CA5F0009E61C5 /* Apps/PushGo-watchOS */,
-			);
-			name = "PushGo-watchOS";
-			packageProductDependencies = (
-			);
-			productName = PushGo;
-			productReference = AAFB52C12F0CA5F0009E61C5 /* PushGoWatch.app */;
-			productType = "com.apple.product-type.application";
 		};
 		CF8A576C8ED05746DC334102 /* PushGoNSE-watchOS */ = {
 			isa = PBXNativeTarget;
@@ -1541,13 +1549,13 @@
 					AA49A19B2EE3E46C00C1EBF2 = {
 						CreatedOnToolsVersion = 26.1.1;
 					};
-					ABCD00012F90000100ABC010 = {
-						CreatedOnToolsVersion = 26.2;
-					};
 					AACFE15A2F28511200701BB4 = {
 						CreatedOnToolsVersion = 26.2;
 					};
 					AAFB52C02F0CA5F0009E61C5 = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					ABCD00012F90000100ABC010 = {
 						CreatedOnToolsVersion = 26.2;
 					};
 					CF8A576C8ED05746DC334102 = {
@@ -1564,12 +1572,12 @@
 			buildConfigurationList = AA49A1852EE3E31500C1EBF2 /* Build configuration list for PBXProject "pushgo" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
-				knownRegions = (
-					en,
-					Base,
-					"zh-Hans",
-					"zh-Hant",
-				);
+			knownRegions = (
+				en,
+				Base,
+				"zh-Hans",
+				"zh-Hant",
+			);
 			mainGroup = AA49A1812EE3E31500C1EBF2;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
@@ -1634,6 +1642,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AACFE1592F28511200701BB4 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AAFB52BF2F0CA5F0009E61C5 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		ABCD00012F90000100ABC014 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1649,20 +1671,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		ABCD00012F90000300ABC014 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		AACFE1592F28511200701BB4 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		AAFB52BF2F0CA5F0009E61C5 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -1771,6 +1779,7 @@
 				F0BB0000000000000000001F /* Shared/SystemIntegration/PushGoLiveActivityModels.swift in Sources */,
 				F0BB00000000000000000020 /* Shared/SystemIntegration/PushGoLiveActivityTokenRegistrationService.swift in Sources */,
 				F0BB00000000000000000021 /* Shared/SystemIntegration/PushGoShortcutOutput.swift in Sources */,
+				F0BB00000000000000000023 /* Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift in Sources */,
 				F1B2C3D4E5F60718293A4B61 /* NotificationIngressInbox.swift in Sources */,
 				F4B2C3D4E5F60718293A4B61 /* ProviderDeliveryAckFailureStore.swift in Sources */,
 				F6B2C3D4E5F60718293A4B61 /* ProviderIngressCoordinator.swift in Sources */,
@@ -1882,6 +1891,7 @@
 				F0CC0000000000000000001F /* Shared/SystemIntegration/PushGoLiveActivityModels.swift in Sources */,
 				F0CC00000000000000000020 /* Shared/SystemIntegration/PushGoLiveActivityTokenRegistrationService.swift in Sources */,
 				F0CC00000000000000000021 /* Shared/SystemIntegration/PushGoShortcutOutput.swift in Sources */,
+				F0CC00000000000000000023 /* Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift in Sources */,
 				F1B2C3D4E5F60718293A4B62 /* NotificationIngressInbox.swift in Sources */,
 				F4B2C3D4E5F60718293A4B62 /* ProviderDeliveryAckFailureStore.swift in Sources */,
 				F6B2C3D4E5F60718293A4B62 /* ProviderIngressCoordinator.swift in Sources */,
@@ -1993,30 +2003,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		ABCD00012F90000100ABC011 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				ABCD00012F90000100ABC022 /* Shared/SystemIntegration/PushGoLiveActivityModels.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		ABCD00012F90000200ABC011 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				ABCD00012F90000200ABC022 /* Shared/SystemIntegration/PushGoLiveActivityModels.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		ABCD00012F90000300ABC011 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				ABCD00012F90000300ABC022 /* Shared/SystemIntegration/PushGoLiveActivityModels.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		AACFE1572F28511200701BB4 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -2091,6 +2077,7 @@
 				F0A00000000000000000001F /* Shared/SystemIntegration/PushGoLiveActivityModels.swift in Sources */,
 				F0A000000000000000000020 /* Shared/SystemIntegration/PushGoLiveActivityTokenRegistrationService.swift in Sources */,
 				F0A000000000000000000021 /* Shared/SystemIntegration/PushGoShortcutOutput.swift in Sources */,
+				F0A000000000000000000023 /* Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift in Sources */,
 				B1E7D1134F8A4C3DA9E8F103 /* EntityProjectionModels.swift in Sources */,
 				F4B2C3D4E5F60718293A4B66 /* ProviderDeliveryAckFailureStore.swift in Sources */,
 				F6B2C3D4E5F60718293A4B66 /* ProviderIngressCoordinator.swift in Sources */,
@@ -2130,6 +2117,33 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		ABCD00012F90000100ABC011 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ABCD00012F90000100ABC022 /* Shared/SystemIntegration/PushGoLiveActivityModels.swift in Sources */,
+				ABCD00012F90000100ABC023 /* Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ABCD00012F90000200ABC011 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ABCD00012F90000200ABC022 /* Shared/SystemIntegration/PushGoLiveActivityModels.swift in Sources */,
+				ABCD00012F90000200ABC023 /* Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ABCD00012F90000300ABC011 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ABCD00012F90000300ABC022 /* Shared/SystemIntegration/PushGoLiveActivityModels.swift in Sources */,
+				ABCD00012F90000300ABC023 /* Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		D90000112F7F000100A10005 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -2162,6 +2176,11 @@
 			target = AA49A19B2EE3E46C00C1EBF2 /* PushGoNSE-iOS */;
 			targetProxy = AA49A1A12EE3E46C00C1EBF2 /* PBXContainerItemProxy */;
 		};
+		AA6603842F1A8AA20087E0F0 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AAFB52C02F0CA5F0009E61C5 /* PushGo-watchOS */;
+			targetProxy = AA6603832F1A8AA20087E0F0 /* PBXContainerItemProxy */;
+		};
 		ABCD00012F90000100ABC004 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = ABCD00012F90000100ABC010 /* PushGoWidgets-iOS */;
@@ -2181,11 +2200,6 @@
 			isa = PBXTargetDependency;
 			target = ABCD00012F90000300ABC010 /* PushGoWidgets-watchOS */;
 			targetProxy = ABCD00012F90000300ABC003 /* PBXContainerItemProxy */;
-		};
-		AA6603842F1A8AA20087E0F0 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = AAFB52C02F0CA5F0009E61C5 /* PushGo-watchOS */;
-			targetProxy = AA6603832F1A8AA20087E0F0 /* PBXContainerItemProxy */;
 		};
 		B1C85A66EF56429F56398B06 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -2739,239 +2753,6 @@
 			};
 			name = Release;
 		};
-		ABCD00012F90000100ABC015 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = Extensions/PushGoWidgets/PushGoWidgets.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 86;
-				DEVELOPMENT_TEAM = W6H9P5MVUB;
-				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
-				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = Extensions/PushGoWidgets/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.2.7;
-				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.widgets;
-				PRODUCT_NAME = PushGoWidgets;
-				PROVISIONING_PROFILE_SPECIFIER = "";
-				REGISTER_APP_GROUPS = YES;
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_STRICT_CONCURRENCY = complete;
-				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
-		ABCD00012F90000100ABC016 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = Extensions/PushGoWidgets/PushGoWidgets.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Distribution";
-				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 86;
-				DEVELOPMENT_TEAM = W6H9P5MVUB;
-				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
-				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = Extensions/PushGoWidgets/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.2.7;
-				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.widgets;
-				PRODUCT_NAME = PushGoWidgets;
-				PROVISIONING_PROFILE_SPECIFIER = "PushGo Widgets";
-				REGISTER_APP_GROUPS = YES;
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_STRICT_CONCURRENCY = complete;
-				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				VALIDATE_PRODUCT = YES;
-			};
-			name = Release;
-		};
-		ABCD00012F90000200ABC015 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoWidgets/PushGoWidgets-macOS.entitlements";
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 86;
-				DEVELOPMENT_TEAM = W6H9P5MVUB;
-				ENABLE_APP_SANDBOX = YES;
-				ENABLE_HARDENED_RUNTIME = YES;
-				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
-				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = Extensions/PushGoWidgets/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-					"@executable_path/../../../../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.2.7;
-				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.widgets.mac;
-				PRODUCT_NAME = PushGoWidgetsMac;
-				PROVISIONING_PROFILE_SPECIFIER = "";
-				REGISTER_APP_GROUPS = YES;
-				SDKROOT = macosx;
-				SKIP_INSTALL = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = macosx;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_STRICT_CONCURRENCY = complete;
-				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 6.0;
-			};
-			name = Debug;
-		};
-		ABCD00012F90000200ABC016 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoWidgets/PushGoWidgets-macOS.entitlements";
-				CODE_SIGN_IDENTITY = "Apple Distribution";
-				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 86;
-				DEVELOPMENT_TEAM = W6H9P5MVUB;
-				ENABLE_APP_SANDBOX = YES;
-				ENABLE_HARDENED_RUNTIME = YES;
-				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
-				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = Extensions/PushGoWidgets/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-					"@executable_path/../../../../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.2.7;
-				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.widgets.mac;
-				PRODUCT_NAME = PushGoWidgetsMac;
-				PROVISIONING_PROFILE_SPECIFIER = "PushGo Widgets macOS";
-				REGISTER_APP_GROUPS = YES;
-				SDKROOT = macosx;
-				SKIP_INSTALL = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = macosx;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_STRICT_CONCURRENCY = complete;
-				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 6.0;
-				VALIDATE_PRODUCT = YES;
-			};
-			name = Release;
-		};
-		ABCD00012F90000300ABC015 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoWidgets/PushGoWidgets-watchOS.entitlements";
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 86;
-				DEVELOPMENT_TEAM = W6H9P5MVUB;
-				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
-				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = Extensions/PushGoWidgets/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.2.7;
-				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.watchkitapp.widgets;
-				PRODUCT_NAME = PushGoWidgetsWatch;
-				PROVISIONING_PROFILE_SPECIFIER = "";
-				REGISTER_APP_GROUPS = YES;
-				SDKROOT = watchos;
-				SKIP_INSTALL = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "watchos watchsimulator";
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_STRICT_CONCURRENCY = complete;
-				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 10.0;
-			};
-			name = Debug;
-		};
-		ABCD00012F90000300ABC016 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoWidgets/PushGoWidgets-watchOS.entitlements";
-				CODE_SIGN_IDENTITY = "Apple Distribution";
-				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 86;
-				DEVELOPMENT_TEAM = W6H9P5MVUB;
-				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
-				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = Extensions/PushGoWidgets/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.2.7;
-				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.watchkitapp.widgets;
-				PRODUCT_NAME = PushGoWidgetsWatch;
-				PROVISIONING_PROFILE_SPECIFIER = "PushGo Widgets watchOS";
-				REGISTER_APP_GROUPS = YES;
-				SDKROOT = watchos;
-				SKIP_INSTALL = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "watchos watchsimulator";
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_STRICT_CONCURRENCY = complete;
-				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = 4;
-				VALIDATE_PRODUCT = YES;
-				WATCHOS_DEPLOYMENT_TARGET = 10.0;
-			};
-			name = Release;
-		};
 		AACFE1642F28511200701BB4 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -3198,6 +2979,239 @@
 				TARGETED_DEVICE_FAMILY = 4;
 				VALIDATE_PRODUCT = YES;
 				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
+		ABCD00012F90000100ABC015 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Extensions/PushGoWidgets/PushGoWidgets.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 86;
+				DEVELOPMENT_TEAM = W6H9P5MVUB;
+				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Extensions/PushGoWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.2.7;
+				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.widgets;
+				PRODUCT_NAME = PushGoWidgets;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		ABCD00012F90000100ABC016 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Extensions/PushGoWidgets/PushGoWidgets.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 86;
+				DEVELOPMENT_TEAM = W6H9P5MVUB;
+				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Extensions/PushGoWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.2.7;
+				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.widgets;
+				PRODUCT_NAME = PushGoWidgets;
+				PROVISIONING_PROFILE_SPECIFIER = "PushGo Widgets";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		ABCD00012F90000200ABC015 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoWidgets/PushGoWidgets-macOS.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 86;
+				DEVELOPMENT_TEAM = W6H9P5MVUB;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Extensions/PushGoWidgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.2.7;
+				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.widgets.mac;
+				PRODUCT_NAME = PushGoWidgetsMac;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		ABCD00012F90000200ABC016 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoWidgets/PushGoWidgets-macOS.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 86;
+				DEVELOPMENT_TEAM = W6H9P5MVUB;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Extensions/PushGoWidgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.2.7;
+				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.widgets.mac;
+				PRODUCT_NAME = PushGoWidgetsMac;
+				PROVISIONING_PROFILE_SPECIFIER = "PushGo Widgets macOS";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		ABCD00012F90000300ABC015 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoWidgets/PushGoWidgets-watchOS.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 86;
+				DEVELOPMENT_TEAM = W6H9P5MVUB;
+				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Extensions/PushGoWidgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.2.7;
+				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.watchkitapp.widgets;
+				PRODUCT_NAME = PushGoWidgetsWatch;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Debug;
+		};
+		ABCD00012F90000300ABC016 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoWidgets/PushGoWidgets-watchOS.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 86;
+				DEVELOPMENT_TEAM = W6H9P5MVUB;
+				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Extensions/PushGoWidgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.2.7;
+				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.watchkitapp.widgets;
+				PRODUCT_NAME = PushGoWidgetsWatch;
+				PROVISIONING_PROFILE_SPECIFIER = "PushGo Widgets watchOS";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
 			};
 			name = Release;
 		};
@@ -3517,6 +3531,24 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		AACFE1632F28511200701BB4 /* Build configuration list for PBXNativeTarget "PushGoNSE-macOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AACFE1642F28511200701BB4 /* Debug */,
+				AACFE1652F28511200701BB4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AAFB52D12F0CA5F1009E61C5 /* Build configuration list for PBXNativeTarget "PushGo-watchOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AAFB52CF2F0CA5F1009E61C5 /* Debug */,
+				AAFB52D02F0CA5F1009E61C5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		ABCD00012F90000100ABC013 /* Build configuration list for PBXNativeTarget "PushGoWidgets-iOS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -3540,24 +3572,6 @@
 			buildConfigurations = (
 				ABCD00012F90000300ABC015 /* Debug */,
 				ABCD00012F90000300ABC016 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		AACFE1632F28511200701BB4 /* Build configuration list for PBXNativeTarget "PushGoNSE-macOS" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				AACFE1642F28511200701BB4 /* Debug */,
-				AACFE1652F28511200701BB4 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		AAFB52D12F0CA5F1009E61C5 /* Build configuration list for PBXNativeTarget "PushGo-watchOS" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				AAFB52CF2F0CA5F1009E61C5 /* Debug */,
-				AAFB52D02F0CA5F1009E61C5 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
