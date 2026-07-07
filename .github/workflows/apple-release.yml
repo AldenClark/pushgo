@@ -677,6 +677,21 @@ jobs:
           export_profile_metadata '${{ steps.profile_macos_app.outputs.profiles }}' 'PushGo mac' 'APP_STORE_PROFILE_MACOS_APP_UUID' 'APP_STORE_PROFILE_MACOS_APP_NAME' 'macOS app'
           export_profile_metadata '${{ steps.profile_macos_nse.outputs.profiles }}' 'PushGo mac NSE' 'APP_STORE_PROFILE_MACOS_NSE_UUID' 'APP_STORE_PROFILE_MACOS_NSE_NAME' 'macOS NSE'
 
+      - name: Validate App Store provisioning profile entitlements
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/python3 scripts/validate_release_profiles.py \
+            --profile "iOS app:${APP_STORE_PROFILE_IOS_APP_UUID}:io.ethan.pushgo:Apps/PushGo-iOS/pushgo.entitlements" \
+            --profile "iOS NSE:${APP_STORE_PROFILE_IOS_NSE_UUID}:io.ethan.pushgo.NotificationServiceExtension:Extensions/PushGoNSE-iOS/NotificationServiceExtension.entitlements" \
+            --profile "watch app:${APP_STORE_PROFILE_WATCH_APP_UUID}:io.ethan.pushgo.watchkitapp:Apps/PushGo-watchOS/pushgowatch Watch App.entitlements" \
+            --profile "watch NSE:${APP_STORE_PROFILE_WATCH_NSE_UUID}:io.ethan.pushgo.watchkitapp.NotificationServiceExtension:Extensions/PushGoNSE-watchOS/pushgowatch NotificationServiceExtension.entitlements" \
+            --profile "iOS widget:${APP_STORE_PROFILE_IOS_WIDGET_UUID}:io.ethan.pushgo.widgets:Extensions/PushGoWidgets/PushGoWidgets.entitlements" \
+            --profile "watch widget:${APP_STORE_PROFILE_WATCH_WIDGET_UUID}:io.ethan.pushgo.watchkitapp.widgets:Extensions/PushGoWidgets/PushGoWidgets-watchOS.entitlements" \
+            --profile "macOS app:${APP_STORE_PROFILE_MACOS_APP_UUID}:io.ethan.pushgo:Apps/PushGo-macOS/pushgomac.entitlements" \
+            --profile "macOS NSE:${APP_STORE_PROFILE_MACOS_NSE_UUID}:io.ethan.pushgo.NotificationServiceExtension:Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements" \
+            --profile "macOS widget:${APP_STORE_PROFILE_MACOS_WIDGET_UUID}:io.ethan.pushgo.widgets.mac:Extensions/PushGoWidgets/PushGoWidgets-macOS.entitlements"
+
       - name: Run fastlane beta upload
         if: steps.resolve.outputs.release_kind == 'beta'
         run: bundle _2.5.23_ exec fastlane ios beta_upload
@@ -953,6 +968,15 @@ jobs:
 
           export_profile_metadata '${{ steps.profile_direct_macos_app.outputs.profiles }}' 'PushGo mac direct' 'DEVELOPER_ID_PROFILE_MACOS_APP_UUID' 'DEVELOPER_ID_PROFILE_MACOS_APP_NAME' 'macOS app'
           export_profile_metadata '${{ steps.profile_direct_macos_nse.outputs.profiles }}' 'PushGo mac NSE direct' 'DEVELOPER_ID_PROFILE_MACOS_NSE_UUID' 'DEVELOPER_ID_PROFILE_MACOS_NSE_NAME' 'macOS NSE'
+
+      - name: Validate direct-distribution provisioning profile entitlements
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/python3 scripts/validate_release_profiles.py \
+            --profile "macOS direct app:${DEVELOPER_ID_PROFILE_MACOS_APP_UUID}:io.ethan.pushgo:Apps/PushGo-macOS/pushgomac.entitlements" \
+            --profile "macOS direct NSE:${DEVELOPER_ID_PROFILE_MACOS_NSE_UUID}:io.ethan.pushgo.NotificationServiceExtension:Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements" \
+            --profile "macOS direct widget:${DEVELOPER_ID_PROFILE_MACOS_WIDGET_UUID}:io.ethan.pushgo.widgets.mac:Extensions/PushGoWidgets/PushGoWidgets-macOS.entitlements"
 
       - name: Resolve Swift packages
         shell: bash
