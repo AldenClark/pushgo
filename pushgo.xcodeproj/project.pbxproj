@@ -3043,7 +3043,7 @@
 				MARKETING_VERSION = 1.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.widgets;
 				PRODUCT_NAME = PushGoWidgets;
-				PROVISIONING_PROFILE_SPECIFIER = "PushGo Widgets";
+				PROVISIONING_PROFILE_SPECIFIER = "pushgo ios widgets";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
@@ -3124,7 +3124,7 @@
 				MARKETING_VERSION = 1.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.widgets.mac;
 				PRODUCT_NAME = PushGoWidgetsMac;
-				PROVISIONING_PROFILE_SPECIFIER = "PushGo Widgets macOS";
+				PROVISIONING_PROFILE_SPECIFIER = "pushgo widgets mac";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
@@ -3197,7 +3197,7 @@
 				MARKETING_VERSION = 1.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.ethan.pushgo.watchkitapp.widgets;
 				PRODUCT_NAME = PushGoWidgetsWatch;
-				PROVISIONING_PROFILE_SPECIFIER = "PushGo Widgets watchOS";
+				PROVISIONING_PROFILE_SPECIFIER = "pushgo watch widgets";
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
