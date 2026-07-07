@@ -224,14 +224,16 @@ platform :ios do
   def developer_id_entitlements_sources
     {
       "io.ethan.pushgo" => resolve_from_repo("Apps/PushGo-macOS/pushgomac.entitlements"),
-      "io.ethan.pushgo.NotificationServiceExtension" => resolve_from_repo("Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements")
+      "io.ethan.pushgo.NotificationServiceExtension" => resolve_from_repo("Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements"),
+      "io.ethan.pushgo.widgets.mac" => resolve_from_repo("Extensions/PushGoWidgets/PushGoWidgets-macOS.entitlements")
     }
   end
 
   def developer_id_provisioning_profiles
     {
       "io.ethan.pushgo" => env_value!("DEVELOPER_ID_PROFILE_MACOS_APP_UUID"),
-      "io.ethan.pushgo.NotificationServiceExtension" => env_value!("DEVELOPER_ID_PROFILE_MACOS_NSE_UUID")
+      "io.ethan.pushgo.NotificationServiceExtension" => env_value!("DEVELOPER_ID_PROFILE_MACOS_NSE_UUID"),
+      "io.ethan.pushgo.widgets.mac" => env_value!("DEVELOPER_ID_PROFILE_MACOS_WIDGET_UUID")
     }
   end
 
@@ -324,14 +326,17 @@ platform :ios do
       "io.ethan.pushgo" => resolve_from_repo("Apps/PushGo-iOS/pushgo.entitlements"),
       "io.ethan.pushgo.NotificationServiceExtension" => resolve_from_repo("Extensions/PushGoNSE-iOS/NotificationServiceExtension.entitlements"),
       "io.ethan.pushgo.watchkitapp" => resolve_from_repo("Apps/PushGo-watchOS/pushgowatch Watch App.entitlements"),
-      "io.ethan.pushgo.watchkitapp.NotificationServiceExtension" => resolve_from_repo("Extensions/PushGoNSE-watchOS/pushgowatch NotificationServiceExtension.entitlements")
+      "io.ethan.pushgo.watchkitapp.NotificationServiceExtension" => resolve_from_repo("Extensions/PushGoNSE-watchOS/pushgowatch NotificationServiceExtension.entitlements"),
+      "io.ethan.pushgo.widgets" => resolve_from_repo("Extensions/PushGoWidgets/PushGoWidgets.entitlements"),
+      "io.ethan.pushgo.watchkitapp.widgets" => resolve_from_repo("Extensions/PushGoWidgets/PushGoWidgets-watchOS.entitlements")
     }
   end
 
   def macos_store_entitlements_sources
     {
       "io.ethan.pushgo" => resolve_from_repo("Apps/PushGo-macOS/pushgomac.entitlements"),
-      "io.ethan.pushgo.NotificationServiceExtension" => resolve_from_repo("Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements")
+      "io.ethan.pushgo.NotificationServiceExtension" => resolve_from_repo("Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements"),
+      "io.ethan.pushgo.widgets.mac" => resolve_from_repo("Extensions/PushGoWidgets/PushGoWidgets-macOS.entitlements")
     }
   end
 
@@ -685,14 +690,17 @@ platform :ios do
       "io.ethan.pushgo" => env_value!("APP_STORE_PROFILE_IOS_APP_UUID"),
       "io.ethan.pushgo.NotificationServiceExtension" => env_value!("APP_STORE_PROFILE_IOS_NSE_UUID"),
       "io.ethan.pushgo.watchkitapp" => env_value!("APP_STORE_PROFILE_WATCH_APP_UUID"),
-      "io.ethan.pushgo.watchkitapp.NotificationServiceExtension" => env_value!("APP_STORE_PROFILE_WATCH_NSE_UUID")
+      "io.ethan.pushgo.watchkitapp.NotificationServiceExtension" => env_value!("APP_STORE_PROFILE_WATCH_NSE_UUID"),
+      "io.ethan.pushgo.widgets" => env_value!("APP_STORE_PROFILE_IOS_WIDGET_UUID"),
+      "io.ethan.pushgo.watchkitapp.widgets" => env_value!("APP_STORE_PROFILE_WATCH_WIDGET_UUID")
     }
   end
 
   def macos_export_provisioning_profiles
     {
       "io.ethan.pushgo" => env_value!("APP_STORE_PROFILE_MACOS_APP_UUID"),
-      "io.ethan.pushgo.NotificationServiceExtension" => env_value!("APP_STORE_PROFILE_MACOS_NSE_UUID")
+      "io.ethan.pushgo.NotificationServiceExtension" => env_value!("APP_STORE_PROFILE_MACOS_NSE_UUID"),
+      "io.ethan.pushgo.widgets.mac" => env_value!("APP_STORE_PROFILE_MACOS_WIDGET_UUID")
     }
   end
 

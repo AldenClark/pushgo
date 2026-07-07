@@ -488,6 +488,16 @@ jobs:
           api-key-id: ${{ secrets.ASC_KEY_ID }}
           api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
 
+      - name: Download iOS widget App Store profile
+        id: profile_ios_widget
+        uses: Apple-Actions/download-provisioning-profiles@v5
+        with:
+          bundle-id: io.ethan.pushgo.widgets
+          profile-type: IOS_APP_STORE
+          issuer-id: ${{ secrets.ASC_ISSUER_ID }}
+          api-key-id: ${{ secrets.ASC_KEY_ID }}
+          api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
+
       - name: Download watch App Store profile
         id: profile_watch_app
         uses: Apple-Actions/download-provisioning-profiles@v5
@@ -508,11 +518,31 @@ jobs:
           api-key-id: ${{ secrets.ASC_KEY_ID }}
           api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
 
+      - name: Download watch widget App Store profile
+        id: profile_watch_widget
+        uses: Apple-Actions/download-provisioning-profiles@v5
+        with:
+          bundle-id: io.ethan.pushgo.watchkitapp.widgets
+          profile-type: IOS_APP_STORE
+          issuer-id: ${{ secrets.ASC_ISSUER_ID }}
+          api-key-id: ${{ secrets.ASC_KEY_ID }}
+          api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
+
       - name: Download macOS App Store profile
         id: profile_macos_app
         uses: Apple-Actions/download-provisioning-profiles@v5
         with:
           bundle-id: io.ethan.pushgo
+          profile-type: MAC_APP_STORE
+          issuer-id: ${{ secrets.ASC_ISSUER_ID }}
+          api-key-id: ${{ secrets.ASC_KEY_ID }}
+          api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
+
+      - name: Download macOS widget App Store profile
+        id: profile_macos_widget
+        uses: Apple-Actions/download-provisioning-profiles@v5
+        with:
+          bundle-id: io.ethan.pushgo.widgets.mac
           profile-type: MAC_APP_STORE
           issuer-id: ${{ secrets.ASC_ISSUER_ID }}
           api-key-id: ${{ secrets.ASC_KEY_ID }}
@@ -539,17 +569,28 @@ jobs:
             local uuid_env="$3"
             local name_env="$4"
             local label="$5"
-            local count uuid name filtered
+            local total_count matched_count uuid name filtered
 
-            filtered="$(jq -c --arg name "$expected_name" '[.[] | select(.name == $name)]' <<<"$json")"
-            count="$(jq 'length' <<<"$filtered")"
-            if [[ "$count" != "1" ]]; then
-              echo "Expected exactly one ${label} provisioning profile named '${expected_name}', found ${count}. Raw output: ${json}" >&2
+            total_count="$(jq 'length' <<<"$json")"
+            if [[ "$total_count" == "0" ]]; then
+              echo "No ${label} provisioning profiles were downloaded. Raw output: ${json}" >&2
               exit 1
             fi
 
-            uuid="$(jq -r '.[0].udid' <<<"$filtered")"
-            name="$(jq -r '.[0].name' <<<"$filtered")"
+            if [[ "$total_count" == "1" ]]; then
+              filtered="$(jq -c '.[0]' <<<"$json")"
+            else
+              filtered="$(jq -c --arg name "$expected_name" '[.[] | select(.name == $name)]' <<<"$json")"
+              matched_count="$(jq 'length' <<<"$filtered")"
+              if [[ "$matched_count" != "1" ]]; then
+                echo "Expected exactly one ${label} provisioning profile named '${expected_name}', found ${matched_count} among ${total_count}. Raw output: ${json}" >&2
+                exit 1
+              fi
+              filtered="$(jq -c '.[0]' <<<"$filtered")"
+            fi
+
+            uuid="$(jq -r '.udid' <<<"$filtered")"
+            name="$(jq -r '.name' <<<"$filtered")"
 
             if [[ -z "$uuid" || "$uuid" == "null" || -z "$name" || "$name" == "null" ]]; then
               echo "Downloaded ${label} provisioning profile metadata is incomplete: ${filtered}" >&2
@@ -564,9 +605,12 @@ jobs:
 
           export_profile_metadata '${{ steps.profile_ios_app.outputs.profiles }}' 'PushGo' 'APP_STORE_PROFILE_IOS_APP_UUID' 'APP_STORE_PROFILE_IOS_APP_NAME' 'iOS app'
           export_profile_metadata '${{ steps.profile_ios_nse.outputs.profiles }}' 'PushGo NSE' 'APP_STORE_PROFILE_IOS_NSE_UUID' 'APP_STORE_PROFILE_IOS_NSE_NAME' 'iOS NSE'
+          export_profile_metadata '${{ steps.profile_ios_widget.outputs.profiles }}' 'PushGo Widgets' 'APP_STORE_PROFILE_IOS_WIDGET_UUID' 'APP_STORE_PROFILE_IOS_WIDGET_NAME' 'iOS widget'
           export_profile_metadata '${{ steps.profile_watch_app.outputs.profiles }}' 'PushGo watch' 'APP_STORE_PROFILE_WATCH_APP_UUID' 'APP_STORE_PROFILE_WATCH_APP_NAME' 'watch app'
           export_profile_metadata '${{ steps.profile_watch_nse.outputs.profiles }}' 'PushGo watch NSE' 'APP_STORE_PROFILE_WATCH_NSE_UUID' 'APP_STORE_PROFILE_WATCH_NSE_NAME' 'watch NSE'
+          export_profile_metadata '${{ steps.profile_watch_widget.outputs.profiles }}' 'PushGo Widgets watchOS' 'APP_STORE_PROFILE_WATCH_WIDGET_UUID' 'APP_STORE_PROFILE_WATCH_WIDGET_NAME' 'watch widget'
           export_profile_metadata '${{ steps.profile_macos_app.outputs.profiles }}' 'PushGo mac' 'APP_STORE_PROFILE_MACOS_APP_UUID' 'APP_STORE_PROFILE_MACOS_APP_NAME' 'macOS app'
+          export_profile_metadata '${{ steps.profile_macos_widget.outputs.profiles }}' 'PushGo Widgets macOS' 'APP_STORE_PROFILE_MACOS_WIDGET_UUID' 'APP_STORE_PROFILE_MACOS_WIDGET_NAME' 'macOS widget'
           export_profile_metadata '${{ steps.profile_macos_nse.outputs.profiles }}' 'PushGo mac NSE' 'APP_STORE_PROFILE_MACOS_NSE_UUID' 'APP_STORE_PROFILE_MACOS_NSE_NAME' 'macOS NSE'
 
       - name: Run fastlane beta upload
@@ -753,6 +797,16 @@ jobs:
           api-key-id: ${{ secrets.ASC_KEY_ID }}
           api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
 
+      - name: Download macOS direct-distribution widget profile
+        id: profile_direct_macos_widget
+        uses: Apple-Actions/download-provisioning-profiles@v5
+        with:
+          bundle-id: io.ethan.pushgo.widgets.mac
+          profile-type: MAC_APP_DIRECT
+          issuer-id: ${{ secrets.ASC_ISSUER_ID }}
+          api-key-id: ${{ secrets.ASC_KEY_ID }}
+          api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
+
       - name: Resolve direct-distribution provisioning profiles
         shell: bash
         run: |
@@ -764,17 +818,28 @@ jobs:
             local uuid_env="$3"
             local name_env="$4"
             local label="$5"
-            local count uuid name filtered
+            local total_count matched_count uuid name filtered
 
-            filtered="$(jq -c --arg name "$expected_name" '[.[] | select(.name == $name)]' <<<"$json")"
-            count="$(jq 'length' <<<"$filtered")"
-            if [[ "$count" != "1" ]]; then
-              echo "Expected exactly one ${label} direct-distribution provisioning profile named '${expected_name}', found ${count}. Raw output: ${json}" >&2
+            total_count="$(jq 'length' <<<"$json")"
+            if [[ "$total_count" == "0" ]]; then
+              echo "No ${label} direct-distribution provisioning profiles were downloaded. Raw output: ${json}" >&2
               exit 1
             fi
 
-            uuid="$(jq -r '.[0].udid' <<<"$filtered")"
-            name="$(jq -r '.[0].name' <<<"$filtered")"
+            if [[ "$total_count" == "1" ]]; then
+              filtered="$(jq -c '.[0]' <<<"$json")"
+            else
+              filtered="$(jq -c --arg name "$expected_name" '[.[] | select(.name == $name)]' <<<"$json")"
+              matched_count="$(jq 'length' <<<"$filtered")"
+              if [[ "$matched_count" != "1" ]]; then
+                echo "Expected exactly one ${label} direct-distribution provisioning profile named '${expected_name}', found ${matched_count} among ${total_count}. Raw output: ${json}" >&2
+                exit 1
+              fi
+              filtered="$(jq -c '.[0]' <<<"$filtered")"
+            fi
+
+            uuid="$(jq -r '.udid' <<<"$filtered")"
+            name="$(jq -r '.name' <<<"$filtered")"
             if [[ -z "$uuid" || "$uuid" == "null" || -z "$name" || "$name" == "null" ]]; then
               echo "Downloaded ${label} direct-distribution provisioning profile metadata is incomplete: ${filtered}" >&2
               exit 1
@@ -788,6 +853,7 @@ jobs:
 
           export_profile_metadata '${{ steps.profile_direct_macos_app.outputs.profiles }}' 'PushGo mac direct' 'DEVELOPER_ID_PROFILE_MACOS_APP_UUID' 'DEVELOPER_ID_PROFILE_MACOS_APP_NAME' 'macOS app'
           export_profile_metadata '${{ steps.profile_direct_macos_nse.outputs.profiles }}' 'PushGo mac NSE direct' 'DEVELOPER_ID_PROFILE_MACOS_NSE_UUID' 'DEVELOPER_ID_PROFILE_MACOS_NSE_NAME' 'macOS NSE'
+          export_profile_metadata '${{ steps.profile_direct_macos_widget.outputs.profiles }}' 'PushGo Widgets macOS direct' 'DEVELOPER_ID_PROFILE_MACOS_WIDGET_UUID' 'DEVELOPER_ID_PROFILE_MACOS_WIDGET_NAME' 'macOS widget'
 
       - name: Resolve Swift packages
         shell: bash
