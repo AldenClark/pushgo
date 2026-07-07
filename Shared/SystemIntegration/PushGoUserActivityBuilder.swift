@@ -1,7 +1,7 @@
 import Foundation
 
 #if canImport(CoreSpotlight)
-@preconcurrency import CoreSpotlight
+import CoreSpotlight
 #endif
 
 enum PushGoUserActivityBuilder {

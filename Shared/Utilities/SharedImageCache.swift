@@ -40,13 +40,17 @@ enum SharedImageCache {
         let expiresAtEpochMillis: Int64
     }
 
-    private actor MaintenanceState {
-        private var didStart = false
+    private actor MaintenanceController {
+        private var task: Task<Void, Never>?
 
-        func claimStart() -> Bool {
-            guard !didStart else { return false }
-            didStart = true
-            return true
+        func startIfNeeded() {
+            guard task == nil else { return }
+            task = Task(priority: .utility) {
+                while !Task.isCancelled {
+                    _ = await SharedImageCache.purgeExpired()
+                    try? await Task.sleep(nanoseconds: maintenanceIntervalNanoseconds)
+                }
+            }
         }
     }
 
@@ -342,7 +346,7 @@ enum SharedImageCache {
     private static let maxCacheTTLMillis: Int64 = 30 * 24 * 60 * 60 * 1000
     private static let minimumRenderTTLMillis: Int64 = 10 * 60 * 1000
     private static let maintenanceIntervalNanoseconds: UInt64 = 6 * 60 * 60 * 1_000_000_000
-    private static let maintenanceState = MaintenanceState()
+    private static let maintenanceController = MaintenanceController()
 
     static func cachedData(for url: URL, rendition: Rendition = .original) async -> Data? {
         guard URLSanitizer.isAllowedRemoteURL(url) else { return nil }
@@ -470,12 +474,8 @@ enum SharedImageCache {
     }
 
     static func startMaintenance() {
-        Task.detached(priority: .utility) {
-            guard await maintenanceState.claimStart() else { return }
-            while !Task.isCancelled {
-                _ = await purgeExpired()
-                try? await Task.sleep(nanoseconds: maintenanceIntervalNanoseconds)
-            }
+        Task {
+            await maintenanceController.startIfNeeded()
         }
     }
 

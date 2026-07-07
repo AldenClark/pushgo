@@ -1,7 +1,7 @@
 import Foundation
 
 #if canImport(CoreSpotlight)
-@preconcurrency import CoreSpotlight
+import CoreSpotlight
 #endif
 
 protocol PushGoSpotlightIndexing: Sendable {
@@ -26,7 +26,7 @@ struct PushGoSpotlightIndexOperation: Equatable, Sendable {
 }
 
 #if canImport(CoreSpotlight)
-struct CoreSpotlightPushGoIndexer: PushGoSpotlightIndexing, @unchecked Sendable {
+actor CoreSpotlightPushGoIndexer: PushGoSpotlightIndexing {
     private let searchableIndex: CSSearchableIndex
 
     init(searchableIndex: CSSearchableIndex = .default()) {

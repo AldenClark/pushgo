@@ -10,6 +10,11 @@ Policy:
 
 ## [Unreleased]
 
+### Improved
+- Added widgets, controls, search indexing, and app shortcuts so important messages, events, and objects are easier to reach from Apple system surfaces.
+- Added WidgetKit push wiring so widget and complication snapshots stay fresher across iPhone, Mac, and Apple Watch.
+- Reworked the Apple Watch receiver flow so delivery, sync state, and receiver-health reporting behave more independently and predictably.
+- Improved cached image handling and refreshed Apple localization assets after the current integration pass.
 
 ## [v1.2.7]
 

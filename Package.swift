@@ -104,6 +104,7 @@ let package = Package(
                 "SystemIntegration/PushGoSystemSummaryBuilder.swift",
                 "SystemIntegration/PushGoSystemIntentRouter.swift",
                 "SystemIntegration/PushGoUserActivityBuilder.swift",
+                "SystemIntegration/PushGoWidgetPushTokenStore.swift",
                 "UI/EntityProjectionModels.swift",
                 "Services/NotificationHandling.swift",
                 "Services/NotificationIngressInbox.swift",

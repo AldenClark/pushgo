@@ -12,6 +12,16 @@ PushGo policy:
 
 ## [Unreleased]
 
+### Changed
+- Updated Apple release target defaults to `MARKETING_VERSION = 1.3.0`, `PUSHGO_DISPLAY_VERSION = v1.3.0-beta.1`, and `CURRENT_PROJECT_VERSION = 87`.
+- Added versioned beta release note source file: `release/update-notes/v1.3.0-beta.1.json`.
+- Refreshed release workflow docs so Apple CI examples match the current `vX.Y.Z` / `vX.Y.Z-beta.N` tag conventions.
+
+### Improved
+- Added system search, accessibility summaries, app shortcuts, and deeper Apple system-surface routing for messages, events, and objects.
+- Added system integration widgets plus WidgetKit push token and refresh handling across iPhone, Mac, and Apple Watch.
+- Reworked the Apple Watch first-class receiver flow so delivery, provisioning state, receiver health, and related sync behavior are more predictable.
+- Improved cached image handling under short HTTP cache TTLs and trimmed Apple localization artifacts to the supported locale set.
 
 ## [v1.2.7] - 2026-06-15
 
