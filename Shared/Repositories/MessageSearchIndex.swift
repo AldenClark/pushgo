@@ -256,6 +256,15 @@ actor MessageMetadataIndex {
         }
     }
 
+    func indexedMessageCount() throws -> Int {
+        try dbQueue.read { db in
+            try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(DISTINCT message_id) FROM message_metadata_index;"
+            ) ?? 0
+        }
+    }
+
     func clear() throws {
         try dbQueue.write { db in
             try db.execute(sql: "DELETE FROM message_metadata_index;")

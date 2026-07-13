@@ -445,13 +445,16 @@ final class MessageListViewModel {
                 filteredMessages = []
                 hasMorePages = false
             }
-            await refreshCountsAndChannels()
             if isUnreadOnlyFilterActive {
+                await refreshCountsAndChannels()
                 await refreshUnreadFilterSessionSnapshot(
                     reconcile: reconcileUnreadSession || unreadFilterSession == nil
                 )
             } else {
                 await refreshFirstPagesKeepingListStable()
+                hasLoadedOnce = true
+                await refreshCountsAndChannels()
+                return
             }
             hasLoadedOnce = true
             return
@@ -764,10 +767,11 @@ final class MessageListViewModel {
     }
 
     private func loadCurrentScopeUnreadCount() async throws -> Int {
-        let unreadCandidates = try await dataStore.loadMessages(filter: currentQueryFilter(), channel: nil)
-        return unreadCandidates.lazy.filter { message in
-            !message.isRead && self.matchesCurrentFacetSelections(message)
-        }.count
+        try await dataStore.unreadMessageCount(
+            filter: currentQueryFilter(),
+            channels: selectedChannels.map(\.rawChannelValue),
+            tags: Array(selectedTags)
+        )
     }
 
     private func unreadMessageIDsInCurrentScope() async throws -> [UUID] {

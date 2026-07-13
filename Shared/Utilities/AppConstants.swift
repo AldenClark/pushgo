@@ -894,6 +894,8 @@ enum AppVersionDisplay {
 }
 
 enum MessageTimestampFormatter {
+    private static let cache = MessageTimestampFormatterCache()
+
     static func listTimestamp(
         for date: Date,
         now: Date = Date(),
@@ -920,21 +922,19 @@ enum MessageTimestampFormatter {
     }
 
     private static func formattedTime(_ date: Date, locale: Locale, calendar: Calendar) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = locale
-        formatter.calendar = calendar
-        formatter.timeZone = calendar.timeZone
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+        cache.dateString(
+            for: date,
+            locale: locale,
+            calendar: calendar,
+            formatKey: "time-short"
+        ) { formatter in
+            formatter.dateStyle = .none
+            formatter.timeStyle = .short
+        }
     }
 
     private static func formattedRelative(_ date: Date, relativeTo now: Date, locale: Locale) -> String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.locale = locale
-        formatter.unitsStyle = .full
-        formatter.dateTimeStyle = .named
-        return formatter.localizedString(for: date, relativeTo: now)
+        cache.relativeString(for: date, relativeTo: now, locale: locale)
     }
 
     private static func formatted(
@@ -943,12 +943,66 @@ enum MessageTimestampFormatter {
         locale: Locale,
         calendar: Calendar
     ) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = locale
-        formatter.calendar = calendar
-        formatter.timeZone = calendar.timeZone
-        formatter.setLocalizedDateFormatFromTemplate(template)
+        cache.dateString(
+            for: date,
+            locale: locale,
+            calendar: calendar,
+            formatKey: "template-\(template)"
+        ) { formatter in
+            formatter.setLocalizedDateFormatFromTemplate(template)
+        }
+    }
+}
+
+private struct MessageTimestampFormatterCache: Sendable {
+    private static let threadKeyPrefix = "io.ethan.pushgo.message-timestamp."
+
+    func dateString(
+        for date: Date,
+        locale: Locale,
+        calendar: Calendar,
+        formatKey: String,
+        configure: (DateFormatter) -> Void
+    ) -> String {
+        let key = [
+            locale.identifier,
+            String(describing: calendar.identifier),
+            calendar.timeZone.identifier,
+            formatKey,
+        ].joined(separator: "|")
+        let threadKey = Self.threadKeyPrefix + "date." + key
+        let dictionary = Thread.current.threadDictionary
+        let formatter: DateFormatter
+        if let cached = dictionary[threadKey] as? DateFormatter {
+            formatter = cached
+        } else {
+            let created = DateFormatter()
+            created.locale = locale
+            created.calendar = calendar
+            created.timeZone = calendar.timeZone
+            configure(created)
+            dictionary[threadKey] = created
+            formatter = created
+        }
         return formatter.string(from: date)
+    }
+
+    func relativeString(for date: Date, relativeTo now: Date, locale: Locale) -> String {
+        let key = locale.identifier
+        let threadKey = Self.threadKeyPrefix + "relative." + key
+        let dictionary = Thread.current.threadDictionary
+        let formatter: RelativeDateTimeFormatter
+        if let cached = dictionary[threadKey] as? RelativeDateTimeFormatter {
+            formatter = cached
+        } else {
+            let created = RelativeDateTimeFormatter()
+            created.locale = locale
+            created.unitsStyle = .full
+            created.dateTimeStyle = .named
+            dictionary[threadKey] = created
+            formatter = created
+        }
+        return formatter.localizedString(for: date, relativeTo: now)
     }
 }
 

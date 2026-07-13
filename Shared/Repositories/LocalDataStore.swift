@@ -334,6 +334,7 @@ private func canonicalizedMessageForPersistence(_ message: PushMessage) -> PushM
 
 actor LocalDataStore {
     private static let tagMetadataBackfillDefaultsKey = "message_tag_metadata_backfill_v1"
+    private static let messageSearchDerivedComponent = "message_search_index"
     static let systemSearchHealthCheckDefaultsKey = "pushgo.system_search.health_check.last_run.v1"
     private static let systemSearchHealthCheckInterval: TimeInterval = 12 * 60 * 60
     static let systemSurfaceSnapshotHealthCheckDefaultsKey = "pushgo.system_surface_snapshot.health_check.last_run.v1"
@@ -803,10 +804,8 @@ actor LocalDataStore {
             batchSize: batchSize
         ) else { return }
         guard !deletedIds.isEmpty else { return }
-        if let searchIndex {
-            for id in deletedIds {
-                try? await searchIndex.remove(id: id)
-            }
+        await mutateSearchIndex { searchIndex in
+            try await searchIndex.bulkRemove(ids: deletedIds)
         }
         if let metadataIndex {
             try? await metadataIndex.bulkRemove(ids: deletedIds)
@@ -1775,21 +1774,6 @@ actor LocalDataStore {
         sortMode: MessageListSortMode = .timeDescending
     ) async throws -> [PushMessage] {
         let backend = try requireBackend()
-        if let indexedMessages = try await indexedTagMessagesPageIfAvailable(
-            backend: backend,
-            before: cursor,
-            limit: limit,
-            filter: filter,
-            channel: channel,
-            tag: tag,
-            sortMode: sortMode
-        ) {
-            return applyPendingInserts(
-                to: indexedMessages,
-                includePending: cursor == nil,
-                limit: limit
-            )
-        }
         let messages = try await backend.loadMessagesPage(
             before: cursor,
             limit: limit,
@@ -1814,21 +1798,6 @@ actor LocalDataStore {
         sortMode: MessageListSortMode = .timeDescending
     ) async throws -> [PushMessageSummary] {
         let backend = try requireBackend()
-        if let indexedMessages = try await indexedTagMessagesPageIfAvailable(
-            backend: backend,
-            before: cursor,
-            limit: limit,
-            filter: filter,
-            channel: channel,
-            tag: tag,
-            sortMode: sortMode
-        ) {
-            return applyPendingInsertsToSummaries(
-                base: indexedMessages.map(PushMessageSummary.init(message:)),
-                includePending: cursor == nil,
-                limit: limit
-            )
-        }
         let summaries = try await backend.loadMessageSummariesPage(
             before: cursor,
             limit: limit,
@@ -1842,37 +1811,6 @@ actor LocalDataStore {
             includePending: cursor == nil,
             limit: limit
         )
-    }
-
-    private func indexedTagMessagesPageIfAvailable(
-        backend: GRDBStore,
-        before cursor: MessagePageCursor?,
-        limit: Int,
-        filter: MessageQueryFilter,
-        channel: String?,
-        tag: String?,
-        sortMode: MessageListSortMode
-    ) async throws -> [PushMessage]? {
-        guard limit > 0,
-              filter == .all,
-              channel == nil,
-              sortMode == .timeDescending,
-              let normalizedTag = Self.normalizedTagValue(tag),
-              let metadataIndex
-        else {
-            return nil
-        }
-
-        await ensureMetadataIndexReady()
-        let ids = try await metadataIndex.searchMessageIDs(
-            matchingAllTags: [normalizedTag],
-            textQuery: nil,
-            before: cursor?.receivedAt,
-            beforeID: cursor?.id,
-            limit: limit
-        )
-        guard !ids.isEmpty else { return [] }
-        return try await backend.loadMessages(ids: ids)
     }
 
     private static func normalizedTagValue(_ rawTag: String?) -> String? {
@@ -1889,13 +1827,6 @@ actor LocalDataStore {
 
     func messageTagCounts() async throws -> [MessageTagCount] {
         let backend = try requireBackend()
-        if let metadataIndex {
-            await ensureMetadataIndexReady()
-            let indexedCounts = try await metadataIndex.tagCounts()
-            if !indexedCounts.isEmpty {
-                return indexedCounts
-            }
-        }
         return try await backend.messageTagCounts()
     }
 
@@ -1904,10 +1835,27 @@ actor LocalDataStore {
         return try await backend.messageCounts()
     }
 
+    func unreadMessageCount(
+        filter: MessageQueryFilter,
+        channels: [String?],
+        tags: [String]
+    ) async throws -> Int {
+        let backend = try requireBackend()
+        return try await backend.unreadMessageCount(
+            filter: filter,
+            channels: channels,
+            tags: tags
+        )
+    }
+
     func searchMessagesCount(query: String) async throws -> Int {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let parsedQuery = Self.parsedSearchQuery(from: trimmed)
         guard !parsedQuery.isEmpty else { return 0 }
+        let backend = try requireBackend()
+        if !parsedQuery.tags.isEmpty, parsedQuery.textQueryForFTS == nil {
+            return try await backend.countMessages(matchingAllTags: parsedQuery.tags)
+        }
         if !parsedQuery.tags.isEmpty, let metadataIndex {
             await ensureMetadataIndexReady()
             let textQuery = parsedQuery.textQueryForFTS
@@ -1921,16 +1869,14 @@ actor LocalDataStore {
             }
         }
         if let searchIndex {
-            await ensureSearchIndexReady()
-            if let ftsQuery = parsedQuery.textQueryForFTS,
+            let searchIsReady = await ensureSearchIndexReady()
+            if searchIsReady,
+               let ftsQuery = parsedQuery.textQueryForFTS,
                let count = try? await searchIndex.count(query: ftsQuery)
             {
-                if count > 0 {
-                    return count
-                }
+                return count
             }
         }
-        let backend = try requireBackend()
         return try await backend.searchMessagesCount(query: trimmed)
     }
 
@@ -1959,17 +1905,30 @@ actor LocalDataStore {
         let parsedQuery = Self.parsedSearchQuery(from: trimmed)
         guard !parsedQuery.isEmpty else { return [] }
         let backend = try requireBackend()
+        if sortMode == .timeDescending,
+           !parsedQuery.tags.isEmpty,
+           parsedQuery.textQueryForFTS == nil
+        {
+            return try await backend.loadMessageSummaries(
+                matchingAllTags: parsedQuery.tags,
+                before: cursor,
+                limit: limit
+            )
+        }
         if sortMode == .timeDescending, let searchIndex {
-            await ensureSearchIndexReady()
-            if parsedQuery.tags.isEmpty, let ftsQuery = parsedQuery.textQueryForFTS {
+            let searchIsReady = await ensureSearchIndexReady()
+            if searchIsReady,
+               parsedQuery.tags.isEmpty,
+               let ftsQuery = parsedQuery.textQueryForFTS
+            {
                 if let ids = try? await searchIndex.searchIDs(
                     query: ftsQuery,
                     before: cursor?.receivedAt,
                     beforeID: cursor?.id,
                     limit: limit
-                ),
-                   !ids.isEmpty
+                )
                 {
+                    guard !ids.isEmpty else { return [] }
                     return try await backend.loadMessageSummaries(ids: ids)
                 }
             }
@@ -2042,7 +2001,7 @@ actor LocalDataStore {
             try await backend.saveMessages(canonicalMessages)
         }
         let searchable = storedMessages.filter(isTopLevelMessage)
-        await rebuildSearchIndex(with: searchable)
+        await updateSearchIndex(with: searchable)
         await rebuildMetadataIndex(with: searchable)
         await indexSystemSearchMessages(searchable)
         await mergeNotificationContextSnapshot(with: storedMessages)
@@ -2067,7 +2026,7 @@ actor LocalDataStore {
             try await backend.saveMessages([canonicalMessage])
         }
         let searchable = storedMessages.filter(isTopLevelMessage)
-        await rebuildSearchIndex(with: searchable)
+        await updateSearchIndex(with: searchable)
         await rebuildMetadataIndex(with: searchable)
         await indexSystemSearchMessages(searchable)
         await mergeNotificationContextSnapshot(with: storedMessages)
@@ -2091,7 +2050,7 @@ actor LocalDataStore {
                 return isTopLevelMessage(stored) ? [stored] : []
             }
         }()
-        await rebuildSearchIndex(with: searchable)
+        await updateSearchIndex(with: searchable)
         await rebuildMetadataIndex(with: searchable)
         await indexSystemSearchMessages(searchable)
         switch outcome {
@@ -2108,17 +2067,38 @@ actor LocalDataStore {
 
     func saveMessagesBatch(_ messages: [PushMessage]) async throws {
         guard !messages.isEmpty else { return }
+        let deferDerivedIndexes = messages.count > 500
         let canonicalMessages = messages.map(canonicalizedMessageForPersistence)
         let storedMessages = try await performBackendWrite { backend in
             try await backend.saveMessages(canonicalMessages)
         }
+        let derivedStateBackend = try requireBackend()
         let searchable = storedMessages.filter(isTopLevelMessage)
-        await rebuildSearchIndex(with: searchable)
-        await rebuildMetadataIndex(with: searchable)
-        await indexSystemSearchMessages(searchable)
-        await mergeNotificationContextSnapshot(with: storedMessages)
-        await PushGoLiveActivityCoordinator.handlePersistedMessages(storedMessages)
-        await refreshSystemSurfaceSnapshot(reason: .write)
+        if deferDerivedIndexes {
+            if let searchIndex {
+                do {
+                    try await searchIndex.clear()
+                } catch {
+                    await derivedStateBackend.setDerivedComponentStatus(
+                        Self.messageSearchDerivedComponent,
+                        status: "stale",
+                        error: String(describing: error)
+                    )
+                }
+            }
+            await derivedStateBackend.setDerivedComponentStatus(
+                Self.messageSearchDerivedComponent,
+                status: "stale"
+            )
+            if let metadataIndex { try? await metadataIndex.clear() }
+        } else {
+            await updateSearchIndex(with: searchable)
+            await rebuildMetadataIndex(with: searchable)
+            await indexSystemSearchMessages(searchable)
+            await mergeNotificationContextSnapshot(with: storedMessages)
+            await PushGoLiveActivityCoordinator.handlePersistedMessages(storedMessages)
+            await refreshSystemSurfaceSnapshot(reason: .write)
+        }
     }
 
     func setMessageReadState(id: UUID, isRead: Bool) async throws {
@@ -2155,8 +2135,8 @@ actor LocalDataStore {
         try await performBackendWrite { backend in
             try await backend.deleteMessage(id: id)
         }
-        if let searchIndex {
-            try? await searchIndex.remove(id: id)
+        await mutateSearchIndex { searchIndex in
+            try await searchIndex.remove(id: id)
         }
         if let metadataIndex {
             try? await metadataIndex.remove(id: id)
@@ -2180,8 +2160,10 @@ actor LocalDataStore {
             return (deletedIds, affectsSnapshot)
         }
         let deletedIds = deletion.ids
-        if let searchIndex, !deletedIds.isEmpty {
-            try? await searchIndex.bulkRemove(ids: deletedIds)
+        if !deletedIds.isEmpty {
+            await mutateSearchIndex { searchIndex in
+                try await searchIndex.bulkRemove(ids: deletedIds)
+            }
         }
         if let metadataIndex, !deletedIds.isEmpty {
             try? await metadataIndex.bulkRemove(ids: deletedIds)
@@ -2193,7 +2175,11 @@ actor LocalDataStore {
             await rebuildNotificationContextSnapshot()
         }
         if !deletedIds.isEmpty {
-            await refreshSystemSurfaceSnapshot(reason: .delete)
+            if deletedIds.count > 10 {
+                scheduleSystemSurfaceSnapshotRefresh(reason: .delete)
+            } else {
+                await refreshSystemSurfaceSnapshot(reason: .delete)
+            }
         }
         return deletedIds.count
     }
@@ -2208,8 +2194,8 @@ actor LocalDataStore {
             return nil
         }
         if let deletedMessageId {
-            if let searchIndex {
-                try? await searchIndex.remove(id: deletedMessageId)
+            await mutateSearchIndex { searchIndex in
+                try await searchIndex.remove(id: deletedMessageId)
             }
             if let metadataIndex {
                 try? await metadataIndex.remove(id: deletedMessageId)
@@ -2329,9 +2315,7 @@ actor LocalDataStore {
             try await backend.deleteAllMessages()
             try await backend.deleteAllEntityRecords()
         }
-        if let searchIndex {
-            try? await searchIndex.clear()
-        }
+        await replaceSearchIndexWithEmptyReadyState()
         if let metadataIndex {
             try? await metadataIndex.clear()
         }
@@ -2347,9 +2331,7 @@ actor LocalDataStore {
                 try await backend.deleteAllMessages()
                 return count
             }
-            if let searchIndex {
-                try? await searchIndex.clear()
-            }
+            await replaceSearchIndexWithEmptyReadyState()
             if let metadataIndex {
                 try? await metadataIndex.clear()
             }
@@ -2364,8 +2346,10 @@ actor LocalDataStore {
         let deletedIds = try await performBackendWrite { backend in
             try await backend.deleteMessages(readState: readState, before: cutoff)
         }
-        if let searchIndex, !deletedIds.isEmpty {
-            try? await searchIndex.bulkRemove(ids: deletedIds)
+        if !deletedIds.isEmpty {
+            await mutateSearchIndex { searchIndex in
+                try await searchIndex.bulkRemove(ids: deletedIds)
+            }
         }
         if let metadataIndex, !deletedIds.isEmpty {
             try? await metadataIndex.bulkRemove(ids: deletedIds)
@@ -2384,8 +2368,10 @@ actor LocalDataStore {
         let deletedIds = try await performBackendWrite { backend in
             try await backend.deleteMessages(channel: channel)
         }
-        if let searchIndex, !deletedIds.isEmpty {
-            try? await searchIndex.bulkRemove(ids: deletedIds)
+        if !deletedIds.isEmpty {
+            await mutateSearchIndex { searchIndex in
+                try await searchIndex.bulkRemove(ids: deletedIds)
+            }
         }
         if let metadataIndex, !deletedIds.isEmpty {
             try? await metadataIndex.bulkRemove(ids: deletedIds)
@@ -2404,8 +2390,10 @@ actor LocalDataStore {
         let deletedIds = try await performBackendWrite { backend in
             try await backend.deleteMessages(channel: channel, readState: readState)
         }
-        if let searchIndex, !deletedIds.isEmpty {
-            try? await searchIndex.bulkRemove(ids: deletedIds)
+        if !deletedIds.isEmpty {
+            await mutateSearchIndex { searchIndex in
+                try await searchIndex.bulkRemove(ids: deletedIds)
+            }
         }
         if let metadataIndex, !deletedIds.isEmpty {
             try? await metadataIndex.bulkRemove(ids: deletedIds)
@@ -2444,8 +2432,10 @@ actor LocalDataStore {
                 excludingChannels: excludingChannels
             )
         }
-        if let searchIndex, !deletedIds.isEmpty {
-            try? await searchIndex.bulkRemove(ids: deletedIds)
+        if !deletedIds.isEmpty {
+            await mutateSearchIndex { searchIndex in
+                try await searchIndex.bulkRemove(ids: deletedIds)
+            }
         }
         if let metadataIndex, !deletedIds.isEmpty {
             try? await metadataIndex.bulkRemove(ids: deletedIds)
@@ -2478,10 +2468,8 @@ actor LocalDataStore {
             batchSize: batchSize
         ) else { return 0 }
         guard !deletedIds.isEmpty else { return 0 }
-        if let searchIndex {
-            for id in deletedIds {
-                try? await searchIndex.remove(id: id)
-            }
+        await mutateSearchIndex { searchIndex in
+            try await searchIndex.bulkRemove(ids: deletedIds)
         }
         if let metadataIndex {
             try? await metadataIndex.bulkRemove(ids: deletedIds)
@@ -2497,7 +2485,7 @@ actor LocalDataStore {
         await flushWrites()
         guard let backend else { return }
         await backend.prepareStatsIfNeeded(progressive: true)
-        await rebuildSearchIndexIfNeeded(batchSize: 200, yieldBetweenBatches: true)
+        _ = await rebuildSearchIndexIfNeeded(batchSize: 200, yieldBetweenBatches: true)
         await rebuildMetadataIndexIfNeeded(batchSize: 200, yieldBetweenBatches: true)
         await rebuildTagMetadataIndexIfNeeded(batchSize: 200, yieldBetweenBatches: true)
         await rebuildNotificationContextSnapshot()
@@ -2574,6 +2562,15 @@ actor LocalDataStore {
         guard policy.shouldRefresh(now: now, reason: reason, defaults: defaults) else { return }
         await rebuildSystemSurfaceSnapshot(now: now)
         policy.recordRefresh(now: now, defaults: defaults)
+    }
+
+    private func scheduleSystemSurfaceSnapshotRefresh(
+        reason: PushGoSystemSnapshotRefreshReason
+    ) {
+        Task { [weak self] in
+            await Task.yield()
+            await self?.refreshSystemSurfaceSnapshot(reason: reason)
+        }
     }
 
     func rebuildSystemSurfaceSnapshot(now: Date = Date()) async {
@@ -2926,25 +2923,75 @@ actor LocalDataStore {
         return processName.isEmpty ? "unknown" : processName
     }
 
-    private func rebuildSearchIndex(with messages: [PushMessage]) async {
-        guard let searchIndex else { return }
+    private func updateSearchIndex(with messages: [PushMessage]) async {
         guard !messages.isEmpty else { return }
-        let batchSize = 500
-        var index = 0
-        while index < messages.count {
-            let upper = min(messages.count, index + batchSize)
-            let slice = messages[index..<upper]
-            let entries = slice.map { message in
-                MessageSearchIndex.Entry(
-                    id: message.id,
-                    title: message.title,
-                    body: message.resolvedBody.rawText,
-                    channel: message.channel,
-                    receivedAt: message.receivedAt
+        await mutateSearchIndex { searchIndex in
+            let batchSize = 500
+            var index = 0
+            while index < messages.count {
+                let upper = min(messages.count, index + batchSize)
+                let slice = messages[index..<upper]
+                let entries = slice.map { message in
+                    MessageSearchIndex.Entry(
+                        id: message.id,
+                        title: message.title,
+                        body: message.resolvedBody.rawText,
+                        channel: message.channel,
+                        receivedAt: message.receivedAt
+                    )
+                }
+                try await searchIndex.bulkUpsert(entries: entries)
+                index = upper
+            }
+        }
+    }
+
+    private func mutateSearchIndex(
+        _ mutation: (MessageSearchIndex) async throws -> Void
+    ) async {
+        guard let backend else { return }
+        guard let searchIndex else {
+            await backend.setDerivedComponentStatus(
+                Self.messageSearchDerivedComponent,
+                status: "stale",
+                error: "Search index is unavailable"
+            )
+            return
+        }
+        let wasReady = await backend.derivedComponentIsReady(Self.messageSearchDerivedComponent)
+        do {
+            try await mutation(searchIndex)
+            if wasReady {
+                await backend.setDerivedComponentStatus(
+                    Self.messageSearchDerivedComponent,
+                    status: "ready"
                 )
             }
-            try? await searchIndex.bulkUpsert(entries: entries)
-            index = upper
+        } catch {
+            await backend.setDerivedComponentStatus(
+                Self.messageSearchDerivedComponent,
+                status: "stale",
+                error: String(describing: error)
+            )
+        }
+    }
+
+    private func replaceSearchIndexWithEmptyReadyState() async {
+        guard let backend else { return }
+        do {
+            if let searchIndex {
+                try await searchIndex.clear()
+            }
+            await backend.setDerivedComponentStatus(
+                Self.messageSearchDerivedComponent,
+                status: "ready"
+            )
+        } catch {
+            await backend.setDerivedComponentStatus(
+                Self.messageSearchDerivedComponent,
+                status: "stale",
+                error: String(describing: error)
+            )
         }
     }
 
@@ -2969,31 +3016,72 @@ actor LocalDataStore {
         }
     }
 
-    private func ensureSearchIndexReady() async {
+    private func ensureSearchIndexReady() async -> Bool {
         await rebuildSearchIndexIfNeeded(batchSize: 500, yieldBetweenBatches: false)
     }
 
     private func rebuildSearchIndexIfNeeded(
         batchSize: Int,
         yieldBetweenBatches: Bool
-    ) async {
-        guard let searchIndex else { return }
-        guard let isEmpty = try? await searchIndex.isEmpty(), isEmpty else { return }
-        guard let backend else { return }
+    ) async -> Bool {
+        guard let backend, let searchIndex else { return false }
         let total = (try? await backend.messageCounts().total) ?? 0
-        guard total > 0 else { return }
-
-        var cursor: MessagePageCursor?
-        try? await searchIndex.clear()
-        while true {
-            let entries = try? await backend.searchIndexEntriesPage(before: cursor, limit: batchSize)
-            guard let entries, !entries.isEmpty else { break }
-            try? await searchIndex.bulkUpsert(entries: entries)
-            cursor = entries.last.map { MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id) }
-            if entries.count < batchSize { break }
-            if yieldBetweenBatches {
-                await Task.yield()
+        let stateIsReady = await backend.derivedComponentIsReady(Self.messageSearchDerivedComponent)
+        if stateIsReady {
+            if total == 0 { return true }
+            if let isEmpty = try? await searchIndex.isEmpty(), !isEmpty {
+                return true
             }
+            await backend.setDerivedComponentStatus(
+                Self.messageSearchDerivedComponent,
+                status: "stale",
+                error: "Ready search index failed its health check"
+            )
+        }
+
+        if total == 0 {
+            do {
+                try await searchIndex.clear()
+                await backend.setDerivedComponentStatus(
+                    Self.messageSearchDerivedComponent,
+                    status: "ready"
+                )
+                return true
+            } catch {
+                await backend.setDerivedComponentStatus(
+                    Self.messageSearchDerivedComponent,
+                    status: "stale",
+                    error: String(describing: error)
+                )
+                return false
+            }
+        }
+
+        do {
+            var cursor: MessagePageCursor?
+            try await searchIndex.clear()
+            while true {
+                let entries = try await backend.searchIndexEntriesPage(before: cursor, limit: batchSize)
+                guard !entries.isEmpty else { break }
+                try await searchIndex.bulkUpsert(entries: entries)
+                cursor = entries.last.map { MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id) }
+                if entries.count < batchSize { break }
+                if yieldBetweenBatches {
+                    await Task.yield()
+                }
+            }
+            await backend.setDerivedComponentStatus(
+                Self.messageSearchDerivedComponent,
+                status: "ready"
+            )
+            return true
+        } catch {
+            await backend.setDerivedComponentStatus(
+                Self.messageSearchDerivedComponent,
+                status: "stale",
+                error: String(describing: error)
+            )
+            return false
         }
     }
 
@@ -3002,40 +3090,14 @@ actor LocalDataStore {
         yieldBetweenBatches: Bool
     ) async {
         guard let metadataIndex else { return }
-        guard let isEmpty = try? await metadataIndex.isEmpty(), isEmpty else { return }
         guard let backend else { return }
-        let total = (try? await backend.messageCounts().total) ?? 0
-        guard total > 0 else { return }
-
-        var cursor: MessagePageCursor?
-        try? await metadataIndex.clear()
-        while true {
-            let messages = try? await backend.loadMessagesPage(
-                before: cursor,
-                limit: batchSize,
-                filter: .all,
-                channel: nil,
-                tag: nil,
-                sortMode: .timeDescending
-            )
-            guard let messages, !messages.isEmpty else { break }
-            let entries = messages.map { message in
-                MessageMetadataIndex.Entry(
-                    id: message.id,
-                    receivedAt: message.receivedAt,
-                    items: message.metadata,
-                    tags: message.tags
-                )
-            }
-            try? await metadataIndex.bulkReplace(entries: entries)
-            cursor = messages.last.map {
-                MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
-            }
-            if messages.count < batchSize { break }
-            if yieldBetweenBatches {
-                await Task.yield()
-            }
-        }
+        let canonicalCount = (try? await backend.messageFacetIndexedMessageCount()) ?? 0
+        let indexedCount = (try? await metadataIndex.indexedMessageCount()) ?? -1
+        guard indexedCount != canonicalCount else { return }
+        _ = await forceRebuildMetadataIndex(
+            batchSize: batchSize,
+            yieldBetweenBatches: yieldBetweenBatches
+        )
     }
 
     private static func searchIndexQuery(from raw: String) -> String {
@@ -3073,7 +3135,14 @@ actor LocalDataStore {
         guard let metadataIndex else { return false }
         guard let backend else { return false }
         let total = (try? await backend.messageCounts().total) ?? 0
-        guard total > 0 else { return true }
+        if total == 0 {
+            do {
+                try await metadataIndex.clear()
+                return true
+            } catch {
+                return false
+            }
+        }
 
         do {
             var cursor: MessagePageCursor?
@@ -4249,6 +4318,376 @@ private actor GRDBStore {
         migrator.registerMigration("v17_watch_delivery_records") { db in
             try GRDBStore.createWatchDeliveryRecordsTable(db)
         }
+		migrator.registerMigration("v18_message_stats_and_revision") { db in
+			try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_top_level_read_received ON messages(is_top_level_message, is_read, received_at DESC, id DESC);")
+			try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_top_level_channel_key_read_received ON messages(is_top_level_message, COALESCE(NULLIF(TRIM(channel), ''), ''), is_read, received_at DESC, id DESC);")
+			try db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_messages_top_level_channel_key_received ON messages(is_top_level_message, COALESCE(NULLIF(TRIM(channel), ''), ''), received_at DESC, id DESC);")
+
+			try db.execute(sql: """
+				CREATE TABLE message_global_stats (
+					id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
+					total_count INTEGER NOT NULL,
+					unread_count INTEGER NOT NULL,
+					updated_at_epoch_ms INTEGER NOT NULL
+				);
+				CREATE TABLE message_channel_stats (
+					channel_key TEXT PRIMARY KEY NOT NULL,
+					total_count INTEGER NOT NULL,
+					unread_count INTEGER NOT NULL,
+					latest_received_at REAL,
+					latest_unread_at REAL,
+					updated_at_epoch_ms INTEGER NOT NULL
+				);
+				CREATE TABLE message_store_revision (
+					id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
+					revision INTEGER NOT NULL,
+					updated_at_epoch_ms INTEGER NOT NULL
+				);
+				""")
+
+			try db.execute(sql: """
+				INSERT INTO message_global_stats(id, total_count, unread_count, updated_at_epoch_ms)
+				SELECT 1,
+				       COUNT(*),
+				       COALESCE(SUM(CASE WHEN is_read = 0 THEN 1 ELSE 0 END), 0),
+				       CAST(strftime('%s', 'now') AS INTEGER) * 1000
+				FROM messages WHERE is_top_level_message = 1;
+				INSERT INTO message_channel_stats(
+					channel_key, total_count, unread_count, latest_received_at,
+					latest_unread_at, updated_at_epoch_ms
+				)
+				SELECT COALESCE(NULLIF(TRIM(channel), ''), ''),
+				       COUNT(*),
+				       COALESCE(SUM(CASE WHEN is_read = 0 THEN 1 ELSE 0 END), 0),
+				       MAX(received_at),
+				       MAX(CASE WHEN is_read = 0 THEN received_at END),
+				       CAST(strftime('%s', 'now') AS INTEGER) * 1000
+				FROM messages
+				WHERE is_top_level_message = 1
+				GROUP BY COALESCE(NULLIF(TRIM(channel), ''), '');
+				INSERT INTO message_store_revision(id, revision, updated_at_epoch_ms)
+				VALUES(1, 0, CAST(strftime('%s', 'now') AS INTEGER) * 1000);
+				""")
+
+            let globalStatsMismatch = try Int.fetchOne(
+                db,
+                sql: """
+                    SELECT CASE WHEN
+                        (SELECT total_count FROM message_global_stats WHERE id = 1)
+                            <> (SELECT COUNT(*) FROM messages WHERE is_top_level_message = 1)
+                        OR
+                        (SELECT unread_count FROM message_global_stats WHERE id = 1)
+                            <> (SELECT COUNT(*) FROM messages WHERE is_top_level_message = 1 AND is_read = 0)
+                    THEN 1 ELSE 0 END;
+                    """
+            ) ?? 1
+            let channelStatsMismatch = try Int.fetchOne(
+                db,
+                sql: """
+                    WITH canonical AS (
+                        SELECT COALESCE(NULLIF(TRIM(channel), ''), '') AS channel_key,
+                               COUNT(*) AS total_count,
+                               SUM(CASE WHEN is_read = 0 THEN 1 ELSE 0 END) AS unread_count,
+                               MAX(received_at) AS latest_received_at,
+                               MAX(CASE WHEN is_read = 0 THEN received_at END) AS latest_unread_at
+                        FROM messages
+                        WHERE is_top_level_message = 1
+                        GROUP BY COALESCE(NULLIF(TRIM(channel), ''), '')
+                    )
+                    SELECT CASE WHEN EXISTS (
+                        SELECT channel_key, total_count, unread_count, latest_received_at, latest_unread_at
+                        FROM canonical
+                        EXCEPT
+                        SELECT channel_key, total_count, unread_count, latest_received_at, latest_unread_at
+                        FROM message_channel_stats
+                    ) OR EXISTS (
+                        SELECT channel_key, total_count, unread_count, latest_received_at, latest_unread_at
+                        FROM message_channel_stats
+                        EXCEPT
+                        SELECT channel_key, total_count, unread_count, latest_received_at, latest_unread_at
+                        FROM canonical
+                    ) THEN 1 ELSE 0 END;
+                    """
+            ) ?? 1
+            guard globalStatsMismatch == 0, channelStatsMismatch == 0 else {
+                throw AppError.localStore("v18 message statistics invariant failed")
+            }
+
+			let addNewChannel = """
+				INSERT INTO message_channel_stats(
+					channel_key, total_count, unread_count, latest_received_at,
+					latest_unread_at, updated_at_epoch_ms
+				)
+				SELECT COALESCE(NULLIF(TRIM(NEW.channel), ''), ''), 1,
+				       CASE WHEN NEW.is_read = 0 THEN 1 ELSE 0 END,
+				       NEW.received_at, CASE WHEN NEW.is_read = 0 THEN NEW.received_at END,
+				       CAST(strftime('%s', 'now') AS INTEGER) * 1000
+				WHERE NEW.is_top_level_message = 1
+				ON CONFLICT(channel_key) DO UPDATE SET
+					total_count = total_count + excluded.total_count,
+					unread_count = unread_count + excluded.unread_count,
+					latest_received_at = CASE
+						WHEN latest_received_at IS NULL OR excluded.latest_received_at > latest_received_at
+						THEN excluded.latest_received_at ELSE latest_received_at END,
+					latest_unread_at = CASE
+						WHEN excluded.latest_unread_at IS NOT NULL
+						 AND (latest_unread_at IS NULL OR excluded.latest_unread_at > latest_unread_at)
+						THEN excluded.latest_unread_at ELSE latest_unread_at END,
+					updated_at_epoch_ms = excluded.updated_at_epoch_ms;
+				"""
+			let removeOldChannel = """
+				UPDATE message_channel_stats
+				SET total_count = total_count - OLD.is_top_level_message,
+				    unread_count = unread_count - (OLD.is_top_level_message * (1 - OLD.is_read)),
+				    updated_at_epoch_ms = CAST(strftime('%s', 'now') AS INTEGER) * 1000
+				WHERE channel_key = COALESCE(NULLIF(TRIM(OLD.channel), ''), '');
+				DELETE FROM message_channel_stats
+				WHERE channel_key = COALESCE(NULLIF(TRIM(OLD.channel), ''), '') AND total_count <= 0;
+				UPDATE message_channel_stats
+				SET latest_received_at = CASE
+				    WHEN OLD.is_top_level_message = 1 AND OLD.received_at >= latest_received_at THEN (
+				        SELECT received_at FROM messages
+				        WHERE is_top_level_message = 1
+				          AND COALESCE(NULLIF(TRIM(channel), ''), '') = COALESCE(NULLIF(TRIM(OLD.channel), ''), '')
+				        ORDER BY received_at DESC, id DESC LIMIT 1
+				    ) ELSE latest_received_at END,
+				    latest_unread_at = CASE
+				    WHEN OLD.is_top_level_message = 1 AND OLD.is_read = 0
+				         AND OLD.received_at >= latest_unread_at THEN (
+				        SELECT received_at FROM messages
+				        WHERE is_top_level_message = 1 AND is_read = 0
+				          AND COALESCE(NULLIF(TRIM(channel), ''), '') = COALESCE(NULLIF(TRIM(OLD.channel), ''), '')
+				        ORDER BY received_at DESC, id DESC LIMIT 1
+				    ) ELSE latest_unread_at END
+				WHERE channel_key = COALESCE(NULLIF(TRIM(OLD.channel), ''), '');
+				"""
+
+			try db.execute(sql: """
+				CREATE TRIGGER messages_stats_after_insert
+				AFTER INSERT ON messages
+				BEGIN
+					UPDATE message_global_stats
+					SET total_count = total_count + NEW.is_top_level_message,
+					    unread_count = unread_count + (NEW.is_top_level_message * (1 - NEW.is_read)),
+					    updated_at_epoch_ms = CAST(strftime('%s', 'now') AS INTEGER) * 1000
+					WHERE id = 1;
+					\(addNewChannel)
+					UPDATE message_store_revision
+					SET revision = revision + 1,
+					    updated_at_epoch_ms = CAST(strftime('%s', 'now') AS INTEGER) * 1000
+					WHERE id = 1;
+				END;
+
+				CREATE TRIGGER messages_stats_after_delete
+				AFTER DELETE ON messages
+				BEGIN
+					UPDATE message_global_stats
+					SET total_count = total_count - OLD.is_top_level_message,
+					    unread_count = unread_count - (OLD.is_top_level_message * (1 - OLD.is_read)),
+					    updated_at_epoch_ms = CAST(strftime('%s', 'now') AS INTEGER) * 1000
+					WHERE id = 1;
+					\(removeOldChannel)
+					UPDATE message_store_revision
+					SET revision = revision + 1,
+					    updated_at_epoch_ms = CAST(strftime('%s', 'now') AS INTEGER) * 1000
+					WHERE id = 1;
+				END;
+
+				CREATE TRIGGER messages_stats_after_update
+				AFTER UPDATE ON messages
+				BEGIN
+					UPDATE message_global_stats
+					SET total_count = total_count + NEW.is_top_level_message - OLD.is_top_level_message,
+					    unread_count = unread_count
+					        + (NEW.is_top_level_message * (1 - NEW.is_read))
+					        - (OLD.is_top_level_message * (1 - OLD.is_read)),
+					    updated_at_epoch_ms = CAST(strftime('%s', 'now') AS INTEGER) * 1000
+					WHERE id = 1;
+					\(removeOldChannel)
+					\(addNewChannel)
+					UPDATE message_store_revision
+					SET revision = revision + 1,
+					    updated_at_epoch_ms = CAST(strftime('%s', 'now') AS INTEGER) * 1000
+					WHERE id = 1;
+				END;
+				""")
+		}
+		migrator.registerMigration("v19_message_summary_and_facets") { db in
+			try db.execute(sql: """
+				CREATE TABLE message_summary_projection (
+					local_message_id TEXT PRIMARY KEY NOT NULL
+						REFERENCES messages(id) ON DELETE CASCADE,
+					body_preview TEXT NOT NULL,
+					secondary_text TEXT,
+					severity TEXT,
+					is_encrypted INTEGER NOT NULL,
+					primary_image_url TEXT,
+					image_urls_json TEXT NOT NULL,
+					tags_json TEXT NOT NULL,
+					tag_display_text TEXT NOT NULL,
+					source_fingerprint TEXT NOT NULL,
+					projection_schema_version INTEGER NOT NULL
+				);
+				CREATE TABLE message_facet_index (
+					local_message_id TEXT NOT NULL
+						REFERENCES messages(id) ON DELETE CASCADE,
+					key_name TEXT NOT NULL,
+					value_norm TEXT NOT NULL,
+					received_at REAL NOT NULL,
+					PRIMARY KEY(local_message_id, key_name, value_norm)
+				);
+				CREATE INDEX idx_message_facet_lookup
+				ON message_facet_index(key_name, value_norm, received_at DESC, local_message_id DESC);
+				CREATE INDEX idx_message_facet_message
+				ON message_facet_index(local_message_id);
+				CREATE TABLE message_derived_state (
+					component TEXT PRIMARY KEY NOT NULL,
+					schema_version INTEGER NOT NULL,
+					status TEXT NOT NULL,
+					source_revision INTEGER NOT NULL,
+					cursor_local_message_id TEXT,
+					updated_at_epoch_ms INTEGER NOT NULL,
+					last_error TEXT
+				);
+				INSERT INTO message_derived_state(
+					component, schema_version, status, source_revision,
+					cursor_local_message_id, updated_at_epoch_ms, last_error
+				)
+				VALUES
+					('message_summary_projection', 1, 'stale', 0, NULL, CAST(strftime('%s', 'now') AS INTEGER) * 1000, NULL),
+					('message_facet_index', 1, 'stale', 0, NULL, CAST(strftime('%s', 'now') AS INTEGER) * 1000, NULL);
+				""")
+		}
+        migrator.registerMigration("v20_message_entity_identity_index") { db in
+            try db.execute(sql: """
+                CREATE INDEX IF NOT EXISTS idx_messages_entity_identity
+                    ON messages(entity_type, entity_id);
+                """)
+        }
+        migrator.registerMigration("v21_message_search_derived_state") { db in
+            try db.execute(
+                sql: """
+                    INSERT INTO message_derived_state(
+                        component, schema_version, status, source_revision,
+                        cursor_local_message_id, updated_at_epoch_ms, last_error
+                    ) VALUES (
+                        'message_search_index', 1, 'stale', 0, NULL,
+                        CAST(strftime('%s', 'now') AS INTEGER) * 1000, NULL
+                    )
+                    ON CONFLICT(component) DO NOTHING;
+                    """
+                )
+        }
+        migrator.registerMigration("v22_split_message_stats_and_revision_update_triggers") { db in
+            try db.execute(sql: "DROP TRIGGER IF EXISTS messages_stats_after_update;")
+
+            let addNewChannel = """
+                INSERT INTO message_channel_stats(
+                    channel_key, total_count, unread_count, latest_received_at,
+                    latest_unread_at, updated_at_epoch_ms
+                )
+                SELECT COALESCE(NULLIF(TRIM(NEW.channel), ''), ''), 1,
+                       CASE WHEN NEW.is_read = 0 THEN 1 ELSE 0 END,
+                       NEW.received_at, CASE WHEN NEW.is_read = 0 THEN NEW.received_at END,
+                       CAST(strftime('%s', 'now') AS INTEGER) * 1000
+                WHERE NEW.is_top_level_message = 1
+                ON CONFLICT(channel_key) DO UPDATE SET
+                    total_count = total_count + excluded.total_count,
+                    unread_count = unread_count + excluded.unread_count,
+                    latest_received_at = CASE
+                        WHEN latest_received_at IS NULL OR excluded.latest_received_at > latest_received_at
+                        THEN excluded.latest_received_at ELSE latest_received_at END,
+                    latest_unread_at = CASE
+                        WHEN excluded.latest_unread_at IS NOT NULL
+                         AND (latest_unread_at IS NULL OR excluded.latest_unread_at > latest_unread_at)
+                        THEN excluded.latest_unread_at ELSE latest_unread_at END,
+                    updated_at_epoch_ms = excluded.updated_at_epoch_ms;
+                """
+            let removeOldChannel = """
+                UPDATE message_channel_stats
+                SET total_count = total_count - OLD.is_top_level_message,
+                    unread_count = unread_count - (OLD.is_top_level_message * (1 - OLD.is_read)),
+                    updated_at_epoch_ms = CAST(strftime('%s', 'now') AS INTEGER) * 1000
+                WHERE channel_key = COALESCE(NULLIF(TRIM(OLD.channel), ''), '');
+                DELETE FROM message_channel_stats
+                WHERE channel_key = COALESCE(NULLIF(TRIM(OLD.channel), ''), '') AND total_count <= 0;
+                UPDATE message_channel_stats
+                SET latest_received_at = CASE
+                    WHEN OLD.is_top_level_message = 1 AND OLD.received_at >= latest_received_at THEN (
+                        SELECT received_at FROM messages
+                        WHERE is_top_level_message = 1
+                          AND COALESCE(NULLIF(TRIM(channel), ''), '') = COALESCE(NULLIF(TRIM(OLD.channel), ''), '')
+                        ORDER BY received_at DESC, id DESC LIMIT 1
+                    ) ELSE latest_received_at END,
+                    latest_unread_at = CASE
+                    WHEN OLD.is_top_level_message = 1 AND OLD.is_read = 0
+                         AND OLD.received_at >= latest_unread_at THEN (
+                        SELECT received_at FROM messages
+                        WHERE is_top_level_message = 1 AND is_read = 0
+                          AND COALESCE(NULLIF(TRIM(channel), ''), '') = COALESCE(NULLIF(TRIM(OLD.channel), ''), '')
+                        ORDER BY received_at DESC, id DESC LIMIT 1
+                    ) ELSE latest_unread_at END
+                WHERE channel_key = COALESCE(NULLIF(TRIM(OLD.channel), ''), '');
+                """
+            try db.execute(sql: """
+                CREATE TRIGGER messages_stats_after_update
+                AFTER UPDATE OF is_read, channel, received_at, is_top_level_message ON messages
+                WHEN OLD.is_read IS NOT NEW.is_read
+                  OR OLD.channel IS NOT NEW.channel
+                  OR OLD.received_at IS NOT NEW.received_at
+                  OR OLD.is_top_level_message IS NOT NEW.is_top_level_message
+                BEGIN
+                    UPDATE message_global_stats
+                    SET total_count = total_count + NEW.is_top_level_message - OLD.is_top_level_message,
+                        unread_count = unread_count
+                            + (NEW.is_top_level_message * (1 - NEW.is_read))
+                            - (OLD.is_top_level_message * (1 - OLD.is_read)),
+                        updated_at_epoch_ms = CAST(strftime('%s', 'now') AS INTEGER) * 1000
+                    WHERE id = 1;
+                    \(removeOldChannel)
+                    \(addNewChannel)
+                END;
+
+                CREATE TRIGGER messages_revision_after_update
+                AFTER UPDATE OF
+                    message_id, title, body, channel, url, is_read, received_at,
+                    raw_payload_json, status, decryption_state,
+                    notification_request_id, delivery_id, operation_id,
+                    entity_type, entity_id, event_id, thing_id,
+                    projection_destination, event_state, event_time_epoch,
+                    observed_time_epoch, occurred_at_epoch, is_top_level_message
+                ON messages
+                WHEN OLD.message_id IS NOT NEW.message_id
+                  OR OLD.title IS NOT NEW.title
+                  OR OLD.body IS NOT NEW.body
+                  OR OLD.channel IS NOT NEW.channel
+                  OR OLD.url IS NOT NEW.url
+                  OR OLD.is_read IS NOT NEW.is_read
+                  OR OLD.received_at IS NOT NEW.received_at
+                  OR OLD.raw_payload_json IS NOT NEW.raw_payload_json
+                  OR OLD.status IS NOT NEW.status
+                  OR OLD.decryption_state IS NOT NEW.decryption_state
+                  OR OLD.notification_request_id IS NOT NEW.notification_request_id
+                  OR OLD.delivery_id IS NOT NEW.delivery_id
+                  OR OLD.operation_id IS NOT NEW.operation_id
+                  OR OLD.entity_type IS NOT NEW.entity_type
+                  OR OLD.entity_id IS NOT NEW.entity_id
+                  OR OLD.event_id IS NOT NEW.event_id
+                  OR OLD.thing_id IS NOT NEW.thing_id
+                  OR OLD.projection_destination IS NOT NEW.projection_destination
+                  OR OLD.event_state IS NOT NEW.event_state
+                  OR OLD.event_time_epoch IS NOT NEW.event_time_epoch
+                  OR OLD.observed_time_epoch IS NOT NEW.observed_time_epoch
+                  OR OLD.occurred_at_epoch IS NOT NEW.occurred_at_epoch
+                  OR OLD.is_top_level_message IS NOT NEW.is_top_level_message
+                BEGIN
+                    UPDATE message_store_revision
+                    SET revision = revision + 1,
+                        updated_at_epoch_ms = CAST(strftime('%s', 'now') AS INTEGER) * 1000
+                    WHERE id = 1;
+                END;
+                """)
+        }
 	        return migrator
 	    }()
 
@@ -4338,6 +4777,63 @@ private actor GRDBStore {
 	            try upsertEntityProjectionHeadIfNeeded(GRDBMessageRecord(row: row), db: db)
 	        }
 	    }
+
+    private static func rebuildAffectedEntityProjectionHeads(
+        afterDeleting deletedRecords: [GRDBMessageRecord],
+        db: Database
+    ) throws {
+        let eventIDs = Set(deletedRecords.compactMap { record -> String? in
+            guard record.entityType == "event" else { return nil }
+            return normalizeEntityReference(record.eventId ?? record.entityId)
+        })
+        let thingIDs = Set(deletedRecords.compactMap { record -> String? in
+            guard record.entityType == "thing" else { return nil }
+            return normalizeEntityReference(record.thingId ?? record.entityId)
+        })
+        guard !eventIDs.isEmpty || !thingIDs.isEmpty else { return }
+
+        for eventID in eventIDs {
+            try db.execute(
+                sql: "DELETE FROM event_projection_heads WHERE event_id = ?;",
+                arguments: [eventID]
+            )
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT * FROM messages
+                    WHERE entity_type = 'event'
+                      AND COALESCE(NULLIF(trim(event_id), ''), NULLIF(trim(entity_id), '')) = ?
+                    ORDER BY COALESCE(occurred_at_epoch, event_time_epoch, observed_time_epoch, CAST(received_at AS INTEGER)) ASC,
+                             received_at ASC, id ASC;
+                    """,
+                arguments: [eventID]
+            )
+            for row in rows {
+                try upsertEntityProjectionHeadIfNeeded(GRDBMessageRecord(row: row), db: db)
+            }
+        }
+
+        for thingID in thingIDs {
+            try db.execute(
+                sql: "DELETE FROM thing_projection_heads WHERE thing_id = ?;",
+                arguments: [thingID]
+            )
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT * FROM messages
+                    WHERE entity_type = 'thing'
+                      AND COALESCE(NULLIF(trim(thing_id), ''), NULLIF(trim(entity_id), '')) = ?
+                    ORDER BY COALESCE(occurred_at_epoch, event_time_epoch, observed_time_epoch, CAST(received_at AS INTEGER)) ASC,
+                             received_at ASC, id ASC;
+                    """,
+                arguments: [thingID]
+            )
+            for row in rows {
+                try upsertEntityProjectionHeadIfNeeded(GRDBMessageRecord(row: row), db: db)
+            }
+        }
+    }
 
     private static func sqlQuoted(_ value: String) -> String {
         "'\(value.replacingOccurrences(of: "'", with: "''"))'"
@@ -4869,6 +5365,140 @@ private actor GRDBStore {
         try GRDBMessageRecord.from(message: message, encoder: encoder)
     }
 
+    private func updateMessageDerivedData(
+        for record: GRDBMessageRecord,
+        message sourceMessage: PushMessage? = nil,
+        db: Database
+    ) throws {
+        guard record.topLevelMessage else {
+            try db.execute(
+                sql: "DELETE FROM message_summary_projection WHERE local_message_id = ?;",
+                arguments: [record.id.uuidString]
+            )
+            try db.execute(
+                sql: "DELETE FROM message_facet_index WHERE local_message_id = ?;",
+                arguments: [record.id.uuidString]
+            )
+            return
+        }
+
+        let message = sourceMessage ?? record.toPushMessage(decoder: decoder)
+        let summary = PushMessageSummary(message: message)
+        let imageURLsJSON = String(
+            data: try encoder.encode(summary.imageURLs.map(\.absoluteString)),
+            encoding: .utf8
+        ) ?? "[]"
+        let tagsJSON = String(data: try encoder.encode(summary.tags), encoding: .utf8) ?? "[]"
+        let fingerprint = Self.messageProjectionFingerprint(record)
+
+        try db.cachedStatement(
+            sql: """
+                INSERT INTO message_summary_projection(
+                    local_message_id, body_preview, secondary_text, severity,
+                    is_encrypted, primary_image_url, image_urls_json, tags_json,
+                    tag_display_text, source_fingerprint, projection_schema_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                ON CONFLICT(local_message_id) DO UPDATE SET
+                    body_preview = excluded.body_preview,
+                    secondary_text = excluded.secondary_text,
+                    severity = excluded.severity,
+                    is_encrypted = excluded.is_encrypted,
+                    primary_image_url = excluded.primary_image_url,
+                    image_urls_json = excluded.image_urls_json,
+                    tags_json = excluded.tags_json,
+                    tag_display_text = excluded.tag_display_text,
+                    source_fingerprint = excluded.source_fingerprint,
+                    projection_schema_version = excluded.projection_schema_version;
+                """
+        ).execute(arguments: [
+                record.id.uuidString,
+                summary.bodyPreview,
+                summary.secondaryText,
+                summary.severity?.rawValue,
+                summary.isEncrypted ? 1 : 0,
+                summary.imageURL?.absoluteString,
+                imageURLsJSON,
+                tagsJSON,
+                summary.tags.joined(separator: " "),
+                fingerprint,
+            ])
+
+        try db.cachedStatement(
+            sql: "DELETE FROM message_facet_index WHERE local_message_id = ?;"
+        ).execute(arguments: [record.id.uuidString])
+        var facets: [String: (key: String, value: String)] = [:]
+        for tag in message.tags {
+            let value = tag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !value.isEmpty else { continue }
+            facets["tag\u{1f}\(value)"] = ("tag", value)
+        }
+        for (rawKey, rawValue) in message.metadata {
+            let key = rawKey.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !key.isEmpty, !value.isEmpty else { continue }
+            let facetKey = "metadata_\(key)"
+            facets["\(facetKey)\u{1f}\(value)"] = (facetKey, value)
+        }
+        for facet in facets.values {
+            try db.cachedStatement(
+                sql: """
+                    INSERT INTO message_facet_index(local_message_id, key_name, value_norm, received_at)
+                    VALUES (?, ?, ?, ?);
+                    """
+            ).execute(arguments: [
+                record.id.uuidString,
+                facet.key,
+                facet.value,
+                Self.storedEpoch(record.receivedAt),
+            ])
+        }
+    }
+
+    private static func messageProjectionFingerprint(_ record: GRDBMessageRecord) -> String {
+        let source = [
+            record.title,
+            record.body,
+            record.rawPayloadJSON,
+            record.messageId,
+            record.status,
+            record.decryptionState ?? "",
+        ].joined(separator: "\u{1e}")
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in source.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return String(hash, radix: 16)
+    }
+
+    private func markMessageDerivedDataStale(
+        _ error: Error,
+        localMessageID: UUID? = nil,
+        db: Database
+    ) {
+        let message = String(describing: error)
+        if let localMessageID {
+            try? db.execute(
+                sql: """
+                    UPDATE message_summary_projection
+                    SET projection_schema_version = 0
+                    WHERE local_message_id = ?;
+                    """,
+                arguments: [localMessageID.uuidString]
+            )
+        }
+        try? db.execute(
+            sql: """
+                UPDATE message_derived_state
+                SET status = 'stale',
+                    updated_at_epoch_ms = CAST(strftime('%s', 'now') AS INTEGER) * 1000,
+                    last_error = ?
+                WHERE component IN ('message_summary_projection', 'message_facet_index');
+                """,
+            arguments: [String(message.prefix(1_000))]
+        )
+    }
+
     private func hasThingParentRecord(
         thingId: String,
         db: Database
@@ -4977,7 +5607,10 @@ private actor GRDBStore {
 	    private func insertOrUpdateMessage(
 	        _ record: GRDBMessageRecord,
 	        db: Database,
-	        updateOnConflict: Bool
+	        updateOnConflict: Bool,
+	        projectionMessage: PushMessage? = nil,
+	        maintainDerivedData: Bool = true,
+            maintainEntityProjectionHeads: Bool = true
 	    ) throws {
         let baseInsertSQL = """
             INSERT INTO messages (
@@ -4988,32 +5621,36 @@ private actor GRDBStore {
                 occurred_at_epoch,
                 is_top_level_message
             ) VALUES (
-                \(Self.sqlQuoted(record.id.uuidString)),
-                \(Self.sqlQuoted(record.messageId)),
-                \(Self.sqlQuoted(record.title)),
-                \(Self.sqlQuoted(record.body)),
-                \(Self.sqlOptionalText(record.channel)),
-                \(Self.sqlOptionalText(record.url)),
-                \(record.isRead ? 1 : 0),
-                \(Self.storedEpoch(record.receivedAt)),
-                \(Self.sqlQuoted(record.rawPayloadJSON)),
-                \(Self.sqlQuoted(record.status)),
-                \(Self.sqlOptionalText(record.decryptionState)),
-                \(Self.sqlOptionalText(record.notificationRequestId)),
-                \(Self.sqlOptionalText(record.deliveryId)),
-                \(Self.sqlOptionalText(record.operationId)),
-                \(Self.sqlQuoted(record.entityType)),
-                \(Self.sqlOptionalText(record.entityId)),
-                \(Self.sqlOptionalText(record.eventId)),
-                \(Self.sqlOptionalText(record.thingId)),
-                \(Self.sqlOptionalText(record.projectionDestination)),
-                \(Self.sqlOptionalText(record.eventState)),
-                \(Self.sqlOptionalInt64(record.eventTimeEpoch)),
-                \(Self.sqlOptionalInt64(record.observedTimeEpoch)),
-                \(Self.sqlOptionalInt64(record.occurredAtEpoch)),
-                \(record.topLevelMessage ? 1 : 0)
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             """
+        let arguments: StatementArguments = [
+            record.id.uuidString,
+            record.messageId,
+            record.title,
+            record.body,
+            record.channel,
+            record.url,
+            record.isRead ? 1 : 0,
+            Self.storedEpoch(record.receivedAt),
+            record.rawPayloadJSON,
+            record.status,
+            record.decryptionState,
+            record.notificationRequestId,
+            record.deliveryId,
+            record.operationId,
+            record.entityType,
+            record.entityId,
+            record.eventId,
+            record.thingId,
+            record.projectionDestination,
+            record.eventState,
+            record.eventTimeEpoch,
+            record.observedTimeEpoch,
+            record.occurredAtEpoch,
+            record.topLevelMessage ? 1 : 0,
+        ]
 
         if updateOnConflict {
             let sql = baseInsertSQL + """
@@ -5042,11 +5679,32 @@ private actor GRDBStore {
                     is_top_level_message = excluded.is_top_level_message
                 WHERE excluded.received_at >= messages.received_at;
                 """
-            try db.execute(sql: sql)
+            try db.cachedStatement(sql: sql).execute(arguments: arguments)
 	        } else {
-	            try db.execute(sql: baseInsertSQL + " ON CONFLICT(message_id) DO NOTHING;")
+	            try db.cachedStatement(
+                    sql: baseInsertSQL + " ON CONFLICT(message_id) DO NOTHING;"
+                ).execute(arguments: arguments)
 	        }
-	        try Self.upsertEntityProjectionHeadIfNeeded(record, db: db)
+            if maintainEntityProjectionHeads {
+	            try Self.upsertEntityProjectionHeadIfNeeded(record, db: db)
+            }
+	        if maintainDerivedData,
+	           let persistedRecord = try loadMessageRecordByMessageId(record.messageId, db: db)
+	        {
+	            do {
+	                try updateMessageDerivedData(
+	                    for: persistedRecord,
+	                    message: projectionMessage,
+	                    db: db
+	                )
+	            } catch {
+	                markMessageDerivedDataStale(
+	                    error,
+	                    localMessageID: persistedRecord.id,
+	                    db: db
+	                )
+	            }
+	        }
 	    }
 
 	    private static func upsertEntityProjectionHeadIfNeeded(
@@ -5085,6 +5743,40 @@ private actor GRDBStore {
 	            try upsertThingProjectionHead(thingId: thingId, record: merged, db: db)
 	        }
 	    }
+
+    private static func mergeEntityProjectionHeadIfNeeded(
+        _ record: GRDBMessageRecord,
+        eventHeads: inout [String: GRDBMessageRecord],
+        thingHeads: inout [String: GRDBMessageRecord],
+        affectedEventIDs: inout Set<String>,
+        affectedThingIDs: inout Set<String>
+    ) {
+        if record.entityType == "event",
+           let eventID = normalizeEntityReference(record.eventId ?? record.entityId),
+           ProjectionSemantics.isTopLevelEventProjection(
+               entityType: record.entityType,
+               eventId: eventID,
+               thingId: normalizeEntityReference(record.thingId),
+               projectionDestination: record.projectionDestination
+           )
+        {
+            eventHeads[eventID] = mergedProjectionHeadRecord(
+                existing: eventHeads[eventID],
+                incoming: record
+            )
+            affectedEventIDs.insert(eventID)
+        }
+
+        if record.entityType == "thing",
+           let thingID = normalizeEntityReference(record.thingId ?? record.entityId)
+        {
+            thingHeads[thingID] = mergedProjectionHeadRecord(
+                existing: thingHeads[thingID],
+                incoming: record
+            )
+            affectedThingIDs.insert(thingID)
+        }
+    }
 
 	    private static func loadProjectionHeadRecord(
 	        table: String,
@@ -5153,12 +5845,15 @@ private actor GRDBStore {
 	        record: GRDBMessageRecord,
 	        db: Database
 	    ) throws {
-	        try db.execute(sql: projectionHeadInsertSQL(
+	        try db.cachedStatement(sql: projectionHeadInsertSQL(
 	            table: "event_projection_heads",
-	            keyColumn: "event_id",
-	            key: eventId,
-	            record: record
-	        ))
+	            keyColumn: "event_id"
+	        )).execute(arguments: projectionHeadArguments(
+                key: eventId,
+                record: record,
+                relatedEntityID: record.entityId,
+                relatedProjectionID: record.thingId
+            ))
 	    }
 
 	    private static func upsertThingProjectionHead(
@@ -5166,33 +5861,31 @@ private actor GRDBStore {
 	        record: GRDBMessageRecord,
 	        db: Database
 	    ) throws {
-	        try db.execute(sql: projectionHeadInsertSQL(
+	        try db.cachedStatement(sql: projectionHeadInsertSQL(
 	            table: "thing_projection_heads",
-	            keyColumn: "thing_id",
-	            key: thingId,
-	            record: record
-	        ))
+	            keyColumn: "thing_id"
+	        )).execute(arguments: projectionHeadArguments(
+                key: thingId,
+                record: record,
+                relatedEntityID: record.entityId,
+                relatedProjectionID: record.eventId
+            ))
 	    }
 
 	    private static func projectionHeadInsertSQL(
 	        table: String,
-	        keyColumn: String,
-	        key: String,
-	        record: GRDBMessageRecord
+	        keyColumn: String
 	    ) -> String {
 	        let relationshipColumns: String
-	        let relationshipValues: String
 	        let relationshipUpdates: String
 	        if keyColumn == "event_id" {
 	            relationshipColumns = "entity_id, thing_id"
-	            relationshipValues = "\(Self.sqlOptionalText(record.entityId)), \(Self.sqlOptionalText(record.thingId))"
 	            relationshipUpdates = """
 	                entity_id = excluded.entity_id,
 	                thing_id = excluded.thing_id,
 	            """
 	        } else {
 	            relationshipColumns = "entity_id, event_id"
-	            relationshipValues = "\(Self.sqlOptionalText(record.entityId)), \(Self.sqlOptionalText(record.eventId))"
 	            relationshipUpdates = """
 	                entity_id = excluded.entity_id,
 	                event_id = excluded.event_id,
@@ -5207,29 +5900,8 @@ private actor GRDBStore {
 	                event_time_epoch, observed_time_epoch, occurred_at_epoch,
 	                is_top_level_message
 	            ) VALUES (
-	                \(Self.sqlQuoted(key)),
-	                \(Self.sqlQuoted(record.id.uuidString)),
-	                \(Self.sqlQuoted(record.messageId)),
-	                \(Self.sqlQuoted(record.title)),
-	                \(Self.sqlQuoted(record.body)),
-	                \(Self.sqlOptionalText(record.channel)),
-	                \(Self.sqlOptionalText(record.url)),
-	                \(record.isRead ? 1 : 0),
-	                \(Self.storedEpoch(record.receivedAt)),
-	                \(Self.sqlQuoted(record.rawPayloadJSON)),
-	                \(Self.sqlQuoted(record.status)),
-	                \(Self.sqlOptionalText(record.decryptionState)),
-	                \(Self.sqlOptionalText(record.notificationRequestId)),
-	                \(Self.sqlOptionalText(record.deliveryId)),
-	                \(Self.sqlOptionalText(record.operationId)),
-	                \(Self.sqlQuoted(record.entityType)),
-	                \(relationshipValues),
-	                \(Self.sqlOptionalText(record.projectionDestination)),
-	                \(Self.sqlOptionalText(record.eventState)),
-	                \(Self.sqlOptionalInt64(record.eventTimeEpoch)),
-	                \(Self.sqlOptionalInt64(record.observedTimeEpoch)),
-	                \(Self.sqlOptionalInt64(record.occurredAtEpoch)),
-	                \(record.topLevelMessage ? 1 : 0)
+	                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+	                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 	            )
 	            ON CONFLICT(\(keyColumn)) DO UPDATE SET
 	                id = excluded.id,
@@ -5256,6 +5928,40 @@ private actor GRDBStore {
 	                is_top_level_message = excluded.is_top_level_message;
 	            """
 	    }
+
+    private static func projectionHeadArguments(
+        key: String,
+        record: GRDBMessageRecord,
+        relatedEntityID: String?,
+        relatedProjectionID: String?
+    ) -> StatementArguments {
+        [
+            key,
+            record.id.uuidString,
+            record.messageId,
+            record.title,
+            record.body,
+            record.channel,
+            record.url,
+            record.isRead ? 1 : 0,
+            storedEpoch(record.receivedAt),
+            record.rawPayloadJSON,
+            record.status,
+            record.decryptionState,
+            record.notificationRequestId,
+            record.deliveryId,
+            record.operationId,
+            record.entityType,
+            relatedEntityID,
+            relatedProjectionID,
+            record.projectionDestination,
+            record.eventState,
+            record.eventTimeEpoch,
+            record.observedTimeEpoch,
+            record.occurredAtEpoch,
+            record.topLevelMessage ? 1 : 0,
+        ]
+    }
 
     private func loadMessageRecord(where condition: String, db: Database) throws -> GRDBMessageRecord? {
         let sql = "SELECT * FROM messages WHERE \(condition) ORDER BY received_at DESC, id DESC LIMIT 1;"
@@ -5412,6 +6118,115 @@ private actor GRDBStore {
             .map { $0.toPushMessage(decoder: decoder) }
     }
 
+    private func messageDerivedDataIsReady(_ db: Database) throws -> Bool {
+        let readyCount = try Int.fetchOne(
+            db,
+            sql: """
+                SELECT COUNT(*) FROM message_derived_state
+                WHERE component IN ('message_summary_projection', 'message_facet_index')
+                  AND schema_version = 1
+                  AND status = 'ready';
+                """
+        ) ?? 0
+        return readyCount == 2
+    }
+
+    func derivedComponentIsReady(_ component: String) async -> Bool {
+        (try? read { db in
+            try String.fetchOne(
+                db,
+                sql: "SELECT status FROM message_derived_state WHERE component = ?;",
+                arguments: [component]
+            ) == "ready"
+        }) ?? false
+    }
+
+    func setDerivedComponentStatus(
+        _ component: String,
+        status: String,
+        error: String? = nil
+    ) async {
+        try? write { db in
+            let revision = try Int64.fetchOne(
+                db,
+                sql: "SELECT revision FROM message_store_revision WHERE id = 1;"
+            ) ?? 0
+            try db.execute(
+                sql: """
+                    UPDATE message_derived_state
+                    SET status = ?, source_revision = ?, cursor_local_message_id = NULL,
+                        updated_at_epoch_ms = CAST(strftime('%s', 'now') AS INTEGER) * 1000,
+                        last_error = ?
+                    WHERE component = ?;
+                    """,
+                arguments: [status, revision, error.map { String($0.prefix(1_000)) }, component]
+            )
+        }
+    }
+
+    private func fetchProjectedMessageSummaries(
+        db: Database,
+        where conditions: [String],
+        orderBy: String,
+        limit: Int
+    ) throws -> [PushMessageSummary] {
+        let whereClause = conditions.isEmpty ? "1" : conditions.joined(separator: " AND ")
+        let sql = """
+            SELECT
+                m.id, m.message_id, m.title, m.channel, m.url, m.is_read,
+                m.received_at, m.status, m.decryption_state, m.entity_type,
+                m.entity_id, m.event_id, m.thing_id, m.event_state,
+                p.body_preview, p.secondary_text, p.severity, p.is_encrypted,
+                p.primary_image_url, p.image_urls_json, p.tags_json
+            FROM messages AS m
+            JOIN message_summary_projection AS p ON p.local_message_id = m.id
+            WHERE \(whereClause)
+            ORDER BY \(orderBy)
+            LIMIT \(max(0, limit));
+            """
+        return try Row.fetchAll(db, sql: sql).map { row in
+            let idString: String = row["id"]
+            let receivedAtEpoch: Double = row["received_at"]
+            let isReadInt: Int64 = row["is_read"]
+            let encryptedInt: Int64 = row["is_encrypted"]
+            let statusRaw: String = row["status"]
+            let decryptionRaw: String? = row["decryption_state"]
+            let severityRaw: String? = row["severity"]
+            let imageURLsJSON: String = row["image_urls_json"]
+            let tagsJSON: String = row["tags_json"]
+            let imageURLStrings = (try? decoder.decode(
+                [String].self,
+                from: Data(imageURLsJSON.utf8)
+            )) ?? []
+            let tags = (try? decoder.decode([String].self, from: Data(tagsJSON.utf8))) ?? []
+            let urlText: String? = row["url"]
+            let primaryImageURLText: String? = row["primary_image_url"]
+            return PushMessageSummary(
+                id: UUID(uuidString: idString) ?? UUID(),
+                messageId: row["message_id"],
+                title: row["title"],
+                bodyPreview: row["body_preview"],
+                channel: row["channel"],
+                url: urlText.flatMap(URL.init(string:)),
+                isRead: isReadInt != 0,
+                receivedAt: Self.dateFromStoredEpoch(receivedAtEpoch),
+                status: PushMessage.Status(rawValue: statusRaw) ?? .normal,
+                decryptionState: PushMessage.DecryptionState.from(raw: decryptionRaw),
+                imageURL: primaryImageURLText.flatMap(URL.init(string:)),
+                imageURLs: imageURLStrings.compactMap(URL.init(string:)),
+                tags: tags,
+                severity: severityRaw.flatMap(PushMessage.Severity.init(rawValue:)),
+                secondaryText: row["secondary_text"] ?? "",
+                isEncrypted: encryptedInt != 0,
+                entityType: row["entity_type"],
+                entityId: row["entity_id"],
+                eventId: row["event_id"],
+                thingId: row["thing_id"],
+                eventState: row["event_state"]
+            )
+        }
+    }
+
     private func loadMessages(
         filter: MessageQueryFilter,
         channel: String?,
@@ -5420,9 +6235,9 @@ private actor GRDBStore {
         limit: Int?,
         sortMode: MessageListSortMode
     ) throws -> [PushMessage] {
-        try read { db in
+        return try read { db in
             let normalizedTag = normalizedTagValue(tag)
-            let conditions = baseMessageConditions(
+            var conditions = baseMessageConditions(
                 includeTopLevelOnly: true,
                 filter: filter,
                 channel: channel,
@@ -5430,14 +6245,30 @@ private actor GRDBStore {
                 cursor: cursor,
                 sortMode: sortMode
             )
-            let sqlLimit = normalizedTag == nil ? limit : nil
+            let canUseFacetIndex: Bool
+            if normalizedTag != nil {
+                canUseFacetIndex = try messageDerivedDataIsReady(db)
+            } else {
+                canUseFacetIndex = false
+            }
+            if let normalizedTag, canUseFacetIndex {
+                conditions.append("""
+                    EXISTS (
+                        SELECT 1 FROM message_facet_index AS facet
+                        WHERE facet.local_message_id = messages.id
+                          AND facet.key_name = 'tag'
+                          AND facet.value_norm = \(Self.sqlQuoted(normalizedTag))
+                    )
+                    """)
+            }
+            let sqlLimit = normalizedTag == nil || canUseFacetIndex ? limit : nil
             let messages = try fetchMessages(
                 db: db,
                 where: conditions,
                 orderBy: messageOrderBy(sortMode: sortMode),
                 limit: sqlLimit
             )
-            guard let normalizedTag else { return messages }
+            guard let normalizedTag, !canUseFacetIndex else { return messages }
             let filtered = messages.filter { $0.tags.contains(normalizedTag) }
             guard let limit else { return filtered }
             return Array(filtered.prefix(max(0, limit)))
@@ -6405,7 +7236,12 @@ private actor GRDBStore {
                     occurredAtEpoch: record.occurredAtEpoch,
                     topLevelMessage: record.topLevelMessage
                 )
-                try insertOrUpdateMessage(updatedRecord, db: db, updateOnConflict: true)
+                try insertOrUpdateMessage(
+                    updatedRecord,
+                    db: db,
+                    updateOnConflict: true,
+                    projectionMessage: canonicalMessage
+                )
                 return .duplicateRequest(updatedRecord.toPushMessage(decoder: decoder))
             }
 
@@ -6420,7 +7256,12 @@ private actor GRDBStore {
                 return .duplicateMessage(existing.toPushMessage(decoder: decoder))
             }
 
-            try insertOrUpdateMessage(record, db: db, updateOnConflict: false)
+            try insertOrUpdateMessage(
+                record,
+                db: db,
+                updateOnConflict: false,
+                projectionMessage: canonicalMessage
+            )
             if let identity = resolveOperationScopeIdentity(from: canonicalMessage) {
                 try upsertOperationLedger(
                     identity: identity,
@@ -6478,11 +7319,50 @@ private actor GRDBStore {
 
     func saveMessages(_ messages: [PushMessage]) async throws -> [PushMessage] {
         guard !messages.isEmpty else { return [] }
+        // This API is only called with messages already canonicalized by LocalDataStore.
+        // Keeping the authoritative projection/facets in the same transaction makes
+        // tag and summary reads bounded immediately after even a large import.
+        let maintainDerivedData = true
         var storedMessages: [PushMessage] = []
         storedMessages.reserveCapacity(messages.count)
         try write { db in
+            let useBulkProjectionHeads = messages.count > 500
+            var existingByMessageID: [String: (id: UUID, receivedAt: Date)] = [:]
+            var eventProjectionHeads: [String: GRDBMessageRecord] = [:]
+            var thingProjectionHeads: [String: GRDBMessageRecord] = [:]
+            var affectedEventIDs = Set<String>()
+            var affectedThingIDs = Set<String>()
+            if useBulkProjectionHeads {
+                let rows = try Row.fetchAll(
+                    db,
+                    sql: "SELECT id, message_id, received_at FROM messages;"
+                )
+                existingByMessageID.reserveCapacity(rows.count + messages.count)
+                for row in rows {
+                    let idText: String = row["id"]
+                    let messageID: String = row["message_id"]
+                    let receivedAtEpoch: Double = row["received_at"]
+                    guard let id = UUID(uuidString: idText) else { continue }
+                    existingByMessageID[messageID] = (
+                        id: id,
+                        receivedAt: Self.dateFromStoredEpoch(receivedAtEpoch)
+                    )
+                }
+                for row in try Row.fetchAll(db, sql: "SELECT * FROM event_projection_heads;") {
+                    let head = GRDBMessageRecord(row: row)
+                    if let eventID = normalizeEntityReference(head.eventId ?? head.entityId) {
+                        eventProjectionHeads[eventID] = head
+                    }
+                }
+                for row in try Row.fetchAll(db, sql: "SELECT * FROM thing_projection_heads;") {
+                    let head = GRDBMessageRecord(row: row)
+                    if let thingID = normalizeEntityReference(head.thingId ?? head.entityId) {
+                        thingProjectionHeads[thingID] = head
+                    }
+                }
+            }
             for message in messages {
-                let canonical = canonicalizedMessageForPersistence(message)
+                let canonical = message
                 let record = try buildMessageRecord(from: canonical)
                 if let thingId = referencedThingIdRequiringExistingParent(canonical),
                    try !hasThingParentRecord(thingId: thingId, db: db)
@@ -6490,19 +7370,83 @@ private actor GRDBStore {
                     try enqueuePendingInboundMessage(record, thingId: thingId, db: db)
                     continue
                 }
-                let existing = try loadMessageRecordByMessageId(record.messageId, db: db)
-                if let existing, record.receivedAt < existing.receivedAt {
+                let existingIdentity: (id: UUID, receivedAt: Date)?
+                if useBulkProjectionHeads {
+                    existingIdentity = existingByMessageID[record.messageId]
+                } else {
+                    let existingRecord = try loadMessageRecordByMessageId(record.messageId, db: db)
+                    existingIdentity = existingRecord.map { (id: $0.id, receivedAt: $0.receivedAt) }
+                }
+                if let existingIdentity, record.receivedAt < existingIdentity.receivedAt {
                     continue
                 }
-                try insertOrUpdateMessage(record, db: db, updateOnConflict: true)
-                if let existing {
-                    storedMessages.append(record.withID(existing.id).toPushMessage(decoder: decoder))
+                try insertOrUpdateMessage(
+                    record,
+                    db: db,
+                    updateOnConflict: true,
+                    projectionMessage: canonical,
+                    maintainDerivedData: maintainDerivedData,
+                    maintainEntityProjectionHeads: !useBulkProjectionHeads
+                )
+                if useBulkProjectionHeads {
+                    Self.mergeEntityProjectionHeadIfNeeded(
+                        record,
+                        eventHeads: &eventProjectionHeads,
+                        thingHeads: &thingProjectionHeads,
+                        affectedEventIDs: &affectedEventIDs,
+                        affectedThingIDs: &affectedThingIDs
+                    )
+                }
+                if let existingIdentity {
+                    storedMessages.append(record.withID(existingIdentity.id).toPushMessage(decoder: decoder))
                 } else {
                     storedMessages.append(canonical)
+                }
+                if useBulkProjectionHeads {
+                    existingByMessageID[record.messageId] = (
+                        id: existingIdentity?.id ?? record.id,
+                        receivedAt: record.receivedAt
+                    )
                 }
                 if let thingId = thingParentIdentity(from: canonical) {
                     try replayPendingInboundMessages(thingId: thingId, db: db)
                 }
+            }
+            if useBulkProjectionHeads {
+                for eventID in affectedEventIDs {
+                    guard let head = eventProjectionHeads[eventID] else { continue }
+                    try Self.upsertEventProjectionHead(eventId: eventID, record: head, db: db)
+                }
+                for thingID in affectedThingIDs {
+                    guard let head = thingProjectionHeads[thingID] else { continue }
+                    try Self.upsertThingProjectionHead(thingId: thingID, record: head, db: db)
+                }
+            }
+            let missingProjectionCount = try Int.fetchOne(
+                db,
+                sql: """
+                    SELECT COUNT(*)
+                    FROM messages AS m
+                    LEFT JOIN message_summary_projection AS p ON p.local_message_id = m.id
+                    WHERE m.is_top_level_message = 1
+                      AND (p.local_message_id IS NULL OR p.projection_schema_version <> 1);
+                    """
+            ) ?? 0
+            if missingProjectionCount == 0 {
+                let revision = try Int64.fetchOne(
+                    db,
+                    sql: "SELECT revision FROM message_store_revision WHERE id = 1;"
+                ) ?? 0
+                try db.execute(
+                    sql: """
+                        UPDATE message_derived_state
+                        SET status = 'ready', source_revision = ?, cursor_local_message_id = NULL,
+                            updated_at_epoch_ms = CAST(strftime('%s', 'now') AS INTEGER) * 1000,
+                            last_error = NULL
+                        WHERE component IN ('message_summary_projection', 'message_facet_index');
+                        """,
+                    arguments: [revision]
+                )
             }
         }
         return storedMessages
@@ -6561,15 +7505,43 @@ private actor GRDBStore {
         tag: String?,
         sortMode: MessageListSortMode
     ) async throws -> [PushMessageSummary] {
-        try await loadMessagesPage(
+        guard limit > 0 else { return [] }
+        let projected = try read { db -> [PushMessageSummary]? in
+            guard try messageDerivedDataIsReady(db) else { return nil }
+            var conditions = baseMessageConditions(
+                includeTopLevelOnly: true,
+                filter: filter,
+                channel: channel,
+                tag: nil,
+                cursor: cursor,
+                sortMode: sortMode
+            )
+            if let normalizedTag = normalizedTagValue(tag) {
+                conditions.append("""
+                    EXISTS (
+                        SELECT 1 FROM message_facet_index AS facet
+                        WHERE facet.local_message_id = m.id
+                          AND facet.key_name = 'tag'
+                          AND facet.value_norm = \(Self.sqlQuoted(normalizedTag))
+                    )
+                    """)
+            }
+            return try fetchProjectedMessageSummaries(
+                db: db,
+                where: conditions,
+                orderBy: messageOrderBy(sortMode: sortMode),
+                limit: limit
+            )
+        }
+        if let projected { return projected }
+        return try await loadMessagesPage(
             before: cursor,
             limit: limit,
             filter: filter,
             channel: channel,
             tag: tag,
             sortMode: sortMode
-        )
-            .map(PushMessageSummary.init(message:))
+        ).map(PushMessageSummary.init(message:))
     }
 
     func loadMessageSummaries(ids: [UUID]) async throws -> [PushMessageSummary] {
@@ -6784,38 +7756,136 @@ private actor GRDBStore {
     }
 
     func prepareStatsIfNeeded(progressive: Bool) async {
-        _ = progressive
+        let batchSize = 100
+        while true {
+            do {
+                let processed = try write { db -> Int in
+                    let records = try Row.fetchAll(
+                        db,
+                        sql: """
+                            SELECT m.* FROM messages AS m
+                            LEFT JOIN message_summary_projection AS p
+                              ON p.local_message_id = m.id
+                            WHERE m.is_top_level_message = 1
+                              AND (p.local_message_id IS NULL OR p.projection_schema_version <> 1)
+                            ORDER BY m.received_at DESC, m.id DESC
+                            LIMIT ?;
+                            """,
+                        arguments: [batchSize]
+                    ).map(GRDBMessageRecord.init(row:))
+                    for record in records {
+                        try updateMessageDerivedData(for: record, db: db)
+                    }
+                    if records.isEmpty {
+                        let revision = try Int64.fetchOne(
+                            db,
+                            sql: "SELECT revision FROM message_store_revision WHERE id = 1;"
+                        ) ?? 0
+                        try db.execute(
+                            sql: """
+                                UPDATE message_derived_state
+                                SET status = 'ready', source_revision = ?, cursor_local_message_id = NULL,
+                                    updated_at_epoch_ms = CAST(strftime('%s', 'now') AS INTEGER) * 1000,
+                                    last_error = NULL
+                                WHERE component IN ('message_summary_projection', 'message_facet_index');
+                                """,
+                            arguments: [revision]
+                        )
+                    } else {
+                        try db.execute(
+                            sql: """
+                                UPDATE message_derived_state
+                                SET status = 'building', cursor_local_message_id = ?,
+                                    updated_at_epoch_ms = CAST(strftime('%s', 'now') AS INTEGER) * 1000,
+                                    last_error = NULL
+                                WHERE component IN ('message_summary_projection', 'message_facet_index');
+                                """,
+                            arguments: [records.last?.id.uuidString]
+                        )
+                    }
+                    return records.count
+                }
+                guard processed > 0 else { return }
+                if progressive { await Task.yield() }
+            } catch {
+                try? write { db in markMessageDerivedDataStale(error, db: db) }
+                return
+            }
+        }
     }
 
     func messageCounts() async throws -> (total: Int, unread: Int) {
         try read { db in
-            let totalSql = "SELECT COUNT(*) AS count FROM messages WHERE is_top_level_message = 1;"
-            let unreadSql = "SELECT COUNT(*) AS count FROM messages WHERE is_top_level_message = 1 AND is_read = 0;"
-            let total = try Int.fetchOne(db, sql: totalSql) ?? 0
-            let unread = try Int.fetchOne(db, sql: unreadSql) ?? 0
+            guard let row = try Row.fetchOne(
+                db,
+                sql: "SELECT total_count, unread_count FROM message_global_stats WHERE id = 1;"
+            ) else { return (total: 0, unread: 0) }
+            let total: Int = row["total_count"]
+            let unread: Int = row["unread_count"]
             return (total: total, unread: unread)
+        }
+    }
+
+    func unreadMessageCount(
+        filter: MessageQueryFilter,
+        channels: [String?],
+        tags: [String]
+    ) async throws -> Int {
+        try read { db in
+            if channels.isEmpty,
+               tags.isEmpty,
+               filter == .all || filter == .unreadOnly
+            {
+                return try Int.fetchOne(
+                    db,
+                    sql: "SELECT unread_count FROM message_global_stats WHERE id = 1;"
+                ) ?? 0
+            }
+
+            var conditions = baseMessageConditions(
+                includeTopLevelOnly: true,
+                filter: filter,
+                channel: nil,
+                tag: nil,
+                cursor: nil,
+                sortMode: .timeDescending
+            )
+            conditions.append("is_read = 0")
+            if !channels.isEmpty {
+                let channelConditions = channels.map {
+                    Self.channelMatchCondition(column: "messages.channel", value: $0)
+                }
+                conditions.append("(\(channelConditions.joined(separator: " OR ")))")
+            }
+            let normalizedTags = Set(tags.compactMap(normalizedTagValue))
+            if !normalizedTags.isEmpty {
+                let values = normalizedTags.map(Self.sqlQuoted).joined(separator: ", ")
+                conditions.append("""
+                    EXISTS (
+                        SELECT 1 FROM message_facet_index AS facet
+                        WHERE facet.local_message_id = messages.id
+                          AND facet.key_name = 'tag'
+                          AND facet.value_norm IN (\(values))
+                    )
+                    """)
+            }
+            return try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM messages WHERE \(conditions.joined(separator: " AND "));"
+            ) ?? 0
         }
     }
 
     func messageChannelCounts() async throws -> [MessageChannelCount] {
         try read { db in
             let sql = """
-                SELECT
-                    CASE
-                        WHEN channel IS NULL OR trim(channel) = '' THEN NULL
-                        ELSE channel
-                    END AS channel_key,
-                    COUNT(*) AS total_count,
-                    SUM(CASE WHEN is_read = 0 THEN 1 ELSE 0 END) AS unread_count,
-                    MAX(received_at) AS latest_received_at,
-                    MAX(CASE WHEN is_read = 0 THEN received_at ELSE NULL END) AS latest_unread_at
-                FROM messages
-                WHERE is_top_level_message = 1
-                GROUP BY channel_key
+                SELECT channel_key, total_count, unread_count, latest_received_at, latest_unread_at
+                FROM message_channel_stats
                 ORDER BY latest_received_at DESC;
                 """
             return try Row.fetchAll(db, sql: sql).map { row in
-                let channel: String? = row["channel_key"]
+                let channelKey: String = row["channel_key"]
+                let channel: String? = channelKey.isEmpty ? nil : channelKey
                 let totalCount: Int = row["total_count"]
                 let unreadCount: Int = row["unread_count"]
                 let latestReceivedAtEpoch: Double? = row["latest_received_at"]
@@ -6832,44 +7902,98 @@ private actor GRDBStore {
     }
 
     func messageTagCounts() async throws -> [MessageTagCount] {
-        let messages = try await loadMessages()
-        var aggregates: [String: (totalCount: Int, latestReceivedAt: Date?)] = [:]
-
-        for message in messages {
-            let tags = Set(
-                message.tags
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-                    .filter { !$0.isEmpty }
+        await prepareStatsIfNeeded(progressive: false)
+        return try read { db in
+            guard try messageDerivedDataIsReady(db) else { return [] }
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT value_norm, COUNT(*) AS total_count, MAX(received_at) AS latest_received_at
+                    FROM message_facet_index
+                    WHERE key_name = 'tag'
+                    GROUP BY value_norm
+                    ORDER BY total_count DESC, value_norm ASC;
+                    """
             )
-            for tag in tags {
-                let existing = aggregates[tag]
-                let latestReceivedAt: Date
-                if let existingLatest = existing?.latestReceivedAt {
-                    latestReceivedAt = max(existingLatest, message.receivedAt)
-                } else {
-                    latestReceivedAt = message.receivedAt
-                }
-                aggregates[tag] = (
-                    totalCount: (existing?.totalCount ?? 0) + 1,
-                    latestReceivedAt: latestReceivedAt
+            return rows.map { row in
+                let epoch: Double? = row["latest_received_at"]
+                return MessageTagCount(
+                    tag: row["value_norm"],
+                    totalCount: row["total_count"],
+                    latestReceivedAt: epoch.map(Self.dateFromStoredEpoch)
                 )
             }
         }
+    }
 
-        return aggregates
-            .map { tag, aggregate in
-                MessageTagCount(
-                    tag: tag,
-                    totalCount: aggregate.totalCount,
-                    latestReceivedAt: aggregate.latestReceivedAt
-                )
+    func messageFacetIndexedMessageCount() async throws -> Int {
+        await prepareStatsIfNeeded(progressive: false)
+        return try read { db in
+            try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(DISTINCT local_message_id) FROM message_facet_index;"
+            ) ?? 0
+        }
+    }
+
+    func countMessages(matchingAllTags tags: [String]) async throws -> Int {
+        await prepareStatsIfNeeded(progressive: false)
+        let normalizedTags = Set(tags.compactMap(normalizedTagValue))
+        guard !normalizedTags.isEmpty else { return 0 }
+        return try read { db in
+            var conditions = ["m.is_top_level_message = 1"]
+            for tag in normalizedTags {
+                conditions.append("""
+                    EXISTS (
+                        SELECT 1 FROM message_facet_index AS facet
+                        WHERE facet.local_message_id = m.id
+                          AND facet.key_name = 'tag'
+                          AND facet.value_norm = \(Self.sqlQuoted(tag))
+                    )
+                    """)
             }
-            .sorted { lhs, rhs in
-                if lhs.totalCount != rhs.totalCount {
-                    return lhs.totalCount > rhs.totalCount
-                }
-                return lhs.tag.localizedCaseInsensitiveCompare(rhs.tag) == .orderedAscending
+            return try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM messages AS m WHERE \(conditions.joined(separator: " AND "));"
+            ) ?? 0
+        }
+    }
+
+    func loadMessageSummaries(
+        matchingAllTags tags: [String],
+        before cursor: MessagePageCursor?,
+        limit: Int
+    ) async throws -> [PushMessageSummary] {
+        guard limit > 0 else { return [] }
+        await prepareStatsIfNeeded(progressive: false)
+        let normalizedTags = Set(tags.compactMap(normalizedTagValue))
+        guard !normalizedTags.isEmpty else { return [] }
+        return try read { db in
+            var conditions = baseMessageConditions(
+                includeTopLevelOnly: true,
+                filter: .all,
+                channel: nil,
+                tag: nil,
+                cursor: cursor,
+                sortMode: .timeDescending
+            )
+            for tag in normalizedTags {
+                conditions.append("""
+                    EXISTS (
+                        SELECT 1 FROM message_facet_index AS facet
+                        WHERE facet.local_message_id = m.id
+                          AND facet.key_name = 'tag'
+                          AND facet.value_norm = \(Self.sqlQuoted(tag))
+                    )
+                    """)
             }
+            return try fetchProjectedMessageSummaries(
+                db: db,
+                where: conditions,
+                orderBy: messageOrderBy(sortMode: .timeDescending),
+                limit: limit
+            )
+        }
     }
 
     func searchMessagesCount(query: String) async throws -> Int {
@@ -6977,8 +8101,13 @@ private actor GRDBStore {
 
 	    func deleteMessage(id: UUID) async throws {
 	        try write { db in
-	            try db.execute(sql: "DELETE FROM messages WHERE id = \(Self.sqlQuoted(id.uuidString));")
-	            try Self.rebuildEntityProjectionHeads(db)
+            let records = try Row.fetchAll(
+                db,
+                sql: "SELECT * FROM messages WHERE id = ?;",
+                arguments: [id.uuidString]
+            ).map(GRDBMessageRecord.init(row:))
+	            try db.execute(sql: "DELETE FROM messages WHERE id = ?;", arguments: [id.uuidString])
+            try Self.rebuildAffectedEntityProjectionHeads(afterDeleting: records, db: db)
 	        }
 	    }
 
@@ -6987,17 +8116,15 @@ private actor GRDBStore {
         guard !uniqueIds.isEmpty else { return [] }
         return try write { db in
             let joined = uniqueIds.map { Self.sqlQuoted($0.uuidString) }.joined(separator: ",")
-            let existing = try Row.fetchAll(
+            let existingRecords = try Row.fetchAll(
                 db,
-                sql: "SELECT id FROM messages WHERE id IN (\(joined));"
-            ).compactMap { row -> UUID? in
-                let raw: String? = row["id"]
-                return raw.flatMap(UUID.init(uuidString:))
-            }
+                sql: "SELECT * FROM messages WHERE id IN (\(joined));"
+            ).map(GRDBMessageRecord.init(row:))
+	            let existing = existingRecords.map(\.id)
 	            guard !existing.isEmpty else { return [] }
 	            let existingJoined = existing.map { Self.sqlQuoted($0.uuidString) }.joined(separator: ",")
 	            try db.execute(sql: "DELETE FROM messages WHERE id IN (\(existingJoined));")
-	            try Self.rebuildEntityProjectionHeads(db)
+            try Self.rebuildAffectedEntityProjectionHeads(afterDeleting: existingRecords, db: db)
 	            return existing
 	        }
 	    }
@@ -7007,8 +8134,13 @@ private actor GRDBStore {
         guard !normalized.isEmpty else { return }
 	        try write { db in
 	            let whereClause = "notification_request_id = \(Self.sqlQuoted(normalized))"
+	            let records = try Row.fetchAll(
+                    db,
+                    sql: "SELECT * FROM messages WHERE \(whereClause);"
+                )
+                .map(GRDBMessageRecord.init(row:))
 	            try db.execute(sql: "DELETE FROM messages WHERE \(whereClause);")
-	            try Self.rebuildEntityProjectionHeads(db)
+            try Self.rebuildAffectedEntityProjectionHeads(afterDeleting: records, db: db)
 	        }
 	    }
 

@@ -38,7 +38,7 @@ struct MainTabContainerView: View {
                 guard !didRefreshAuthorizationStatus else { return }
                 didRefreshAuthorizationStatus = true
                 await environment.pushRegistrationService.refreshAuthorizationStatus()
-                await refreshDataForStoreChange()
+                await entityViewModel.reload()
                 environment.updateActiveTab(activeTab)
                 if environment.pendingEventToOpen != nil || environment.pendingThingToOpen != nil {
                     openPendingEntityIfNeeded()

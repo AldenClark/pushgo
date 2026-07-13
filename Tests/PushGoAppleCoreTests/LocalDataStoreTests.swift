@@ -3477,6 +3477,10 @@ struct LocalDataStoreTests {
         let tagSearchCount = try await store.searchMessagesCount(query: "tag:legacy-fixture")
         #expect(tagSearchCount == fixture.topLevelIDs.count)
         #expect(try await store.searchMessagesCount(query: "tag:shadow-alpha") == 0)
+        #expect(
+            try await store.searchMessagesCount(query: "legacy tag:legacy-fixture")
+                == fixture.topLevelIDs.count
+        )
 
         let tagCounts = try await store.messageTagCounts()
         #expect(tagCounts.first(where: { $0.tag == "legacy-fixture" })?.totalCount == fixture.topLevelIDs.count)

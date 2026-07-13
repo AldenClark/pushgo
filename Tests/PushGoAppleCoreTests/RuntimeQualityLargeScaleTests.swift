@@ -31,8 +31,8 @@ struct RuntimeQualityLargeScaleTests {
     }
 
     @Test
-    func metadataIndexReceivesGeneratedTaskTags() async throws {
-        try await withIsolatedLocalDataStore { store, appGroupIdentifier in
+    func canonicalFacetIndexReceivesGeneratedTaskTags() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
             let generator = RuntimeQualityFixtureGenerator(seed: 0x5152, platform: .iOS)
             let dataset = generator.makeDataset(count: 1_000)
             let generatedTask = try #require(dataset.messages.first { $0.tags.contains("task") })
@@ -42,15 +42,14 @@ struct RuntimeQualityLargeScaleTests {
             let reloadedTask = try #require(try await store.loadMessage(id: generatedTask.id))
             #expect(reloadedTask.tags.contains("task"))
 
-            let metadataIndex = try MessageMetadataIndex(appGroupIdentifier: appGroupIdentifier)
-            let tagCounts = try await metadataIndex.tagCounts()
+            let tagCounts = try await store.messageTagCounts()
             let taskCount = tagCounts.first(where: { $0.tag == "task" })?.totalCount ?? 0
             #expect(taskCount == dataset.taskLikeMessageCount)
         }
     }
 
     @Test
-    func tagFilterPageUsesMetadataIndexWithoutMainStoreTableDependency() async throws {
+    func tagFilterPageUsesCanonicalFacetIndexAcrossPagesAndScopes() async throws {
         try await withIsolatedLocalDataStore { store, _ in
             let generator = RuntimeQualityFixtureGenerator(seed: 0x5153, platform: .macOS)
             let dataset = generator.makeDataset(count: 1_000)
@@ -219,6 +218,60 @@ struct RuntimeQualityLargeScaleTests {
             #expect(malformedReloaded.tags == ["bad optional"])
             #expect(malformedReloaded.metadata.isEmpty)
             #expect(malformedEvent.imageURLs.isEmpty)
+        }
+    }
+
+    @Test
+    func currentV17StoreUpgradesInPlaceWithoutLosingMessagesOrEntityProjections() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            let generator = RuntimeQualityFixtureGenerator(seed: 0x5170, platform: .macOS)
+            let dataset = generator.makeDataset(count: 200)
+            let stagingStore = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            try await stagingStore.saveMessagesBatch(dataset.messages)
+            let expectedEventHeadCount = try await stagingStore
+                .loadEventMessagesForProjectionPage(before: nil, limit: 100)
+                .count
+            let expectedThingHeadCount = try await stagingStore
+                .loadThingMessagesForProjectionPage(before: nil, limit: 100)
+                .count
+
+            let upgradeAppGroupIdentifier = "group.ethan.pushgo.tests.\(UUID().uuidString.lowercased())"
+            try cloneUpgradeAutomationStorageFixture(
+                root: root,
+                sourceAppGroupIdentifier: appGroupIdentifier,
+                destinationAppGroupIdentifier: upgradeAppGroupIdentifier
+            )
+            try downgradeUpgradeFixtureToV17(appGroupIdentifier: upgradeAppGroupIdentifier)
+
+            let upgradedStore = LocalDataStore(appGroupIdentifier: upgradeAppGroupIdentifier)
+            let counts = try await upgradedStore.messageCounts()
+            #expect(counts.total == dataset.topLevelMessageCount)
+            #expect(counts.unread == dataset.unreadTopLevelMessageCount)
+
+            let firstPage = try await upgradedStore.loadMessageSummariesPage(
+                before: nil,
+                limit: 50,
+                filter: .all,
+                channel: nil,
+                tag: nil
+            )
+            #expect(firstPage.map(\.id) == dataset.expectedFirstSummaryIDs)
+            let tagCounts = try await upgradedStore.messageTagCounts()
+            #expect(tagCounts.first(where: { $0.tag == "runtimequality" })?.totalCount == dataset.topLevelMessageCount)
+            #expect(try await upgradedStore.loadEventMessagesForProjectionPage(before: nil, limit: 100).count == expectedEventHeadCount)
+            #expect(try await upgradedStore.loadThingMessagesForProjectionPage(before: nil, limit: 100).count == expectedThingHeadCount)
+
+            let dbQueue = try DatabaseQueue(
+                path: upgradeMainDatabaseURL(appGroupIdentifier: upgradeAppGroupIdentifier).path
+            )
+            let applied = try await dbQueue.read { db in
+                try Set(String.fetchAll(db, sql: "SELECT identifier FROM grdb_migrations;"))
+            }
+            #expect(applied.contains("v18_message_stats_and_revision"))
+            #expect(applied.contains("v19_message_summary_and_facets"))
+            #expect(applied.contains("v20_message_entity_identity_index"))
+            #expect(applied.contains("v21_message_search_derived_state"))
+            #expect(applied.contains("v22_split_message_stats_and_revision_update_triggers"))
         }
     }
 
@@ -641,11 +694,19 @@ struct RuntimeQualityLargeScaleTests {
             if assertThresholds {
                 #expect(firstPage.seconds < configuration.maxShortReadSeconds)
             }
+            #expect(try upgradeDerivedStatus(
+                appGroupIdentifier: upgradeAppGroupIdentifier,
+                component: "message_search_index"
+            ) == "stale")
 
             let searchCount = try await RuntimeQualityMetric.measure("\(metricPrefix).rebuild.searchCount", count: dataset.runtimeQualitySearchCount) {
                 try await store.searchMessagesCount(query: "runtimequality")
             }
             #expect(searchCount.value == dataset.runtimeQualitySearchCount)
+            #expect(try upgradeDerivedStatus(
+                appGroupIdentifier: upgradeAppGroupIdentifier,
+                component: "message_search_index"
+            ) == "ready")
             if assertThresholds {
                 #expect(searchCount.seconds < configuration.maxSearchSeconds)
             }
@@ -928,6 +989,14 @@ struct RuntimeQualityLargeScaleTests {
         .appendingPathComponent(AppConstants.messageIndexDatabaseFilename)
     }
 
+    private func upgradeMainDatabaseURL(appGroupIdentifier: String) throws -> URL {
+        try AppConstants.appLocalDatabaseDirectory(
+            fileManager: .default,
+            appGroupIdentifier: appGroupIdentifier
+        )
+        .appendingPathComponent(AppConstants.databaseStoreFilename)
+    }
+
     private func removeUpgradeSQLiteArtifacts(at fileURL: URL) throws {
         let sidecars = [
             fileURL,
@@ -947,17 +1016,65 @@ struct RuntimeQualityLargeScaleTests {
     }
 
     private func upgradeRealTagRowCount(appGroupIdentifier: String, value: String) throws -> Int {
-        let dbQueue = try DatabaseQueue(path: upgradeIndexDatabaseURL(appGroupIdentifier: appGroupIdentifier).path)
+        let dbQueue = try DatabaseQueue(path: upgradeMainDatabaseURL(appGroupIdentifier: appGroupIdentifier).path)
         return try dbQueue.read { db in
             try Int.fetchOne(
                 db,
                 sql: """
-                    SELECT COUNT(DISTINCT message_id)
-                    FROM message_metadata_index
+                    SELECT COUNT(DISTINCT local_message_id)
+                    FROM message_facet_index
                     WHERE key_name = 'tag' AND value_norm = ?;
                     """,
                 arguments: [value]
             ) ?? 0
+        }
+    }
+
+    private func upgradeDerivedStatus(
+        appGroupIdentifier: String,
+        component: String
+    ) throws -> String? {
+        let dbQueue = try DatabaseQueue(
+            path: upgradeMainDatabaseURL(appGroupIdentifier: appGroupIdentifier).path
+        )
+        return try dbQueue.read { db in
+            try String.fetchOne(
+                db,
+                sql: "SELECT status FROM message_derived_state WHERE component = ?;",
+                arguments: [component]
+            )
+        }
+    }
+
+    private func downgradeUpgradeFixtureToV17(appGroupIdentifier: String) throws {
+        let dbQueue = try DatabaseQueue(
+            path: upgradeMainDatabaseURL(appGroupIdentifier: appGroupIdentifier).path
+        )
+        try dbQueue.write { db in
+            try db.execute(sql: """
+                DROP TRIGGER IF EXISTS messages_stats_after_insert;
+                DROP TRIGGER IF EXISTS messages_stats_after_delete;
+                DROP TRIGGER IF EXISTS messages_stats_after_update;
+                DROP TRIGGER IF EXISTS messages_revision_after_update;
+                DROP TABLE IF EXISTS message_facet_index;
+                DROP TABLE IF EXISTS message_summary_projection;
+                DROP TABLE IF EXISTS message_derived_state;
+                DROP TABLE IF EXISTS message_channel_stats;
+                DROP TABLE IF EXISTS message_global_stats;
+                DROP TABLE IF EXISTS message_store_revision;
+                DROP INDEX IF EXISTS idx_messages_top_level_read_received;
+                DROP INDEX IF EXISTS idx_messages_top_level_channel_key_read_received;
+                DROP INDEX IF EXISTS idx_messages_top_level_channel_key_received;
+                DROP INDEX IF EXISTS idx_messages_entity_identity;
+                DELETE FROM grdb_migrations
+                WHERE identifier IN (
+                    'v18_message_stats_and_revision',
+                    'v19_message_summary_and_facets',
+                    'v20_message_entity_identity_index',
+                    'v21_message_search_derived_state',
+                    'v22_split_message_stats_and_revision_update_triggers'
+                );
+                """)
         }
     }
 
