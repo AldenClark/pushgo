@@ -615,7 +615,7 @@ jobs:
 
           install_profile_from_secret \
             "${APP_STORE_PROFILE_MACOS_WIDGET_BASE64}" \
-            "io.ethan.pushgo.widgets.mac" \
+            "io.ethan.pushgo.macwidgets" \
             "APP_STORE_PROFILE_MACOS_WIDGET_UUID" \
             "APP_STORE_PROFILE_MACOS_WIDGET_NAME" \
             "macOS widget" \
@@ -690,7 +690,7 @@ jobs:
             --profile "watch widget:${APP_STORE_PROFILE_WATCH_WIDGET_UUID}:io.ethan.pushgo.watchkitapp.widgets:Extensions/PushGoWidgets/PushGoWidgets-watchOS.entitlements" \
             --profile "macOS app:${APP_STORE_PROFILE_MACOS_APP_UUID}:io.ethan.pushgo:Apps/PushGo-macOS/pushgomac.entitlements" \
             --profile "macOS NSE:${APP_STORE_PROFILE_MACOS_NSE_UUID}:io.ethan.pushgo.NotificationServiceExtension:Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements" \
-            --profile "macOS widget:${APP_STORE_PROFILE_MACOS_WIDGET_UUID}:io.ethan.pushgo.widgets.mac:Extensions/PushGoWidgets/PushGoWidgets-macOS.entitlements"
+            --profile "macOS widget:${APP_STORE_PROFILE_MACOS_WIDGET_UUID}:io.ethan.pushgo.macwidgets:Extensions/PushGoWidgets/PushGoWidgets-macOS.entitlements"
 
       - name: Run fastlane beta upload
         if: steps.resolve.outputs.release_kind == 'beta'
@@ -902,7 +902,7 @@ jobs:
           )"
           bundle_id="${app_identifier#*.}"
 
-          if [[ "$bundle_id" != "io.ethan.pushgo.widgets.mac" ]]; then
+          if [[ "$bundle_id" != "io.ethan.pushgo.macwidgets" ]]; then
             echo "macOS widget direct-distribution profile bundle id mismatch: ${bundle_id}" >&2
             exit 1
           fi
@@ -976,7 +976,7 @@ jobs:
           /usr/bin/python3 scripts/validate_release_profiles.py \
             --profile "macOS direct app:${DEVELOPER_ID_PROFILE_MACOS_APP_UUID}:io.ethan.pushgo:Apps/PushGo-macOS/pushgomac.entitlements" \
             --profile "macOS direct NSE:${DEVELOPER_ID_PROFILE_MACOS_NSE_UUID}:io.ethan.pushgo.NotificationServiceExtension:Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements" \
-            --profile "macOS direct widget:${DEVELOPER_ID_PROFILE_MACOS_WIDGET_UUID}:io.ethan.pushgo.widgets.mac:Extensions/PushGoWidgets/PushGoWidgets-macOS.entitlements"
+            --profile "macOS direct widget:${DEVELOPER_ID_PROFILE_MACOS_WIDGET_UUID}:io.ethan.pushgo.macwidgets:Extensions/PushGoWidgets/PushGoWidgets-macOS.entitlements"
 
       - name: Resolve Swift packages
         shell: bash

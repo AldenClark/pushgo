@@ -225,7 +225,7 @@ platform :ios do
     {
       "io.ethan.pushgo" => resolve_from_repo("Apps/PushGo-macOS/pushgomac.entitlements"),
       "io.ethan.pushgo.NotificationServiceExtension" => resolve_from_repo("Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements"),
-      "io.ethan.pushgo.widgets.mac" => resolve_from_repo("Extensions/PushGoWidgets/PushGoWidgets-macOS.entitlements")
+      "io.ethan.pushgo.macwidgets" => resolve_from_repo("Extensions/PushGoWidgets/PushGoWidgets-macOS.entitlements")
     }
   end
 
@@ -233,7 +233,7 @@ platform :ios do
     {
       "io.ethan.pushgo" => env_value!("DEVELOPER_ID_PROFILE_MACOS_APP_UUID"),
       "io.ethan.pushgo.NotificationServiceExtension" => env_value!("DEVELOPER_ID_PROFILE_MACOS_NSE_UUID"),
-      "io.ethan.pushgo.widgets.mac" => env_value!("DEVELOPER_ID_PROFILE_MACOS_WIDGET_UUID")
+      "io.ethan.pushgo.macwidgets" => env_value!("DEVELOPER_ID_PROFILE_MACOS_WIDGET_UUID")
     }
   end
 
@@ -336,7 +336,7 @@ platform :ios do
     {
       "io.ethan.pushgo" => resolve_from_repo("Apps/PushGo-macOS/pushgomac.entitlements"),
       "io.ethan.pushgo.NotificationServiceExtension" => resolve_from_repo("Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements"),
-      "io.ethan.pushgo.widgets.mac" => resolve_from_repo("Extensions/PushGoWidgets/PushGoWidgets-macOS.entitlements")
+      "io.ethan.pushgo.macwidgets" => resolve_from_repo("Extensions/PushGoWidgets/PushGoWidgets-macOS.entitlements")
     }
   end
 
@@ -700,7 +700,7 @@ platform :ios do
     {
       "io.ethan.pushgo" => env_value!("APP_STORE_PROFILE_MACOS_APP_UUID"),
       "io.ethan.pushgo.NotificationServiceExtension" => env_value!("APP_STORE_PROFILE_MACOS_NSE_UUID"),
-      "io.ethan.pushgo.widgets.mac" => env_value!("APP_STORE_PROFILE_MACOS_WIDGET_UUID")
+      "io.ethan.pushgo.macwidgets" => env_value!("APP_STORE_PROFILE_MACOS_WIDGET_UUID")
     }
   end
 
