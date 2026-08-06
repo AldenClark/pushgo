@@ -226,7 +226,7 @@ struct RuntimeQualityLargeScaleTests {
         try await withIsolatedAutomationStorage { root, appGroupIdentifier in
             let generator = RuntimeQualityFixtureGenerator(seed: 0x5170, platform: .macOS)
             let dataset = generator.makeDataset(count: 200)
-            let stagingStore = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let stagingStore = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             try await stagingStore.saveMessagesBatch(dataset.messages)
             let expectedEventHeadCount = try await stagingStore
                 .loadEventMessagesForProjectionPage(before: nil, limit: 100)
@@ -243,7 +243,7 @@ struct RuntimeQualityLargeScaleTests {
             )
             try downgradeUpgradeFixtureToV17(appGroupIdentifier: upgradeAppGroupIdentifier)
 
-            let upgradedStore = LocalDataStore(appGroupIdentifier: upgradeAppGroupIdentifier)
+            let upgradedStore = LocalDataStore(appGroupIdentifier: upgradeAppGroupIdentifier, spotlightIndexer: nil)
             let counts = try await upgradedStore.messageCounts()
             #expect(counts.total == dataset.topLevelMessageCount)
             #expect(counts.unread == dataset.unreadTopLevelMessageCount)
@@ -490,7 +490,7 @@ struct RuntimeQualityLargeScaleTests {
             #expect(deleted.value == firstPage.value.count)
             #expect(deleted.seconds < configuration.maxSmallDeleteSeconds)
 
-            let reloadedStore = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let reloadedStore = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             let afterDeleteCounts = try await reloadedStore.messageCounts()
             #expect(afterDeleteCounts.total == dataset.topLevelMessageCount - firstPage.value.count)
 
@@ -639,7 +639,7 @@ struct RuntimeQualityLargeScaleTests {
         try await withIsolatedAutomationStorage { root, appGroupIdentifier in
             let generator = RuntimeQualityFixtureGenerator(seed: seed, platform: .iOS)
             let dataset = generator.makeDataset(count: scale)
-            let stagingStore = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let stagingStore = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             let seedWrite = try await RuntimeQualityMetric.measure("\(metricPrefix).fixture.seedWrite", count: scale) {
                 try await stagingStore.saveMessagesBatch(dataset.messages)
             }
@@ -656,7 +656,7 @@ struct RuntimeQualityLargeScaleTests {
             )
 
             let opened = await RuntimeQualityMetric.measure("\(metricPrefix).open.store", count: scale) {
-                LocalDataStore(appGroupIdentifier: upgradeAppGroupIdentifier)
+                LocalDataStore(appGroupIdentifier: upgradeAppGroupIdentifier, spotlightIndexer: nil)
             }
             let store = opened.value
             if assertThresholds {
@@ -790,7 +790,7 @@ struct RuntimeQualityLargeScaleTests {
                 sourceAppGroupIdentifier: upgradeAppGroupIdentifier,
                 destinationAppGroupIdentifier: reloadAppGroupIdentifier
             )
-            let reloadedStore = LocalDataStore(appGroupIdentifier: reloadAppGroupIdentifier)
+            let reloadedStore = LocalDataStore(appGroupIdentifier: reloadAppGroupIdentifier, spotlightIndexer: nil)
             let reloadedPage = try await reloadedStore.loadMessageSummariesPage(
                 before: nil,
                 limit: 50,

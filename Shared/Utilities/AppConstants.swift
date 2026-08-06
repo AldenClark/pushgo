@@ -51,8 +51,20 @@ enum PushGoAutomationContext {
     private static let forceForegroundAppEnv = "PUSHGO_AUTOMATION_FORCE_FOREGROUND_APP"
     private static let allowCrossAppDataAccessEnv = "PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS"
 
+    #if DEBUG
+    // Unit tests run concurrently in one process. A task-local override keeps
+    // each test's storage sandbox scoped to that test without mutating the
+    // process-wide environment used by UI automation and production builds.
+    @TaskLocal static var storageRootOverrideURL: URL?
+    #endif
+
     static var storageRootURL: URL? {
-        normalizedURL(for: storageRootEnv)
+        #if DEBUG
+        if let storageRootOverrideURL {
+            return storageRootOverrideURL
+        }
+        #endif
+        return normalizedURL(for: storageRootEnv)
     }
 
     static var keychainDirectoryURL: URL? {

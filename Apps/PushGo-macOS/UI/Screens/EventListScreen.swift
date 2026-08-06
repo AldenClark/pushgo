@@ -12,8 +12,6 @@ struct EventListScreen: View {
 
     let events: [EventProjection]
     @Binding var selection: String?
-    @Binding var batchSelection: Set<String>
-    @Binding var isBatchMode: Bool
     var isLoadingMore: Bool = false
     var onReachEnd: (() -> Void)? = nil
     var onOpenEvent: ((EventProjection) -> Void)? = nil
@@ -22,7 +20,7 @@ struct EventListScreen: View {
 
     var body: some View {
         ZStack {
-            activeListView
+            eventList
                 .opacity(events.isEmpty ? 0.001 : 1)
                 .allowsHitTesting(!events.isEmpty)
                 .accessibilityHidden(events.isEmpty)
@@ -35,65 +33,7 @@ struct EventListScreen: View {
         .accessibilityIdentifier("screen.events.list")
     }
 
-    @ViewBuilder
-    private var activeListView: some View {
-        if isBatchMode {
-            eventBatchList
-        } else {
-            eventSelectionList
-        }
-    }
-
-    private var eventBatchList: some View {
-        List {
-            ForEach(events.indices, id: \.self) { index in
-                let event = events[index]
-                Button {
-                    toggleBatchSelection(event.id)
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: batchSelection.contains(event.id) ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(batchSelection.contains(event.id) ? .accent : .secondary)
-                        EventListRow(event: event)
-                    }
-                    .entityListRowTapTarget()
-                }
-                .buttonStyle(.plain)
-                .id(event.id)
-                .accessibilityIdentifier("event.row.\(event.id)")
-                .modifier(eventAccessibilityActions(for: event))
-                .listRowInsets(Layout.rowInsets)
-                .alignmentGuide(.listRowSeparatorLeading) { dimensions in
-                    dimensions[.leading]
-                }
-                .alignmentGuide(.listRowSeparatorTrailing) { dimensions in
-                    dimensions[.trailing] - Layout.rowInsets.trailing
-                }
-                .listRowBackground(EntitySelectionBackground(isSelected: batchSelection.contains(event.id)))
-                .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
-                .listRowSeparator(index == events.count - 1 ? .hidden : .visible, edges: .bottom)
-                .onAppear {
-                    guard index == events.count - 1 else { return }
-                    onReachEnd?()
-                }
-            }
-            if isLoadingMore {
-                HStack {
-                    Spacer()
-                    ProgressView()
-                        .controlSize(.small)
-                    Spacer()
-                }
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-            }
-        }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .background(EntityVisualTokens.pageBackground)
-    }
-
-    private var eventSelectionList: some View {
+    private var eventList: some View {
         List {
             ForEach(events.indices, id: \.self) { index in
                 let event = events[index]
@@ -136,14 +76,6 @@ struct EventListScreen: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(EntityVisualTokens.pageBackground)
-    }
-
-    private func toggleBatchSelection(_ eventId: String) {
-        if batchSelection.contains(eventId) {
-            batchSelection.remove(eventId)
-        } else {
-            batchSelection.insert(eventId)
-        }
     }
 
     private func eventAccessibilityActions(for event: EventProjection) -> some ViewModifier {

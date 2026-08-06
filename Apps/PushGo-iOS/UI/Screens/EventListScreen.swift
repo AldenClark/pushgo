@@ -15,12 +15,10 @@ struct EventListScreen: View {
     var scrollToTopToken: Int = 0
     var onOpenEventHandled: (() -> Void)? = nil
     @State private var selectedEvent: EventProjection?
-    @State private var selectedEventIds: Set<String> = []
     @State private var searchQuery: String = ""
     @State private var selectedChannelIDs: Set<String> = []
     @State private var selectedTags: Set<String> = []
     @State private var isFilterPopoverPresented = false
-    @State private var isBatchModeActive = false
     @State private var hydrationRequestedEventIDs: Set<String> = []
 
     var body: some View {
@@ -37,7 +35,6 @@ struct EventListScreen: View {
         .navigationTitle(localizationManager.localized("thing_detail_tab_events"))
         .navigationBarTitleDisplayMode(.large)
         .toolbar { toolbarContent }
-        .toolbar(isBatchMode ? .hidden : .visible, for: .tabBar)
         .onAppear {
             environment.updateEventListPosition(isAtTop: true)
             openEventIfNeeded()
@@ -63,20 +60,10 @@ struct EventListScreen: View {
             publishAutomationState()
 #endif
         }
-        .onChange(of: isBatchMode) { _, active in
-            if active {
-                selectedEvent = nil
-            } else {
-                selectedEventIds.removeAll()
-                openEventIfNeeded()
-            }
-        }
         .onChange(of: environment.pendingLocalDeletionController.pendingDeletion) { _, _ in
             if let selectedEvent, isPendingLocalDeletion(selectedEvent) {
                 self.selectedEvent = nil
             }
-            let visibleIDs = Set(filteredEvents.map(\.id))
-            selectedEventIds = selectedEventIds.intersection(visibleIDs)
         }
         .sheet(item: $selectedEvent) { event in
             EventDetailScreen(
@@ -127,23 +114,16 @@ struct EventListScreen: View {
     @ViewBuilder
     private func eventList(filteredEvents: [EventProjection]) -> some View {
         ScrollViewReader { proxy in
-            List(selection: batchSelectionBinding) {
+            List {
                 ForEach(filteredEvents.indices, id: \.self) { index in
                     let event = filteredEvents[index]
-                    Group {
-                        if isBatchMode {
-                            EventListRow(event: event)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        } else {
-                            Button {
-                                selectEvent(event)
-                            } label: {
-                                EventListRow(event: event)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .buttonStyle(.plain)
-                        }
+                    Button {
+                        selectEvent(event)
+                    } label: {
+                        EventListRow(event: event)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .buttonStyle(.plain)
                     .id(event.id)
                     .accessibilityIdentifier("event.row.\(event.id)")
                     .accessibilityElement(children: .combine)
@@ -157,7 +137,7 @@ struct EventListScreen: View {
                         environment.showToast(message: localizationManager.localized("copied"), style: .success, duration: 1.6)
                     }
                     .accessibilityAction(named: Text(localizationManager.localized("delete"))) {
-                        Task { await scheduleDeletion(for: [event]) }
+                        Task { await scheduleDeletion(for: event) }
                     }
                     .tag(event.id)
                     .listRowInsets(EdgeInsets(
@@ -167,7 +147,7 @@ struct EventListScreen: View {
                         trailing: EntityVisualTokens.listRowInsetHorizontal
                     ))
                     .listRowBackground(
-                        EntitySelectionBackground(isSelected: isBatchMode ? selectedEventIds.contains(event.id) : selectedEvent?.id == event.id)
+                        EntitySelectionBackground(isSelected: selectedEvent?.id == event.id)
                     )
                     .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
                     .listRowSeparator(index == filteredEvents.count - 1 ? .hidden : .visible, edges: .bottom)
@@ -196,7 +176,6 @@ struct EventListScreen: View {
                     )
                 }
             )
-            .environment(\.editMode, isBatchMode ? .constant(.active) : .constant(.inactive))
             .scrollContentBackground(.hidden)
             .background(EntityVisualTokens.pageBackground)
             .coordinateSpace(name: EventListScrollMetrics.coordinateSpaceName)
@@ -230,7 +209,7 @@ struct EventListScreen: View {
 
     @ViewBuilder
     private func applySearchIfNeeded<Content: View>(_ content: Content) -> some View {
-        if viewModel.events.isEmpty || isBatchMode {
+        if viewModel.events.isEmpty {
             content
         } else {
             content.searchable(
@@ -360,64 +339,22 @@ struct EventListScreen: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        if isBatchMode {
-            ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    toggleSelectAllEvents()
-                } label: {
-                    Image(systemName: areAllVisibleEventsSelected ? "checkmark.rectangle.stack.fill" : "checkmark.rectangle.stack")
-                }
-                .accessibilityLabel(localizationManager.localized("all"))
-            }
-        }
         ToolbarItemGroup(placement: .primaryAction) {
-            if isBatchMode {
-                Button {
-                    Task { await exitBatchModeAfterFlushingPendingDeletion() }
-                } label: {
-                    batchDoneToolbarIcon()
-                }
-                .accessibilityLabel(localizationManager.localized("done"))
-            } else {
-                Button {
-                    isFilterPopoverPresented = true
-                } label: {
-                    filterToolbarIcon(isHighlighted: isFilterMenuHighlighted)
-                }
-                .accessibilityLabel(localizationManager.localized("channel"))
-                .popover(isPresented: $isFilterPopoverPresented, arrowEdge: .top) {
-                    if #available(iOS 16.4, *) {
-                        filterPopoverContent
-                            .presentationCompactAdaptation(.popover)
-                    } else {
-                        filterPopoverContent
-                    }
+            Button {
+                isFilterPopoverPresented = true
+            } label: {
+                filterToolbarIcon(isHighlighted: isFilterMenuHighlighted)
+            }
+            .accessibilityLabel(localizationManager.localized("channel"))
+            .popover(isPresented: $isFilterPopoverPresented, arrowEdge: .top) {
+                if #available(iOS 16.4, *) {
+                    filterPopoverContent
+                        .presentationCompactAdaptation(.popover)
+                } else {
+                    filterPopoverContent
                 }
             }
         }
-        if isBatchMode {
-            ToolbarItemGroup(placement: .bottomBar) {
-                Spacer()
-                Button(role: .destructive) {
-                    Task { await scheduleDeletion(for: selectedBatchEvents) }
-                } label: {
-                    Image(systemName: "trash")
-                }
-                .accessibilityLabel(localizationManager.localized("delete"))
-                .disabled(selectedEventIds.isEmpty)
-            }
-        }
-    }
-
-    private var isBatchMode: Bool {
-        isBatchModeActive
-    }
-
-    private var batchSelectionBinding: Binding<Set<String>> {
-        if isBatchMode {
-            return $selectedEventIds
-        }
-        return .constant([])
     }
 
     private func normalizedChannel(_ value: String?) -> String? {
@@ -430,7 +367,6 @@ struct EventListScreen: View {
     }
 
     private func openEventIfNeeded() {
-        guard !isBatchMode else { return }
         let target = openEventId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !target.isEmpty else { return }
         if let matched = viewModel.events.first(where: { $0.id == target }) {
@@ -467,7 +403,6 @@ struct EventListScreen: View {
     }
 
     private func selectEvent(_ event: EventProjection) {
-        guard !isBatchMode else { return }
         selectedEvent = event
         Task { @MainActor in
             if let hydrated = await viewModel.ensureEventDetailsLoaded(eventId: event.id, forceRefresh: true) {
@@ -500,18 +435,6 @@ struct EventListScreen: View {
         }
     }
 
-    @MainActor
-    private func exitBatchModeAfterFlushingPendingDeletion() async {
-        await environment.pendingLocalDeletionController.commitCurrentIfNeeded()
-        isBatchModeActive = false
-    }
-
-    private var selectedBatchEvents: [EventProjection] {
-        let selectedIds = selectedEventIds
-        guard !selectedIds.isEmpty else { return [] }
-        return filteredEvents.filter { selectedIds.contains($0.id) }
-    }
-
     private func isPendingLocalDeletion(_ event: EventProjection) -> Bool {
         environment.pendingLocalDeletionController.suppressesEvent(
             id: event.id,
@@ -520,9 +443,9 @@ struct EventListScreen: View {
     }
 
     @MainActor
-    private func scheduleDeletion(for events: [EventProjection]) async {
+    private func scheduleDeletion(for event: EventProjection) async {
         guard let result = await environment.pendingLocalDeletionController.scheduleItems(
-            events,
+            [event],
             identity: { $0.id },
             title: { $0.title },
             fallbackSingleSummary: localizationManager.localized("push_type_event"),
@@ -545,7 +468,6 @@ struct EventListScreen: View {
         if let selectedEvent, result.scope.suppressesEvent(id: selectedEvent.id, channelId: selectedEvent.channelId) {
             self.selectedEvent = nil
         }
-        selectedEventIds.subtract(result.scope.eventIDs)
     }
 
     @ViewBuilder
@@ -557,14 +479,6 @@ struct EventListScreen: View {
         !selectedChannelIDs.isEmpty || !selectedTags.isEmpty
     }
 
-    private func batchDoneToolbarIcon() -> some View {
-        Image(systemName: "checkmark")
-            .font(.footnote.weight(.bold))
-            .foregroundStyle(
-                .appAccentPrimary
-            )
-    }
-
     private func filterToolbarIcon(isHighlighted: Bool) -> some View {
         Image(systemName: "line.3.horizontal.decrease")
             .font(.body.weight(.semibold))
@@ -573,19 +487,6 @@ struct EventListScreen: View {
 
     private var filterPopoverContent: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Button {
-                isBatchModeActive.toggle()
-                isFilterPopoverPresented = false
-            } label: {
-                filterMenuSelectionRow(
-                    title: "选择",
-                    systemImage: "checklist",
-                    isSelected: isBatchModeActive
-                )
-            }
-            .buttonStyle(.plain)
-            .padding(.vertical, 2)
-
             if !allChannelIds.isEmpty {
                 Rectangle()
                     .fill(Color.appDividerSubtle.opacity(0.9))
@@ -706,20 +607,6 @@ struct EventListScreen: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var allVisibleEventIDs: Set<String> {
-        Set(filteredEvents.map(\.id))
-    }
-
-    private var areAllVisibleEventsSelected: Bool {
-        let visibleIDs = allVisibleEventIDs
-        return !visibleIDs.isEmpty && selectedEventIds == visibleIDs
-    }
-
-    private func toggleSelectAllEvents() {
-        let visibleIDs = allVisibleEventIDs
-        guard !visibleIDs.isEmpty else { return }
-        selectedEventIds = areAllVisibleEventsSelected ? [] : visibleIDs
-    }
 }
 
 private struct EventFilterChipFlowLayout: Layout {

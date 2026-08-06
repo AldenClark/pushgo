@@ -5,6 +5,29 @@ struct ChannelSubscriptionService {
     static let deviceRoutePath = "/channel/device"
     static let deviceChannelDeletePath = "/channel/device/delete"
     static let providerTokenRetirePath = "/channel/device/provider-token/retire"
+    static let pullV2Path = "/v2/messages/pull"
+    static let pullLegacyPath = "/messages/pull"
+    static let ackPath = "/messages/ack"
+    static let batchAckV2Path = "/v2/messages/ack"
+
+    enum PullContract: Sendable, Equatable {
+        case v2
+        case legacy
+    }
+
+    struct PullResult: Sendable, Equatable {
+        let items: [PullItem]
+        let hasMore: Bool
+        let contract: PullContract
+
+        var requiresAck: Bool { contract == .v2 }
+    }
+
+    private let session: URLSession
+
+    init(session: URLSession = .shared) {
+        self.session = session
+    }
 
     struct DeviceRegisterPayload: Decodable {
         let deviceKey: String
@@ -82,9 +105,15 @@ struct ChannelSubscriptionService {
 
     struct PullResponse: Decodable {
         let items: [PullItem]
+        let hasMore: Bool?
+
+        enum CodingKeys: String, CodingKey {
+            case items
+            case hasMore = "has_more"
+        }
     }
 
-    struct PullItem: Decodable {
+    struct PullItem: Decodable, Sendable, Equatable {
         let deliveryId: String
         let payload: [String: String]
 
@@ -104,8 +133,28 @@ struct ChannelSubscriptionService {
         }
     }
 
+    struct BatchAckRequest: Encodable {
+        let deviceKey: String
+        let deliveryIds: [String]
+
+        enum CodingKeys: String, CodingKey {
+            case deviceKey = "device_key"
+            case deliveryIds = "delivery_ids"
+        }
+    }
+
     struct AckResponse: Decodable {
         let removed: Bool
+    }
+
+    struct BatchAckResponse: Decodable, Sendable, Equatable {
+        let requestedCount: Int
+        let removedCount: Int
+
+        enum CodingKeys: String, CodingKey {
+            case requestedCount = "requested_count"
+            case removedCount = "removed_count"
+        }
     }
 
     struct EmptyPayload: Decodable {
@@ -502,12 +551,48 @@ struct ChannelSubscriptionService {
         token: String?,
         deviceKey: String,
         deliveryId: String? = nil
-    ) async throws -> [PullItem] {
+    ) async throws -> PullResult {
+        do {
+            let response = try await pullMessages(
+                baseURL: baseURL,
+                token: token,
+                deviceKey: deviceKey,
+                deliveryId: deliveryId,
+                path: Self.pullV2Path
+            )
+            return PullResult(
+                items: response.items,
+                hasMore: response.hasMore ?? false,
+                contract: .v2
+            )
+        } catch let AppError.gateway(problem)
+            where problem.status == 404
+                && problem.code?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                    == "route_not_found"
+        {
+            let response = try await pullMessages(
+                baseURL: baseURL,
+                token: token,
+                deviceKey: deviceKey,
+                deliveryId: deliveryId,
+                path: Self.pullLegacyPath
+            )
+            return PullResult(items: response.items, hasMore: false, contract: .legacy)
+        }
+    }
+
+    private func pullMessages(
+        baseURL: URL,
+        token: String?,
+        deviceKey: String,
+        deliveryId: String?,
+        path: String
+    ) async throws -> PullResponse {
         let baseURL = try validatedBaseURL(baseURL)
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw AppError.invalidURL
         }
-        components.path = components.path.appendingPathComponent("/messages/pull")
+        components.path = components.path.appendingPathComponent(path)
         guard let url = components.url else {
             throw AppError.invalidURL
         }
@@ -536,8 +621,8 @@ struct ChannelSubscriptionService {
                 deliveryId: normalizedDeliveryId
             )
         )
-        let (data, response) = try await URLSession.shared.data(for: request)
-        return try decodePayload(PullResponse.self, data: data, response: response).items
+        let (data, response) = try await session.data(for: request)
+        return try decodePayload(PullResponse.self, data: data, response: response)
     }
 
     func ackMessage(
@@ -550,7 +635,7 @@ struct ChannelSubscriptionService {
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw AppError.invalidURL
         }
-        components.path = components.path.appendingPathComponent("/messages/ack")
+        components.path = components.path.appendingPathComponent(Self.ackPath)
         guard let url = components.url else {
             throw AppError.invalidURL
         }
@@ -583,8 +668,67 @@ struct ChannelSubscriptionService {
                 deliveryId: normalizedDeliveryId
             )
         )
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         return try decodePayload(AckResponse.self, data: data, response: response).removed
+    }
+
+    func ackMessages(
+        baseURL: URL,
+        token: String?,
+        deviceKey: String,
+        deliveryIds: [String]
+    ) async throws -> BatchAckResponse {
+        let normalizedDeviceKey = deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedDeviceKey.isEmpty else {
+            throw AppError.typedLocal(
+                code: "missing_device_key",
+                category: .validation,
+                message: LocalizationProvider.localized("operation_failed"),
+                detail: "missing device_key"
+            )
+        }
+        let normalizedDeliveryIds = Array(
+            Set(deliveryIds.compactMap { value -> String? in
+                let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                return normalized.isEmpty ? nil : normalized
+            })
+        ).sorted()
+        guard !normalizedDeliveryIds.isEmpty, normalizedDeliveryIds.count <= 200 else {
+            throw AppError.typedLocal(
+                code: "invalid_delivery_ids",
+                category: .validation,
+                message: LocalizationProvider.localized("operation_failed"),
+                detail: "delivery_ids must contain between 1 and 200 unique values"
+            )
+        }
+        let baseURL = try validatedBaseURL(baseURL)
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw AppError.invalidURL
+        }
+        components.path = components.path.appendingPathComponent(Self.batchAckV2Path)
+        guard let url = components.url else { throw AppError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = AppConstants.deviceRegistrationTimeout
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        Self.applyGatewayHeaders(&request, token: token)
+        request.httpBody = try JSONEncoder().encode(
+            BatchAckRequest(deviceKey: normalizedDeviceKey, deliveryIds: normalizedDeliveryIds)
+        )
+        let (data, response) = try await session.data(for: request)
+        let result = try decodePayload(BatchAckResponse.self, data: data, response: response)
+        guard result.requestedCount == normalizedDeliveryIds.count,
+              result.removedCount >= 0,
+              result.removedCount <= result.requestedCount
+        else {
+            throw AppError.typedLocal(
+                code: "gateway_ack_count_mismatch",
+                category: .internalError,
+                message: LocalizationProvider.localized("operation_failed"),
+                detail: "batch ack count mismatch"
+            )
+        }
+        return result
     }
 
     func subscribe(

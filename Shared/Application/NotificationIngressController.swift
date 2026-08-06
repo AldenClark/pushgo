@@ -131,6 +131,32 @@ final class NotificationIngressController {
         )
     }
 
+    func finalizePulledProviderIngress(
+        deliveryId: String,
+        context: ProviderPullContext,
+        outcome: NotificationPersistenceOutcome,
+        source: String
+    ) async {
+        await providerIngressCoordinator.finalizePulledIngress(
+            deliveryId: deliveryId,
+            context: context,
+            result: ProviderIngressPersistenceResult(outcome),
+            source: source
+        )
+    }
+
+    func ackDirectProviderIngressIfNeeded(
+        payload: [AnyHashable: Any],
+        outcome: NotificationPersistenceOutcome,
+        source: String
+    ) async {
+        await providerIngressCoordinator.ackDirectDeliveryIfNeeded(
+            payload: payload,
+            result: ProviderIngressPersistenceResult(outcome),
+            source: source
+        )
+    }
+
     @discardableResult
     func purgePendingUnresolvedWakeupEntries(limit: Int = 256) async -> Int {
         await providerIngressCoordinator.purgePendingUnresolvedWakeupEntries(limit: limit)
@@ -167,12 +193,18 @@ final class NotificationIngressController {
         )
         let outcome: NotificationPersistenceOutcome
         switch ingress {
-        case let .pulled(payload, requestIdentifier):
+        case let .pulled(payload, requestIdentifier, context):
             outcome = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
                 payload,
                 requestIdentifier: requestIdentifier,
                 dataStore: dataStore,
                 beforeSave: beforePersistMessage
+            )
+            await finalizePulledProviderIngress(
+                deliveryId: requestIdentifier,
+                context: context,
+                outcome: outcome,
+                source: "provider.notification.pulled.\(platformSuffix)"
             )
         case .claimedByPeer:
             outcome = await hasPersistedNotification(identity: identity) ? .duplicate : .rejected
@@ -208,6 +240,11 @@ final class NotificationIngressController {
                 fallbackRequestIdentifier: notification.request.identifier,
                 dataStore: dataStore,
                 beforeSave: beforePersistMessage
+            )
+            await ackDirectProviderIngressIfNeeded(
+                payload: notificationPayload,
+                outcome: outcome,
+                source: "provider.notification.direct.\(platformSuffix)"
             )
         }
 

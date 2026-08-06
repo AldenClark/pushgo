@@ -2,6 +2,20 @@ import Foundation
 import Testing
 @testable import PushGoAppleCore
 
+private func testDeliveryIdentity(
+    deliveryId: String,
+    baseURL: String = "https://sandbox.pushgo.dev",
+    deviceKey: String = "provider-device-key",
+    ackContract: ProviderDeliveryAckFailureStore.AckContract = .v2Batch
+) -> ProviderDeliveryAckFailureStore.DeliveryIdentity {
+    ProviderDeliveryAckFailureStore.DeliveryIdentity(
+        deliveryId: deliveryId,
+        baseURL: URL(string: baseURL)!,
+        deviceKey: deviceKey,
+        ackContract: ackContract
+    )!
+}
+
 struct NotificationIngressInboxTests {
     @Test
     func notificationIngressInboxPersistsBinaryCodableEntries() async throws {
@@ -103,16 +117,14 @@ struct NotificationIngressInboxTests {
     }
 
     @Test
-    func providerDeliveryAckFailureStorePersistsPendingOrFailedMarkersByDeliveryId() async throws {
+    func providerDeliveryAckFailureStorePersistsPendingOrFailedMarkersByFullIdentity() async throws {
         try await withIsolatedAutomationStorage { _, appGroupIdentifier in
             let store = ProviderDeliveryAckFailureStore(appGroupIdentifier: appGroupIdentifier)
-            let baseURL = try #require(URL(string: "https://sandbox.pushgo.dev"))
+            let identity = testDeliveryIdentity(deliveryId: "delivery-ack-failure-001")
 
             #expect(
                 await store.markPreparing(
-                    deliveryId: " delivery-ack-failure-001 ",
-                    baseURL: baseURL,
-                    deviceKeyAccount: "provider.device_key.ios",
+                    identity: identity,
                     source: "nse_preparing"
                 )
             )
@@ -120,9 +132,7 @@ struct NotificationIngressInboxTests {
 
             #expect(
                 await store.markInboxDurable(
-                    deliveryId: "delivery-ack-failure-001",
-                    baseURL: baseURL,
-                    deviceKeyAccount: "provider.device_key.ios",
+                    identity: identity,
                     source: "nse_inbox_durable"
                 )
             )
@@ -133,6 +143,7 @@ struct NotificationIngressInboxTests {
             #expect(pending.first?.record.stage == .inboxDurable)
             #expect(pending.first?.record.source == "nse_inbox_durable")
             #expect(pending.first?.baseURL?.absoluteString == "https://sandbox.pushgo.dev")
+            #expect(pending.first?.identity == identity)
 
             let first = try #require(pending.first)
             let rawData = try Data(contentsOf: first.fileURL)
@@ -158,7 +169,7 @@ struct NotificationIngressInboxTests {
             #expect(pending.count == 1)
             #expect(pending.first?.record.stage == .inboxDurable)
 
-            await store.markCompleted(deliveryId: "delivery-ack-failure-001")
+            await store.markCompleted(identity: identity)
             pending = await store.pendingMarkers()
             #expect(pending.isEmpty)
         }
@@ -166,16 +177,14 @@ struct NotificationIngressInboxTests {
 
     @Test
     func providerDeliveryAckFailureStoreHidesFreshInboxDurableMarkersFromAppDrain() async throws {
-        try await withIsolatedAutomationStorage { _, appGroupIdentifier in
+        await withIsolatedAutomationStorage { _, appGroupIdentifier in
             let store = ProviderDeliveryAckFailureStore(appGroupIdentifier: appGroupIdentifier)
-            let baseURL = try #require(URL(string: "https://sandbox.pushgo.dev"))
+            let identity = testDeliveryIdentity(deliveryId: "delivery-young-marker-001")
             let now = Date()
 
             #expect(
                 await store.markInboxDurable(
-                    deliveryId: "delivery-young-marker-001",
-                    baseURL: baseURL,
-                    deviceKeyAccount: "provider.device_key.macos",
+                    identity: identity,
                     source: "nse_inbox_durable",
                     postNotification: false
                 )
@@ -190,13 +199,11 @@ struct NotificationIngressInboxTests {
     func providerDeliveryAckFailureStoreDoesNotRecreateRecentlyCompletedMarkers() async throws {
         try await withIsolatedAutomationStorage { _, appGroupIdentifier in
             let store = ProviderDeliveryAckFailureStore(appGroupIdentifier: appGroupIdentifier)
-            let baseURL = try #require(URL(string: "https://sandbox.pushgo.dev"))
+            let identity = testDeliveryIdentity(deliveryId: "delivery-completed-marker-001")
 
             #expect(
                 await store.markInboxDurable(
-                    deliveryId: "delivery-completed-marker-001",
-                    baseURL: baseURL,
-                    deviceKeyAccount: "provider.device_key.macos",
+                    identity: identity,
                     source: "nse_inbox_durable",
                     postNotification: false
                 )
@@ -233,9 +240,7 @@ struct NotificationIngressInboxTests {
 
             #expect(
                 await store.markInboxDurable(
-                    deliveryId: "delivery-completed-marker-001",
-                    baseURL: baseURL,
-                    deviceKeyAccount: "provider.device_key.macos",
+                    identity: identity,
                     source: "second_nse_inbox_durable",
                     postNotification: false
                 ) == false
@@ -248,13 +253,11 @@ struct NotificationIngressInboxTests {
     func providerDeliveryAckFailureStoreKeepsActiveLeaseFromBeingOverwritten() async throws {
         try await withIsolatedAutomationStorage { _, appGroupIdentifier in
             let store = ProviderDeliveryAckFailureStore(appGroupIdentifier: appGroupIdentifier)
-            let baseURL = try #require(URL(string: "https://sandbox.pushgo.dev"))
+            let identity = testDeliveryIdentity(deliveryId: "delivery-active-lease-001")
 
             #expect(
                 await store.markInboxDurable(
-                    deliveryId: "delivery-active-lease-001",
-                    baseURL: baseURL,
-                    deviceKeyAccount: "provider.device_key.macos",
+                    identity: identity,
                     source: "nse_inbox_durable",
                     postNotification: false
                 )
@@ -269,9 +272,7 @@ struct NotificationIngressInboxTests {
 
             #expect(
                 await store.markInboxDurable(
-                    deliveryId: "delivery-active-lease-001",
-                    baseURL: baseURL,
-                    deviceKeyAccount: "provider.device_key.macos",
+                    identity: identity,
                     source: "second_nse_inbox_durable",
                     postNotification: false
                 ) == false
@@ -281,29 +282,110 @@ struct NotificationIngressInboxTests {
     }
 
     @Test
-    func providerWakeupPullClaimStoreAllowsOnlyOneActiveClaimPerDelivery() async throws {
+    func providerDeliveryAckFailureStoreIsolatesSameDeliveryAcrossGatewaysAndDevices() async throws {
+        await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let store = ProviderDeliveryAckFailureStore(appGroupIdentifier: appGroupIdentifier)
+            let identityA = testDeliveryIdentity(
+                deliveryId: "shared-delivery-id",
+                baseURL: "https://gateway.example/GatewayA",
+                deviceKey: "device-a",
+                ackContract: .legacySingle
+            )
+            let identityB = testDeliveryIdentity(
+                deliveryId: "shared-delivery-id",
+                baseURL: "https://gateway.example/GatewayB",
+                deviceKey: "device-b",
+                ackContract: .legacySingle
+            )
+
+            #expect(await store.markInboxDurable(
+                identity: identityA,
+                source: "gateway-a",
+                postNotification: false
+            ))
+            #expect(await store.markInboxDurable(
+                identity: identityB,
+                source: "gateway-b",
+                postNotification: false
+            ))
+            #expect(await store.pendingMarkers().count == 2)
+
+            await store.markCompleted(identity: identityA)
+            let remaining = await store.pendingMarkers()
+            #expect(remaining.count == 1)
+            #expect(remaining.first?.identity == identityB)
+        }
+    }
+
+    @Test
+    func providerDeliveryAckFailureStoreDeletesUnattributedV2Marker() async throws {
+        try await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let store = ProviderDeliveryAckFailureStore(appGroupIdentifier: appGroupIdentifier)
+            let appGroupURL = try #require(AppConstants.appGroupContainerURL(identifier: appGroupIdentifier))
+            let directory = appGroupURL
+                .appendingPathComponent("Library", isDirectory: true)
+                .appendingPathComponent("Application Support", isDirectory: true)
+                .appendingPathComponent("provider-delivery-ack-failures", isDirectory: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let fileURL = directory.appendingPathComponent("legacy-delivery.ackbin")
+            let now = Int64(Date().timeIntervalSince1970 * 1_000)
+            let legacy = ProviderDeliveryAckFailureStore.StoredMarker(
+                schemaVersion: 2,
+                deliveryId: "legacy-delivery",
+                baseURLString: "https://gateway.example/GatewayA",
+                deviceKey: nil,
+                ackContract: nil,
+                attemptCount: nil,
+                stage: .inboxDurable,
+                owner: nil,
+                leaseUntilEpochMs: nil,
+                retryAfterEpochMs: nil,
+                createdAtEpochMs: now,
+                updatedAtEpochMs: now,
+                source: "legacy-v2"
+            )
+            try PropertyListEncoder().encode(legacy).write(to: fileURL)
+
+            #expect(await store.pendingMarkers().isEmpty)
+            #expect(!FileManager.default.fileExists(atPath: fileURL.path))
+        }
+    }
+
+    @Test
+    func providerWakeupPullClaimStoreAllowsOnlyOneActiveClaimPerIdentity() async throws {
         await withIsolatedAutomationStorage { _, appGroupIdentifier in
             let store = ProviderWakeupPullClaimStore(appGroupIdentifier: appGroupIdentifier)
+            let identity = testDeliveryIdentity(deliveryId: "delivery-pull-claim-001")
+            let otherGatewayIdentity = testDeliveryIdentity(
+                deliveryId: "delivery-pull-claim-001",
+                baseURL: "https://other.pushgo.dev",
+                deviceKey: "other-device"
+            )
             let firstLease = await store.acquireLease(
-                deliveryId: " delivery-pull-claim-001 ",
+                identity: identity,
                 owner: "nse.macos",
                 leaseDuration: 30
             )
             #expect(firstLease?.record.deliveryId == "delivery-pull-claim-001")
 
             let secondLease = await store.acquireLease(
-                deliveryId: "delivery-pull-claim-001",
+                identity: identity,
                 owner: "app.macos",
                 leaseDuration: 30
             )
             #expect(secondLease == nil)
+            #expect(await store.acquireLease(
+                identity: otherGatewayIdentity,
+                owner: "app.other-gateway",
+                leaseDuration: 30
+            ) != nil)
 
             if let firstLease {
                 await store.markCompleted(firstLease)
             }
 
             let completedLease = await store.acquireLease(
-                deliveryId: "delivery-pull-claim-001",
+                identity: identity,
                 owner: "app.retry",
                 leaseDuration: 30
             )
@@ -312,13 +394,50 @@ struct NotificationIngressInboxTests {
     }
 
     @Test
+    func providerWakeupPullClaimStorePurgesLegacyDeliveryOnlyClaim() async throws {
+        try await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let store = ProviderWakeupPullClaimStore(appGroupIdentifier: appGroupIdentifier)
+            let appGroupURL = try #require(AppConstants.appGroupContainerURL(identifier: appGroupIdentifier))
+            let directory = appGroupURL
+                .appendingPathComponent("Library", isDirectory: true)
+                .appendingPathComponent("Application Support", isDirectory: true)
+                .appendingPathComponent("provider-wakeup-pull-claims", isDirectory: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let legacyFileURL = directory.appendingPathComponent("legacy-delivery.pullclaim")
+            let now = Int64(Date().timeIntervalSince1970 * 1_000)
+            let legacy = ProviderWakeupPullClaimStore.StoredClaim(
+                schemaVersion: 1,
+                deliveryId: "legacy-delivery",
+                baseURLString: nil,
+                deviceKey: nil,
+                ackContract: nil,
+                state: .claimed,
+                owner: "legacy",
+                leaseUntilEpochMs: now + 30_000,
+                createdAtEpochMs: now,
+                updatedAtEpochMs: now
+            )
+            try PropertyListEncoder().encode(legacy).write(to: legacyFileURL)
+
+            let identity = testDeliveryIdentity(deliveryId: "new-delivery")
+            #expect(await store.acquireLease(
+                identity: identity,
+                owner: "new-owner",
+                leaseDuration: 30
+            ) != nil)
+            #expect(!FileManager.default.fileExists(atPath: legacyFileURL.path))
+        }
+    }
+
+    @Test
     func providerWakeupPullClaimStoreAllowsRetryAfterReleaseOrLeaseExpiry() async throws {
         try await withIsolatedAutomationStorage { _, appGroupIdentifier in
             let store = ProviderWakeupPullClaimStore(appGroupIdentifier: appGroupIdentifier)
+            let retryIdentity = testDeliveryIdentity(deliveryId: "delivery-pull-claim-retry-001")
 
             let firstLease = try #require(
                 await store.acquireLease(
-                    deliveryId: "delivery-pull-claim-retry-001",
+                    identity: retryIdentity,
                     owner: "nse.macos",
                     leaseDuration: 30
                 )
@@ -326,16 +445,17 @@ struct NotificationIngressInboxTests {
 
             await store.releaseLease(firstLease)
             let retryLease = await store.acquireLease(
-                deliveryId: "delivery-pull-claim-retry-001",
+                identity: retryIdentity,
                 owner: "app.macos",
                 leaseDuration: 30
             )
             #expect(retryLease != nil)
 
             let expiredStore = ProviderWakeupPullClaimStore(appGroupIdentifier: appGroupIdentifier)
+            let expiryIdentity = testDeliveryIdentity(deliveryId: "delivery-pull-claim-expiry-001")
             let leaseAtNow = try #require(
                 await expiredStore.acquireLease(
-                    deliveryId: "delivery-pull-claim-expiry-001",
+                    identity: expiryIdentity,
                     owner: "nse.expiry",
                     leaseDuration: 5,
                     now: Date(timeIntervalSince1970: 1_000)
@@ -344,7 +464,7 @@ struct NotificationIngressInboxTests {
             #expect(leaseAtNow.record.state == .claimed)
 
             let takeoverLease = await expiredStore.acquireLease(
-                deliveryId: "delivery-pull-claim-expiry-001",
+                identity: expiryIdentity,
                 owner: "app.expiry",
                 leaseDuration: 5,
                 now: Date(timeIntervalSince1970: 1_007)
@@ -354,19 +474,55 @@ struct NotificationIngressInboxTests {
     }
 
     @Test
+    func expiredPullOwnerCannotCompletePeerTakeoverAfterCrash() async throws {
+        try await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let store = ProviderWakeupPullClaimStore(appGroupIdentifier: appGroupIdentifier)
+            let identity = testDeliveryIdentity(deliveryId: "delivery-pull-crash-001")
+            let crashedLease = try #require(
+                await store.acquireLease(
+                    identity: identity,
+                    owner: "nse.crashed",
+                    leaseDuration: 5,
+                    now: Date(timeIntervalSince1970: 1_000)
+                )
+            )
+            let peerLease = try #require(
+                await store.acquireLease(
+                    identity: identity,
+                    owner: "app.peer",
+                    leaseDuration: 30,
+                    now: Date(timeIntervalSince1970: 1_007)
+                )
+            )
+
+            await store.markCompleted(crashedLease, now: Date(timeIntervalSince1970: 1_008))
+            await store.releaseLease(peerLease, now: Date(timeIntervalSince1970: 1_009))
+
+            let retryAfterPeerFailure = await store.acquireLease(
+                identity: identity,
+                owner: "app.retry",
+                leaseDuration: 30,
+                now: Date(timeIntervalSince1970: 1_010)
+            )
+            #expect(retryAfterPeerFailure != nil)
+        }
+    }
+
+    @Test
     func providerWakeupPullClaimStoreWaitsForPeerCompletionBeforeGivingUp() async throws {
         try await withIsolatedAutomationStorage { _, appGroupIdentifier in
             let store = ProviderWakeupPullClaimStore(appGroupIdentifier: appGroupIdentifier)
+            let identity = testDeliveryIdentity(deliveryId: "delivery-pull-claim-peer-001")
             let lease = try #require(
                 await store.acquireLease(
-                    deliveryId: "delivery-pull-claim-peer-001",
+                    identity: identity,
                     owner: "app.peer",
                     leaseDuration: 30
                 )
             )
 
             async let observedCompletion = store.waitForPeerCompletion(
-                deliveryId: "delivery-pull-claim-peer-001",
+                identity: identity,
                 timeout: 1.0,
                 pollInterval: 0.02
             )

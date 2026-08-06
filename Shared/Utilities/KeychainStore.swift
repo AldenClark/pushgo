@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import os
 import Security
@@ -600,7 +601,9 @@ struct LocalKeychainConfigStore {
         guard let data = try readSharedOrLegacy(account: Self.serverConfigAccount) else {
             return nil
         }
-        return try decoder.decode(ServerConfig.self, from: data)
+        let config = try decoder.decode(ServerConfig.self, from: data).normalized()
+        _ = ProviderGatewayTokenStore().save(token: config.token, baseURL: config.baseURL)
+        return config
     }
 
     func saveServerConfig(_ config: ServerConfig?) throws {
@@ -611,6 +614,7 @@ struct LocalKeychainConfigStore {
         }
         let data = try encoder.encode(config)
         try keychain.write(account: Self.serverConfigAccount, data: data)
+        _ = ProviderGatewayTokenStore().save(token: config.token, baseURL: config.baseURL)
     }
 
     func loadManualKeyPreferences() throws -> ManualKeyPreferences {
@@ -636,6 +640,68 @@ struct LocalKeychainConfigStore {
             return data
         }
         return try legacyKeychain?.read(account: account)
+    }
+}
+
+struct ProviderGatewayTokenStore {
+    private static let service = "io.ethan.pushgo.provider.gateway-token"
+    private static let accountPrefix = "provider.gateway_token."
+    private static let accessGroupSuffix = "io.ethan.pushgo.shared"
+
+    private let keychain: KeychainStore
+
+    init() {
+        keychain = KeychainStore(
+            service: Self.service,
+            accessGroup: KeychainStore.accessGroup(matchingSuffix: Self.accessGroupSuffix),
+            synchronizable: false
+        )
+    }
+
+    func load(baseURL: URL) -> String? {
+        guard let account = Self.accountName(for: baseURL),
+              keychain.accessGroup != nil || PushGoAutomationContext.keychainDirectoryURL != nil
+        else {
+            return nil
+        }
+        do {
+            guard let data = try keychain.read(account: account),
+                  let value = String(data: data, encoding: .utf8)
+            else {
+                return nil
+            }
+            let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return normalized.isEmpty ? nil : normalized
+        } catch {
+            return nil
+        }
+    }
+
+    @discardableResult
+    func save(token: String?, baseURL: URL) -> Bool {
+        guard let account = Self.accountName(for: baseURL),
+              keychain.accessGroup != nil || PushGoAutomationContext.keychainDirectoryURL != nil
+        else { return false }
+        let normalized = token?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        do {
+            if normalized.isEmpty {
+                try keychain.delete(account: account)
+                return true
+            }
+            guard let data = normalized.data(using: .utf8) else { return false }
+            try keychain.write(account: account, data: data)
+            return try keychain.read(account: account) == data
+        } catch {
+            return false
+        }
+    }
+
+    static func accountName(for baseURL: URL) -> String? {
+        guard let normalizedURL = normalizedProviderGatewayURL(baseURL) else { return nil }
+        let digest = SHA256.hash(data: Data(normalizedURL.absoluteString.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+        return accountPrefix + digest
     }
 }
 

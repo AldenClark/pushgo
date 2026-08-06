@@ -180,7 +180,7 @@ struct LocalDataStoreTests {
 	    @Test
 	    func dataPageVisibilityPersistsAcrossStoreReload() async throws {
         await withIsolatedAutomationStorage { _, appGroupIdentifier in
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             let defaultVisibility = await store.loadDataPageVisibility()
             #expect(defaultVisibility == .default)
 
@@ -199,12 +199,12 @@ struct LocalDataStoreTests {
     @Test
     func watchModePersistsAcrossStoreReload() async throws {
         await withIsolatedAutomationStorage { _, appGroupIdentifier in
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             #expect(await store.loadWatchMode() == .standalone)
 
             await store.saveWatchMode(.standalone)
 
-            let reloaded = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let reloaded = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             #expect(await reloaded.loadWatchMode() == .standalone)
         }
     }
@@ -212,7 +212,7 @@ struct LocalDataStoreTests {
     @Test
     func watchModeControlStatePersistsAcrossStoreReload() async throws {
         await withIsolatedAutomationStorage { _, appGroupIdentifier in
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             let state = WatchModeControlPersistenceState(
                 desiredMode: .standalone,
                 effectiveMode: .mirror,
@@ -224,7 +224,7 @@ struct LocalDataStoreTests {
 
             await store.saveWatchModeControlState(state)
 
-            let reloaded = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let reloaded = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             let restored = await reloaded.loadWatchModeControlState()
 
             #expect(restored == state)
@@ -235,7 +235,7 @@ struct LocalDataStoreTests {
     @Test
     func watchPublicationStatePersistsAcrossStoreReload() async throws {
         await withIsolatedAutomationStorage { _, appGroupIdentifier in
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             let publicationState = WatchPublicationState(
                 syncGenerations: WatchSyncGenerationState(
                     controlGeneration: 11,
@@ -249,7 +249,7 @@ struct LocalDataStoreTests {
 
             await store.saveWatchPublicationState(publicationState)
 
-            let reloaded = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let reloaded = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             let restored = await reloaded.loadWatchPublicationState()
 
             #expect(restored == publicationState)
@@ -319,7 +319,7 @@ struct LocalDataStoreTests {
                 }
             }
 
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             let publicationState = WatchPublicationState(
                 syncGenerations: WatchSyncGenerationState(
                     controlGeneration: 10,
@@ -400,7 +400,7 @@ struct LocalDataStoreTests {
     @Test
     func invalidChannelSubscriptionUpsertDoesNotPolluteFallbackCredentialStore() async throws {
         await withIsolatedAutomationStorage { root, appGroupIdentifier in
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             let gateway = "https://sandbox.pushgo.dev"
 
             await #expect(throws: Error.self) {
@@ -466,7 +466,7 @@ struct LocalDataStoreTests {
     @Test
     func watchProvisioningStatePersistsServerConfigAndMetadataInDatabase() async throws {
         try await withIsolatedAutomationStorage { _, appGroupIdentifier in
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             let config = ServerConfig(
                 id: UUID(),
                 name: "Sandbox",
@@ -492,7 +492,7 @@ struct LocalDataStoreTests {
                 )
             )
 
-            let reloaded = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let reloaded = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             let storedConfig = try await reloaded.loadWatchProvisioningServerConfig()
             let storedState = await reloaded.loadWatchProvisioningState()
 
@@ -510,7 +510,7 @@ struct LocalDataStoreTests {
     @Test
     func applyWatchStandaloneProvisioningReplacesChannelsAndAdvancesProvisioningState() async throws {
         try await withIsolatedAutomationStorage { _, appGroupIdentifier in
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             _ = try await store.applyWatchStandaloneProvisioning(
                 WatchStandaloneProvisioningSnapshot(
                     generation: 9,
@@ -974,7 +974,7 @@ struct LocalDataStoreTests {
     @Test
     func localDataStoreUsesCurrentDatabaseArtifactNameInAutomationContainer() async throws {
         try await withIsolatedAutomationStorage { _, appGroupIdentifier in
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             let probe = makeMessage(
                 messageId: "msg-db-artifact-probe-001",
                 notificationRequestId: "req-db-artifact-probe-001",
@@ -1048,7 +1048,7 @@ struct LocalDataStoreTests {
                     """)
             }
 
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             _ = try await store.loadMessages()
 
             let currentMainURL = databaseDirectory.appendingPathComponent(AppConstants.databaseStoreFilename)
@@ -1101,7 +1101,7 @@ struct LocalDataStoreTests {
                     """)
             }
 
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             _ = try await store.loadMessages()
 
             let currentMainURL = databaseDirectory.appendingPathComponent(AppConstants.databaseStoreFilename)
@@ -1152,7 +1152,7 @@ struct LocalDataStoreTests {
                     """)
             }
 
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             _ = try await store.loadMessages()
 
             let appLocalDatabaseDirectory = root
@@ -1208,7 +1208,7 @@ struct LocalDataStoreTests {
                     """)
             }
 
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             _ = try await store.loadMessages()
 
             let appLocalDatabaseDirectory = root
@@ -1277,7 +1277,7 @@ struct LocalDataStoreTests {
                     """)
             }
 
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             _ = try await store.loadMessages()
 
             let appLocalDatabaseDirectory = root
@@ -1339,7 +1339,7 @@ struct LocalDataStoreTests {
                     """)
             }
 
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             _ = try await store.loadMessages()
 
             let appLocalDatabaseDirectory = root
@@ -1398,7 +1398,7 @@ struct LocalDataStoreTests {
                     """)
             }
 
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             _ = try await store.loadMessages()
 
             let appLocalDatabaseDirectory = root
@@ -1453,7 +1453,7 @@ struct LocalDataStoreTests {
                     """)
             }
 
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             _ = try await store.loadMessages()
 
             let appLocalDatabaseDirectory = root
@@ -1521,7 +1521,7 @@ struct LocalDataStoreTests {
                     """)
             }
 
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             _ = try await store.loadMessages()
 
             let appLocalDatabaseDirectory = root
@@ -1612,7 +1612,7 @@ struct LocalDataStoreTests {
             )
             #expect(blockerWritten)
 
-            let firstAttempt = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let firstAttempt = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             switch firstAttempt.storageState.mode {
             case .persistent:
                 Issue.record("Expected first attempt to fail while Database path is blocked by a file.")
@@ -1622,7 +1622,7 @@ struct LocalDataStoreTests {
 
             try FileManager.default.removeItem(at: databasePathBlocker)
 
-            let recoveredStore = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let recoveredStore = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             switch recoveredStore.storageState.mode {
             case .persistent:
                 break
@@ -1670,7 +1670,7 @@ struct LocalDataStoreTests {
                     """)
             }
 
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             _ = try await store.loadMessages()
 
             let migratedQueue = try DatabaseQueue(path: placeholderURL.path)
@@ -2447,7 +2447,7 @@ struct LocalDataStoreTests {
                 messages: [jsonTags, directArrayTags, commaTags, missingTags, wrongTypeTags]
             )
 
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
 
             let loadedJSON = try #require(try await store.loadMessage(messageId: jsonTags.messageId ?? ""))
             let loadedArray = try #require(try await store.loadMessage(messageId: directArrayTags.messageId ?? ""))
@@ -2687,7 +2687,7 @@ struct LocalDataStoreTests {
                 )
             }
 
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             let counts = try await store.messageCounts()
             #expect(counts.total == 2)
             #expect(counts.unread == 2)
@@ -2725,7 +2725,7 @@ struct LocalDataStoreTests {
             )
             try removeSQLiteArtifacts(at: indexDatabaseURL(appGroupIdentifier: appGroupIdentifier))
 
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             let firstProbe = try await exerciseLegacyFixture(
                 store: store,
                 appGroupIdentifier: appGroupIdentifier,
@@ -2743,7 +2743,7 @@ struct LocalDataStoreTests {
                 destinationAppGroupIdentifier: reloadedAppGroupIdentifier
             )
 
-            let reloadedStore = LocalDataStore(appGroupIdentifier: reloadedAppGroupIdentifier)
+            let reloadedStore = LocalDataStore(appGroupIdentifier: reloadedAppGroupIdentifier, spotlightIndexer: nil)
             let secondProbe = try await exerciseLegacyFixture(
                 store: reloadedStore,
                 appGroupIdentifier: reloadedAppGroupIdentifier,
@@ -2771,7 +2771,7 @@ struct LocalDataStoreTests {
             )
             try createEmptyIndexFile(appGroupIdentifier: appGroupIdentifier)
 
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             _ = try await exerciseLegacyFixture(
                 store: store,
                 appGroupIdentifier: appGroupIdentifier,
@@ -2801,7 +2801,7 @@ struct LocalDataStoreTests {
                 includeHealthyMetadata: true
             )
 
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             _ = try await exerciseLegacyFixture(
                 store: store,
                 appGroupIdentifier: appGroupIdentifier,
@@ -2831,7 +2831,7 @@ struct LocalDataStoreTests {
                 includeHealthySearch: true
             )
 
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             _ = try await exerciseLegacyFixture(
                 store: store,
                 appGroupIdentifier: appGroupIdentifier,
@@ -2858,7 +2858,7 @@ struct LocalDataStoreTests {
             )
             try createFullyLegacySchemaIndexFile(appGroupIdentifier: appGroupIdentifier)
 
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             _ = try await exerciseLegacyFixture(
                 store: store,
                 appGroupIdentifier: appGroupIdentifier,
@@ -2889,7 +2889,7 @@ struct LocalDataStoreTests {
                 withIntermediateDirectories: true
             )
 
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             _ = try await exerciseLegacyFixture(
                 store: store,
                 appGroupIdentifier: appGroupIdentifier,
@@ -2925,7 +2925,7 @@ struct LocalDataStoreTests {
                 try? FileManager.default.removeItem(at: indexURL)
             }
             remover.start()
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             while !remover.isFinished {
                 try await Task.sleep(nanoseconds: 1_000_000)
             }
@@ -3135,7 +3135,7 @@ struct LocalDataStoreTests {
     @Test
     func cachedDeviceKeyFallsBackToSharedWakeupDefaultsWhenKeychainEntryIsMissing() async throws {
         try await withIsolatedAutomationStorage { root, appGroupIdentifier in
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             let saveResult = await store.saveCachedDeviceKey("device-key-defaults-001", for: "macos")
             #expect(saveResult?.didPersist == true)
 

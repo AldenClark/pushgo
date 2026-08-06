@@ -1954,14 +1954,12 @@ final class AppEnvironment {
         source: String
     ) async {
         let payload: [AnyHashable: Any]
-        let deliveryId: String?
         switch ingress {
-        case let .direct(resolvedPayload, requestIdentifier):
+        case let .direct(resolvedPayload, _):
             payload = resolvedPayload
             if NotificationHandling.providerWakeupPullDeliveryId(from: payload) != nil {
                 return
             }
-            deliveryId = requestIdentifier ?? NotificationHandling.providerIngressRequestIdentifier(from: payload)
         case .pulled:
             return
         case .claimedByPeer:
@@ -1969,13 +1967,10 @@ final class AppEnvironment {
         case .unresolvedWakeup:
             return
         }
-        let normalizedDeliveryId = deliveryId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !normalizedDeliveryId.isEmpty else { return }
         await providerIngressCoordinator.ackDirectDeliveryIfNeeded(
             payload: payload,
             result: .persisted,
-            source: source,
-            fallbackDeliveryId: normalizedDeliveryId
+            source: source
         )
     }
 
@@ -2110,7 +2105,7 @@ final class AppEnvironment {
         let body = notification.request.content.body
         let fallbackRequestIdentifier = notification.request.identifier
         switch ingress {
-        case let .pulled(payload, requestIdentifier):
+        case let .pulled(payload, requestIdentifier, context):
             let persisted = await persistStandaloneResolvedPayload(
                 payload,
                 requestIdentifier: requestIdentifier,
@@ -2118,6 +2113,12 @@ final class AppEnvironment {
                 fallbackTitle: title,
                 fallbackBody: body,
                 ingressSource: .watchPull
+            )
+            await providerIngressCoordinator.finalizePulledIngress(
+                deliveryId: requestIdentifier,
+                context: context,
+                result: persisted ? .persisted : .failed,
+                source: "provider.notification.pulled.watchos"
             )
             return persisted
         case let .direct(payload, requestIdentifier):

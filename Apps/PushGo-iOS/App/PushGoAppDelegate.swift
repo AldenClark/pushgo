@@ -232,16 +232,27 @@ final class PushGoAppDelegate: NSObject, UIApplicationDelegate, @preconcurrency 
                 skipInboxMerge: true
             )
             return (inboxApplied + pulled) > 0 ? .newData : .noData
-        case let .pulled(resolvedPayload, requestIdentifier):
+        case let .pulled(resolvedPayload, requestIdentifier, context):
             let outcome = await environment.persistRemotePayloadIfNeeded(
                 resolvedPayload,
                 requestIdentifier: requestIdentifier
+            )
+            await environment.finalizePulledProviderIngress(
+                deliveryId: requestIdentifier,
+                context: context,
+                outcome: outcome,
+                source: "provider.remote_notification.pulled.ios"
             )
             return remoteFetchResult(inboxApplied: inboxApplied, persistenceOutcome: outcome)
         case let .direct(resolvedPayload, requestIdentifier):
             let outcome = await environment.persistRemotePayloadIfNeeded(
                 resolvedPayload,
                 requestIdentifier: requestIdentifier
+            )
+            await environment.ackDirectProviderIngressIfNeeded(
+                payload: resolvedPayload,
+                outcome: outcome,
+                source: "provider.remote_notification.direct.ios"
             )
             return remoteFetchResult(inboxApplied: inboxApplied, persistenceOutcome: outcome)
         }

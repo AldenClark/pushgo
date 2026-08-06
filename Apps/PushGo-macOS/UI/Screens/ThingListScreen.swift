@@ -12,8 +12,6 @@ struct ThingListScreen: View {
 
     let things: [ThingProjection]
     @Binding var selection: String?
-    @Binding var batchSelection: Set<String>
-    @Binding var isBatchMode: Bool
     var isLoadingMore: Bool = false
     var onReachEnd: (() -> Void)? = nil
     var onOpenThing: ((ThingProjection) -> Void)? = nil
@@ -22,7 +20,7 @@ struct ThingListScreen: View {
 
     var body: some View {
         ZStack {
-            activeListView
+            thingList
                 .opacity(things.isEmpty ? 0.001 : 1)
                 .allowsHitTesting(!things.isEmpty)
                 .accessibilityHidden(things.isEmpty)
@@ -35,65 +33,7 @@ struct ThingListScreen: View {
         .accessibilityIdentifier("screen.things.list")
     }
 
-    @ViewBuilder
-    private var activeListView: some View {
-        if isBatchMode {
-            thingBatchList
-        } else {
-            thingSelectionList
-        }
-    }
-
-    private var thingBatchList: some View {
-        List {
-            ForEach(things.indices, id: \.self) { index in
-                let thing = things[index]
-                Button {
-                    toggleBatchSelection(thing.id)
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: batchSelection.contains(thing.id) ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(batchSelection.contains(thing.id) ? .accent : .secondary)
-                        ThingListRow(thing: thing)
-                    }
-                    .entityListRowTapTarget()
-                }
-                .buttonStyle(.plain)
-                .id(thing.id)
-                .accessibilityIdentifier("thing.row.\(thing.id)")
-                .modifier(thingAccessibilityActions(for: thing))
-                .listRowInsets(Layout.rowInsets)
-                .alignmentGuide(.listRowSeparatorLeading) { dimensions in
-                    dimensions[.leading]
-                }
-                .alignmentGuide(.listRowSeparatorTrailing) { dimensions in
-                    dimensions[.trailing] - Layout.rowInsets.trailing
-                }
-                .listRowBackground(EntitySelectionBackground(isSelected: batchSelection.contains(thing.id)))
-                .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
-                .listRowSeparator(index == things.count - 1 ? .hidden : .visible, edges: .bottom)
-                .onAppear {
-                    guard index == things.count - 1 else { return }
-                    onReachEnd?()
-                }
-            }
-            if isLoadingMore {
-                HStack {
-                    Spacer()
-                    ProgressView()
-                        .controlSize(.small)
-                    Spacer()
-                }
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
-            }
-        }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .background(EntityVisualTokens.pageBackground)
-    }
-
-    private var thingSelectionList: some View {
+    private var thingList: some View {
         List {
             ForEach(things.indices, id: \.self) { index in
                 let thing = things[index]
@@ -136,14 +76,6 @@ struct ThingListScreen: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(EntityVisualTokens.pageBackground)
-    }
-
-    private func toggleBatchSelection(_ thingId: String) {
-        if batchSelection.contains(thingId) {
-            batchSelection.remove(thingId)
-        } else {
-            batchSelection.insert(thingId)
-        }
     }
 
     private func thingAccessibilityActions(for thing: ThingProjection) -> some ViewModifier {

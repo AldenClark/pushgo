@@ -15,12 +15,10 @@ struct ThingListScreen: View {
     var scrollToTopToken: Int = 0
     var onOpenThingHandled: (() -> Void)? = nil
     @State private var selectedThing: ThingProjection?
-    @State private var selectedThingIds: Set<String> = []
     @State private var searchQuery: String = ""
     @State private var selectedChannelIDs: Set<String> = []
     @State private var selectedTags: Set<String> = []
     @State private var isFilterPopoverPresented = false
-    @State private var isBatchModeActive = false
     @State private var hydrationRequestedThingIDs: Set<String> = []
 
     var body: some View {
@@ -37,7 +35,6 @@ struct ThingListScreen: View {
         .navigationTitle(localizationManager.localized("push_type_thing"))
         .navigationBarTitleDisplayMode(.large)
         .toolbar { toolbarContent }
-        .toolbar(isBatchMode ? .hidden : .visible, for: .tabBar)
         .onAppear {
             environment.updateThingListPosition(isAtTop: true)
             openThingIfNeeded()
@@ -63,20 +60,10 @@ struct ThingListScreen: View {
             publishAutomationState()
 #endif
         }
-        .onChange(of: isBatchMode) { _, active in
-            if active {
-                selectedThing = nil
-            } else {
-                selectedThingIds.removeAll()
-                openThingIfNeeded()
-            }
-        }
         .onChange(of: environment.pendingLocalDeletionController.pendingDeletion) { _, _ in
             if let selectedThing, isPendingLocalDeletion(selectedThing) {
                 self.selectedThing = nil
             }
-            let visibleIDs = Set(filteredThings.map(\.id))
-            selectedThingIds = selectedThingIds.intersection(visibleIDs)
         }
         .sheet(item: $selectedThing) { thing in
             ThingDetailScreen(
@@ -124,23 +111,16 @@ struct ThingListScreen: View {
     @ViewBuilder
     private func thingList(filteredThings: [ThingProjection]) -> some View {
         ScrollViewReader { proxy in
-            List(selection: batchSelectionBinding) {
+            List {
                 ForEach(filteredThings.indices, id: \.self) { index in
                     let thing = filteredThings[index]
-                    Group {
-                        if isBatchMode {
-                            ThingListRow(thing: thing)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        } else {
-                            Button {
-                                selectThing(thing)
-                            } label: {
-                                ThingListRow(thing: thing)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .buttonStyle(.plain)
-                        }
+                    Button {
+                        selectThing(thing)
+                    } label: {
+                        ThingListRow(thing: thing)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .buttonStyle(.plain)
                     .id(thing.id)
                     .accessibilityIdentifier("thing.row.\(thing.id)")
                     .accessibilityElement(children: .combine)
@@ -154,7 +134,7 @@ struct ThingListScreen: View {
                         environment.showToast(message: localizationManager.localized("copied"), style: .success, duration: 1.6)
                     }
                     .accessibilityAction(named: Text(localizationManager.localized("delete"))) {
-                        Task { await scheduleDeletion(for: [thing]) }
+                        Task { await scheduleDeletion(for: thing) }
                     }
                     .tag(thing.id)
                     .listRowInsets(EdgeInsets(
@@ -164,7 +144,7 @@ struct ThingListScreen: View {
                         trailing: EntityVisualTokens.listRowInsetHorizontal
                     ))
                     .listRowBackground(
-                        EntitySelectionBackground(isSelected: isBatchMode ? selectedThingIds.contains(thing.id) : selectedThing?.id == thing.id)
+                        EntitySelectionBackground(isSelected: selectedThing?.id == thing.id)
                     )
                     .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
                     .listRowSeparator(index == filteredThings.count - 1 ? .hidden : .visible, edges: .bottom)
@@ -193,7 +173,6 @@ struct ThingListScreen: View {
                     )
                 }
             )
-            .environment(\.editMode, isBatchMode ? .constant(.active) : .constant(.inactive))
             .scrollContentBackground(.hidden)
             .background(EntityVisualTokens.pageBackground)
             .coordinateSpace(name: ThingListScrollMetrics.coordinateSpaceName)
@@ -227,7 +206,7 @@ struct ThingListScreen: View {
 
     @ViewBuilder
     private func applySearchIfNeeded<Content: View>(_ content: Content) -> some View {
-        if viewModel.things.isEmpty || isBatchMode {
+        if viewModel.things.isEmpty {
             content
         } else {
             content.searchable(
@@ -356,64 +335,22 @@ struct ThingListScreen: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        if isBatchMode {
-            ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    toggleSelectAllThings()
-                } label: {
-                    Image(systemName: areAllVisibleThingsSelected ? "checkmark.rectangle.stack.fill" : "checkmark.rectangle.stack")
-                }
-                .accessibilityLabel(localizationManager.localized("all"))
-            }
-        }
         ToolbarItemGroup(placement: .primaryAction) {
-            if isBatchMode {
-                Button {
-                    Task { await exitBatchModeAfterFlushingPendingDeletion() }
-                } label: {
-                    batchDoneToolbarIcon()
-                }
-                .accessibilityLabel(localizationManager.localized("done"))
-            } else {
-                Button {
-                    isFilterPopoverPresented = true
-                } label: {
-                    filterToolbarIcon(isHighlighted: isFilterMenuHighlighted)
-                }
-                .accessibilityLabel(localizationManager.localized("channel"))
-                .popover(isPresented: $isFilterPopoverPresented, arrowEdge: .top) {
-                    if #available(iOS 16.4, *) {
-                        filterPopoverContent
-                            .presentationCompactAdaptation(.popover)
-                    } else {
-                        filterPopoverContent
-                    }
+            Button {
+                isFilterPopoverPresented = true
+            } label: {
+                filterToolbarIcon(isHighlighted: isFilterMenuHighlighted)
+            }
+            .accessibilityLabel(localizationManager.localized("channel"))
+            .popover(isPresented: $isFilterPopoverPresented, arrowEdge: .top) {
+                if #available(iOS 16.4, *) {
+                    filterPopoverContent
+                        .presentationCompactAdaptation(.popover)
+                } else {
+                    filterPopoverContent
                 }
             }
         }
-        if isBatchMode {
-            ToolbarItemGroup(placement: .bottomBar) {
-                Spacer()
-                Button(role: .destructive) {
-                    Task { await scheduleDeletion(for: selectedBatchThings) }
-                } label: {
-                    Image(systemName: "trash")
-                }
-                .accessibilityLabel(localizationManager.localized("delete"))
-                .disabled(selectedThingIds.isEmpty)
-            }
-        }
-    }
-
-    private var isBatchMode: Bool {
-        isBatchModeActive
-    }
-
-    private var batchSelectionBinding: Binding<Set<String>> {
-        if isBatchMode {
-            return $selectedThingIds
-        }
-        return .constant([])
     }
 
     private func normalizedChannel(_ value: String?) -> String? {
@@ -426,7 +363,6 @@ struct ThingListScreen: View {
     }
 
     private func openThingIfNeeded() {
-        guard !isBatchMode else { return }
         let target = openThingId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !target.isEmpty else { return }
         if let matched = viewModel.things.first(where: { $0.id == target }) {
@@ -463,7 +399,6 @@ struct ThingListScreen: View {
     }
 
     private func selectThing(_ thing: ThingProjection) {
-        guard !isBatchMode else { return }
         selectedThing = thing
         Task { @MainActor in
             if let hydrated = await viewModel.ensureThingDetailsLoaded(thingId: thing.id, forceRefresh: true) {
@@ -472,12 +407,6 @@ struct ThingListScreen: View {
                 selectedThing = nil
             }
         }
-    }
-
-    @MainActor
-    private func exitBatchModeAfterFlushingPendingDeletion() async {
-        await environment.pendingLocalDeletionController.commitCurrentIfNeeded()
-        isBatchModeActive = false
     }
 
     private func syncSelectedThingSnapshot() {
@@ -489,12 +418,6 @@ struct ThingListScreen: View {
         }
     }
 
-    private var selectedBatchThings: [ThingProjection] {
-        let selectedIds = selectedThingIds
-        guard !selectedIds.isEmpty else { return [] }
-        return filteredThings.filter { selectedIds.contains($0.id) }
-    }
-
     private func isPendingLocalDeletion(_ thing: ThingProjection) -> Bool {
         environment.pendingLocalDeletionController.suppressesThing(
             id: thing.id,
@@ -503,9 +426,9 @@ struct ThingListScreen: View {
     }
 
     @MainActor
-    private func scheduleDeletion(for things: [ThingProjection]) async {
+    private func scheduleDeletion(for thing: ThingProjection) async {
         guard let result = await environment.pendingLocalDeletionController.scheduleItems(
-            things,
+            [thing],
             identity: { $0.id },
             title: { $0.title },
             fallbackSingleSummary: localizationManager.localized("push_type_thing"),
@@ -528,7 +451,6 @@ struct ThingListScreen: View {
         if let selectedThing, result.scope.suppressesThing(id: selectedThing.id, channelId: selectedThing.channelId) {
             self.selectedThing = nil
         }
-        selectedThingIds.subtract(result.scope.thingIDs)
     }
 
     @ViewBuilder
@@ -540,14 +462,6 @@ struct ThingListScreen: View {
         !selectedChannelIDs.isEmpty || !selectedTags.isEmpty
     }
 
-    private func batchDoneToolbarIcon() -> some View {
-        Image(systemName: "checkmark")
-            .font(.footnote.weight(.bold))
-            .foregroundStyle(
-                .appAccentPrimary
-            )
-    }
-
     private func filterToolbarIcon(isHighlighted: Bool) -> some View {
         Image(systemName: "line.3.horizontal.decrease")
             .font(.body.weight(.semibold))
@@ -556,19 +470,6 @@ struct ThingListScreen: View {
 
     private var filterPopoverContent: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Button {
-                isBatchModeActive.toggle()
-                isFilterPopoverPresented = false
-            } label: {
-                filterMenuSelectionRow(
-                    title: "选择",
-                    systemImage: "checklist",
-                    isSelected: isBatchModeActive
-                )
-            }
-            .buttonStyle(.plain)
-            .padding(.vertical, 2)
-
             if !allChannelIds.isEmpty {
                 Rectangle()
                     .fill(Color.appDividerSubtle.opacity(0.9))
@@ -689,20 +590,6 @@ struct ThingListScreen: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var allVisibleThingIDs: Set<String> {
-        Set(filteredThings.map(\.id))
-    }
-
-    private var areAllVisibleThingsSelected: Bool {
-        let visibleIDs = allVisibleThingIDs
-        return !visibleIDs.isEmpty && selectedThingIds == visibleIDs
-    }
-
-    private func toggleSelectAllThings() {
-        let visibleIDs = allVisibleThingIDs
-        guard !visibleIDs.isEmpty else { return }
-        selectedThingIds = areAllVisibleThingsSelected ? [] : visibleIDs
-    }
 }
 
 private struct ThingFilterChipFlowLayout: Layout {

@@ -501,6 +501,19 @@ actor LocalDataStore {
         )
     }
 
+    #if DEBUG
+    static func releaseSharedResourcesForTesting(storageRootURL: URL) {
+        let rootPath = storageRootURL.standardizedFileURL.path
+        let rootPrefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
+        sharedResourcesCache.withLockUnchecked { cache in
+            cache = cache.filter { key, _ in
+                let path = URL(fileURLWithPath: key.containerPath).standardizedFileURL.path
+                return path != rootPath && !path.hasPrefix(rootPrefix)
+            }
+        }
+    }
+    #endif
+
     private static func buildSharedResources(
         fileManager: FileManager,
         appGroupIdentifier: String

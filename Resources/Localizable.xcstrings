@@ -2872,6 +2872,166 @@
         }
       }
     },
+    "history_cleanup_1_year" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Older than 1 year" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清理1年前" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "清理1年前" } }
+      }
+    },
+    "history_cleanup_3_months" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Older than 3 months" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清理3个月前" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "清理3個月前" } }
+      }
+    },
+    "history_cleanup_30_days" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Older than 30 days" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清理30天前" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "清理30天前" } }
+      }
+    },
+    "history_cleanup_6_months" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Older than 6 months" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清理6个月前" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "清理6個月前" } }
+      }
+    },
+    "history_cleanup_7_days" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Older than 7 days" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清理7天前" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "清理7天前" } }
+      }
+    },
+    "history_cleanup_all" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear all" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "全部清理" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "全部清理" } }
+      }
+    },
+    "history_cleanup_all_detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove every message stored on this device" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "删除此设备上保存的全部消息" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "刪除此裝置上儲存的全部訊息" } }
+      }
+    },
+    "history_cleanup_chip" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear message history" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清理历史消息" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "清理歷史訊息" } }
+      }
+    },
+    "history_cleanup_cleaning" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cleaning…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清理中…" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "清理中…" } }
+      }
+    },
+    "history_cleanup_cleaning_detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Removing matching local messages. Keep the app open." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在删除符合条件的本地消息，请保持应用运行。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "正在刪除符合條件的本機訊息，請保持 App 運行。" } }
+      }
+    },
+    "history_cleanup_complete" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cleanup complete" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清理完成" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "清理完成" } }
+      }
+    },
+    "history_cleanup_confirm_action" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Confirm cleanup" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "确认清理" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "確認清理" } }
+      }
+    },
+    "history_cleanup_confirm_detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Review the cleanup range below. This action cannot be undone." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "请确认以下清理范围。此操作无法撤销。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "請確認以下清理範圍。此操作無法復原。" } }
+      }
+    },
+    "history_cleanup_confirm_message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ will permanently remove matching local messages. This cannot be undone." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%@将永久删除符合条件的本地消息，此操作无法撤销。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "%@將永久刪除符合條件的本機訊息，此操作無法復原。" } }
+      }
+    },
+    "history_cleanup_confirm_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Confirm cleanup" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "确认清理" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "確認清理" } }
+      }
+    },
+    "history_cleanup_failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cleanup failed" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清理失败" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "清理失敗" } }
+      }
+    },
+    "history_cleanup_range_detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove messages received before this cutoff" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "删除早于此时间范围收到的消息" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "刪除早於此時間範圍收到的訊息" } }
+      }
+    },
+    "history_cleanup_sheet_detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose how much local history to remove. Newer messages stay untouched." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "选择要移除的本地历史范围，较新的消息会保留。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "選擇要移除的本機歷史範圍，較新的訊息會保留。" } }
+      }
+    },
+    "history_cleanup_success" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Removed %d messages." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已清理 %d 条消息。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已清理 %d 則訊息。" } }
+      }
+    },
+    "history_cleanup_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear message history" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清理历史消息" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "清理歷史訊息" } }
+      }
+    },
     "hide_key" : {
       "extractionState" : "manual",
       "localizations" : {

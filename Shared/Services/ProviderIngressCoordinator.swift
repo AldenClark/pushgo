@@ -22,6 +22,13 @@ enum ProviderIngressPersistenceResult {
         }
     }
 
+    var allowsPulledItemRemoval: Bool {
+        if case .failed = self {
+            return false
+        }
+        return true
+    }
+
     var removesSuccessfulInboxEntry: Bool {
         switch self {
         case .persisted, .duplicate:
@@ -72,6 +79,13 @@ struct ProviderIngressIdentity: Sendable, Equatable {
 }
 
 final class ProviderIngressCoordinator {
+    private struct AckBatch {
+        let baseURL: URL
+        let token: String?
+        let deviceKey: String
+        var leases: [ProviderDeliveryAckFailureStore.PendingMarker]
+    }
+
     enum SyncOutcome {
         case skipped
         case succeeded(appliedCount: Int)
@@ -110,7 +124,9 @@ final class ProviderIngressCoordinator {
     private let notificationIngressInbox: NotificationIngressInbox
     private let ackMarkerStore: ProviderDeliveryAckFailureStore
     private let wakeupPullClaimStore: ProviderWakeupPullClaimStore
+    private let gatewayTokenStore: ProviderGatewayTokenStore
     private let hooks: Hooks
+    private let ackMarkerMinimumAge: TimeInterval
     private var isDrainingAckMarkers = false
     private var isFullSyncInFlight = false
     private var lastFullSyncAttemptAt = Date.distantPast
@@ -124,6 +140,8 @@ final class ProviderIngressCoordinator {
         notificationIngressInbox: NotificationIngressInbox,
         ackMarkerStore: ProviderDeliveryAckFailureStore,
         wakeupPullClaimStore: ProviderWakeupPullClaimStore,
+        gatewayTokenStore: ProviderGatewayTokenStore = ProviderGatewayTokenStore(),
+        ackMarkerMinimumAge: TimeInterval = ProviderIngressCoordinator.appAckMarkerMinimumAge,
         hooks: Hooks
     ) {
         self.platformSuffix = platformSuffix
@@ -132,6 +150,8 @@ final class ProviderIngressCoordinator {
         self.notificationIngressInbox = notificationIngressInbox
         self.ackMarkerStore = ackMarkerStore
         self.wakeupPullClaimStore = wakeupPullClaimStore
+        self.gatewayTokenStore = gatewayTokenStore
+        self.ackMarkerMinimumAge = ackMarkerMinimumAge
         self.hooks = hooks
     }
 
@@ -186,12 +206,18 @@ final class ProviderIngressCoordinator {
 
             let shouldRemove: Bool
             switch ingress {
-            case let .pulled(resolvedPayload, requestIdentifier):
+            case let .pulled(resolvedPayload, requestIdentifier, context):
                 let result = await hooks.persistPayload(resolvedPayload, requestIdentifier)
                 await hooks.applyPersistenceResult(result)
                 if result.isApplied {
                     applied += 1
                 }
+                await finalizePulledIngress(
+                    deliveryId: requestIdentifier,
+                    context: context,
+                    result: result,
+                    source: "provider.inbox.pulled.\(platformSuffix)"
+                )
                 shouldRemove = shouldRemoveInboxEntry(payload: resolvedPayload, result: result)
             case let .direct(resolvedPayload, requestIdentifier):
                 let effectiveRequestIdentifier = requestIdentifier ?? pendingEntry.record.requestIdentifier
@@ -200,6 +226,11 @@ final class ProviderIngressCoordinator {
                 if result.isApplied {
                     applied += 1
                 }
+                await ackDirectDeliveryIfNeeded(
+                    payload: resolvedPayload,
+                    result: result,
+                    source: "provider.inbox.direct.\(platformSuffix)"
+                )
                 shouldRemove = shouldRemoveInboxEntry(payload: resolvedPayload, result: result)
             case .claimedByPeer:
                 shouldRemove = await hooks.hasPersistedNotification(identity)
@@ -281,10 +312,19 @@ final class ProviderIngressCoordinator {
         }
         guard let config = await hooks.serverConfig() else { return .skipped }
         guard let deviceKey = await hooks.cachedDeviceKey() else { return .skipped }
+        _ = gatewayTokenStore.save(token: config.token, baseURL: config.baseURL)
         var wakeupPullLease: ProviderWakeupPullClaimStore.ClaimLease?
         if let normalizedDeliveryId {
-            guard let lease = await wakeupPullClaimStore.acquireLease(
+            guard let identity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
                 deliveryId: normalizedDeliveryId,
+                baseURL: config.baseURL,
+                deviceKey: deviceKey,
+                ackContract: .v2Batch
+            ) else {
+                return .skipped
+            }
+            guard let lease = await wakeupPullClaimStore.acquireLease(
+                identity: identity,
                 owner: "app.sync.\(platformSuffix)",
                 leaseDuration: 30
             ) else {
@@ -294,37 +334,98 @@ final class ProviderIngressCoordinator {
         }
 
         do {
-            let items = try await channelSubscriptionService.pullMessages(
-                baseURL: config.baseURL,
-                token: config.token,
-                deviceKey: deviceKey,
-                deliveryId: normalizedDeliveryId
-            )
-            guard !items.isEmpty else {
-                if let wakeupPullLease {
-                    await wakeupPullClaimStore.releaseLease(wakeupPullLease)
-                }
-                return .succeeded(appliedCount: 0)
-            }
-
             var applied = 0
-            for item in items {
-                let payload: [AnyHashable: Any] = item.payload.reduce(into: [:]) { result, element in
-                    result[element.key] = element.value
+            var targetPersistenceFailed = false
+            var mayContinue = true
+            while mayContinue {
+                try Task.checkCancellation()
+                let pullResult = try await channelSubscriptionService.pullMessages(
+                    baseURL: config.baseURL,
+                    token: config.token,
+                    deviceKey: deviceKey,
+                    deliveryId: normalizedDeliveryId
+                )
+                var deliveryIdsToAck: [String] = []
+                var pageContainsFailedItem = false
+                for item in pullResult.items {
+                    var payload: [AnyHashable: Any] = item.payload.reduce(into: [:]) { result, element in
+                        result[element.key] = element.value
+                    }
+                    payload["delivery_id"] = item.deliveryId
+                    let result = await hooks.persistPayload(payload, item.deliveryId)
+                    await hooks.applyPersistenceResult(result)
+                    if result.isApplied {
+                        applied += 1
+                    }
+                    if case .failed = result {
+                        pageContainsFailedItem = true
+                        if normalizedDeliveryId == item.deliveryId {
+                            targetPersistenceFailed = true
+                        }
+                    }
+                    if pullResult.requiresAck, result.allowsPulledItemRemoval {
+                        guard let identity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
+                            deliveryId: item.deliveryId,
+                            baseURL: config.baseURL,
+                            deviceKey: deviceKey,
+                            ackContract: .v2Batch
+                        ) else {
+                            pageContainsFailedItem = true
+                            continue
+                        }
+                        _ = await ackMarkerStore.markInboxDurable(
+                            identity: identity,
+                            source: "provider.pull.persisted.\(platformSuffix)",
+                            postNotification: false
+                        )
+                        deliveryIdsToAck.append(item.deliveryId)
+                    }
                 }
-                let result = await hooks.persistPayload(payload, item.deliveryId)
-                await hooks.applyPersistenceResult(result)
-                if result.isApplied {
-                    applied += 1
+
+                var ackSucceeded = true
+                if !deliveryIdsToAck.isEmpty {
+                    do {
+                        let ack = try await channelSubscriptionService.ackMessages(
+                            baseURL: config.baseURL,
+                            token: config.token,
+                            deviceKey: deviceKey,
+                            deliveryIds: deliveryIdsToAck
+                        )
+                        guard ack.removedCount == deliveryIdsToAck.count else {
+                            throw Self.incompleteFreshAckError(
+                                requested: deliveryIdsToAck.count,
+                                removed: ack.removedCount
+                            )
+                        }
+                        for deliveryId in deliveryIdsToAck {
+                            if let identity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
+                                deliveryId: deliveryId,
+                                baseURL: config.baseURL,
+                                deviceKey: deviceKey,
+                                ackContract: .v2Batch
+                            ) {
+                                await ackMarkerStore.markCompleted(identity: identity)
+                            }
+                        }
+                    } catch {
+                        ackSucceeded = false
+                        await hooks.recordProviderError(
+                            error,
+                            "provider.ingress.ack_batch.\(reason)"
+                        )
+                    }
                 }
-                if result.allowsAck {
-                    await ackMarkerStore.markCompleted(deliveryId: item.deliveryId)
-                }
+
+                mayContinue = pullResult.hasMore && !pageContainsFailedItem && ackSucceeded
             }
             if let wakeupPullLease {
-                await wakeupPullClaimStore.markCompleted(wakeupPullLease)
+                if targetPersistenceFailed {
+                    await wakeupPullClaimStore.releaseLease(wakeupPullLease)
+                } else {
+                    await wakeupPullClaimStore.markCompleted(wakeupPullLease)
+                }
             }
-            return .succeeded(appliedCount: applied)
+            return targetPersistenceFailed ? .failed : .succeeded(appliedCount: applied)
         } catch {
             if let wakeupPullLease {
                 await wakeupPullClaimStore.releaseLease(wakeupPullLease)
@@ -364,19 +465,69 @@ final class ProviderIngressCoordinator {
     func ackDirectDeliveryIfNeeded(
         payload: [AnyHashable: Any],
         result: ProviderIngressPersistenceResult,
-        source: String,
-        fallbackDeliveryId: String? = nil
+        source: String
     ) async {
         guard result.allowsAck else { return }
         guard NotificationHandling.providerWakeupPullDeliveryId(from: payload) == nil else { return }
-        guard let deliveryId = providerDeliveryId(from: payload)
-            ?? normalizedText(fallbackDeliveryId)
-        else { return }
+        let sanitized = UserInfoSanitizer.sanitize(payload)
+        guard let identity = ProviderDeliveryAckFailureStore.DeliveryIdentity.direct(from: sanitized) else { return }
         await ackDelivery(
-            deliveryId: deliveryId,
-            baseURL: await hooks.serverConfig()?.baseURL,
+            identity: identity,
             source: source
         )
+    }
+
+    func finalizePulledIngress(
+        deliveryId: String,
+        context: ProviderPullContext,
+        result: ProviderIngressPersistenceResult,
+        source: String
+    ) async {
+        guard result.allowsPulledItemRemoval else {
+            await wakeupPullClaimStore.releaseLease(context.claimLease)
+            return
+        }
+
+        if context.requiresAck {
+            guard let identity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
+                deliveryId: deliveryId,
+                baseURL: context.baseURL,
+                deviceKey: context.deviceKey,
+                ackContract: .v2Batch
+            ) else {
+                await wakeupPullClaimStore.releaseLease(context.claimLease)
+                return
+            }
+            _ = await ackMarkerStore.markInboxDurable(
+                identity: identity,
+                source: "\(source).durable",
+                postNotification: false
+            )
+        }
+        await wakeupPullClaimStore.markCompleted(context.claimLease)
+        guard context.requiresAck else { return }
+
+        do {
+            let ack = try await channelSubscriptionService.ackMessages(
+                baseURL: context.baseURL,
+                token: context.token,
+                deviceKey: context.deviceKey,
+                deliveryIds: [deliveryId]
+            )
+            guard ack.removedCount == 1 else {
+                throw Self.incompleteFreshAckError(requested: 1, removed: ack.removedCount)
+            }
+            if let identity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
+                deliveryId: deliveryId,
+                baseURL: context.baseURL,
+                deviceKey: context.deviceKey,
+                ackContract: .v2Batch
+            ) {
+                await ackMarkerStore.markCompleted(identity: identity)
+            }
+        } catch {
+            await hooks.recordProviderError(error, source)
+        }
     }
 
     func drainAckMarkers(source: String) async {
@@ -384,28 +535,15 @@ final class ProviderIngressCoordinator {
         isDrainingAckMarkers = true
         defer { isDrainingAckMarkers = false }
 
-        let currentConfig = await hooks.serverConfig()
-        let currentDeviceKey = await hooks.cachedDeviceKey()
         let markers = await ackMarkerStore.pendingMarkers(
             limit: 64,
-            minimumAge: Self.appAckMarkerMinimumAge
+            minimumAge: ackMarkerMinimumAge
         )
+        var batches: [String: AckBatch] = [:]
         for marker in markers {
-            let deliveryId = marker.record.deliveryId
-            let identity = ProviderIngressIdentity(
-                messageId: nil,
-                deliveryId: deliveryId,
-                requestIdentifier: deliveryId
-            )
-            guard await hooks.hasPersistedNotification(identity) else {
-                continue
-            }
-            guard let baseURL = marker.baseURL ?? currentConfig?.baseURL else { continue }
-            let deviceKey = normalizedText(currentDeviceKey) ?? ""
-            guard !deviceKey.isEmpty else { continue }
-            let token = currentConfig?.baseURL.absoluteString == baseURL.absoluteString
-                ? currentConfig?.token
-                : nil
+            guard let identity = marker.identity else { continue }
+            let baseURL = identity.baseURL
+            let token = gatewayTokenStore.load(baseURL: baseURL)
             guard let lease = await ackMarkerStore.acquireAckLease(
                 marker,
                 owner: "app.\(platformSuffix)",
@@ -413,54 +551,79 @@ final class ProviderIngressCoordinator {
             ) else {
                 continue
             }
-
-            do {
-                _ = try await channelSubscriptionService.ackMessage(
+            if lease.ackContract == .legacySingle {
+                do {
+                    let removed = try await channelSubscriptionService.ackMessage(
+                        baseURL: baseURL,
+                        token: token,
+                        deviceKey: identity.deviceKey,
+                        deliveryId: lease.record.deliveryId
+                    )
+                    guard removed || lease.attemptCount > 0 else {
+                        throw Self.incompleteFreshAckError(requested: 1, removed: 0)
+                    }
+                    await ackMarkerStore.markCompleted(lease)
+                } catch {
+                    await ackMarkerStore.markAckFailed(
+                        lease,
+                        source: "\(source).failed",
+                        retryAfter: Date().addingTimeInterval(60),
+                        postNotification: false
+                    )
+                    await hooks.recordProviderError(error, source)
+                }
+                continue
+            }
+            let batchKey = Self.ackBatchKey(for: baseURL) + "\u{0}" + identity.deviceKey
+            if var batch = batches[batchKey] {
+                batch.leases.append(lease)
+                batches[batchKey] = batch
+            } else {
+                batches[batchKey] = AckBatch(
                     baseURL: baseURL,
                     token: token,
-                    deviceKey: deviceKey,
-                    deliveryId: deliveryId
+                    deviceKey: identity.deviceKey,
+                    leases: [lease]
                 )
-                await ackMarkerStore.markCompleted(lease)
+            }
+        }
+
+        for batch in batches.values {
+            do {
+                _ = try await channelSubscriptionService.ackMessages(
+                    baseURL: batch.baseURL,
+                    token: batch.token,
+                    deviceKey: batch.deviceKey,
+                    deliveryIds: batch.leases.map(\.record.deliveryId)
+                )
+                for lease in batch.leases {
+                    await ackMarkerStore.markCompleted(lease)
+                }
             } catch {
-                await ackMarkerStore.markAckFailed(
-                    lease,
-                    source: "\(source).failed",
-                    retryAfter: Date().addingTimeInterval(60),
-                    postNotification: false
-                )
+                for lease in batch.leases {
+                    await ackMarkerStore.markAckFailed(
+                        lease,
+                        source: "\(source).failed",
+                        retryAfter: Date().addingTimeInterval(60),
+                        postNotification: false
+                    )
+                }
                 await hooks.recordProviderError(error, source)
             }
         }
     }
 
     private func ackDelivery(
-        deliveryId: String,
-        baseURL fallbackBaseURL: URL?,
+        identity: ProviderDeliveryAckFailureStore.DeliveryIdentity,
         source: String
     ) async {
-        guard let config = await hooks.serverConfig(),
-              let deviceKey = await hooks.cachedDeviceKey()
-        else {
-            _ = await ackMarkerStore.markInboxDurable(
-                deliveryId: deliveryId,
-                baseURL: fallbackBaseURL,
-                deviceKeyAccount: nil,
-                source: "\(source).unavailable",
-                retryAfter: Date().addingTimeInterval(60),
-                postNotification: false
-            )
-            return
-        }
         _ = await ackMarkerStore.markInboxDurable(
-            deliveryId: deliveryId,
-            baseURL: config.baseURL,
-            deviceKeyAccount: nil,
+            identity: identity,
             source: "\(source).pending",
             postNotification: false
         )
         guard let lease = await ackMarkerStore.acquireAckLease(
-            deliveryId: deliveryId,
+            identity: identity,
             owner: "app.direct.\(platformSuffix)",
             leaseDuration: 30
         ) else {
@@ -468,12 +631,15 @@ final class ProviderIngressCoordinator {
         }
 
         do {
-            _ = try await channelSubscriptionService.ackMessage(
-                baseURL: config.baseURL,
-                token: config.token,
-                deviceKey: deviceKey,
-                deliveryId: deliveryId
+            let removed = try await channelSubscriptionService.ackMessage(
+                baseURL: identity.baseURL,
+                token: gatewayTokenStore.load(baseURL: identity.baseURL),
+                deviceKey: identity.deviceKey,
+                deliveryId: identity.deliveryId
             )
+            guard removed || lease.attemptCount > 0 else {
+                throw Self.incompleteFreshAckError(requested: 1, removed: 0)
+            }
             await ackMarkerStore.markCompleted(lease)
         } catch {
             await ackMarkerStore.markAckFailed(
@@ -502,6 +668,24 @@ final class ProviderIngressCoordinator {
     private func bypassesRecentFullSyncCoalescing(reason: String) -> Bool {
         let normalized = reason.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return normalized.contains("pull_to_refresh") || normalized.contains("manual")
+    }
+
+    static func ackBatchKey(for baseURL: URL) -> String {
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            return baseURL.absoluteString
+        }
+        components.scheme = components.scheme?.lowercased()
+        components.host = components.host?.lowercased()
+        return components.string ?? baseURL.absoluteString
+    }
+
+    private static func incompleteFreshAckError(requested: Int, removed: Int) -> AppError {
+        AppError.typedLocal(
+            code: "gateway_ack_incomplete",
+            category: .conflict,
+            message: LocalizationProvider.localized("operation_failed"),
+            detail: "fresh batch ack removed \(removed) of \(requested) deliveries"
+        )
     }
 
     private func providerDeliveryId(from payload: [AnyHashable: Any]) -> String? {

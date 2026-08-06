@@ -14,8 +14,6 @@ struct EventSplitScreen: View {
     @State private var hydrationRequestedEventIDs: Set<String> = []
     @State private var hydratedSelectedEvent: EventProjection?
     @State private var showCloseConfirmation = false
-    @State private var isBatchMode: Bool = false
-    @State private var batchSelection: Set<String> = []
     @State private var searchFieldText: String = ""
     @State private var isFilterPopoverPresented = false
     private let fixedListWidth: CGFloat = 300
@@ -49,15 +47,11 @@ struct EventSplitScreen: View {
             }
         }
         .onChange(of: searchFieldText) { _, newValue in
-            guard !isBatchMode else { return }
             guard searchQuery != newValue else { return }
             searchQuery = newValue
         }
         .onChange(of: viewModel.events) { _, _ in
             syncSelection()
-        }
-        .onChange(of: isBatchMode) { _, isActive in
-            searchFieldText = isActive ? "" : searchQuery
         }
         .onChange(of: searchQuery) { _, _ in
             syncSelection()
@@ -66,7 +60,6 @@ struct EventSplitScreen: View {
             syncSelection()
         }
         .onChange(of: selection) { _, id in
-            guard !isBatchMode else { return }
             guard let id else {
                 hydratedSelectedEvent = nil
                 return
@@ -75,8 +68,6 @@ struct EventSplitScreen: View {
             requestSelectedEventHydration(id)
         }
         .onChange(of: environment.pendingLocalDeletionController.pendingDeletion) { _, _ in
-            let visibleIDs = Set(filteredEvents.map(\.id))
-            batchSelection = batchSelection.intersection(visibleIDs)
             syncSelection()
         }
     }
@@ -87,8 +78,6 @@ struct EventSplitScreen: View {
             EventListScreen(
                 events: filteredEvents,
                 selection: $selection,
-                batchSelection: $batchSelection,
-                isBatchMode: $isBatchMode,
                 isLoadingMore: viewModel.isLoadingMoreEvents,
                 onReachEnd: {
                     Task { await viewModel.loadMoreEvents() }
@@ -105,7 +94,7 @@ struct EventSplitScreen: View {
                     )
                 },
                 onDeleteEvent: { event in
-                    Task { await scheduleDeletion(for: [event]) }
+                    Task { await scheduleDeletion(for: event) }
                 }
             )
             .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
@@ -117,7 +106,7 @@ struct EventSplitScreen: View {
                 placement: .toolbar,
                 prompt: Text(localizationManager.localized("search_events"))
             )
-            .navigationTitle(isBatchMode ? "" : localizationManager.localized("push_type_event"))
+            .navigationTitle(localizationManager.localized("push_type_event"))
         }
         .pendingLocalDeletionBarHost(environment: environment)
         .toolbar { listToolbarContent }
@@ -184,7 +173,6 @@ struct EventSplitScreen: View {
     }
 
     private var selectedEvent: EventProjection? {
-        guard !isBatchMode else { return nil }
         guard let selection else { return nil }
         if hydratedSelectedEvent?.id == selection {
             return hydratedSelectedEvent
@@ -207,47 +195,16 @@ struct EventSplitScreen: View {
 
     @ToolbarContentBuilder
     private var listToolbarContent: some ToolbarContent {
-        if isBatchMode {
-            ToolbarItem(placement: .navigation) {
-                Button {
-                    toggleSelectAllVisibleEvents()
-                } label: {
-                    Image(systemName: areAllVisibleEventsSelected ? "checkmark.rectangle.stack.fill" : "checkmark.rectangle.stack")
-                }
-                .help(localizationManager.localized("all"))
-                .accessibilityLabel(localizationManager.localized("all"))
-            }
-        }
-
         ToolbarItemGroup(placement: .primaryAction) {
-            if isBatchMode {
-                Button(role: .destructive) {
-                    deleteSelectedEvents()
-                } label: {
-                    Image(systemName: "trash")
-                }
-                .help(localizationManager.localized("delete"))
-                .accessibilityLabel(localizationManager.localized("delete"))
-                .disabled(batchSelection.isEmpty)
-                
-                Button {
-                    Task { await exitBatchModeAfterFlushingPendingDeletion() }
-                } label: {
-                    batchDoneToolbarIcon()
-                }
-                .help(localizationManager.localized("done"))
-                .accessibilityLabel(localizationManager.localized("done"))
-            } else {
-                Button {
-                    isFilterPopoverPresented = true
-                } label: {
-                    filterToolbarIcon(isHighlighted: isFilterMenuHighlighted)
-                }
-                .help(localizationManager.localized("channel"))
-                .accessibilityLabel(localizationManager.localized("channel"))
-                .popover(isPresented: $isFilterPopoverPresented, arrowEdge: .top) {
-                    filterPopoverContent
-                }
+            Button {
+                isFilterPopoverPresented = true
+            } label: {
+                filterToolbarIcon(isHighlighted: isFilterMenuHighlighted)
+            }
+            .help(localizationManager.localized("channel"))
+            .accessibilityLabel(localizationManager.localized("channel"))
+            .popover(isPresented: $isFilterPopoverPresented, arrowEdge: .top) {
+                filterPopoverContent
             }
         }
     }
@@ -270,7 +227,7 @@ struct EventSplitScreen: View {
                 Image(systemName: "trash")
             }
             .help(localizationManager.localized("delete"))
-            .disabled(selectedEvent == nil || isBatchMode)
+            .disabled(selectedEvent == nil)
         }
     }
 
@@ -293,21 +250,6 @@ struct EventSplitScreen: View {
         syncSelection()
     }
 
-    private func setBatchMode(_ enabled: Bool) {
-        isBatchMode = enabled
-        if enabled {
-            selection = nil
-        } else {
-            batchSelection.removeAll()
-        }
-    }
-
-    @MainActor
-    private func exitBatchModeAfterFlushingPendingDeletion() async {
-        await environment.pendingLocalDeletionController.commitCurrentIfNeeded()
-        setBatchMode(false)
-    }
-
     private func closeSelectedEvent() {
         guard let selectedEvent else { return }
         Task {
@@ -327,38 +269,13 @@ struct EventSplitScreen: View {
 
     private func deleteSelectedEvent() {
         guard let selectedEvent else { return }
-        Task { await scheduleDeletion(for: [selectedEvent]) }
-    }
-
-    private func deleteSelectedEvents() {
-        Task { await scheduleDeletion(for: selectedBatchEvents) }
-    }
-
-    private var selectedBatchEvents: [EventProjection] {
-        let ids = batchSelection
-        guard !ids.isEmpty else { return [] }
-        return filteredEvents.filter { ids.contains($0.id) }
-    }
-
-    private var allVisibleEventIDs: Set<String> {
-        Set(filteredEvents.map(\.id))
-    }
-
-    private var areAllVisibleEventsSelected: Bool {
-        let visibleIDs = allVisibleEventIDs
-        return !visibleIDs.isEmpty && batchSelection == visibleIDs
-    }
-
-    private func toggleSelectAllVisibleEvents() {
-        let visibleIDs = allVisibleEventIDs
-        guard !visibleIDs.isEmpty else { return }
-        batchSelection = areAllVisibleEventsSelected ? [] : visibleIDs
+        Task { await scheduleDeletion(for: selectedEvent) }
     }
 
     @MainActor
-    private func scheduleDeletion(for events: [EventProjection]) async {
+    private func scheduleDeletion(for event: EventProjection) async {
         guard let result = await environment.pendingLocalDeletionController.scheduleItems(
-            events,
+            [event],
             identity: { $0.id },
             title: { $0.title },
             fallbackSingleSummary: localizationManager.localized("push_type_event"),
@@ -383,15 +300,9 @@ struct EventSplitScreen: View {
         {
             selection = nil
         }
-        batchSelection.subtract(result.scope.eventIDs)
     }
 
     private func syncSelection() {
-        if isBatchMode {
-            selection = nil
-            hydratedSelectedEvent = nil
-            return
-        }
         if let target = openEventId?.trimmingCharacters(in: .whitespacesAndNewlines),
            !target.isEmpty
         {
@@ -471,20 +382,6 @@ struct EventSplitScreen: View {
 
     private var filterPopoverContent: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Button {
-                setBatchMode(true)
-                isFilterPopoverPresented = false
-            } label: {
-                filterMenuSelectionRow(
-                    title: "选择",
-                    systemImage: "checklist",
-                    isSelected: isBatchMode
-                )
-            }
-            .buttonStyle(.plain)
-            .padding(.vertical, 2)
-            .transientPresentationActionControl()
-
             if !channelOptions.isEmpty {
                 Rectangle()
                     .fill(Color.appDividerSubtle.opacity(0.9))
@@ -631,14 +528,6 @@ struct EventSplitScreen: View {
         .foregroundStyle(Color.appTextPrimary)
         .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func batchDoneToolbarIcon() -> some View {
-        Image(systemName: "checkmark")
-            .font(.footnote.weight(.bold))
-            .foregroundStyle(
-                .appAccentPrimary
-            )
     }
 
     private func filterToolbarIcon(isHighlighted: Bool) -> some View {

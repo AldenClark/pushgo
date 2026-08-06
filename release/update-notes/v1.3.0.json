@@ -1,0 +1,5 @@
+{
+  "en": "PushGo 1.3.0 improves notification delivery reliability and Apple platform integration.\n- Keeps pulled notifications recoverable until local persistence and gateway acknowledgement complete\n- Adds efficient batch acknowledgement with compatibility for beta gateways\n- Improves iPhone, Mac, and Apple Watch system surfaces, widgets, search, and receiver behavior",
+  "zh-CN": "PushGo 1.3.0 提升了通知投递可靠性与 Apple 平台集成体验。\n- 拉取通知会保留到本地持久化与网关确认完成，降低异常中断时的数据丢失风险\n- 新增高效批量确认，并兼容 beta 网关\n- 改进 iPhone、Mac 与 Apple Watch 的系统入口、组件、搜索和接收端体验",
+  "zh-TW": "PushGo 1.3.0 提升了通知投遞可靠性與 Apple 平台整合體驗。\n- 拉取通知會保留至本機持久化與閘道確認完成，降低異常中斷時的資料遺失風險\n- 新增高效批次確認，並相容 beta 閘道\n- 改進 iPhone、Mac 與 Apple Watch 的系統入口、小工具、搜尋和接收端體驗"
+}

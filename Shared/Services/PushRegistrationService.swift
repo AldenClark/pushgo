@@ -6,6 +6,11 @@ import UserNotifications
     @MainActor
     @Observable
     final class PushRegistrationService {
+        private struct TokenWaiter {
+            let continuation: CheckedContinuation<String, Error>
+            var timeoutTask: Task<Void, Never>?
+        }
+
         enum AuthorizationState {
             case notDetermined
             case authorized
@@ -30,7 +35,10 @@ import UserNotifications
 
         private let automationProviderToken: String?
         private let bypassPushAuthorizationPrompt: Bool
-        private var tokenWaiters: [UUID: CheckedContinuation<String, Error>] = [:]
+        private var tokenWaiters: [UUID: TokenWaiter] = [:]
+#if DEBUG
+        private var testingBeforeTokenWaiterInstall: (() -> Void)?
+#endif
 
         private init(
             automationProviderToken: String? = PushGoAutomationContext.providerToken,
@@ -81,28 +89,22 @@ import UserNotifications
         var testingTokenWaiterCount: Int {
             tokenWaiters.count
         }
+
+        func setTestingBeforeTokenWaiterInstall(_ action: (() -> Void)?) {
+            testingBeforeTokenWaiterInstall = action
+        }
 #endif
 
         func awaitToken(timeout: TimeInterval = 10) async throws -> String {
             if let token = apnsToken {
                 return token
             }
-
-            return try await withThrowingTaskGroup(of: String.self) { group in
-                group.addTask { [weak self] in
-                    guard let self else { throw AppError.apnsDenied }
-                    return try await enqueueTokenWaiter()
-                }
-
-                group.addTask {
-                    try await Task.sleep(for: .seconds(timeout))
-                    throw AppError.apnsDenied
-                }
-
-                let result = try await group.next()!
-                group.cancelAll()
-                return result
-            }
+#if DEBUG
+            let beforeInstall = testingBeforeTokenWaiterInstall
+            testingBeforeTokenWaiterInstall = nil
+            beforeInstall?()
+#endif
+            return try await enqueueTokenWaiter(timeout: timeout)
         }
 
         func refreshAuthorizationStatus() async {
@@ -157,36 +159,82 @@ import UserNotifications
             resolveWaiters(with: .failure(AppError.apnsDenied))
         }
 
-        private func enqueueTokenWaiter() async throws -> String {
+        private func enqueueTokenWaiter(timeout: TimeInterval) async throws -> String {
             let waiterId = UUID()
             return try await withTaskCancellationHandler {
                 try await withCheckedThrowingContinuation { continuation in
-                    tokenWaiters[waiterId] = continuation
+                    tokenWaiters[waiterId] = TokenWaiter(
+                        continuation: continuation,
+                        timeoutTask: nil
+                    )
+
+                    if let token = apnsToken {
+                        completeWaiter(id: waiterId, with: .success(token))
+                        return
+                    }
+                    if Task.isCancelled {
+                        completeWaiter(id: waiterId, with: .failure(CancellationError()))
+                        return
+                    }
+
+                    let normalizedTimeout = max(0, timeout)
+                    let timeoutTask = Task { [weak self, waiterId] in
+                        do {
+                            try await Task.sleep(for: .seconds(normalizedTimeout))
+                        } catch {
+                            return
+                        }
+                        self?.completeWaiter(
+                            id: waiterId,
+                            with: .failure(Self.registrationTimedOutError)
+                        )
+                    }
+                    guard var waiter = tokenWaiters[waiterId] else {
+                        timeoutTask.cancel()
+                        return
+                    }
+                    waiter.timeoutTask = timeoutTask
+                    tokenWaiters[waiterId] = waiter
                 }
             } onCancel: { [weak self, waiterId] in
-                let service = self
                 Task { @MainActor in
-                    service?.cancelWaiter(id: waiterId)
+                    self?.completeWaiter(id: waiterId, with: .failure(CancellationError()))
                 }
             }
         }
 
-        private func cancelWaiter(id: UUID) {
-            let continuation = tokenWaiters.removeValue(forKey: id)
-            continuation?.resume(throwing: CancellationError())
+        private func completeWaiter(id: UUID, with result: Result<String, Error>) {
+            guard let waiter = tokenWaiters.removeValue(forKey: id) else { return }
+            waiter.timeoutTask?.cancel()
+            switch result {
+            case let .success(token):
+                waiter.continuation.resume(returning: token)
+            case let .failure(error):
+                waiter.continuation.resume(throwing: error)
+            }
         }
 
         private func resolveWaiters(with result: Result<String, Error>) {
             let waiters = Array(tokenWaiters.values)
             tokenWaiters.removeAll()
             for waiter in waiters {
+                waiter.timeoutTask?.cancel()
                 switch result {
                 case let .success(token):
-                    waiter.resume(returning: token)
+                    waiter.continuation.resume(returning: token)
                 case let .failure(error):
-                    waiter.resume(throwing: error)
+                    waiter.continuation.resume(throwing: error)
                 }
             }
+        }
+
+        static var registrationTimedOutError: AppError {
+            .typedLocal(
+                code: "apns_registration_timed_out",
+                category: .local,
+                message: LocalizationProvider.localized("operation_failed"),
+                detail: "timed out waiting for APNs device token"
+            )
         }
 
         private static func normalizedAutomationProviderToken(_ token: String?) -> String? {

@@ -19,16 +19,26 @@ struct NormalizedRemoteNotification {
 
 enum ProviderWakeupResolution {
     case notWakeup
-    case pulled(payload: [AnyHashable: Any], requestIdentifier: String)
+    case pulled(payload: [AnyHashable: Any], requestIdentifier: String, context: ProviderPullContext)
     case claimedByPeer(payload: [AnyHashable: Any], requestIdentifier: String?)
     case unresolvedWakeup(payload: [AnyHashable: Any], requestIdentifier: String?)
 }
 
 enum NotificationIngressResolution {
     case direct(payload: [AnyHashable: Any], requestIdentifier: String?)
-    case pulled(payload: [AnyHashable: Any], requestIdentifier: String)
+    case pulled(payload: [AnyHashable: Any], requestIdentifier: String, context: ProviderPullContext)
     case claimedByPeer(payload: [AnyHashable: Any], requestIdentifier: String?)
     case unresolvedWakeup(payload: [AnyHashable: Any], requestIdentifier: String?)
+}
+
+struct ProviderPullContext: Sendable {
+    let contract: ChannelSubscriptionService.PullContract
+    let baseURL: URL
+    let token: String?
+    let deviceKey: String
+    let claimLease: ProviderWakeupPullClaimStore.ClaimLease
+
+    var requiresAck: Bool { contract == .v2 }
 }
 
 private struct WakeupServerCandidate {
@@ -899,8 +909,12 @@ enum NotificationHandling {
                 payload: sanitized,
                 requestIdentifier: providerIngressRequestIdentifier(from: sanitized)
             )
-        case let .pulled(resolvedPayload, requestIdentifier):
-            return .pulled(payload: resolvedPayload, requestIdentifier: requestIdentifier)
+        case let .pulled(resolvedPayload, requestIdentifier, context):
+            return .pulled(
+                payload: resolvedPayload,
+                requestIdentifier: requestIdentifier,
+                context: context
+            )
         case let .claimedByPeer(unresolvedPayload, requestIdentifier):
             return .claimedByPeer(
                 payload: unresolvedPayload,
@@ -933,11 +947,11 @@ enum NotificationHandling {
         }
 
         switch ingress {
-        case let .direct(payload, requestIdentifier):
+        case let .direct(payload, _):
             if providerWakeupPullDeliveryId(from: payload) != nil {
                 return nil
             }
-            return requestIdentifier ?? providerIngressRequestIdentifier(from: payload)
+            return providerIngressRequestIdentifier(from: payload)
         case .pulled:
             return nil
         case .claimedByPeer:
@@ -1012,56 +1026,70 @@ enum NotificationHandling {
         guard let deviceKey = await activeProviderDeviceKeyForWakeupIngress(dataStore: dataStore) else {
             return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId)
         }
-        let claimStore = ProviderWakeupPullClaimStore.shared
         let owner = "app_wakeup_resolver"
         let leaseDuration: TimeInterval = 30
-        let lease: ProviderWakeupPullClaimStore.ClaimLease
-        if let acquiredLease = await claimStore.acquireLease(
-            deliveryId: deliveryId,
-            owner: owner,
-            leaseDuration: leaseDuration
-        ) {
-            lease = acquiredLease
-        } else if await claimStore.waitForPeerCompletion(
-            deliveryId: deliveryId,
-            timeout: 1.5
-        ) {
-            return .claimedByPeer(payload: sanitized, requestIdentifier: deliveryId)
-        } else if let retryLease = await claimStore.acquireLease(
-            deliveryId: deliveryId,
-            owner: owner,
-            leaseDuration: leaseDuration
-        ) {
-            lease = retryLease
-        } else {
-            return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId)
-        }
-
+        let claimStore = ProviderWakeupPullClaimStore.shared
         for candidate in candidates {
+            guard let identity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
+                deliveryId: deliveryId,
+                baseURL: candidate.config.baseURL,
+                deviceKey: deviceKey,
+                ackContract: .v2Batch
+            ) else {
+                continue
+            }
+            let lease: ProviderWakeupPullClaimStore.ClaimLease
+            if let acquiredLease = await claimStore.acquireLease(
+                identity: identity,
+                owner: owner,
+                leaseDuration: leaseDuration
+            ) {
+                lease = acquiredLease
+            } else if await claimStore.waitForPeerCompletion(
+                identity: identity,
+                timeout: 1.5
+            ) {
+                return .claimedByPeer(payload: sanitized, requestIdentifier: deliveryId)
+            } else if let retryLease = await claimStore.acquireLease(
+                identity: identity,
+                owner: owner,
+                leaseDuration: leaseDuration
+            ) {
+                lease = retryLease
+            } else {
+                continue
+            }
             do {
-                let items = try await channelSubscriptionService.pullMessages(
+                let pullResult = try await channelSubscriptionService.pullMessages(
                     baseURL: candidate.config.baseURL,
                     token: candidate.config.token,
                     deviceKey: deviceKey,
                     deliveryId: deliveryId
                 )
-                guard let item = items.first else {
+                guard let item = pullResult.items.first else {
+                    await claimStore.releaseLease(lease)
                     continue
                 }
-                let pulledPayload: [AnyHashable: Any] = item.payload.reduce(into: [:]) { result, element in
+                var pulledPayload: [AnyHashable: Any] = item.payload.reduce(into: [:]) { result, element in
                     result[element.key] = element.value
                 }
-                await claimStore.markCompleted(lease)
+                pulledPayload["delivery_id"] = item.deliveryId
                 return .pulled(
                     payload: UserInfoSanitizer.sanitize(pulledPayload),
-                    requestIdentifier: normalizedPayloadString(item.deliveryId) ?? deliveryId
+                    requestIdentifier: normalizedPayloadString(item.deliveryId) ?? deliveryId,
+                    context: ProviderPullContext(
+                        contract: pullResult.contract,
+                        baseURL: candidate.config.baseURL,
+                        token: candidate.config.token,
+                        deviceKey: deviceKey,
+                        claimLease: lease
+                    )
                 )
             } catch {
+                await claimStore.releaseLease(lease)
                 continue
             }
         }
-
-        await claimStore.releaseLease(lease)
         return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId)
     }
 #endif
@@ -1130,17 +1158,37 @@ enum NotificationHandling {
     ) async -> [WakeupServerCandidate] {
         var candidates: [WakeupServerCandidate] = []
         var dedupe = Set<String>()
+        let tokenStore = ProviderGatewayTokenStore()
         func appendCandidate(baseURL: URL, token: String?, source: String) {
             let normalizedConfig = ServerConfig(
                 baseURL: baseURL,
-                token: token,
+                token: token ?? tokenStore.load(baseURL: baseURL),
                 notificationKeyMaterial: nil
             ).normalized()
-            let dedupeKey = "\(normalizedConfig.baseURL.absoluteString.lowercased())|\(normalizedConfig.token ?? "")"
+            let normalizedBaseURL = normalizedProviderGatewayURL(normalizedConfig.baseURL)
+                ?? normalizedConfig.baseURL
+            let dedupeKey = "\(normalizedBaseURL.absoluteString)|\(normalizedConfig.token ?? "")"
             guard dedupe.insert(dedupeKey).inserted else {
                 return
             }
-            candidates.append(WakeupServerCandidate(config: normalizedConfig, source: source))
+            candidates.append(
+                WakeupServerCandidate(
+                    config: ServerConfig(
+                        baseURL: normalizedBaseURL,
+                        token: normalizedConfig.token,
+                        notificationKeyMaterial: normalizedConfig.notificationKeyMaterial
+                    ),
+                    source: source
+                )
+            )
+        }
+
+        if let gatewayURL = wakeupGatewayURL(from: payload) {
+            appendCandidate(
+                baseURL: gatewayURL,
+                token: tokenStore.load(baseURL: gatewayURL),
+                source: "payload.base_url"
+            )
         }
 
         if let channelId = normalizedPayloadString(payload["channel_id"]) {
@@ -1155,14 +1203,6 @@ enum NotificationHandling {
                     source: "channel_subscriptions.channel_id"
                 )
             }
-        }
-
-        if let gatewayURL = wakeupGatewayURL(from: payload) {
-            appendCandidate(
-                baseURL: gatewayURL,
-                token: nil,
-                source: "payload.base_url"
-            )
         }
 
         if let fallbackServerConfig {

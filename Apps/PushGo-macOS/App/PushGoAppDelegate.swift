@@ -264,15 +264,26 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency 
                     skipInboxMerge: true
                 )
             }
-        case let .pulled(resolvedPayload, requestIdentifier):
-            _ = await AppEnvironment.shared.persistRemotePayloadIfNeeded(
+        case let .pulled(resolvedPayload, requestIdentifier, context):
+            let outcome = await AppEnvironment.shared.persistRemotePayloadIfNeeded(
                 resolvedPayload,
                 requestIdentifier: requestIdentifier
             )
+            await AppEnvironment.shared.finalizePulledProviderIngress(
+                deliveryId: requestIdentifier,
+                context: context,
+                outcome: outcome,
+                source: "provider.remote_notification.pulled.macos"
+            )
         case let .direct(resolvedPayload, requestIdentifier):
-            _ = await AppEnvironment.shared.persistRemotePayloadIfNeeded(
+            let outcome = await AppEnvironment.shared.persistRemotePayloadIfNeeded(
                 resolvedPayload,
                 requestIdentifier: requestIdentifier
+            )
+            await AppEnvironment.shared.ackDirectProviderIngressIfNeeded(
+                payload: resolvedPayload,
+                outcome: outcome,
+                source: "provider.remote_notification.direct.macos"
             )
         }
     }

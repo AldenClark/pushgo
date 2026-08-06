@@ -1300,6 +1300,20 @@ final class AppEnvironment {
         )
     }
 
+    func finalizePulledProviderIngress(
+        deliveryId: String,
+        context: ProviderPullContext,
+        outcome: NotificationPersistenceOutcome,
+        source: String
+    ) async {
+        await notificationIngressController.finalizePulledProviderIngress(
+            deliveryId: deliveryId,
+            context: context,
+            outcome: outcome,
+            source: source
+        )
+    }
+
     @discardableResult
     func purgePendingUnresolvedWakeupEntries(limit: Int = 256) async -> Int {
         await notificationIngressController.purgePendingUnresolvedWakeupEntries(limit: limit)
@@ -1325,6 +1339,18 @@ final class AppEnvironment {
         await notificationIngressController.persistRemotePayloadIfNeeded(
             payload,
             requestIdentifier: requestIdentifier
+        )
+    }
+
+    func ackDirectProviderIngressIfNeeded(
+        payload: [AnyHashable: Any],
+        outcome: NotificationPersistenceOutcome,
+        source: String
+    ) async {
+        await notificationIngressController.ackDirectProviderIngressIfNeeded(
+            payload: payload,
+            outcome: outcome,
+            source: source
         )
     }
 

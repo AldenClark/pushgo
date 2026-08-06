@@ -1,6 +1,31 @@
+import CryptoKit
 import Foundation
 
+func normalizedProviderGatewayURL(_ baseURL: URL) -> URL? {
+    guard let validated = URLSanitizer.validatedServerURL(baseURL),
+          var components = URLComponents(url: validated, resolvingAgainstBaseURL: false)
+    else {
+        return nil
+    }
+    components.scheme = components.scheme?.lowercased()
+    components.host = components.host?.lowercased()
+    var path = components.percentEncodedPath
+    while path.hasSuffix("/") && path.count > 1 {
+        path.removeLast()
+    }
+    if path == "/" {
+        path = ""
+    }
+    components.percentEncodedPath = path
+    return components.url
+}
+
 actor ProviderDeliveryAckFailureStore {
+    enum AckContract: String, Codable, Sendable {
+        case legacySingle
+        case v2Batch
+    }
+
     enum Stage: String, Codable, Sendable {
         case preparing
         case inboxDurable
@@ -8,12 +33,77 @@ actor ProviderDeliveryAckFailureStore {
         case completed
     }
 
+    struct DeliveryIdentity: Codable, Hashable, Sendable {
+        let baseURLString: String
+        let deviceKey: String
+        let ackContract: AckContract
+        let deliveryId: String
+
+        init?(
+            deliveryId: String,
+            baseURL: URL,
+            deviceKey: String,
+            ackContract: AckContract
+        ) {
+            let normalizedDeliveryId = deliveryId.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedDeviceKey = deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalizedDeliveryId.isEmpty,
+                  !normalizedDeviceKey.isEmpty,
+                  let normalizedBaseURL = normalizedProviderGatewayURL(baseURL)
+            else {
+                return nil
+            }
+            self.baseURLString = normalizedBaseURL.absoluteString
+            self.deviceKey = normalizedDeviceKey
+            self.ackContract = ackContract
+            self.deliveryId = normalizedDeliveryId
+        }
+
+        var baseURL: URL {
+            URL(string: baseURLString)!
+        }
+
+        var storageKey: String {
+            let material = [
+                baseURLString,
+                deviceKey,
+                ackContract.rawValue,
+                deliveryId,
+            ].joined(separator: "\u{0}")
+            return SHA256.hash(data: Data(material.utf8))
+                .map { String(format: "%02x", $0) }
+                .joined()
+        }
+
+        static func direct(from payload: [String: Any]) -> DeliveryIdentity? {
+            guard let deliveryId = normalized(payload["delivery_id"] as? String),
+                  let rawBaseURL = normalized(payload["base_url"] as? String),
+                  let baseURL = URLSanitizer.validatedServerURL(from: rawBaseURL),
+                  let deviceKey = normalized(payload["provider_device_key"] as? String)
+            else {
+                return nil
+            }
+            return DeliveryIdentity(
+                deliveryId: deliveryId,
+                baseURL: baseURL,
+                deviceKey: deviceKey,
+                ackContract: .legacySingle
+            )
+        }
+
+        private static func normalized(_ value: String?) -> String? {
+            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmed.isEmpty ? nil : trimmed
+        }
+    }
+
     struct StoredMarker: Codable, Sendable {
         let schemaVersion: Int
         let deliveryId: String
         let baseURLString: String?
-        let deviceKeyAccount: String?
-        let routeGeneration: String?
+        let deviceKey: String?
+        let ackContract: AckContract?
+        let attemptCount: Int?
         let stage: Stage
         let owner: String?
         let leaseUntilEpochMs: Int64?
@@ -32,11 +122,34 @@ actor ProviderDeliveryAckFailureStore {
             guard let raw = record.baseURLString else { return nil }
             return URLSanitizer.validatedServerURL(from: raw)
         }
+
+        var identity: DeliveryIdentity? {
+            guard let baseURL,
+                  let deviceKey = record.deviceKey,
+                  let ackContract = record.ackContract
+            else {
+                return nil
+            }
+            return DeliveryIdentity(
+                deliveryId: record.deliveryId,
+                baseURL: baseURL,
+                deviceKey: deviceKey,
+                ackContract: ackContract
+            )
+        }
+
+        var ackContract: AckContract {
+            record.ackContract ?? .legacySingle
+        }
+
+        var attemptCount: Int {
+            max(0, record.attemptCount ?? 0)
+        }
     }
 
     static let shared = ProviderDeliveryAckFailureStore()
 
-    private static let schemaVersion = 2
+    private static let schemaVersion = 3
     private static let fileExtension = "ackbin"
     private static let mutationLockExtension = "lock"
     private static let directoryName = "provider-delivery-ack-failures"
@@ -63,18 +176,12 @@ actor ProviderDeliveryAckFailureStore {
 
     @discardableResult
     func markPreparing(
-        deliveryId: String,
-        baseURL: URL?,
-        deviceKeyAccount: String?,
-        routeGeneration: String? = nil,
+        identity: DeliveryIdentity,
         source: String,
         postNotification: Bool = false
     ) async -> Bool {
         await writeMarker(
-            deliveryId: deliveryId,
-            baseURL: baseURL,
-            deviceKeyAccount: deviceKeyAccount,
-            routeGeneration: routeGeneration,
+            identity: identity,
             stage: .preparing,
             owner: nil,
             leaseUntil: nil,
@@ -86,19 +193,13 @@ actor ProviderDeliveryAckFailureStore {
 
     @discardableResult
     func markInboxDurable(
-        deliveryId: String,
-        baseURL: URL?,
-        deviceKeyAccount: String?,
-        routeGeneration: String? = nil,
+        identity: DeliveryIdentity,
         source: String,
         retryAfter: Date? = nil,
         postNotification: Bool = true
     ) async -> Bool {
         await writeMarker(
-            deliveryId: deliveryId,
-            baseURL: baseURL,
-            deviceKeyAccount: deviceKeyAccount,
-            routeGeneration: routeGeneration,
+            identity: identity,
             stage: .inboxDurable,
             owner: nil,
             leaseUntil: nil,
@@ -141,7 +242,7 @@ actor ProviderDeliveryAckFailureStore {
         now: Date = Date()
     ) async -> PendingMarker? {
         await acquireAckLease(
-            deliveryId: marker.record.deliveryId,
+            identity: marker.identity,
             owner: owner,
             leaseDuration: leaseDuration,
             now: now
@@ -149,24 +250,24 @@ actor ProviderDeliveryAckFailureStore {
     }
 
     func acquireAckLease(
-        deliveryId: String,
+        identity: DeliveryIdentity?,
         owner: String,
         leaseDuration: TimeInterval,
         now: Date = Date()
     ) async -> PendingMarker? {
-        guard let normalizedDeliveryId = normalizedText(deliveryId),
+        guard let identity,
               let directoryURL = markerDirectoryURL()
         else {
             return nil
         }
-        guard await acquireMutationLock(deliveryId: normalizedDeliveryId, directoryURL: directoryURL, now: now) else {
+        guard await acquireMutationLock(identity: identity, directoryURL: directoryURL, now: now) else {
             return nil
         }
         defer {
-            releaseMutationLock(deliveryId: normalizedDeliveryId, directoryURL: directoryURL)
+            releaseMutationLock(identity: identity, directoryURL: directoryURL)
         }
         let fileURL = directoryURL.appendingPathComponent(
-            Self.markerFileName(deliveryId: normalizedDeliveryId),
+            Self.markerFileName(identity: identity),
             isDirectory: false
         )
         guard let current = loadMarker(fileURL: fileURL) else {
@@ -187,10 +288,11 @@ actor ProviderDeliveryAckFailureStore {
 
         let updated = StoredMarker(
             schemaVersion: Self.schemaVersion,
-            deliveryId: current.record.deliveryId,
-            baseURLString: current.record.baseURLString,
-            deviceKeyAccount: current.record.deviceKeyAccount,
-            routeGeneration: current.record.routeGeneration,
+            deliveryId: identity.deliveryId,
+            baseURLString: identity.baseURLString,
+            deviceKey: identity.deviceKey,
+            ackContract: identity.ackContract,
+            attemptCount: current.record.attemptCount,
             stage: .ackInFlight,
             owner: normalizedText(owner),
             leaseUntilEpochMs: Self.epochMilliseconds(now.addingTimeInterval(leaseDuration)),
@@ -211,66 +313,66 @@ actor ProviderDeliveryAckFailureStore {
         retryAfter: Date? = Date().addingTimeInterval(30),
         postNotification: Bool = true
     ) async {
+        guard let identity = marker.identity else { return }
         _ = await writeMarker(
-            deliveryId: marker.record.deliveryId,
-            baseURL: marker.baseURL,
-            deviceKeyAccount: marker.record.deviceKeyAccount,
-            routeGeneration: marker.record.routeGeneration,
+            identity: identity,
             stage: .inboxDurable,
             owner: nil,
             leaseUntil: nil,
             retryAfter: retryAfter,
             source: source,
             postNotification: postNotification,
-            allowActiveLeaseOverride: true
+            allowActiveLeaseOverride: true,
+            incrementAttemptCount: true
         )
     }
 
     func markCompleted(_ marker: PendingMarker) async {
-        guard let directoryURL = markerDirectoryURL() else { return }
+        guard let identity = marker.identity,
+              let directoryURL = markerDirectoryURL()
+        else { return }
         let now = Date()
         guard await acquireMutationLock(
-            deliveryId: marker.record.deliveryId,
+            identity: identity,
             directoryURL: directoryURL,
             now: now
         ) else {
             return
         }
         defer {
-            releaseMutationLock(deliveryId: marker.record.deliveryId, directoryURL: directoryURL)
+            releaseMutationLock(identity: identity, directoryURL: directoryURL)
         }
         let completed = completedMarker(
             from: marker.record,
-            deliveryId: marker.record.deliveryId,
+            identity: identity,
             now: now
         )
         _ = write(completed, to: marker.fileURL, postNotification: false)
     }
 
-    func markCompleted(deliveryId: String) async {
-        guard let normalizedDeliveryId = normalizedText(deliveryId),
-              let directoryURL = markerDirectoryURL()
+    func markCompleted(identity: DeliveryIdentity) async {
+        guard let directoryURL = markerDirectoryURL()
         else {
             return
         }
         let now = Date()
         guard await acquireMutationLock(
-            deliveryId: normalizedDeliveryId,
+            identity: identity,
             directoryURL: directoryURL,
             now: now
         ) else {
             return
         }
         defer {
-            releaseMutationLock(deliveryId: normalizedDeliveryId, directoryURL: directoryURL)
+            releaseMutationLock(identity: identity, directoryURL: directoryURL)
         }
         let fileURL = directoryURL.appendingPathComponent(
-            Self.markerFileName(deliveryId: normalizedDeliveryId),
+            Self.markerFileName(identity: identity),
             isDirectory: false
         )
         let completed = completedMarker(
             from: loadMarker(fileURL: fileURL)?.record,
-            deliveryId: normalizedDeliveryId,
+            identity: identity,
             now: now
         )
         _ = write(completed, to: fileURL, postNotification: false)
@@ -278,35 +380,32 @@ actor ProviderDeliveryAckFailureStore {
 
     @discardableResult
     private func writeMarker(
-        deliveryId: String,
-        baseURL: URL?,
-        deviceKeyAccount: String?,
-        routeGeneration: String?,
+        identity: DeliveryIdentity,
         stage: Stage,
         owner: String?,
         leaseUntil: Date?,
         retryAfter: Date?,
         source: String,
         postNotification: Bool,
-        allowActiveLeaseOverride: Bool = false
+        allowActiveLeaseOverride: Bool = false,
+        incrementAttemptCount: Bool = false
     ) async -> Bool {
-        guard let normalizedDeliveryId = normalizedText(deliveryId),
-              let directoryURL = markerDirectoryURL()
+        guard let directoryURL = markerDirectoryURL()
         else {
             return false
         }
         let now = Date()
         guard await acquireMutationLock(
-            deliveryId: normalizedDeliveryId,
+            identity: identity,
             directoryURL: directoryURL,
             now: now
         ) else {
             return false
         }
         defer {
-            releaseMutationLock(deliveryId: normalizedDeliveryId, directoryURL: directoryURL)
+            releaseMutationLock(identity: identity, directoryURL: directoryURL)
         }
-        let fileName = Self.markerFileName(deliveryId: normalizedDeliveryId)
+        let fileName = Self.markerFileName(identity: identity)
         let finalURL = directoryURL.appendingPathComponent(fileName, isDirectory: false)
         let nowEpochMs = Self.epochMilliseconds(now)
         var existing = loadMarker(fileURL: finalURL)?.record
@@ -334,10 +433,11 @@ actor ProviderDeliveryAckFailureStore {
         }
         let marker = StoredMarker(
             schemaVersion: Self.schemaVersion,
-            deliveryId: normalizedDeliveryId,
-            baseURLString: baseURL?.absoluteString ?? existing?.baseURLString,
-            deviceKeyAccount: normalizedText(deviceKeyAccount) ?? existing?.deviceKeyAccount,
-            routeGeneration: normalizedText(routeGeneration) ?? existing?.routeGeneration,
+            deliveryId: identity.deliveryId,
+            baseURLString: identity.baseURLString,
+            deviceKey: identity.deviceKey,
+            ackContract: identity.ackContract,
+            attemptCount: max(0, existing?.attemptCount ?? 0) + (incrementAttemptCount ? 1 : 0),
             stage: stage,
             owner: normalizedText(owner),
             leaseUntilEpochMs: leaseUntil.map(Self.epochMilliseconds),
@@ -407,7 +507,17 @@ actor ProviderDeliveryAckFailureStore {
         guard let data = try? Data(contentsOf: fileURL),
               let record = try? decoder.decode(StoredMarker.self, from: data),
               record.schemaVersion == Self.schemaVersion,
-              normalizedText(record.deliveryId) != nil
+              let rawBaseURL = record.baseURLString,
+              let baseURL = URLSanitizer.validatedServerURL(from: rawBaseURL),
+              let deviceKey = normalizedText(record.deviceKey),
+              let ackContract = record.ackContract,
+              let identity = DeliveryIdentity(
+                  deliveryId: record.deliveryId,
+                  baseURL: baseURL,
+                  deviceKey: deviceKey,
+                  ackContract: ackContract
+              ),
+              fileURL.lastPathComponent == Self.markerFileName(identity: identity)
         else {
             try? fileManager.removeItem(at: fileURL)
             return nil
@@ -469,26 +579,21 @@ actor ProviderDeliveryAckFailureStore {
             .appendingPathComponent(Self.directoryName, isDirectory: true)
     }
 
-    private static func markerFileName(deliveryId: String) -> String {
-        let escaped = Data(deliveryId.utf8)
-            .base64EncodedString()
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "=", with: "")
-        return "\(escaped).\(fileExtension)"
+    private static func markerFileName(identity: DeliveryIdentity) -> String {
+        "\(identity.storageKey).\(fileExtension)"
     }
 
-    private static func mutationLockDirectoryName(deliveryId: String) -> String {
-        ".\(markerFileName(deliveryId: deliveryId)).\(mutationLockExtension)"
+    private static func mutationLockDirectoryName(identity: DeliveryIdentity) -> String {
+        ".\(markerFileName(identity: identity)).\(mutationLockExtension)"
     }
 
     private func acquireMutationLock(
-        deliveryId: String,
+        identity: DeliveryIdentity,
         directoryURL: URL,
         now: Date
     ) async -> Bool {
         let lockURL = directoryURL.appendingPathComponent(
-            Self.mutationLockDirectoryName(deliveryId: deliveryId),
+            Self.mutationLockDirectoryName(identity: identity),
             isDirectory: true
         )
         for attempt in 0..<5 {
@@ -509,9 +614,9 @@ actor ProviderDeliveryAckFailureStore {
         return false
     }
 
-    private func releaseMutationLock(deliveryId: String, directoryURL: URL) {
+    private func releaseMutationLock(identity: DeliveryIdentity, directoryURL: URL) {
         let lockURL = directoryURL.appendingPathComponent(
-            Self.mutationLockDirectoryName(deliveryId: deliveryId),
+            Self.mutationLockDirectoryName(identity: identity),
             isDirectory: true
         )
         try? fileManager.removeItem(at: lockURL)
@@ -528,16 +633,17 @@ actor ProviderDeliveryAckFailureStore {
 
     private func completedMarker(
         from existing: StoredMarker?,
-        deliveryId: String,
+        identity: DeliveryIdentity,
         now: Date
     ) -> StoredMarker {
         let nowEpochMs = Self.epochMilliseconds(now)
         return StoredMarker(
             schemaVersion: Self.schemaVersion,
-            deliveryId: deliveryId,
-            baseURLString: existing?.baseURLString,
-            deviceKeyAccount: existing?.deviceKeyAccount,
-            routeGeneration: existing?.routeGeneration,
+            deliveryId: identity.deliveryId,
+            baseURLString: identity.baseURLString,
+            deviceKey: identity.deviceKey,
+            ackContract: identity.ackContract,
+            attemptCount: existing?.attemptCount,
             stage: .completed,
             owner: nil,
             leaseUntilEpochMs: nil,
@@ -600,6 +706,9 @@ actor ProviderWakeupPullClaimStore {
     struct StoredClaim: Codable, Sendable {
         let schemaVersion: Int
         let deliveryId: String
+        let baseURLString: String?
+        let deviceKey: String?
+        let ackContract: ProviderDeliveryAckFailureStore.AckContract?
         let state: State
         let owner: String?
         let leaseUntilEpochMs: Int64?
@@ -611,11 +720,27 @@ actor ProviderWakeupPullClaimStore {
         let fileName: String
         let fileURL: URL
         let record: StoredClaim
+
+        var identity: ProviderDeliveryAckFailureStore.DeliveryIdentity? {
+            guard let rawBaseURL = record.baseURLString,
+                  let baseURL = URLSanitizer.validatedServerURL(from: rawBaseURL),
+                  let deviceKey = record.deviceKey,
+                  let ackContract = record.ackContract
+            else {
+                return nil
+            }
+            return ProviderDeliveryAckFailureStore.DeliveryIdentity(
+                deliveryId: record.deliveryId,
+                baseURL: baseURL,
+                deviceKey: deviceKey,
+                ackContract: ackContract
+            )
+        }
     }
 
     static let shared = ProviderWakeupPullClaimStore()
 
-    private static let schemaVersion = 1
+    private static let schemaVersion = 2
     private static let fileExtension = "pullclaim"
     private static let lockExtension = "lock"
     private static let directoryName = "provider-wakeup-pull-claims"
@@ -641,30 +766,30 @@ actor ProviderWakeupPullClaimStore {
     }
 
     func acquireLease(
-        deliveryId: String,
+        identity: ProviderDeliveryAckFailureStore.DeliveryIdentity,
         owner: String,
         leaseDuration: TimeInterval,
         now: Date = Date()
     ) async -> ClaimLease? {
-        guard let normalizedDeliveryId = normalizedText(deliveryId),
-              let normalizedOwner = normalizedText(owner),
+        guard let normalizedOwner = normalizedText(owner),
               let directoryURL = claimsDirectoryURL()
         else {
             return nil
         }
+        purgeInvalidClaims(directoryURL: directoryURL)
         guard await acquireMutationLock(
-            deliveryId: normalizedDeliveryId,
+            identity: identity,
             directoryURL: directoryURL,
             now: now
         ) else {
             return nil
         }
         defer {
-            releaseMutationLock(deliveryId: normalizedDeliveryId, directoryURL: directoryURL)
+            releaseMutationLock(identity: identity, directoryURL: directoryURL)
         }
 
         let fileURL = directoryURL.appendingPathComponent(
-            Self.claimFileName(deliveryId: normalizedDeliveryId),
+            Self.claimFileName(identity: identity),
             isDirectory: false
         )
         let nowEpochMs = Self.epochMilliseconds(now)
@@ -685,7 +810,10 @@ actor ProviderWakeupPullClaimStore {
 
         let claim = StoredClaim(
             schemaVersion: Self.schemaVersion,
-            deliveryId: normalizedDeliveryId,
+            deliveryId: identity.deliveryId,
+            baseURLString: identity.baseURLString,
+            deviceKey: identity.deviceKey,
+            ackContract: identity.ackContract,
             state: .claimed,
             owner: normalizedOwner,
             leaseUntilEpochMs: Self.epochMilliseconds(now.addingTimeInterval(leaseDuration)),
@@ -699,21 +827,32 @@ actor ProviderWakeupPullClaimStore {
     }
 
     func markCompleted(_ lease: ClaimLease, now: Date = Date()) async {
-        let deliveryId = lease.record.deliveryId
-        guard let directoryURL = claimsDirectoryURL() else { return }
-        guard await acquireMutationLock(deliveryId: deliveryId, directoryURL: directoryURL, now: now) else {
+        guard let identity = lease.identity,
+              let directoryURL = claimsDirectoryURL()
+        else { return }
+        guard await acquireMutationLock(identity: identity, directoryURL: directoryURL, now: now) else {
             return
         }
         defer {
-            releaseMutationLock(deliveryId: deliveryId, directoryURL: directoryURL)
+            releaseMutationLock(identity: identity, directoryURL: directoryURL)
         }
         let fileURL = directoryURL.appendingPathComponent(
-            Self.claimFileName(deliveryId: deliveryId),
+            Self.claimFileName(identity: identity),
             isDirectory: false
         )
+        guard let current = loadClaim(fileURL: fileURL)?.record,
+              current.state == .claimed,
+              current.owner == lease.record.owner,
+              current.updatedAtEpochMs == lease.record.updatedAtEpochMs
+        else {
+            return
+        }
         let completed = StoredClaim(
             schemaVersion: Self.schemaVersion,
-            deliveryId: deliveryId,
+            deliveryId: identity.deliveryId,
+            baseURLString: identity.baseURLString,
+            deviceKey: identity.deviceKey,
+            ackContract: identity.ackContract,
             state: .completed,
             owner: normalizedText(lease.record.owner),
             leaseUntilEpochMs: nil,
@@ -724,35 +863,40 @@ actor ProviderWakeupPullClaimStore {
     }
 
     func releaseLease(_ lease: ClaimLease, now: Date = Date()) async {
-        let deliveryId = lease.record.deliveryId
-        guard let directoryURL = claimsDirectoryURL() else { return }
-        guard await acquireMutationLock(deliveryId: deliveryId, directoryURL: directoryURL, now: now) else {
+        guard let identity = lease.identity,
+              let directoryURL = claimsDirectoryURL()
+        else { return }
+        guard await acquireMutationLock(identity: identity, directoryURL: directoryURL, now: now) else {
             return
         }
         defer {
-            releaseMutationLock(deliveryId: deliveryId, directoryURL: directoryURL)
+            releaseMutationLock(identity: identity, directoryURL: directoryURL)
         }
         let fileURL = directoryURL.appendingPathComponent(
-            Self.claimFileName(deliveryId: deliveryId),
+            Self.claimFileName(identity: identity),
             isDirectory: false
         )
+        guard let current = loadClaim(fileURL: fileURL)?.record,
+              current.state == .claimed,
+              current.owner == lease.record.owner,
+              current.updatedAtEpochMs == lease.record.updatedAtEpochMs
+        else {
+            return
+        }
         try? fileManager.removeItem(at: fileURL)
     }
 
     func waitForPeerCompletion(
-        deliveryId: String,
+        identity: ProviderDeliveryAckFailureStore.DeliveryIdentity,
         timeout: TimeInterval,
         pollInterval: TimeInterval = 0.05,
         now: Date = Date()
     ) async -> Bool {
-        guard let normalizedDeliveryId = normalizedText(deliveryId) else {
-            return false
-        }
         let deadline = now.addingTimeInterval(timeout)
         let sleepNanoseconds = UInt64(max(0.01, pollInterval) * 1_000_000_000)
         var current = now
         while current <= deadline {
-            switch claimState(deliveryId: normalizedDeliveryId, now: current) {
+            switch claimState(identity: identity, now: current) {
             case .completed:
                 return true
             case .claimed:
@@ -766,7 +910,7 @@ actor ProviderWakeupPullClaimStore {
                 return false
             }
         }
-        return claimState(deliveryId: normalizedDeliveryId, now: Date()) == .completed
+        return claimState(identity: identity, now: Date()) == .completed
     }
 
     private func claimsDirectoryURL() -> URL? {
@@ -784,19 +928,46 @@ actor ProviderWakeupPullClaimStore {
 
     private func loadClaim(fileURL: URL) -> ClaimLease? {
         guard let data = try? Data(contentsOf: fileURL),
-              let claim = try? decoder.decode(StoredClaim.self, from: data)
+              let claim = try? decoder.decode(StoredClaim.self, from: data),
+              claim.schemaVersion == Self.schemaVersion,
+              let rawBaseURL = claim.baseURLString,
+              let baseURL = URLSanitizer.validatedServerURL(from: rawBaseURL),
+              let deviceKey = normalizedText(claim.deviceKey),
+              let ackContract = claim.ackContract,
+              let identity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
+                  deliveryId: claim.deliveryId,
+                  baseURL: baseURL,
+                  deviceKey: deviceKey,
+                  ackContract: ackContract
+              ),
+              fileURL.lastPathComponent == Self.claimFileName(identity: identity)
         else {
+            try? fileManager.removeItem(at: fileURL)
             return nil
         }
         return ClaimLease(fileName: fileURL.lastPathComponent, fileURL: fileURL, record: claim)
     }
 
-    private func claimState(deliveryId: String, now: Date) -> ClaimState {
+    private func purgeInvalidClaims(directoryURL: URL) {
+        let contents = (try? fileManager.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        for fileURL in contents where fileURL.pathExtension == Self.fileExtension {
+            _ = loadClaim(fileURL: fileURL)
+        }
+    }
+
+    private func claimState(
+        identity: ProviderDeliveryAckFailureStore.DeliveryIdentity,
+        now: Date
+    ) -> ClaimState {
         guard let directoryURL = claimsDirectoryURL() else {
             return .available
         }
         let fileURL = directoryURL.appendingPathComponent(
-            Self.claimFileName(deliveryId: deliveryId),
+            Self.claimFileName(identity: identity),
             isDirectory: false
         )
         guard let current = loadClaim(fileURL: fileURL) else {
@@ -846,12 +1017,12 @@ actor ProviderWakeupPullClaimStore {
     }
 
     private func acquireMutationLock(
-        deliveryId: String,
+        identity: ProviderDeliveryAckFailureStore.DeliveryIdentity,
         directoryURL: URL,
         now: Date
     ) async -> Bool {
         let lockURL = directoryURL.appendingPathComponent(
-            Self.lockFileName(deliveryId: deliveryId),
+            Self.lockFileName(identity: identity),
             isDirectory: false
         )
 
@@ -883,9 +1054,12 @@ actor ProviderWakeupPullClaimStore {
         }
     }
 
-    private func releaseMutationLock(deliveryId: String, directoryURL: URL) {
+    private func releaseMutationLock(
+        identity: ProviderDeliveryAckFailureStore.DeliveryIdentity,
+        directoryURL: URL
+    ) {
         let lockURL = directoryURL.appendingPathComponent(
-            Self.lockFileName(deliveryId: deliveryId),
+            Self.lockFileName(identity: identity),
             isDirectory: false
         )
         try? fileManager.removeItem(at: lockURL)
@@ -900,20 +1074,16 @@ actor ProviderWakeupPullClaimStore {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    private static func claimFileName(deliveryId: String) -> String {
-        "\(filesystemComponent(deliveryId)).\(fileExtension)"
+    private static func claimFileName(
+        identity: ProviderDeliveryAckFailureStore.DeliveryIdentity
+    ) -> String {
+        "\(identity.storageKey).\(fileExtension)"
     }
 
-    private static func lockFileName(deliveryId: String) -> String {
-        "\(filesystemComponent(deliveryId)).\(lockExtension)"
-    }
-
-    private static func filesystemComponent(_ value: String) -> String {
-        Data(value.utf8)
-            .base64EncodedString()
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "=", with: "")
+    private static func lockFileName(
+        identity: ProviderDeliveryAckFailureStore.DeliveryIdentity
+    ) -> String {
+        "\(identity.storageKey).\(lockExtension)"
     }
 
     private static func epochMilliseconds(_ date: Date) -> Int64 {

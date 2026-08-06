@@ -6,7 +6,7 @@ struct DataPageVisibilityControllerTests {
     @Test
     func persistedVisibilityReloadsFromStore() async {
         await withIsolatedAutomationStorage { _, appGroupIdentifier in
-            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
             _ = await Task { @MainActor in
                 let controller = DataPageVisibilityController(dataStore: store)
                 controller.setEventPageEnabled(false)
@@ -16,7 +16,7 @@ struct DataPageVisibilityControllerTests {
             await store.flushWrites()
 
             let reloadedState = await Task { @MainActor in
-                let reloadedStore = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+                let reloadedStore = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
                 let controller = DataPageVisibilityController(dataStore: reloadedStore)
                 await controller.loadPersistedState()
                 return (

@@ -19,6 +19,7 @@ final class NotificationServiceProcessor {
     private let wakeupPullClaimStore: ProviderWakeupPullClaimStore
     private let localConfigStore: LocalKeychainConfigStore
     private let deviceKeyStore: ProviderDeviceKeyStore
+    private let gatewayTokenStore: ProviderGatewayTokenStore
 
     init(
         channelSubscriptionService: ChannelSubscriptionService = NotificationServiceProcessor.sharedChannelSubscriptionService,
@@ -27,6 +28,7 @@ final class NotificationServiceProcessor {
         wakeupPullClaimStore: ProviderWakeupPullClaimStore = NotificationServiceProcessor.sharedWakeupPullClaimStore,
         localConfigStore: LocalKeychainConfigStore = LocalKeychainConfigStore(),
         deviceKeyStore: ProviderDeviceKeyStore = ProviderDeviceKeyStore(),
+        gatewayTokenStore: ProviderGatewayTokenStore = ProviderGatewayTokenStore(),
         contentPreparer: NotificationContentPreparer = NotificationContentPreparer()
     ) {
         self.channelSubscriptionService = channelSubscriptionService
@@ -35,6 +37,7 @@ final class NotificationServiceProcessor {
         self.wakeupPullClaimStore = wakeupPullClaimStore
         self.localConfigStore = localConfigStore
         self.deviceKeyStore = deviceKeyStore
+        self.gatewayTokenStore = gatewayTokenStore
         self.contentPreparer = contentPreparer
     }
 
@@ -53,12 +56,15 @@ final class NotificationServiceProcessor {
         )
         if enqueued {
             await markAckInboxDurableIfNeeded(ingress)
+            await finalizePullClaimIfNeeded(ingress, durable: true)
             _ = await PushGoNotificationProjectionUpdater.update(
                 content: content,
                 requestIdentifier: requestIdentifier(for: request, ingress: ingress)
             )
             DarwinNotificationPoster.post(name: AppConstants.notificationIngressChangedNotificationName)
             await ackIngressIfNeeded(ingress)
+        } else {
+            await finalizePullClaimIfNeeded(ingress, durable: false)
         }
         guard !Task.isCancelled else { return content }
         await deduplicateEntityNotificationsIfNeeded(
@@ -103,7 +109,7 @@ final class NotificationServiceProcessor {
         switch ingress {
         case let .direct(_, ingressRequestIdentifier):
             requestIdentifier = ingressRequestIdentifier
-        case let .pulled(_, ingressRequestIdentifier):
+        case let .pulled(_, ingressRequestIdentifier, _):
             requestIdentifier = ingressRequestIdentifier
         case let .claimedByPeer(_, ingressRequestIdentifier):
             requestIdentifier = ingressRequestIdentifier
@@ -127,7 +133,7 @@ final class NotificationServiceProcessor {
         to content: UNMutableNotificationContent
     ) {
         switch ingress {
-        case let .pulled(payload, _):
+        case let .pulled(payload, _, _):
             NotificationHandling.applyResolvedPayload(payload, to: content)
         case let .claimedByPeer(payload, _):
             if let fallbackPayload = NotificationHandling.wakeupFallbackDisplayPayload(from: payload) {
@@ -158,70 +164,106 @@ final class NotificationServiceProcessor {
     }
 
     private func ackIngressIfNeeded(_ ingress: NotificationIngressResolution) async {
-        let payload: [AnyHashable: Any]
         let deliveryId: String?
+        let identity: ProviderDeliveryAckFailureStore.DeliveryIdentity?
+        let ackToken: String?
         switch ingress {
-        case let .direct(resolvedPayload, requestIdentifier):
-            payload = resolvedPayload
+        case let .direct(resolvedPayload, _):
             guard NotificationHandling.providerWakeupPullDeliveryId(from: resolvedPayload) == nil else {
                 return
             }
-            deliveryId = requestIdentifier ?? NotificationHandling.providerIngressRequestIdentifier(from: resolvedPayload)
-        case .pulled:
-            // /messages/pull already consumes the pending delivery on gateway side.
-            return
+            identity = ProviderDeliveryAckFailureStore.DeliveryIdentity.direct(
+                from: UserInfoSanitizer.sanitize(resolvedPayload)
+            )
+            deliveryId = identity?.deliveryId
+            ackToken = identity.flatMap { gatewayTokenStore.load(baseURL: $0.baseURL) }
+        case let .pulled(_, requestIdentifier, context):
+            guard context.requiresAck else { return }
+            deliveryId = requestIdentifier
+            identity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
+                deliveryId: requestIdentifier,
+                baseURL: context.baseURL,
+                deviceKey: context.deviceKey,
+                ackContract: .v2Batch
+            )
+            ackToken = context.token
         case .claimedByPeer:
             return
         case .unresolvedWakeup:
             return
         }
-        guard let deliveryId = Self.normalizedPayloadString(deliveryId) else {
+        guard let deliveryId = Self.normalizedPayloadString(deliveryId),
+              let identity
+        else {
             return
         }
 
-        let sanitized = UserInfoSanitizer.sanitize(payload)
-        let candidates = wakeupServerCandidatesWithoutDatabase(from: sanitized)
-        let loadResult = providerDeviceKeyWithoutDatabase()
-        guard !candidates.isEmpty,
-              let deviceKey = loadResult.deviceKey
-        else {
-            _ = await ackFailureStore.markInboxDurable(
-                deliveryId: deliveryId,
-                baseURL: candidates.first?.baseURL,
-                deviceKeyAccount: loadResult.account,
-                source: "nse_ack_unavailable",
-                retryAfter: Date().addingTimeInterval(30)
-            )
+        if identity.ackContract == .v2Batch {
+            guard let lease = await ackFailureStore.acquireAckLease(
+                identity: identity,
+                owner: "nse",
+                leaseDuration: 120
+            ) else {
+                return
+            }
+            do {
+                let ack = try await channelSubscriptionService.ackMessages(
+                    baseURL: identity.baseURL,
+                    token: ackToken,
+                    deviceKey: identity.deviceKey,
+                    deliveryIds: [deliveryId]
+                )
+                guard ack.removedCount == 1 else {
+                    throw AppError.typedLocal(
+                        code: "gateway_ack_incomplete",
+                        category: .conflict,
+                        message: LocalizationProvider.localized("operation_failed"),
+                        detail: "fresh batch ack did not remove delivery"
+                    )
+                }
+                await ackFailureStore.markCompleted(lease)
+            } catch {
+                await ackFailureStore.markAckFailed(
+                    lease,
+                    source: "nse_ack_failed",
+                    retryAfter: Date().addingTimeInterval(30)
+                )
+            }
             return
         }
+
         guard let lease = await ackFailureStore.acquireAckLease(
-            deliveryId: deliveryId,
+            identity: identity,
             owner: "nse",
             leaseDuration: 120
         ) else {
             return
         }
 
-        for candidate in candidates {
-            do {
-                _ = try await channelSubscriptionService.ackMessage(
-                    baseURL: candidate.baseURL,
-                    token: candidate.token,
-                    deviceKey: deviceKey,
-                    deliveryId: deliveryId
+        do {
+            let removed = try await channelSubscriptionService.ackMessage(
+                baseURL: identity.baseURL,
+                token: gatewayTokenStore.load(baseURL: identity.baseURL),
+                deviceKey: identity.deviceKey,
+                deliveryId: deliveryId
+            )
+            guard removed || lease.attemptCount > 0 else {
+                throw AppError.typedLocal(
+                    code: "gateway_ack_incomplete",
+                    category: .conflict,
+                    message: LocalizationProvider.localized("operation_failed"),
+                    detail: "fresh legacy ack did not remove delivery"
                 )
-                await ackFailureStore.markCompleted(lease)
-                return
-            } catch {
-                continue
             }
+            await ackFailureStore.markCompleted(lease)
+            return
+        } catch {
+            await ackFailureStore.markAckFailed(
+                lease,
+                source: "nse_ack_failed",
+                retryAfter: Date().addingTimeInterval(30)
+            )
         }
-
-        await ackFailureStore.markAckFailed(
-            lease,
-            source: "nse_ack_failed",
-            retryAfter: Date().addingTimeInterval(30)
-        )
     }
 
     private func markAckPreparingIfNeeded(_ ingress: NotificationIngressResolution) async {
@@ -236,42 +278,39 @@ final class NotificationServiceProcessor {
         _ ingress: NotificationIngressResolution,
         stage: ProviderDeliveryAckFailureStore.Stage
     ) async {
-        let payload: [AnyHashable: Any]
-        let deliveryId: String?
+        let identity: ProviderDeliveryAckFailureStore.DeliveryIdentity?
         switch ingress {
-        case let .direct(resolvedPayload, requestIdentifier):
-            payload = resolvedPayload
+        case let .direct(resolvedPayload, _):
             guard NotificationHandling.providerWakeupPullDeliveryId(from: resolvedPayload) == nil else {
                 return
             }
-            deliveryId = requestIdentifier ?? NotificationHandling.providerIngressRequestIdentifier(from: resolvedPayload)
-        case .pulled:
-            // Pull ingress must not create ack markers; the delivery is already acknowledged.
-            return
+            identity = ProviderDeliveryAckFailureStore.DeliveryIdentity.direct(
+                from: UserInfoSanitizer.sanitize(resolvedPayload)
+            )
+        case let .pulled(_, requestIdentifier, context):
+            guard context.requiresAck else { return }
+            identity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
+                deliveryId: requestIdentifier,
+                baseURL: context.baseURL,
+                deviceKey: context.deviceKey,
+                ackContract: .v2Batch
+            )
         case .claimedByPeer:
             return
         case .unresolvedWakeup:
             return
         }
-        guard let deliveryId = Self.normalizedPayloadString(deliveryId) else {
-            return
-        }
-        let candidates = wakeupServerCandidatesWithoutDatabase(from: UserInfoSanitizer.sanitize(payload))
-        let account = ProviderDeviceKeyStore.accountName(for: nsePlatformIdentifier())
+        guard let identity else { return }
         switch stage {
         case .preparing:
             _ = await ackFailureStore.markPreparing(
-                deliveryId: deliveryId,
-                baseURL: candidates.first?.baseURL,
-                deviceKeyAccount: account,
+                identity: identity,
                 source: "nse_ack_preparing",
                 postNotification: false
             )
         case .inboxDurable:
             _ = await ackFailureStore.markInboxDurable(
-                deliveryId: deliveryId,
-                baseURL: candidates.first?.baseURL,
-                deviceKeyAccount: account,
+                identity: identity,
                 source: "nse_inbox_durable",
                 postNotification: false
             )
@@ -300,52 +339,81 @@ final class NotificationServiceProcessor {
         }
         let owner = "nse.\(nsePlatformIdentifier())"
         let leaseDuration: TimeInterval = 30
-        let lease: ProviderWakeupPullClaimStore.ClaimLease
-        if let acquiredLease = await wakeupPullClaimStore.acquireLease(
-            deliveryId: deliveryId,
-            owner: owner,
-            leaseDuration: leaseDuration
-        ) {
-            lease = acquiredLease
-        } else if await wakeupPullClaimStore.waitForPeerCompletion(
-            deliveryId: deliveryId,
-            timeout: 1.5
-        ) {
-            return .claimedByPeer(payload: sanitized, requestIdentifier: deliveryId)
-        } else if let retryLease = await wakeupPullClaimStore.acquireLease(
-            deliveryId: deliveryId,
-            owner: owner,
-            leaseDuration: leaseDuration
-        ) {
-            lease = retryLease
-        } else {
-            return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId)
-        }
-
         for candidate in candidates {
+            _ = gatewayTokenStore.save(token: candidate.token, baseURL: candidate.baseURL)
+            guard let identity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
+                deliveryId: deliveryId,
+                baseURL: candidate.baseURL,
+                deviceKey: deviceKey,
+                ackContract: .v2Batch
+            ) else {
+                continue
+            }
+            let lease: ProviderWakeupPullClaimStore.ClaimLease
+            if let acquiredLease = await wakeupPullClaimStore.acquireLease(
+                identity: identity,
+                owner: owner,
+                leaseDuration: leaseDuration
+            ) {
+                lease = acquiredLease
+            } else if await wakeupPullClaimStore.waitForPeerCompletion(
+                identity: identity,
+                timeout: 1.5
+            ) {
+                return .claimedByPeer(payload: sanitized, requestIdentifier: deliveryId)
+            } else if let retryLease = await wakeupPullClaimStore.acquireLease(
+                identity: identity,
+                owner: owner,
+                leaseDuration: leaseDuration
+            ) {
+                lease = retryLease
+            } else {
+                continue
+            }
             do {
-                let items = try await channelSubscriptionService.pullMessages(
+                let pullResult = try await channelSubscriptionService.pullMessages(
                     baseURL: candidate.baseURL,
                     token: candidate.token,
                     deviceKey: deviceKey,
                     deliveryId: deliveryId
                 )
-                guard let item = items.first else { continue }
-                let pulledPayload: [AnyHashable: Any] = item.payload.reduce(into: [:]) { result, element in
+                guard let item = pullResult.items.first else {
+                    await wakeupPullClaimStore.releaseLease(lease)
+                    continue
+                }
+                var pulledPayload: [AnyHashable: Any] = item.payload.reduce(into: [:]) { result, element in
                     result[element.key] = element.value
                 }
-                await wakeupPullClaimStore.markCompleted(lease)
+                pulledPayload["delivery_id"] = item.deliveryId
                 return .pulled(
                     payload: UserInfoSanitizer.sanitize(pulledPayload),
-                    requestIdentifier: Self.normalizedPayloadString(item.deliveryId) ?? deliveryId
+                    requestIdentifier: Self.normalizedPayloadString(item.deliveryId) ?? deliveryId,
+                    context: ProviderPullContext(
+                        contract: pullResult.contract,
+                        baseURL: candidate.baseURL,
+                        token: candidate.token,
+                        deviceKey: deviceKey,
+                        claimLease: lease
+                    )
                 )
             } catch {
+                await wakeupPullClaimStore.releaseLease(lease)
                 continue
             }
         }
-
-        await wakeupPullClaimStore.releaseLease(lease)
         return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId)
+    }
+
+    private func finalizePullClaimIfNeeded(
+        _ ingress: NotificationIngressResolution,
+        durable: Bool
+    ) async {
+        guard case let .pulled(_, _, context) = ingress else { return }
+        if durable {
+            await wakeupPullClaimStore.markCompleted(context.claimLease)
+        } else {
+            await wakeupPullClaimStore.releaseLease(context.claimLease)
+        }
     }
 
     private func wakeupServerCandidatesWithoutDatabase(
@@ -354,8 +422,10 @@ final class NotificationServiceProcessor {
         var candidates: [WakeupServerCandidate] = []
         var indexByBaseURL: [String: Int] = [:]
         func appendCandidate(baseURL: URL, token: String?) {
-            let key = baseURL.absoluteString.lowercased()
-            let normalizedToken = token?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedBaseURL = normalizedProviderGatewayURL(baseURL) ?? baseURL
+            let key = normalizedBaseURL.absoluteString
+            let normalizedToken = (token ?? gatewayTokenStore.load(baseURL: normalizedBaseURL))?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
             let hasToken = normalizedToken?.isEmpty == false
             if let existingIndex = indexByBaseURL[key] {
                 let existingHasToken = candidates[existingIndex].token?
@@ -365,11 +435,14 @@ final class NotificationServiceProcessor {
                     return
                 }
                 if hasToken {
-                    candidates[existingIndex] = WakeupServerCandidate(baseURL: baseURL, token: normalizedToken)
+                    candidates[existingIndex] = WakeupServerCandidate(
+                        baseURL: normalizedBaseURL,
+                        token: normalizedToken
+                    )
                 }
                 return
             }
-            candidates.append(WakeupServerCandidate(baseURL: baseURL, token: normalizedToken))
+            candidates.append(WakeupServerCandidate(baseURL: normalizedBaseURL, token: normalizedToken))
             indexByBaseURL[key] = candidates.count - 1
         }
 

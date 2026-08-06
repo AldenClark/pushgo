@@ -12,9 +12,13 @@ PushGo policy:
 
 ## [Unreleased]
 
+## [v1.3.0] - 2026-08-04
+
 ### Changed
-- Updated Apple release target defaults to `MARKETING_VERSION = 1.3.0`, `PUSHGO_DISPLAY_VERSION = v1.3.0-beta.1`, and `CURRENT_PROJECT_VERSION = 87`.
-- Added versioned beta release note source file: `release/update-notes/v1.3.0-beta.1.json`.
+- Finalized Apple release targets at `MARKETING_VERSION = 1.3.0`, `PUSHGO_DISPLAY_VERSION = v1.3.0`, and `CURRENT_PROJECT_VERSION = 88`.
+- Added versioned stable release note source file: `release/update-notes/v1.3.0.json`.
+- Switched provider ingress to non-destructive Pull v2 with exact structured fallback to the beta Pull route.
+- Added persisted, grouped ACK batches so pulled deliveries are acknowledged only after local persistence succeeds.
 - Refreshed release workflow docs so Apple CI examples match the current `vX.Y.Z` / `vX.Y.Z-beta.N` tag conventions.
 
 ### Improved

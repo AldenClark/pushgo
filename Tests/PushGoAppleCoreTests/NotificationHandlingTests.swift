@@ -15,6 +15,36 @@ private actor NotificationMessageCapture {
     }
 }
 
+private func makeTestProviderPullContext(
+    contract: ChannelSubscriptionService.PullContract = .v2,
+    deliveryId: String = "delivery-pulled-001"
+) -> ProviderPullContext {
+    let now = Int64(Date().timeIntervalSince1970 * 1_000)
+    let record = ProviderWakeupPullClaimStore.StoredClaim(
+        schemaVersion: 2,
+        deliveryId: deliveryId,
+        baseURLString: "https://gateway.example/GatewayA",
+        deviceKey: "test-device",
+        ackContract: .v2Batch,
+        state: .claimed,
+        owner: "test",
+        leaseUntilEpochMs: now + 30_000,
+        createdAtEpochMs: now,
+        updatedAtEpochMs: now
+    )
+    return ProviderPullContext(
+        contract: contract,
+        baseURL: URL(string: "https://gateway.example/GatewayA")!,
+        token: "test-token",
+        deviceKey: "test-device",
+        claimLease: .init(
+            fileName: "\(deliveryId).pullclaim",
+            fileURL: URL(fileURLWithPath: "/tmp/\(deliveryId).pullclaim"),
+            record: record
+        )
+    )
+}
+
 struct NotificationHandlingTests {
     @Test
     func skipPersistenceRecognizesTruthyFlagVariants() {
@@ -71,7 +101,8 @@ struct NotificationHandlingTests {
                 "message_id": "msg-pulled-001",
                 "body": "Pulled body",
             ],
-            requestIdentifier: "delivery-pulled-001"
+            requestIdentifier: "delivery-pulled-001",
+            context: makeTestProviderPullContext()
         )
         let unresolvedIngress = NotificationIngressResolution.unresolvedWakeup(
             payload: [
@@ -80,6 +111,14 @@ struct NotificationHandlingTests {
                 "delivery_id": "delivery-wakeup-ack-001",
             ],
             requestIdentifier: "delivery-wakeup-ack-001"
+        )
+        let directIngressMissingPayloadDeliveryId = NotificationIngressResolution.direct(
+            payload: [
+                "message_id": "msg-direct-missing-delivery-id",
+                "base_url": "https://gateway.example",
+                "provider_device_key": "device-key",
+            ],
+            requestIdentifier: "local-notification-request-id"
         )
 
         #expect(
@@ -107,6 +146,14 @@ struct NotificationHandlingTests {
                 for: unresolvedIngress,
                 outcome: .persistedMain(
                     PushMessage(messageId: "msg-wakeup-ack-001", title: "Wakeup", body: "Body")
+                )
+            ) == nil
+        )
+        #expect(
+            NotificationHandling.providerIngressAckDeliveryId(
+                for: directIngressMissingPayloadDeliveryId,
+                outcome: .persistedMain(
+                    PushMessage(messageId: "msg-direct-missing-delivery-id", title: "Direct", body: "Body")
                 )
             ) == nil
         )
@@ -763,7 +810,10 @@ struct NotificationHandlingTests {
             ) { group in
                 for slot in 0..<40 {
                     group.addTask {
-                        let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier)
+                        let store = LocalDataStore(
+                            appGroupIdentifier: appGroupIdentifier,
+                            spotlightIndexer: nil
+                        )
                         let available: Bool
                         switch store.storageState.mode {
                         case .persistent:

@@ -1,6 +1,61 @@
 import Foundation
+import os
 import Testing
 @testable import PushGoAppleCore
+
+final class ChannelServiceURLProtocol: URLProtocol {
+    typealias Handler = @Sendable (URLRequest) throws -> (HTTPURLResponse, Data)
+
+    private static let handlers = OSAllocatedUnfairLock(initialState: [String: Handler]())
+
+    static func register(host: String, handler: @escaping Handler) {
+        handlers.withLock { $0[host] = handler }
+    }
+
+    static func unregister(host: String) {
+        _ = handlers.withLock { $0.removeValue(forKey: host) }
+    }
+
+    static func bodyData(from request: URLRequest) -> Data? {
+        if let body = request.httpBody { return body }
+        guard let stream = request.httpBodyStream else { return nil }
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 1_024)
+        while stream.hasBytesAvailable {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            guard count > 0 else { break }
+            data.append(buffer, count: count)
+        }
+        return data
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let host = request.url?.host else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
+        let handler = Self.handlers.withLock { $0[host] }
+        guard let handler else {
+            client?.urlProtocol(self, didFailWithError: URLError(.resourceUnavailable))
+            return
+        }
+        do {
+            let (response, data) = try handler(request)
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
+}
 
 struct ChannelSubscriptionServiceTests {
     @Test
@@ -9,6 +64,10 @@ struct ChannelSubscriptionServiceTests {
         #expect(ChannelSubscriptionService.deviceRoutePath == "/channel/device")
         #expect(ChannelSubscriptionService.deviceChannelDeletePath == "/channel/device/delete")
         #expect(ChannelSubscriptionService.providerTokenRetirePath == "/channel/device/provider-token/retire")
+        #expect(ChannelSubscriptionService.pullV2Path == "/v2/messages/pull")
+        #expect(ChannelSubscriptionService.pullLegacyPath == "/messages/pull")
+        #expect(ChannelSubscriptionService.ackPath == "/messages/ack")
+        #expect(ChannelSubscriptionService.batchAckV2Path == "/v2/messages/ack")
     }
 
     @Test
@@ -130,6 +189,19 @@ struct ChannelSubscriptionServiceTests {
     }
 
     @Test
+    func batchAckRequestEncodesMutuallyExclusiveDeliveryIdsField() throws {
+        let request = ChannelSubscriptionService.BatchAckRequest(
+            deviceKey: "dev-001",
+            deliveryIds: ["delivery-001", "delivery-002"]
+        )
+        let data = try JSONEncoder().encode(request)
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(object["device_key"] as? String == "dev-001")
+        #expect(object["delivery_ids"] as? [String] == ["delivery-001", "delivery-002"])
+        #expect(object["delivery_id"] == nil)
+    }
+
+    @Test
     func pullResponseDecodesDeliveryItems() throws {
         let raw = """
         {
@@ -162,6 +234,105 @@ struct ChannelSubscriptionServiceTests {
         """.data(using: .utf8)!
         let decoded = try JSONDecoder().decode(ChannelSubscriptionService.AckResponse.self, from: raw)
         #expect(decoded.removed)
+    }
+
+    @Test
+    func v2PullAndBatchAckUseIndependentRoutesAndValidateCounts() async throws {
+        let host = "apple-v2-\(UUID().uuidString.lowercased()).example"
+        let baseURL = try #require(URL(string: "https://\(host)/GatewayA"))
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ChannelServiceURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer {
+            session.invalidateAndCancel()
+            ChannelServiceURLProtocol.unregister(host: host)
+        }
+
+        ChannelServiceURLProtocol.register(host: host) { request in
+            let path = request.url?.path
+            let payload: String
+            if path == "/GatewayA/v2/messages/pull" {
+                payload = """
+                {"success":true,"data":{"items":[{"delivery_id":"outer-001","payload":{"delivery_id":"inner-wrong","title":"hello"}}],"has_more":true}}
+                """
+            } else if path == "/GatewayA/v2/messages/ack" {
+                let body = try #require(ChannelServiceURLProtocol.bodyData(from: request))
+                let object = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+                #expect(object["delivery_id"] == nil)
+                #expect(object["delivery_ids"] as? [String] == ["outer-001", "outer-002"])
+                payload = """
+                {"success":true,"data":{"removed":true,"requested_count":2,"removed_count":1}}
+                """
+            } else {
+                throw URLError(.unsupportedURL)
+            }
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, Data(payload.utf8))
+        }
+
+        let service = ChannelSubscriptionService(session: session)
+        let result = try await service.pullMessages(
+            baseURL: baseURL,
+            token: "token",
+            deviceKey: "device"
+        )
+        #expect(result.contract == .v2)
+        #expect(result.requiresAck)
+        #expect(result.hasMore)
+        #expect(result.items.first?.deliveryId == "outer-001")
+
+        let ack = try await service.ackMessages(
+            baseURL: baseURL,
+            token: "token",
+            deviceKey: "device",
+            deliveryIds: ["outer-002", "outer-001", "outer-001"]
+        )
+        #expect(ack.requestedCount == 2)
+        #expect(ack.removedCount == 1)
+    }
+
+    @Test
+    func exactRouteNotFoundFallsBackToDestructiveLegacyPullWithoutAckRequirement() async throws {
+        let host = "apple-legacy-\(UUID().uuidString.lowercased()).example"
+        let baseURL = try #require(URL(string: "https://\(host)/GatewayA"))
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ChannelServiceURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer {
+            session.invalidateAndCancel()
+            ChannelServiceURLProtocol.unregister(host: host)
+        }
+
+        ChannelServiceURLProtocol.register(host: host) { request in
+            let path = request.url?.path
+            let status: Int
+            let payload: String
+            if path == "/GatewayA/v2/messages/pull" {
+                status = 404
+                payload = """
+                {"success":false,"error_code":"route_not_found","problem":{"code":"route_not_found","category":"not_found","status":404,"title":"Not found","retryable":false}}
+                """
+            } else if path == "/GatewayA/messages/pull" {
+                status = 200
+                payload = """
+                {"success":true,"data":{"items":[{"delivery_id":"legacy-001","payload":{"title":"legacy"}}]}}
+                """
+            } else {
+                throw URLError(.unsupportedURL)
+            }
+            let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
+            return (response, Data(payload.utf8))
+        }
+
+        let result = try await ChannelSubscriptionService(session: session).pullMessages(
+            baseURL: baseURL,
+            token: nil,
+            deviceKey: "device"
+        )
+        #expect(result.contract == .legacy)
+        #expect(!result.requiresAck)
+        #expect(!result.hasMore)
+        #expect(result.items.map(\.deliveryId) == ["legacy-001"])
     }
 
     @Test

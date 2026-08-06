@@ -12,8 +12,6 @@ struct ThingSplitScreen: View {
     @State private var selectedChannelIDs: Set<String> = []
     @State private var selectedTags: Set<String> = []
     @State private var hydrationRequestedThingIDs: Set<String> = []
-    @State private var isBatchMode: Bool = false
-    @State private var batchSelection: Set<String> = []
     @State private var searchFieldText: String = ""
     @State private var isFilterPopoverPresented = false
     private let fixedListWidth: CGFloat = 300
@@ -46,15 +44,11 @@ struct ThingSplitScreen: View {
             syncSelection()
         }
         .onChange(of: searchFieldText) { _, newValue in
-            guard !isBatchMode else { return }
             guard searchQuery != newValue else { return }
             searchQuery = newValue
         }
         .onChange(of: viewModel.things) { _, _ in
             syncSelection()
-        }
-        .onChange(of: isBatchMode) { _, isActive in
-            searchFieldText = isActive ? "" : searchQuery
         }
         .onChange(of: searchQuery) { _, _ in
             syncSelection()
@@ -63,7 +57,6 @@ struct ThingSplitScreen: View {
             syncSelection()
         }
         .onChange(of: selection) { _, id in
-            guard !isBatchMode else { return }
             guard let id else { return }
             Task { @MainActor in
                 let hydrated = await viewModel.ensureThingDetailsLoaded(thingId: id, forceRefresh: true)
@@ -74,8 +67,6 @@ struct ThingSplitScreen: View {
             }
         }
         .onChange(of: environment.pendingLocalDeletionController.pendingDeletion) { _, _ in
-            let visibleIDs = Set(filteredThings.map(\.id))
-            batchSelection = batchSelection.intersection(visibleIDs)
             syncSelection()
         }
     }
@@ -86,8 +77,6 @@ struct ThingSplitScreen: View {
             ThingListScreen(
                 things: filteredThings,
                 selection: $selection,
-                batchSelection: $batchSelection,
-                isBatchMode: $isBatchMode,
                 isLoadingMore: viewModel.isLoadingMoreThings,
                 onReachEnd: {
                     Task { await viewModel.loadMoreThings() }
@@ -104,7 +93,7 @@ struct ThingSplitScreen: View {
                     )
                 },
                 onDeleteThing: { thing in
-                    Task { await scheduleDeletion(for: [thing]) }
+                    Task { await scheduleDeletion(for: thing) }
                 }
             )
             .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
@@ -116,7 +105,7 @@ struct ThingSplitScreen: View {
                 placement: .toolbar,
                 prompt: Text(localizationManager.localized("search_objects"))
             )
-            .navigationTitle(isBatchMode ? "" : localizationManager.localized("push_type_thing"))
+            .navigationTitle(localizationManager.localized("push_type_thing"))
         }
         .pendingLocalDeletionBarHost(environment: environment)
         .toolbar { listToolbarContent }
@@ -225,7 +214,6 @@ struct ThingSplitScreen: View {
     }
 
     private var selectedThing: ThingProjection? {
-        guard !isBatchMode else { return nil }
         guard let selection else { return nil }
         return filteredThings.first(where: { $0.id == selection })
     }
@@ -246,48 +234,16 @@ struct ThingSplitScreen: View {
 
     @ToolbarContentBuilder
     private var listToolbarContent: some ToolbarContent {
-        if isBatchMode {
-            ToolbarItem(placement: .navigation) {
-                Button {
-                    toggleSelectAllVisibleThings()
-                } label: {
-                    Image(systemName: areAllVisibleThingsSelected ? "checkmark.rectangle.stack.fill" : "checkmark.rectangle.stack")
-                }
-                .help(localizationManager.localized("all"))
-                .accessibilityLabel(localizationManager.localized("all"))
-            }
-        }
-
         ToolbarItemGroup(placement: .primaryAction) {
-            if isBatchMode {
-
-                Button(role: .destructive) {
-                    deleteSelectedThings()
-                } label: {
-                    Image(systemName: "trash")
-                }
-                .help(localizationManager.localized("delete"))
-                .accessibilityLabel(localizationManager.localized("delete"))
-                .disabled(batchSelection.isEmpty)
-                
-                Button {
-                    Task { await exitBatchModeAfterFlushingPendingDeletion() }
-                } label: {
-                    batchDoneToolbarIcon()
-                }
-                .help(localizationManager.localized("done"))
-                .accessibilityLabel(localizationManager.localized("done"))
-            } else {
-                Button {
-                    isFilterPopoverPresented = true
-                } label: {
-                    filterToolbarIcon(isHighlighted: isFilterMenuHighlighted)
-                }
-                .help(localizationManager.localized("channel"))
-                .accessibilityLabel(localizationManager.localized("channel"))
-                .popover(isPresented: $isFilterPopoverPresented, arrowEdge: .top) {
-                    filterPopoverContent
-                }
+            Button {
+                isFilterPopoverPresented = true
+            } label: {
+                filterToolbarIcon(isHighlighted: isFilterMenuHighlighted)
+            }
+            .help(localizationManager.localized("channel"))
+            .accessibilityLabel(localizationManager.localized("channel"))
+            .popover(isPresented: $isFilterPopoverPresented, arrowEdge: .top) {
+                filterPopoverContent
             }
         }
     }
@@ -301,59 +257,19 @@ struct ThingSplitScreen: View {
                 Image(systemName: "trash")
             }
             .help(localizationManager.localized("delete"))
-            .disabled(selectedThing == nil || isBatchMode)
+            .disabled(selectedThing == nil)
         }
-    }
-
-    private func setBatchMode(_ enabled: Bool) {
-        isBatchMode = enabled
-        if enabled {
-            selection = nil
-        } else {
-            batchSelection.removeAll()
-        }
-    }
-
-    @MainActor
-    private func exitBatchModeAfterFlushingPendingDeletion() async {
-        await environment.pendingLocalDeletionController.commitCurrentIfNeeded()
-        setBatchMode(false)
     }
 
     private func deleteSelectedThing() {
         guard let selectedThing else { return }
-        Task { await scheduleDeletion(for: [selectedThing]) }
-    }
-
-    private func deleteSelectedThings() {
-        Task { await scheduleDeletion(for: selectedBatchThings) }
-    }
-
-    private var selectedBatchThings: [ThingProjection] {
-        let ids = batchSelection
-        guard !ids.isEmpty else { return [] }
-        return filteredThings.filter { ids.contains($0.id) }
-    }
-
-    private var allVisibleThingIDs: Set<String> {
-        Set(filteredThings.map(\.id))
-    }
-
-    private var areAllVisibleThingsSelected: Bool {
-        let visibleIDs = allVisibleThingIDs
-        return !visibleIDs.isEmpty && batchSelection == visibleIDs
-    }
-
-    private func toggleSelectAllVisibleThings() {
-        let visibleIDs = allVisibleThingIDs
-        guard !visibleIDs.isEmpty else { return }
-        batchSelection = areAllVisibleThingsSelected ? [] : visibleIDs
+        Task { await scheduleDeletion(for: selectedThing) }
     }
 
     @MainActor
-    private func scheduleDeletion(for things: [ThingProjection]) async {
+    private func scheduleDeletion(for thing: ThingProjection) async {
         guard let result = await environment.pendingLocalDeletionController.scheduleItems(
-            things,
+            [thing],
             identity: { $0.id },
             title: { $0.title },
             fallbackSingleSummary: localizationManager.localized("push_type_thing"),
@@ -378,14 +294,9 @@ struct ThingSplitScreen: View {
         {
             selection = nil
         }
-        batchSelection.subtract(result.scope.thingIDs)
     }
 
     private func syncSelection() {
-        if isBatchMode {
-            selection = nil
-            return
-        }
         if let target = openThingId?.trimmingCharacters(in: .whitespacesAndNewlines),
            !target.isEmpty
         {
@@ -435,20 +346,6 @@ struct ThingSplitScreen: View {
 
     private var filterPopoverContent: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Button {
-                setBatchMode(true)
-                isFilterPopoverPresented = false
-            } label: {
-                filterMenuSelectionRow(
-                    title: "选择",
-                    systemImage: "checklist",
-                    isSelected: isBatchMode
-                )
-            }
-            .buttonStyle(.plain)
-            .padding(.vertical, 2)
-            .transientPresentationActionControl()
-
             if !channelOptions.isEmpty {
                 Rectangle()
                     .fill(Color.appDividerSubtle.opacity(0.9))
@@ -595,14 +492,6 @@ struct ThingSplitScreen: View {
         .foregroundStyle(Color.appTextPrimary)
         .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func batchDoneToolbarIcon() -> some View {
-        Image(systemName: "checkmark")
-            .font(.footnote.weight(.bold))
-            .foregroundStyle(
-                .appAccentPrimary
-            )
     }
 
     private func filterToolbarIcon(isHighlighted: Bool) -> some View {

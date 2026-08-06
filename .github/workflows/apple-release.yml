@@ -6,7 +6,42 @@ on:
       - "v*"
 
 jobs:
+  release_gate:
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "26.4"
+      - name: Validate tag metadata and release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          if [[ "$tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)(-beta\.[1-9][0-9]*)?$ ]]; then
+            semver="${BASH_REMATCH[1]}"
+          else
+            echo "Unsupported release tag: $tag" >&2
+            exit 1
+          fi
+          settings="$(xcodebuild -project pushgo.xcodeproj -scheme PushGo-iOS -configuration Release -showBuildSettings)"
+          marketing="$(printf '%s\n' "$settings" | sed -nE 's/^[[:space:]]*MARKETING_VERSION[[:space:]]*=[[:space:]]*(.+)$/\1/p' | sort -u)"
+          test "$marketing" = "$semver"
+          if [[ "$tag" != *-beta.* ]]; then
+            grep -Fq "## [$tag]" release/RELEASE_NOTES.md
+          fi
+          test -f "release/update-notes/${tag}.json"
+          jq -e 'type == "object" and length > 0 and all(.[]; type == "string" and length > 0)' "release/update-notes/${tag}.json" >/dev/null
+      - name: Build all Apple targets and run package tests
+        env:
+          CI: "true"
+        run: bash scripts/apple_concurrency_gate.sh
+
   app_store_release:
+    needs: release_gate
     runs-on: macos-26
     timeout-minutes: 120
     env:
@@ -709,6 +744,7 @@ jobs:
           if-no-files-found: warn
 
   dmg_release:
+    needs: release_gate
     runs-on: macos-26
     timeout-minutes: 120
     permissions:

@@ -57,4 +57,32 @@ struct KeychainStoreTests {
             #expect(store.loadResult(platform: "macOS").deviceKey == nil)
         }
     }
+
+    @Test
+    func providerGatewayTokenStoreIsolatesNormalizedURLIncludingPathCase() async throws {
+        try await withIsolatedAutomationStorage { _, _ in
+            let store = ProviderGatewayTokenStore()
+            let gatewayA = try #require(URL(string: "HTTPS://Gateway.EXAMPLE/GatewayA/"))
+            let gatewayANormalized = try #require(URL(string: "https://gateway.example/GatewayA"))
+            let gatewayLowerPath = try #require(URL(string: "https://gateway.example/gatewaya"))
+
+            #expect(store.save(token: "  token-A  ", baseURL: gatewayA))
+            #expect(store.save(token: "token-lower", baseURL: gatewayLowerPath))
+            #expect(store.load(baseURL: gatewayANormalized) == "token-A")
+            #expect(store.load(baseURL: gatewayLowerPath) == "token-lower")
+            #expect(ProviderGatewayTokenStore.accountName(for: gatewayANormalized)
+                != ProviderGatewayTokenStore.accountName(for: gatewayLowerPath))
+        }
+    }
+
+    @Test
+    func localConfigSaveBackfillsGatewayTokenByURL() async throws {
+        try await withIsolatedAutomationStorage { _, _ in
+            let baseURL = try #require(URL(string: "https://gateway.example/GatewayA"))
+            try LocalKeychainConfigStore().saveServerConfig(
+                ServerConfig(baseURL: baseURL, token: "stored-config-token")
+            )
+            #expect(ProviderGatewayTokenStore().load(baseURL: baseURL) == "stored-config-token")
+        }
+    }
 }
