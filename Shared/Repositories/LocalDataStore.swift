@@ -333,6 +333,13 @@ private func canonicalizedMessageForPersistence(_ message: PushMessage) -> PushM
 }
 
 actor LocalDataStore {
+    struct ChannelRemovalResult: Sendable {
+        let deletedMessageIDs: [UUID]
+        let deletedNotificationRequestIDs: [String]
+        let deletedImageURLs: [URL]
+        let deletedRecordCount: Int
+    }
+
     private static let tagMetadataBackfillDefaultsKey = "message_tag_metadata_backfill_v1"
     private static let messageSearchDerivedComponent = "message_search_index"
     static let systemSearchHealthCheckDefaultsKey = "pushgo.system_search.health_check.last_run.v1"
@@ -1098,27 +1105,81 @@ actor LocalDataStore {
     ) async throws {
         let trimmedGateway = normalizeGatewayKey(gateway)
         guard !trimmedGateway.isEmpty else { return }
-        var items = try channelSubscriptionStore.loadSubscriptions(
-            gatewayKey: trimmedGateway
-        )
         let trimmedChannelId = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let index = items.firstIndex(where: { $0.channelId == trimmedChannelId }) else { return }
-        var item = items[index]
-        item.isDeleted = true
-        item.deletedAt = Date()
-        item.password = ""
-        items[index] = item
-        try channelSubscriptionStore.saveSubscriptions(
-            gatewayKey: trimmedGateway,
-            subscriptions: items
+        let deletedAt = Date()
+        try softDeleteLegacyChannelSubscription(
+            gateway: trimmedGateway,
+            channelId: trimmedChannelId,
+            deletedAt: deletedAt
         )
         if let backend {
             try await backend.softDeleteChannelSubscription(
                 gateway: trimmedGateway,
                 channelId: trimmedChannelId,
-                deletedAt: item.deletedAt ?? Date()
+                deletedAt: deletedAt
             )
         }
+    }
+
+    private func softDeleteLegacyChannelSubscription(
+        gateway: String,
+        channelId: String,
+        deletedAt: Date
+    ) throws {
+        var items = try channelSubscriptionStore.loadSubscriptions(gatewayKey: gateway)
+        guard let index = items.firstIndex(where: { $0.channelId == channelId }) else { return }
+        var item = items[index]
+        item.isDeleted = true
+        item.deletedAt = deletedAt
+        item.password = ""
+        items[index] = item
+        try channelSubscriptionStore.saveSubscriptions(
+            gatewayKey: gateway,
+            subscriptions: items
+        )
+    }
+
+    func softDeleteChannelSubscriptionAndDeleteHistory(
+        gateway: String,
+        channelId: String,
+        expectedUpdatedAt: Date? = nil
+    ) async throws -> ChannelRemovalResult {
+        let trimmedGateway = normalizeGatewayKey(gateway)
+        let trimmedChannelId = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedGateway.isEmpty, !trimmedChannelId.isEmpty else {
+            throw AppError.localStore("Invalid gateway/channel_id for atomic channel removal.")
+        }
+        let deletedAt = Date()
+        let result = try await performBackendWrite { backend in
+            try await backend.softDeleteChannelSubscriptionAndDeleteHistory(
+                gateway: trimmedGateway,
+                channelId: trimmedChannelId,
+                expectedUpdatedAt: expectedUpdatedAt,
+                deletedAt: deletedAt
+            )
+        }
+
+        // GRDB is authoritative. Keep the legacy credential mirror aligned on a
+        // best-effort basis, but never turn a committed database transaction into
+        // a misleading failure if the mirror cannot be rewritten.
+        try? softDeleteLegacyChannelSubscription(
+            gateway: trimmedGateway,
+            channelId: trimmedChannelId,
+            deletedAt: deletedAt
+        )
+
+        if !result.deletedMessageIDs.isEmpty {
+            await mutateSearchIndex { searchIndex in
+                try await searchIndex.bulkRemove(ids: result.deletedMessageIDs)
+            }
+            if let metadataIndex {
+                try? await metadataIndex.bulkRemove(ids: result.deletedMessageIDs)
+            }
+        }
+        await rebuildSystemSearchIndex()
+        await rebuildNotificationContextSnapshot()
+        await refreshSystemSurfaceSnapshot(reason: .delete)
+        return result
     }
 
     func softDeleteChannelSubscription(
@@ -1153,16 +1214,23 @@ actor LocalDataStore {
         gateway: String,
         for channelId: String
     ) async -> String? {
+        try? await activeChannelPassword(gateway: gateway, for: channelId)
+    }
+
+    func activeChannelPassword(
+        gateway: String,
+        for channelId: String
+    ) async throws -> String? {
         let trimmedGateway = normalizeGatewayKey(gateway)
         guard !trimmedGateway.isEmpty else { return nil }
         let trimmedChannelId = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let backend,
-           let credential = try? await backend.loadChannelCredentials(gateway: trimmedGateway)
-            .first(where: { $0.channelId == trimmedChannelId })
-        {
-            return credential.password
+        if let backend {
+            let credentials = try await backend.loadChannelCredentials(gateway: trimmedGateway)
+            return credentials
+                .first(where: { $0.channelId == trimmedChannelId })?
+                .password
         }
-        guard let item = try? channelSubscriptionStore
+        guard let item = try channelSubscriptionStore
             .loadSubscriptions(gatewayKey: trimmedGateway)
             .first(where: { $0.channelId == trimmedChannelId })
         else { return nil }
@@ -6500,6 +6568,67 @@ private actor GRDBStore {
                   AND channel_id = \(Self.sqlQuoted(normalizedChannelId));
                 """
             try db.execute(sql: sql)
+        }
+    }
+
+    func softDeleteChannelSubscriptionAndDeleteHistory(
+        gateway: String,
+        channelId: String,
+        expectedUpdatedAt: Date?,
+        deletedAt: Date
+    ) async throws -> LocalDataStore.ChannelRemovalResult {
+        let normalizedGateway = Self.normalizeGateway(gateway)
+        let normalizedChannelId = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedGateway.isEmpty, !normalizedChannelId.isEmpty else {
+            throw localStoreError("Invalid gateway/channel_id for atomic channel removal.")
+        }
+
+        return try write { db in
+            let channelCondition = Self.channelMatchCondition(value: normalizedChannelId)
+            let messageRecords = try Row.fetchAll(
+                db,
+                sql: "SELECT * FROM messages WHERE \(channelCondition);"
+            )
+            .map(GRDBMessageRecord.init(row:))
+            let messageIDs = messageRecords.map(\.id)
+            let notificationRequestIDs = messageRecords.compactMap(\.notificationRequestId)
+            let imageURLs = messageRecords.flatMap {
+                $0.toPushMessage(decoder: decoder).imageURLs
+            }
+            let pendingCount = try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM pending_inbound_messages WHERE \(channelCondition);"
+            ) ?? 0
+
+            try db.execute(sql: "DELETE FROM messages WHERE \(channelCondition);")
+            try db.execute(sql: "DELETE FROM event_projection_heads WHERE \(channelCondition);")
+            try db.execute(sql: "DELETE FROM thing_projection_heads WHERE \(channelCondition);")
+            try db.execute(sql: "DELETE FROM pending_inbound_messages WHERE \(channelCondition);")
+            let expectedVersionCondition = expectedUpdatedAt.map {
+                " AND updated_at = \(Self.storedEpoch($0))"
+            } ?? ""
+            try db.execute(
+                sql: """
+                    UPDATE channel_subscriptions
+                    SET is_deleted = 1,
+                        deleted_at = \(Self.storedEpoch(deletedAt)),
+                        password = '',
+                        updated_at = \(Self.storedEpoch(deletedAt))
+                    WHERE gateway = \(Self.sqlQuoted(normalizedGateway))
+                      AND channel_id = \(Self.sqlQuoted(normalizedChannelId))
+                      AND is_deleted = 0\(expectedVersionCondition);
+                    """
+            )
+            guard db.changesCount == 1 else {
+                throw localStoreError("Channel subscription disappeared during atomic channel removal.")
+            }
+
+            return LocalDataStore.ChannelRemovalResult(
+                deletedMessageIDs: messageIDs,
+                deletedNotificationRequestIDs: notificationRequestIDs,
+                deletedImageURLs: imageURLs,
+                deletedRecordCount: messageIDs.count + pendingCount
+            )
         }
     }
 

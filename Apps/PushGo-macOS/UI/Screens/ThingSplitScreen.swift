@@ -66,7 +66,7 @@ struct ThingSplitScreen: View {
                 }
             }
         }
-        .onChange(of: environment.pendingLocalDeletionController.pendingDeletion) { _, _ in
+        .onChange(of: environment.pendingLocalDeletionController.effectiveScope) { _, _ in
             syncSelection()
         }
     }
@@ -107,7 +107,6 @@ struct ThingSplitScreen: View {
             )
             .navigationTitle(localizationManager.localized("push_type_thing"))
         }
-        .pendingLocalDeletionBarHost(environment: environment)
         .toolbar { listToolbarContent }
     }
 

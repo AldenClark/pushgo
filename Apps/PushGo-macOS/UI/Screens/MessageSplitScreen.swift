@@ -129,7 +129,6 @@ struct MessageSplitScreen: View {
                 prompt: Text(localizationManager.localized("search_messages"))
             )
         }
-        .pendingLocalDeletionBarHost(environment: environment)
         .toolbar { messageListToolbarContent }
     }
 
@@ -155,7 +154,6 @@ struct MessageSplitScreen: View {
                     shouldDismissOnDelete: false,
                     useNavigationContainer: false,
                     showsDeleteToolbarAction: false,
-                    showsPendingDeletionBar: false,
                 )
                 .id(displayedMessage.id)
             } else if let messageId = selection {

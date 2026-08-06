@@ -60,7 +60,7 @@ struct EventListScreen: View {
             publishAutomationState()
 #endif
         }
-        .onChange(of: environment.pendingLocalDeletionController.pendingDeletion) { _, _ in
+        .onChange(of: environment.pendingLocalDeletionController.effectiveScope) { _, _ in
             if let selectedEvent, isPendingLocalDeletion(selectedEvent) {
                 self.selectedEvent = nil
             }

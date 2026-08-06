@@ -14,7 +14,6 @@ struct MessageDetailScreen: View {
     private let shouldDismissOnDelete: Bool
     private let useNavigationContainer: Bool
     private let showsDeleteToolbarAction: Bool
-    private let showsPendingDeletionBar: Bool
 
     private enum Layout {
         static let singleImageHeight: CGFloat = 240
@@ -31,7 +30,6 @@ struct MessageDetailScreen: View {
         shouldDismissOnDelete: Bool = true,
         useNavigationContainer: Bool = true,
         showsDeleteToolbarAction: Bool = true,
-        showsPendingDeletionBar: Bool = true,
     ) {
         _viewModel = State(wrappedValue: MessageDetailViewModel(
             messageId: messageId,
@@ -42,7 +40,6 @@ struct MessageDetailScreen: View {
         self.shouldDismissOnDelete = shouldDismissOnDelete
         self.useNavigationContainer = useNavigationContainer
         self.showsDeleteToolbarAction = showsDeleteToolbarAction
-        self.showsPendingDeletionBar = showsPendingDeletionBar
     }
 
     var body: some View {
@@ -82,10 +79,6 @@ struct MessageDetailScreen: View {
         }
         .pushgoImagePreviewOverlay(previewItem: $previewingImage, imageURL: \.url)
         .background(detailBackgroundColor)
-        .modifier(PendingDeletionBarModifier(
-            environment: environment,
-            isEnabled: showsPendingDeletionBar
-        ))
         .userActivity(
             PushGoUserActivityBuilder.messageActivityType,
             isActive: viewModel.message != nil
@@ -572,19 +565,6 @@ struct MessageDetailScreen: View {
             style: .success,
             duration: 1.2
         )
-    }
-}
-
-private struct PendingDeletionBarModifier: ViewModifier {
-    let environment: AppEnvironment
-    let isEnabled: Bool
-
-    func body(content: Content) -> some View {
-        if isEnabled {
-            content.pendingLocalDeletionBarHost(environment: environment)
-        } else {
-            content
-        }
     }
 }
 

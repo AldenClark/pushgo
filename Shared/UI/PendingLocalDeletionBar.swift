@@ -17,7 +17,7 @@ struct PendingLocalDeletionBar: View {
         for deletion: PendingLocalDeletionController.PendingDeletion,
         now: Date
     ) -> some View {
-        let remainingSeconds = max(1, Int(ceil(deletion.deadline.timeIntervalSince(now))))
+        let remainingSeconds = max(1, Int(ceil(deletion.timeRemaining(at: now))))
 
         return HStack(spacing: 10) {
             Text(deletion.summary)
@@ -64,20 +64,6 @@ struct PendingLocalDeletionBar: View {
 
     private var borderColor: Color {
         colorScheme == .dark ? .white.opacity(0.08) : .black.opacity(0.08)
-    }
-}
-
-extension View {
-    func pendingLocalDeletionBarHost(
-        environment: AppEnvironment,
-        horizontalPadding: CGFloat = 12,
-        bottomPadding: CGFloat = 12
-    ) -> some View {
-        modifier(PendingLocalDeletionBarHostModifier(
-            environment: environment,
-            horizontalPadding: horizontalPadding,
-            bottomPadding: bottomPadding
-        ))
     }
 }
 
@@ -514,39 +500,4 @@ private struct MessageHistoryCleanupActions: View {
         }
     }
 
-}
-
-private struct PendingLocalDeletionBarHostModifier: ViewModifier {
-    @Bindable var environment: AppEnvironment
-    let horizontalPadding: CGFloat
-    let bottomPadding: CGFloat
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    init(
-        environment: AppEnvironment,
-        horizontalPadding: CGFloat,
-        bottomPadding: CGFloat
-    ) {
-        _environment = Bindable(environment)
-        self.horizontalPadding = horizontalPadding
-        self.bottomPadding = bottomPadding
-    }
-
-    func body(content: Content) -> some View {
-        content
-            .overlay(alignment: .bottom) {
-                if environment.pendingLocalDeletionController.pendingDeletion != nil {
-                    PendingLocalDeletionBar(
-                        controller: environment.pendingLocalDeletionController
-                    )
-                    .padding(.horizontal, horizontalPadding)
-                    .padding(.bottom, bottomPadding)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
-            .animation(
-                reduceMotion ? nil : .easeInOut(duration: 0.25),
-                value: environment.pendingLocalDeletionController.pendingDeletion
-            )
-    }
 }

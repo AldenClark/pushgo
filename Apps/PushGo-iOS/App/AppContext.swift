@@ -32,6 +32,7 @@ private struct DynamicLocaleWrapper<Content: View>: View {
     @Bindable var localizationManager: LocalizationManager
     let bootstrap: Bool
     @Environment(\.scenePhase) private var scenePhase
+    @State private var sceneID = UUID()
 
     var body: some View {
         content
@@ -46,12 +47,20 @@ private struct DynamicLocaleWrapper<Content: View>: View {
                 #endif
             }
 #endif
-            .modifier(BootstrapTaskModifier(perform: bootstrap, environment: environment, scenePhase: scenePhase))
+            .modifier(BootstrapTaskModifier(
+                perform: bootstrap,
+                environment: environment,
+                scenePhase: scenePhase,
+                sceneID: sceneID
+            ))
             .onChange(of: scenePhase) { _, newValue in
-                environment.updateScenePhase(newValue)
+                environment.updateScenePhase(newValue, sceneID: sceneID)
             }
             .task {
-                environment.updateScenePhase(scenePhase)
+                environment.updateScenePhase(scenePhase, sceneID: sceneID)
+            }
+            .onDisappear {
+                environment.removeScenePhase(sceneID: sceneID)
             }
             .task {
                 for await _ in NotificationCenter.default.notifications(
@@ -187,12 +196,13 @@ private struct BootstrapTaskModifier: ViewModifier {
     let perform: Bool
     @Bindable var environment: AppEnvironment
     var scenePhase: ScenePhase
+    let sceneID: UUID
 
     func body(content: Content) -> some View {
         content.task {
             guard perform else { return }
             await environment.bootstrap()
-            environment.updateScenePhase(scenePhase)
+            environment.updateScenePhase(scenePhase, sceneID: sceneID)
 #if DEBUG
             #if !os(watchOS)
             await PushGoAutomationRuntime.shared.importStartupFixtureIfNeeded(environment: environment)

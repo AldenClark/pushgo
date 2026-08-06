@@ -4,7 +4,6 @@ import Foundation
 final class ChannelSubscriptionController {
     typealias ServerConfigProvider = @MainActor () -> ServerConfig?
     typealias MessageStateCoordinatorProvider = @MainActor () -> MessageStateCoordinator?
-    typealias RefreshCountsAndNotify = @MainActor () async -> Void
 
     private let dataStore: LocalDataStore
     private let channelSubscriptionService: ChannelSubscriptionService
@@ -13,7 +12,6 @@ final class ChannelSubscriptionController {
     private let localizationManager: LocalizationManager
     private let serverConfigProvider: ServerConfigProvider
     private let messageStateCoordinatorProvider: MessageStateCoordinatorProvider
-    private let refreshMessageCountsAndNotify: RefreshCountsAndNotify
     private let platform: String
 
     init(
@@ -24,8 +22,7 @@ final class ChannelSubscriptionController {
         channelSyncController: ChannelSyncController,
         localizationManager: LocalizationManager,
         serverConfigProvider: @escaping ServerConfigProvider,
-        messageStateCoordinatorProvider: @escaping MessageStateCoordinatorProvider,
-        refreshMessageCountsAndNotify: @escaping RefreshCountsAndNotify
+        messageStateCoordinatorProvider: @escaping MessageStateCoordinatorProvider
     ) {
         self.platform = platform
         self.dataStore = dataStore
@@ -35,7 +32,6 @@ final class ChannelSubscriptionController {
         self.localizationManager = localizationManager
         self.serverConfigProvider = serverConfigProvider
         self.messageStateCoordinatorProvider = messageStateCoordinatorProvider
-        self.refreshMessageCountsAndNotify = refreshMessageCountsAndNotify
     }
 
     func channelExists(channelId: String) async throws -> ChannelSubscriptionService.ExistsPayload {
@@ -109,16 +105,50 @@ final class ChannelSubscriptionController {
         await channelSyncController.refreshChannelSubscriptions()
     }
 
-    func deleteLocalHistoryForChannel(channelId: String) async throws -> Int {
+    func unsubscribeChannelAndDeleteLocalHistory(
+        channelId: String,
+        expectedGateway: String,
+        expectedUpdatedAt: Date
+    ) async throws -> Int {
+        guard let config = serverConfigProvider() else { throw AppError.noServer }
+        let gatewayKey = config.gatewayKey
+        let normalizedExpectedGateway = expectedGateway.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let normalizedCurrentGateway = gatewayKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard normalizedExpectedGateway == normalizedCurrentGateway else {
+            throw AppError.typedLocal(
+                code: "gateway_changed_during_channel_removal",
+                category: .validation,
+                message: localizationManager.localized("operation_failed"),
+                detail: "gateway changed while channel removal was pending"
+            )
+        }
         let normalized = try ChannelIdValidator.normalize(channelId)
-        let eventImageURLs = try await dataStore
-            .loadEventMessagesForProjection()
-            .filter { Self.channelMatches($0.channel, normalizedChannel: normalized) }
-            .flatMap(\.imageURLs)
-        let thingImageURLs = try await dataStore
-            .loadThingMessagesForProjection()
-            .filter { Self.channelMatches($0.channel, normalizedChannel: normalized) }
-            .flatMap(\.imageURLs)
+        let currentSubscription = try await dataStore.loadChannelSubscriptions(
+            gateway: gatewayKey,
+            includeDeleted: false
+        ).first {
+            $0.channelId.trimmingCharacters(in: .whitespacesAndNewlines) == normalized
+        }
+        guard let currentSubscription,
+              abs(currentSubscription.updatedAt.timeIntervalSince(expectedUpdatedAt)) < 0.001
+        else {
+            throw AppError.typedLocal(
+                code: "channel_subscription_changed_during_removal",
+                category: .validation,
+                message: localizationManager.localized("operation_failed"),
+                detail: "channel subscription changed while removal was pending"
+            )
+        }
+        guard try await dataStore.activeChannelPassword(gateway: gatewayKey, for: normalized) != nil else {
+            throw AppError.typedLocal(
+                code: "channel_password_missing",
+                category: .validation,
+                message: localizationManager.localized("channel_password_missing"),
+                detail: "missing stored password for transactional channel removal"
+            )
+        }
         guard let messageStateCoordinator = messageStateCoordinatorProvider() else {
             throw AppError.typedLocal(
                 code: "message_state_coordinator_unavailable",
@@ -127,24 +157,69 @@ final class ChannelSubscriptionController {
                 detail: "messageStateCoordinatorProvider returned nil during channel cleanup"
             )
         }
-        let removedMessages = try await messageStateCoordinator.deleteMessages(channel: normalized, readState: nil)
-        let removedEvents = try await dataStore.deleteEventRecords(channel: normalized)
-        let removedThings = try await dataStore.deleteThingRecords(channel: normalized)
-        let remainingMessages = try await dataStore.loadMessages(filter: .all, channel: normalized)
-        let remainingEvents = try await dataStore
-            .loadEventMessagesForProjection()
-            .filter { Self.channelMatches($0.channel, normalizedChannel: normalized) }
-        let remainingThings = try await dataStore
-            .loadThingMessagesForProjection()
-            .filter { Self.channelMatches($0.channel, normalizedChannel: normalized) }
-        if !remainingMessages.isEmpty || !remainingEvents.isEmpty || !remainingThings.isEmpty {
-            throw AppError.localStore(
-                "channel cleanup incomplete messages=\(remainingMessages.count) events=\(remainingEvents.count) things=\(remainingThings.count)"
+        let token = try await channelSyncController.ensureActivePushToken(serverConfig: config)
+        let deviceKey = try await providerRouteController.ensureProviderRoute(
+            config: config,
+            providerToken: token
+        )
+
+        _ = try await channelSubscriptionService.unsubscribe(
+            baseURL: config.baseURL,
+            token: config.token,
+            deviceKey: deviceKey,
+            channelId: normalized
+        )
+
+        let result: LocalDataStore.ChannelRemovalResult
+        do {
+            result = try await dataStore.softDeleteChannelSubscriptionAndDeleteHistory(
+                gateway: gatewayKey,
+                channelId: normalized,
+                expectedUpdatedAt: expectedUpdatedAt
             )
+        } catch {
+            let localError = error
+            let currentPassword: String?
+            do {
+                currentPassword = try await dataStore.activeChannelPassword(
+                    gateway: gatewayKey,
+                    for: normalized
+                )
+            } catch {
+                throw AppError.localStore(
+                    "channel removal local transaction failed and remote compensation state "
+                        + "could not be verified; local=\(localError.localizedDescription); "
+                        + "credential_read=\(error.localizedDescription)"
+                )
+            }
+            guard let currentPassword else {
+                // A newer local removal superseded this intent. Do not resurrect
+                // the subscription with a credential captured by the stale intent.
+                throw localError
+            }
+            do {
+                _ = try await subscribeWithDeviceKeyRecovery(
+                    config: config,
+                    providerToken: token,
+                    channelId: normalized,
+                    alias: nil,
+                    password: currentPassword
+                )
+            } catch {
+                throw AppError.localStore(
+                    "channel removal local transaction failed and remote compensation failed; "
+                        + "local=\(localError.localizedDescription); compensation=\(error.localizedDescription)"
+                )
+            }
+            throw localError
         }
-        await SharedImageCache.purge(urls: eventImageURLs + thingImageURLs)
-        await refreshMessageCountsAndNotify()
-        return removedMessages + removedEvents + removedThings
+
+        await messageStateCoordinator.reconcileExternallyDeletedMessages(
+            notificationRequestIDs: result.deletedNotificationRequestIDs,
+            imageURLs: result.deletedImageURLs
+        )
+        await channelSyncController.refreshChannelSubscriptions()
+        return result.deletedRecordCount
     }
 
     private func subscribeChannel(

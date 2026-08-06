@@ -190,6 +190,15 @@ final class MessageStateCoordinator {
         }
     }
 
+    func reconcileExternallyDeletedMessages(
+        notificationRequestIDs: [String],
+        imageURLs: [URL]
+    ) async {
+        removeDeliveredNotifications(identifiers: notificationRequestIDs)
+        await SharedImageCache.purge(urls: imageURLs)
+        await refreshCountsAndNotify()
+    }
+
     private func messageFilter(for readState: Bool?) -> MessageQueryFilter {
         switch readState {
         case .some(true):

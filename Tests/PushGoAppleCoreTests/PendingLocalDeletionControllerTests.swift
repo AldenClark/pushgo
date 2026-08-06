@@ -52,6 +52,7 @@ struct PendingLocalDeletionControllerTests {
             undoLabel: "undo",
             scope: PendingLocalDeletionController.Scope(messageIDs: [messageID])
         ) {
+            try await Task.sleep(for: .milliseconds(5))
             await recorder.increment()
         }
 
@@ -65,7 +66,7 @@ struct PendingLocalDeletionControllerTests {
     }
 
     @Test
-    func schedulingNewDeletionCommitsExistingPendingBeforeReplacingIt() async {
+    func schedulingNewDeletionQueuesWithoutShorteningExistingUndoWindow() async {
         let controller = PendingLocalDeletionController(timeout: 5)
         let firstID = UUID()
         let secondID = UUID()
@@ -87,8 +88,14 @@ struct PendingLocalDeletionControllerTests {
             await recorder.append("second")
         }
 
-        #expect(await recorder.entries == ["first"])
+        #expect(await recorder.entries.isEmpty)
+        #expect(controller.pendingDeletion?.scope.messageIDs == Set([firstID]))
+        #expect(controller.effectiveScope.messageIDs == Set([firstID, secondID]))
+
+        controller.undoCurrent()
+
         #expect(controller.pendingDeletion?.scope.messageIDs == Set([secondID]))
+        #expect(controller.effectiveScope.messageIDs == Set([secondID]))
     }
 
     @Test
@@ -124,10 +131,14 @@ struct PendingLocalDeletionControllerTests {
             undoLabel: "undo",
             scope: PendingLocalDeletionController.Scope(messageIDs: [messageID])
         ) {
+            try await Task.sleep(for: .milliseconds(5))
             await recorder.increment()
         }
 
-        let completed = await waitUntil {
+        // The package test runner executes several database-heavy suites in parallel.
+        // Keep the production timeout short, but allow enough scheduling headroom for
+        // the MainActor countdown task when the full suite saturates the machine.
+        let completed = await waitUntil(timeout: .seconds(10)) {
             await recorder.count == 1 && controller.pendingDeletion == nil
         }
 
@@ -162,6 +173,54 @@ struct PendingLocalDeletionControllerTests {
         await commitTask.value
 
         #expect(controller.effectiveScope.messageIDs.isEmpty)
+    }
+
+    @Test
+    func inactiveInteractionPausesCountdownUntilReactivated() async {
+        let controller = PendingLocalDeletionController(timeout: 5)
+        let recorder = CommitRecorder()
+
+        await controller.schedule(
+            summary: "message",
+            undoLabel: "undo",
+            scope: PendingLocalDeletionController.Scope()
+        ) {
+            await recorder.increment()
+        }
+
+        controller.setInteractionActive(false)
+        let frozenRemaining = controller.pendingDeletion?.frozenTimeRemaining ?? 0
+        try? await Task.sleep(for: .milliseconds(100))
+
+        #expect(frozenRemaining > 0)
+        #expect(await recorder.count == 0)
+        #expect(controller.pendingDeletion?.isCountdownActive == false)
+
+        controller.setInteractionActive(true)
+        await controller.commitCurrentIfNeeded()
+
+        #expect(await recorder.count == 1)
+    }
+
+    @Test
+    func concurrentCommitClaimsEntryOnlyOnce() async {
+        let controller = PendingLocalDeletionController(timeout: 5)
+        let recorder = CommitRecorder()
+
+        await controller.schedule(
+            summary: "message",
+            undoLabel: "undo",
+            scope: PendingLocalDeletionController.Scope()
+        ) {
+            await recorder.increment()
+            try? await Task.sleep(for: .milliseconds(40))
+        }
+
+        async let first: Void = controller.commitCurrentIfNeeded()
+        async let second: Void = controller.commitCurrentIfNeeded()
+        _ = await (first, second)
+
+        #expect(await recorder.count == 1)
     }
 
     @Test

@@ -28,6 +28,7 @@ final class AppEnvironment {
     @ObservationIgnored private var bootstrapTask: Task<Void, Never>?
     @ObservationIgnored private var didBootstrap = false
     @ObservationIgnored private var providerIngressBootstrapRecoveryInFlight = false
+    @ObservationIgnored private var scenePhases: [UUID: ScenePhase] = [:]
 
     private var toastDismissTask: Task<Void, Never>?
     private(set) var isMainWindowVisible = true
@@ -128,9 +129,6 @@ final class AppEnvironment {
         },
         messageStateCoordinatorProvider: { [weak self] in
             self?.messageStateCoordinator
-        },
-        refreshMessageCountsAndNotify: { [weak self] in
-            await self?.refreshMessageCountsAndNotify()
         }
     )
     @ObservationIgnored private(set) lazy var notificationOpenController = NotificationOpenController(
@@ -1043,8 +1041,16 @@ final class AppEnvironment {
         try await channelSubscriptionController.unsubscribeChannel(channelId: channelId)
     }
 
-    func deleteLocalHistoryForChannel(channelId: String) async throws -> Int {
-        try await channelSubscriptionController.deleteLocalHistoryForChannel(channelId: channelId)
+    func unsubscribeChannelAndDeleteLocalHistory(
+        channelId: String,
+        expectedGateway: String,
+        expectedUpdatedAt: Date
+    ) async throws -> Int {
+        try await channelSubscriptionController.unsubscribeChannelAndDeleteLocalHistory(
+            channelId: channelId,
+            expectedGateway: expectedGateway,
+            expectedUpdatedAt: expectedUpdatedAt
+        )
     }
 
     func closeEvent(
@@ -1145,7 +1151,30 @@ final class AppEnvironment {
         "macos"
     }
 
-    func updateScenePhase(_ phase: ScenePhase) {
+    func updateScenePhase(_ phase: ScenePhase, sceneID: UUID) {
+        let previousPhase = aggregateScenePhase
+        scenePhases[sceneID] = phase
+        let currentPhase = aggregateScenePhase
+        guard previousPhase != currentPhase else { return }
+        applyAggregateScenePhase(currentPhase)
+    }
+
+    func removeScenePhase(sceneID: UUID) {
+        let previousPhase = aggregateScenePhase
+        scenePhases.removeValue(forKey: sceneID)
+        let currentPhase = aggregateScenePhase
+        guard previousPhase != currentPhase else { return }
+        applyAggregateScenePhase(currentPhase)
+    }
+
+    private var aggregateScenePhase: ScenePhase {
+        if scenePhases.values.contains(.active) { return .active }
+        if scenePhases.values.contains(.inactive) { return .inactive }
+        return .background
+    }
+
+    private func applyAggregateScenePhase(_ phase: ScenePhase) {
+        pendingLocalDeletionController.setInteractionActive(phase == .active)
         switch phase {
         case .active:
             navigationState.setSceneActive(true)
@@ -1167,9 +1196,6 @@ final class AppEnvironment {
             }
         case .background, .inactive:
             navigationState.setSceneActive(false)
-            Task { @MainActor in
-                await pendingLocalDeletionController.commitCurrentIfNeeded()
-            }
             Task {
                 await dataStore.flushWrites()
             }

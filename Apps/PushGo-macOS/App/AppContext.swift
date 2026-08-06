@@ -15,8 +15,14 @@ extension View {
         )
     }
 
-    func toastOverlay(environment: AppEnvironment) -> some View {
-        modifier(ToastOverlayModifier(environment: environment))
+    func toastOverlay(
+        environment: AppEnvironment,
+        showsPendingDeletionBar: Bool = false
+    ) -> some View {
+        modifier(ToastOverlayModifier(
+            environment: environment,
+            showsPendingDeletionBar: showsPendingDeletionBar
+        ))
     }
 }
 
@@ -26,13 +32,14 @@ private struct DynamicLocaleWrapper<Content: View>: View {
     @Bindable var localizationManager: LocalizationManager
     let bootstrap: Bool
     @Environment(\.scenePhase) private var scenePhase
+    @State private var sceneID = UUID()
 
     var body: some View {
         content
             .environment(environment)
             .environment(localizationManager)
             .environment(\.locale, localizationManager.swiftUILocale)
-            .toastOverlay(environment: environment)
+            .toastOverlay(environment: environment, showsPendingDeletionBar: true)
 #if DEBUG
             .task {
                 #if !os(watchOS)
@@ -41,12 +48,20 @@ private struct DynamicLocaleWrapper<Content: View>: View {
                 #endif
             }
 #endif
-            .modifier(BootstrapTaskModifier(perform: bootstrap, environment: environment, scenePhase: scenePhase))
+            .modifier(BootstrapTaskModifier(
+                perform: bootstrap,
+                environment: environment,
+                scenePhase: scenePhase,
+                sceneID: sceneID
+            ))
             .onChange(of: scenePhase) { _, newValue in
-                environment.updateScenePhase(newValue)
+                environment.updateScenePhase(newValue, sceneID: sceneID)
             }
             .task {
-                environment.updateScenePhase(scenePhase)
+                environment.updateScenePhase(scenePhase, sceneID: sceneID)
+            }
+            .onDisappear {
+                environment.removeScenePhase(sceneID: sceneID)
             }
             .task {
                 for await _ in NotificationCenter.default.notifications(
@@ -96,23 +111,35 @@ private struct DynamicLocaleWrapper<Content: View>: View {
 
 private struct ToastOverlayModifier: ViewModifier {
     @Bindable var environment: AppEnvironment
+    let showsPendingDeletionBar: Bool
 
-    init(environment: AppEnvironment) {
+    init(environment: AppEnvironment, showsPendingDeletionBar: Bool) {
         _environment = Bindable(environment)
+        self.showsPendingDeletionBar = showsPendingDeletionBar
     }
 
     func body(content: Content) -> some View {
-        ToastOverlayContent(content: content, environment: environment)
+        ToastOverlayContent(
+            content: content,
+            environment: environment,
+            showsPendingDeletionBar: showsPendingDeletionBar
+        )
     }
 
     private struct ToastOverlayContent<Content: View>: View {
         let content: Content
         @Bindable var environment: AppEnvironment
+        let showsPendingDeletionBar: Bool
         @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-        init(content: Content, environment: AppEnvironment) {
+        init(
+            content: Content,
+            environment: AppEnvironment,
+            showsPendingDeletionBar: Bool
+        ) {
             self.content = content
             _environment = Bindable(environment)
+            self.showsPendingDeletionBar = showsPendingDeletionBar
         }
 
         var body: some View {
@@ -132,7 +159,21 @@ private struct ToastOverlayModifier: ViewModifier {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
+                .overlay(alignment: .bottom) {
+                    if showsPendingDeletionBar,
+                       environment.pendingLocalDeletionController.pendingDeletion != nil {
+                        PendingLocalDeletionBar(controller: environment.pendingLocalDeletionController)
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 20)
+                            .frame(maxWidth: .infinity)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                }
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: environment.toastMessage)
+                .animation(
+                    reduceMotion ? nil : .easeInOut(duration: 0.25),
+                    value: environment.pendingLocalDeletionController.pendingDeletion
+                )
         }
     }
 }
@@ -141,6 +182,7 @@ private struct BootstrapTaskModifier: ViewModifier {
     let perform: Bool
     @Bindable var environment: AppEnvironment
     var scenePhase: ScenePhase
+    let sceneID: UUID
 
     func body(content: Content) -> some View {
         content.task {
@@ -149,7 +191,7 @@ private struct BootstrapTaskModifier: ViewModifier {
             PushGoAutomationRuntime.shared.recordBootstrapCheckpoint("macos.bootstrap.begin")
             #endif
             await environment.bootstrap()
-            environment.updateScenePhase(scenePhase)
+            environment.updateScenePhase(scenePhase, sceneID: sceneID)
 #if DEBUG
             #if !os(watchOS)
             PushGoAutomationRuntime.shared.recordBootstrapCheckpoint("macos.bootstrap.after_environment")

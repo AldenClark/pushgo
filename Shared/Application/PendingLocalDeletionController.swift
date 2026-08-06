@@ -9,7 +9,16 @@ final class PendingLocalDeletionController {
         let summary: String
         let undoLabel: String
         let deadline: Date
+        let frozenTimeRemaining: TimeInterval
+        let isCountdownActive: Bool
         let scope: Scope
+
+        func timeRemaining(at date: Date) -> TimeInterval {
+            if isCountdownActive {
+                return max(0, deadline.timeIntervalSince(date))
+            }
+            return max(0, frozenTimeRemaining)
+        }
     }
 
     struct Scope: Equatable {
@@ -57,20 +66,27 @@ final class PendingLocalDeletionController {
     typealias CompletionHandler = @MainActor (Result<Void, Error>) -> Void
 
     private struct ScheduledDeletion {
-        let deletion: PendingDeletion
+        let id: UUID
+        let summary: String
+        let undoLabel: String
+        let scope: Scope
         let commit: CommitOperation
         let onCompletion: CompletionHandler?
+        var remainingDuration: TimeInterval
+        var deadline: Date?
     }
 
     private let timeout: TimeInterval
     @ObservationIgnored private var commitTask: Task<Void, Never>?
-    @ObservationIgnored private var scheduledDeletion: ScheduledDeletion?
+    @ObservationIgnored private var queuedDeletions: [ScheduledDeletion] = []
+    @ObservationIgnored private var committingScopes: [UUID: Scope] = [:]
+    @ObservationIgnored private var interactionActive = true
 
     private(set) var pendingDeletion: PendingDeletion?
     private(set) var effectiveScope: Scope = Scope()
 
     init(timeout: TimeInterval = 5) {
-        self.timeout = timeout
+        self.timeout = max(0, timeout)
     }
 
     deinit {
@@ -84,23 +100,22 @@ final class PendingLocalDeletionController {
         commit: @escaping CommitOperation,
         onCompletion: CompletionHandler? = nil
     ) async {
-        await commitCurrentIfNeeded()
-
-        let deletion = PendingDeletion(
+        queuedDeletions.append(ScheduledDeletion(
             id: UUID(),
             summary: summary,
             undoLabel: undoLabel,
-            deadline: Date().addingTimeInterval(timeout),
-            scope: scope
-        )
-        scheduledDeletion = ScheduledDeletion(
-            deletion: deletion,
+            scope: scope,
             commit: commit,
-            onCompletion: onCompletion
-        )
-        pendingDeletion = deletion
-        effectiveScope = scope
-        armCommitTask(for: deletion)
+            onCompletion: onCompletion,
+            remainingDuration: timeout,
+            deadline: nil
+        ))
+
+        if queuedDeletions.count == 1 {
+            activateCurrentDeletion()
+        } else {
+            publishEffectiveScope()
+        }
     }
 
     @discardableResult
@@ -140,17 +155,27 @@ final class PendingLocalDeletionController {
         return (uniqueItems, resolvedScope)
     }
 
+    func setInteractionActive(_ active: Bool) {
+        guard interactionActive != active else { return }
+        interactionActive = active
+        if active {
+            activateCurrentDeletion()
+        } else {
+            pauseCurrentDeletion()
+        }
+    }
+
     func undoCurrent() {
+        guard !queuedDeletions.isEmpty else { return }
         commitTask?.cancel()
         commitTask = nil
-        scheduledDeletion = nil
-        pendingDeletion = nil
-        effectiveScope = Scope()
+        queuedDeletions.removeFirst()
+        activateCurrentDeletion()
     }
 
     func commitCurrentIfNeeded() async {
-        guard let scheduledDeletion else { return }
-        await commitScheduledDeletion(expectedID: scheduledDeletion.deletion.id)
+        guard let expectedID = queuedDeletions.first?.id else { return }
+        await commitScheduledDeletion(expectedID: expectedID, cancelCountdownTask: true)
     }
 
     func suppressesMessage(id: UUID, channelId: String?) -> Bool {
@@ -165,38 +190,110 @@ final class PendingLocalDeletionController {
         effectiveScope.suppressesThing(id: id, channelId: channelId)
     }
 
-    private func armCommitTask(for deletion: PendingDeletion) {
-        commitTask?.cancel()
-        commitTask = Task { [weak self] in
-            guard let self else { return }
-            try? await Task.sleep(for: .seconds(timeout))
-            guard !Task.isCancelled else { return }
-            await self.commitScheduledDeletion(expectedID: deletion.id)
-        }
-    }
-
-    private func commitScheduledDeletion(expectedID: UUID) async {
-        guard let scheduledDeletion, scheduledDeletion.deletion.id == expectedID else { return }
-
+    private func activateCurrentDeletion() {
         commitTask?.cancel()
         commitTask = nil
-        pendingDeletion = nil
+        guard !queuedDeletions.isEmpty else {
+            pendingDeletion = nil
+            publishEffectiveScope()
+            return
+        }
 
-        do {
-            try await scheduledDeletion.commit()
-            clearScheduledDeletionIfCurrent(expectedID: expectedID)
-            scheduledDeletion.onCompletion?(.success(()))
-        } catch {
-            clearScheduledDeletionIfCurrent(expectedID: expectedID)
-            scheduledDeletion.onCompletion?(.failure(error))
+        let now = Date()
+        if interactionActive {
+            queuedDeletions[0].deadline = now.addingTimeInterval(queuedDeletions[0].remainingDuration)
+        } else {
+            queuedDeletions[0].deadline = nil
+        }
+        publishPendingDeletion(now: now)
+        publishEffectiveScope()
+        guard interactionActive else { return }
+        armCommitTask(for: queuedDeletions[0])
+    }
+
+    private func pauseCurrentDeletion() {
+        commitTask?.cancel()
+        commitTask = nil
+        guard !queuedDeletions.isEmpty else { return }
+        let now = Date()
+        if let deadline = queuedDeletions[0].deadline {
+            queuedDeletions[0].remainingDuration = max(0, deadline.timeIntervalSince(now))
+        }
+        queuedDeletions[0].deadline = nil
+        publishPendingDeletion(now: now)
+    }
+
+    private func publishPendingDeletion(now: Date = Date()) {
+        guard let entry = queuedDeletions.first else {
+            pendingDeletion = nil
+            return
+        }
+        pendingDeletion = PendingDeletion(
+            id: entry.id,
+            summary: entry.summary,
+            undoLabel: entry.undoLabel,
+            deadline: entry.deadline ?? now.addingTimeInterval(entry.remainingDuration),
+            frozenTimeRemaining: entry.remainingDuration,
+            isCountdownActive: interactionActive,
+            scope: entry.scope
+        )
+    }
+
+    private func armCommitTask(for deletion: ScheduledDeletion) {
+        let duration = deletion.remainingDuration
+        commitTask = Task { [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: .seconds(duration))
+            guard !Task.isCancelled else { return }
+            await self.commitScheduledDeletion(expectedID: deletion.id, cancelCountdownTask: false)
         }
     }
 
-    private func clearScheduledDeletionIfCurrent(expectedID: UUID) {
-        guard scheduledDeletion?.deletion.id == expectedID else { return }
-        scheduledDeletion = nil
-        pendingDeletion = nil
-        effectiveScope = Scope()
+    private func commitScheduledDeletion(
+        expectedID: UUID,
+        cancelCountdownTask: Bool
+    ) async {
+        guard let scheduledDeletion = claimCurrentDeletion(
+            expectedID: expectedID,
+            cancelCountdownTask: cancelCountdownTask
+        ) else { return }
+
+        let result: Result<Void, Error>
+        do {
+            try await scheduledDeletion.commit()
+            result = .success(())
+        } catch {
+            result = .failure(error)
+        }
+
+        committingScopes.removeValue(forKey: expectedID)
+        publishEffectiveScope()
+        scheduledDeletion.onCompletion?(result)
+    }
+
+    private func claimCurrentDeletion(
+        expectedID: UUID,
+        cancelCountdownTask: Bool
+    ) -> ScheduledDeletion? {
+        guard queuedDeletions.first?.id == expectedID else { return nil }
+        if cancelCountdownTask {
+            commitTask?.cancel()
+        }
+        commitTask = nil
+        let entry = queuedDeletions.removeFirst()
+        committingScopes[entry.id] = entry.scope
+        activateCurrentDeletion()
+        return entry
+    }
+
+    private func publishEffectiveScope() {
+        let scopes = queuedDeletions.map(\.scope) + Array(committingScopes.values)
+        effectiveScope = Scope(
+            messageIDs: scopes.reduce(into: Set<UUID>()) { $0.formUnion($1.messageIDs) },
+            eventIDs: scopes.reduce(into: Set<String>()) { $0.formUnion($1.eventIDs) },
+            thingIDs: scopes.reduce(into: Set<String>()) { $0.formUnion($1.thingIDs) },
+            channelIDs: scopes.reduce(into: Set<String>()) { $0.formUnion($1.channelIDs) }
+        )
     }
 
     private func uniquePreservingOrder<Item, ID: Hashable>(

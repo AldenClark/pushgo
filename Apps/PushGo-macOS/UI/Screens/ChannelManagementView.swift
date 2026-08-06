@@ -39,7 +39,7 @@ struct ChannelManagementView: View {
                 }
 
                 Group {
-                    if environment.channelSubscriptions.isEmpty {
+                    if visibleChannelSubscriptions.isEmpty {
                         EntityOnboardingEmptyView(
                             kind: .channels,
                             channelPrimaryAction: {
@@ -61,7 +61,6 @@ struct ChannelManagementView: View {
             }
             .background(channelBackgroundColor)
             .navigationTitle(localizationManager.localized("channels"))
-            .pendingLocalDeletionBarHost(environment: environment)
             .toolbar { channelToolbarContent }
             .confirmationDialog(
                 pendingRemoval.map { localizationManager.localized("unsubscribe_channel_title", $0.displayName) } ?? "",
@@ -154,8 +153,15 @@ struct ChannelManagementView: View {
     }
 
     private var channelList: some View {
-        ForEach(environment.channelSubscriptions) { subscription in
+        ForEach(visibleChannelSubscriptions) { subscription in
             channelRow(subscription)
+        }
+    }
+
+    private var visibleChannelSubscriptions: [ChannelSubscription] {
+        let suppressed = environment.pendingLocalDeletionController.effectiveScope.channelIDs
+        return environment.channelSubscriptions.filter {
+            !suppressed.contains($0.channelId.trimmingCharacters(in: .whitespacesAndNewlines))
         }
     }
 
@@ -488,16 +494,21 @@ struct ChannelManagementView: View {
         pendingRename = nil
 
         do {
-            try await environment.unsubscribeChannel(channelId: subscription.channelId)
             if deleteHistory {
                 let summary = channelDeletionSummary(for: subscription)
                 let channelId = subscription.channelId
+                let expectedGateway = subscription.gateway
+                let expectedUpdatedAt = subscription.updatedAt
                 await environment.pendingLocalDeletionController.schedule(
                     summary: summary,
                     undoLabel: localizationManager.localized("cancel"),
                     scope: .init(channelIDs: Set([channelId]))
                 ) {
-                    _ = try await environment.deleteLocalHistoryForChannel(channelId: channelId)
+                    _ = try await environment.unsubscribeChannelAndDeleteLocalHistory(
+                        channelId: channelId,
+                        expectedGateway: expectedGateway,
+                        expectedUpdatedAt: expectedUpdatedAt
+                    )
                 } onCompletion: { [environment] result in
                     guard case let .failure(error) = result else { return }
                     environment.showErrorToast(
@@ -507,6 +518,7 @@ struct ChannelManagementView: View {
                     )
                 }
             } else {
+                try await environment.unsubscribeChannel(channelId: subscription.channelId)
                 environment.showToast(
                     message: localizationManager.localized("channel_unsubscribed"),
                     style: .success,

@@ -1919,6 +1919,110 @@ struct LocalDataStoreTests {
     }
 
     @Test
+    func atomicChannelRemovalRollsBackHistoryWhenSubscriptionUpdateFails() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let channelId = "rollback-channel"
+            let message = makeMessage(
+                messageId: "rollback-message",
+                notificationRequestId: "rollback-request",
+                title: "Rollback",
+                body: "Rollback body",
+                rawPayload: [
+                    "channel_id": channelId,
+                    "entity_type": "message",
+                    "entity_id": "rollback-message",
+                ]
+            )
+            try await store.saveMessages([message])
+
+            await #expect(throws: (any Error).self) {
+                try await store.softDeleteChannelSubscriptionAndDeleteHistory(
+                    gateway: "https://rollback.pushgo.dev",
+                    channelId: channelId
+                )
+            }
+
+            #expect(try await store.loadMessage(id: message.id) != nil)
+        }
+    }
+
+    @Test
+    func atomicChannelRemovalCommitsSubscriptionAndHistoryTogether() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let gateway = "https://atomic.pushgo.dev"
+            let channelId = "atomic-channel"
+            _ = try await store.upsertChannelSubscription(
+                gateway: gateway,
+                channelId: channelId,
+                displayName: "Atomic",
+                password: "atomic-password",
+                lastSyncedAt: Date()
+            )
+            let message = makeMessage(
+                messageId: "atomic-message",
+                notificationRequestId: "atomic-request",
+                title: "Atomic",
+                body: "Atomic body",
+                rawPayload: [
+                    "channel_id": channelId,
+                    "entity_type": "message",
+                    "entity_id": "atomic-message",
+                ]
+            )
+            try await store.saveMessages([message])
+
+            let result = try await store.softDeleteChannelSubscriptionAndDeleteHistory(
+                gateway: gateway,
+                channelId: channelId
+            )
+
+            #expect(result.deletedMessageIDs.contains(message.id))
+            #expect(try await store.loadMessage(id: message.id) == nil)
+            #expect(try await store.loadChannelSubscriptions(gateway: gateway).isEmpty)
+            #expect(await store.channelPassword(gateway: gateway, for: channelId) == nil)
+        }
+    }
+
+    @Test
+    func atomicChannelRemovalRejectsStaleSubscriptionVersion() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let gateway = "https://stale-version.pushgo.dev"
+            let channelId = "stale-version-channel"
+            let subscription = try await store.upsertChannelSubscription(
+                gateway: gateway,
+                channelId: channelId,
+                displayName: "Current",
+                password: "current-password",
+                lastSyncedAt: Date()
+            )
+            let message = makeMessage(
+                messageId: "stale-version-message",
+                notificationRequestId: "stale-version-request",
+                title: "Stale version",
+                body: "Must survive stale removal",
+                rawPayload: [
+                    "channel_id": channelId,
+                    "entity_type": "message",
+                    "entity_id": "stale-version-message",
+                ]
+            )
+            try await store.saveMessages([message])
+
+            await #expect(throws: (any Error).self) {
+                try await store.softDeleteChannelSubscriptionAndDeleteHistory(
+                    gateway: gateway,
+                    channelId: channelId,
+                    expectedUpdatedAt: subscription.updatedAt.addingTimeInterval(-1)
+                )
+            }
+
+            #expect(try await store.loadMessage(id: message.id) != nil)
+            #expect(try await store.loadChannelSubscriptions(gateway: gateway).count == 1)
+            #expect(await store.channelPassword(gateway: gateway, for: channelId) == "current-password")
+        }
+    }
+
+    @Test
     func channelScopedCleanupRemovesMessagesEventsAndThings() async throws {
         try await withIsolatedLocalDataStore { store, _ in
             let targetChannel = "channel-cleanup-target"

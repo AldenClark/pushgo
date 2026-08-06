@@ -67,7 +67,7 @@ struct EventSplitScreen: View {
             hydratedSelectedEvent = nil
             requestSelectedEventHydration(id)
         }
-        .onChange(of: environment.pendingLocalDeletionController.pendingDeletion) { _, _ in
+        .onChange(of: environment.pendingLocalDeletionController.effectiveScope) { _, _ in
             syncSelection()
         }
     }
@@ -108,7 +108,6 @@ struct EventSplitScreen: View {
             )
             .navigationTitle(localizationManager.localized("push_type_event"))
         }
-        .pendingLocalDeletionBarHost(environment: environment)
         .toolbar { listToolbarContent }
     }
 
