@@ -158,13 +158,13 @@ private struct MessageSearchScreenModern: View {
     }
 
     private var resultsSection: some View {
-        VStack(alignment: .leading, spacing: EntityVisualTokens.detailSectionSpacing) {
+        let results = viewModel.displayedResults
+        return VStack(alignment: .leading, spacing: EntityVisualTokens.detailSectionSpacing) {
             Text(localizationManager.localized("found_number_results", viewModel.totalResults))
                 .font(.headline)
 
             LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(viewModel.displayedResults.indices, id: \.self) { index in
-                    let message = viewModel.displayedResults[index]
+                ForEach(Array(results.enumerated()), id: \.element.id) { index, message in
                     Button {
                         selectMessage(message)
                     } label: {
@@ -177,7 +177,7 @@ private struct MessageSearchScreenModern: View {
                         viewModel.loadMoreIfNeeded(currentItem: message)
                     }
 
-                    if index < viewModel.displayedResults.count - 1 {
+                    if index < results.count - 1 {
                         AppInsetDivider(verticalPadding: EntityVisualTokens.rowVerticalPadding)
                     }
                 }

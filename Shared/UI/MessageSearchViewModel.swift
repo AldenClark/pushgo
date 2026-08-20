@@ -47,10 +47,11 @@ final class MessageSearchViewModel {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             resetResults()
-            lastIssuedQuery = nil
             return
         }
         hasSearched = true
+        debounceTask?.cancel()
+        debounceTask = nil
         guard lastIssuedQuery != trimmed else { return }
         lastIssuedQuery = trimmed
         performSearch(with: trimmed)
@@ -65,6 +66,7 @@ final class MessageSearchViewModel {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         debounceTask?.cancel()
+        debounceTask = nil
         lastIssuedQuery = trimmed
         performSearch(with: trimmed)
     }
@@ -101,14 +103,20 @@ final class MessageSearchViewModel {
     private func scheduleSearch(with trimmedQuery: String) {
         debounceTask?.cancel()
         let pendingQuery = trimmedQuery
-        debounceTask = Task { [weak self] in
+        debounceTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(180))
             guard !Task.isCancelled, let self else { return }
-            await MainActor.run { self.performSearch(with: pendingQuery) }
+            self.lastIssuedQuery = pendingQuery
+            self.performSearch(with: pendingQuery)
         }
     }
 
     private func resetResults() {
+        debounceTask?.cancel()
+        debounceTask = nil
+        searchTask?.cancel()
+        searchTask = nil
+        lastIssuedQuery = nil
         hasSearched = false
         nextCursor = nil
         hasMoreResults = false

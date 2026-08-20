@@ -256,15 +256,16 @@ struct MessageListScreen: View {
 
     @ViewBuilder
     private var messageList: some View {
+        let searchResults = visibleSearchResults
+        let filteredMessages = visibleFilteredMessages
         ScrollViewReader { proxy in
             List {
                 if isShowingSearchResults {
-                    if visibleSearchResults.isEmpty {
+                    if searchResults.isEmpty {
                         searchPlaceholderRow
                     } else {
                         Section {
-                            ForEach(visibleSearchResults.indices, id: \.self) { index in
-                                let message = visibleSearchResults[index]
+                            ForEach(Array(searchResults.enumerated()), id: \.element.id) { index, message in
                                 messageRow(for: message, at: index)
                                 .tag(message.id)
                                 .onAppear {
@@ -277,7 +278,7 @@ struct MessageListScreen: View {
                                 )
                                 .modifier(
                                     BottomSeparatorModifier(
-                                        hide: index == visibleSearchResults.count - 1,
+                                        hide: index == searchResults.count - 1,
                                     ),
                                 )
                             }
@@ -293,8 +294,7 @@ struct MessageListScreen: View {
                         }
                     }
                 } else {
-                    ForEach(visibleFilteredMessages.indices, id: \.self) { index in
-                        let message = visibleFilteredMessages[index]
+                    ForEach(Array(filteredMessages.enumerated()), id: \.element.id) { index, message in
                         messageRow(for: message, at: index)
                             .tag(message.id)
                             .id(message.id)
@@ -305,7 +305,7 @@ struct MessageListScreen: View {
                             )
                             .modifier(
                                 BottomSeparatorModifier(
-                                    hide: index == visibleFilteredMessages.count - 1,
+                                    hide: index == filteredMessages.count - 1,
                                 ),
                             )
                             .onAppear {

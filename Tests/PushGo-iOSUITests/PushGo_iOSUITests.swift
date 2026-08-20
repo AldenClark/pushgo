@@ -339,6 +339,55 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
+    func testSubmittingPopulatedSearchResultsKeepsAppRunning() {
+        let context = configuredLaunchContext(
+            requestName: "fixture.seed_messages",
+            args: ["path": messageSeedFixturePath]
+        )
+        launch(context.app)
+
+        assertVisibleScreen("screen.messages.list", in: context)
+        XCTAssertNotNil(
+            waitForAutomationState(
+                at: context.stateURL,
+                timeout: 12,
+                matching: {
+                    $0.lastFixtureImportMessageCount == 1
+                        && ($0.totalMessageCount ?? 0) >= 1
+                }
+            )
+        )
+
+        let searchField = runtimeQualitySearchField(in: context.app)
+        XCTAssertTrue(searchField.waitForExistence(timeout: 10))
+        searchField.tap()
+        let query = "P2 Split"
+        searchField.typeText(query)
+        XCTAssertNotNil(
+            waitForAutomationEvent(
+                at: context.eventsURL,
+                timeout: 12,
+                matching: { event in
+                    guard (event["type"] as? String) == "search.results_updated",
+                          let details = event["details"] as? [String: Any],
+                          (details["search_query"] as? String) == query,
+                          let rawCount = details["result_count"] as? String,
+                          let resultCount = Int(rawCount)
+                    else { return false }
+                    return resultCount > 0
+                }
+            )
+        )
+
+        searchField.typeText(XCUIKeyboardKey.return.rawValue)
+
+        XCTAssertTrue(context.app.wait(for: .runningForeground, timeout: 3))
+        XCTAssertTrue(
+            context.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 3),
+            "Submitting an already populated search must preserve the results and keep the app alive."
+        )
+    }
+
     func testFixtureSeedEntityRecordsPublishesProjectionCounts() {
         let context = configuredLaunchContext(
             requestName: "fixture.seed_entity_records",
