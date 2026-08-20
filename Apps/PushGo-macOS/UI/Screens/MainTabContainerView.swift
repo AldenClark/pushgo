@@ -105,19 +105,11 @@ struct MainTabContainerView: View {
         .onChange(of: visibleNavigationSignature) { _, _ in
             ensureSidebarSelectionIsVisible()
         }
-        .onChange(of: searchViewModel.query) { _, newValue in
+        .onChange(of: searchViewModel.completedSearchRevision) { _, _ in
 #if DEBUG
             PushGoAutomationRuntime.shared.recordSearchResultsUpdated(
-                query: newValue,
+                query: searchViewModel.displayedQuery,
                 resultCount: searchViewModel.totalResults
-            )
-#endif
-        }
-        .onChange(of: searchViewModel.totalResults) { _, newValue in
-#if DEBUG
-            PushGoAutomationRuntime.shared.recordSearchResultsUpdated(
-                query: searchViewModel.query,
-                resultCount: newValue
             )
 #endif
         }

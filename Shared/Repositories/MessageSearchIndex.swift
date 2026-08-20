@@ -31,6 +31,33 @@ private enum MessageIndexDatabase {
     }
 }
 
+private enum MessageSearchSQL {
+    static func predicate(
+        tableAlias: String? = nil,
+        query: SearchQuerySemantics.IndexTextQuery
+    ) -> (sql: String, arguments: StatementArguments) {
+        let table = tableAlias ?? "message_search"
+        let matchColumn = tableAlias.map { "\($0).message_search" } ?? "message_search"
+        var conditions: [String] = []
+        var arguments = StatementArguments()
+
+        if let trigramQuery = query.trigramQuery {
+            conditions.append("\(matchColumn) MATCH ?")
+            arguments += [trigramQuery]
+        }
+        for token in query.normalizedTokens {
+            conditions.append(
+                "(instr(COALESCE(\(table).title, ''), ?) > 0 "
+                    + "OR instr(COALESCE(\(table).body, ''), ?) > 0 "
+                    + "OR instr(COALESCE(\(table).channel_id, ''), ?) > 0)"
+            )
+            arguments += [token, token, token]
+        }
+
+        return (conditions.joined(separator: " AND "), arguments)
+    }
+}
+
 actor MessageSearchIndex {
     struct Entry: Sendable {
         let id: UUID
@@ -64,6 +91,12 @@ actor MessageSearchIndex {
         }
     }
 
+    func indexedMessageCount() throws -> Int {
+        try dbQueue.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM message_search;") ?? 0
+        }
+    }
+
     func clear() throws {
         try dbQueue.write { db in
             try db.execute(sql: "DELETE FROM message_search;")
@@ -83,9 +116,9 @@ actor MessageSearchIndex {
                     """,
                     arguments: [
                         entry.id.uuidString,
-                        entry.title,
-                        entry.body,
-                        Self.normalizedChannel(entry.channel),
+                        SearchQuerySemantics.normalizeText(entry.title),
+                        SearchQuerySemantics.normalizeText(entry.body),
+                        Self.normalizedChannel(entry.channel).map(SearchQuerySemantics.normalizeText),
                         entry.receivedAt.timeIntervalSince1970,
                     ]
                 )
@@ -106,9 +139,9 @@ actor MessageSearchIndex {
                 """,
                 arguments: [
                     entry.id.uuidString,
-                    entry.title,
-                    entry.body,
-                    Self.normalizedChannel(entry.channel),
+                    SearchQuerySemantics.normalizeText(entry.title),
+                    SearchQuerySemantics.normalizeText(entry.body),
+                    Self.normalizedChannel(entry.channel).map(SearchQuerySemantics.normalizeText),
                     entry.receivedAt.timeIntervalSince1970,
                 ]
             )
@@ -136,27 +169,29 @@ actor MessageSearchIndex {
         }
     }
 
-    func count(query: String) throws -> Int {
+    func count(query: SearchQuerySemantics.IndexTextQuery) throws -> Int {
         try dbQueue.read { db in
-            try Int.fetchOne(
+            let predicate = MessageSearchSQL.predicate(query: query)
+            return try Int.fetchOne(
                 db,
-                sql: "SELECT COUNT(*) FROM message_search WHERE message_search MATCH ?;",
-                arguments: [query]
+                sql: "SELECT COUNT(*) FROM message_search WHERE \(predicate.sql);",
+                arguments: predicate.arguments
             ) ?? 0
         }
     }
 
     func searchIDs(
-        query: String,
+        query: SearchQuerySemantics.IndexTextQuery,
         before: Date?,
         beforeID: UUID?,
         limit: Int,
     ) throws -> [UUID] {
         let cutoff = before?.timeIntervalSince1970 ?? Date.distantFuture.timeIntervalSince1970
         let cutoffID = beforeID?.uuidString ?? "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF"
+        let predicate = MessageSearchSQL.predicate(query: query)
         let sql = """
             SELECT id FROM message_search
-            WHERE message_search MATCH ?
+            WHERE \(predicate.sql)
               AND (received_at < ? OR (received_at = ? AND id < ?))
             ORDER BY received_at DESC, id DESC
             LIMIT ?;
@@ -166,7 +201,7 @@ actor MessageSearchIndex {
             let idStrings = try String.fetchAll(
                 db,
                 sql: sql,
-                arguments: [query, cutoff, cutoff, cutoffID, max(0, limit)]
+                arguments: predicate.arguments + [cutoff, cutoff, cutoffID, max(0, limit)]
             )
             return idStrings.compactMap(UUID.init(uuidString:))
         }
@@ -184,20 +219,34 @@ actor MessageSearchIndex {
 
     private static func createTablesIfNeeded(db: Database) throws {
         try resetSearchTableIfNeeded(db: db)
-        try db.execute(sql: """
-            CREATE VIRTUAL TABLE IF NOT EXISTS message_search USING fts5(
-                id UNINDEXED,
-                title,
-                body,
-                channel_id,
-                received_at UNINDEXED,
-                tokenize = 'unicode61'
-            );
-            """)
+        try db.create(virtualTable: "message_search", options: .ifNotExists, using: FTS5()) { table in
+            table.column("id").notIndexed()
+            table.column("title")
+            table.column("body")
+            table.column("channel_id")
+            table.column("received_at").notIndexed()
+            table.tokenizer = FTS5TokenizerDescriptor(components: ["trigram"])
+            table.detail = "none"
+            table.columnSize = 0
+        }
     }
 
     private static func resetSearchTableIfNeeded(db: Database) throws {
         do {
+            let schemaSQL = try String.fetchOne(
+                db,
+                sql: "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'message_search';"
+            ) ?? ""
+            let normalizedSchema = schemaSQL.lowercased().filter {
+                !$0.isWhitespace && $0 != "'" && $0 != "\""
+            }
+            guard normalizedSchema.contains("tokenize=trigram"),
+                  normalizedSchema.contains("detail=none"),
+                  normalizedSchema.contains("columnsize=0")
+            else {
+                try db.execute(sql: "DROP TABLE IF EXISTS message_search;")
+                return
+            }
             _ = try Row.fetchCursor(db, sql: "SELECT channel_id FROM message_search LIMIT 1;")
         } catch {
             try db.execute(sql: "DROP TABLE IF EXISTS message_search;")
@@ -300,7 +349,7 @@ actor MessageMetadataIndex {
 
     func countMessages(
         matchingAllTags rawTags: [String],
-        textQuery: String? = nil
+        textQuery: SearchQuerySemantics.IndexTextQuery? = nil
     ) throws -> Int {
         let tags = Self.normalizedTagValues(rawTags)
         guard !tags.isEmpty else { return 0 }
@@ -337,7 +386,7 @@ actor MessageMetadataIndex {
 
     func searchMessageIDs(
         matchingAllTags rawTags: [String],
-        textQuery: String? = nil,
+        textQuery: SearchQuerySemantics.IndexTextQuery? = nil,
         before: Date?,
         beforeID: UUID?,
         limit: Int
@@ -450,10 +499,9 @@ actor MessageMetadataIndex {
 
     private static func tagCountSQL(
         tags: [String],
-        textQuery: String?
+        textQuery: SearchQuerySemantics.IndexTextQuery?
     ) -> (sql: String, arguments: StatementArguments) {
-        let trimmedText = textQuery?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if tags.count == 1, trimmedText.isEmpty {
+        if tags.count == 1, textQuery == nil {
             return (
                 """
                 SELECT COUNT(DISTINCT message_id)
@@ -470,9 +518,9 @@ actor MessageMetadataIndex {
             SELECT COUNT(*) FROM (
                 SELECT mi.message_id
                 FROM message_metadata_index mi
-            """
+        """
         var arguments = StatementArguments()
-        if !trimmedText.isEmpty {
+        if textQuery != nil {
             sql += "\nJOIN message_search ms ON ms.id = mi.message_id"
         }
         sql += """
@@ -483,9 +531,10 @@ actor MessageMetadataIndex {
         for tag in tags {
             arguments += [tag]
         }
-        if !trimmedText.isEmpty {
-            sql += "\n  AND ms.message_search MATCH ?"
-            arguments += [trimmedText]
+        if let textQuery {
+            let predicate = MessageSearchSQL.predicate(tableAlias: "ms", query: textQuery)
+            sql += "\n  AND \(predicate.sql)"
+            arguments += predicate.arguments
         }
         sql += """
             
@@ -499,13 +548,12 @@ actor MessageMetadataIndex {
 
     private static func tagSearchSQL(
         tags: [String],
-        textQuery: String?,
+        textQuery: SearchQuerySemantics.IndexTextQuery?,
         cutoff: TimeInterval,
         cutoffID: String,
         limit: Int
     ) -> (sql: String, arguments: StatementArguments) {
-        let trimmedText = textQuery?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if tags.count == 1, trimmedText.isEmpty {
+        if tags.count == 1, textQuery == nil {
             return (
                 """
                 SELECT message_id
@@ -528,9 +576,9 @@ actor MessageMetadataIndex {
                     mi.message_id AS message_id,
                     MAX(mi.received_at) AS received_at
                 FROM message_metadata_index mi
-            """
+        """
         var arguments = StatementArguments()
-        if !trimmedText.isEmpty {
+        if textQuery != nil {
             sql += "\nJOIN message_search ms ON ms.id = mi.message_id"
         }
         sql += """
@@ -541,9 +589,10 @@ actor MessageMetadataIndex {
         for tag in tags {
             arguments += [tag]
         }
-        if !trimmedText.isEmpty {
-            sql += "\n  AND ms.message_search MATCH ?"
-            arguments += [trimmedText]
+        if let textQuery {
+            let predicate = MessageSearchSQL.predicate(tableAlias: "ms", query: textQuery)
+            sql += "\n  AND \(predicate.sql)"
+            arguments += predicate.arguments
         }
         sql += """
             

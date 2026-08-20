@@ -6,6 +6,8 @@ import Observation
 final class MessageSearchViewModel {
     var query: String = ""
     private(set) var sortMode: MessageListSortMode = MessageListSortMode.loadPreference()
+    private(set) var displayedQuery: String = ""
+    private(set) var completedSearchRevision: UInt64 = 0
     private(set) var displayedResultsIdentityRevision: UInt64 = 0
     private(set) var displayedResults: [PushMessageSummary] = [] {
         didSet {
@@ -15,18 +17,21 @@ final class MessageSearchViewModel {
     }
     private(set) var totalResults: Int = 0
     private(set) var hasSearched: Bool = false
+    private(set) var isSearching: Bool = false
 
     private let pageSize: Int = 20
     private let maxCachedResults: Int = 200
+    private let searchDebounceDuration: Duration = .milliseconds(250)
     private var nextCursor: MessagePageCursor?
     private var hasMoreResults: Bool = false
-    private var isLoading: Bool = false
+    private var isLoadingMore: Bool = false
 
     private let environment: AppEnvironment
     private let dataStore: LocalDataStore
     private var searchTask: Task<Void, Never>?
     private var debounceTask: Task<Void, Never>?
-    private var lastIssuedQuery: String?
+    private var loadMoreTask: Task<Void, Never>?
+    private var searchRequestRevision: UInt64 = 0
 
     init(environment: AppEnvironment? = nil) {
         self.environment = environment ?? AppEnvironment.shared
@@ -39,7 +44,6 @@ final class MessageSearchViewModel {
             resetResults()
             return
         }
-        hasSearched = true
         scheduleSearch(with: trimmed)
     }
     func applySearchTextImmediately(_ text: String) {
@@ -49,12 +53,7 @@ final class MessageSearchViewModel {
             resetResults()
             return
         }
-        hasSearched = true
-        debounceTask?.cancel()
-        debounceTask = nil
-        guard lastIssuedQuery != trimmed else { return }
-        lastIssuedQuery = trimmed
-        performSearch(with: trimmed)
+        performSearchImmediately(with: trimmed)
     }
     func refreshMessagesIfNeeded() {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -65,18 +64,19 @@ final class MessageSearchViewModel {
     func refreshMessagesImmediatelyIfNeeded() {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        debounceTask?.cancel()
-        debounceTask = nil
-        lastIssuedQuery = trimmed
-        performSearch(with: trimmed)
+        performSearchImmediately(with: trimmed)
     }
     func loadMoreIfNeeded(currentItem: PushMessageSummary) {
-        guard hasMoreResults, !isLoading else { return }
+        guard hasMoreResults, !isSearching, !isLoadingMore else { return }
         guard displayedResults.last?.id == currentItem.id else { return }
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        Task { @MainActor in
-            await loadNextPage(trimmedQuery: trimmed)
+        let committedQuery = displayedQuery
+        guard !committedQuery.isEmpty else { return }
+        let requestRevision = searchRequestRevision
+        loadMoreTask = Task { @MainActor [weak self] in
+            await self?.loadNextPage(
+                trimmedQuery: committedQuery,
+                requestRevision: requestRevision
+            )
         }
     }
 
@@ -93,75 +93,134 @@ final class MessageSearchViewModel {
         hasMoreResults
     }
 
-    private func performSearch(with trimmedQuery: String) {
-        searchTask?.cancel()
+    private func performSearchImmediately(with trimmedQuery: String) {
+        let requestRevision = beginSearchRequest()
+        launchSearch(with: trimmedQuery, requestRevision: requestRevision)
+    }
+
+    private func launchSearch(with trimmedQuery: String, requestRevision: UInt64) {
+        guard requestRevision == searchRequestRevision else { return }
         searchTask = Task(priority: .userInitiated) { @MainActor [weak self] in
-            await self?.loadFirstPage(trimmedQuery: trimmedQuery)
+            await self?.loadFirstPage(
+                trimmedQuery: trimmedQuery,
+                requestRevision: requestRevision
+            )
         }
     }
 
     private func scheduleSearch(with trimmedQuery: String) {
-        debounceTask?.cancel()
+        let requestRevision = beginSearchRequest()
         let pendingQuery = trimmedQuery
+        let debounceDuration = searchDebounceDuration
         debounceTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(180))
-            guard !Task.isCancelled, let self else { return }
-            self.lastIssuedQuery = pendingQuery
-            self.performSearch(with: pendingQuery)
+            do {
+                try await Task.sleep(for: debounceDuration)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled,
+                  let self,
+                  requestRevision == self.searchRequestRevision
+            else { return }
+            self.debounceTask = nil
+            self.launchSearch(with: pendingQuery, requestRevision: requestRevision)
         }
     }
 
-    private func resetResults() {
+    @discardableResult
+    private func beginSearchRequest() -> UInt64 {
+        searchRequestRevision &+= 1
         debounceTask?.cancel()
         debounceTask = nil
         searchTask?.cancel()
         searchTask = nil
-        lastIssuedQuery = nil
+        loadMoreTask?.cancel()
+        loadMoreTask = nil
+        isLoadingMore = false
+        isSearching = true
+        return searchRequestRevision
+    }
+
+    private func resetResults() {
+        searchRequestRevision &+= 1
+        debounceTask?.cancel()
+        debounceTask = nil
+        searchTask?.cancel()
+        searchTask = nil
+        loadMoreTask?.cancel()
+        loadMoreTask = nil
         hasSearched = false
+        isSearching = false
+        isLoadingMore = false
+        displayedQuery = ""
         nextCursor = nil
         hasMoreResults = false
-        isLoading = false
         totalResults = 0
         displayedResults = []
     }
 
-    private func loadFirstPage(trimmedQuery: String) async {
+    private func loadFirstPage(trimmedQuery: String, requestRevision: UInt64) async {
         guard !trimmedQuery.isEmpty else { return }
-        isLoading = true
-        defer { isLoading = false }
-        nextCursor = nil
-        displayedResults = []
-        hasMoreResults = false
+        defer {
+            if requestRevision == searchRequestRevision {
+                isSearching = false
+                searchTask = nil
+            }
+        }
 
         do {
             let count = try await dataStore.searchMessagesCount(query: trimmedQuery)
+            try Task.checkCancellation()
             let page = try await loadVisiblePage(
                 trimmedQuery: trimmedQuery,
                 before: nil,
                 targetVisibleCount: pageSize
             )
-            guard !Task.isCancelled else { return }
+            try Task.checkCancellation()
+            guard isCurrentSearchRequest(requestRevision, query: trimmedQuery) else { return }
+            displayedQuery = trimmedQuery
             totalResults = count
             displayedResults = page.messages
             nextCursor = page.nextCursor
             hasMoreResults = page.hasMoreResults
+            hasSearched = true
+            completedSearchRevision &+= 1
         } catch {
+            guard isCurrentSearchRequest(requestRevision, query: trimmedQuery) else { return }
+            displayedQuery = trimmedQuery
             totalResults = 0
             displayedResults = []
+            nextCursor = nil
             hasMoreResults = false
+            hasSearched = true
+            completedSearchRevision &+= 1
         }
     }
 
-    private func loadNextPage(trimmedQuery: String) async {
-        guard hasMoreResults, !isLoading else { return }
-        isLoading = true
-        defer { isLoading = false }
+    private func loadNextPage(trimmedQuery: String, requestRevision: UInt64) async {
+        guard requestRevision == searchRequestRevision,
+              trimmedQuery == displayedQuery,
+              hasMoreResults,
+              !isSearching,
+              !isLoadingMore
+        else { return }
+        isLoadingMore = true
+        defer {
+            if requestRevision == searchRequestRevision {
+                isLoadingMore = false
+                loadMoreTask = nil
+            }
+        }
         do {
             let page = try await loadVisiblePage(
                 trimmedQuery: trimmedQuery,
                 before: nextCursor,
                 targetVisibleCount: pageSize
             )
+            try Task.checkCancellation()
+            guard requestRevision == searchRequestRevision,
+                  trimmedQuery == displayedQuery
+            else { return }
             guard !page.messages.isEmpty else {
                 hasMoreResults = false
                 return
@@ -171,8 +230,18 @@ final class MessageSearchViewModel {
             trimCachedResultsIfNeeded()
             hasMoreResults = page.hasMoreResults
         } catch {
+            guard requestRevision == searchRequestRevision,
+                  trimmedQuery == displayedQuery,
+                  !Task.isCancelled
+            else { return }
             hasMoreResults = false
         }
+    }
+
+    private func isCurrentSearchRequest(_ requestRevision: UInt64, query trimmedQuery: String) -> Bool {
+        requestRevision == searchRequestRevision
+            && !Task.isCancelled
+            && self.query.trimmingCharacters(in: .whitespacesAndNewlines) == trimmedQuery
     }
 
     private func trimCachedResultsIfNeeded() {

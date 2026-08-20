@@ -31,6 +31,32 @@ struct MessagePerformanceArchitectureGuardrailTests {
         #expect(!countSection.contains("filter {"))
     }
 
+    @Test
+    func searchKeepsDisplayedResultsUntilTheCurrentRequestCommits() throws {
+        let source = try readSource("Shared/UI/MessageSearchViewModel.swift")
+        let queryUpdateSection = try section(
+            in: source,
+            from: "func updateQuery(",
+            to: "func applySearchTextImmediately("
+        )
+        let firstPageSection = try section(
+            in: source,
+            from: "private func loadFirstPage(",
+            to: "private func loadNextPage("
+        )
+        let beforeFirstFetch = try section(
+            in: String(firstPageSection),
+            from: "private func loadFirstPage(",
+            to: "let count = try await dataStore.searchMessagesCount"
+        )
+
+        #expect(!queryUpdateSection.contains("hasSearched = true"))
+        #expect(!beforeFirstFetch.contains("displayedResults = []"))
+        #expect(firstPageSection.contains("guard isCurrentSearchRequest"))
+        #expect(firstPageSection.contains("displayedQuery = trimmedQuery"))
+        #expect(source.contains("searchDebounceDuration: Duration = .milliseconds(250)"))
+    }
+
     private func readSource(_ relativePath: String) throws -> String {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

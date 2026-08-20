@@ -54,18 +54,12 @@ private struct MessageSearchScreenModern: View {
             if searchFieldText != newValue {
                 searchFieldText = newValue
             }
-#if DEBUG
-            PushGoAutomationRuntime.shared.recordSearchResultsUpdated(
-                query: newValue,
-                resultCount: viewModel.totalResults
-            )
-#endif
         }
-        .onChange(of: viewModel.totalResults) { _, newValue in
+        .onChange(of: viewModel.completedSearchRevision) { _, _ in
 #if DEBUG
             PushGoAutomationRuntime.shared.recordSearchResultsUpdated(
-                query: viewModel.query,
-                resultCount: newValue
+                query: viewModel.displayedQuery,
+                resultCount: viewModel.totalResults
             )
 #endif
         }
@@ -138,7 +132,12 @@ private struct MessageSearchScreenModern: View {
 
     @ViewBuilder
     private var searchStateContent: some View {
-        if !viewModel.hasSearched {
+        if viewModel.isSearching && (!viewModel.hasSearched || viewModel.displayedResults.isEmpty) {
+            ProgressView()
+                .progressViewStyle(.circular)
+                .controlSize(.large)
+                .frame(maxWidth: .infinity, minHeight: 240)
+        } else if !viewModel.hasSearched {
             MessageSearchPlaceholderView(
                 imageName: "magnifyingglass",
                 title: "start_your_search",
@@ -160,15 +159,25 @@ private struct MessageSearchScreenModern: View {
     private var resultsSection: some View {
         let results = viewModel.displayedResults
         return VStack(alignment: .leading, spacing: EntityVisualTokens.detailSectionSpacing) {
-            Text(localizationManager.localized("found_number_results", viewModel.totalResults))
-                .font(.headline)
+            HStack {
+                Text(localizationManager.localized("found_number_results", viewModel.totalResults))
+                    .font(.headline)
+
+                Spacer()
+
+                if viewModel.isSearching {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .controlSize(.small)
+                }
+            }
 
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(results.enumerated()), id: \.element.id) { index, message in
                     Button {
                         selectMessage(message)
                     } label: {
-                        MessageSearchResultRow(message: message, query: viewModel.query)
+                        MessageSearchResultRow(message: message, query: viewModel.displayedQuery)
                             .padding(.vertical, EntityVisualTokens.listRowInsetVertical)
                     }
                     .buttonStyle(.appPlain)

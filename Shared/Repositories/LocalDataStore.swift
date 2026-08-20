@@ -1934,12 +1934,12 @@ actor LocalDataStore {
         let parsedQuery = Self.parsedSearchQuery(from: trimmed)
         guard !parsedQuery.isEmpty else { return 0 }
         let backend = try requireBackend()
-        if !parsedQuery.tags.isEmpty, parsedQuery.textQueryForFTS == nil {
+        if !parsedQuery.tags.isEmpty, parsedQuery.indexTextQuery == nil {
             return try await backend.countMessages(matchingAllTags: parsedQuery.tags)
         }
         if !parsedQuery.tags.isEmpty, let metadataIndex {
             await ensureMetadataIndexReady()
-            let textQuery = parsedQuery.textQueryForFTS
+            let textQuery = parsedQuery.indexTextQuery
             if textQuery == nil || searchIndex != nil {
                 if let count = try? await metadataIndex.countMessages(
                     matchingAllTags: parsedQuery.tags,
@@ -1952,8 +1952,8 @@ actor LocalDataStore {
         if let searchIndex {
             let searchIsReady = await ensureSearchIndexReady()
             if searchIsReady,
-               let ftsQuery = parsedQuery.textQueryForFTS,
-               let count = try? await searchIndex.count(query: ftsQuery)
+               let indexQuery = parsedQuery.indexTextQuery,
+               let count = try? await searchIndex.count(query: indexQuery)
             {
                 return count
             }
@@ -1988,7 +1988,7 @@ actor LocalDataStore {
         let backend = try requireBackend()
         if sortMode == .timeDescending,
            !parsedQuery.tags.isEmpty,
-           parsedQuery.textQueryForFTS == nil
+           parsedQuery.indexTextQuery == nil
         {
             return try await backend.loadMessageSummaries(
                 matchingAllTags: parsedQuery.tags,
@@ -2000,10 +2000,10 @@ actor LocalDataStore {
             let searchIsReady = await ensureSearchIndexReady()
             if searchIsReady,
                parsedQuery.tags.isEmpty,
-               let ftsQuery = parsedQuery.textQueryForFTS
+               let indexQuery = parsedQuery.indexTextQuery
             {
                 if let ids = try? await searchIndex.searchIDs(
-                    query: ftsQuery,
+                    query: indexQuery,
                     before: cursor?.receivedAt,
                     beforeID: cursor?.id,
                     limit: limit
@@ -2016,7 +2016,7 @@ actor LocalDataStore {
         }
         if sortMode == .timeDescending, !parsedQuery.tags.isEmpty, let metadataIndex {
             await ensureMetadataIndexReady()
-            let textQuery = parsedQuery.textQueryForFTS
+            let textQuery = parsedQuery.indexTextQuery
             if textQuery == nil || searchIndex != nil {
                 if let ids = try? await metadataIndex.searchMessageIDs(
                     matchingAllTags: parsedQuery.tags,
@@ -3109,14 +3109,13 @@ actor LocalDataStore {
         let total = (try? await backend.messageCounts().total) ?? 0
         let stateIsReady = await backend.derivedComponentIsReady(Self.messageSearchDerivedComponent)
         if stateIsReady {
-            if total == 0 { return true }
-            if let isEmpty = try? await searchIndex.isEmpty(), !isEmpty {
+            if let indexedCount = try? await searchIndex.indexedMessageCount(), indexedCount == total {
                 return true
             }
             await backend.setDerivedComponentStatus(
                 Self.messageSearchDerivedComponent,
                 status: "stale",
-                error: "Ready search index failed its health check"
+                error: "Ready search index row count differs from the canonical store"
             )
         }
 
@@ -3179,10 +3178,6 @@ actor LocalDataStore {
             batchSize: batchSize,
             yieldBetweenBatches: yieldBetweenBatches
         )
-    }
-
-    private static func searchIndexQuery(from raw: String) -> String {
-        SearchQuerySemantics.normalizedSearchIndexQuery(from: raw)
     }
 
     private static func parsedSearchQuery(from raw: String) -> SearchQuerySemantics.ParsedQuery {
@@ -4768,6 +4763,26 @@ private actor GRDBStore {
                     WHERE id = 1;
                 END;
                 """)
+        }
+        migrator.registerMigration("v23_trigram_message_search_index") { db in
+            try db.execute(
+                sql: """
+                    INSERT INTO message_derived_state(
+                        component, schema_version, status, source_revision,
+                        cursor_local_message_id, updated_at_epoch_ms, last_error
+                    ) VALUES (
+                        'message_search_index', 2, 'stale', 0, NULL,
+                        CAST(strftime('%s', 'now') AS INTEGER) * 1000, NULL
+                    )
+                    ON CONFLICT(component) DO UPDATE SET
+                        schema_version = 2,
+                        status = 'stale',
+                        source_revision = 0,
+                        cursor_local_message_id = NULL,
+                        updated_at_epoch_ms = excluded.updated_at_epoch_ms,
+                        last_error = NULL;
+                    """
+                )
         }
 	        return migrator
 	    }()
@@ -6390,17 +6405,13 @@ private actor GRDBStore {
 
         guard !parsedQuery.textTokens.isEmpty else { return true }
         let candidates = [
-            message.messageId,
             message.title,
             message.body,
             message.channel,
-            message.eventId,
-            message.thingId,
-            message.tags.joined(separator: " "),
         ]
-            .compactMap { $0?.lowercased() }
+            .compactMap { $0.map(SearchQuerySemantics.normalizeText) }
 
-        for token in parsedQuery.textTokens.map({ $0.lowercased() }) {
+        for token in parsedQuery.textTokens.map(SearchQuerySemantics.normalizeText) {
             var matched = false
             for candidate in candidates where candidate.contains(token) {
                 matched = true

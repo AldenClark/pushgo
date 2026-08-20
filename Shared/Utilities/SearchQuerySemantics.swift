@@ -1,6 +1,11 @@
 import Foundation
 
 struct SearchQuerySemantics {
+    struct IndexTextQuery: Sendable, Equatable {
+        let trigramQuery: String?
+        let normalizedTokens: [String]
+    }
+
     struct ParsedQuery: Sendable, Equatable {
         let textTokens: [String]
         let tags: [String]
@@ -9,17 +14,31 @@ struct SearchQuerySemantics {
             textTokens.isEmpty && tags.isEmpty
         }
 
-        var textQueryForFTS: String? {
+        var indexTextQuery: IndexTextQuery? {
             guard !textTokens.isEmpty else { return nil }
-            return textTokens
-                .map { "\"\($0.replacingOccurrences(of: "\"", with: ""))\"" }
-                .joined(separator: " AND ")
+            let normalizedTokens = textTokens
+                .map(SearchQuerySemantics.normalizeText)
+                .filter { !$0.isEmpty }
+            guard !normalizedTokens.isEmpty else { return nil }
+
+            var seenTrigrams: Set<String> = []
+            let trigrams = normalizedTokens
+                .flatMap(SearchQuerySemantics.representativeTrigrams)
+                .filter { seenTrigrams.insert($0).inserted }
+            let trigramQuery = trigrams.isEmpty
+                ? nil
+                : trigrams
+                    .map { "\"\($0.replacingOccurrences(of: "\"", with: "\"\""))\"" }
+                    .joined(separator: " AND ")
+            return IndexTextQuery(
+                trigramQuery: trigramQuery,
+                normalizedTokens: normalizedTokens
+            )
         }
     }
 
-    static func normalizedSearchIndexQuery(from raw: String) -> String {
-        parse(raw).textQueryForFTS ?? raw
-    }
+    private static let maximumRepresentativeTrigramsPerToken = 16
+    private static let normalizationLocale = Locale(identifier: "en_US_POSIX")
 
     static func parse(_ raw: String) -> ParsedQuery {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -65,5 +84,34 @@ struct SearchQuerySemantics {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         return trimmed.lowercased()
+    }
+
+    static func normalizeText(_ raw: String) -> String {
+        raw.folding(
+            options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive],
+            locale: normalizationLocale
+        )
+        .lowercased(with: normalizationLocale)
+    }
+
+    private static func representativeTrigrams(in token: String) -> [String] {
+        let scalars = Array(token.unicodeScalars)
+        let trigramCount = scalars.count - 2
+        guard trigramCount > 0 else { return [] }
+
+        let selectedOffsets: [Int]
+        if trigramCount <= maximumRepresentativeTrigramsPerToken {
+            selectedOffsets = Array(0 ..< trigramCount)
+        } else {
+            selectedOffsets = (0 ..< maximumRepresentativeTrigramsPerToken).map { index in
+                index * (trigramCount - 1) / (maximumRepresentativeTrigramsPerToken - 1)
+            }
+        }
+
+        return selectedOffsets.map { offset in
+            scalars[offset ..< offset + 3].reduce(into: "") { trigram, scalar in
+                trigram.unicodeScalars.append(scalar)
+            }
+        }
     }
 }

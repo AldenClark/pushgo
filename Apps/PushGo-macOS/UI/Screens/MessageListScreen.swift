@@ -113,7 +113,11 @@ struct MessageListScreen: View {
         ScrollViewReader { proxy in
             List {
                 if searchResults.isEmpty {
-                    searchPlaceholderRow
+                    if searchViewModel.isSearching {
+                        searchProgressRow
+                    } else {
+                        searchPlaceholderRow
+                    }
                 } else {
                     Section {
                         ForEach(searchResults) { message in
@@ -147,7 +151,15 @@ struct MessageListScreen: View {
                             .listRowInsets(Layout.rowInsets)
                         }
                     } header: {
-                        Text(localizationManager.localized("found_number_results", searchViewModel.totalResults))
+                        HStack {
+                            Text(localizationManager.localized("found_number_results", searchViewModel.totalResults))
+                            Spacer()
+                            if searchViewModel.isSearching {
+                                ProgressView()
+                                    .progressViewStyle(.circular)
+                                    .controlSize(.small)
+                            }
+                        }
                     }
                 }
             }
@@ -210,6 +222,18 @@ struct MessageListScreen: View {
         )
         .padding(.vertical, 60)
         .frame(maxWidth: .infinity, alignment: .center)
+        .listRowInsets(EdgeInsets())
+    }
+
+    private var searchProgressRow: some View {
+        HStack {
+            Spacer()
+            ProgressView()
+                .progressViewStyle(.circular)
+                .controlSize(.large)
+            Spacer()
+        }
+        .padding(.vertical, 60)
         .listRowInsets(EdgeInsets())
     }
 

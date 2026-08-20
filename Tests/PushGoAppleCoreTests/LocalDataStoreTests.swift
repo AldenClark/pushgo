@@ -2589,6 +2589,61 @@ struct LocalDataStoreTests {
     }
 
     @Test
+    func searchMatchesArbitraryCaseInsensitiveSubstringsAcrossIndexedText() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let target = makeMessage(
+                messageId: "substring-search-target-001",
+                notificationRequestId: "req-substring-search-target-001",
+                title: "Claude Release",
+                body: "Observability café 智能 status abcdefghijklmnopqrstuvwxyz0123456789",
+                rawPayload: [
+                    "tags": #"["assistant"]"#,
+                    "channel_id": "AI-Research",
+                ]
+            )
+            let unrelated = makeMessage(
+                messageId: "substring-search-other-001",
+                notificationRequestId: "req-substring-search-other-001",
+                title: "Routine update",
+                body: "No matching fragments here",
+                receivedAt: target.receivedAt.addingTimeInterval(-1),
+                rawPayload: [
+                    "tags": #"["operations"]"#,
+                    "channel_id": "General",
+                ]
+            )
+            try await store.saveMessagesBatch([target, unrelated])
+
+            for query in [
+                "智",
+                "Cl",
+                "au",
+                "aud",
+                "LAU",
+                "serva",
+                "CAFE",
+                "Rese",
+                "aud serva",
+                "defghijklmnopqrstuvwxyz0123",
+            ] {
+                let count = try await store.searchMessagesCount(query: query)
+                #expect(count == 1, "Expected substring query '\(query)' to find the target message.")
+
+                let page = try await store.searchMessageSummariesPage(
+                    query: query,
+                    before: nil,
+                    limit: 10
+                )
+                #expect(page.map(\.id) == [target.id])
+            }
+
+            #expect(try await store.searchMessagesCount(query: "aud tag:assistant") == 1)
+            #expect(try await store.searchMessagesCount(query: "aud tag:operations") == 0)
+            #expect(try await store.searchMessagesCount(query: "missing-fragment") == 0)
+        }
+    }
+
+    @Test
     func staleLateInputsDoNotPolluteSideIndexesOrNotificationSnapshot() async throws {
         try await withIsolatedLocalDataStore { store, appGroupIdentifier in
             let topLevelNewer = makeMessage(
@@ -2999,6 +3054,8 @@ struct LocalDataStoreTests {
                 appGroupIdentifier: appGroupIdentifier,
                 fixture: fixture
             )
+            #expect(try await store.searchMessagesCount(query: "eg") == fixture.topLevelIDs.count)
+            #expect(try await store.searchMessagesCount(query: "gac") == fixture.topLevelIDs.count)
 
             var isDirectory = ObjCBool(false)
             #expect(FileManager.default.fileExists(atPath: indexURL.path, isDirectory: &isDirectory))
@@ -3663,12 +3720,22 @@ struct LocalDataStoreTests {
                     WHERE key_name = 'metadata_tag' AND value_norm = 'shadow-alpha';
                     """
             ) ?? 0
-            return (searchRowCount, legacyTagCount, shadowTagCount, metadataShadowCount)
+            let searchSchema = try String.fetchOne(
+                db,
+                sql: "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'message_search';"
+            ) ?? ""
+            return (searchRowCount, legacyTagCount, shadowTagCount, metadataShadowCount, searchSchema)
         }
         #expect(facts.0 == fixture.topLevelIDs.count)
         #expect(facts.1 == fixture.topLevelIDs.count)
         #expect(facts.2 == 0)
         #expect(facts.3 == 1)
+        let normalizedSearchSchema = facts.4.lowercased().filter {
+            !$0.isWhitespace && $0 != "'" && $0 != "\""
+        }
+        #expect(normalizedSearchSchema.contains("tokenize=trigram"))
+        #expect(normalizedSearchSchema.contains("detail=none"))
+        #expect(normalizedSearchSchema.contains("columnsize=0"))
     }
 
     private func makeLegacyCompatibilityFixture() -> LegacyCompatibilityFixture {

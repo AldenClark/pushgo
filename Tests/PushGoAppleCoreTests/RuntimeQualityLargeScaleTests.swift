@@ -272,6 +272,7 @@ struct RuntimeQualityLargeScaleTests {
             #expect(applied.contains("v20_message_entity_identity_index"))
             #expect(applied.contains("v21_message_search_derived_state"))
             #expect(applied.contains("v22_split_message_stats_and_revision_update_triggers"))
+            #expect(applied.contains("v23_trigram_message_search_index"))
         }
     }
 
@@ -1072,7 +1073,8 @@ struct RuntimeQualityLargeScaleTests {
                     'v19_message_summary_and_facets',
                     'v20_message_entity_identity_index',
                     'v21_message_search_derived_state',
-                    'v22_split_message_stats_and_revision_update_triggers'
+                    'v22_split_message_stats_and_revision_update_triggers',
+                    'v23_trigram_message_search_index'
                 );
                 """)
         }

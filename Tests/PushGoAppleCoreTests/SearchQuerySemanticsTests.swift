@@ -4,31 +4,40 @@ import Testing
 
 struct SearchQuerySemanticsTests {
     @Test
-    func normalizedQueryQuotesWhitespaceSeparatedTerms() {
-        #expect(
-            SearchQuerySemantics.normalizedSearchIndexQuery(from: " cpu   warning ") ==
-            "\"cpu\" AND \"warning\""
-        )
+    func indexQueryBuildsTrigramCandidatesAndKeepsExactTokens() throws {
+        let query = try #require(SearchQuerySemantics.parse("Claude").indexTextQuery)
+
+        #expect(query.normalizedTokens == ["claude"])
+        #expect(query.trigramQuery == "\"cla\" AND \"lau\" AND \"aud\" AND \"ude\"")
     }
 
     @Test
-    func normalizedQueryStripsEmbeddedQuotes() {
-        #expect(
-            SearchQuerySemantics.normalizedSearchIndexQuery(from: "\"quoted\" alert") ==
-            "\"quoted\" AND \"alert\""
-        )
+    func twoCharacterQueryUsesExactSubstringScanWithoutTrigramCandidate() throws {
+        let query = try #require(SearchQuerySemantics.parse("Cl").indexTextQuery)
+
+        #expect(query.normalizedTokens == ["cl"])
+        #expect(query.trigramQuery == nil)
     }
 
     @Test
-    func normalizedQueryTreatsMixedWhitespaceAsSeparators() {
-        #expect(
-            SearchQuerySemantics.normalizedSearchIndexQuery(from: "disk\tpressure\ncritical") ==
-            "\"disk\" AND \"pressure\" AND \"critical\""
-        )
+    func indexQueryNormalizesCaseWidthAndDiacritics() throws {
+        let query = try #require(SearchQuerySemantics.parse("ＣLÁUDE").indexTextQuery)
+
+        #expect(query.normalizedTokens == ["claude"])
+        #expect(query.trigramQuery == "\"cla\" AND \"lau\" AND \"aud\" AND \"ude\"")
     }
 
     @Test
-    func emptyQueryReturnsOriginalInput() {
-        #expect(SearchQuerySemantics.normalizedSearchIndexQuery(from: "   ") == "   ")
+    func parserPreservesMultiTermAndTagSemantics() throws {
+        let parsed = SearchQuerySemantics.parse(" disk\tpressure\n#Critical ")
+        let query = try #require(parsed.indexTextQuery)
+
+        #expect(query.normalizedTokens == ["disk", "pressure"])
+        #expect(parsed.tags == ["critical"])
+    }
+
+    @Test
+    func emptyQueryHasNoIndexTextQuery() {
+        #expect(SearchQuerySemantics.parse("   ").indexTextQuery == nil)
     }
 }

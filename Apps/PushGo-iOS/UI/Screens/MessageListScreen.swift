@@ -76,19 +76,11 @@ struct MessageListScreen: View {
                 publishAutomationState()
 #endif
             }
-            .onChange(of: searchViewModel.query) { _, newValue in
+            .onChange(of: searchViewModel.completedSearchRevision) { _, _ in
 #if DEBUG
                 PushGoAutomationRuntime.shared.recordSearchResultsUpdated(
-                    query: newValue,
+                    query: searchViewModel.displayedQuery,
                     resultCount: searchViewModel.totalResults
-                )
-#endif
-            }
-            .onChange(of: searchViewModel.totalResults) { _, newValue in
-#if DEBUG
-                PushGoAutomationRuntime.shared.recordSearchResultsUpdated(
-                    query: searchViewModel.query,
-                    resultCount: newValue
                 )
 #endif
             }
@@ -262,7 +254,11 @@ struct MessageListScreen: View {
             List {
                 if isShowingSearchResults {
                     if searchResults.isEmpty {
-                        searchPlaceholderRow
+                        if searchViewModel.isSearching {
+                            searchProgressRow
+                        } else {
+                            searchPlaceholderRow
+                        }
                     } else {
                         Section {
                             ForEach(Array(searchResults.enumerated()), id: \.element.id) { index, message in
@@ -290,7 +286,15 @@ struct MessageListScreen: View {
                                 }
                             }
                         } header: {
-                            Text(localizationManager.localized("found_number_results", searchViewModel.totalResults))
+                            HStack {
+                                Text(localizationManager.localized("found_number_results", searchViewModel.totalResults))
+                                Spacer()
+                                if searchViewModel.isSearching {
+                                    ProgressView()
+                                        .progressViewStyle(.circular)
+                                        .controlSize(.small)
+                                }
+                            }
                         }
                     }
                 } else {
@@ -453,6 +457,20 @@ struct MessageListScreen: View {
         .listRowBackground(
             Group { Color.clear },
         )
+        .hideListSeparator()
+    }
+
+    private var searchProgressRow: some View {
+        HStack {
+            Spacer()
+            ProgressView()
+                .progressViewStyle(.circular)
+                .controlSize(.large)
+            Spacer()
+        }
+        .padding(.vertical, 60)
+        .listRowInsets(EdgeInsets())
+        .listRowBackground(Group { Color.clear })
         .hideListSeparator()
     }
 }
