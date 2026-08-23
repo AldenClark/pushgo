@@ -9,6 +9,7 @@
 - The notarized and stapled DMG, SBOM, attestations, Sparkle appcast, update-host artifact, and GitHub release were published successfully.
 - The final Apple workflow run `32635431049` completed all release-gate, DMG, and App Store jobs successfully.
 - The published DMG is 22,334,893 bytes with SHA-256 `6e48c39bcc9744229d44edecc617bede5857c7368c812cbf6c1993cf37a263e2`; the stable update feed advertises the same artifact length.
+- Update-host directory permissions were repaired by maintenance run `32637168126`; the run downloaded the public DMG and verified that same SHA-256. Future releases now set explicit Web-readable permissions and compare the public DMG byte-for-byte after deployment.
 
 ## Current
 
