@@ -53,6 +53,7 @@ run_build() {
 "$ROOT/scripts/verify_locked_packages.sh"
 "$ROOT/scripts/verify_privacy_manifests.sh"
 python3 "$ROOT/scripts/verify_release_workflow_security.py"
+python3 "$ROOT/scripts/verify_release_distribution_contract.py"
 "$ROOT/scripts/verify_rollback_compatibility.sh"
 
 run_build "PushGo-macOS" "platform=macOS"
