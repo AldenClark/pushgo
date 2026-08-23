@@ -1106,10 +1106,12 @@ jobs:
           release_notes_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_SHA}/release/RELEASE_NOTES.md"
           release_body="Source: [release/RELEASE_NOTES.md](${release_notes_url}) [$section]"$'\n\n'"$section_body"
 
-          echo "RELEASE_CHANGELOG_BODY<<__PUSHGO_RELEASE_BODY_EOF__" >> "$GITHUB_ENV"
-          printf "%s\n" "$release_body" >> "$GITHUB_ENV"
-          echo "__PUSHGO_RELEASE_BODY_EOF__" >> "$GITHUB_ENV"
-          echo "RELEASE_TITLE=${release_title}" >> "$GITHUB_ENV"
+          {
+            echo "RELEASE_CHANGELOG_BODY<<__PUSHGO_RELEASE_BODY_EOF__"
+            printf "%s\n" "$release_body"
+            echo "__PUSHGO_RELEASE_BODY_EOF__"
+            echo "RELEASE_TITLE=${release_title}"
+          } >> "$GITHUB_ENV"
 
       - name: Validate Sparkle/update host configuration
         shell: bash
@@ -1137,6 +1139,7 @@ jobs:
         run: |
           set -euo pipefail
           sparkle_xcconfig="$RUNNER_TEMP/pushgo-dmg-sparkle.xcconfig"
+          # shellcheck disable=SC2016 # $() must remain literal in the generated xcconfig URL.
           feed_url_xcconfig="$(printf '%s' "$PUSHGO_SPARKLE_FEED_URL" | sed 's#//#/$()/#g')"
           {
             printf 'PUSHGO_SPARKLE_FEED_URL = %s\n' "$feed_url_xcconfig"
