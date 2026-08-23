@@ -15,18 +15,20 @@ for manifest in "${MANIFESTS[@]}"; do
   plutil -lint "$manifest" >/dev/null
 done
 
-python3 - "${MANIFESTS[@]}" <<'PY'
+python3 - "$ROOT" "${MANIFESTS[@]}" <<'PY'
 import pathlib
 import plistlib
+import re
 import sys
 
+root = pathlib.Path(sys.argv[1])
 expected = {
     "NSPrivacyAccessedAPICategoryFileTimestamp": {"C617.1"},
     "NSPrivacyAccessedAPICategorySystemBootTime": {"35F9.1"},
     "NSPrivacyAccessedAPICategoryUserDefaults": {"1C8F.1", "CA92.1"},
 }
 
-for raw_path in sys.argv[1:]:
+for raw_path in sys.argv[2:]:
     path = pathlib.Path(raw_path)
     with path.open("rb") as handle:
         payload = plistlib.load(handle)
@@ -38,19 +40,20 @@ for raw_path in sys.argv[1:]:
     }
     if declared != expected:
         raise SystemExit(f"{path}: required-reason declarations differ from the reviewed source inventory")
-PY
 
-if ! rg -q 'ProcessInfo\.processInfo\.systemUptime' "$ROOT/Apps" "$ROOT/Shared"; then
-  echo "SystemBootTime reason is stale: no systemUptime use remains" >&2
-  exit 1
-fi
-if ! rg -q 'contentModificationDate(Key)?|creationDate(Key)?|fileModificationDate' "$ROOT/Apps" "$ROOT/Shared" "$ROOT/Extensions"; then
-  echo "FileTimestamp reason is stale: no covered file timestamp use remains" >&2
-  exit 1
-fi
-if ! rg -q 'UserDefaults' "$ROOT/Apps" "$ROOT/Shared" "$ROOT/Extensions"; then
-  echo "UserDefaults reasons are stale: no UserDefaults use remains" >&2
-  exit 1
-fi
+source = "\n".join(
+    path.read_text(encoding="utf-8", errors="ignore")
+    for directory in (root / "Apps", root / "Shared", root / "Extensions")
+    for path in directory.rglob("*.swift")
+)
+required_usage = {
+    "SystemBootTime": r"ProcessInfo\.processInfo\.systemUptime",
+    "FileTimestamp": r"contentModificationDate(?:Key)?|creationDate(?:Key)?|fileModificationDate",
+    "UserDefaults": r"UserDefaults",
+}
+for category, pattern in required_usage.items():
+    if re.search(pattern, source) is None:
+        raise SystemExit(f"{category} reason is stale: no covered source use remains")
+PY
 
 echo "privacy manifests verified"
