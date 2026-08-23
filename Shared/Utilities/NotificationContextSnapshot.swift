@@ -67,6 +67,10 @@ struct NotificationContextProjectionInput: Sendable {
 }
 
 enum NotificationContextSnapshotStore {
+    enum StoreError: Error, Equatable {
+        case appGroupContainerUnavailable(String)
+    }
+
     private static let directoryName = "notification-context-snapshot"
     private static let fileName = "snapshot.bin"
 
@@ -127,13 +131,16 @@ enum NotificationContextSnapshotStore {
         fileManager: FileManager = .default,
         appGroupIdentifier: String = AppConstants.appGroupIdentifier
     ) -> Bool {
-        guard let fileURL = snapshotFileURL(
-            fileManager: fileManager,
-            appGroupIdentifier: appGroupIdentifier
-        ) else {
+        do {
+            try writeOrThrow(
+                snapshot,
+                fileManager: fileManager,
+                appGroupIdentifier: appGroupIdentifier
+            )
+            return true
+        } catch {
             return false
         }
-        return write(snapshot, to: fileURL, fileManager: fileManager)
     }
 
     @discardableResult
@@ -142,16 +149,43 @@ enum NotificationContextSnapshotStore {
         to fileURL: URL,
         fileManager: FileManager = .default
     ) -> Bool {
-        let directoryURL = fileURL.deletingLastPathComponent()
         do {
-            try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-            let encoder = PropertyListEncoder()
-            encoder.outputFormat = .binary
-            let data = try encoder.encode(snapshot)
-            let temporaryURL = directoryURL.appendingPathComponent(
-                ".\(fileName).tmp-\(UUID().uuidString.lowercased())",
-                isDirectory: false
-            )
+            try writeOrThrow(snapshot, to: fileURL, fileManager: fileManager)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    static func writeOrThrow(
+        _ snapshot: NotificationContextSnapshot,
+        fileManager: FileManager = .default,
+        appGroupIdentifier: String = AppConstants.appGroupIdentifier
+    ) throws {
+        guard let fileURL = snapshotFileURL(
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier
+        ) else {
+            throw StoreError.appGroupContainerUnavailable(appGroupIdentifier)
+        }
+        try writeOrThrow(snapshot, to: fileURL, fileManager: fileManager)
+    }
+
+    static func writeOrThrow(
+        _ snapshot: NotificationContextSnapshot,
+        to fileURL: URL,
+        fileManager: FileManager = .default
+    ) throws {
+        let directoryURL = fileURL.deletingLastPathComponent()
+        try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let encoder = PropertyListEncoder()
+        encoder.outputFormat = .binary
+        let data = try encoder.encode(snapshot)
+        let temporaryURL = directoryURL.appendingPathComponent(
+            ".\(fileName).tmp-\(UUID().uuidString.lowercased())",
+            isDirectory: false
+        )
+        do {
             try data.write(to: temporaryURL, options: [])
             if fileManager.fileExists(atPath: fileURL.path) {
                 _ = try fileManager.replaceItemAt(
@@ -163,6 +197,37 @@ enum NotificationContextSnapshotStore {
             } else {
                 try fileManager.moveItem(at: temporaryURL, to: fileURL)
             }
+        } catch {
+            try? fileManager.removeItem(at: temporaryURL)
+            throw error
+        }
+    }
+
+    static func clearOrThrow(
+        fileManager: FileManager = .default,
+        appGroupIdentifier: String = AppConstants.appGroupIdentifier
+    ) throws {
+        guard let fileURL = snapshotFileURL(
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier
+        ) else {
+            throw StoreError.appGroupContainerUnavailable(appGroupIdentifier)
+        }
+        try clearOrThrow(at: fileURL, fileManager: fileManager)
+    }
+
+    static func clearOrThrow(
+        at fileURL: URL,
+        fileManager: FileManager = .default
+    ) throws {
+        guard fileManager.fileExists(atPath: fileURL.path) else { return }
+        try fileManager.removeItem(at: fileURL)
+    }
+
+    @discardableResult
+    private static func ignoringFailure(_ operation: () throws -> Void) -> Bool {
+        do {
+            try operation()
             return true
         } catch {
             return false
@@ -174,13 +239,12 @@ enum NotificationContextSnapshotStore {
         fileManager: FileManager = .default,
         appGroupIdentifier: String = AppConstants.appGroupIdentifier
     ) -> Bool {
-        guard let fileURL = snapshotFileURL(
-            fileManager: fileManager,
-            appGroupIdentifier: appGroupIdentifier
-        ) else {
-            return false
+        ignoringFailure {
+            try clearOrThrow(
+                fileManager: fileManager,
+                appGroupIdentifier: appGroupIdentifier
+            )
         }
-        return clear(at: fileURL, fileManager: fileManager)
     }
 
     @discardableResult
@@ -188,12 +252,8 @@ enum NotificationContextSnapshotStore {
         at fileURL: URL,
         fileManager: FileManager = .default
     ) -> Bool {
-        guard fileManager.fileExists(atPath: fileURL.path) else { return true }
-        do {
-            try fileManager.removeItem(at: fileURL)
-            return true
-        } catch {
-            return false
+        ignoringFailure {
+            try clearOrThrow(at: fileURL, fileManager: fileManager)
         }
     }
 }

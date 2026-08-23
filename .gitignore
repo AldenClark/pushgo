@@ -20,4 +20,4 @@ docs/
 *.xcarchive
 *.dSYM
 *.xcresult
-
+*.profraw

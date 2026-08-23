@@ -434,21 +434,10 @@ struct ThingListScreen: View {
             fallbackSingleSummary: localizationManager.localized("push_type_thing"),
             multipleSummaryTitle: localizationManager.localized("push_type_thing"),
             undoLabel: localizationManager.localized("cancel"),
-            scope: { PendingLocalDeletionController.Scope(thingIDs: Set($0.map(\.id))) },
-            commit: { thingIDs in
-                _ = try await viewModel.deleteThings(thingIds: thingIDs)
-            },
-            onCompletion: { [environment] result in
-                guard case let .failure(error) = result else { return }
-                environment.showErrorToast(
-                    error,
-                    fallbackMessage: localizationManager.localized("operation_failed"),
-                    duration: 2
-                )
-            }
+            intent: { .things(ids: $0) }
         ) else { return }
 
-        if let selectedThing, result.scope.suppressesThing(id: selectedThing.id, channelId: selectedThing.channelId) {
+        if let selectedThing, result.contains(where: { $0.id == selectedThing.id }) {
             self.selectedThing = nil
         }
     }

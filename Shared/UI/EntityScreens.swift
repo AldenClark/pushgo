@@ -51,6 +51,10 @@ final class EntityProjectionViewModel {
     private var hydratedThingIDs = Set<String>()
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
     @ObservationIgnored private var pendingReload = false
+    @ObservationIgnored private var eventReloadTask: Task<Void, Never>?
+    @ObservationIgnored private var thingReloadTask: Task<Void, Never>?
+    @ObservationIgnored private var pendingEventReload = false
+    @ObservationIgnored private var pendingThingReload = false
 
     private(set) var events: [EventProjection] = []
     private(set) var things: [ThingProjection] = []
@@ -90,6 +94,42 @@ final class EntityProjectionViewModel {
         } while pendingReload
     }
 
+    func reloadEvents() async {
+        if let eventReloadTask {
+            pendingEventReload = true
+            await eventReloadTask.value
+            return
+        }
+
+        repeat {
+            pendingEventReload = false
+            let task = Task { @MainActor in
+                await self.performEventReload()
+            }
+            eventReloadTask = task
+            await task.value
+            eventReloadTask = nil
+        } while pendingEventReload
+    }
+
+    func reloadThings() async {
+        if let thingReloadTask {
+            pendingThingReload = true
+            await thingReloadTask.value
+            return
+        }
+
+        repeat {
+            pendingThingReload = false
+            let task = Task { @MainActor in
+                await self.performThingReload()
+            }
+            thingReloadTask = task
+            await task.value
+            thingReloadTask = nil
+        } while pendingThingReload
+    }
+
     private func performReload() async {
         do {
             resetPaginationState()
@@ -104,6 +144,38 @@ final class EntityProjectionViewModel {
                 error,
                 fallbackMessage: LocalizationProvider.localized("operation_failed"),
                 code: "entity_projection_reload_failed"
+            )
+        }
+    }
+
+    private func performEventReload() async {
+        do {
+            hydratedEventIDs = []
+            try await loadMoreEventsPage(reset: true)
+            error = nil
+        } catch let appError as AppError {
+            error = appError
+        } catch {
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: LocalizationProvider.localized("operation_failed"),
+                code: "entity_event_projection_reload_failed"
+            )
+        }
+    }
+
+    private func performThingReload() async {
+        do {
+            hydratedThingIDs = []
+            try await loadMoreThingsPage(reset: true)
+            error = nil
+        } catch let appError as AppError {
+            error = appError
+        } catch {
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: LocalizationProvider.localized("operation_failed"),
+                code: "entity_thing_projection_reload_failed"
             )
         }
     }
@@ -223,6 +295,7 @@ final class EntityProjectionViewModel {
         if isLoadingMoreEvents {
             if reset {
                 pendingReload = true
+                pendingEventReload = true
             }
             return
         }
@@ -249,6 +322,7 @@ final class EntityProjectionViewModel {
         if isLoadingMoreThings {
             if reset {
                 pendingReload = true
+                pendingThingReload = true
             }
             return
         }

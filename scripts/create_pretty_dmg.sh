@@ -139,6 +139,9 @@ build_app() {
     -configuration Release \
     -destination "generic/platform=macOS" \
     -derivedDataPath "$derived_data" \
+    -onlyUsePackageVersionsFromResolvedFile \
+    -disableAutomaticPackageResolution \
+    -skipPackageUpdates \
     build \
     "PUSHGO_DISPLAY_VERSION=${display_version}" \
     CODE_SIGNING_ALLOWED=NO \

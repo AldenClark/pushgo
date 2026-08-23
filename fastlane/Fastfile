@@ -20,6 +20,10 @@ platform :ios do
     File.expand_path(path, repo_root)
   end
 
+  def locked_package_xcodebuild_args
+    "-onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution -skipPackageUpdates"
+  end
+
   def app_store_api_key!
     key_id = ENV["ASC_KEY_ID"]
     issuer_id = ENV["ASC_ISSUER_ID"]
@@ -413,6 +417,7 @@ platform :ios do
     output = sh(
       "xcodebuild -project #{Shellwords.escape(project)} " \
       "-target #{Shellwords.escape(target_name)} " \
+      "#{locked_package_xcodebuild_args} " \
       "-showBuildSettings",
       log: false
     )
@@ -732,6 +737,7 @@ platform :ios do
       "-configuration Release " \
       "-destination 'generic/platform=iOS' " \
       "-archivePath #{Shellwords.escape(archive_path)} " \
+      "#{locked_package_xcodebuild_args} " \
       "archive #{archive_xcargs}"
     )
 
@@ -787,6 +793,7 @@ platform :ios do
       "-configuration Release " \
       "-destination 'generic/platform=macOS' " \
       "-archivePath #{Shellwords.escape(archive_path)} " \
+      "#{locked_package_xcodebuild_args} " \
       "archive #{archive_xcargs}"
     )
 
@@ -889,6 +896,7 @@ platform :ios do
         "-configuration Release " \
         "-destination 'generic/platform=macOS' " \
         "-derivedDataPath #{Shellwords.escape(reference_derived_data_path)} " \
+        "#{locked_package_xcodebuild_args} " \
         "build " \
         "PUSHGO_DISPLAY_VERSION=#{Shellwords.escape(display_version)} " \
         "CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' DEVELOPMENT_TEAM=''"
@@ -904,6 +912,7 @@ platform :ios do
         "-configuration Release " \
         "-destination 'generic/platform=macOS' " \
         "-archivePath #{Shellwords.escape(archive_path)} " \
+        "#{locked_package_xcodebuild_args} " \
         "archive " \
         "PUSHGO_DISPLAY_VERSION=#{Shellwords.escape(display_version)} " \
         "CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' DEVELOPMENT_TEAM=''"
@@ -1003,10 +1012,21 @@ platform :ios do
     end
   end
 
-  def upload_beta_builds!
+  def build_store_artifacts!
+    [archive_ios_app!, archive_macos_app_store_pkg!]
+  end
+
+  def existing_store_artifacts!
+    output_directory = resolve_from_repo(ENV.fetch("BUILD_OUTPUT_DIR", "artifacts/release"))
+    ipa_path = File.join(output_directory, "#{ENV.fetch("IPA_OUTPUT_NAME", "PushGo-iOS")}.ipa")
+    pkg_path = File.join(output_directory, "#{ENV.fetch("MACOS_PKG_OUTPUT_NAME", "PushGo-macOS")}.pkg")
+    UI.user_error!("Missing prebuilt IPA: #{ipa_path}") unless File.file?(ipa_path)
+    UI.user_error!("Missing prebuilt PKG: #{pkg_path}") unless File.file?(pkg_path)
+    [ipa_path, pkg_path]
+  end
+
+  def upload_beta_artifacts!(ios_ipa_path, macos_pkg_path)
     api_key = app_store_api_key!
-    ios_ipa_path = archive_ios_app!
-    macos_pkg_path = archive_macos_app_store_pkg!
     changelog = ENV["TESTFLIGHT_CHANGELOG"].to_s.strip
     groups = ENV.fetch("TESTFLIGHT_EXTERNAL_GROUPS", "").split(",").map(&:strip).reject(&:empty?)
     build_selection = app_store_build_selection_options(include_build_number: false)
@@ -1042,10 +1062,8 @@ platform :ios do
     end
   end
 
-  def upload_release_builds!
+  def upload_release_artifacts!(ios_ipa_path, macos_pkg_path)
     api_key = app_store_api_key!
-    ios_ipa_path = archive_ios_app!
-    macos_pkg_path = archive_macos_app_store_pkg!
     release_notes = release_notes_payload
     build_selection = app_store_build_selection_options(include_build_number: false)
     submission_information = app_store_submission_information
@@ -1082,6 +1100,16 @@ platform :ios do
         force: true
       )
     end
+  end
+
+  def upload_beta_builds!
+    ios_ipa_path, macos_pkg_path = build_store_artifacts!
+    upload_beta_artifacts!(ios_ipa_path, macos_pkg_path)
+  end
+
+  def upload_release_builds!
+    ios_ipa_path, macos_pkg_path = build_store_artifacts!
+    upload_release_artifacts!(ios_ipa_path, macos_pkg_path)
   end
 
   def network_retry_attempts
@@ -1160,6 +1188,23 @@ platform :ios do
   desc "Archive and upload build to App Store"
   lane :release_upload do
     upload_release_builds!
+  end
+
+  desc "Build signed store artifacts without uploading them"
+  lane :store_build do
+    build_store_artifacts!
+  end
+
+  desc "Upload previously built artifacts to TestFlight"
+  lane :beta_upload_prebuilt do
+    ios_ipa_path, macos_pkg_path = existing_store_artifacts!
+    upload_beta_artifacts!(ios_ipa_path, macos_pkg_path)
+  end
+
+  desc "Upload previously built artifacts to the release service"
+  lane :release_upload_prebuilt do
+    ios_ipa_path, macos_pkg_path = existing_store_artifacts!
+    upload_release_artifacts!(ios_ipa_path, macos_pkg_path)
   end
 
   desc "Build and notarize DMG for beta tags"

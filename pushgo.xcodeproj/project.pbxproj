@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D1A000022F91000100D10001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = D1A000012F91000100D10001 /* PrivacyInfo.xcprivacy */; };
 		02C1C7A566ABB8EBB1B08D92 /* PushMessageSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36B8C43824CA496F9D0EDDC7 /* PushMessageSummary.swift */; };
 		03DC253E48CA6B70EEF1B336 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 3949F99E0D1C96080BD96181 /* Sparkle */; };
 		0637F07C839C0C2D397AB069 /* NotificationServiceProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25CF4B72C6499CEADC594FC9 /* NotificationServiceProcessor.swift */; };
@@ -377,6 +378,12 @@
 		F1B2C3D4E5F60718293A4B64 /* NotificationIngressInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1B2C3D4E5F60718293A4B5C /* NotificationIngressInbox.swift */; };
 		F1B2C3D4E5F60718293A4B65 /* NotificationIngressInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1B2C3D4E5F60718293A4B5C /* NotificationIngressInbox.swift */; };
 		F1B2C3D4E5F60718293A4B66 /* NotificationIngressInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1B2C3D4E5F60718293A4B5C /* NotificationIngressInbox.swift */; };
+		D7B2C3D4E5F60718293A4B61 /* DurableIngressJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7B2C3D4E5F60718293A4B5C /* DurableIngressJournal.swift */; };
+		D7B2C3D4E5F60718293A4B62 /* DurableIngressJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7B2C3D4E5F60718293A4B5C /* DurableIngressJournal.swift */; };
+		D7B2C3D4E5F60718293A4B63 /* DurableIngressJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7B2C3D4E5F60718293A4B5C /* DurableIngressJournal.swift */; };
+		D7B2C3D4E5F60718293A4B64 /* DurableIngressJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7B2C3D4E5F60718293A4B5C /* DurableIngressJournal.swift */; };
+		D7B2C3D4E5F60718293A4B65 /* DurableIngressJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7B2C3D4E5F60718293A4B5C /* DurableIngressJournal.swift */; };
+		D7B2C3D4E5F60718293A4B66 /* DurableIngressJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7B2C3D4E5F60718293A4B5C /* DurableIngressJournal.swift */; };
 		F2B2C3D4E5F60718293A4B61 /* NotificationContextSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B2C3D4E5F60718293A4B5C /* NotificationContextSnapshot.swift */; };
 		F2B2C3D4E5F60718293A4B62 /* NotificationContextSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B2C3D4E5F60718293A4B5C /* NotificationContextSnapshot.swift */; };
 		F2B2C3D4E5F60718293A4B63 /* NotificationContextSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2B2C3D4E5F60718293A4B5C /* NotificationContextSnapshot.swift */; };
@@ -548,6 +555,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		D1A000012F91000100D10001 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		0AC200102F90000100C0FFEE /* NotificationContentPreparer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationContentPreparer.swift; sourceTree = "<group>"; };
 		0AC200112F90000100C0FFEE /* WatchNotificationServiceProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchNotificationServiceProcessor.swift; sourceTree = "<group>"; };
 		0AC200122F90000100C0FFEE /* WatchLightNotificationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchLightNotificationStore.swift; sourceTree = "<group>"; };
@@ -668,6 +676,7 @@
 		F0AA00000000000000000022 /* Shared/SystemIntegration/PushGoNotificationProjectionUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoNotificationProjectionUpdater.swift; sourceTree = SOURCE_ROOT; };
 		F0AA00000000000000000023 /* Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift; sourceTree = SOURCE_ROOT; };
 		F1B2C3D4E5F60718293A4B5C /* NotificationIngressInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationIngressInbox.swift; sourceTree = "<group>"; };
+		D7B2C3D4E5F60718293A4B5C /* DurableIngressJournal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DurableIngressJournal.swift; sourceTree = "<group>"; };
 		F2B2C3D4E5F60718293A4B5C /* NotificationContextSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationContextSnapshot.swift; sourceTree = "<group>"; };
 		F4B2C3D4E5F60718293A4B5C /* ProviderDeliveryAckFailureStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderDeliveryAckFailureStore.swift; sourceTree = "<group>"; };
 		F5F7201AE9644B8F9A6A4BD8 /* MessageListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageListViewModel.swift; sourceTree = "<group>"; };
@@ -1127,6 +1136,7 @@
 				D2A100000000000000000003 /* NotificationSoundPreviewPlayer.swift */,
 				25CF4B72C6499CEADC594FC9 /* NotificationServiceProcessor.swift */,
 				6ADFF5A76CA49E94408B363E /* NotificationHandling.swift */,
+				D7B2C3D4E5F60718293A4B5C /* DurableIngressJournal.swift */,
 				F1B2C3D4E5F60718293A4B5C /* NotificationIngressInbox.swift */,
 				F4B2C3D4E5F60718293A4B5C /* ProviderDeliveryAckFailureStore.swift */,
 				F6B2C3D4E5F60718293A4B5C /* ProviderIngressCoordinator.swift */,
@@ -1230,6 +1240,7 @@
 		D498F7BDCDB2E45FD9D0CA9C /* Extensions/PushGoNSE-watchOS */ = {
 			isa = PBXGroup;
 			children = (
+				D1A000012F91000100D10001 /* PrivacyInfo.xcprivacy */,
 				82C9A591E410A5C90A91A022 /* NotificationService.swift */,
 				0AC200112F90000100C0FFEE /* WatchNotificationServiceProcessor.swift */,
 				0AC200122F90000100C0FFEE /* WatchLightNotificationStore.swift */,
@@ -1611,6 +1622,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D1A000022F91000100D10001 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1710,6 +1722,7 @@
 				F0DD00000000000000000011 /* Shared/SystemIntegration/PushGoSystemSummary.swift in Sources */,
 				F0DD0000000000000000001A /* Shared/SystemIntegration/PushGoSystemSurfaceSnapshot.swift in Sources */,
 				F1B2C3D4E5F60718293A4B65 /* NotificationIngressInbox.swift in Sources */,
+				D7B2C3D4E5F60718293A4B65 /* DurableIngressJournal.swift in Sources */,
 				F4B2C3D4E5F60718293A4B65 /* ProviderDeliveryAckFailureStore.swift in Sources */,
 				0AC200012F90000100C0FFEE /* WatchNotificationServiceProcessor.swift in Sources */,
 				0AC200022F90000100C0FFEE /* WatchLightNotificationStore.swift in Sources */,
@@ -1781,6 +1794,7 @@
 				F0BB00000000000000000021 /* Shared/SystemIntegration/PushGoShortcutOutput.swift in Sources */,
 				F0BB00000000000000000023 /* Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift in Sources */,
 				F1B2C3D4E5F60718293A4B61 /* NotificationIngressInbox.swift in Sources */,
+				D7B2C3D4E5F60718293A4B61 /* DurableIngressJournal.swift in Sources */,
 				F4B2C3D4E5F60718293A4B61 /* ProviderDeliveryAckFailureStore.swift in Sources */,
 				F6B2C3D4E5F60718293A4B61 /* ProviderIngressCoordinator.swift in Sources */,
 				6A4744330FF5443C3E79BAC6 /* NotificationHandling.swift in Sources */,
@@ -1893,6 +1907,7 @@
 				F0CC00000000000000000021 /* Shared/SystemIntegration/PushGoShortcutOutput.swift in Sources */,
 				F0CC00000000000000000023 /* Shared/SystemIntegration/PushGoWidgetPushTokenStore.swift in Sources */,
 				F1B2C3D4E5F60718293A4B62 /* NotificationIngressInbox.swift in Sources */,
+				D7B2C3D4E5F60718293A4B62 /* DurableIngressJournal.swift in Sources */,
 				F4B2C3D4E5F60718293A4B62 /* ProviderDeliveryAckFailureStore.swift in Sources */,
 				F6B2C3D4E5F60718293A4B62 /* ProviderIngressCoordinator.swift in Sources */,
 				278EDCDB13F0B883D94FC08A /* NotificationHandling.swift in Sources */,
@@ -1958,6 +1973,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F1B2C3D4E5F60718293A4B63 /* NotificationIngressInbox.swift in Sources */,
+				D7B2C3D4E5F60718293A4B63 /* DurableIngressJournal.swift in Sources */,
 				F0EE00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */,
 				F0EE00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift in Sources */,
 				F0EE00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */,
@@ -2008,6 +2024,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F1B2C3D4E5F60718293A4B64 /* NotificationIngressInbox.swift in Sources */,
+				D7B2C3D4E5F60718293A4B64 /* DurableIngressJournal.swift in Sources */,
 				F0FF00000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */,
 				F0FF00000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift in Sources */,
 				F0FF00000000000000000008 /* Shared/SystemIntegration/PushGoNotificationActionPolicy.swift in Sources */,
@@ -2058,6 +2075,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F1B2C3D4E5F60718293A4B66 /* NotificationIngressInbox.swift in Sources */,
+				D7B2C3D4E5F60718293A4B66 /* DurableIngressJournal.swift in Sources */,
 				F0A000000000000000000001 /* Shared/Models/SystemIntegrationSettings.swift in Sources */,
 				F0A00000000000000000001B /* Shared/Models/EntityProjectionDetail.swift in Sources */,
 				F0A000000000000000000002 /* Shared/SystemIntegration/PushGoAccessibilitySummaryBuilder.swift in Sources */,
@@ -2225,7 +2243,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-watchOS/pushgowatch NotificationServiceExtension.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 88;
+				CURRENT_PROJECT_VERSION = 90;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				"EXCLUDED_ARCHS[sdk=watchsimulator*]" = x86_64;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
@@ -2270,7 +2288,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 88;
+				CURRENT_PROJECT_VERSION = 90;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -2335,7 +2353,7 @@
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 88;
+				CURRENT_PROJECT_VERSION = 90;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -2534,7 +2552,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-iOS/pushgo.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 88;
+				CURRENT_PROJECT_VERSION = 90;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -2597,7 +2615,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 88;
+				CURRENT_PROJECT_VERSION = 90;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = W6H9P5MVUB;
@@ -2659,7 +2677,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-iOS/NotificationServiceExtension.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 88;
+				CURRENT_PROJECT_VERSION = 90;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -2715,7 +2733,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-iOS/NotificationServiceExtension.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 88;
+				CURRENT_PROJECT_VERSION = 90;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -2760,7 +2778,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 88;
+				CURRENT_PROJECT_VERSION = 90;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -2818,7 +2836,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 88;
+				CURRENT_PROJECT_VERSION = 90;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -2877,7 +2895,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-watchOS/pushgowatch Watch App.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 88;
+				CURRENT_PROJECT_VERSION = 90;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_PREVIEWS = YES;
 				"EXCLUDED_ARCHS[sdk=watchsimulator*]" = x86_64;
@@ -2933,7 +2951,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Apps/PushGo-watchOS/pushgowatch Watch App.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 88;
+				CURRENT_PROJECT_VERSION = 90;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_PREVIEWS = YES;
 				"EXCLUDED_ARCHS[sdk=watchsimulator*]" = x86_64;
@@ -2988,7 +3006,7 @@
 				CODE_SIGN_ENTITLEMENTS = Extensions/PushGoWidgets/PushGoWidgets.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 88;
+				CURRENT_PROJECT_VERSION = 90;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -3028,7 +3046,7 @@
 				CODE_SIGN_ENTITLEMENTS = Extensions/PushGoWidgets/PushGoWidgets.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 88;
+				CURRENT_PROJECT_VERSION = 90;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -3069,7 +3087,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoWidgets/PushGoWidgets-macOS.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 88;
+				CURRENT_PROJECT_VERSION = 90;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -3107,7 +3125,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoWidgets/PushGoWidgets-macOS.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 88;
+				CURRENT_PROJECT_VERSION = 90;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -3146,7 +3164,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoWidgets/PushGoWidgets-watchOS.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 88;
+				CURRENT_PROJECT_VERSION = 90;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -3183,7 +3201,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoWidgets/PushGoWidgets-watchOS.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 88;
+				CURRENT_PROJECT_VERSION = 90;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
 				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
@@ -3225,7 +3243,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "3rd Party Mac Developer Application";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 88;
+				CURRENT_PROJECT_VERSION = 90;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
 				"DEVELOPMENT_TEAM[sdk=macosx*]" = W6H9P5MVUB;
@@ -3385,7 +3403,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 88;
+				CURRENT_PROJECT_VERSION = 90;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				ENABLE_APP_SANDBOX = YES;
@@ -3449,7 +3467,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Extensions/PushGoNSE-watchOS/pushgowatch NotificationServiceExtension.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 88;
+				CURRENT_PROJECT_VERSION = 90;
 				DEVELOPMENT_TEAM = W6H9P5MVUB;
 				"EXCLUDED_ARCHS[sdk=watchsimulator*]" = x86_64;
 				EXCLUDED_RESOURCE_FILE_NAMES = Info.plist;
@@ -3610,24 +3628,24 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/sparkle-project/Sparkle";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.7.0;
+				kind = exactVersion;
+				version = 2.9.3;
 			};
 		};
 		A0AA00012F70000100AA0022 /* XCRemoteSwiftPackageReference "textual" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/AldenClark/textual";
 			requirement = {
-				branch = main;
-				kind = branch;
+				kind = revision;
+				revision = 46d1ffacb40518d824fa4c3bd6ee606ba25dcdfd;
 			};
 		};
 		A0AA00012F70000100AA0033 /* XCRemoteSwiftPackageReference "GRDB.swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/groue/GRDB.swift.git";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 7.6.0;
+				kind = exactVersion;
+				version = 7.11.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

@@ -21,6 +21,10 @@ final class NotificationIngressController {
     private let shouldDeferStartupWakeupPulls: StartupWakeupPullDeferPredicate
     private let notificationIngressInbox: NotificationIngressInbox
     private let ackFailureStore: ProviderDeliveryAckFailureStore
+    private var ackDrainTask: Task<Void, Never>?
+    private var ingressRetryWakeTask: Task<Void, Never>?
+    private var ingressRetryWakeDate: Date?
+    private var ackDrainRequested = false
 
     private lazy var providerIngressCoordinator = ProviderIngressCoordinator(
         platformSuffix: platformSuffix,
@@ -87,10 +91,26 @@ final class NotificationIngressController {
             reason: reason,
             allowFallbackPull: false
         )
+        guard !Task.isCancelled else { return }
+        scheduleProviderAckDrain(source: "provider.ingress_changed.\(platformSuffix)")
     }
 
-    func drainProviderDeliveryAckFailures(source: String) async {
-        await providerIngressCoordinator.drainAckMarkers(source: source)
+    @discardableResult
+    func drainProviderDeliveryAckFailures(
+        source: String
+    ) async -> IngressBackgroundRefreshRunner.StageOutcome {
+        scheduleProviderAckDrain(source: source)
+        if let task = ackDrainTask {
+            await withTaskCancellationHandler {
+                await task.value
+            } onCancel: {
+                task.cancel()
+            }
+        }
+        guard !Task.isCancelled else { return .failed }
+        let hasPendingRetry = await ackFailureStore.nextAttemptDate() != nil
+        await rearmIngressRetryWake(source: source)
+        return hasPendingRetry ? .failed : .succeeded
     }
 
     @discardableResult
@@ -99,10 +119,36 @@ final class NotificationIngressController {
         allowFallbackPull: Bool,
         limit: Int = 256
     ) async -> Int {
-        await providerIngressCoordinator.mergeInbox(
+        await mergeNotificationIngressInboxOutcome(
             reason: reason,
             allowFallbackPull: allowFallbackPull,
             limit: limit
+        ).appliedCount
+    }
+
+    struct MergeOutcome: Sendable, Equatable {
+        let appliedCount: Int
+        let stageOutcome: IngressBackgroundRefreshRunner.StageOutcome
+    }
+
+    func mergeNotificationIngressInboxOutcome(
+        reason: String,
+        allowFallbackPull: Bool,
+        limit: Int = 256
+    ) async -> MergeOutcome {
+        let applied = await providerIngressCoordinator.mergeInbox(
+            reason: reason,
+            allowFallbackPull: allowFallbackPull,
+            limit: limit
+        )
+        guard !Task.isCancelled else {
+            return MergeOutcome(appliedCount: applied, stageOutcome: .failed)
+        }
+        let hasPendingRetry = await notificationIngressInbox.nextRetryDate() != nil
+        scheduleProviderAckDrain(source: "provider.merge.\(reason).\(platformSuffix)")
+        return MergeOutcome(
+            appliedCount: applied,
+            stageOutcome: hasPendingRetry ? .failed : .succeeded
         )
     }
 
@@ -143,6 +189,44 @@ final class NotificationIngressController {
             result: ProviderIngressPersistenceResult(outcome),
             source: source
         )
+        scheduleProviderAckDrain(source: "\(source).ack")
+    }
+
+    @discardableResult
+    func persistPulledProviderIngress(
+        payload: [AnyHashable: Any],
+        deliveryId: String,
+        context: ProviderPullContext,
+        source: String
+    ) async -> NotificationPersistenceOutcome {
+        guard await providerIngressCoordinator.journalPulledPayload(
+            payload,
+            deliveryID: deliveryId,
+            context: context,
+            source: "\(source).journal"
+        ) else {
+            await providerIngressCoordinator.finalizePulledIngress(
+                deliveryId: deliveryId,
+                context: context,
+                result: .failed,
+                source: "\(source).journal_failed"
+            )
+            return .failed
+        }
+        let outcome = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
+            payload,
+            requestIdentifier: deliveryId,
+            dataStore: dataStore,
+            beforeSave: beforePersistMessage
+        )
+        await finalizePulledProviderIngress(
+            deliveryId: deliveryId,
+            context: context,
+            outcome: outcome,
+            source: source
+        )
+        applyNotificationPersistenceOutcome(outcome)
+        return outcome
     }
 
     func ackDirectProviderIngressIfNeeded(
@@ -155,6 +239,67 @@ final class NotificationIngressController {
             result: ProviderIngressPersistenceResult(outcome),
             source: source
         )
+        scheduleProviderAckDrain(source: "\(source).ack")
+    }
+
+    private func scheduleProviderAckDrain(source: String) {
+        guard !Task.isCancelled else { return }
+        cancelIngressRetryWake()
+        ackDrainRequested = true
+        guard ackDrainTask == nil else { return }
+        ackDrainTask = Task(priority: .utility) { @MainActor [weak self] in
+            guard let self else { return }
+            defer { ackDrainTask = nil }
+            repeat {
+                ackDrainRequested = false
+                await providerIngressCoordinator.drainAckMarkers(source: source)
+            } while ackDrainRequested && !Task.isCancelled
+            guard !Task.isCancelled else { return }
+            await rearmIngressRetryWake(source: source)
+        }
+    }
+
+    private func rearmIngressRetryWake(source: String) async {
+        guard !Task.isCancelled else { return }
+        async let ingressDue = notificationIngressInbox.nextRetryDate()
+        async let ackDue = ackFailureStore.nextAttemptDate()
+        guard let due = [await ingressDue, await ackDue].compactMap({ $0 }).min() else {
+            cancelIngressRetryWake()
+            return
+        }
+        if let scheduled = ingressRetryWakeDate, scheduled <= due {
+            return
+        }
+        cancelIngressRetryWake()
+        let delay = max(0.1, due.timeIntervalSinceNow)
+        ingressRetryWakeDate = due
+        ingressRetryWakeTask = Task(priority: .utility) { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(delay))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled, let self else { return }
+            await ingressRetryWakeFired(expectedDate: due, source: source)
+        }
+    }
+
+    private func ingressRetryWakeFired(expectedDate: Date, source: String) async {
+        guard ingressRetryWakeDate == expectedDate else { return }
+        ingressRetryWakeTask = nil
+        ingressRetryWakeDate = nil
+        _ = await mergeNotificationIngressInboxOutcome(
+            reason: "retry_due_\(platformSuffix)",
+            allowFallbackPull: true
+        )
+        guard !Task.isCancelled else { return }
+        _ = await drainProviderDeliveryAckFailures(source: "\(source).retry_due")
+    }
+
+    private func cancelIngressRetryWake() {
+        ingressRetryWakeTask?.cancel()
+        ingressRetryWakeTask = nil
+        ingressRetryWakeDate = nil
     }
 
     @discardableResult
@@ -189,21 +334,16 @@ final class NotificationIngressController {
             from: notificationPayload,
             dataStore: dataStore,
             fallbackServerConfig: serverConfigProvider(),
-            channelSubscriptionService: channelSubscriptionService
+            channelSubscriptionService: channelSubscriptionService,
+            notificationIngressInbox: notificationIngressInbox
         )
         let outcome: NotificationPersistenceOutcome
         switch ingress {
         case let .pulled(payload, requestIdentifier, context):
-            outcome = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
-                payload,
-                requestIdentifier: requestIdentifier,
-                dataStore: dataStore,
-                beforeSave: beforePersistMessage
-            )
-            await finalizePulledProviderIngress(
+            outcome = await persistPulledProviderIngress(
+                payload: payload,
                 deliveryId: requestIdentifier,
                 context: context,
-                outcome: outcome,
                 source: "provider.notification.pulled.\(platformSuffix)"
             )
         case .claimedByPeer:

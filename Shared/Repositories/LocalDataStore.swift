@@ -214,6 +214,22 @@ enum NotificationStoreSaveOutcome: Sendable {
     case duplicateMessage(PushMessage)
 }
 
+private enum CanonicalDerivedWorkKind: String, CaseIterable, Sendable {
+    case search
+    case notificationContext = "notification_context"
+    case liveActivity = "live_activity"
+    case systemSnapshot = "system_snapshot"
+}
+
+private struct CanonicalDerivedWorkItem: Sendable {
+    let workID: String
+    let messageID: UUID
+    let kind: CanonicalDerivedWorkKind
+    let owner: String
+    let generation: Int64
+    let leaseGeneration: Int64
+}
+
 private struct OperationScopeIdentity: Hashable, Sendable {
     let scopeKey: String
     let opId: String
@@ -415,12 +431,18 @@ actor LocalDataStore {
     private let searchIndex: MessageSearchIndex?
     private let metadataIndex: MessageMetadataIndex?
     private let spotlightIndexer: PushGoSpotlightIndexing?
+    private let canonicalLiveActivityHandler: @Sendable (PushMessage) async throws -> Void
     private let fileManager: FileManager
     private let appGroupIdentifier: String
     private let channelSubscriptionStore = ChannelSubscriptionStore()
     private let localConfigStore = LocalKeychainConfigStore()
     private let pushTokenStore = PushTokenStore()
     private let deviceKeyStore = ProviderDeviceKeyStore()
+    private let canonicalDerivedWorkRetryDelay: TimeInterval
+    private var derivedWorkDrainTask: Task<Bool, Never>?
+    private var derivedWorkDrainRequested = false
+    private var derivedWorkRetryWakeTask: Task<Void, Never>?
+    private var derivedWorkRetryWakeDate: Date?
     private struct TrackedWriteTask: Sendable {
         let id: UUID
         let task: Task<Void, Never>
@@ -434,6 +456,10 @@ actor LocalDataStore {
         fileManager: FileManager = .default,
         appGroupIdentifier: String = AppConstants.appGroupIdentifier,
         spotlightIndexer: PushGoSpotlightIndexing? = CoreSpotlightPushGoIndexer(),
+        canonicalDerivedWorkRetryDelay: TimeInterval = 30,
+        canonicalLiveActivityHandler: @escaping @Sendable (PushMessage) async throws -> Void = {
+            try await PushGoLiveActivityCoordinator.handlePersistedMessageReportingFailure($0)
+        }
     ) {
         KeychainSharedAccessMigration.migrateLegacyItemsToSharedAccessGroup()
         self.fileManager = fileManager
@@ -448,6 +474,8 @@ actor LocalDataStore {
         searchIndex = sharedResources.searchIndex
         metadataIndex = sharedResources.metadataIndex
         self.spotlightIndexer = spotlightIndexer
+        self.canonicalDerivedWorkRetryDelay = max(0.01, canonicalDerivedWorkRetryDelay)
+        self.canonicalLiveActivityHandler = canonicalLiveActivityHandler
         Self.writeStorageProbe(
             fileManager: fileManager,
             appGroupIdentifier: appGroupIdentifier,
@@ -606,15 +634,23 @@ actor LocalDataStore {
         let snapshotFileURL = diagnosticsURL.appendingPathComponent(storageSnapshotFilename)
         let snapshotWalURL = diagnosticsURL.appendingPathComponent(storageSnapshotWalFilename)
         let snapshotShmURL = diagnosticsURL.appendingPathComponent(storageSnapshotShmFilename)
+        // The canonical database already lives in the App Group and is what the
+        // host app and extensions share. This second copy is only a forensic
+        // artifact, so avoid duplicating the full SQLite family on every healthy
+        // process launch. Preserve it when opening persistent storage fails.
         let snapshotResult: (databaseCopied: Bool, walCopied: Bool, shmCopied: Bool)
-        if let databaseFileURL {
+        if storageState.mode == .unavailable, let databaseFileURL {
             snapshotResult = copySQLiteArtifactsForDiagnostics(
                 fileManager: fileManager,
                 sourceBaseURL: databaseFileURL,
                 destinationBaseURL: snapshotFileURL
             )
         } else {
-            snapshotResult = (databaseCopied: false, walCopied: false, shmCopied: false)
+            snapshotResult = (
+                databaseCopied: fileManager.fileExists(atPath: snapshotFileURL.path),
+                walCopied: fileManager.fileExists(atPath: snapshotWalURL.path),
+                shmCopied: fileManager.fileExists(atPath: snapshotShmURL.path)
+            )
         }
 
         let searchIndexFileURL = searchIndexReady
@@ -701,6 +737,155 @@ actor LocalDataStore {
             throw storeUnavailableError
         }
         return backend
+    }
+
+    func enqueuePendingLocalDeletion(
+        summary: String,
+        undoLabel: String,
+        intent: PendingLocalDeletionIntent,
+        timeout: TimeInterval,
+        now: Date
+    ) async throws -> PendingLocalDeletionRecord {
+        let backend = try requireBackend()
+        return try await backend.enqueuePendingLocalDeletion(
+            summary: summary,
+            undoLabel: undoLabel,
+            intent: intent,
+            timeout: timeout,
+            now: now
+        )
+    }
+
+    func loadPendingLocalDeletions(now: Date) async throws -> [PendingLocalDeletionRecord] {
+        try await requireBackend().loadPendingLocalDeletions(now: now)
+    }
+
+    func forcePendingLocalDeletionsDue(now: Date) async throws {
+        try await requireBackend().forcePendingLocalDeletionsDue(now: now)
+    }
+
+    func forcePendingLocalDeletionDue(
+        id: UUID,
+        timeout: TimeInterval,
+        now: Date
+    ) async throws -> Bool {
+        try await requireBackend().forcePendingLocalDeletionDue(id: id, timeout: timeout, now: now)
+    }
+
+    func undoPendingLocalDeletion(
+        id: UUID,
+        timeout: TimeInterval,
+        now: Date
+    ) async throws -> Bool {
+        try await requireBackend().undoPendingLocalDeletion(
+            id: id,
+            timeout: timeout,
+            now: now
+        )
+    }
+
+    func claimNextPendingLocalDeletion(
+        owner: String,
+        leaseDuration: TimeInterval,
+        timeout: TimeInterval,
+        now: Date
+    ) async throws -> PendingLocalDeletionRecord? {
+        try await requireBackend().claimNextPendingLocalDeletion(
+            owner: owner,
+            leaseDuration: leaseDuration,
+            timeout: timeout,
+            now: now
+        )
+    }
+
+    func nextPendingLocalDeletionCleanup() async throws -> PendingLocalDeletionRecord? {
+        try await requireBackend().nextPendingLocalDeletionCleanup()
+    }
+
+    func retryClaimedPendingLocalDeletion(
+        id: UUID,
+        owner: String,
+        retryAfter: Date,
+        errorCode: String
+    ) async throws {
+        try await requireBackend().retryClaimedPendingLocalDeletion(
+            id: id,
+            owner: owner,
+            retryAfter: retryAfter,
+            errorCode: errorCode
+        )
+    }
+
+    func abandonClaimedPendingLocalDeletion(id: UUID, owner: String) async throws {
+        try await requireBackend().abandonClaimedPendingLocalDeletion(id: id, owner: owner)
+    }
+
+    func markPendingLocalDeletionReconciliationRequired(
+        id: UUID,
+        owner: String?,
+        errorCode: String
+    ) async throws {
+        try await requireBackend().markPendingLocalDeletionReconciliationRequired(
+            id: id,
+            owner: owner,
+            errorCode: errorCode
+        )
+    }
+
+    func commitClaimedPendingLocalDeletion(
+        id: UUID,
+        owner: String,
+        now: Date
+    ) async throws -> PendingLocalDeletionCleanup {
+        let backend = try requireBackend()
+        let record = try await backend.pendingLocalDeletion(id: id)
+        let cleanup = try await backend.commitClaimedPendingLocalDeletion(
+            id: id,
+            owner: owner,
+            now: now
+        )
+        if case let .channelHistory(channelID, gateway, _) = record?.intent {
+            try? softDeleteLegacyChannelSubscription(
+                gateway: gateway,
+                channelId: channelID,
+                deletedAt: now
+            )
+        }
+        return cleanup
+    }
+
+    func completePendingLocalDeletionCleanup(id: UUID) async throws {
+        try await requireBackend().completePendingLocalDeletionCleanup(id: id)
+    }
+
+    func reconcilePendingLocalDeletionCleanup(
+        _ cleanup: PendingLocalDeletionCleanup
+    ) async throws {
+        if !cleanup.messageIDs.isEmpty {
+            await mutateSearchIndex { searchIndex in
+                try await searchIndex.bulkRemove(ids: cleanup.messageIDs)
+            }
+            if let metadataIndex {
+                try? await metadataIndex.bulkRemove(ids: cleanup.messageIDs)
+            }
+        }
+        if cleanup.rebuildSystemSearchIndex {
+            await rebuildSystemSearchIndex()
+        } else {
+            await deleteSystemSearchItems(
+                cleanup.messageIDs.compactMap {
+                    PushGoSpotlightIdentifier(kind: .message, identifier: $0.uuidString)
+                }
+                + cleanup.eventIDs.compactMap {
+                    PushGoSpotlightIdentifier(kind: .event, identifier: $0)
+                }
+                + cleanup.thingIDs.compactMap {
+                    PushGoSpotlightIdentifier(kind: .thing, identifier: $0)
+                }
+            )
+        }
+        await rebuildNotificationContextSnapshot()
+        await refreshSystemSurfaceSnapshot(reason: .delete)
     }
 
     nonisolated func enqueueTrackedWrite(
@@ -2122,28 +2307,164 @@ actor LocalDataStore {
         let outcome = try await performBackendWrite { backend in
             try await backend.persistNotificationMessageIfNeeded(canonicalMessage)
         }
-        let searchable: [PushMessage] = {
-            switch outcome {
-            case let .persisted(stored),
-                 let .persistedPending(stored),
-                 let .duplicateRequest(stored),
-                 let .duplicateMessage(stored):
-                return isTopLevelMessage(stored) ? [stored] : []
-            }
-        }()
-        await updateSearchIndex(with: searchable)
-        await rebuildMetadataIndex(with: searchable)
-        await indexSystemSearchMessages(searchable)
-        switch outcome {
-        case let .persisted(stored),
-             let .persistedPending(stored),
-             let .duplicateRequest(stored),
-            let .duplicateMessage(stored):
-            await mergeNotificationContextSnapshot(with: [stored])
-            await PushGoLiveActivityCoordinator.handlePersistedMessage(stored)
-        }
-        await refreshSystemSurfaceSnapshot(reason: .write)
+        scheduleDerivedWorkDrain()
         return outcome
+    }
+
+    /// Starts (or joins) the single owned worker for canonical post-commit
+    /// projections. Callers never wait for Spotlight/Widget/Live Activity work.
+    func scheduleDerivedWorkDrain() {
+        derivedWorkDrainRequested = true
+        derivedWorkRetryWakeTask?.cancel()
+        derivedWorkRetryWakeTask = nil
+        derivedWorkRetryWakeDate = nil
+        guard derivedWorkDrainTask == nil else { return }
+        derivedWorkDrainRequested = false
+        derivedWorkDrainTask = Task(priority: .utility) { [weak self] in
+            guard let self else { return false }
+            return await self.drainCanonicalDerivedWork()
+        }
+    }
+
+    /// Joins the owned projection worker so a background refresh cannot report
+    /// success while work it started is still running. Cancellation propagates
+    /// to that worker and leaves durable work rearmed for the next opportunity.
+    func drainDerivedWorkForBackgroundRefresh() async -> Bool {
+        scheduleDerivedWorkDrain()
+        var succeeded = true
+        while let task = derivedWorkDrainTask {
+            let result = await withTaskCancellationHandler {
+                await task.value
+            } onCancel: {
+                task.cancel()
+            }
+            succeeded = succeeded && result
+            if Task.isCancelled { return false }
+        }
+        return succeeded
+    }
+
+    func messageStoreRevisionValues() async throws -> AsyncValueObservation<Int64> {
+        try await requireBackend().messageStoreRevisionValues()
+    }
+
+    private func drainCanonicalDerivedWork() async -> Bool {
+        var processed = 0
+        var claimFailed = false
+        var workFailed = false
+        guard let backend else {
+            derivedWorkDrainTask = nil
+            return false
+        }
+        let owner = "app.derived.\(UUID().uuidString.lowercased())"
+        while !Task.isCancelled, processed < 512 {
+            let item: CanonicalDerivedWorkItem
+            do {
+                guard let claimed = try await backend.claimCanonicalDerivedWork(
+                    owner: owner,
+                    leaseDuration: 60,
+                    now: Date()
+                ) else { break }
+                item = claimed
+            } catch {
+                claimFailed = true
+                break
+            }
+            do {
+                guard let message = try await backend.loadMessage(id: item.messageID) else {
+                    try await backend.completeCanonicalDerivedWork(item, now: Date())
+                    processed += 1
+                    continue
+                }
+                switch item.kind {
+                case .search:
+                    if isTopLevelMessage(message) {
+                        try await updateSearchIndexReportingFailure(with: [message])
+                        try await rebuildMetadataIndexReportingFailure(with: [message])
+                        try await indexSystemSearchMessagesReportingFailure([message])
+                    }
+                case .notificationContext:
+                    if affectsNotificationContextSnapshot(message) {
+                        try await mergeNotificationContextSnapshotReportingFailure(with: [message])
+                    }
+                case .liveActivity:
+                    try await canonicalLiveActivityHandler(message)
+                case .systemSnapshot:
+                    try await refreshSystemSurfaceSnapshotReportingFailure(reason: .write)
+                }
+                try await backend.completeCanonicalDerivedWork(item, now: Date())
+            } catch {
+                workFailed = true
+                try? await backend.retryCanonicalDerivedWork(
+                    item,
+                    retryAfter: Date().addingTimeInterval(canonicalDerivedWorkRetryDelay),
+                    error: String(describing: error)
+                )
+            }
+            processed += 1
+        }
+
+        let shouldDrainAgain = derivedWorkDrainRequested || processed >= 512
+        derivedWorkDrainTask = nil
+        guard !Task.isCancelled else {
+            scheduleDerivedWorkWake(
+                at: Date().addingTimeInterval(min(1, canonicalDerivedWorkRetryDelay))
+            )
+            return false
+        }
+        if shouldDrainAgain {
+            scheduleDerivedWorkDrain()
+        } else if claimFailed {
+            scheduleDerivedWorkWake(
+                at: Date().addingTimeInterval(min(1, canonicalDerivedWorkRetryDelay))
+            )
+        } else {
+            await scheduleNextCanonicalDerivedWorkWake()
+        }
+        return !claimFailed && !workFailed
+    }
+
+    private func scheduleNextCanonicalDerivedWorkWake() async {
+        guard let backend else { return }
+        do {
+            guard let nextAttempt = try await backend.nextCanonicalDerivedWorkAttemptDate() else {
+                return
+            }
+            // The actor can re-enter while the database query is suspended.
+            // Never replace a newly started drain with a stale retry timer.
+            guard derivedWorkDrainTask == nil, !derivedWorkDrainRequested else { return }
+            scheduleDerivedWorkWake(at: nextAttempt)
+        } catch {
+            guard derivedWorkDrainTask == nil, !derivedWorkDrainRequested else { return }
+            scheduleDerivedWorkWake(
+                at: Date().addingTimeInterval(min(1, canonicalDerivedWorkRetryDelay))
+            )
+        }
+    }
+
+    private func scheduleDerivedWorkWake(at date: Date) {
+        if let scheduled = derivedWorkRetryWakeDate, scheduled <= date {
+            return
+        }
+        derivedWorkRetryWakeTask?.cancel()
+        let delay = max(0, date.timeIntervalSinceNow)
+        derivedWorkRetryWakeDate = date
+        derivedWorkRetryWakeTask = Task(priority: .utility) { [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(delay))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            await self?.derivedWorkWakeFired(expectedDate: date)
+        }
+    }
+
+    private func derivedWorkWakeFired(expectedDate: Date) {
+        guard derivedWorkRetryWakeDate == expectedDate else { return }
+        derivedWorkRetryWakeTask = nil
+        derivedWorkRetryWakeDate = nil
+        scheduleDerivedWorkDrain()
     }
 
     func saveMessagesBatch(_ messages: [PushMessage]) async throws {
@@ -2574,6 +2895,12 @@ actor LocalDataStore {
     }
 
     private func mergeNotificationContextSnapshot(with messages: [PushMessage]) async {
+        try? await mergeNotificationContextSnapshotReportingFailure(with: messages)
+    }
+
+    private func mergeNotificationContextSnapshotReportingFailure(
+        with messages: [PushMessage]
+    ) async throws {
         guard !messages.isEmpty else { return }
         let eventMessages = messages.filter { message in
             normalizedEntityType(message) == "event" || message.eventId != nil
@@ -2595,7 +2922,7 @@ actor LocalDataStore {
             thingMessages: thingMessages,
             source: snapshotSourceIdentifier()
         )
-        _ = NotificationContextSnapshotStore.write(
+        try NotificationContextSnapshotStore.writeOrThrow(
             snapshot,
             fileManager: fileManager,
             appGroupIdentifier: appGroupIdentifier
@@ -2638,10 +2965,17 @@ actor LocalDataStore {
         reason: PushGoSystemSnapshotRefreshReason,
         now: Date = Date()
     ) async {
+        try? await refreshSystemSurfaceSnapshotReportingFailure(reason: reason, now: now)
+    }
+
+    private func refreshSystemSurfaceSnapshotReportingFailure(
+        reason: PushGoSystemSnapshotRefreshReason,
+        now: Date = Date()
+    ) async throws {
         let defaults = AppConstants.sharedUserDefaults(suiteName: appGroupIdentifier)
         let policy = PushGoSystemSnapshotRefreshPolicy()
         guard policy.shouldRefresh(now: now, reason: reason, defaults: defaults) else { return }
-        await rebuildSystemSurfaceSnapshot(now: now)
+        try await rebuildSystemSurfaceSnapshotReportingFailure(now: now)
         policy.recordRefresh(now: now, defaults: defaults)
     }
 
@@ -2655,29 +2989,33 @@ actor LocalDataStore {
     }
 
     func rebuildSystemSurfaceSnapshot(now: Date = Date()) async {
+        try? await rebuildSystemSurfaceSnapshotReportingFailure(now: now)
+    }
+
+    private func rebuildSystemSurfaceSnapshotReportingFailure(now: Date = Date()) async throws {
         guard backend != nil else {
-            clearSystemSurfaceSnapshot()
+            try clearSystemSurfaceSnapshotReportingFailure()
             return
         }
         let settings = await loadSystemIntegrationSettings()
-        let countsTuple = (try? await messageCounts()) ?? (total: 0, unread: 0)
-        let recentMessages = ((try? await loadMessagesPage(
+        let countsTuple = try await messageCounts()
+        let recentMessages = try await loadMessagesPage(
             before: nil,
             limit: 80,
             filter: .all,
             channel: nil,
             tag: nil,
             sortMode: .timeDescending
-        )) ?? [])
+        )
             .filter(isTopLevelMessage)
             .map { PushGoSystemSummaryBuilder.summary(for: $0, settings: settings) }
 
         var eventSummaries: [PushGoSystemSummary] = []
-        let eventMessages = (try? await loadEventMessagesForProjectionPage(before: nil, limit: 120)) ?? []
+        let eventMessages = try await loadEventMessagesForProjectionPage(before: nil, limit: 120)
         let eventIDs = orderedEntityIDs(from: eventMessages, kind: .event)
         for eventID in eventIDs {
-            guard let detail = try? await loadEventProjectionDetail(eventId: eventID),
-                  let summary = PushGoProjectionSummaryBuilder.eventSummary(
+            let detail = try await loadEventProjectionDetail(eventId: eventID)
+            guard let summary = PushGoProjectionSummaryBuilder.eventSummary(
                     from: detail,
                     eventID: eventID,
                     settings: settings
@@ -2689,11 +3027,11 @@ actor LocalDataStore {
         }
 
         var thingSummaries: [PushGoSystemSummary] = []
-        let thingMessages = (try? await loadThingMessagesForProjectionPage(before: nil, limit: 120)) ?? []
+        let thingMessages = try await loadThingMessagesForProjectionPage(before: nil, limit: 120)
         let thingIDs = orderedEntityIDs(from: thingMessages, kind: .thing)
         for thingID in thingIDs {
-            guard let detail = try? await loadThingProjectionDetail(thingId: thingID),
-                  let summary = PushGoProjectionSummaryBuilder.thingSummary(
+            let detail = try await loadThingProjectionDetail(thingId: thingID)
+            guard let summary = PushGoProjectionSummaryBuilder.thingSummary(
                     from: detail,
                     thingID: thingID,
                     settings: settings
@@ -2735,10 +3073,10 @@ actor LocalDataStore {
             now: now
         )
         if counts.totalMessages == 0, snapshot.criticalEvents.isEmpty, snapshot.latestObjectStates.isEmpty {
-            clearSystemSurfaceSnapshot()
+            try clearSystemSurfaceSnapshotReportingFailure()
             return
         }
-        _ = PushGoSystemSnapshotStore.write(
+        try PushGoSystemSnapshotStore.writeOrThrow(
             snapshot,
             fileManager: fileManager,
             appGroupIdentifier: appGroupIdentifier
@@ -2746,7 +3084,11 @@ actor LocalDataStore {
     }
 
     private func clearSystemSurfaceSnapshot() {
-        _ = PushGoSystemSnapshotStore.clear(
+        try? clearSystemSurfaceSnapshotReportingFailure()
+    }
+
+    private func clearSystemSurfaceSnapshotReportingFailure() throws {
+        try PushGoSystemSnapshotStore.clearOrThrow(
             fileManager: fileManager,
             appGroupIdentifier: appGroupIdentifier
         )
@@ -2876,6 +3218,16 @@ actor LocalDataStore {
         _ messages: [PushMessage],
         settings explicitSettings: SystemIntegrationSettings? = nil
     ) async {
+        try? await indexSystemSearchMessagesReportingFailure(
+            messages,
+            settings: explicitSettings
+        )
+    }
+
+    private func indexSystemSearchMessagesReportingFailure(
+        _ messages: [PushMessage],
+        settings explicitSettings: SystemIntegrationSettings? = nil
+    ) async throws {
         guard let spotlightIndexer, !messages.isEmpty else { return }
         let settings: SystemIntegrationSettings
         if let explicitSettings {
@@ -2888,7 +3240,7 @@ actor LocalDataStore {
             .map { PushGoSystemSummaryBuilder.summary(for: $0, settings: settings) }
             .filter(\.privacy.mayIndexTitle)
         guard !summaries.isEmpty else { return }
-        try? await spotlightIndexer.index(summaries)
+        try await spotlightIndexer.index(summaries)
     }
 
     private func indexSystemSearchEntities(
@@ -3005,8 +3357,12 @@ actor LocalDataStore {
     }
 
     private func updateSearchIndex(with messages: [PushMessage]) async {
+        try? await updateSearchIndexReportingFailure(with: messages)
+    }
+
+    private func updateSearchIndexReportingFailure(with messages: [PushMessage]) async throws {
         guard !messages.isEmpty else { return }
-        await mutateSearchIndex { searchIndex in
+        try await mutateSearchIndexReportingFailure { searchIndex in
             let batchSize = 500
             var index = 0
             while index < messages.count {
@@ -3024,6 +3380,38 @@ actor LocalDataStore {
                 try await searchIndex.bulkUpsert(entries: entries)
                 index = upper
             }
+        }
+    }
+
+    private func mutateSearchIndexReportingFailure(
+        _ mutation: (MessageSearchIndex) async throws -> Void
+    ) async throws {
+        guard let backend else { return }
+        guard let searchIndex else {
+            let error = CocoaError(.fileNoSuchFile)
+            await backend.setDerivedComponentStatus(
+                Self.messageSearchDerivedComponent,
+                status: "stale",
+                error: "Search index is unavailable"
+            )
+            throw error
+        }
+        let wasReady = await backend.derivedComponentIsReady(Self.messageSearchDerivedComponent)
+        do {
+            try await mutation(searchIndex)
+            if wasReady {
+                await backend.setDerivedComponentStatus(
+                    Self.messageSearchDerivedComponent,
+                    status: "ready"
+                )
+            }
+        } catch {
+            await backend.setDerivedComponentStatus(
+                Self.messageSearchDerivedComponent,
+                status: "stale",
+                error: String(describing: error)
+            )
+            throw error
         }
     }
 
@@ -3077,7 +3465,13 @@ actor LocalDataStore {
     }
 
     private func rebuildMetadataIndex(with messages: [PushMessage]) async {
-        guard let metadataIndex else { return }
+        try? await rebuildMetadataIndexReportingFailure(with: messages)
+    }
+
+    private func rebuildMetadataIndexReportingFailure(with messages: [PushMessage]) async throws {
+        guard let metadataIndex else {
+            throw CocoaError(.fileNoSuchFile)
+        }
         guard !messages.isEmpty else { return }
         let batchSize = 500
         var index = 0
@@ -3092,7 +3486,7 @@ actor LocalDataStore {
                     tags: message.tags
                 )
             }
-            try? await metadataIndex.bulkReplace(entries: entries)
+            try await metadataIndex.bulkReplace(entries: entries)
             index = upper
         }
     }
@@ -4784,6 +5178,70 @@ private actor GRDBStore {
                     """
                 )
         }
+		migrator.registerMigration("v24_durable_pending_local_deletions") { db in
+            try db.execute(
+                sql: """
+                    CREATE TABLE pending_local_deletions (
+                        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                        id TEXT NOT NULL UNIQUE,
+                        deduplication_key TEXT NOT NULL,
+                        summary TEXT NOT NULL,
+                        undo_label TEXT NOT NULL,
+                        payload_version INTEGER NOT NULL DEFAULT 1,
+                        payload_json TEXT NOT NULL,
+                        state TEXT NOT NULL,
+                        created_at_epoch_ms REAL NOT NULL,
+                        deadline_epoch_ms REAL,
+                        retry_after_epoch_ms REAL,
+                        attempt_count INTEGER NOT NULL DEFAULT 0,
+                        lease_owner TEXT,
+                        lease_until_epoch_ms REAL,
+                        cleanup_json TEXT,
+                        last_error_code TEXT,
+                        CHECK (payload_version = 1),
+                        CHECK (state IN (
+                            'queued', 'undoable', 'executing', 'retry_waiting',
+                            'cleanup_pending', 'reconciliation_required'
+                        ))
+                    );
+                    """
+            )
+            try db.execute(
+                sql: "CREATE INDEX idx_pending_local_deletions_state_sequence ON pending_local_deletions(state, sequence);"
+            )
+            try db.execute(
+                sql: "CREATE INDEX idx_pending_local_deletions_deduplication ON pending_local_deletions(deduplication_key);"
+            )
+            try db.execute(
+                sql: "CREATE UNIQUE INDEX idx_pending_local_deletions_one_undoable ON pending_local_deletions(state) WHERE state = 'undoable';"
+            )
+        }
+		migrator.registerMigration("v25_canonical_derived_work_outbox") { db in
+            try db.execute(
+                sql: """
+                    CREATE TABLE canonical_derived_work (
+                        work_id TEXT PRIMARY KEY NOT NULL,
+                        local_message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+                        kind TEXT NOT NULL,
+                        state TEXT NOT NULL DEFAULT 'pending',
+                        generation INTEGER NOT NULL DEFAULT 1,
+                        lease_owner TEXT,
+                        lease_until_epoch_ms INTEGER,
+                        lease_generation INTEGER NOT NULL DEFAULT 0,
+                        attempt_count INTEGER NOT NULL DEFAULT 0,
+                        next_attempt_epoch_ms INTEGER NOT NULL,
+                        created_at_epoch_ms INTEGER NOT NULL,
+                        updated_at_epoch_ms INTEGER NOT NULL,
+                        last_error TEXT,
+                        CHECK (kind IN ('search', 'notification_context', 'live_activity', 'system_snapshot')),
+                        CHECK (state IN ('pending', 'leased', 'retry_wait', 'completed')),
+                        UNIQUE(local_message_id, kind)
+                    );
+                    CREATE INDEX idx_canonical_derived_work_due
+                        ON canonical_derived_work(state, next_attempt_epoch_ms, lease_until_epoch_ms, created_at_epoch_ms);
+                    """
+            )
+        }
 	        return migrator
 	    }()
 
@@ -5301,6 +5759,551 @@ private actor GRDBStore {
         try dbQueue.write(action)
     }
 
+    func enqueuePendingLocalDeletion(
+        summary: String,
+        undoLabel: String,
+        intent: PendingLocalDeletionIntent,
+        timeout: TimeInterval,
+        now: Date
+    ) async throws -> PendingLocalDeletionRecord {
+        try write { db in
+            if let existing = try pendingLocalDeletion(
+                deduplicationKey: intent.deduplicationKey,
+                db: db
+            ) {
+                return existing
+            }
+            let hasUndoable = try Bool.fetchOne(
+                db,
+                sql: "SELECT EXISTS(SELECT 1 FROM pending_local_deletions WHERE state = 'undoable');"
+            ) ?? false
+            let id = UUID()
+            let state: PendingLocalDeletionState = hasUndoable ? .queued : .undoable
+            let deadline = hasUndoable ? nil : now.addingTimeInterval(max(0, timeout))
+            let payload = try encodedJSONString(intent)
+            try db.execute(
+                sql: """
+                    INSERT INTO pending_local_deletions(
+                        id, deduplication_key, summary, undo_label, payload_version,
+                        payload_json, state, created_at_epoch_ms, deadline_epoch_ms,
+                        retry_after_epoch_ms, attempt_count, lease_owner,
+                        lease_until_epoch_ms, cleanup_json, last_error_code
+                    ) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, NULL, 0, NULL, NULL, NULL, NULL);
+                    """,
+                arguments: [
+                    id.uuidString,
+                    intent.deduplicationKey,
+                    summary,
+                    undoLabel,
+                    payload,
+                    state.rawValue,
+                    Self.storedEpoch(now),
+                    deadline.map(Self.storedEpoch),
+                ]
+            )
+            guard let record = try pendingLocalDeletion(id: id, db: db) else {
+                throw localStoreError("Pending deletion was not persisted.")
+            }
+            return record
+        }
+    }
+
+    func loadPendingLocalDeletions(now: Date) async throws -> [PendingLocalDeletionRecord] {
+        try write { db in
+            try recoverExpiredPendingLocalDeletionLeases(db: db, now: now)
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT * FROM pending_local_deletions
+                    WHERE state <> 'reconciliation_required'
+                    ORDER BY sequence ASC;
+                    """
+            )
+            var foundInvalidPayload = false
+            for row in rows {
+                do {
+                    _ = try decodePendingLocalDeletion(row)
+                } catch {
+                    foundInvalidPayload = true
+                    let id: String = row["id"]
+                    try db.execute(
+                        sql: """
+                            UPDATE pending_local_deletions
+                            SET state = 'reconciliation_required',
+                                deadline_epoch_ms = NULL, retry_after_epoch_ms = NULL,
+                                lease_owner = NULL, lease_until_epoch_ms = NULL,
+                                last_error_code = 'invalid_persisted_payload'
+                            WHERE id = ?;
+                            """,
+                        arguments: [id]
+                    )
+                }
+            }
+            if foundInvalidPayload {
+                try promoteNextPendingLocalDeletion(db: db, now: now, timeout: 5)
+            }
+            return try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT * FROM pending_local_deletions
+                    WHERE state <> 'reconciliation_required'
+                    ORDER BY sequence ASC;
+                    """
+            ).map(decodePendingLocalDeletion)
+        }
+    }
+
+    func pendingLocalDeletion(id: UUID) async throws -> PendingLocalDeletionRecord? {
+        try read { db in try pendingLocalDeletion(id: id, db: db) }
+    }
+
+    func forcePendingLocalDeletionsDue(now: Date) async throws {
+        try write { db in
+            try db.execute(
+                sql: """
+                    UPDATE pending_local_deletions
+                    SET state = 'retry_waiting', deadline_epoch_ms = NULL,
+                        retry_after_epoch_ms = ?, last_error_code = NULL
+                    WHERE state IN ('queued', 'undoable');
+                    """,
+                arguments: [Self.storedEpoch(now)]
+            )
+        }
+    }
+
+    func forcePendingLocalDeletionDue(
+        id: UUID,
+        timeout: TimeInterval,
+        now: Date
+    ) async throws -> Bool {
+        try write { db in
+            try db.execute(
+                sql: """
+                    UPDATE pending_local_deletions
+                    SET state = 'retry_waiting', deadline_epoch_ms = NULL,
+                        retry_after_epoch_ms = ?, last_error_code = NULL
+                    WHERE id = ? AND state = 'undoable';
+                    """,
+                arguments: [Self.storedEpoch(now), id.uuidString]
+            )
+            let changed = db.changesCount == 1
+            if changed {
+                try promoteNextPendingLocalDeletion(db: db, now: now, timeout: timeout)
+            }
+            return changed
+        }
+    }
+
+    func undoPendingLocalDeletion(
+        id: UUID,
+        timeout: TimeInterval,
+        now: Date
+    ) async throws -> Bool {
+        try write { db in
+            try db.execute(
+                sql: "DELETE FROM pending_local_deletions WHERE id = ? AND state = 'undoable';",
+                arguments: [id.uuidString]
+            )
+            guard db.changesCount == 1 else { return false }
+            try promoteNextPendingLocalDeletion(db: db, now: now, timeout: timeout)
+            return true
+        }
+    }
+
+    func claimNextPendingLocalDeletion(
+        owner: String,
+        leaseDuration: TimeInterval,
+        timeout: TimeInterval,
+        now: Date
+    ) async throws -> PendingLocalDeletionRecord? {
+        try write { db in
+            try recoverExpiredPendingLocalDeletionLeases(db: db, now: now)
+            let nowEpoch = Self.storedEpoch(now)
+            guard let row = try Row.fetchOne(
+                db,
+                sql: """
+                    SELECT * FROM pending_local_deletions
+                    WHERE (state = 'undoable' AND deadline_epoch_ms <= ?)
+                       OR (state = 'retry_waiting' AND retry_after_epoch_ms <= ?)
+                    ORDER BY sequence ASC
+                    LIMIT 1;
+                    """,
+                arguments: [nowEpoch, nowEpoch]
+            ) else { return nil }
+            let candidate = try decodePendingLocalDeletion(row)
+            try db.execute(
+                sql: """
+                    UPDATE pending_local_deletions
+                    SET state = 'executing', attempt_count = attempt_count + 1,
+                        lease_owner = ?, lease_until_epoch_ms = ?,
+                        deadline_epoch_ms = NULL, retry_after_epoch_ms = NULL
+                    WHERE id = ? AND state = ?;
+                    """,
+                arguments: [
+                    owner,
+                    Self.storedEpoch(now.addingTimeInterval(max(1, leaseDuration))),
+                    candidate.id.uuidString,
+                    candidate.state.rawValue,
+                ]
+            )
+            guard db.changesCount == 1 else { return nil }
+            if candidate.state == .undoable {
+                try promoteNextPendingLocalDeletion(db: db, now: now, timeout: timeout)
+            }
+            return try pendingLocalDeletion(id: candidate.id, db: db)
+        }
+    }
+
+    func nextPendingLocalDeletionCleanup() async throws -> PendingLocalDeletionRecord? {
+        try read { db in
+            guard let row = try Row.fetchOne(
+                db,
+                sql: """
+                    SELECT * FROM pending_local_deletions
+                    WHERE state = 'cleanup_pending'
+                    ORDER BY sequence ASC LIMIT 1;
+                    """
+            ) else { return nil }
+            return try decodePendingLocalDeletion(row)
+        }
+    }
+
+    func retryClaimedPendingLocalDeletion(
+        id: UUID,
+        owner: String,
+        retryAfter: Date,
+        errorCode: String
+    ) async throws {
+        try write { db in
+            try db.execute(
+                sql: """
+                    UPDATE pending_local_deletions
+                    SET state = 'retry_waiting', retry_after_epoch_ms = ?,
+                        lease_owner = NULL, lease_until_epoch_ms = NULL,
+                        last_error_code = ?
+                    WHERE id = ? AND state = 'executing' AND lease_owner = ?;
+                    """,
+                arguments: [Self.storedEpoch(retryAfter), errorCode, id.uuidString, owner]
+            )
+        }
+    }
+
+    func abandonClaimedPendingLocalDeletion(id: UUID, owner: String) async throws {
+        try write { db in
+            try db.execute(
+                sql: """
+                    DELETE FROM pending_local_deletions
+                    WHERE id = ? AND state = 'executing' AND lease_owner = ?;
+                    """,
+                arguments: [id.uuidString, owner]
+            )
+        }
+    }
+
+    func markPendingLocalDeletionReconciliationRequired(
+        id: UUID,
+        owner: String?,
+        errorCode: String
+    ) async throws {
+        try write { db in
+            var sql = """
+                UPDATE pending_local_deletions
+                SET state = 'reconciliation_required', lease_owner = NULL,
+                    lease_until_epoch_ms = NULL, deadline_epoch_ms = NULL,
+                    retry_after_epoch_ms = NULL, last_error_code = ?
+                WHERE id = ?
+                """
+            var arguments: StatementArguments = [errorCode, id.uuidString]
+            if let owner {
+                sql += " AND state = 'executing' AND lease_owner = ?"
+                arguments += [owner]
+            }
+            try db.execute(sql: sql + ";", arguments: arguments)
+        }
+    }
+
+    func completePendingLocalDeletionCleanup(id: UUID) async throws {
+        try write { db in
+            try db.execute(
+                sql: "DELETE FROM pending_local_deletions WHERE id = ? AND state = 'cleanup_pending';",
+                arguments: [id.uuidString]
+            )
+        }
+    }
+
+    func commitClaimedPendingLocalDeletion(
+        id: UUID,
+        owner: String,
+        now: Date
+    ) async throws -> PendingLocalDeletionCleanup {
+        try write { db in
+            guard let record = try pendingLocalDeletion(id: id, db: db),
+                  record.state == .executing,
+                  record.leaseOwner == owner
+            else {
+                throw localStoreError("Pending deletion lease is no longer owned by this executor.")
+            }
+
+            var cleanup = PendingLocalDeletionCleanup()
+            switch record.intent {
+            case let .messages(ids):
+                let uniqueIDs = Array(Set(ids))
+                if !uniqueIDs.isEmpty {
+                    let inClause = uniqueIDs.map { Self.sqlQuoted($0.uuidString) }.joined(separator: ",")
+                    let records = try Row.fetchAll(
+                        db,
+                        sql: "SELECT * FROM messages WHERE id IN (\(inClause));"
+                    ).map(GRDBMessageRecord.init(row:))
+                    try db.execute(sql: "DELETE FROM messages WHERE id IN (\(inClause));")
+                    try Self.rebuildAffectedEntityProjectionHeads(afterDeleting: records, db: db)
+                    cleanup = deletionCleanup(messageRecords: records)
+                }
+
+            case let .events(ids):
+                let normalized = normalizedIdentifiers(ids)
+                cleanup.eventIDs = normalized
+                if !normalized.isEmpty {
+                    let inClause = normalized.map(Self.sqlQuoted).joined(separator: ",")
+                    let records = try Row.fetchAll(
+                        db,
+                        sql: "SELECT * FROM messages WHERE event_id IN (\(inClause)) AND entity_type = 'event';"
+                    ).map(GRDBMessageRecord.init(row:))
+                    let messageIDs = records.map { Self.sqlQuoted($0.id.uuidString) }.joined(separator: ",")
+                    if !messageIDs.isEmpty {
+                        try db.execute(sql: "DELETE FROM messages WHERE id IN (\(messageIDs));")
+                    }
+                    try db.execute(sql: "DELETE FROM event_projection_heads WHERE event_id IN (\(inClause));")
+                    mergeMessageRecords(records, into: &cleanup)
+                }
+
+            case let .things(ids):
+                let normalized = normalizedIdentifiers(ids)
+                cleanup.thingIDs = normalized
+                if !normalized.isEmpty {
+                    let inClause = normalized.map(Self.sqlQuoted).joined(separator: ",")
+                    let records = try Row.fetchAll(
+                        db,
+                        sql: """
+                            SELECT * FROM messages
+                            WHERE thing_id IN (\(inClause))
+                               OR (entity_type = 'thing' AND entity_id IN (\(inClause)));
+                            """
+                    ).map(GRDBMessageRecord.init(row:))
+                    let pendingCount = try Int.fetchOne(
+                        db,
+                        sql: "SELECT COUNT(*) FROM pending_inbound_messages WHERE thing_id IN (\(inClause));"
+                    ) ?? 0
+                    let messageIDs = records.map { Self.sqlQuoted($0.id.uuidString) }.joined(separator: ",")
+                    if !messageIDs.isEmpty {
+                        try db.execute(sql: "DELETE FROM messages WHERE id IN (\(messageIDs));")
+                    }
+                    try db.execute(sql: "DELETE FROM thing_projection_heads WHERE thing_id IN (\(inClause));")
+                    try db.execute(sql: "DELETE FROM pending_inbound_messages WHERE thing_id IN (\(inClause));")
+                    mergeMessageRecords(records, into: &cleanup)
+                    cleanup.deletedRecordCount += pendingCount
+                }
+
+            case let .channelHistory(channelID, expectedGateway, expectedUpdatedAt):
+                let normalizedGateway = Self.normalizeGateway(expectedGateway)
+                let normalizedChannel = channelID.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !normalizedGateway.isEmpty, !normalizedChannel.isEmpty else {
+                    throw localStoreError("Invalid gateway/channel_id for pending channel removal.")
+                }
+                let channelCondition = Self.channelMatchCondition(value: normalizedChannel)
+                let records = try Row.fetchAll(
+                    db,
+                    sql: "SELECT * FROM messages WHERE \(channelCondition);"
+                ).map(GRDBMessageRecord.init(row:))
+                let pendingCount = try Int.fetchOne(
+                    db,
+                    sql: "SELECT COUNT(*) FROM pending_inbound_messages WHERE \(channelCondition);"
+                ) ?? 0
+                try db.execute(sql: "DELETE FROM messages WHERE \(channelCondition);")
+                try db.execute(sql: "DELETE FROM event_projection_heads WHERE \(channelCondition);")
+                try db.execute(sql: "DELETE FROM thing_projection_heads WHERE \(channelCondition);")
+                try db.execute(sql: "DELETE FROM pending_inbound_messages WHERE \(channelCondition);")
+                try db.execute(
+                    sql: """
+                        UPDATE channel_subscriptions
+                        SET is_deleted = 1, deleted_at = ?, password = '', updated_at = ?
+                        WHERE gateway = ? AND channel_id = ? AND is_deleted = 0 AND updated_at = ?;
+                        """,
+                    arguments: [
+                        Self.storedEpoch(now),
+                        Self.storedEpoch(now),
+                        normalizedGateway,
+                        normalizedChannel,
+                        Self.storedEpoch(expectedUpdatedAt),
+                    ]
+                )
+                guard db.changesCount == 1 else {
+                    throw localStoreError("Channel subscription changed during pending removal.")
+                }
+                cleanup = deletionCleanup(messageRecords: records)
+                cleanup.deletedRecordCount += pendingCount
+                cleanup.rebuildSystemSearchIndex = true
+            }
+
+            let cleanupJSON = try encodedJSONString(cleanup)
+            try db.execute(
+                sql: """
+                    UPDATE pending_local_deletions
+                    SET state = 'cleanup_pending', cleanup_json = ?,
+                        lease_owner = NULL, lease_until_epoch_ms = NULL,
+                        deadline_epoch_ms = NULL, retry_after_epoch_ms = NULL,
+                        last_error_code = NULL
+                    WHERE id = ? AND state = 'executing' AND lease_owner = ?;
+                    """,
+                arguments: [cleanupJSON, id.uuidString, owner]
+            )
+            guard db.changesCount == 1 else {
+                throw localStoreError("Pending deletion lease changed during commit.")
+            }
+            return cleanup
+        }
+    }
+
+    private func pendingLocalDeletion(
+        id: UUID,
+        db: Database
+    ) throws -> PendingLocalDeletionRecord? {
+        guard let row = try Row.fetchOne(
+            db,
+            sql: "SELECT * FROM pending_local_deletions WHERE id = ? LIMIT 1;",
+            arguments: [id.uuidString]
+        ) else { return nil }
+        return try decodePendingLocalDeletion(row)
+    }
+
+    private func pendingLocalDeletion(
+        deduplicationKey: String,
+        db: Database
+    ) throws -> PendingLocalDeletionRecord? {
+        guard let row = try Row.fetchOne(
+            db,
+            sql: """
+                SELECT * FROM pending_local_deletions
+                WHERE deduplication_key = ? AND state <> 'reconciliation_required'
+                ORDER BY sequence ASC LIMIT 1;
+                """,
+            arguments: [deduplicationKey]
+        ) else { return nil }
+        return try decodePendingLocalDeletion(row)
+    }
+
+    private func decodePendingLocalDeletion(_ row: Row) throws -> PendingLocalDeletionRecord {
+        let sequence: Int64 = row["sequence"]
+        let idString: String = row["id"]
+        let payloadVersion: Int = row["payload_version"]
+        let payloadJSON: String = row["payload_json"]
+        let stateRaw: String = row["state"]
+        let createdEpoch: Double = row["created_at_epoch_ms"]
+        let deadlineEpoch: Double? = row["deadline_epoch_ms"]
+        let retryEpoch: Double? = row["retry_after_epoch_ms"]
+        let leaseUntilEpoch: Double? = row["lease_until_epoch_ms"]
+        let cleanupJSON: String? = row["cleanup_json"]
+        guard payloadVersion == 1,
+              let id = UUID(uuidString: idString),
+              let state = PendingLocalDeletionState(rawValue: stateRaw),
+              let payloadData = payloadJSON.data(using: .utf8)
+        else {
+            throw localStoreError("Pending deletion record has an unsupported format.")
+        }
+        let pendingDecoder = JSONDecoder()
+        pendingDecoder.dateDecodingStrategy = .millisecondsSince1970
+        let intent = try pendingDecoder.decode(PendingLocalDeletionIntent.self, from: payloadData)
+        let cleanup: PendingLocalDeletionCleanup?
+        if let cleanupJSON, let data = cleanupJSON.data(using: .utf8) {
+            cleanup = try pendingDecoder.decode(PendingLocalDeletionCleanup.self, from: data)
+        } else {
+            cleanup = nil
+        }
+        return PendingLocalDeletionRecord(
+            sequence: sequence,
+            id: id,
+            summary: row["summary"],
+            undoLabel: row["undo_label"],
+            intent: intent,
+            state: state,
+            createdAt: Self.dateFromStoredEpoch(createdEpoch),
+            deadline: deadlineEpoch.map(Self.dateFromStoredEpoch),
+            retryAfter: retryEpoch.map(Self.dateFromStoredEpoch),
+            attemptCount: row["attempt_count"],
+            leaseOwner: row["lease_owner"],
+            leaseUntil: leaseUntilEpoch.map(Self.dateFromStoredEpoch),
+            cleanup: cleanup,
+            lastErrorCode: row["last_error_code"]
+        )
+    }
+
+    private func encodedJSONString<T: Encodable>(_ value: T) throws -> String {
+        let pendingEncoder = JSONEncoder()
+        pendingEncoder.dateEncodingStrategy = .millisecondsSince1970
+        let data = try pendingEncoder.encode(value)
+        guard let string = String(data: data, encoding: .utf8) else {
+            throw localStoreError("Pending deletion payload could not be encoded.")
+        }
+        return string
+    }
+
+    private func recoverExpiredPendingLocalDeletionLeases(db: Database, now: Date) throws {
+        try db.execute(
+            sql: """
+                UPDATE pending_local_deletions
+                SET state = 'retry_waiting', retry_after_epoch_ms = ?,
+                    lease_owner = NULL, lease_until_epoch_ms = NULL,
+                    last_error_code = 'execution_lease_expired'
+                WHERE state = 'executing' AND lease_until_epoch_ms <= ?;
+                """,
+            arguments: [Self.storedEpoch(now), Self.storedEpoch(now)]
+        )
+    }
+
+    private func promoteNextPendingLocalDeletion(
+        db: Database,
+        now: Date,
+        timeout: TimeInterval
+    ) throws {
+        let hasUndoable = try Bool.fetchOne(
+            db,
+            sql: "SELECT EXISTS(SELECT 1 FROM pending_local_deletions WHERE state = 'undoable');"
+        ) ?? false
+        guard !hasUndoable else { return }
+        try db.execute(
+            sql: """
+                UPDATE pending_local_deletions
+                SET state = 'undoable', deadline_epoch_ms = ?
+                WHERE sequence = (
+                    SELECT sequence FROM pending_local_deletions
+                    WHERE state = 'queued' ORDER BY sequence ASC LIMIT 1
+                );
+                """,
+            arguments: [Self.storedEpoch(now.addingTimeInterval(max(0, timeout)))]
+        )
+    }
+
+    private func normalizedIdentifiers(_ values: [String]) -> [String] {
+        Array(Set(values.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }))
+    }
+
+    private func deletionCleanup(
+        messageRecords: [GRDBMessageRecord]
+    ) -> PendingLocalDeletionCleanup {
+        var cleanup = PendingLocalDeletionCleanup()
+        mergeMessageRecords(messageRecords, into: &cleanup)
+        return cleanup
+    }
+
+    private func mergeMessageRecords(
+        _ records: [GRDBMessageRecord],
+        into cleanup: inout PendingLocalDeletionCleanup
+    ) {
+        cleanup.messageIDs.append(contentsOf: records.map(\.id))
+        cleanup.notificationRequestIDs.append(contentsOf: records.compactMap(\.notificationRequestId))
+        cleanup.imageURLs.append(contentsOf: records.flatMap { $0.toPushMessage(decoder: decoder).imageURLs })
+        cleanup.deletedRecordCount += records.count
+    }
+
     private func loadAppSettings(_ db: Database) throws -> AppSettingsSnapshot? {
         let sql = "SELECT * FROM app_settings WHERE id = 'default' LIMIT 1;"
         guard let row = try Row.fetchOne(db, sql: sql) else { return nil }
@@ -5686,6 +6689,7 @@ private actor GRDBStore {
             }
 
             try insertOrUpdateMessage(record, db: db, updateOnConflict: false)
+            try enqueueCanonicalDerivedWork(messageID: record.id, db: db)
             if let identity = resolveOperationScopeIdentity(from: record.toPushMessage(decoder: decoder)) {
                 try upsertOperationLedger(
                     identity: identity,
@@ -7362,8 +8366,7 @@ private actor GRDBStore {
             if let notificationRequestId = record.notificationRequestId,
                let existing = try loadMessageRecordByNotificationRequestId(notificationRequestId, db: db)
             {
-                var updatedRecord = record
-                updatedRecord = GRDBMessageRecord(
+                let updatedRecord = GRDBMessageRecord(
                     id: existing.id,
                     messageId: existing.messageId,
                     title: record.title,
@@ -7395,6 +8398,7 @@ private actor GRDBStore {
                     updateOnConflict: true,
                     projectionMessage: canonicalMessage
                 )
+                try enqueueCanonicalDerivedWork(messageID: updatedRecord.id, db: db)
                 return .duplicateRequest(updatedRecord.toPushMessage(decoder: decoder))
             }
 
@@ -7426,8 +8430,172 @@ private actor GRDBStore {
             if let thingId = thingParentIdentity(from: canonicalMessage) {
                 try replayPendingInboundMessages(thingId: thingId, db: db)
             }
+            try enqueueCanonicalDerivedWork(messageID: record.id, db: db)
             return .persisted(record.toPushMessage(decoder: decoder))
         }
+    }
+
+    private func enqueueCanonicalDerivedWork(messageID: UUID, db: Database) throws {
+        let now = Int64((Date().timeIntervalSince1970 * 1_000).rounded())
+        for kind in CanonicalDerivedWorkKind.allCases {
+            let workID = "\(messageID.uuidString.lowercased()):\(kind.rawValue)"
+            try db.execute(
+                sql: """
+                    INSERT INTO canonical_derived_work (
+                        work_id, local_message_id, kind, state, generation,
+                        lease_generation, attempt_count, next_attempt_epoch_ms,
+                        created_at_epoch_ms, updated_at_epoch_ms
+                    ) VALUES (?, ?, ?, 'pending', 1, 0, 0, ?, ?, ?)
+                    ON CONFLICT(work_id) DO UPDATE SET
+                        generation = canonical_derived_work.generation + 1,
+                        state = CASE
+                            WHEN canonical_derived_work.state = 'leased' THEN 'leased'
+                            ELSE 'pending'
+                        END,
+                        next_attempt_epoch_ms = excluded.next_attempt_epoch_ms,
+                        updated_at_epoch_ms = excluded.updated_at_epoch_ms,
+                        last_error = NULL;
+                    """,
+                // `messages.id` is stored using UUID.uuidString (uppercase). SQLite
+                // TEXT foreign keys are byte-for-byte, so preserve that spelling.
+                arguments: [workID, messageID.uuidString, kind.rawValue, now, now, now]
+            )
+        }
+    }
+
+    func claimCanonicalDerivedWork(
+        owner: String,
+        leaseDuration: TimeInterval,
+        now: Date
+    ) async throws -> CanonicalDerivedWorkItem? {
+        try write { db in
+            let nowMs = Int64((now.timeIntervalSince1970 * 1_000).rounded())
+            let leaseUntil = Int64((now.addingTimeInterval(max(1, leaseDuration)).timeIntervalSince1970 * 1_000).rounded())
+            guard let row = try Row.fetchOne(
+                db,
+                sql: """
+                    SELECT work_id, local_message_id, kind, generation, lease_generation
+                    FROM canonical_derived_work
+                    WHERE (state IN ('pending','retry_wait') AND next_attempt_epoch_ms <= ?)
+                       OR (state = 'leased' AND lease_until_epoch_ms <= ?)
+                    ORDER BY CASE kind
+                        WHEN 'search' THEN 0
+                        WHEN 'notification_context' THEN 1
+                        WHEN 'live_activity' THEN 2
+                        ELSE 3 END,
+                        next_attempt_epoch_ms ASC, created_at_epoch_ms ASC
+                    LIMIT 1;
+                    """,
+                arguments: [nowMs, nowMs]
+            ) else { return nil }
+            let workID: String = row["work_id"]
+            let expectedGeneration: Int64 = row["generation"]
+            let expectedLeaseGeneration: Int64 = row["lease_generation"]
+            try db.execute(
+                sql: """
+                    UPDATE canonical_derived_work
+                    SET state = 'leased', lease_owner = ?, lease_until_epoch_ms = ?,
+                        lease_generation = lease_generation + 1, updated_at_epoch_ms = ?
+                    WHERE work_id = ? AND generation = ? AND lease_generation = ?
+                      AND ((state IN ('pending','retry_wait') AND next_attempt_epoch_ms <= ?)
+                        OR (state = 'leased' AND lease_until_epoch_ms <= ?));
+                    """,
+                arguments: [
+                    owner, leaseUntil, nowMs, workID, expectedGeneration,
+                    expectedLeaseGeneration, nowMs, nowMs,
+                ]
+            )
+            guard db.changesCount == 1,
+                  let messageIDText: String = row["local_message_id"],
+                  let messageID = UUID(uuidString: messageIDText),
+                  let kindRaw: String = row["kind"],
+                  let kind = CanonicalDerivedWorkKind(rawValue: kindRaw)
+            else { return nil }
+            return CanonicalDerivedWorkItem(
+                workID: workID,
+                messageID: messageID,
+                kind: kind,
+                owner: owner,
+                generation: expectedGeneration,
+                leaseGeneration: expectedLeaseGeneration + 1
+            )
+        }
+    }
+
+    func nextCanonicalDerivedWorkAttemptDate() async throws -> Date? {
+        try read { db in
+            let epochMs = try Int64.fetchOne(
+                db,
+                sql: """
+                    SELECT MIN(CASE
+                        WHEN state IN ('pending', 'retry_wait') THEN next_attempt_epoch_ms
+                        WHEN state = 'leased' THEN lease_until_epoch_ms
+                        ELSE NULL
+                    END)
+                    FROM canonical_derived_work
+                    WHERE state IN ('pending', 'retry_wait', 'leased');
+                    """
+            )
+            return epochMs.map { Date(timeIntervalSince1970: TimeInterval($0) / 1_000) }
+        }
+    }
+
+    func completeCanonicalDerivedWork(
+        _ item: CanonicalDerivedWorkItem,
+        now: Date
+    ) async throws {
+        try write { db in
+            try db.execute(
+                sql: """
+                    UPDATE canonical_derived_work
+                    SET state = 'completed', lease_owner = NULL, lease_until_epoch_ms = NULL,
+                        updated_at_epoch_ms = ?, last_error = NULL
+                    WHERE work_id = ? AND state = 'leased' AND lease_owner = ?
+                      AND generation = ? AND lease_generation = ?;
+                    """,
+                arguments: [
+                    Int64((now.timeIntervalSince1970 * 1_000).rounded()), item.workID,
+                    item.owner, item.generation, item.leaseGeneration,
+                ]
+            )
+        }
+    }
+
+    func retryCanonicalDerivedWork(
+        _ item: CanonicalDerivedWorkItem,
+        retryAfter: Date,
+        error: String
+    ) async throws {
+        try write { db in
+            try db.execute(
+                sql: """
+                    UPDATE canonical_derived_work
+                    SET state = 'retry_wait', lease_owner = NULL, lease_until_epoch_ms = NULL,
+                        attempt_count = attempt_count + 1, next_attempt_epoch_ms = ?,
+                        updated_at_epoch_ms = ?, last_error = ?
+                    WHERE work_id = ? AND state = 'leased' AND lease_owner = ?
+                      AND generation = ? AND lease_generation = ?;
+                    """,
+                arguments: [
+                    Int64((retryAfter.timeIntervalSince1970 * 1_000).rounded()),
+                    Int64((Date().timeIntervalSince1970 * 1_000).rounded()),
+                    String(error.prefix(1_000)), item.workID, item.owner,
+                    item.generation, item.leaseGeneration,
+                ]
+            )
+        }
+    }
+
+    func messageStoreRevisionValues() -> AsyncValueObservation<Int64> {
+        ValueObservation
+            .trackingConstantRegion { db in
+                try Int64.fetchOne(
+                    db,
+                    sql: "SELECT revision FROM message_store_revision WHERE id = 1;"
+                ) ?? 0
+            }
+            .removeDuplicates()
+            .values(in: dbQueue, bufferingPolicy: .bufferingNewest(1))
     }
 
     func saveEntityRecords(_ messages: [PushMessage]) async throws {

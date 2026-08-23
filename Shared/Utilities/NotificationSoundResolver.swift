@@ -65,7 +65,7 @@ enum NotificationSoundResolver {
         case .systemDefault:
             return .systemDefault
         case .silent:
-            return level == .low ? nil : defaultResolution(for: level)
+            return level.allowsSilentMode ? nil : defaultResolution(for: level)
         case .builtin:
             if let filename = configuredCompiledFilename(rule.compiledFilename) {
                 return .named(filename)

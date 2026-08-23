@@ -1,11 +1,18 @@
 import Foundation
+import Darwin
 #if canImport(WidgetKit)
 import WidgetKit
 #endif
 
 enum PushGoSystemSnapshotStore {
+    enum StoreError: Error, Equatable {
+        case appGroupContainerUnavailable(String)
+        case lockUnavailable(Int32)
+    }
+
     private static let directoryName = "system-surface-snapshot"
     private static let fileName = "snapshot.bin"
+    private static let processLock = NSLock()
     private static let widgetKinds = [
         "io.ethan.pushgo.widgets.unread",
         "io.ethan.pushgo.widgets.critical-events",
@@ -69,17 +76,16 @@ enum PushGoSystemSnapshotStore {
         fileManager: FileManager = .default,
         appGroupIdentifier: String = AppConstants.appGroupIdentifier
     ) -> Bool {
-        guard let fileURL = snapshotFileURL(
-            fileManager: fileManager,
-            appGroupIdentifier: appGroupIdentifier
-        ) else {
+        do {
+            try writeOrThrow(
+                snapshot,
+                fileManager: fileManager,
+                appGroupIdentifier: appGroupIdentifier
+            )
+            return true
+        } catch {
             return false
         }
-        let didWrite = write(snapshot, to: fileURL, fileManager: fileManager)
-        if didWrite {
-            reloadWidgets()
-        }
-        return didWrite
     }
 
     @discardableResult
@@ -88,16 +94,87 @@ enum PushGoSystemSnapshotStore {
         to fileURL: URL,
         fileManager: FileManager = .default
     ) -> Bool {
-        let directoryURL = fileURL.deletingLastPathComponent()
         do {
-            try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-            let encoder = PropertyListEncoder()
-            encoder.outputFormat = .binary
-            let data = try encoder.encode(snapshot)
-            let temporaryURL = directoryURL.appendingPathComponent(
-                ".\(fileName).tmp-\(UUID().uuidString.lowercased())",
-                isDirectory: false
-            )
+            try writeOrThrow(snapshot, to: fileURL, fileManager: fileManager)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    static func writeOrThrow(
+        _ snapshot: PushGoSystemSurfaceSnapshot,
+        fileManager: FileManager = .default,
+        appGroupIdentifier: String = AppConstants.appGroupIdentifier
+    ) throws {
+        guard let fileURL = snapshotFileURL(
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier
+        ) else {
+            throw StoreError.appGroupContainerUnavailable(appGroupIdentifier)
+        }
+        try writeOrThrow(snapshot, to: fileURL, fileManager: fileManager)
+        reloadWidgets()
+    }
+
+    static func writeOrThrow(
+        _ snapshot: PushGoSystemSurfaceSnapshot,
+        to fileURL: URL,
+        fileManager: FileManager = .default
+    ) throws {
+        try withExclusiveLock(for: fileURL, fileManager: fileManager) {
+            try writeUnlocked(snapshot, to: fileURL, fileManager: fileManager)
+        }
+    }
+
+    /// Serializes the small snapshot read/modify/write window across the host
+    /// and notification extensions. The closure must stay CPU/file-local; no
+    /// network or message-database work belongs inside this lock.
+    static func updateAtomically<Result>(
+        fileManager: FileManager = .default,
+        appGroupIdentifier: String = AppConstants.appGroupIdentifier,
+        _ mutation: (PushGoSystemSurfaceSnapshot?) -> (PushGoSystemSurfaceSnapshot, Result)?
+    ) -> Result? {
+        guard let fileURL = snapshotFileURL(
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier
+        ) else {
+            return nil
+        }
+        do {
+            let result = try withExclusiveLock(for: fileURL, fileManager: fileManager) {
+                guard let (snapshot, result) = mutation(
+                    load(from: fileURL, fileManager: fileManager)
+                ) else {
+                    return Optional<Result>.none
+                }
+                try writeUnlocked(snapshot, to: fileURL, fileManager: fileManager)
+                return Optional(result)
+            }
+            if result != nil {
+                reloadWidgets()
+            }
+            return result
+        } catch {
+            return nil
+        }
+    }
+
+    private static func writeUnlocked(
+        _ snapshot: PushGoSystemSurfaceSnapshot,
+        to fileURL: URL,
+        fileManager: FileManager
+    ) throws {
+        let directoryURL = fileURL.deletingLastPathComponent()
+        try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let encoder = PropertyListEncoder()
+        encoder.outputFormat = .binary
+        let data = try encoder.encode(snapshot)
+        let temporaryURL = directoryURL.appendingPathComponent(
+            ".\(fileName).tmp-\(UUID().uuidString.lowercased())",
+            isDirectory: false
+        )
+        do {
             try data.write(to: temporaryURL, options: [])
             if fileManager.fileExists(atPath: fileURL.path) {
                 _ = try fileManager.replaceItemAt(
@@ -109,6 +186,40 @@ enum PushGoSystemSnapshotStore {
             } else {
                 try fileManager.moveItem(at: temporaryURL, to: fileURL)
             }
+        } catch {
+            try? fileManager.removeItem(at: temporaryURL)
+            throw error
+        }
+    }
+
+    static func clearOrThrow(
+        fileManager: FileManager = .default,
+        appGroupIdentifier: String = AppConstants.appGroupIdentifier
+    ) throws {
+        guard let fileURL = snapshotFileURL(
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier
+        ) else {
+            throw StoreError.appGroupContainerUnavailable(appGroupIdentifier)
+        }
+        try clearOrThrow(at: fileURL, fileManager: fileManager)
+        reloadWidgets()
+    }
+
+    static func clearOrThrow(
+        at fileURL: URL,
+        fileManager: FileManager = .default
+    ) throws {
+        try withExclusiveLock(for: fileURL, fileManager: fileManager) {
+            guard fileManager.fileExists(atPath: fileURL.path) else { return }
+            try fileManager.removeItem(at: fileURL)
+        }
+    }
+
+    @discardableResult
+    private static func ignoringFailure(_ operation: () throws -> Void) -> Bool {
+        do {
+            try operation()
             return true
         } catch {
             return false
@@ -120,17 +231,15 @@ enum PushGoSystemSnapshotStore {
         fileManager: FileManager = .default,
         appGroupIdentifier: String = AppConstants.appGroupIdentifier
     ) -> Bool {
-        guard let fileURL = snapshotFileURL(
-            fileManager: fileManager,
-            appGroupIdentifier: appGroupIdentifier
-        ) else {
+        do {
+            try clearOrThrow(
+                fileManager: fileManager,
+                appGroupIdentifier: appGroupIdentifier
+            )
+            return true
+        } catch {
             return false
         }
-        let didClear = clear(at: fileURL, fileManager: fileManager)
-        if didClear {
-            reloadWidgets()
-        }
-        return didClear
     }
 
     @discardableResult
@@ -138,12 +247,8 @@ enum PushGoSystemSnapshotStore {
         at fileURL: URL,
         fileManager: FileManager = .default
     ) -> Bool {
-        guard fileManager.fileExists(atPath: fileURL.path) else { return true }
-        do {
-            try fileManager.removeItem(at: fileURL)
-            return true
-        } catch {
-            return false
+        ignoringFailure {
+            try clearOrThrow(at: fileURL, fileManager: fileManager)
         }
     }
 
@@ -154,6 +259,48 @@ enum PushGoSystemSnapshotStore {
         }
         WidgetCenter.shared.reloadAllTimelines()
         #endif
+    }
+
+    private static func withExclusiveLock<Result>(
+        for fileURL: URL,
+        fileManager: FileManager,
+        _ operation: () throws -> Result
+    ) throws -> Result {
+        processLock.lock()
+        defer { processLock.unlock() }
+        return try withExclusiveFileLock(
+            for: fileURL,
+            fileManager: fileManager,
+            operation
+        )
+    }
+
+    private static func withExclusiveFileLock<Result>(
+        for fileURL: URL,
+        fileManager: FileManager,
+        _ operation: () throws -> Result
+    ) throws -> Result {
+        let directoryURL = fileURL.deletingLastPathComponent()
+        try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let lockURL = directoryURL.appendingPathComponent(".snapshot.lock", isDirectory: false)
+        let descriptor = lockURL.path.withCString {
+            Darwin.open($0, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+        }
+        guard descriptor >= 0 else {
+            throw StoreError.lockUnavailable(errno)
+        }
+        defer { Darwin.close(descriptor) }
+        var fileLock = flock()
+        fileLock.l_type = Int16(F_WRLCK)
+        fileLock.l_whence = Int16(SEEK_SET)
+        guard Darwin.fcntl(descriptor, F_SETLKW, &fileLock) != -1 else {
+            throw StoreError.lockUnavailable(errno)
+        }
+        defer {
+            fileLock.l_type = Int16(F_UNLCK)
+            _ = Darwin.fcntl(descriptor, F_SETLK, &fileLock)
+        }
+        return try operation()
     }
 
     static func waitForWidgetReloadRequestDelivery(timeout: Duration = .milliseconds(350)) async {

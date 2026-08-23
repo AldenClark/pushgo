@@ -472,7 +472,7 @@ actor NotificationSoundManager {
         var referencedCompiledFilenames = Set<String>()
         for level in NotificationSoundLevel.allCases {
             var rule = settings.rule(for: level)
-            if rule.mode == .silent, level != .low {
+            if rule.mode == .silent, !level.allowsSilentMode {
                 rule = .default(for: level)
             }
             rule.gain = min(max(rule.gain, NotificationSoundCompiler.minimumGain), NotificationSoundCompiler.maximumGain)
@@ -633,7 +633,7 @@ actor NotificationSoundManager {
 
     private func fallbackRuleAfterRemovingCustomSound(for level: NotificationSoundLevel) -> NotificationSoundRule {
         var rule = NotificationSoundRule.default(for: level)
-        if level == .low {
+        if level.allowsSilentMode {
             rule.mode = .silent
         }
         rule.customAssetID = nil

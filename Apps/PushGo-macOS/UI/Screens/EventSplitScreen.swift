@@ -280,22 +280,11 @@ struct EventSplitScreen: View {
             fallbackSingleSummary: localizationManager.localized("push_type_event"),
             multipleSummaryTitle: localizationManager.localized("push_type_event"),
             undoLabel: localizationManager.localized("cancel"),
-            scope: { PendingLocalDeletionController.Scope(eventIDs: Set($0.map(\.id))) },
-            commit: { eventIDs in
-                _ = try await viewModel.deleteEvents(eventIds: eventIDs)
-            },
-            onCompletion: { [environment] result in
-                guard case let .failure(error) = result else { return }
-                environment.showErrorToast(
-                    error,
-                    fallbackMessage: localizationManager.localized("operation_failed"),
-                    duration: 2
-                )
-            }
+            intent: { .events(ids: $0) }
         ) else { return }
 
         if let selectedEvent,
-           result.scope.suppressesEvent(id: selectedEvent.id, channelId: selectedEvent.channelId)
+           result.contains(where: { $0.id == selectedEvent.id })
         {
             selection = nil
         }

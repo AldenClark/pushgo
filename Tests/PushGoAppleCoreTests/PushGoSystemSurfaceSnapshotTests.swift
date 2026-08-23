@@ -224,6 +224,87 @@ struct PushGoSystemSurfaceSnapshotTests {
     }
 
     @Test
+    func durableDedupeDoesNotIncrementAnUnreadEvictedFromTheTopFiveSnapshot() {
+        let duplicate = UNMutableNotificationContent()
+        duplicate.userInfo = [
+            "message_id": "msg-evicted-dedupe",
+            "entity_type": "message",
+            "title": "Old delivery",
+            "body": "Redelivered after leaving the preview window",
+        ]
+        var snapshot = PushGoSystemSurfaceSnapshot.empty(source: "tests")
+        for index in 0..<6 {
+            let content = UNMutableNotificationContent()
+            content.userInfo = [
+                "message_id": index == 0 ? "msg-evicted-dedupe" : "msg-new-\(index)",
+                "entity_type": "message",
+                "title": "Message \(index)",
+            ]
+            snapshot = PushGoNotificationProjectionUpdater.makeUpdate(
+                content: content,
+                requestIdentifier: "request-\(index)",
+                existingSnapshot: snapshot,
+                insertedUnread: true,
+                now: Date(timeIntervalSince1970: TimeInterval(400 + index))
+            )!.snapshot
+        }
+        #expect(!snapshot.unreadMessages.contains { $0.id == "message:msg-evicted-dedupe" })
+
+        let update = PushGoNotificationProjectionUpdater.makeUpdate(
+            content: duplicate,
+            requestIdentifier: "request-redelivery",
+            existingSnapshot: snapshot,
+            insertedUnread: false,
+            now: Date(timeIntervalSince1970: 500)
+        )
+
+        #expect(update?.insertedUnread == false)
+        #expect(update?.snapshot.counts.unreadMessages == 6)
+        #expect(update?.snapshot.unreadMessages.first?.id == "message:msg-evicted-dedupe")
+    }
+
+    @Test
+    func concurrentSnapshotMutationsDoNotLoseUnreadIncrements() async {
+        await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            await withTaskGroup(of: Void.self) { group in
+                for _ in 0..<24 {
+                    group.addTask {
+                        _ = PushGoSystemSnapshotStore.updateAtomically(
+                            appGroupIdentifier: appGroupIdentifier
+                        ) { existingSnapshot in
+                            let existing = existingSnapshot ?? .empty(source: "concurrency-test")
+                            let nextUnread = existing.counts.unreadMessages + 1
+                            let snapshot = PushGoSystemSurfaceSnapshot(
+                                schemaVersion: PushGoSystemSurfaceSnapshot.schemaVersion,
+                                generatedAtEpochMs: existing.generatedAtEpochMs + 1,
+                                source: "concurrency-test",
+                                counts: .init(
+                                    totalMessages: existing.counts.totalMessages + 1,
+                                    unreadMessages: nextUnread,
+                                    criticalEvents: existing.counts.criticalEvents,
+                                    objectWarnings: existing.counts.objectWarnings
+                                ),
+                                focusState: existing.focusState,
+                                recentMessages: existing.recentMessages,
+                                unreadMessages: existing.unreadMessages,
+                                criticalEvents: existing.criticalEvents,
+                                objectWarnings: existing.objectWarnings,
+                                latestObjectStates: existing.latestObjectStates
+                            )
+                            return (snapshot, nextUnread)
+                        }
+                    }
+                }
+            }
+
+            let snapshot = PushGoSystemSnapshotStore.load(
+                appGroupIdentifier: appGroupIdentifier
+            )
+            #expect(snapshot?.counts.unreadMessages == 24)
+        }
+    }
+
+    @Test
     func nseProjectionRedactsDecryptFailedContentButStillCountsUnread() {
         let content = UNMutableNotificationContent()
         content.title = "Encrypted alert"

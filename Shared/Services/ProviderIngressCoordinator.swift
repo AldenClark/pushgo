@@ -1,5 +1,54 @@
 import Foundation
 
+enum ProviderLegacyDestructivePullMetadata {
+    static let markerKey = "_pushgo_legacy_destructive_pull"
+    static let markerValue = "1"
+}
+
+@MainActor
+struct IngressBackgroundRefreshRunner {
+    enum Stage: Sendable, Equatable {
+        case canonicalIngress
+        case acknowledgements
+        case derivedWork
+    }
+
+    enum StageOutcome: Sendable, Equatable {
+        case succeeded
+        case failed
+    }
+
+    enum Outcome: Sendable, Equatable {
+        case succeeded
+        case failed(Stage)
+        case cancelled
+
+        var isSuccessful: Bool { self == .succeeded }
+    }
+
+    typealias StageOperation = @MainActor @Sendable () async -> StageOutcome
+
+    let mergeIngress: StageOperation
+    let drainAcknowledgements: StageOperation
+    let drainDerivedWork: StageOperation
+
+    func run() async -> Outcome {
+        guard !Task.isCancelled else { return .cancelled }
+        guard await mergeIngress() == .succeeded else {
+            return Task.isCancelled ? .cancelled : .failed(.canonicalIngress)
+        }
+        guard !Task.isCancelled else { return .cancelled }
+        guard await drainAcknowledgements() == .succeeded else {
+            return Task.isCancelled ? .cancelled : .failed(.acknowledgements)
+        }
+        guard !Task.isCancelled else { return .cancelled }
+        guard await drainDerivedWork() == .succeeded else {
+            return Task.isCancelled ? .cancelled : .failed(.derivedWork)
+        }
+        return Task.isCancelled ? .cancelled : .succeeded
+    }
+}
+
 enum ProviderIngressPersistenceResult {
     case persisted
     case duplicate
@@ -78,7 +127,18 @@ struct ProviderIngressIdentity: Sendable, Equatable {
     }
 }
 
-final class ProviderIngressCoordinator {
+/// Mutable coordination is confined to the host application's main actor. The
+/// type remains nonisolated because legacy notification dictionaries are not
+/// `Sendable`; every production owner is `@MainActor`, and tests give each
+/// instance to at most one task at a time.
+final class ProviderIngressCoordinator: @unchecked Sendable {
+    private struct DurablePulledItem {
+        let payload: [AnyHashable: Any]
+        let deliveryID: String
+        let ackIdentity: ProviderDeliveryAckFailureStore.DeliveryIdentity?
+        let ingressIdentity: ProviderDeliveryAckFailureStore.DeliveryIdentity
+    }
+
     private struct AckBatch {
         let baseURL: URL
         let token: String?
@@ -131,7 +191,9 @@ final class ProviderIngressCoordinator {
     private var isFullSyncInFlight = false
     private var lastFullSyncAttemptAt = Date.distantPast
     private static let recentFullSyncInterval: TimeInterval = 3
-    private static let appAckMarkerMinimumAge: TimeInterval = 120
+    // NSE never owns correctness-critical network work. The host may claim a
+    // freshly durable ACK immediately; duplicate workers are fenced by lease.
+    private static let appAckMarkerMinimumAge: TimeInterval = 0
 
     init(
         platformSuffix: String,
@@ -177,94 +239,116 @@ final class ProviderIngressCoordinator {
         allowFallbackPull: Bool,
         limit: Int = 256
     ) async -> Int {
-        guard await hooks.isEnabled() else { return 0 }
-        let pendingEntries = await notificationIngressInbox.pendingEntries(limit: limit)
-        guard !pendingEntries.isEmpty else {
-            await drainAckMarkers(source: "provider.inbox.ack_marker.\(platformSuffix)")
-            return 0
-        }
-
+        guard !Task.isCancelled, await hooks.isEnabled() else { return 0 }
+        let batchSize = max(1, min(limit, 512))
+        let maximumEntriesPerDrain = 8_192
         var applied = 0
-        for pendingEntry in pendingEntries {
-            let payload = pendingEntry.payload
-            let identity = identity(
-                from: payload,
-                fallbackRequestIdentifier: pendingEntry.record.requestIdentifier
-            )
+        var visited = 0
 
-            if await hooks.hasPersistedNotification(identity) {
-                await notificationIngressInbox.markCompleted(pendingEntry)
-                continue
-            }
+        while visited < maximumEntriesPerDrain {
+            guard !Task.isCancelled else { return applied }
+            let pendingEntries = await notificationIngressInbox.pendingEntries(limit: batchSize)
+            guard !pendingEntries.isEmpty else { break }
+            for pendingEntry in pendingEntries {
+                guard !Task.isCancelled else { return applied }
+                visited += 1
+                let payload = pendingEntry.payload
+                let identity = identity(
+                    from: payload,
+                    fallbackRequestIdentifier: pendingEntry.record.requestIdentifier
+                )
 
-            let ingress = await NotificationHandling.resolveNotificationIngress(
-                from: payload,
-                dataStore: dataStore,
-                fallbackServerConfig: await hooks.serverConfig(),
-                channelSubscriptionService: channelSubscriptionService
-            )
+                if await hooks.hasPersistedNotification(identity) {
+                    await notificationIngressInbox.markCompleted(pendingEntry)
+                    continue
+                }
 
-            let shouldRemove: Bool
-            switch ingress {
-            case let .pulled(resolvedPayload, requestIdentifier, context):
-                let result = await hooks.persistPayload(resolvedPayload, requestIdentifier)
-                await hooks.applyPersistenceResult(result)
-                if result.isApplied {
-                    applied += 1
-                }
-                await finalizePulledIngress(
-                    deliveryId: requestIdentifier,
-                    context: context,
-                    result: result,
-                    source: "provider.inbox.pulled.\(platformSuffix)"
+                let ingress = await NotificationHandling.resolveNotificationIngress(
+                    from: payload,
+                    dataStore: dataStore,
+                    fallbackServerConfig: await hooks.serverConfig(),
+                    channelSubscriptionService: channelSubscriptionService,
+                    notificationIngressInbox: notificationIngressInbox,
+                    allowLegacyFallback: allowFallbackPull
                 )
-                shouldRemove = shouldRemoveInboxEntry(payload: resolvedPayload, result: result)
-            case let .direct(resolvedPayload, requestIdentifier):
-                let effectiveRequestIdentifier = requestIdentifier ?? pendingEntry.record.requestIdentifier
-                let result = await hooks.persistPayload(resolvedPayload, effectiveRequestIdentifier)
-                await hooks.applyPersistenceResult(result)
-                if result.isApplied {
-                    applied += 1
+                guard !Task.isCancelled else { return applied }
+
+                let shouldRemove: Bool
+                switch ingress {
+                case let .pulled(resolvedPayload, requestIdentifier, context):
+                    guard await journalPulledPayload(
+                        resolvedPayload,
+                        deliveryID: requestIdentifier,
+                        context: context,
+                        source: "provider.inbox.pull.\(platformSuffix)"
+                    ) else {
+                        await notificationIngressInbox.markRetry(
+                            pendingEntry,
+                            reason: "pulled_payload_journal_failed"
+                        )
+                        continue
+                    }
+                    let result = await hooks.persistPayload(resolvedPayload, requestIdentifier)
+                    await hooks.applyPersistenceResult(result)
+                    if result.isApplied { applied += 1 }
+                    await finalizePulledIngress(
+                        deliveryId: requestIdentifier,
+                        context: context,
+                        result: result,
+                        source: "provider.inbox.pulled.\(platformSuffix)"
+                    )
+                    shouldRemove = shouldRemoveInboxEntry(payload: resolvedPayload, result: result)
+                case let .direct(resolvedPayload, requestIdentifier):
+                    let effectiveRequestIdentifier = requestIdentifier ?? pendingEntry.record.requestIdentifier
+                    let result = await hooks.persistPayload(resolvedPayload, effectiveRequestIdentifier)
+                    await hooks.applyPersistenceResult(result)
+                    if result.isApplied { applied += 1 }
+                    await ackDirectDeliveryIfNeeded(
+                        payload: resolvedPayload,
+                        result: result,
+                        source: "provider.inbox.direct.\(platformSuffix)"
+                    )
+                    shouldRemove = shouldRemoveInboxEntry(payload: resolvedPayload, result: result)
+                case .claimedByPeer:
+                    shouldRemove = await hooks.hasPersistedNotification(identity)
+                case let .unresolvedWakeup(unresolvedPayload, requestIdentifier):
+                    guard allowFallbackPull else {
+                        shouldRemove = false
+                        break
+                    }
+                    let unresolvedDeliveryId = requestIdentifier
+                        ?? NotificationHandling.providerWakeupPullDeliveryId(from: unresolvedPayload)
+                        ?? pendingEntry.record.requestIdentifier
+                    guard let unresolvedDeliveryId else {
+                        shouldRemove = false
+                        break
+                    }
+                    let pulled = await syncProviderIngress(
+                        deliveryId: unresolvedDeliveryId,
+                        reason: "inbox_unresolved_\(reason)",
+                        skipInboxMerge: true
+                    )
+                    if pulled > 0 {
+                        applied += pulled
+                        shouldRemove = true
+                    } else {
+                        shouldRemove = false
+                    }
                 }
-                await ackDirectDeliveryIfNeeded(
-                    payload: resolvedPayload,
-                    result: result,
-                    source: "provider.inbox.direct.\(platformSuffix)"
-                )
-                shouldRemove = shouldRemoveInboxEntry(payload: resolvedPayload, result: result)
-            case .claimedByPeer:
-                shouldRemove = await hooks.hasPersistedNotification(identity)
-            case let .unresolvedWakeup(unresolvedPayload, requestIdentifier):
-                guard allowFallbackPull else {
-                    shouldRemove = false
-                    break
-                }
-                let unresolvedDeliveryId = requestIdentifier
-                    ?? NotificationHandling.providerWakeupPullDeliveryId(from: unresolvedPayload)
-                    ?? pendingEntry.record.requestIdentifier
-                guard let unresolvedDeliveryId else {
-                    shouldRemove = false
-                    break
-                }
-                let pulled = await syncProviderIngress(
-                    deliveryId: unresolvedDeliveryId,
-                    reason: "inbox_unresolved_\(reason)",
-                    skipInboxMerge: true
-                )
-                if pulled > 0 {
-                    applied += pulled
-                    shouldRemove = true
+
+                if shouldRemove {
+                    await notificationIngressInbox.markCompleted(pendingEntry)
                 } else {
-                    shouldRemove = false
+                    await notificationIngressInbox.markRetry(
+                        pendingEntry,
+                        reason: "canonical_or_resolution_retry"
+                    )
                 }
             }
-
-            if shouldRemove {
-                await notificationIngressInbox.markCompleted(pendingEntry)
-            }
+            if pendingEntries.count < batchSize { break }
         }
 
-        await drainAckMarkers(source: "provider.inbox.ack_marker.\(platformSuffix)")
+        _ = await notificationIngressInbox.performMaintenance()
         return applied
     }
 
@@ -287,7 +371,7 @@ final class ProviderIngressCoordinator {
         reason: String,
         skipInboxMerge: Bool = false
     ) async -> SyncOutcome {
-        guard await hooks.isEnabled() else { return .skipped }
+        guard !Task.isCancelled, await hooks.isEnabled() else { return .skipped }
         let normalizedDeliveryId = normalizedText(deliveryId)
         let shouldCoalesceFullSync = normalizedDeliveryId == nil && !bypassesRecentFullSyncCoalescing(reason: reason)
         if shouldCoalesceFullSync {
@@ -310,8 +394,11 @@ final class ProviderIngressCoordinator {
                 allowFallbackPull: false
             )
         }
+        guard !Task.isCancelled else { return .skipped }
         guard let config = await hooks.serverConfig() else { return .skipped }
+        guard !Task.isCancelled else { return .skipped }
         guard let deviceKey = await hooks.cachedDeviceKey() else { return .skipped }
+        guard !Task.isCancelled else { return .skipped }
         _ = gatewayTokenStore.save(token: config.token, baseURL: config.baseURL)
         var wakeupPullLease: ProviderWakeupPullClaimStore.ClaimLease?
         if let normalizedDeliveryId {
@@ -323,6 +410,7 @@ final class ProviderIngressCoordinator {
             ) else {
                 return .skipped
             }
+            guard !Task.isCancelled else { return .skipped }
             guard let lease = await wakeupPullClaimStore.acquireLease(
                 identity: identity,
                 owner: "app.sync.\(platformSuffix)",
@@ -347,44 +435,128 @@ final class ProviderIngressCoordinator {
                 )
                 var deliveryIdsToAck: [String] = []
                 var pageContainsFailedItem = false
+                var durableItems: [DurablePulledItem] = []
                 for item in pullResult.items {
                     var payload: [AnyHashable: Any] = item.payload.reduce(into: [:]) { result, element in
                         result[element.key] = element.value
                     }
                     payload["delivery_id"] = item.deliveryId
-                    let result = await hooks.persistPayload(payload, item.deliveryId)
+                    guard let ingressIdentity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
+                        deliveryId: item.deliveryId,
+                        baseURL: config.baseURL,
+                        deviceKey: deviceKey,
+                        ackContract: pullResult.requiresAck ? .v2Batch : .legacySingle
+                    ) else {
+                        pageContainsFailedItem = true
+                        continue
+                    }
+                    let ackIdentity = pullResult.requiresAck ? ingressIdentity : nil
+                    guard await journalPulledPayload(
+                        payload,
+                        deliveryID: item.deliveryId,
+                        contract: pullResult.contract,
+                        baseURL: config.baseURL,
+                        deviceKey: deviceKey,
+                        source: "provider.pull.page.\(platformSuffix)"
+                    ) else {
+                        pageContainsFailedItem = true
+                        if normalizedDeliveryId == item.deliveryId {
+                            targetPersistenceFailed = true
+                        }
+                        continue
+                    }
+                    durableItems.append(
+                        DurablePulledItem(
+                            payload: payload,
+                            deliveryID: item.deliveryId,
+                            ackIdentity: ackIdentity,
+                            ingressIdentity: ingressIdentity
+                        )
+                    )
+                }
+
+                try Task.checkCancellation()
+                for item in durableItems {
+                    try Task.checkCancellation()
+                    let result = await hooks.persistPayload(item.payload, item.deliveryID)
                     await hooks.applyPersistenceResult(result)
                     if result.isApplied {
                         applied += 1
                     }
                     if case .failed = result {
                         pageContainsFailedItem = true
-                        if normalizedDeliveryId == item.deliveryId {
+                        if normalizedDeliveryId == item.deliveryID {
                             targetPersistenceFailed = true
                         }
                     }
+                    if item.ackIdentity == nil {
+                        if result.allowsPulledItemRemoval {
+                            await notificationIngressInbox.markTerminal(
+                                identity: item.ingressIdentity,
+                                discarded: {
+                                    if case .rejected = result { return true }
+                                    return false
+                                }(),
+                                reason: "canonical_validation_rejected"
+                            )
+                        }
+                    } else {
+                        switch result {
+                        case .persisted, .duplicate:
+                            await notificationIngressInbox.markTerminal(
+                                identity: item.ingressIdentity,
+                                discarded: false
+                            )
+                        case .rejected:
+                            await notificationIngressInbox.markTerminal(
+                                identity: item.ingressIdentity,
+                                discarded: true,
+                                reason: "canonical_validation_rejected"
+                            )
+                        case .failed:
+                            break
+                        }
+                    }
                     if pullResult.requiresAck, result.allowsPulledItemRemoval {
-                        guard let identity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
-                            deliveryId: item.deliveryId,
-                            baseURL: config.baseURL,
-                            deviceKey: deviceKey,
-                            ackContract: .v2Batch
-                        ) else {
+                        guard item.ackIdentity != nil else {
                             pageContainsFailedItem = true
                             continue
                         }
-                        _ = await ackMarkerStore.markInboxDurable(
-                            identity: identity,
-                            source: "provider.pull.persisted.\(platformSuffix)",
-                            postNotification: false
-                        )
-                        deliveryIdsToAck.append(item.deliveryId)
+                        deliveryIdsToAck.append(item.deliveryID)
                     }
                 }
 
                 var ackSucceeded = true
                 if !deliveryIdsToAck.isEmpty {
+                    var pageAckLeases: [ProviderDeliveryAckFailureStore.PendingMarker] = []
+                    for deliveryID in deliveryIdsToAck {
+                        try Task.checkCancellation()
+                        let identity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
+                            deliveryId: deliveryID,
+                            baseURL: config.baseURL,
+                            deviceKey: deviceKey,
+                            ackContract: .v2Batch
+                        )
+                        guard let lease = await ackMarkerStore.acquireAckLease(
+                            identity: identity,
+                            owner: "app.page.\(platformSuffix)",
+                            leaseDuration: 30
+                        ) else {
+                            ackSucceeded = false
+                            break
+                        }
+                        pageAckLeases.append(lease)
+                    }
                     do {
+                        try Task.checkCancellation()
+                        guard ackSucceeded,
+                              pageAckLeases.count == deliveryIdsToAck.count
+                        else {
+                            throw Self.incompleteFreshAckError(
+                                requested: deliveryIdsToAck.count,
+                                removed: 0
+                            )
+                        }
                         let ack = try await channelSubscriptionService.ackMessages(
                             baseURL: config.baseURL,
                             token: config.token,
@@ -397,18 +569,29 @@ final class ProviderIngressCoordinator {
                                 removed: ack.removedCount
                             )
                         }
-                        for deliveryId in deliveryIdsToAck {
-                            if let identity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
-                                deliveryId: deliveryId,
-                                baseURL: config.baseURL,
-                                deviceKey: deviceKey,
-                                ackContract: .v2Batch
-                            ) {
-                                await ackMarkerStore.markCompleted(identity: identity)
-                            }
+                        for lease in pageAckLeases {
+                            await ackMarkerStore.markCompleted(lease)
                         }
+                    } catch is CancellationError {
+                        for lease in pageAckLeases {
+                            await ackMarkerStore.markAckFailed(
+                                lease,
+                                source: "provider.ingress.ack_batch.\(reason).cancelled",
+                                retryAfter: Date(),
+                                postNotification: false
+                            )
+                        }
+                        throw CancellationError()
                     } catch {
                         ackSucceeded = false
+                        for lease in pageAckLeases {
+                            await ackMarkerStore.markAckFailed(
+                                lease,
+                                source: "provider.ingress.ack_batch.\(reason).failed",
+                                retryAfter: Date().addingTimeInterval(30),
+                                postNotification: false
+                            )
+                        }
                         await hooks.recordProviderError(
                             error,
                             "provider.ingress.ack_batch.\(reason)"
@@ -454,10 +637,12 @@ final class ProviderIngressCoordinator {
             if await hooks.hasPersistedNotification(identity) {
                 await notificationIngressInbox.markCompleted(pendingEntry)
                 removed += 1
-                continue
             }
-            await notificationIngressInbox.markCompleted(pendingEntry)
-            removed += 1
+            // A successful sync against the current Gateway is not evidence
+            // that a hint from another immutable Gateway/device identity is
+            // obsolete. Keep unresolved hints until canonical persistence (or
+            // a future, identity-matched deterministic discard) proves that
+            // their recovery role has ended.
         }
         return removed
     }
@@ -470,10 +655,14 @@ final class ProviderIngressCoordinator {
         guard result.allowsAck else { return }
         guard NotificationHandling.providerWakeupPullDeliveryId(from: payload) == nil else { return }
         let sanitized = UserInfoSanitizer.sanitize(payload)
+        guard sanitized[ProviderLegacyDestructivePullMetadata.markerKey] as? String
+            != ProviderLegacyDestructivePullMetadata.markerValue
+        else { return }
         guard let identity = ProviderDeliveryAckFailureStore.DeliveryIdentity.direct(from: sanitized) else { return }
-        await ackDelivery(
+        _ = await ackMarkerStore.markInboxDurable(
             identity: identity,
-            source: source
+            source: "\(source).pending",
+            postNotification: false
         )
     }
 
@@ -488,71 +677,138 @@ final class ProviderIngressCoordinator {
             return
         }
 
+        guard let identity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
+            deliveryId: deliveryId,
+            baseURL: context.baseURL,
+            deviceKey: context.deviceKey,
+            ackContract: context.requiresAck ? .v2Batch : .legacySingle
+        ) else {
+            await wakeupPullClaimStore.releaseLease(context.claimLease)
+            return
+        }
         if context.requiresAck {
-            guard let identity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
-                deliveryId: deliveryId,
-                baseURL: context.baseURL,
-                deviceKey: context.deviceKey,
-                ackContract: .v2Batch
-            ) else {
-                await wakeupPullClaimStore.releaseLease(context.claimLease)
-                return
+            switch result {
+            case .persisted, .duplicate:
+                await notificationIngressInbox.markTerminal(
+                    identity: identity,
+                    discarded: false
+                )
+            case .rejected:
+                await notificationIngressInbox.markTerminal(
+                    identity: identity,
+                    discarded: true,
+                    reason: "canonical_validation_rejected"
+                )
+            case .failed:
+                break
             }
-            _ = await ackMarkerStore.markInboxDurable(
+        } else {
+            await notificationIngressInbox.markTerminal(
                 identity: identity,
-                source: "\(source).durable",
-                postNotification: false
+                discarded: {
+                    if case .rejected = result { return true }
+                    return false
+                }(),
+                reason: "canonical_validation_rejected"
             )
         }
         await wakeupPullClaimStore.markCompleted(context.claimLease)
-        guard context.requiresAck else { return }
-
-        do {
-            let ack = try await channelSubscriptionService.ackMessages(
-                baseURL: context.baseURL,
-                token: context.token,
-                deviceKey: context.deviceKey,
-                deliveryIds: [deliveryId]
-            )
-            guard ack.removedCount == 1 else {
-                throw Self.incompleteFreshAckError(requested: 1, removed: ack.removedCount)
-            }
-            if let identity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
-                deliveryId: deliveryId,
-                baseURL: context.baseURL,
-                deviceKey: context.deviceKey,
-                ackContract: .v2Batch
-            ) {
-                await ackMarkerStore.markCompleted(identity: identity)
-            }
-        } catch {
-            await hooks.recordProviderError(error, source)
-        }
+        // ACK is owned by the durable worker. Canonical persistence and
+        // notification presentation never wait for Gateway network I/O.
     }
 
-    func drainAckMarkers(source: String) async {
-        guard await hooks.isEnabled(), !isDrainingAckMarkers else { return }
+    @discardableResult
+    func journalPulledPayload(
+        _ payload: [AnyHashable: Any],
+        deliveryID: String,
+        context: ProviderPullContext,
+        source: String
+    ) async -> Bool {
+        await journalPulledPayload(
+            payload,
+            deliveryID: deliveryID,
+            contract: context.contract,
+            baseURL: context.baseURL,
+            deviceKey: context.deviceKey,
+            source: source
+        )
+    }
+
+    private func journalPulledPayload(
+        _ payload: [AnyHashable: Any],
+        deliveryID: String,
+        contract: ChannelSubscriptionService.PullContract,
+        baseURL: URL,
+        deviceKey: String,
+        source: String
+    ) async -> Bool {
+        let requiresAck = contract == .v2
+        let identity = requiresAck
+            ? ProviderDeliveryAckFailureStore.DeliveryIdentity(
+                deliveryId: deliveryID,
+                baseURL: baseURL,
+                deviceKey: deviceKey,
+                ackContract: .v2Batch
+            )
+            : nil
+        if requiresAck, identity == nil { return false }
+        var durablePayload = UserInfoSanitizer.sanitize(payload)
+        if !requiresAck {
+            durablePayload["base_url"] = baseURL.absoluteString
+            durablePayload["provider_device_key"] = deviceKey
+            durablePayload[ProviderLegacyDestructivePullMetadata.markerKey] =
+                ProviderLegacyDestructivePullMetadata.markerValue
+        }
+        let codablePayload = durablePayload.reduce(
+            into: [String: AnyCodable]()
+        ) { result, element in
+            result[element.key] = AnyCodable(element.value)
+        }
+        return await notificationIngressInbox.enqueue(
+            codablePayload: codablePayload,
+            requestIdentifier: deliveryID,
+            source: source,
+            ackIdentity: identity,
+            requiredEntryState: requiresAck ? "terminal_local" : "durable"
+        )
+    }
+
+    func drainAckMarkers(source: String, now: Date = Date()) async {
+        guard !Task.isCancelled, await hooks.isEnabled(), !isDrainingAckMarkers else { return }
         isDrainingAckMarkers = true
         defer { isDrainingAckMarkers = false }
 
         let markers = await ackMarkerStore.pendingMarkers(
             limit: 64,
-            minimumAge: ackMarkerMinimumAge
+            minimumAge: ackMarkerMinimumAge,
+            now: now
         )
         var batches: [String: AckBatch] = [:]
         for marker in markers {
+            guard !Task.isCancelled else { return }
             guard let identity = marker.identity else { continue }
             let baseURL = identity.baseURL
             let token = gatewayTokenStore.load(baseURL: baseURL)
             guard let lease = await ackMarkerStore.acquireAckLease(
                 marker,
                 owner: "app.\(platformSuffix)",
-                leaseDuration: 30
+                leaseDuration: 30,
+                now: now
             ) else {
                 continue
             }
+            guard !Task.isCancelled else {
+                await ackMarkerStore.markAckFailed(
+                    lease,
+                    source: "\(source).cancelled",
+                    retryAfter: now,
+                    postNotification: false
+                )
+                return
+            }
             if lease.ackContract == .legacySingle {
                 do {
+                    try Task.checkCancellation()
                     let removed = try await channelSubscriptionService.ackMessage(
                         baseURL: baseURL,
                         token: token,
@@ -572,6 +828,7 @@ final class ProviderIngressCoordinator {
                     )
                     await hooks.recordProviderError(error, source)
                 }
+                guard !Task.isCancelled else { return }
                 continue
             }
             let batchKey = Self.ackBatchKey(for: baseURL) + "\u{0}" + identity.deviceKey
@@ -589,13 +846,36 @@ final class ProviderIngressCoordinator {
         }
 
         for batch in batches.values {
+            guard !Task.isCancelled else {
+                for lease in batch.leases {
+                    await ackMarkerStore.markAckFailed(
+                        lease,
+                        source: "\(source).cancelled",
+                        retryAfter: now,
+                        postNotification: false
+                    )
+                }
+                return
+            }
             do {
-                _ = try await channelSubscriptionService.ackMessages(
+                try Task.checkCancellation()
+                let response = try await channelSubscriptionService.ackMessages(
                     baseURL: batch.baseURL,
                     token: batch.token,
                     deviceKey: batch.deviceKey,
                     deliveryIds: batch.leases.map(\.record.deliveryId)
                 )
+                let requested = batch.leases.count
+                let idempotentZero = response.removedCount == 0
+                    && batch.leases.allSatisfy { $0.attemptCount > 0 }
+                guard response.requestedCount == requested,
+                      response.removedCount == requested || idempotentZero
+                else {
+                    throw Self.incompleteFreshAckError(
+                        requested: requested,
+                        removed: response.removedCount
+                    )
+                }
                 for lease in batch.leases {
                     await ackMarkerStore.markCompleted(lease)
                 }
@@ -611,45 +891,7 @@ final class ProviderIngressCoordinator {
                 await hooks.recordProviderError(error, source)
             }
         }
-    }
-
-    private func ackDelivery(
-        identity: ProviderDeliveryAckFailureStore.DeliveryIdentity,
-        source: String
-    ) async {
-        _ = await ackMarkerStore.markInboxDurable(
-            identity: identity,
-            source: "\(source).pending",
-            postNotification: false
-        )
-        guard let lease = await ackMarkerStore.acquireAckLease(
-            identity: identity,
-            owner: "app.direct.\(platformSuffix)",
-            leaseDuration: 30
-        ) else {
-            return
-        }
-
-        do {
-            let removed = try await channelSubscriptionService.ackMessage(
-                baseURL: identity.baseURL,
-                token: gatewayTokenStore.load(baseURL: identity.baseURL),
-                deviceKey: identity.deviceKey,
-                deliveryId: identity.deliveryId
-            )
-            guard removed || lease.attemptCount > 0 else {
-                throw Self.incompleteFreshAckError(requested: 1, removed: 0)
-            }
-            await ackMarkerStore.markCompleted(lease)
-        } catch {
-            await ackMarkerStore.markAckFailed(
-                lease,
-                source: "\(source).failed",
-                retryAfter: Date().addingTimeInterval(60),
-                postNotification: false
-            )
-            await hooks.recordProviderError(error, source)
-        }
+        _ = await notificationIngressInbox.performMaintenance()
     }
 
     private func shouldRemoveInboxEntry(

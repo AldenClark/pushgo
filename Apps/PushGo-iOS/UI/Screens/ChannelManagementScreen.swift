@@ -526,24 +526,15 @@ struct ChannelManagementScreen: View {
                 let channelId = subscription.channelId
                 let expectedGateway = subscription.gateway
                 let expectedUpdatedAt = subscription.updatedAt
-                await environment.pendingLocalDeletionController.schedule(
+                _ = await environment.pendingLocalDeletionController.schedule(
                     summary: summary,
                     undoLabel: localizationManager.localized("cancel"),
-                    scope: .init(channelIDs: Set([channelId]))
-                ) {
-                    _ = try await environment.unsubscribeChannelAndDeleteLocalHistory(
-                        channelId: channelId,
+                    intent: .channelHistory(
+                        channelID: channelId,
                         expectedGateway: expectedGateway,
                         expectedUpdatedAt: expectedUpdatedAt
                     )
-                } onCompletion: { [environment] result in
-                    guard case let .failure(error) = result else { return }
-                    environment.showErrorToast(
-                        error,
-                        fallbackMessage: localizationManager.localized("operation_failed"),
-                        duration: 2.5
-                    )
-                }
+                )
             } else {
                 try await environment.unsubscribeChannel(channelId: subscription.channelId)
                 environment.showToast(

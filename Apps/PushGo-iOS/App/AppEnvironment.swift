@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import GRDB
 @preconcurrency import Network
 import Observation
 import SwiftUI
@@ -32,10 +33,14 @@ final class AppEnvironment {
     @ObservationIgnored private var messageSyncObserver: DarwinNotificationObserver?
     @ObservationIgnored private var notificationIngressObserver: DarwinNotificationObserver?
     @ObservationIgnored private var pendingCountsRefreshTask: Task<Void, Never>?
+    @ObservationIgnored private var messageStoreObservationTask: Task<Void, Never>?
     @ObservationIgnored private var bootstrapTask: Task<Void, Never>?
     @ObservationIgnored private var didBootstrap = false
     @ObservationIgnored private var providerIngressBootstrapRecoveryInFlight = false
     @ObservationIgnored private var scenePhases: [UUID: ScenePhase] = [:]
+    @ObservationIgnored private var pendingDeletionBackgroundTask: Task<Void, Never>?
+    @ObservationIgnored private var pendingDeletionBackgroundTaskID: UIBackgroundTaskIdentifier = .invalid
+    @ObservationIgnored private var pendingDeletionBackgroundDrainID: UUID?
 
     private var toastDismissTask: Task<Void, Never>?
 
@@ -44,7 +49,7 @@ final class AppEnvironment {
     private(set) var unreadMessageCount: Int = 0
     private(set) var messageStoreRevision: UUID = UUID()
     private(set) var toastMessage: ToastMessage?
-    @ObservationIgnored let pendingLocalDeletionController = PendingLocalDeletionController()
+    private(set) var isDeletionRecoveryReady = false
     var localStoreRecoveryState: LocalStoreRecoveryState? { localStoreRecoveryController.localStoreRecoveryState }
     private(set) var shouldPresentNotificationPermissionAlert: Bool = false
     var pendingMessageToOpen: UUID? {
@@ -174,6 +179,26 @@ final class AppEnvironment {
             self?.messageStateCoordinator
         }
     )
+    @ObservationIgnored private(set) lazy var pendingLocalDeletionController = PendingLocalDeletionController(
+        dataStore: dataStore,
+        channelCommitHandler: { [weak self] record, owner in
+            guard let self else { throw CancellationError() }
+            return try await self.channelSubscriptionController.commitPendingChannelRemoval(
+                record: record,
+                leaseOwner: owner
+            )
+        },
+        cleanupHandler: { [weak self] cleanup in
+            guard let self else { return }
+            await self.messageStateCoordinator.reconcileExternallyDeletedMessages(
+                notificationRequestIDs: cleanup.notificationRequestIDs,
+                imageURLs: cleanup.imageURLs
+            )
+        },
+        failureHandler: { [weak self] error in
+            self?.showErrorToast(error)
+        }
+    )
     @ObservationIgnored private(set) lazy var localStoreRecoveryController = LocalStoreRecoveryController(
         dataStore: dataStore,
         localizationManager: localizationManager,
@@ -280,15 +305,24 @@ final class AppEnvironment {
     private func performBootstrap() async {
         beginProviderIngressBootstrapRecovery()
         await loadPersistedState()
-        _ = await mergeNotificationIngressInbox(
-            reason: "bootstrap",
-            allowFallbackPull: false
-        )
-        await drainProviderDeliveryAckFailures(source: "provider.bootstrap.ack_failure.ios")
+        startMessageStoreObservationIfNeeded()
+        await pendingLocalDeletionController.restorePendingState()
+        isDeletionRecoveryReady = true
+        Task(priority: .utility) { @MainActor in
+            await pendingLocalDeletionController.processDueDeletions()
+        }
+        Task(priority: .utility) { @MainActor in
+            await drainProviderDeliveryAckFailures(source: "provider.bootstrap.ack_failure.ios")
+        }
         Task(priority: .utility) { @MainActor in
             defer {
                 finishProviderIngressBootstrapRecovery()
             }
+            _ = await mergeNotificationIngressInbox(
+                reason: "bootstrap",
+                allowFallbackPull: false
+            )
+            await dataStore.scheduleDerivedWorkDrain()
             await preparePushInfrastructure()
             let syncOutcome = await syncProviderIngressOutcome(reason: "bootstrap_ready")
             _ = await mergeNotificationIngressInbox(
@@ -308,6 +342,23 @@ final class AppEnvironment {
         }
         Task(priority: .utility) {
             await store.ensureSystemSearchIndexHealthy()
+        }
+    }
+
+    private func startMessageStoreObservationIfNeeded() {
+        guard messageStoreObservationTask == nil else { return }
+        let store = dataStore
+        messageStoreObservationTask = Task { @MainActor [weak self] in
+            do {
+                let revisions = try await store.messageStoreRevisionValues()
+                for try await _ in revisions {
+                    guard !Task.isCancelled else { break }
+                    self?.scheduleMessageListRefresh()
+                }
+            } catch {
+                // Imperative refresh hooks remain a compatibility accelerator;
+                // foreground bootstrap will retry observation next launch.
+            }
         }
     }
 
@@ -381,10 +432,15 @@ final class AppEnvironment {
         }
     }
 
-    func refreshChannelSubscriptions(syncWatch: Bool = true, immediateStandalone: Bool = false) async {
+    func refreshChannelSubscriptions(
+        syncWatch: Bool = true,
+        immediateStandalone: Bool = false,
+        syncProviderRoute: Bool = true
+    ) async {
         await channelSyncController.refreshChannelSubscriptions(
             syncWatch: syncWatch,
-            immediateStandalone: immediateStandalone
+            immediateStandalone: immediateStandalone,
+            syncProviderRoute: syncProviderRoute
         )
     }
 
@@ -1049,9 +1105,12 @@ final class AppEnvironment {
             let mergedReasons = listFormatter.string(from: bootstrapErrors) ?? bootstrapErrors.joined(separator: "、")
             showToast(message: localizationManager.localized("initialization_failed_placeholder", mergedReasons))
         }
-        await refreshChannelSubscriptions(syncWatch: false)
+        await refreshChannelSubscriptions(syncWatch: false, syncProviderRoute: false)
         await watchSyncController.completeBootstrapSync()
         requestNetworkPermissionOnLaunch()
+        Task(priority: .utility) { @MainActor [weak self] in
+            await self?.channelSyncController.refreshPrivateChannelRouteState()
+        }
     }
 
     func resyncWatchReceiverProvisioning() async throws {
@@ -1200,35 +1259,70 @@ final class AppEnvironment {
     }
 
     private func applyAggregateScenePhase(_ phase: ScenePhase) {
-        pendingLocalDeletionController.setInteractionActive(phase == .active)
         switch phase {
         case .active:
+            Task { await pendingLocalDeletionController.sceneBecameActive() }
             navigationState.setSceneActive(true)
             clearDeliveredSystemNotifications()
             syncBadgeWithUnreadCount()
-            scheduleMessageListRefresh()
             Task { @MainActor in
                 _ = await mergeNotificationIngressInbox(
                     reason: "ios_scene_active",
                     allowFallbackPull: true
                 )
+                scheduleMessageListRefresh()
                 await refreshChannelSubscriptions()
                 await syncWidgetPushRegistration()
             }
             Task(priority: .utility) {
                 await dataStore.ensureSystemSearchIndexHealthy()
             }
-        case .background, .inactive:
+        case .background:
             navigationState.setSceneActive(false)
+            PushGoAppDelegate.scheduleIngressBackgroundRefresh(source: "scene_background")
+            beginPendingDeletionBackgroundDrain()
             Task {
                 await dataStore.flushWrites()
             }
             Task { @MainActor in
                 await channelSyncController.refreshPrivateChannelRouteState()
             }
+        case .inactive:
+            navigationState.setSceneActive(false)
         @unknown default:
             navigationState.setSceneActive(false)
         }
+    }
+
+    private func beginPendingDeletionBackgroundDrain() {
+        guard pendingDeletionBackgroundTask == nil else { return }
+        let drainID = UUID()
+        pendingDeletionBackgroundDrainID = drainID
+        pendingDeletionBackgroundTaskID = UIApplication.shared.beginBackgroundTask(
+            withName: "pending-local-deletion"
+        ) { [weak self] in
+            Task { @MainActor in
+                self?.endPendingDeletionBackgroundDrain(id: drainID, cancel: true)
+            }
+        }
+        pendingDeletionBackgroundTask = Task { [weak self] in
+            guard let self else { return }
+            await self.pendingLocalDeletionController.commitAllForBackground()
+            self.endPendingDeletionBackgroundDrain(id: drainID, cancel: false)
+        }
+    }
+
+    private func endPendingDeletionBackgroundDrain(id: UUID, cancel: Bool) {
+        guard pendingDeletionBackgroundDrainID == id else { return }
+        if cancel {
+            pendingDeletionBackgroundTask?.cancel()
+            pendingLocalDeletionController.cancelExecution()
+        }
+        pendingDeletionBackgroundTask = nil
+        pendingDeletionBackgroundDrainID = nil
+        guard pendingDeletionBackgroundTaskID != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(pendingDeletionBackgroundTaskID)
+        pendingDeletionBackgroundTaskID = .invalid
     }
 
     func updateActiveTab(_ tab: MainTab) {
@@ -1284,7 +1378,13 @@ final class AppEnvironment {
         await notificationIngressController.handleNotificationIngressChanged(reason: reason)
     }
 
-    private func drainProviderDeliveryAckFailures(source: String) async {
+    func drainProviderDeliveryAckFailures(source: String) async {
+        _ = await notificationIngressController.drainProviderDeliveryAckFailures(source: source)
+    }
+
+    func drainProviderDeliveryAckFailuresOutcome(
+        source: String
+    ) async -> IngressBackgroundRefreshRunner.StageOutcome {
         await notificationIngressController.drainProviderDeliveryAckFailures(source: source)
     }
 
@@ -1295,6 +1395,18 @@ final class AppEnvironment {
         limit: Int = 256
     ) async -> Int {
         await notificationIngressController.mergeNotificationIngressInbox(
+            reason: reason,
+            allowFallbackPull: allowFallbackPull,
+            limit: limit
+        )
+    }
+
+    func mergeNotificationIngressInboxOutcome(
+        reason: String,
+        allowFallbackPull: Bool,
+        limit: Int = 256
+    ) async -> NotificationIngressController.MergeOutcome {
+        await notificationIngressController.mergeNotificationIngressInboxOutcome(
             reason: reason,
             allowFallbackPull: allowFallbackPull,
             limit: limit
@@ -1336,6 +1448,20 @@ final class AppEnvironment {
             deliveryId: deliveryId,
             context: context,
             outcome: outcome,
+            source: source
+        )
+    }
+
+    func persistPulledProviderIngress(
+        payload: [AnyHashable: Any],
+        deliveryId: String,
+        context: ProviderPullContext,
+        source: String
+    ) async -> NotificationPersistenceOutcome {
+        await notificationIngressController.persistPulledProviderIngress(
+            payload: payload,
+            deliveryId: deliveryId,
+            context: context,
             source: source
         )
     }

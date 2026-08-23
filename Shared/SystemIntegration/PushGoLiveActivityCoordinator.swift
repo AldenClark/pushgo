@@ -12,6 +12,13 @@ enum PushGoLiveActivityCoordinator {
     }
 
     static func handlePersistedMessage(_ message: PushMessage) async {
+        try? await handlePersistedMessageReportingFailure(message)
+    }
+
+    /// Runs the same projection while surfacing failures that the platform API
+    /// reports (currently Activity.request). Durable callers use this entry
+    /// point so a failed start remains retryable instead of being acknowledged.
+    static func handlePersistedMessageReportingFailure(_ message: PushMessage) async throws {
         #if canImport(ActivityKit) && os(iOS)
         guard #available(iOS 16.2, *) else { return }
         guard let eventID = normalized(message.eventId ?? eventIDFromEntity(message)) else { return }
@@ -31,7 +38,7 @@ enum PushGoLiveActivityCoordinator {
         } else if let existing = activity(eventID: eventID) {
             await existing.update(ActivityContent(state: content, staleDate: nil))
         } else {
-            await start(
+            try await start(
                 eventID: eventID,
                 channelID: normalized(message.channel),
                 content: content
@@ -46,14 +53,14 @@ enum PushGoLiveActivityCoordinator {
         eventID: String,
         channelID: String?,
         content: PushGoEventActivityAttributes.ContentState
-    ) async {
+    ) async throws {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         let attributes = PushGoEventActivityAttributes(eventID: eventID, channelID: channelID)
-        guard let activity = try? Activity.request(
+        let activity = try Activity.request(
             attributes: attributes,
             content: ActivityContent(state: content, staleDate: nil),
             pushType: .token
-        ) else { return }
+        )
         observePushTokenUpdates(
             for: activity,
             activityKey: activityKey(eventID: eventID),

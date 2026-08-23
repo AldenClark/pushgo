@@ -1,9 +1,10 @@
 import Foundation
 import Darwin
+import GRDB
 import Observation
 import ServiceManagement
 import SwiftUI
-@preconcurrency import UserNotifications
+import UserNotifications
 import AppKit
 
 @MainActor
@@ -25,10 +26,13 @@ final class AppEnvironment {
     @ObservationIgnored private var messageSyncObserver: DarwinNotificationObserver?
     @ObservationIgnored private var notificationIngressObserver: DarwinNotificationObserver?
     @ObservationIgnored private var pendingCountsRefreshTask: Task<Void, Never>?
+    @ObservationIgnored private var messageStoreObservationTask: Task<Void, Never>?
     @ObservationIgnored private var bootstrapTask: Task<Void, Never>?
     @ObservationIgnored private var didBootstrap = false
     @ObservationIgnored private var providerIngressBootstrapRecoveryInFlight = false
     @ObservationIgnored private var scenePhases: [UUID: ScenePhase] = [:]
+    @ObservationIgnored private var pendingDeletionActivity: NSObjectProtocol?
+    @ObservationIgnored private var pendingDeletionActivityTask: Task<Void, Never>?
 
     private var toastDismissTask: Task<Void, Never>?
     private(set) var isMainWindowVisible = true
@@ -38,7 +42,7 @@ final class AppEnvironment {
     private(set) var unreadMessageCount: Int = 0
     private(set) var messageStoreRevision: UUID = UUID()
     private(set) var toastMessage: ToastMessage?
-    @ObservationIgnored let pendingLocalDeletionController = PendingLocalDeletionController()
+    private(set) var isDeletionRecoveryReady = false
     var localStoreRecoveryState: LocalStoreRecoveryState? { localStoreRecoveryController.localStoreRecoveryState }
     private(set) var shouldPresentNotificationPermissionAlert: Bool = false
     var pendingMessageToOpen: UUID? {
@@ -129,6 +133,26 @@ final class AppEnvironment {
         },
         messageStateCoordinatorProvider: { [weak self] in
             self?.messageStateCoordinator
+        }
+    )
+    @ObservationIgnored private(set) lazy var pendingLocalDeletionController = PendingLocalDeletionController(
+        dataStore: dataStore,
+        channelCommitHandler: { [weak self] record, owner in
+            guard let self else { throw CancellationError() }
+            return try await self.channelSubscriptionController.commitPendingChannelRemoval(
+                record: record,
+                leaseOwner: owner
+            )
+        },
+        cleanupHandler: { [weak self] cleanup in
+            guard let self else { return }
+            await self.messageStateCoordinator.reconcileExternallyDeletedMessages(
+                notificationRequestIDs: cleanup.notificationRequestIDs,
+                imageURLs: cleanup.imageURLs
+            )
+        },
+        failureHandler: { [weak self] error in
+            self?.showErrorToast(error)
         }
     )
     @ObservationIgnored private(set) lazy var notificationOpenController = NotificationOpenController(
@@ -247,11 +271,19 @@ final class AppEnvironment {
     private func performBootstrap() async {
         beginProviderIngressBootstrapRecovery()
         await loadPersistedState()
+        startMessageStoreObservationIfNeeded()
         _ = await mergeNotificationIngressInbox(
             reason: "bootstrap",
             allowFallbackPull: false
         )
-        await drainProviderDeliveryAckFailures(source: "provider.bootstrap.ack_failure.macos")
+        await dataStore.scheduleDerivedWorkDrain()
+        Task { @MainActor in
+            await pendingLocalDeletionController.restoreAndReconcile()
+            isDeletionRecoveryReady = true
+        }
+        Task(priority: .utility) { @MainActor in
+            await drainProviderDeliveryAckFailures(source: "provider.bootstrap.ack_failure.macos")
+        }
         Task(priority: .utility) { @MainActor in
             defer {
                 finishProviderIngressBootstrapRecovery()
@@ -275,6 +307,21 @@ final class AppEnvironment {
         }
         Task(priority: .utility) {
             await store.ensureSystemSearchIndexHealthy()
+        }
+    }
+
+    private func startMessageStoreObservationIfNeeded() {
+        guard messageStoreObservationTask == nil else { return }
+        let store = dataStore
+        messageStoreObservationTask = Task { @MainActor [weak self] in
+            do {
+                let revisions = try await store.messageStoreRevisionValues()
+                for try await _ in revisions {
+                    guard !Task.isCancelled else { break }
+                    self?.scheduleMessageListRefresh()
+                }
+            } catch {
+            }
         }
     }
 
@@ -1174,18 +1221,18 @@ final class AppEnvironment {
     }
 
     private func applyAggregateScenePhase(_ phase: ScenePhase) {
-        pendingLocalDeletionController.setInteractionActive(phase == .active)
         switch phase {
         case .active:
+            Task { await pendingLocalDeletionController.sceneBecameActive() }
             navigationState.setSceneActive(true)
             clearDeliveredSystemNotifications()
             syncBadgeWithUnreadCount()
-            scheduleMessageListRefresh()
             Task { @MainActor in
                 _ = await mergeNotificationIngressInbox(
                     reason: "macos_scene_active",
                     allowFallbackPull: true
                 )
+                scheduleMessageListRefresh()
                 await refreshLaunchAtLoginStatus()
                 await refreshChannelSubscriptions()
                 await syncPrivateChannelState()
@@ -1194,17 +1241,41 @@ final class AppEnvironment {
             Task(priority: .utility) {
                 await dataStore.ensureSystemSearchIndexHealthy()
             }
-        case .background, .inactive:
+        case .background:
             navigationState.setSceneActive(false)
+            beginPendingDeletionActivity()
             Task {
                 await dataStore.flushWrites()
             }
             Task { @MainActor in
                 await syncPrivateChannelState()
             }
+        case .inactive:
+            navigationState.setSceneActive(false)
         @unknown default:
             navigationState.setSceneActive(false)
         }
+    }
+
+    private func beginPendingDeletionActivity() {
+        guard pendingDeletionActivityTask == nil else { return }
+        let activity = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiated, .idleSystemSleepDisabled],
+            reason: "Finish pending local deletions"
+        )
+        pendingDeletionActivity = activity
+        pendingDeletionActivityTask = Task { [weak self] in
+            guard let self else { return }
+            await self.pendingLocalDeletionController.commitAllForBackground()
+            self.endPendingDeletionActivity()
+        }
+    }
+
+    private func endPendingDeletionActivity() {
+        pendingDeletionActivityTask = nil
+        guard let activity = pendingDeletionActivity else { return }
+        ProcessInfo.processInfo.endActivity(activity)
+        pendingDeletionActivity = nil
     }
 
     private func syncPrivateChannelState() async {
@@ -1240,7 +1311,7 @@ final class AppEnvironment {
     }
 
     private func drainProviderDeliveryAckFailures(source: String) async {
-        await notificationIngressController.drainProviderDeliveryAckFailures(source: source)
+        _ = await notificationIngressController.drainProviderDeliveryAckFailures(source: source)
     }
 
     @discardableResult
@@ -1291,6 +1362,20 @@ final class AppEnvironment {
             deliveryId: deliveryId,
             context: context,
             outcome: outcome,
+            source: source
+        )
+    }
+
+    func persistPulledProviderIngress(
+        payload: [AnyHashable: Any],
+        deliveryId: String,
+        context: ProviderPullContext,
+        source: String
+    ) async -> NotificationPersistenceOutcome {
+        await notificationIngressController.persistPulledProviderIngress(
+            payload: payload,
+            deliveryId: deliveryId,
+            context: context,
             source: source
         )
     }

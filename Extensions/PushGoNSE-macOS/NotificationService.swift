@@ -1,13 +1,16 @@
 import Foundation
+import os
 @preconcurrency import UserNotifications
 
-private actor NotificationServiceDeliveryGate {
-    private var hasDelivered = false
+private final class NotificationServiceDeliveryGate: Sendable {
+    private let hasDelivered = OSAllocatedUnfairLock(initialState: false)
 
     func tryMarkDelivered() -> Bool {
-        guard !hasDelivered else { return false }
-        hasDelivered = true
-        return true
+        hasDelivered.withLock { delivered in
+            guard !delivered else { return false }
+            delivered = true
+            return true
+        }
     }
 }
 
@@ -37,10 +40,8 @@ final class NotificationService: UNNotificationServiceExtension {
 
         guard let content = copiedContent else {
             let fallback = request.content
-            Task {
-                if await currentGate.tryMarkDelivered() {
-                    contentHandler(fallback)
-                }
+            if currentGate.tryMarkDelivered() {
+                contentHandler(fallback)
             }
             return
         }
@@ -51,7 +52,7 @@ final class NotificationService: UNNotificationServiceExtension {
             let processor = NotificationServiceProcessor()
             let result = await processor.process(request: request, content: mutableContent)
             guard !Task.isCancelled else { return }
-            if await currentGate.tryMarkDelivered() {
+            if currentGate.tryMarkDelivered() {
                 contentHandler(result)
             }
         }
@@ -76,10 +77,8 @@ final class NotificationService: UNNotificationServiceExtension {
 
         pendingTask?.cancel()
         guard let handler, let fallbackContent else { return }
-        Task {
-            if await currentGate.tryMarkDelivered() {
-                handler(fallbackContent)
-            }
+        if currentGate.tryMarkDelivered() {
+            handler(fallbackContent)
         }
     }
 }

@@ -14,39 +14,38 @@ enum PushGoNotificationProjectionUpdater {
     static func update(
         content: UNNotificationContent,
         requestIdentifier: String?,
+        insertedUnread: Bool,
         appGroupIdentifier: String = AppConstants.appGroupIdentifier,
         fileManager: FileManager = .default,
         now: Date = Date(),
         spotlightIndexer: PushGoSpotlightIndexing? = CoreSpotlightPushGoIndexer()
     ) async -> PushGoNotificationProjectionUpdate? {
-        guard let update = makeUpdate(
-            content: content,
-            requestIdentifier: requestIdentifier,
-            existingSnapshot: PushGoSystemSnapshotStore.load(
-                fileManager: fileManager,
-                appGroupIdentifier: appGroupIdentifier
-            ),
-            now: now
-        ) else {
-            return nil
-        }
-
-        guard PushGoSystemSnapshotStore.write(
-            update.snapshot,
+        let atomicUpdate: PushGoNotificationProjectionUpdate? = PushGoSystemSnapshotStore.updateAtomically(
             fileManager: fileManager,
             appGroupIdentifier: appGroupIdentifier
-        ) else {
-            return nil
+        ) { existingSnapshot in
+            guard let update = makeUpdate(
+                content: content,
+                requestIdentifier: requestIdentifier,
+                existingSnapshot: existingSnapshot,
+                insertedUnread: insertedUnread,
+                now: now
+            ) else {
+                return nil
+            }
+            return (update.snapshot, update)
         }
-
-        await PushGoSystemSnapshotStore.waitForWidgetReloadRequestDelivery()
-
-        if let summary = update.summary {
-            try? await spotlightIndexer?.index([summary])
+        guard let update = atomicUpdate else {
+            return nil
         }
 
         await MainActor.run {
             BadgeManager.syncExtensionBadge(unreadCount: update.unreadCount)
+        }
+        if let summary = update.summary, let spotlightIndexer {
+            Task(priority: .utility) { @concurrent in
+                try? await spotlightIndexer.index([summary])
+            }
         }
         return update
     }
@@ -55,6 +54,7 @@ enum PushGoNotificationProjectionUpdater {
         content: UNNotificationContent,
         requestIdentifier: String?,
         existingSnapshot: PushGoSystemSurfaceSnapshot?,
+        insertedUnread durableInsertedUnread: Bool? = nil,
         now: Date = Date(),
         limit: Int = defaultLimit
     ) -> PushGoNotificationProjectionUpdate? {
@@ -71,7 +71,8 @@ enum PushGoNotificationProjectionUpdater {
         let existing = existingSnapshot ?? .empty(source: "nse-seed", now: now)
         let item = safeSnapshotItem(from: summary)
         let previousUnreadMessages = existing.unreadMessages.filter { $0.id != item.id }
-        let insertedUnread = !existing.unreadMessages.contains { $0.id == item.id }
+        let insertedUnread = durableInsertedUnread
+            ?? !existing.unreadMessages.contains { $0.id == item.id }
 
         let recentMessages = merged(
             item,

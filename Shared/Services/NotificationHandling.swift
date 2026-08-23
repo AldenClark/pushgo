@@ -19,6 +19,7 @@ struct NormalizedRemoteNotification {
 
 enum ProviderWakeupResolution {
     case notWakeup
+    case recoveredDurable(payload: [AnyHashable: Any], requestIdentifier: String)
     case pulled(payload: [AnyHashable: Any], requestIdentifier: String, context: ProviderPullContext)
     case claimedByPeer(payload: [AnyHashable: Any], requestIdentifier: String?)
     case unresolvedWakeup(payload: [AnyHashable: Any], requestIdentifier: String?)
@@ -894,14 +895,18 @@ enum NotificationHandling {
         from payload: [AnyHashable: Any],
         dataStore: LocalDataStore,
         fallbackServerConfig: ServerConfig? = nil,
-        channelSubscriptionService: ChannelSubscriptionService
+        channelSubscriptionService: ChannelSubscriptionService,
+        notificationIngressInbox: NotificationIngressInbox = .shared,
+        allowLegacyFallback: Bool = true
     ) async -> NotificationIngressResolution {
         let sanitized = UserInfoSanitizer.sanitize(payload)
         let resolution = await resolveProviderWakeup(
             from: sanitized,
             dataStore: dataStore,
             fallbackServerConfig: fallbackServerConfig,
-            channelSubscriptionService: channelSubscriptionService
+            channelSubscriptionService: channelSubscriptionService,
+            notificationIngressInbox: notificationIngressInbox,
+            allowLegacyFallback: allowLegacyFallback
         )
         switch resolution {
         case .notWakeup:
@@ -909,6 +914,8 @@ enum NotificationHandling {
                 payload: sanitized,
                 requestIdentifier: providerIngressRequestIdentifier(from: sanitized)
             )
+        case let .recoveredDurable(resolvedPayload, requestIdentifier):
+            return .direct(payload: resolvedPayload, requestIdentifier: requestIdentifier)
         case let .pulled(resolvedPayload, requestIdentifier, context):
             return .pulled(
                 payload: resolvedPayload,
@@ -1009,11 +1016,27 @@ enum NotificationHandling {
         from payload: [AnyHashable: Any],
         dataStore: LocalDataStore,
         fallbackServerConfig: ServerConfig? = nil,
-        channelSubscriptionService: ChannelSubscriptionService
+        channelSubscriptionService: ChannelSubscriptionService,
+        notificationIngressInbox: NotificationIngressInbox = .shared,
+        allowLegacyFallback: Bool = true
     ) async -> ProviderWakeupResolution {
         let sanitized = UserInfoSanitizer.sanitize(payload)
         guard let deliveryId = providerWakeupPullDeliveryId(from: sanitized) else {
             return .notWakeup
+        }
+        let durableHint = sanitized.reduce(
+            into: [String: AnyCodable]()
+        ) { result, element in
+            result[element.key] = AnyCodable(element.value)
+        }
+        guard await notificationIngressInbox.enqueue(
+            codablePayload: durableHint,
+            requestIdentifier: deliveryId,
+            source: "provider.host.wakeup_hint",
+            ackIdentity: nil,
+            requiredEntryState: "durable"
+        ) else {
+            return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId)
         }
         let candidates = await activeServerConfigsForWakeupIngress(
             dataStore: dataStore,
@@ -1025,6 +1048,25 @@ enum NotificationHandling {
         }
         guard let deviceKey = await activeProviderDeviceKeyForWakeupIngress(dataStore: dataStore) else {
             return .unresolvedWakeup(payload: sanitized, requestIdentifier: deliveryId)
+        }
+        // A legacy pull is destructive. If a prior process already journaled
+        // the returned bytes but crashed before canonical persistence, replay
+        // those exact bytes before making any new provider request.
+        for candidate in candidates {
+            guard let legacyIdentity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
+                deliveryId: deliveryId,
+                baseURL: candidate.config.baseURL,
+                deviceKey: deviceKey,
+                ackContract: .legacySingle
+            ), let durable = await notificationIngressInbox.durablePayload(identity: legacyIdentity)
+            else { continue }
+            let recovered = durable.reduce(into: [AnyHashable: Any]()) { result, element in
+                result[element.key] = element.value.value
+            }
+            guard recovered[ProviderLegacyDestructivePullMetadata.markerKey] as? String
+                    == ProviderLegacyDestructivePullMetadata.markerValue
+            else { continue }
+            return .recoveredDurable(payload: recovered, requestIdentifier: deliveryId)
         }
         let owner = "app_wakeup_resolver"
         let leaseDuration: TimeInterval = 30
@@ -1045,38 +1087,93 @@ enum NotificationHandling {
                 leaseDuration: leaseDuration
             ) {
                 lease = acquiredLease
-            } else if await claimStore.waitForPeerCompletion(
-                identity: identity,
-                timeout: 1.5
-            ) {
-                return .claimedByPeer(payload: sanitized, requestIdentifier: deliveryId)
-            } else if let retryLease = await claimStore.acquireLease(
-                identity: identity,
-                owner: owner,
-                leaseDuration: leaseDuration
-            ) {
-                lease = retryLease
             } else {
-                continue
+                let durablePeerPayload = await claimStore
+                    .durableIngressPayload(identity: identity)
+                let peerPayload = durablePeerPayload?.reduce(
+                    into: [AnyHashable: Any]()
+                ) { result, element in
+                    result[element.key] = element.value.value
+                }
+                let fallbackPayload = sanitized.reduce(
+                    into: [AnyHashable: Any]()
+                ) { result, element in
+                    result[element.key] = element.value
+                }
+                return .claimedByPeer(
+                    payload: peerPayload ?? fallbackPayload,
+                    requestIdentifier: deliveryId
+                )
             }
             do {
                 let pullResult = try await channelSubscriptionService.pullMessages(
                     baseURL: candidate.config.baseURL,
                     token: candidate.config.token,
                     deviceKey: deviceKey,
-                    deliveryId: deliveryId
+                    deliveryId: deliveryId,
+                    allowLegacyFallback: allowLegacyFallback
                 )
-                guard let item = pullResult.items.first else {
+                guard !pullResult.items.isEmpty else {
                     await claimStore.releaseLease(lease)
                     continue
                 }
-                var pulledPayload: [AnyHashable: Any] = item.payload.reduce(into: [:]) { result, element in
-                    result[element.key] = element.value
+                var durableResults: [(payload: [AnyHashable: Any], requestIdentifier: String)] = []
+                var allItemsDurable = true
+                for item in pullResult.items {
+                    var pulledPayload: [AnyHashable: Any] = item.payload.reduce(into: [:]) { result, element in
+                        result[element.key] = element.value
+                    }
+                    pulledPayload["delivery_id"] = item.deliveryId
+                    let requestIdentifier = normalizedPayloadString(item.deliveryId) ?? deliveryId
+                    var durablePayload = UserInfoSanitizer.sanitize(pulledPayload)
+                    let ackIdentity: ProviderDeliveryAckFailureStore.DeliveryIdentity?
+                    let requiredEntryState: String
+                    if pullResult.requiresAck {
+                        ackIdentity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
+                            deliveryId: requestIdentifier,
+                            baseURL: candidate.config.baseURL,
+                            deviceKey: deviceKey,
+                            ackContract: .v2Batch
+                        )
+                        requiredEntryState = "terminal_local"
+                    } else {
+                        durablePayload["base_url"] = candidate.config.baseURL.absoluteString
+                        durablePayload["provider_device_key"] = deviceKey
+                        durablePayload[ProviderLegacyDestructivePullMetadata.markerKey] =
+                            ProviderLegacyDestructivePullMetadata.markerValue
+                        ackIdentity = nil
+                        requiredEntryState = "durable"
+                    }
+                    if pullResult.requiresAck, ackIdentity == nil {
+                        allItemsDurable = false
+                        continue
+                    }
+                    let codablePayload = durablePayload.reduce(
+                        into: [String: AnyCodable]()
+                    ) { result, element in
+                        result[element.key] = AnyCodable(element.value)
+                    }
+                    guard await notificationIngressInbox.enqueue(
+                        codablePayload: codablePayload,
+                        requestIdentifier: requestIdentifier,
+                        source: "provider.host.pulled",
+                        ackIdentity: ackIdentity,
+                        requiredEntryState: requiredEntryState
+                    ) else {
+                        allItemsDurable = false
+                        continue
+                    }
+                    durableResults.append((UserInfoSanitizer.sanitize(pulledPayload), requestIdentifier))
                 }
-                pulledPayload["delivery_id"] = item.deliveryId
+                let selected = durableResults.first { $0.requestIdentifier == deliveryId }
+                    ?? durableResults.first
+                guard allItemsDurable, let selected else {
+                    await claimStore.releaseLease(lease)
+                    continue
+                }
                 return .pulled(
-                    payload: UserInfoSanitizer.sanitize(pulledPayload),
-                    requestIdentifier: normalizedPayloadString(item.deliveryId) ?? deliveryId,
+                    payload: selected.payload,
+                    requestIdentifier: selected.requestIdentifier,
                     context: ProviderPullContext(
                         contract: pullResult.contract,
                         baseURL: candidate.config.baseURL,

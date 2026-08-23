@@ -55,7 +55,11 @@ final class ChannelSyncController {
         self.showChannelEntryFeedback = showChannelEntryFeedback
     }
 
-    func refreshChannelSubscriptions(syncWatch: Bool = true, immediateStandalone: Bool = false) async {
+    func refreshChannelSubscriptions(
+        syncWatch: Bool = true,
+        immediateStandalone: Bool = false,
+        syncProviderRoute: Bool = true
+    ) async {
         guard let gatewayKey = serverConfigProvider()?.gatewayKey else {
             channelSubscriptions = []
             channelSubscriptionLookup = [:]
@@ -88,7 +92,9 @@ final class ChannelSyncController {
         if syncWatch {
             requestWatchStandaloneProvisioningSync(immediateStandalone)
         }
-        await syncPrivateChannelState()
+        if syncProviderRoute {
+            await syncPrivateChannelState()
+        }
     }
 
     func channelDisplayName(for channelId: String?) -> String? {

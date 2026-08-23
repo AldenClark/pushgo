@@ -102,19 +102,47 @@ struct NotificationSoundSettingsTests {
     }
 
     @Test
-    func resolverDoesNotTreatNonLowSilentRulesAsSilentNotifications() {
+    func normalPriorityCanResolveToSilentNotification() {
         var settings = NotificationSoundSettings()
-        var high = settings.rule(for: .high)
-        high.mode = .silent
-        settings.rules[.high] = high
+        var normal = settings.rule(for: .normal)
+        normal.mode = .silent
+        settings.rules[.normal] = normal
 
-        let resolved = NotificationSoundResolver.resolve(for: .high, settings: settings)
+        let resolved = NotificationSoundResolver.resolve(for: .normal, settings: settings)
 
-        #if os(macOS)
-        #expect(resolved?.usesSystemDefault == true)
-        #else
-        #expect(resolved?.filename == "notification-sound.caf")
-        #endif
+        #expect(resolved == nil)
+    }
+
+    @Test
+    func resolverDoesNotTreatCriticalOrHighSilentRulesAsSilentNotifications() {
+        for level in [NotificationSoundLevel.critical, .high] {
+            var settings = NotificationSoundSettings()
+            var rule = settings.rule(for: level)
+            rule.mode = .silent
+            settings.rules[level] = rule
+
+            let resolved = NotificationSoundResolver.resolve(for: level, settings: settings)
+
+            #expect(resolved?.usesSystemDefault == true)
+        }
+    }
+
+    @Test
+    func managerPersistsNormalSilentModeButRejectsHighSilentMode() async throws {
+        try await withIsolatedAutomationStorage { _, _ in
+            var settings = NotificationSoundSettings()
+            var normal = settings.rule(for: .normal)
+            normal.mode = .silent
+            settings.rules[.normal] = normal
+            var high = settings.rule(for: .high)
+            high.mode = .silent
+            settings.rules[.high] = high
+
+            let persisted = try await NotificationSoundManager().persistSettings(settings)
+
+            #expect(persisted.rule(for: .normal).mode == .silent)
+            #expect(persisted.rule(for: .high).mode == .systemDefault)
+        }
     }
     #endif
 

@@ -34,6 +34,7 @@ struct PendingLocalDeletionBar: View {
             Button(localizedUndoLabel) {
                 controller.undoCurrent()
             }
+            .disabled(controller.isUndoInFlight)
             .buttonStyle(.plain)
             .font(.footnote.weight(.semibold))
             .foregroundStyle(Color.accentColor)
@@ -49,10 +50,7 @@ struct PendingLocalDeletionBar: View {
 
     private var localizedUndoLabel: String {
         let language = Locale.preferredLanguages.first?.lowercased() ?? ""
-        if language.hasPrefix("zh") {
-            return "撤销"
-        }
-        return "Undo"
+        return language.hasPrefix("zh") ? "撤销" : "Undo"
     }
 
     private var backgroundStyle: some ShapeStyle {

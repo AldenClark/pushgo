@@ -11,9 +11,9 @@ jobs:
     timeout-minutes: 90
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Select Xcode
-        uses: maxim-lobanov/setup-xcode@v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: "26.4"
       - name: Validate tag metadata and release notes
@@ -27,7 +27,7 @@ jobs:
             echo "Unsupported release tag: $tag" >&2
             exit 1
           fi
-          settings="$(xcodebuild -project pushgo.xcodeproj -scheme PushGo-iOS -configuration Release -showBuildSettings)"
+          settings="$(xcodebuild -project pushgo.xcodeproj -scheme PushGo-iOS -configuration Release -onlyUsePackageVersionsFromResolvedFile -disableAutomaticPackageResolution -skipPackageUpdates -showBuildSettings)"
           marketing="$(printf '%s\n' "$settings" | sed -nE 's/^[[:space:]]*MARKETING_VERSION[[:space:]]*=[[:space:]]*(.+)$/\1/p' | sort -u)"
           test "$marketing" = "$semver"
           if [[ "$tag" != *-beta.* ]]; then
@@ -44,19 +44,19 @@ jobs:
     needs: release_gate
     runs-on: macos-26
     timeout-minutes: 120
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     env:
       APP_PROJECT: pushgo.xcodeproj
       APP_SCHEME: PushGo-iOS
       APP_MACOS_SCHEME: PushGo-macOS
       APP_BUNDLE_ID: io.ethan.pushgo
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
       ASC_KEY_IS_BASE64: ${{ vars.ASC_KEY_IS_BASE64 || 'false' }}
       TESTFLIGHT_EXTERNAL_GROUPS: ${{ vars.TESTFLIGHT_EXTERNAL_GROUPS || '' }}
       APP_STORE_SUBMIT_FOR_REVIEW: ${{ vars.APP_STORE_SUBMIT_FOR_REVIEW || 'false' }}
-      APP_STORE_AUTOMATIC_RELEASE: "true"
+      APP_STORE_AUTOMATIC_RELEASE: ${{ vars.APP_STORE_AUTOMATIC_RELEASE || 'false' }}
       APPLE_DISTRIBUTION_IDENTITY: ${{ vars.APPLE_DISTRIBUTION_IDENTITY || '' }}
       MAC_INSTALLER_DISTRIBUTION_IDENTITY: ${{ vars.MAC_INSTALLER_DISTRIBUTION_IDENTITY || '' }}
       FASTLANE_DISABLE_COLORS: "1"
@@ -69,17 +69,17 @@ jobs:
       LANG: en_US.UTF-8
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Select Xcode
-        uses: maxim-lobanov/setup-xcode@v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: "26.4"
 
       - name: Setup Ruby
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
         with:
           ruby-version: "3.2"
           bundler-cache: false
@@ -174,6 +174,9 @@ jobs:
                 -project "$project_path" \
                 -scheme "$target_name" \
                 -configuration Release \
+                -onlyUsePackageVersionsFromResolvedFile \
+                -disableAutomaticPackageResolution \
+                -skipPackageUpdates \
                 -showBuildSettings 2>/dev/null
             )"
             if [[ -z "$settings_text" ]]; then
@@ -252,6 +255,10 @@ jobs:
             exit 1
           fi
         env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
           APPLE_DISTRIBUTION_P12_BASE64: ${{ secrets.APPLE_DISTRIBUTION_P12_BASE64 }}
           APPLE_DISTRIBUTION_P12_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_P12_PASSWORD }}
           MAC_INSTALLER_DISTRIBUTION_P12_BASE64: ${{ secrets.MAC_INSTALLER_DISTRIBUTION_P12_BASE64 }}
@@ -264,7 +271,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bash ./scripts/retry_command.sh --always -- swift package resolve
+          bash ./scripts/verify_locked_packages.sh
 
       - name: Extract release notes from release/update-notes
         shell: bash
@@ -508,10 +515,12 @@ jobs:
             printf "%s\n" "${decoded_key}"
             echo "__PUSHGO_ASC_KEY_EOF__"
           } >> "$GITHUB_OUTPUT"
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
 
       - name: Download iOS App Store profile
         id: profile_ios_app
-        uses: Apple-Actions/download-provisioning-profiles@v5
+        uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6.1.0
         with:
           bundle-id: io.ethan.pushgo
           profile-type: IOS_APP_STORE
@@ -521,7 +530,7 @@ jobs:
 
       - name: Download iOS NSE App Store profile
         id: profile_ios_nse
-        uses: Apple-Actions/download-provisioning-profiles@v5
+        uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6.1.0
         with:
           bundle-id: io.ethan.pushgo.NotificationServiceExtension
           profile-type: IOS_APP_STORE
@@ -531,7 +540,7 @@ jobs:
 
       - name: Download watch App Store profile
         id: profile_watch_app
-        uses: Apple-Actions/download-provisioning-profiles@v5
+        uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6.1.0
         with:
           bundle-id: io.ethan.pushgo.watchkitapp
           profile-type: IOS_APP_STORE
@@ -541,7 +550,7 @@ jobs:
 
       - name: Download watch NSE App Store profile
         id: profile_watch_nse
-        uses: Apple-Actions/download-provisioning-profiles@v5
+        uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6.1.0
         with:
           bundle-id: io.ethan.pushgo.watchkitapp.NotificationServiceExtension
           profile-type: IOS_APP_STORE
@@ -551,7 +560,7 @@ jobs:
 
       - name: Download macOS App Store profile
         id: profile_macos_app
-        uses: Apple-Actions/download-provisioning-profiles@v5
+        uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6.1.0
         with:
           bundle-id: io.ethan.pushgo
           profile-type: MAC_APP_STORE
@@ -561,7 +570,7 @@ jobs:
 
       - name: Download macOS NSE App Store profile
         id: profile_macos_nse
-        uses: Apple-Actions/download-provisioning-profiles@v5
+        uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6.1.0
         with:
           bundle-id: io.ethan.pushgo.NotificationServiceExtension
           profile-type: MAC_APP_STORE
@@ -727,17 +736,51 @@ jobs:
             --profile "macOS NSE:${APP_STORE_PROFILE_MACOS_NSE_UUID}:io.ethan.pushgo.NotificationServiceExtension:Extensions/PushGoNSE-macOS/PushgoNotificationServiceExtension.entitlements" \
             --profile "macOS widget:${APP_STORE_PROFILE_MACOS_WIDGET_UUID}:io.ethan.pushgo.macwidgets:Extensions/PushGoWidgets/PushGoWidgets-macOS.entitlements"
 
-      - name: Run fastlane beta upload
-        if: steps.resolve.outputs.release_kind == 'beta'
-        run: bundle _2.5.23_ exec fastlane ios beta_upload
+      - name: Build signed store artifacts
+        run: bundle _2.5.23_ exec fastlane ios store_build
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
-      - name: Run fastlane release upload
-        if: steps.resolve.outputs.release_kind == 'release'
-        run: bundle _2.5.23_ exec fastlane ios release_upload
+      - name: Generate store SBOM and artifact manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/generate_apple_release_evidence.py \
+            --output-dir artifacts/release/evidence/app-store \
+            --subject-pattern 'artifacts/release/*.ipa' \
+            --subject-pattern 'artifacts/release/*.pkg'
+
+      - name: Attest store artifacts
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            artifacts/release/*.ipa
+            artifacts/release/*.pkg
+
+      - name: Upload store supply-chain evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pushgo-app-store-evidence-${{ github.run_id }}
+          path: artifacts/release/evidence/app-store/**
+          if-no-files-found: error
+
+      - name: Upload attested store artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$RELEASE_KIND" == "beta" ]]; then
+            bundle _2.5.23_ exec fastlane ios beta_upload_prebuilt
+          else
+            bundle _2.5.23_ exec fastlane ios release_upload_prebuilt
+          fi
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
 
       - name: Upload App Store diagnostics
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pushgo-app-store-diagnostics-${{ github.run_id }}
           path: artifacts/release/**
@@ -749,19 +792,16 @@ jobs:
     timeout-minutes: 120
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     env:
       APP_PROJECT: pushgo.xcodeproj
       APP_MACOS_SCHEME: PushGo-macOS
       APP_MACOS_DMG_SCHEME: PushGo-macOS-DMG
       PUSHGO_DMG_BACKGROUND_PATH: scripts/assets/dmg/pushgo_dmg_bg_680pt_2x.jpg
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
       ASC_KEY_IS_BASE64: ${{ vars.ASC_KEY_IS_BASE64 || 'false' }}
       DEVELOPER_ID_APPLICATION_IDENTITY: ${{ vars.DEVELOPER_ID_APPLICATION_IDENTITY || '' }}
       PUSHGO_SPARKLE_FEED_URL: ${{ vars.PUSHGO_SPARKLE_FEED_URL || 'https://update.pushgo.cn/macos/appcast.xml' }}
-      PUSHGO_SPARKLE_BASE_URL: ${{ vars.PUSHGO_SPARKLE_BASE_URL != '' && vars.PUSHGO_SPARKLE_BASE_URL || secrets.PUSHGO_SPARKLE_BASE_URL }}
       PUSHGO_SPARKLE_SCHEDULED_CHECK_INTERVAL: ${{ vars.PUSHGO_SPARKLE_SCHEDULED_CHECK_INTERVAL || '21600' }}
       FASTLANE_DISABLE_COLORS: "1"
       FASTLANE_SKIP_UPDATE_CHECK: "1"
@@ -773,17 +813,17 @@ jobs:
       LANG: en_US.UTF-8
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Select Xcode
-        uses: maxim-lobanov/setup-xcode@v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: "26.4"
 
       - name: Setup Ruby
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
         with:
           ruby-version: "3.2"
           bundler-cache: false
@@ -857,6 +897,9 @@ jobs:
             printf "%s" "$ASC_KEY_P8" > "$ASC_KEY_PATH"
           fi
           echo "ASC_KEY_PATH=$ASC_KEY_PATH" >> "$GITHUB_ENV"
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
 
       - name: Validate DMG signing and deploy assets
         shell: bash
@@ -875,6 +918,10 @@ jobs:
             exit 1
           fi
         env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          PUSHGO_SPARKLE_BASE_URL: ${{ vars.PUSHGO_SPARKLE_BASE_URL != '' && vars.PUSHGO_SPARKLE_BASE_URL || secrets.PUSHGO_SPARKLE_BASE_URL }}
           DEVELOPER_ID_APPLICATION_P12_BASE64: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_BASE64 }}
           DEVELOPER_ID_APPLICATION_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_PASSWORD }}
           DEVELOPER_ID_PROFILE_MACOS_WIDGET_BASE64: ${{ secrets.DEVELOPER_ID_PROFILE_MACOS_WIDGET_BASE64 }}
@@ -893,10 +940,12 @@ jobs:
             printf "%s\n" "${decoded_key}"
             echo "__PUSHGO_ASC_KEY_EOF__"
           } >> "$GITHUB_OUTPUT"
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
 
       - name: Download macOS direct-distribution profile
         id: profile_direct_macos_app
-        uses: Apple-Actions/download-provisioning-profiles@v5
+        uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6.1.0
         with:
           bundle-id: io.ethan.pushgo
           profile-type: MAC_APP_DIRECT
@@ -906,7 +955,7 @@ jobs:
 
       - name: Download macOS direct-distribution NSE profile
         id: profile_direct_macos_nse
-        uses: Apple-Actions/download-provisioning-profiles@v5
+        uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6.1.0
         with:
           bundle-id: io.ethan.pushgo.NotificationServiceExtension
           profile-type: MAC_APP_DIRECT
@@ -1018,7 +1067,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bash ./scripts/retry_command.sh --always -- swift package resolve
+          bash ./scripts/verify_locked_packages.sh
 
       - name: Extract release notes from release/RELEASE_NOTES
         shell: bash
@@ -1080,6 +1129,8 @@ jobs:
             echo "PUSHGO_SPARKLE_BASE_URL must be a valid http(s) URL"
             exit 1
           fi
+        env:
+          PUSHGO_SPARKLE_BASE_URL: ${{ vars.PUSHGO_SPARKLE_BASE_URL != '' && vars.PUSHGO_SPARKLE_BASE_URL || secrets.PUSHGO_SPARKLE_BASE_URL }}
 
       - name: Prepare Sparkle xcconfig for DMG
         shell: bash
@@ -1138,10 +1189,18 @@ jobs:
       - name: Run fastlane beta dmg
         if: steps.resolve.outputs.release_kind == 'beta'
         run: bundle _2.5.23_ exec fastlane ios beta_dmg
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
 
       - name: Run fastlane release dmg
         if: steps.resolve.outputs.release_kind == 'release'
         run: bundle _2.5.23_ exec fastlane ios release_dmg
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
 
       - name: Resolve release DMG artifact
         shell: bash
@@ -1170,6 +1229,26 @@ jobs:
           } >> "$GITHUB_ENV"
 
           ls -lh "${dmg_path}"
+
+      - name: Generate DMG SBOM and artifact manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/generate_apple_release_evidence.py \
+            --output-dir artifacts/release/evidence/dmg \
+            --subject-pattern 'artifacts/release/*.dmg'
+
+      - name: Attest signed DMG
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ env.RELEASE_DMG_PATH }}
+
+      - name: Upload DMG supply-chain evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pushgo-dmg-evidence-${{ github.run_id }}
+          path: artifacts/release/evidence/dmg/**
+          if-no-files-found: error
 
       - name: Prepare Sparkle Ed25519 signing key
         shell: bash
@@ -1215,6 +1294,8 @@ jobs:
             --account ""
 
           ls -lh release/appcast.xml artifacts/release/*.txt
+        env:
+          PUSHGO_SPARKLE_BASE_URL: ${{ vars.PUSHGO_SPARKLE_BASE_URL != '' && vars.PUSHGO_SPARKLE_BASE_URL || secrets.PUSHGO_SPARKLE_BASE_URL }}
 
       - name: Prepare update deploy SSH key
         shell: bash
@@ -1271,7 +1352,7 @@ jobs:
           PUSHGO_UPDATE_DEPLOY_PATH: ${{ secrets.PUSHGO_UPDATE_DEPLOY_PATH }}
 
       - name: Upload Sparkle feed artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pushgo-macos-sparkle-${{ github.run_id }}
           path: |
@@ -1280,7 +1361,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload signed DMG artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pushgo-macos-dmg-${{ github.run_id }}
           path: ${{ env.RELEASE_DMG_PATH }}
@@ -1451,7 +1532,7 @@ jobs:
 
       - name: Upload DMG diagnostics
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pushgo-dmg-diagnostics-${{ github.run_id }}
           path: |

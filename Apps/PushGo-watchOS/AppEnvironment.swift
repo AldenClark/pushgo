@@ -26,6 +26,9 @@ final class AppEnvironment {
     @ObservationIgnored private var notificationIngressObserver: DarwinNotificationObserver?
     @ObservationIgnored private var pendingMessageListRefreshTask: Task<Void, Never>?
     @ObservationIgnored private var bootstrapTask: Task<Void, Never>?
+    @ObservationIgnored private var providerAckDrainTask: Task<Void, Never>?
+    @ObservationIgnored private var providerAckRetryWakeTask: Task<Void, Never>?
+    @ObservationIgnored private var providerAckDrainRequested = false
     @ObservationIgnored private var didBootstrap = false
 
     private var toastDismissTask: Task<Void, Never>?
@@ -136,6 +139,7 @@ final class AppEnvironment {
                     reason: "darwin_notification",
                     allowFallbackPull: false
                 )
+                self.scheduleProviderAckDrain(source: "provider.ingress_changed.watchos")
             }
         }
         registerDefaultNotificationCategories()
@@ -166,7 +170,9 @@ final class AppEnvironment {
             reason: "bootstrap",
             allowFallbackPull: true
         )
-        await drainProviderDeliveryAckFailures(source: "provider.bootstrap.ack_failure.watchos")
+        Task(priority: .utility) { @MainActor in
+            await drainProviderDeliveryAckFailures(source: "provider.bootstrap.ack_failure.watchos")
+        }
         publishCurrentEffectiveModeStatus(noop: false)
         let store = dataStore
         Task(priority: .utility) {
@@ -1010,14 +1016,14 @@ final class AppEnvironment {
             isSceneActive = true
             clearDeliveredSystemNotifications()
             syncBadgeWithUnreadCount()
-            scheduleMessageListRefresh()
-            flushPendingMessageListRefreshIfNeeded()
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 _ = await self.mergeNotificationIngressInbox(
                     reason: "scene_active",
                     allowFallbackPull: false
                 )
+                self.scheduleMessageListRefresh()
+                self.flushPendingMessageListRefreshIfNeeded()
                 await self.syncWidgetPushRegistration()
             }
             if isStandaloneMode {
@@ -1972,10 +1978,40 @@ final class AppEnvironment {
             result: .persisted,
             source: source
         )
+        scheduleProviderAckDrain(source: "\(source).worker")
     }
 
     private func drainProviderDeliveryAckFailures(source: String) async {
         await providerIngressCoordinator.drainAckMarkers(source: source)
+        await scheduleNextProviderAckRetry(source: source)
+    }
+
+    private func scheduleProviderAckDrain(source: String) {
+        providerAckRetryWakeTask?.cancel()
+        providerAckRetryWakeTask = nil
+        providerAckDrainRequested = true
+        guard providerAckDrainTask == nil else { return }
+        providerAckDrainTask = Task(priority: .utility) { @MainActor [weak self] in
+            guard let self else { return }
+            defer { providerAckDrainTask = nil }
+            repeat {
+                providerAckDrainRequested = false
+                await providerIngressCoordinator.drainAckMarkers(source: source)
+            } while providerAckDrainRequested && !Task.isCancelled
+            await scheduleNextProviderAckRetry(source: source)
+        }
+    }
+
+    private func scheduleNextProviderAckRetry(source: String) async {
+        guard let due = await ackFailureStore.nextAttemptDate() else { return }
+        providerAckRetryWakeTask?.cancel()
+        let delay = max(0.1, due.timeIntervalSinceNow)
+        providerAckRetryWakeTask = Task(priority: .utility) { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled, let self else { return }
+            providerAckRetryWakeTask = nil
+            scheduleProviderAckDrain(source: "\(source).retry_due")
+        }
     }
 
     private func providerIngressDeliveryId(from payload: [AnyHashable: Any]) -> String? {
@@ -2073,11 +2109,13 @@ final class AppEnvironment {
         allowFallbackPull: Bool,
         limit: Int = 256
     ) async -> Int {
-        await providerIngressCoordinator.mergeInbox(
+        let applied = await providerIngressCoordinator.mergeInbox(
             reason: reason,
             allowFallbackPull: allowFallbackPull,
             limit: limit
         )
+        scheduleProviderAckDrain(source: "provider.merge.\(reason).watchos")
+        return applied
     }
 
     @discardableResult
@@ -2106,6 +2144,20 @@ final class AppEnvironment {
         let fallbackRequestIdentifier = notification.request.identifier
         switch ingress {
         case let .pulled(payload, requestIdentifier, context):
+            guard await providerIngressCoordinator.journalPulledPayload(
+                payload,
+                deliveryID: requestIdentifier,
+                context: context,
+                source: "provider.notification.pulled.watchos.journal"
+            ) else {
+                await providerIngressCoordinator.finalizePulledIngress(
+                    deliveryId: requestIdentifier,
+                    context: context,
+                    result: .failed,
+                    source: "provider.notification.pulled.watchos.journal_failed"
+                )
+                return false
+            }
             let persisted = await persistStandaloneResolvedPayload(
                 payload,
                 requestIdentifier: requestIdentifier,
@@ -2120,6 +2172,7 @@ final class AppEnvironment {
                 result: persisted ? .persisted : .failed,
                 source: "provider.notification.pulled.watchos"
             )
+            scheduleProviderAckDrain(source: "provider.notification.pulled.watchos.ack")
             return persisted
         case let .direct(payload, requestIdentifier):
             let persisted = await persistStandaloneResolvedPayload(

@@ -342,7 +342,7 @@ final class SettingsViewModel {
             rule.durationSeconds = nil
             rule.gain = 1
         case .silent:
-            if level == .low {
+            if level.allowsSilentMode {
                 rule.builtinSoundID = level.defaultBuiltinSoundID
             } else {
                 rule = .default(for: level)

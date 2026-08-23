@@ -3,6 +3,11 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DERIVED_BASE="${DERIVED_BASE:-$ROOT/.deriveddata-concurrency}"
+PACKAGE_ARGS=(
+  -onlyUsePackageVersionsFromResolvedFile
+  -disableAutomaticPackageResolution
+  -skipPackageUpdates
+)
 
 run_build() {
   local scheme="$1"
@@ -29,6 +34,7 @@ run_build() {
       -configuration Debug \
       -destination "$destination" \
       -derivedDataPath "$derived" \
+      "${PACKAGE_ARGS[@]}" \
       "${signing_args[@]}" \
       build
   else
@@ -38,19 +44,25 @@ run_build() {
       -configuration Debug \
       -destination "$destination" \
       -derivedDataPath "$derived" \
+      "${PACKAGE_ARGS[@]}" \
       build
   fi
 }
 
 "$ROOT/scripts/concurrency_audit.sh"
+"$ROOT/scripts/verify_locked_packages.sh"
+"$ROOT/scripts/verify_privacy_manifests.sh"
+python3 "$ROOT/scripts/verify_release_workflow_security.py"
+"$ROOT/scripts/verify_rollback_compatibility.sh"
 
 run_build "PushGo-macOS" "platform=macOS"
 run_build "PushGo-watchOS" "generic/platform=watchOS"
 run_build "PushGo-iOS" "generic/platform=iOS"
+"$ROOT/scripts/verify_built_privacy_manifests.sh" "$DERIVED_BASE"
 
 (
   cd "$ROOT"
-  swift test
+  swift test --disable-automatic-resolution
 )
 
 echo "apple concurrency gate passed"

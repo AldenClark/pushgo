@@ -12,6 +12,7 @@ struct MainTabContainerView: View {
     @State private var entityViewModel = EntityProjectionViewModel()
     @State private var selection: MainTab = .messages
     @State private var didRefreshAuthorizationStatus: Bool = false
+    @State private var isInitialSelectionResolved: Bool = false
     @State private var messageScrollToUnreadToken: Int = 0
     @State private var messageScrollToTopToken: Int = 0
     @State private var eventScrollToTopToken: Int = 0
@@ -36,17 +37,24 @@ struct MainTabContainerView: View {
             .task {
                 guard !didRefreshAuthorizationStatus else { return }
                 didRefreshAuthorizationStatus = true
-                await environment.pushRegistrationService.refreshAuthorizationStatus()
-                await refreshDataForStoreChange()
-                environment.updateActiveTab(selection)
-                if environment.pendingMessageToOpen != nil {
+                if environment.notificationOpenController.pendingMessageToOpen != nil {
                     selection = .messages
-                } else if environment.pendingThingToOpen != nil {
+                } else if environment.notificationOpenController.pendingThingToOpen != nil {
                     selection = .things
-                } else if environment.pendingEventToOpen != nil {
+                } else if environment.notificationOpenController.pendingEventToOpen != nil {
                     selection = .events
                 }
                 ensureSelectionIsVisible()
+                environment.updateActiveTab(selection)
+                isInitialSelectionResolved = true
+                Task {
+                    await environment.pushRegistrationService.refreshAuthorizationStatus()
+                }
+            }
+            .task(id: isInitialSelectionResolved ? selection : nil) {
+                guard isInitialSelectionResolved else { return }
+                let tab = selection
+                await refreshData(for: tab)
             }
 #if DEBUG
             .task {
@@ -74,17 +82,17 @@ struct MainTabContainerView: View {
                 )
             }
 #endif
-            .onChange(of: environment.pendingMessageToOpen) { _, id in
+            .onChange(of: environment.notificationOpenController.pendingMessageToOpen) { _, id in
                 if id != nil {
                     selection = .messages
                 }
             }
-            .onChange(of: environment.pendingEventToOpen) { _, id in
-                if id != nil && environment.pendingThingToOpen == nil {
+            .onChange(of: environment.notificationOpenController.pendingEventToOpen) { _, id in
+                if id != nil && environment.notificationOpenController.pendingThingToOpen == nil {
                     selection = .events
                 }
             }
-            .onChange(of: environment.pendingThingToOpen) { _, id in
+            .onChange(of: environment.notificationOpenController.pendingThingToOpen) { _, id in
                 if id != nil {
                     selection = .things
                 }
@@ -111,9 +119,9 @@ struct MainTabContainerView: View {
     private var automationStateVersion: String {
         [
             selection.automationIdentifier,
-            environment.pendingMessageToOpen?.uuidString ?? "",
-            environment.pendingEventToOpen ?? "",
-            environment.pendingThingToOpen ?? "",
+            environment.notificationOpenController.pendingMessageToOpen?.uuidString ?? "",
+            environment.notificationOpenController.pendingEventToOpen ?? "",
+            environment.notificationOpenController.pendingThingToOpen ?? "",
             "\(environment.unreadMessageCount)",
             "\(environment.totalMessageCount)",
         ].joined(separator: "|")
@@ -121,17 +129,25 @@ struct MainTabContainerView: View {
 #endif
 
     @MainActor
-    private func refreshDataForStoreChange() async {
-        await messageListViewModel.refresh()
-        searchViewModel.refreshMessagesIfNeeded()
-        await entityViewModel.reload()
+    private func refreshData(for tab: MainTab) async {
+        switch tab {
+        case .messages:
+            await messageListViewModel.refresh()
+            searchViewModel.refreshMessagesIfNeeded()
+        case .events:
+            await entityViewModel.reloadEvents()
+        case .things:
+            await entityViewModel.reloadThings()
+        case .channels:
+            break
+        }
         ensureSelectionIsVisible()
     }
 
     private func scheduleDataRefreshForStoreChange() {
         dataRefreshTask?.cancel()
         dataRefreshTask = Task { @MainActor in
-            await refreshDataForStoreChange()
+            await refreshData(for: selection)
         }
     }
 
@@ -156,7 +172,7 @@ struct MainTabContainerView: View {
                 navigationContainer {
                     EventListScreen(
                         viewModel: entityViewModel,
-                        openEventId: environment.pendingEventToOpen,
+                        openEventId: environment.notificationOpenController.pendingEventToOpen,
                         scrollToTopToken: eventScrollToTopToken,
                         onOpenEventHandled: {
                             environment.pendingEventToOpen = nil
@@ -173,7 +189,7 @@ struct MainTabContainerView: View {
                 navigationContainer {
                     ThingListScreen(
                         viewModel: entityViewModel,
-                        openThingId: environment.pendingThingToOpen,
+                        openThingId: environment.notificationOpenController.pendingThingToOpen,
                         scrollToTopToken: thingScrollToTopToken,
                         onOpenThingHandled: {
                             environment.pendingThingToOpen = nil

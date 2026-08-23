@@ -167,8 +167,24 @@ struct MessageListScreen: View {
     @ViewBuilder
     private var screenContent: some View {
         if !viewModel.hasLoadedOnce {
-            Color.clear
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            List(0 ..< 6, id: \.self) { _ in
+                HStack(spacing: 12) {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.secondary.opacity(0.18))
+                        .frame(width: 42, height: 42)
+                    VStack(alignment: .leading, spacing: 8) {
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(Color.secondary.opacity(0.18))
+                            .frame(height: 14)
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(Color.secondary.opacity(0.12))
+                            .frame(width: 180, height: 11)
+                    }
+                }
+                .redacted(reason: .placeholder)
+                .accessibilityHidden(true)
+            }
+            .allowsHitTesting(false)
         } else {
             ZStack {
                 messageList
@@ -898,19 +914,10 @@ private extension MessageListScreen {
             fallbackSingleSummary: localizationManager.localized("tab_messages"),
             multipleSummaryTitle: localizationManager.localized("tab_messages"),
             undoLabel: localizationManager.localized("cancel"),
-            scope: { PendingLocalDeletionController.Scope(messageIDs: Set($0.map(\.id))) },
-            commit: { [environment] messageIDs in
-                _ = try await environment.messageStateCoordinator.deleteMessages(
-                    messageIds: messageIDs
-                )
-            },
-            onCompletion: { [environment] result in
-                guard case let .failure(error) = result else { return }
-                environment.showErrorToast(error, duration: 2.5)
-            }
+            intent: { .messages(ids: $0) }
         ) else { return }
 
-        if let selectedMessage, result.scope.suppressesMessage(id: selectedMessage.id, channelId: selectedMessage.channel) {
+        if let selectedMessage, result.contains(where: { $0.id == selectedMessage.id }) {
             self.selectedMessage = nil
         }
     }

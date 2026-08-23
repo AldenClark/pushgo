@@ -2,8 +2,29 @@ import SwiftUI
 import UserNotifications
 
 import UIKit
+import BackgroundTasks
+import OSLog
+import os
 
-final class PushGoAppDelegate: NSObject, UIApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate {
+private final class IngressBackgroundRefreshCompletionGate: Sendable {
+    private let didComplete = OSAllocatedUnfairLock(initialState: false)
+
+    func claimCompletion() -> Bool {
+        didComplete.withLock { completed in
+            guard !completed else { return false }
+            completed = true
+            return true
+        }
+    }
+}
+
+@MainActor
+final class PushGoAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    private static let ingressRefreshIdentifier = "io.ethan.pushgo.ingress-reconcile"
+    private static let ingressRefreshLogger = Logger(
+        subsystem: "io.ethan.pushgo",
+        category: "IngressBackgroundRefresh"
+    )
     private let channelSubscriptionService = ChannelSubscriptionService()
 
     func application(
@@ -11,6 +32,7 @@ final class PushGoAppDelegate: NSObject, UIApplicationDelegate, @preconcurrency 
         didFinishLaunchingWithOptions _: [UIApplication.LaunchOptionsKey: Any]? = nil,
     ) -> Bool {
         PushGoAnimatedImageRuntime.bootstrapIfNeeded()
+        registerIngressBackgroundRefresh()
         AppEnvironment.shared.beginProviderIngressBootstrapRecovery()
         UNUserNotificationCenter.current().delegate = self
         _ = AppEnvironment.shared
@@ -71,7 +93,9 @@ final class PushGoAppDelegate: NSObject, UIApplicationDelegate, @preconcurrency 
         }
     }
 
-    func applicationDidEnterBackground(_: UIApplication) {}
+    func applicationDidEnterBackground(_: UIApplication) {
+        Self.scheduleIngressBackgroundRefresh(source: "application_delegate_background")
+    }
 
     func applicationWillEnterForeground(_: UIApplication) {
         Task { @MainActor in
@@ -233,14 +257,10 @@ final class PushGoAppDelegate: NSObject, UIApplicationDelegate, @preconcurrency 
             )
             return (inboxApplied + pulled) > 0 ? .newData : .noData
         case let .pulled(resolvedPayload, requestIdentifier, context):
-            let outcome = await environment.persistRemotePayloadIfNeeded(
-                resolvedPayload,
-                requestIdentifier: requestIdentifier
-            )
-            await environment.finalizePulledProviderIngress(
+            let outcome = await environment.persistPulledProviderIngress(
+                payload: resolvedPayload,
                 deliveryId: requestIdentifier,
                 context: context,
-                outcome: outcome,
                 source: "provider.remote_notification.pulled.ios"
             )
             return remoteFetchResult(inboxApplied: inboxApplied, persistenceOutcome: outcome)
@@ -255,6 +275,79 @@ final class PushGoAppDelegate: NSObject, UIApplicationDelegate, @preconcurrency 
                 source: "provider.remote_notification.direct.ios"
             )
             return remoteFetchResult(inboxApplied: inboxApplied, persistenceOutcome: outcome)
+        }
+    }
+
+    private func registerIngressBackgroundRefresh() {
+        let registered = BGTaskScheduler.shared.register(
+            forTaskWithIdentifier: Self.ingressRefreshIdentifier,
+            using: nil
+        ) { task in
+            Self.scheduleIngressBackgroundRefresh(source: "handler_start")
+            guard let refreshTask = task as? BGAppRefreshTask else {
+                Self.ingressRefreshLogger.error(
+                    "Received unexpected task type for ingress background refresh"
+                )
+                task.setTaskCompleted(success: false)
+                return
+            }
+            let completionGate = IngressBackgroundRefreshCompletionGate()
+            let work = Task { @MainActor in
+                let environment = AppEnvironment.shared
+                let runner = IngressBackgroundRefreshRunner(
+                    mergeIngress: {
+                        await environment.mergeNotificationIngressInboxOutcome(
+                            reason: "ios_bg_app_refresh",
+                            allowFallbackPull: true
+                        ).stageOutcome
+                    },
+                    drainAcknowledgements: {
+                        await environment.drainProviderDeliveryAckFailuresOutcome(
+                            source: "provider.bg_refresh.ack_failure.ios"
+                        )
+                    },
+                    drainDerivedWork: {
+                        await environment.dataStore.drainDerivedWorkForBackgroundRefresh()
+                            ? .succeeded
+                            : .failed
+                    }
+                )
+                return await runner.run()
+            }
+            refreshTask.expirationHandler = {
+                work.cancel()
+                guard completionGate.claimCompletion() else { return }
+                Task { @MainActor in
+                    refreshTask.setTaskCompleted(success: false)
+                }
+            }
+            Task { @MainActor in
+                let outcome = await work.value
+                guard completionGate.claimCompletion() else { return }
+                refreshTask.setTaskCompleted(success: outcome.isSuccessful)
+            }
+        }
+        if registered {
+            Self.ingressRefreshLogger.info("Registered ingress background refresh handler")
+        } else {
+            Self.ingressRefreshLogger.error(
+                "Failed to register ingress background refresh handler; verify permitted identifiers"
+            )
+        }
+    }
+
+    static func scheduleIngressBackgroundRefresh(source: String) {
+        let request = BGAppRefreshTaskRequest(identifier: ingressRefreshIdentifier)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+        do {
+            try BGTaskScheduler.shared.submit(request)
+            ingressRefreshLogger.info(
+                "Scheduled ingress background refresh from \(source, privacy: .public)"
+            )
+        } catch {
+            ingressRefreshLogger.error(
+                "Failed to schedule ingress background refresh from \(source, privacy: .public): \(String(describing: error), privacy: .public)"
+            )
         }
     }
 

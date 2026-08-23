@@ -1,9 +1,9 @@
 import SwiftUI
-@preconcurrency import UserNotifications
+import UserNotifications
 
 import AppKit
 @MainActor
-final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate, NSMenuDelegate {
+final class PushGoAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private let channelSubscriptionService = ChannelSubscriptionService()
 
@@ -265,14 +265,10 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, @preconcurrency 
                 )
             }
         case let .pulled(resolvedPayload, requestIdentifier, context):
-            let outcome = await AppEnvironment.shared.persistRemotePayloadIfNeeded(
-                resolvedPayload,
-                requestIdentifier: requestIdentifier
-            )
-            await AppEnvironment.shared.finalizePulledProviderIngress(
+            _ = await AppEnvironment.shared.persistPulledProviderIngress(
+                payload: resolvedPayload,
                 deliveryId: requestIdentifier,
                 context: context,
-                outcome: outcome,
                 source: "provider.remote_notification.pulled.macos"
             )
         case let .direct(resolvedPayload, requestIdentifier):

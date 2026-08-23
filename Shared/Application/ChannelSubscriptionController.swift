@@ -222,6 +222,83 @@ final class ChannelSubscriptionController {
         return result.deletedRecordCount
     }
 
+    func commitPendingChannelRemoval(
+        record: PendingLocalDeletionRecord,
+        leaseOwner: String
+    ) async throws -> PendingLocalDeletionCleanup {
+        guard case let .channelHistory(channelId, expectedGateway, expectedUpdatedAt) = record.intent else {
+            throw AppError.localStore("Invalid pending channel removal payload.")
+        }
+        return try await commitPendingChannelRemoval(
+            record: record,
+            leaseOwner: leaseOwner,
+            channelId: channelId,
+            expectedGateway: expectedGateway,
+            expectedUpdatedAt: expectedUpdatedAt
+        )
+    }
+
+    private func commitPendingChannelRemoval(
+        record: PendingLocalDeletionRecord,
+        leaseOwner: String,
+        channelId: String,
+        expectedGateway: String,
+        expectedUpdatedAt: Date
+    ) async throws -> PendingLocalDeletionCleanup {
+        guard let config = serverConfigProvider() else { throw AppError.noServer }
+        let gatewayKey = config.gatewayKey
+        let expected = expectedGateway.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let current = gatewayKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard expected == current else {
+            throw AppError.typedLocal(
+                code: "gateway_changed_during_channel_removal",
+                category: .validation,
+                message: localizationManager.localized("operation_failed")
+            )
+        }
+        let normalized = try ChannelIdValidator.normalize(channelId)
+        let subscription = try await dataStore.loadChannelSubscriptions(
+            gateway: gatewayKey,
+            includeDeleted: false
+        ).first { $0.channelId.trimmingCharacters(in: .whitespacesAndNewlines) == normalized }
+        guard let subscription,
+              abs(subscription.updatedAt.timeIntervalSince(expectedUpdatedAt)) < 0.001
+        else {
+            throw AppError.typedLocal(
+                code: "channel_subscription_changed_during_removal",
+                category: .validation,
+                message: localizationManager.localized("operation_failed")
+            )
+        }
+        return try await finishPendingChannelRemoval(
+            record: record,
+            leaseOwner: leaseOwner,
+            normalizedChannelId: normalized
+        )
+    }
+
+    private func finishPendingChannelRemoval(
+        record: PendingLocalDeletionRecord,
+        leaseOwner: String,
+        normalizedChannelId: String
+    ) async throws -> PendingLocalDeletionCleanup {
+        guard case let .channelHistory(_, expectedGateway, expectedUpdatedAt) = record.intent else {
+            throw AppError.localStore("Invalid pending channel removal payload.")
+        }
+        let deletedRecordCount = try await unsubscribeChannelAndDeleteLocalHistory(
+            channelId: normalizedChannelId,
+            expectedGateway: expectedGateway,
+            expectedUpdatedAt: expectedUpdatedAt
+        )
+        try await dataStore.abandonClaimedPendingLocalDeletion(
+            id: record.id,
+            owner: leaseOwner
+        )
+        return PendingLocalDeletionCleanup(deletedRecordCount: deletedRecordCount)
+    }
+
     private func subscribeChannel(
         channelId: String?,
         alias: String?,

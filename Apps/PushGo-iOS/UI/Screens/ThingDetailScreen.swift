@@ -44,22 +44,18 @@ struct ThingDetailScreen: View {
 
     @MainActor
     private func scheduleDeletion() async {
-        guard let onCommitDelete else { return }
+        guard onCommitDelete != nil else { return }
         let trimmedTitle = thing.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let summary = trimmedTitle.isEmpty
             ? localizationManager.localized("push_type_thing")
             : trimmedTitle
 
-        await environment.pendingLocalDeletionController.schedule(
+        let scheduled = await environment.pendingLocalDeletionController.schedule(
             summary: summary,
             undoLabel: localizationManager.localized("cancel"),
-            scope: .init(thingIDs: Set([thing.id]))
-        ) {
-            try await onCommitDelete()
-        } onCompletion: { [environment] result in
-            guard case let .failure(error) = result else { return }
-            environment.showErrorToast(error, duration: 2.5)
-        }
+            intent: .things(ids: [thing.id])
+        )
+        guard scheduled else { return }
 
         onPrepareDelete?()
         dismiss()

@@ -391,20 +391,11 @@ struct MessageSplitScreen: View {
             fallbackSingleSummary: localizationManager.localized("tab_messages"),
             multipleSummaryTitle: localizationManager.localized("tab_messages"),
             undoLabel: localizationManager.localized("cancel"),
-            scope: { PendingLocalDeletionController.Scope(messageIDs: Set($0.map(\.id))) },
-            commit: { [environment] messageIDs in
-                _ = try await environment.messageStateCoordinator.deleteMessages(
-                    messageIds: messageIDs
-                )
-            },
-            onCompletion: { [environment] result in
-                guard case let .failure(error) = result else { return }
-                environment.showErrorToast(error, duration: 2.5)
-            }
+            intent: { .messages(ids: $0) }
         ) else { return }
 
         if let selectedMessageSnapshot,
-           result.scope.suppressesMessage(id: selectedMessageSnapshot.id, channelId: selectedMessageSnapshot.channel)
+           result.contains(where: { $0.id == selectedMessageSnapshot.id })
         {
             selection = nil
             self.selectedMessageSnapshot = nil

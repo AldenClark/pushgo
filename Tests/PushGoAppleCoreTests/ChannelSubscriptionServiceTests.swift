@@ -336,6 +336,43 @@ struct ChannelSubscriptionServiceTests {
     }
 
     @Test
+    func routeNotFoundDoesNotReachDestructiveLegacyPullWhenFallbackIsDisabled() async throws {
+        let host = "apple-no-legacy-\(UUID().uuidString.lowercased()).example"
+        let baseURL = try #require(URL(string: "https://\(host)/GatewayA"))
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ChannelServiceURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let paths = OSAllocatedUnfairLock(initialState: [String]())
+        defer {
+            session.invalidateAndCancel()
+            ChannelServiceURLProtocol.unregister(host: host)
+        }
+
+        ChannelServiceURLProtocol.register(host: host) { request in
+            paths.withLock { $0.append(request.url?.path ?? "") }
+            let payload = #"{"success":false,"error_code":"route_not_found","problem":{"code":"route_not_found","category":"not_found","status":404,"title":"Not found","retryable":false}}"#
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 404,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, Data(payload.utf8))
+        }
+
+        await #expect(throws: AppError.self) {
+            _ = try await ChannelSubscriptionService(session: session).pullMessages(
+                baseURL: baseURL,
+                token: nil,
+                deviceKey: "device",
+                deliveryId: "wake-001",
+                allowLegacyFallback: false
+            )
+        }
+        #expect(paths.withLock { $0 } == ["/GatewayA/v2/messages/pull"])
+    }
+
+    @Test
     func decodeGatewayResponsePreservesStructuredProblem() throws {
         let data = """
         {

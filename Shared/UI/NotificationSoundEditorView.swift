@@ -433,7 +433,7 @@ struct NotificationSoundSettingsContentView: View {
 
     private func silentRule(for level: NotificationSoundLevel) -> NotificationSoundRule {
         var rule = NotificationSoundRule.default(for: level)
-        if level == .low {
+        if level.allowsSilentMode {
             rule.mode = .silent
         }
         rule.customAssetID = nil
@@ -477,7 +477,7 @@ private struct NotificationSoundPriorityRow: View {
     }
 
     private var allowsSilentOption: Bool {
-        level == .low
+        level.allowsSilentMode
     }
 
     private var fallbackOption: NotificationSoundPickerOption {
@@ -751,11 +751,13 @@ private struct NotificationSoundIntegerField: View {
 #if os(iOS)
                 .keyboardType(.numberPad)
                 .toolbar {
-                    ToolbarItemGroup(placement: .keyboard) {
-                        Spacer()
-                        Button(localizationManager.localized("done")) {
-                            commitDraft()
-                            isFocused = false
+                    if isFocused {
+                        ToolbarItemGroup(placement: .keyboard) {
+                            Spacer()
+                            Button(localizationManager.localized("done")) {
+                                commitDraft()
+                                isFocused = false
+                            }
                         }
                     }
                 }

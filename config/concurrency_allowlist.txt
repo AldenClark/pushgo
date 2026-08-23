@@ -1,10 +1,5 @@
 # format: <relative/path>|<token>|<reason>
 Apps/PushGo-iOS/App/AppEnvironment.swift|preconcurrency|Network preconcurrency import bridge
-Apps/PushGo-iOS/App/PushGoAppDelegate.swift|preconcurrency_delegate|ObjC delegate isolation bridge
-Apps/PushGo-macOS/App/AppEnvironment.swift|preconcurrency|UserNotifications preconcurrency import bridge
-Apps/PushGo-macOS/App/PushGoAppDelegate.swift|preconcurrency|UserNotifications preconcurrency import bridge
-Apps/PushGo-macOS/App/PushGoAppDelegate.swift|preconcurrency_delegate|ObjC delegate isolation bridge
-Apps/PushGo-watchOS/PushGoWatchAppDelegate.swift|preconcurrency_delegate|ObjC delegate isolation bridge
 Extensions/PushGoNSE-iOS/NotificationService.swift|preconcurrency|UserNotifications preconcurrency bridge
 Extensions/PushGoNSE-macOS/NotificationService.swift|preconcurrency|UserNotifications preconcurrency bridge
 Extensions/PushGoNSE-watchOS/NotificationService.swift|preconcurrency|UserNotifications preconcurrency bridge
@@ -18,3 +13,7 @@ Apps/PushGo-macOS/UI/Screens/MessageSplitScreen.swift|task_detached|Utility-prio
 Apps/PushGo-watchOS/WatchAutomation.swift|unsafe_raw_pointer|Darwin mach_task_basic_info pointer bridge for automation runtime metrics
 Shared/Services/NotificationSoundManager.swift|unsafe_raw_pointer|AVAudio float channel buffer access stays within owned buffer lifetime during local resample and CAF write
 Shared/UI/KeyboardDismiss.swift|mainactor_assumeisolated|Main-actor coordinator invalidates main-thread display link during nonisolated deinit cleanup
+Shared/Services/DurableIngressJournal.swift|unsafe_raw_pointer|sqlite3_exec error-message out-parameter is the SQLite C ownership boundary; the pointer is copied immediately and freed exactly once with sqlite3_free
+Shared/Services/ProviderIngressCoordinator.swift|unchecked_sendable|Legacy notification dictionaries are non-Sendable; production ownership is confined to MainActor AppEnvironment/NotificationIngressController and tests give each instance to only one task at a time
+Tests/PushGoAppleCoreTests/NotificationIngressInboxTests.swift|unchecked_sendable|Test-only FULLMUTEX SQLite handle is lexically owned by one test task while intentionally spanning suspension to exercise cross-actor contention
+Tests/PushGoAppleCoreTests/NotificationIngressInboxTests.swift|unsafe_raw_pointer|Test-only sqlite3_exec error-message out-parameter is copied immediately and freed exactly once with sqlite3_free

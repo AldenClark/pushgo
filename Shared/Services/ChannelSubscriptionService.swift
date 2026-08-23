@@ -550,7 +550,8 @@ struct ChannelSubscriptionService {
         baseURL: URL,
         token: String?,
         deviceKey: String,
-        deliveryId: String? = nil
+        deliveryId: String? = nil,
+        allowLegacyFallback: Bool = true
     ) async throws -> PullResult {
         do {
             let response = try await pullMessages(
@@ -570,6 +571,9 @@ struct ChannelSubscriptionService {
                 && problem.code?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
                     == "route_not_found"
         {
+            guard allowLegacyFallback else {
+                throw AppError.gateway(problem)
+            }
             let response = try await pullMessages(
                 baseURL: baseURL,
                 token: token,

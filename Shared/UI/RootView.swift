@@ -24,7 +24,15 @@ struct RootView: View {
         #if os(watchOS)
         EmptyView()
         #else
-        MainTabContainerView()
+        if environment.isDeletionRecoveryReady {
+            MainTabContainerView()
+        } else {
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .task {
+                    await environment.bootstrap()
+                }
+        }
         #endif
     }
 }

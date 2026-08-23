@@ -12,20 +12,32 @@ PushGo policy:
 
 ## [Unreleased]
 
-## [v1.3.0] - 2026-08-04
+## [v1.3.0] - 2026-08-23
 
 ### Changed
-- Finalized Apple release targets at `MARKETING_VERSION = 1.3.0`, `PUSHGO_DISPLAY_VERSION = v1.3.0`, and `CURRENT_PROJECT_VERSION = 88`.
+- Finalized Apple release targets at `MARKETING_VERSION = 1.3.0`, `PUSHGO_DISPLAY_VERSION = v1.3.0`, and `CURRENT_PROJECT_VERSION = 90`.
 - Added versioned stable release note source file: `release/update-notes/v1.3.0.json`.
 - Switched provider ingress to non-destructive Pull v2 with exact structured fallback to the beta Pull route.
 - Added persisted, grouped ACK batches so pulled deliveries are acknowledged only after local persistence succeeds.
 - Refreshed release workflow docs so Apple CI examples match the current `vX.Y.Z` / `vX.Y.Z-beta.N` tag conventions.
+- Added an App Group durable ingress journal with N-1 rollback shadows, explicit rollback-health telemetry, and canonical terminal state before derived ACK work.
+- Locked every Swift package requirement and release-time package resolution to immutable revisions.
+- Pinned release actions to immutable commits, narrowed credential scope, added privacy manifests, and added SPDX SBOM, checksums, artifact manifests, and GitHub artifact attestations before App Store upload.
 
 ### Improved
 - Added system search, accessibility summaries, app shortcuts, and deeper Apple system-surface routing for messages, events, and objects.
 - Added system integration widgets plus WidgetKit push token and refresh handling across iPhone, Mac, and Apple Watch.
 - Reworked the Apple Watch first-class receiver flow so delivery, provisioning state, receiver health, and related sync behavior are more predictable.
 - Improved cached image handling under short HTTP cache TTLs and trimmed Apple localization artifacts to the supported locale set.
+- Added autonomous retry scheduling for persisted ingress work so retry-wait rows do not depend on reopening the app or receiving another notification.
+- Propagated background ingress outcomes to `BGTaskScheduler` and kept derived work durably recoverable instead of reporting success before it finishes.
+
+### Fixed
+- Fixed late notification/system entity-open requests occasionally leaving the iOS UI on the message list by observing the dedicated navigation controller directly.
+- Fixed notification-visible/database-visible timing gaps caused by accepted ingress remaining queued or retry-waiting without an independent wake source.
+- Fixed background refresh paths that could report success while canonical or derived ingress work was still pending.
+- Fixed Swift concurrency isolation violations in notification, application delegate, and shared-controller paths.
+- Made failed N-1 rollback-shadow writes observable without rejecting a notification already committed to the current durable journal.
 
 ## [v1.2.7] - 2026-06-15
 

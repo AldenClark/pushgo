@@ -30,6 +30,9 @@ COMMON_ARGS=(
   -configuration Debug
   -derivedDataPath "$DERIVED_DATA_PATH"
   -destination "platform=iOS Simulator,id=${SIM_UDID}"
+  -onlyUsePackageVersionsFromResolvedFile
+  -disableAutomaticPackageResolution
+  -skipPackageUpdates
   -parallel-testing-enabled NO
   -maximum-parallel-testing-workers 1
 )

@@ -19,6 +19,9 @@ Policy:
 - Added WidgetKit push wiring so widget and complication snapshots stay fresher across iPhone, Mac, and Apple Watch.
 - Reworked the Apple Watch receiver flow so delivery, sync state, and receiver-health reporting behave more independently and predictably.
 - Improved cached image handling and refreshed Apple localization assets after the current integration pass.
+- Notifications now move from system delivery into the app's local database more promptly and recover automatically after transient failures, without requiring the app to be reopened.
+- Background notification processing now reports completion accurately and preserves follow-up work across interruption or relaunch.
+- Improved upgrade and rollback safety for pending notifications across iPhone, Mac, and Apple Watch.
 
 ## [v1.2.7]
 

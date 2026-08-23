@@ -88,6 +88,10 @@ enum NotificationSoundLevel: String, Codable, CaseIterable, Identifiable, Sendab
         defaultBuiltinSoundID == nil ? .silent : .builtin
         #endif
     }
+
+    var allowsSilentMode: Bool {
+        self == .normal || self == .low
+    }
 }
 
 enum NotificationSoundMode: String, Codable, CaseIterable, Sendable {

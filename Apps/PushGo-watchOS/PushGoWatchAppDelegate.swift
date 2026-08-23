@@ -2,7 +2,8 @@ import Foundation
 import UserNotifications
 import WatchKit
 
-final class PushGoWatchAppDelegate: NSObject, WKApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate {
+@MainActor
+final class PushGoWatchAppDelegate: NSObject, WKApplicationDelegate, UNUserNotificationCenterDelegate {
     func applicationDidFinishLaunching() {
         PushGoAnimatedImageRuntime.bootstrapIfNeeded()
         UNUserNotificationCenter.current().delegate = self

@@ -402,20 +402,12 @@ struct MessageDetailScreen: View {
             ? localizationManager.localized("tab_messages")
             : trimmedTitle
 
-        await environment.pendingLocalDeletionController.schedule(
+        let scheduled = await environment.pendingLocalDeletionController.schedule(
             summary: summary,
             undoLabel: localizationManager.localized("cancel"),
-            scope: .init(messageIDs: Set([message.id]))
-        ) { [environment, onCommitDelete] in
-            if let onCommitDelete {
-                try await onCommitDelete()
-            } else {
-                try await environment.messageStateCoordinator.deleteMessage(messageId: message.id)
-            }
-        } onCompletion: { [environment] result in
-            guard case let .failure(error) = result else { return }
-            environment.showErrorToast(error, duration: 2.5)
-        }
+            intent: .messages(ids: [message.id])
+        )
+        guard scheduled else { return }
 
         onPrepareDelete?()
         if shouldDismissOnDelete {
