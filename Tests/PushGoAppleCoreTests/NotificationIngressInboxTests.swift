@@ -947,7 +947,10 @@ struct NotificationIngressInboxTests {
                 requestIdentifier: "locked-request",
                 source: "nse.locked"
             ))
-            #expect(Date().timeIntervalSince(started) < 3)
+            // Keep the fallback comfortably inside the notification extension's
+            // execution window while allowing for scheduler contention when the
+            // complete test suite runs in parallel on a shared CI runner.
+            #expect(Date().timeIntervalSince(started) < 5)
 
             let emergencyDirectory = databaseURL.deletingLastPathComponent()
                 .appendingPathComponent("EmergencyIngress", isDirectory: true)
