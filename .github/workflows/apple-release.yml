@@ -576,15 +576,14 @@ jobs:
           api-key-id: ${{ secrets.ASC_KEY_ID }}
           api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
 
-      - name: Download macOS widget App Store profile
-        id: profile_macos_widget
-        uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594 # v6.1.0
-        with:
-          bundle-id: io.ethan.pushgo.macwidgets
-          profile-type: MAC_APP_STORE
-          issuer-id: ${{ secrets.ASC_ISSUER_ID }}
-          api-key-id: ${{ secrets.ASC_KEY_ID }}
-          api-private-key: ${{ steps.normalize_asc_key.outputs.api_private_key }}
+      - name: Ensure macOS widget App Store profile
+        shell: bash
+        run: bash ./scripts/ensure_macos_widget_app_store_profile.sh
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_API_PRIVATE_KEY: ${{ steps.normalize_asc_key.outputs.api_private_key }}
 
       - name: Install widget App Store profiles from secrets
         shell: bash
@@ -720,7 +719,6 @@ jobs:
           export_profile_metadata '${{ steps.profile_watch_nse.outputs.profiles }}' 'PushGo watch NSE' 'APP_STORE_PROFILE_WATCH_NSE_UUID' 'APP_STORE_PROFILE_WATCH_NSE_NAME' 'watch NSE'
           export_profile_metadata '${{ steps.profile_macos_app.outputs.profiles }}' 'PushGo mac' 'APP_STORE_PROFILE_MACOS_APP_UUID' 'APP_STORE_PROFILE_MACOS_APP_NAME' 'macOS app'
           export_profile_metadata '${{ steps.profile_macos_nse.outputs.profiles }}' 'PushGo mac NSE' 'APP_STORE_PROFILE_MACOS_NSE_UUID' 'APP_STORE_PROFILE_MACOS_NSE_NAME' 'macOS NSE'
-          export_profile_metadata '${{ steps.profile_macos_widget.outputs.profiles }}' 'pushgo widgets mac' 'APP_STORE_PROFILE_MACOS_WIDGET_UUID' 'APP_STORE_PROFILE_MACOS_WIDGET_NAME' 'macOS widget'
 
       - name: Validate App Store provisioning profile entitlements
         shell: bash

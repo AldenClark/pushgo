@@ -5,15 +5,16 @@
 - Gateway 1.3.0 is published with six Linux binaries: amd64, arm64, and armv7 for GNU and musl.
 - Gateway synthetic upgrade and rollback validation passed; production validation was intentionally not run.
 - Apple 1.3.0 build 90 release gate passed, iOS uploaded, and the notarized DMG was published.
+- The corrected tag's hosted release gate passed; App Store Connect confirmed that the macwidgets bundle ID exists but has no active profile.
 
 ## Current
 
 - The App Store/direct-distribution identifier split is implemented and locally verified.
-- Prepare the corrected source commit and move the 1.3.0 tag to it.
+- Make the App Store job create or reuse the missing macwidgets profile with the installed distribution certificate.
 
 ## Next
 
-- Push the corrected tag and verify hosted signing, App Store upload, notarization, and release results.
+- Push the profile recovery and verify hosted signing, App Store upload, notarization, and release results.
 
 ## Evidence limits
 

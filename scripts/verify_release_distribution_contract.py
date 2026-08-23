@@ -20,6 +20,9 @@ def main() -> int:
     project = (ROOT / "pushgo.xcodeproj/project.pbxproj").read_text(encoding="utf-8")
     fastfile = (ROOT / "fastlane/Fastfile").read_text(encoding="utf-8")
     workflow = (ROOT / ".github/workflows/apple-release.yml").read_text(encoding="utf-8")
+    profile_helper = (ROOT / "scripts/ensure_macos_widget_app_store_profile.sh").read_text(
+        encoding="utf-8"
+    )
 
     require(
         errors,
@@ -30,6 +33,11 @@ def main() -> int:
         errors,
         project.count("PUSHGO_MACOS_WIDGET_BUNDLE_ID = io.ethan.pushgo.macwidgets;") == 2,
         "macOS widget target must default to the App Store-compatible identifier",
+    )
+    require(
+        errors,
+        'PROVISIONING_PROFILE_SPECIFIER = "$(PUSHGO_MACOS_WIDGET_PROFILE_SPECIFIER)";' in project,
+        "macOS widget target must accept the profile name created by the release workflow",
     )
     require(
         errors,
@@ -46,6 +54,12 @@ def main() -> int:
         errors,
         fastfile.count('"io.ethan.pushgo.widgets.mac" =>') == 2,
         "direct-distribution entitlement and provisioning maps must use io.ethan.pushgo.widgets.mac",
+    )
+    require(
+        errors,
+        'PUSHGO_MACOS_WIDGET_PROFILE_SPECIFIER=#{Shellwords.escape(env_value!("APP_STORE_PROFILE_MACOS_WIDGET_NAME"))}'
+        in fastfile,
+        "macOS App Store archive must select the actual generated widget profile name",
     )
 
     release_upload = re.search(
@@ -73,9 +87,11 @@ def main() -> int:
     )
     require(
         errors,
-        "- name: Download macOS widget App Store profile" in workflow
-        and "bundle-id: io.ethan.pushgo.macwidgets" in workflow,
-        "App Store workflow must download the macwidgets App Store profile",
+        "- name: Ensure macOS widget App Store profile" in workflow
+        and "bash ./scripts/ensure_macos_widget_app_store_profile.sh" in workflow
+        and 'bundle_id="io.ethan.pushgo.macwidgets"' in profile_helper
+        and "bundle _2.5.23_ exec fastlane sigh" in profile_helper,
+        "App Store workflow must create or reuse the macwidgets App Store profile",
     )
     require(
         errors,
