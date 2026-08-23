@@ -1353,6 +1353,36 @@ jobs:
           PUSHGO_UPDATE_DEPLOY_USER: ${{ secrets.PUSHGO_UPDATE_DEPLOY_USER }}
           PUSHGO_UPDATE_DEPLOY_PATH: ${{ secrets.PUSHGO_UPDATE_DEPLOY_PATH }}
 
+      - name: Verify public Sparkle artifact after deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          public_appcast="$(mktemp)"
+          public_dmg="$(mktemp)"
+          bash ./scripts/retry_command.sh --always -- \
+            curl -fsSL "${PUSHGO_SPARKLE_FEED_URL}?run=${GITHUB_RUN_ID}" -o "$public_appcast"
+          enclosure_url="$(python3 - "$public_appcast" "$RELEASE_DMG_NAME" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          appcast_path, expected_name = sys.argv[1:]
+          for enclosure in ET.parse(appcast_path).iter("enclosure"):
+              url = enclosure.get("url", "")
+              if url.rsplit("/", 1)[-1] == expected_name:
+                  print(url)
+                  break
+          else:
+              raise SystemExit(f"missing enclosure for {expected_name}")
+          PY
+          )"
+          case "$enclosure_url" in
+            https://*) ;;
+            *) echo "Refusing non-HTTPS Sparkle enclosure: $enclosure_url" >&2; exit 1 ;;
+          esac
+          bash ./scripts/retry_command.sh --always -- \
+            curl -fsSL "${enclosure_url}?run=${GITHUB_RUN_ID}" -o "$public_dmg"
+          cmp "$RELEASE_DMG_PATH" "$public_dmg"
+
       - name: Upload Sparkle feed artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

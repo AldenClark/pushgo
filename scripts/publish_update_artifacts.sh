@@ -161,4 +161,9 @@ bash "$retry_cmd" --always -- ssh "${ssh_opts[@]}" "$remote_user_host" \
 bash "$retry_cmd" --always -- ssh "${ssh_opts[@]}" "$remote_user_host" \
   "cat > '$active_appcast_file'" < "$appcast_path"
 
+# Do not rely on the deploy account's umask. nginx (or another unprivileged web
+# worker) must be able to traverse release directories and read every artifact.
+bash "$retry_cmd" --always -- ssh "${ssh_opts[@]}" "$remote_user_host" \
+  "chmod 755 '${remote_base_path%/}' '${remote_base_path%/}/$track' '$release_dir' && find '$release_dir' -type d -exec chmod 755 {} + && find '$release_dir' -type f -exec chmod 644 {} + && chmod 644 '$active_appcast_file'"
+
 echo "Published macOS update artifacts to ${remote_user_host}:${release_dir} and refreshed ${active_appcast_file}"
