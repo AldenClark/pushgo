@@ -2261,18 +2261,30 @@ actor LocalDataStore {
         return AppError.localStore(message)
     }
 
-    func saveMessages(_ messages: [PushMessage]) async throws {
+    func saveMessages(
+        _ messages: [PushMessage],
+        progressObserver: (@Sendable (String) async -> Void)? = nil
+    ) async throws {
         let canonicalMessages = messages.map(canonicalizedMessageForPersistence)
+        await progressObserver?("backend.start")
         let storedMessages = try await performBackendWrite { backend in
             try await backend.saveMessages(canonicalMessages)
         }
+        await progressObserver?("backend.end")
         let searchable = storedMessages.filter(isTopLevelMessage)
+        await progressObserver?("search.start")
         await updateSearchIndex(with: searchable)
+        await progressObserver?("search.end")
         await rebuildMetadataIndex(with: searchable)
+        await progressObserver?("metadata.end")
         await indexSystemSearchMessages(searchable)
+        await progressObserver?("system_search.end")
         await mergeNotificationContextSnapshot(with: storedMessages)
+        await progressObserver?("notification_snapshot.end")
         await PushGoLiveActivityCoordinator.handlePersistedMessages(storedMessages)
+        await progressObserver?("live_activity.end")
         await refreshSystemSurfaceSnapshot(reason: .write)
+        await progressObserver?("system_snapshot.end")
     }
 
     func saveEntityRecords(_ messages: [PushMessage]) async throws {

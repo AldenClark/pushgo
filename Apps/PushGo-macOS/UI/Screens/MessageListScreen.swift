@@ -29,7 +29,9 @@ struct MessageListScreen: View {
     var body: some View {
         let baseView = Group {
             if !viewModel.hasLoadedOnce {
-                Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity)
+                initialLoadingState
+            } else if viewModel.loadState == .failed && messages.isEmpty {
+                messageLoadFailureState
             } else {
                 ZStack {
                     activeListView
@@ -39,6 +41,12 @@ struct MessageListScreen: View {
 
                     if showsEmptyState {
                         emptyState
+                    }
+
+                    if viewModel.loadState == .failed && !messages.isEmpty {
+                        messageLoadFailureBanner
+                            .frame(maxHeight: .infinity, alignment: .top)
+                            .padding()
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -50,6 +58,54 @@ struct MessageListScreen: View {
         }
         .accessibilityIdentifier("screen.messages.list")
         return baseView
+    }
+
+    private var initialLoadingState: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+            Text(localizationManager.localized(
+                viewModel.loadState == .slow
+                    ? "message_ingress_processing_slow"
+                    : "message_ingress_processing_progress"
+            ))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(
+            viewModel.loadState == .slow ? "state.messages.loading.slow" : "state.messages.loading"
+        )
+    }
+
+    private var messageLoadFailureState: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text(localizationManager.localized("message_load_failed"))
+            Button(localizationManager.localized("retry")) {
+                Task { await viewModel.retryAfterFailure() }
+            }
+            .accessibilityIdentifier("action.messages.retry")
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("state.messages.load_failed")
+    }
+
+    private var messageLoadFailureBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+            Text(localizationManager.localized("message_load_failed"))
+            Spacer(minLength: 8)
+            Button(localizationManager.localized("retry")) {
+                Task { await viewModel.retryAfterFailure() }
+            }
+            .accessibilityIdentifier("action.messages.retry")
+        }
+        .padding(12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .accessibilityIdentifier("state.messages.load_failed")
     }
 
     @ViewBuilder
@@ -212,6 +268,7 @@ struct MessageListScreen: View {
                 EntityOnboardingEmptyView(kind: .messages)
             }
         }
+        .accessibilityIdentifier("state.messages.empty")
     }
 
     private var searchPlaceholderRow: some View {

@@ -205,8 +205,21 @@ private struct BootstrapTaskModifier: ViewModifier {
             environment.updateScenePhase(scenePhase, sceneID: sceneID)
 #if DEBUG
             #if !os(watchOS)
+            if PushGoAutomationContext.qualitySession != nil {
+                environment.markQualityRuntimeReadiness("seeding")
+            }
             await PushGoAutomationRuntime.shared.importStartupFixtureIfNeeded(environment: environment)
+            if PushGoAutomationContext.qualitySession != nil {
+                environment.markQualityRuntimeReadiness("executing")
+            }
             await PushGoAutomationRuntime.shared.executeStartupRequestIfNeeded(environment: environment)
+            if PushGoAutomationContext.qualitySession != nil {
+                environment.markQualityRuntimeReadiness("finalizing")
+            }
+            let readiness = await PushGoAutomationRuntime.shared.finalizeQualityReadiness(
+                environment: environment
+            )
+            environment.markQualityRuntimeReadiness(readiness)
             #endif
 #endif
         }

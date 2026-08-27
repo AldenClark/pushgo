@@ -110,6 +110,34 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
+    func testQualitySessionUsesAppOwnedStoreAndReachesFunctionalEmptyState() {
+        let context = configuredApp()
+        let sessionID = "macos-empty-\(UUID().uuidString.lowercased())"
+        setAutomationValue(
+            qualitySessionPayload(sessionID: sessionID, fixture: "empty.clean"),
+            for: "PUSHGO_QUALITY_SESSION_BASE64",
+            in: context.app
+        )
+
+        launch(context)
+
+        XCTAssertTrue(
+            element(in: context.app, identifier: "quality-runtime.ready")
+                .waitForExistence(timeout: 15),
+            "App-owned quality session did not become ready"
+        )
+        XCTAssertEqual(
+            element(in: context.app, identifier: "quality-runtime.ready").value as? String,
+            sessionID
+        )
+        XCTAssertTrue(element(in: context.app, identifier: "screen.messages.list").exists)
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.empty")
+                .waitForExistence(timeout: 5)
+        )
+    }
+
+    @MainActor
     func testSidebarNavigationCoversPrimaryScreens() {
         let context = configuredApp()
         launch(context)
@@ -1022,6 +1050,19 @@ final class PushGo_macOSUITests: XCTestCase {
         }
         return sharedBase
             .appendingPathComponent("PushGo-macOSUITests-\(UUID().uuidString)", isDirectory: true)
+    }
+
+    private func qualitySessionPayload(sessionID: String, fixture: String) -> String {
+        let payload: [String: Any] = [
+            "schema_version": 1,
+            "session_id": sessionID,
+            "fixture": fixture,
+            "faults": [
+                "fail_message_load": false,
+            ],
+        ]
+        let data = try! JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+        return data.base64EncodedString()
     }
 
     @MainActor

@@ -249,6 +249,30 @@ private struct PushGoAutomationRuntimeError: Equatable {
     let timestamp: String
 }
 
+private struct PushGoQualityReadinessSnapshot: Encodable {
+    let schemaVersion: Int
+    let sessionID: String
+    let fixture: String
+    let status: String
+    let localStoreMode: String
+    let localStoreReason: String?
+    let totalMessageCount: Int
+    let runtimeErrorCount: Int
+    let generatedAt: String
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case sessionID = "session_id"
+        case fixture
+        case status
+        case localStoreMode = "local_store_mode"
+        case localStoreReason = "local_store_reason"
+        case totalMessageCount = "total_message_count"
+        case runtimeErrorCount = "runtime_error_count"
+        case generatedAt = "generated_at"
+    }
+}
+
 private struct PushGoAutomationDetailReadySample: Equatable {
     let sequence: Int
     let messageId: String
@@ -520,6 +544,7 @@ final class PushGoAutomationRuntime {
     func configureFromProcessEnvironment() {
         guard !configured else { return }
         configured = true
+        _ = PushGoAutomationContext.cleanupPriorQualitySessionsIfNeeded()
         PushGoAutomationPerformanceMonitor.shared.startIfNeeded()
         responseURL = fileURL(for: PushGoAutomationEnvironment.responsePath)
         stateURL = fileURL(for: PushGoAutomationEnvironment.statePath)
@@ -544,6 +569,59 @@ final class PushGoAutomationRuntime {
         } catch {
             requestDecodeError = "Failed to decode automation request: \(error.localizedDescription)"
         }
+    }
+
+    func finalizeQualityReadiness(environment: AppEnvironment) async -> String? {
+        configureFromProcessEnvironment()
+        guard let session = PushGoAutomationContext.qualitySession else { return nil }
+
+        let state = await currentState(environment: environment)
+        let fixtureReady: Bool
+        switch session.fixture {
+        case .emptyClean:
+            fixtureReady = state.totalMessageCount == 0
+        case .messagesStandard:
+            fixtureReady = state.totalMessageCount > 0
+        case .messagesLarge:
+            fixtureReady = state.totalMessageCount >= 1_000
+        case .eventStandard:
+            fixtureReady = state.eventCount == 1
+        case .thingStandard:
+            fixtureReady = state.thingCount == 1
+        }
+        let status = state.localStoreMode == "persistent"
+            && state.runtimeErrorCount == 0
+            && fixtureReady
+            ? "ready"
+            : "failed"
+        let snapshot = PushGoQualityReadinessSnapshot(
+            schemaVersion: PushGoQualitySessionDescriptor.currentSchemaVersion,
+            sessionID: session.sessionID,
+            fixture: session.fixture.rawValue,
+            status: status,
+            localStoreMode: state.localStoreMode,
+            localStoreReason: state.localStoreReason,
+            totalMessageCount: state.totalMessageCount,
+            runtimeErrorCount: state.runtimeErrorCount,
+            generatedAt: ISO8601DateFormatter().string(from: Date())
+        )
+        writeJSON(
+            snapshot,
+            to: PushGoAutomationContext.qualityArtifactURL(filename: "quality-readiness.json")
+        )
+        writeEvent(
+            type: "quality.readiness",
+            command: nil,
+            details: [
+                "session_id": session.sessionID,
+                "fixture": session.fixture.rawValue,
+                "status": status,
+                "local_store_mode": state.localStoreMode,
+                "total_message_count": String(state.totalMessageCount),
+                "runtime_error_count": String(state.runtimeErrorCount),
+            ]
+        )
+        return status
     }
 
     func recordBootstrapCheckpoint(_ source: String, details: [String: String] = [:]) {
@@ -988,7 +1066,10 @@ final class PushGoAutomationRuntime {
         configureFromProcessEnvironment()
         guard !didImportStartupFixture else { return }
         didImportStartupFixture = true
-        guard startupFixturePath != nil || startupFixtureBase64 != nil else { return }
+        guard PushGoAutomationContext.qualitySession != nil
+            || startupFixturePath != nil
+            || startupFixtureBase64 != nil
+        else { return }
 
         do {
             let bundle = try loadStartupFixtureBundle()
@@ -1264,6 +1345,24 @@ final class PushGoAutomationRuntime {
     }
 
     private func fileURL(for environmentKey: String) -> URL? {
+        if PushGoAutomationContext.qualitySession != nil {
+            let filename: String?
+            switch environmentKey {
+            case PushGoAutomationEnvironment.responsePath:
+                filename = "automation-response.json"
+            case PushGoAutomationEnvironment.statePath:
+                filename = "automation-state.json"
+            case PushGoAutomationEnvironment.eventsPath:
+                filename = "automation-events.jsonl"
+            case PushGoAutomationEnvironment.tracePath:
+                filename = "automation-trace.json"
+            default:
+                filename = nil
+            }
+            if let filename {
+                return PushGoAutomationContext.qualityArtifactURL(filename: filename)
+            }
+        }
         guard let rawPath = environmentValue(for: environmentKey)?
             .trimmingCharacters(in: .whitespacesAndNewlines),
               !rawPath.isEmpty
@@ -1293,6 +1392,11 @@ final class PushGoAutomationRuntime {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(value)
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true,
+                attributes: nil
+            )
             try data.write(to: url, options: .atomic)
         } catch {
         }
@@ -3312,7 +3416,11 @@ final class PushGoAutomationRuntime {
                 bundle.messages
                     .map { $0.toPushMessage() }
                     .sorted { $0.receivedAt > $1.receivedAt }
-            )
+            ) { phase in
+                await MainActor.run {
+                    environment.markQualityRuntimeReadiness("seeding.messages.\(phase)")
+                }
+            }
         }
         try await withPhaseMarker(command: command, phase: "fixture.refresh_state") {
             await environment.refreshMessageCountsAndNotify()
@@ -3369,6 +3477,9 @@ final class PushGoAutomationRuntime {
     }
 
     private func loadStartupFixtureBundle() throws -> PushGoAutomationFixtureBundle {
+        if let session = PushGoAutomationContext.qualitySession {
+            return try loadQualityFixtureBundle(session.fixture)
+        }
         if let startupFixtureBase64 {
             return try loadFixtureBundle(base64Encoded: startupFixtureBase64)
         }
@@ -3376,6 +3487,113 @@ final class PushGoAutomationRuntime {
             throw PushGoAutomationError.missingArgument("startup_fixture")
         }
         return try loadFixtureBundle(path: startupFixturePath)
+    }
+
+    private func loadQualityFixtureBundle(
+        _ fixture: PushGoQualityFixture
+    ) throws -> PushGoAutomationFixtureBundle {
+        let messages: [[String: Any]]
+        let entityRecords: [[String: Any]]
+        switch fixture {
+        case .emptyClean:
+            messages = []
+            entityRecords = []
+        case .messagesStandard:
+            messages = [qualityFixtureMessage(index: 0)]
+            entityRecords = []
+        case .messagesLarge:
+            messages = (0..<1_000).map(qualityFixtureMessage)
+            entityRecords = []
+        case .eventStandard:
+            // Events enter the product through the message ingestion path. Saving this
+            // as an entity record would bypass projection, so the detail could never
+            // be opened even though a fixture row existed.
+            messages = [qualityEventFixture()]
+            entityRecords = []
+        case .thingStandard:
+            // Things use the same user-visible ingestion path as production pushes.
+            messages = [qualityThingFixture()]
+            entityRecords = []
+        }
+        let payload: [String: Any] = [
+            "messages": messages,
+            "entity_records": entityRecords,
+            "channel_subscriptions": [],
+        ]
+        return try decodeFixtureBundle(data: JSONSerialization.data(withJSONObject: payload))
+    }
+
+    private func qualityFixtureMessage(index: Int) -> [String: Any] {
+        let suffix = String(format: "%012x", index + 1)
+        let stableID = index == 0 ? "quality-standard-message" : "quality-large-\(index)"
+        let title = index == 0 ? "P2 Split Seed Message" : "Quality message \(index)"
+        let body = index == 0
+            ? "Seeded from fixture.seed_messages for UI validation."
+            : "Deterministic app-owned performance fixture row \(index)."
+        return [
+            "id": "00000000-0000-0000-0000-\(suffix)",
+            "message_id": stableID,
+            "title": title,
+            "body": body,
+            "channel_id": "quality",
+            "is_read": false,
+            "received_at": "2026-01-15T08:00:00Z",
+            "raw_payload": [
+                "entity_type": "message",
+                "message_id": stableID,
+                "delivery_id": "quality-delivery-\(stableID)",
+            ],
+            "status": "normal",
+        ]
+    }
+
+    private func qualityEventFixture() -> [String: Any] {
+        [
+            "id": "00000000-0000-0000-0000-00000000e001",
+            "message_id": "quality-event-message",
+            "title": "P2 Event Active",
+            "body": "Event fixture for app-owned UI validation.",
+            "channel_id": "quality",
+            "is_read": false,
+            "received_at": "2026-01-15T08:01:00Z",
+            "raw_payload": [
+                "entity_type": "event",
+                "entity_id": "quality-event-active",
+                "event_id": "quality-event-active",
+                "event_state": "active",
+                "status": "ongoing",
+                "message": "Event fixture for app-owned UI validation.",
+                "severity": "high",
+                "event_title": "P2 Event Active",
+                "event_message": "Event fixture for app-owned UI validation.",
+                "projection_destination": "event_head",
+            ],
+            "status": "normal",
+        ]
+    }
+
+    private func qualityThingFixture() -> [String: Any] {
+        [
+            "id": "00000000-0000-0000-0000-00000000a001",
+            "message_id": "quality-thing-message",
+            "title": "P2 Thing Rich",
+            "body": "Thing fixture for app-owned UI validation.",
+            "channel_id": "quality",
+            "is_read": false,
+            "received_at": "2026-01-15T08:02:00Z",
+            "raw_payload": [
+                "entity_type": "thing",
+                "entity_id": "quality-thing-rich",
+                "thing_id": "quality-thing-rich",
+                "title": "P2 Thing Rich",
+                "description": "Fixture thing summary",
+                "thing_title": "P2 Thing Rich",
+                "thing_summary": "Fixture thing summary",
+                "attrs": "{\"region\":\"cn-sh\",\"owner\":\"qa\"}",
+                "projection_destination": "things",
+            ],
+            "status": "normal",
+        ]
     }
 
     private func loadFixtureBundle(path: String) throws -> PushGoAutomationFixtureBundle {
@@ -3403,25 +3621,38 @@ final class PushGoAutomationRuntime {
         environment: AppEnvironment,
     ) async throws {
         if !bundle.messages.isEmpty {
+            environment.markQualityRuntimeReadiness("seeding.messages")
+            for message in bundle.messages.map({ $0.toPushMessage() }) {
+                // App-owned fixtures bypass the provider ingress coordinator, so
+                // explicitly reproduce its page-visibility side effect before saving.
+                environment.autoEnableDataPageIfNeeded(for: message)
+            }
             try await environment.dataStore.saveMessages(
                 bundle.messages
                     .map { $0.toPushMessage() }
                     .sorted { $0.receivedAt > $1.receivedAt }
             )
+            environment.markQualityRuntimeReadiness("seeding.messages.saved")
         }
         if !bundle.entityRecords.isEmpty {
+            environment.markQualityRuntimeReadiness("seeding.entities")
             try await environment.dataStore.saveEntityRecords(
                 bundle.entityRecords
                     .map { $0.toPushMessage() }
                     .sorted { $0.receivedAt > $1.receivedAt }
             )
+            environment.markQualityRuntimeReadiness("seeding.entities.saved")
         }
         if !bundle.channelSubscriptions.isEmpty {
+            environment.markQualityRuntimeReadiness("seeding.channels")
             try await applyFixtureSubscriptions(bundle.channelSubscriptions, environment: environment)
+            environment.markQualityRuntimeReadiness("seeding.channels.saved")
         }
+        environment.markQualityRuntimeReadiness("seeding.refresh")
         await environment.refreshMessageCountsAndNotify()
         environment.publishStoreRefreshForAutomation()
         await environment.refreshChannelSubscriptions()
+        environment.markQualityRuntimeReadiness("seeding.complete")
         recordFixtureImport(
             path: sourcePath,
             messageCount: bundle.messages.count,

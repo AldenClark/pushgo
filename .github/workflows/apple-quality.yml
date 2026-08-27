@@ -1,0 +1,56 @@
+name: Apple Product Quality
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+    tags: [ "v*" ]
+  schedule:
+    - cron: "17 18 * * *"
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: Quality lane to run
+        required: true
+        default: nightly
+        type: choice
+        options:
+          - pr
+          - nightly
+          - release
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apple-quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/main' }}
+
+jobs:
+  quality:
+    runs-on: macos-26
+    timeout-minutes: 120
+    env:
+      QUALITY_LANE: ${{ github.event_name == 'schedule' && 'nightly' || github.event_name == 'workflow_dispatch' && inputs.lane || startsWith(github.ref, 'refs/tags/') && 'release' || 'pr' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: "26.4"
+
+      - name: Run value-based Apple quality lane
+        run: ./scripts/quality_test.sh "$QUALITY_LANE"
+
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: apple-quality-${{ env.QUALITY_LANE }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            build/quality-results/ios/**/*.xcresult
+            build/quality-results/ios/**/*.log

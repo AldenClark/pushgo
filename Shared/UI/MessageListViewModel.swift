@@ -1,6 +1,20 @@
 import Foundation
 import Observation
 
+enum MessageListLoadState: Equatable {
+    case idle
+    case loading
+    case slow
+    case loaded
+    case failed
+}
+
+#if DEBUG
+private enum PushGoQualityInjectedMessageLoadError: Error {
+    case requestedFailure
+}
+#endif
+
 enum MessageChannelKey: Hashable, Identifiable {
     case named(String)
     case ungrouped
@@ -74,6 +88,7 @@ final class MessageListViewModel {
     private(set) var channelSummaries: [MessageChannelSummary] = []
     private(set) var tagSummaries: [MessageTagCount] = []
     private(set) var hasLoadedOnce: Bool = false
+    private(set) var loadState: MessageListLoadState = .idle
     private(set) var totalMessageCount: Int = 0
     private(set) var unreadMessageCount: Int = 0
     private(set) var currentScopeUnreadCount: Int = 0
@@ -98,8 +113,13 @@ final class MessageListViewModel {
     @ObservationIgnored private var isRefreshingCountsAndChannels = false
     @ObservationIgnored private var pendingCountsAndChannels = false
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
+    @ObservationIgnored private var slowLoadTask: Task<Void, Never>?
     @ObservationIgnored private var pendingReloadRequest: ReloadRequest?
     @ObservationIgnored private var unreadFilterSession: UnreadFilterSessionState?
+#if DEBUG
+    @ObservationIgnored private var qualityDelayConsumed = false
+    @ObservationIgnored private var remainingQualityFailures: Int
+#endif
 
     private struct RefreshSnapshot {
         let messages: [PushMessageSummary]
@@ -120,6 +140,9 @@ final class MessageListViewModel {
             self.environment = AppEnvironment.shared
         }
         dataStore = self.environment.dataStore
+#if DEBUG
+        remainingQualityFailures = PushGoAutomationContext.qualitySession?.faults.failMessageLoad == true ? 1 : 0
+#endif
     }
 
     func loadMessages() async {
@@ -128,6 +151,13 @@ final class MessageListViewModel {
 
     func refresh() async {
         await enqueueReload(resetPaging: true, clearBeforeLoading: false, reconcileUnreadSession: false)
+    }
+
+    func retryAfterFailure() async {
+#if DEBUG
+        remainingQualityFailures = 0
+#endif
+        await refresh()
     }
 
     func reconcileUnreadFilterSession() async {
@@ -439,6 +469,23 @@ final class MessageListViewModel {
         clearBeforeLoading: Bool,
         reconcileUnreadSession: Bool
     ) async {
+        beginObservedReload()
+        defer {
+            hasLoadedOnce = true
+            finishObservedReload()
+        }
+
+        do {
+            try await applyQualityFaultBeforeMessageLoadIfNeeded()
+        } catch {
+            self.error = AppError.wrap(
+                error,
+                fallbackMessage: LocalizationProvider.localized("message_load_failed"),
+                code: "quality_message_load_failure"
+            )
+            return
+        }
+
         if resetPaging {
             if clearBeforeLoading {
                 nextCursor = nil
@@ -452,11 +499,9 @@ final class MessageListViewModel {
                 )
             } else {
                 await refreshFirstPagesKeepingListStable()
-                hasLoadedOnce = true
                 await refreshCountsAndChannels()
                 return
             }
-            hasLoadedOnce = true
             return
         }
 
@@ -466,7 +511,37 @@ final class MessageListViewModel {
         } else {
             await loadNextPage()
         }
-        hasLoadedOnce = true
+    }
+
+    private func beginObservedReload() {
+        slowLoadTask?.cancel()
+        error = nil
+        loadState = .loading
+        slowLoadTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled, self?.loadState == .loading else { return }
+            self?.loadState = .slow
+        }
+    }
+
+    private func finishObservedReload() {
+        slowLoadTask?.cancel()
+        slowLoadTask = nil
+        loadState = error == nil ? .loaded : .failed
+    }
+
+    private func applyQualityFaultBeforeMessageLoadIfNeeded() async throws {
+#if DEBUG
+        if !qualityDelayConsumed,
+           let delay = PushGoAutomationContext.qualitySession?.faults.messageLoadDelayMilliseconds,
+           delay > 0 {
+            qualityDelayConsumed = true
+            try await Task.sleep(for: .milliseconds(delay))
+        }
+        if remainingQualityFailures > 0 {
+            throw PushGoQualityInjectedMessageLoadError.requestedFailure
+        }
+#endif
     }
 
     private func refreshUnreadFilterSessionSnapshot(reconcile: Bool) async {

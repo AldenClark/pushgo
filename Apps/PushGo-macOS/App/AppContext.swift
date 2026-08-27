@@ -195,10 +195,23 @@ private struct BootstrapTaskModifier: ViewModifier {
 #if DEBUG
             #if !os(watchOS)
             PushGoAutomationRuntime.shared.recordBootstrapCheckpoint("macos.bootstrap.after_environment")
+            if PushGoAutomationContext.qualitySession != nil {
+                environment.markQualityRuntimeReadiness("seeding")
+            }
             await PushGoAutomationRuntime.shared.importStartupFixtureIfNeeded(environment: environment)
             PushGoAutomationRuntime.shared.recordBootstrapCheckpoint("macos.bootstrap.after_fixture_import")
+            if PushGoAutomationContext.qualitySession != nil {
+                environment.markQualityRuntimeReadiness("executing")
+            }
             await PushGoAutomationRuntime.shared.executeStartupRequestIfNeeded(environment: environment)
             PushGoAutomationRuntime.shared.recordBootstrapCheckpoint("macos.bootstrap.after_request_execute")
+            if PushGoAutomationContext.qualitySession != nil {
+                environment.markQualityRuntimeReadiness("finalizing")
+            }
+            let readiness = await PushGoAutomationRuntime.shared.finalizeQualityReadiness(
+                environment: environment
+            )
+            environment.markQualityRuntimeReadiness(readiness)
             #endif
 #endif
         }

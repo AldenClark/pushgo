@@ -193,6 +193,7 @@ struct MainTabContainerView: View {
                 }
                 .tabItem {
                     Label(LocalizationManager.localizedSync("thing_detail_tab_events"), systemImage: "waveform.path.ecg")
+                        .accessibilityIdentifier("tab.events")
                 }
                 .tag(MainTab.events)
             }
@@ -210,6 +211,7 @@ struct MainTabContainerView: View {
                 }
                 .tabItem {
                     Label(LocalizationManager.localizedSync("push_type_thing"), systemImage: "cpu")
+                        .accessibilityIdentifier("tab.things")
                 }
                 .tag(MainTab.things)
             }

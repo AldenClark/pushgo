@@ -8,6 +8,9 @@ struct RootView: View {
         @Bindable var bindableEnvironment = environment
 #endif
         mainContent
+#if DEBUG
+            .qualityRuntimeReadinessOverlay(environment: environment)
+#endif
 #if os(iOS)
             .sheet(item: $bindableEnvironment.pendingSettingsPresentation) { presentation in
                 SettingsView(
@@ -36,3 +39,30 @@ struct RootView: View {
         #endif
     }
 }
+
+#if DEBUG
+private extension View {
+    @ViewBuilder
+    func qualityRuntimeReadinessOverlay(environment: AppEnvironment) -> some View {
+#if os(watchOS)
+        self
+#else
+        if let session = PushGoAutomationContext.qualitySession {
+            let status = environment.qualityRuntimeReadiness == "inactive"
+                ? "initializing"
+                : environment.qualityRuntimeReadiness
+            overlay(alignment: .topLeading) {
+                Text("Quality runtime \(status)")
+                    .font(.system(size: 1))
+                    .foregroundStyle(.clear)
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier("quality-runtime.\(status)")
+                    .accessibilityValue(session.sessionID)
+            }
+        } else {
+            self
+        }
+#endif
+    }
+}
+#endif

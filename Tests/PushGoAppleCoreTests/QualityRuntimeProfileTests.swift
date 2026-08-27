@@ -1,0 +1,131 @@
+import Foundation
+import Testing
+@testable import PushGoAppleCore
+
+@Suite("Quality runtime profile")
+struct QualityRuntimeProfileTests {
+    @Test("accepts the small typed session contract used by UI runners")
+    func acceptsTypedSession() throws {
+        let encoded = try encodedSession(
+            sessionID: "ios-pr-123_retry-1",
+            fixture: "messages.standard"
+        )
+
+        let descriptor = try PushGoAutomationContext.decodeQualitySession(encoded)
+
+        #expect(descriptor.schemaVersion == 1)
+        #expect(descriptor.sessionID == "ios-pr-123_retry-1")
+        #expect(descriptor.fixture == .messagesStandard)
+        #expect(descriptor.faults.messageLoadDelayMilliseconds == nil)
+        #expect(descriptor.faults.failMessageLoad == false)
+    }
+
+    @Test("rejects path traversal instead of treating a host path as a session")
+    func rejectsPathTraversalSessionID() throws {
+        let encoded = try encodedSession(
+            sessionID: "../../shared-database",
+            fixture: "empty.clean"
+        )
+
+        #expect(throws: PushGoQualitySessionError.invalidSessionID) {
+            try PushGoAutomationContext.decodeQualitySession(encoded)
+        }
+    }
+
+    @Test("rejects unbounded delay faults before app startup")
+    func rejectsUnboundedDelay() throws {
+        let encoded = try encodedSession(
+            sessionID: "slow-load-negative-control",
+            fixture: "messages.standard",
+            faults: ["message_load_delay_ms": 30_001]
+        )
+
+        #expect(throws: PushGoQualitySessionError.invalidMessageLoadDelay(30_001)) {
+            try PushGoAutomationContext.decodeQualitySession(encoded)
+        }
+    }
+
+    @Test("derives storage beneath an app-owned base directory")
+    func derivesContainedSessionRoot() throws {
+        let descriptor = try PushGoAutomationContext.decodeQualitySession(
+            encodedSession(sessionID: "contained-session", fixture: "empty.clean")
+        )
+        let appOwnedBase = URL(fileURLWithPath: "/app/container/Application Support", isDirectory: true)
+
+        let root = try #require(
+            PushGoAutomationContext.qualitySessionRootURL(
+                for: descriptor,
+                baseURL: appOwnedBase
+            )
+        )
+
+        #expect(root.path.hasPrefix(appOwnedBase.path + "/"))
+        #expect(root.lastPathComponent == "contained-session")
+        #expect(!root.path.contains(".."))
+    }
+
+    @Test("cleanup removes only prior validated quality sessions")
+    func cleanupPriorSessionsIsContained() throws {
+        let fileManager = FileManager.default
+        let base = fileManager.temporaryDirectory
+            .appendingPathComponent("pushgo-quality-cleanup-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fileManager.removeItem(at: base) }
+        let active = try PushGoAutomationContext.decodeQualitySession(
+            encodedSession(sessionID: "active-session", fixture: "empty.clean")
+        )
+        let sessions = base
+            .appendingPathComponent("PushGoQuality", isDirectory: true)
+            .appendingPathComponent("Sessions", isDirectory: true)
+        let activeURL = sessions.appendingPathComponent("active-session", isDirectory: true)
+        let staleURL = sessions.appendingPathComponent("stale-session", isDirectory: true)
+        let unrelatedURL = sessions.appendingPathComponent("not a session", isDirectory: true)
+        for directory in [activeURL, staleURL, unrelatedURL] {
+            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+
+        let removed = try PushGoAutomationContext.cleanupPriorQualitySessions(
+            activeSession: active,
+            baseURL: base,
+            fileManager: fileManager
+        )
+
+        #expect(removed == 1)
+        #expect(fileManager.fileExists(atPath: activeURL.path))
+        #expect(!fileManager.fileExists(atPath: staleURL.path))
+        #expect(fileManager.fileExists(atPath: unrelatedURL.path))
+    }
+
+    @Test("release builds cannot activate the quality runtime")
+    func releaseIsolation() throws {
+        let encoded = try encodedSession(
+            sessionID: "release-isolation",
+            fixture: "empty.clean"
+        )
+        let profile = PushGoAutomationContext.resolveRuntimeProfile(
+            encodedQualitySession: encoded
+        )
+
+        #if DEBUG
+        #expect(profile == .quality(try PushGoAutomationContext.decodeQualitySession(encoded)))
+        #else
+        #expect(profile == .production)
+        #endif
+    }
+
+    private func encodedSession(
+        sessionID: String,
+        fixture: String,
+        faults: [String: Any]? = nil
+    ) throws -> String {
+        var payload: [String: Any] = [
+            "schema_version": 1,
+            "session_id": sessionID,
+            "fixture": fixture,
+        ]
+        if let faults {
+            payload["faults"] = faults
+        }
+        return try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+            .base64EncodedString()
+    }
+}

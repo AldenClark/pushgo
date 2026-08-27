@@ -184,6 +184,101 @@ final class PushGo_iOSUITests: XCTestCase {
         assertVisibleScreen("screen.messages.list", in: context)
     }
 
+    func testQualitySessionUsesAppOwnedStoreAndReachesFunctionalEmptyState() {
+        let context = configuredLaunchContext()
+        let sessionID = "ios-empty-\(UUID().uuidString.lowercased())"
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "empty.clean"
+        )
+
+        launch(context.app)
+
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        XCTAssertEqual(
+            element(in: context.app, identifier: "quality-runtime.ready").value as? String,
+            sessionID
+        )
+        assertElementExists("screen.messages.list", in: context.app, timeout: 5)
+        assertElementExists("state.messages.empty", in: context.app, timeout: 5)
+    }
+
+    func testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch() {
+        let sessionID = "ios-standard-\(UUID().uuidString.lowercased())"
+        let seeded = configuredLaunchContext()
+        seeded.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard"
+        )
+
+        launch(seeded.app)
+
+        assertQualityRuntimeReady(in: seeded.app, timeout: 15)
+        XCTAssertTrue(
+            seeded.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8),
+            "Seeded title was not rendered by the real message list"
+        )
+        XCTAssertTrue(
+            seeded.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 5),
+            "Seeded body was not rendered by the real message list"
+        )
+        seeded.app.staticTexts["P2 Split Seed Message"].tap()
+        assertElementExists("sheet.message.detail", in: seeded.app, timeout: 8)
+        XCTAssertTrue(seeded.app.staticTexts["P2 Split Seed Message"].exists)
+        XCTAssertTrue(
+            seeded.app.staticTexts["Seeded from fixture.seed_messages for UI validation."].exists
+        )
+        seeded.app.terminate()
+
+        let relaunched = configuredLaunchContext()
+        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard"
+        )
+        launch(relaunched.app)
+
+        assertQualityRuntimeReady(in: relaunched.app, timeout: 15)
+        XCTAssertTrue(
+            relaunched.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8),
+            "Canonical message did not survive a process relaunch"
+        )
+        XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.empty").exists)
+    }
+
+    func testSlowMessageLoadBecomesVisibleBeforeDataCompletes() {
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: "ios-slow-\(UUID().uuidString.lowercased())",
+            fixture: "empty.clean",
+            messageLoadDelayMilliseconds: 8_000
+        )
+
+        launch(context.app)
+
+        assertElementExists("state.messages.loading.slow", in: context.app, timeout: 4)
+        assertElementExists("state.messages.empty", in: context.app, timeout: 10)
+        XCTAssertFalse(element(in: context.app, identifier: "state.messages.load_failed").exists)
+    }
+
+    func testMessageLoadFailureShowsRetryAndRecoversToRealDataState() {
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: "ios-retry-\(UUID().uuidString.lowercased())",
+            fixture: "empty.clean",
+            failMessageLoad: true
+        )
+
+        launch(context.app)
+
+        assertElementExists("state.messages.load_failed", in: context.app, timeout: 5)
+        let retry = element(in: context.app, identifier: "action.messages.retry")
+        XCTAssertTrue(retry.isHittable, "Retry must be a usable interaction, not a marker-only assertion")
+        retry.tap()
+        assertElementExists("state.messages.empty", in: context.app, timeout: 5)
+        XCTAssertFalse(element(in: context.app, identifier: "state.messages.load_failed").exists)
+    }
+
     func testAutomationRequestCanOpenChannelsScreen() {
         let context = configuredLaunchContext(
             requestName: "nav.switch_tab",
@@ -214,54 +309,55 @@ final class PushGo_iOSUITests: XCTestCase {
     }
 
     func testImportedEventFixtureCanOpenEventDetail() {
-        let context = configuredLaunchContext(
-            startupFixturePath: eventFixturePath,
-            requestName: "entity.open",
-            args: ["entity_type": "event", "entity_id": eventFixtureId]
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: "ios-event-\(UUID().uuidString.lowercased())",
+            fixture: "event.standard"
         )
         launch(context.app)
 
-        assertVisibleScreen("screen.events.detail", in: context)
-        XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: 12, matching: { $0.ok }))
-        XCTAssertNotNil(
-            waitForAutomationEvent(
-                at: context.eventsURL,
-                timeout: 12,
-                matching: { event in
-                    guard (event["type"] as? String) == "entity.opened",
-                          let details = event["details"] as? [String: Any]
-                    else { return false }
-                    return (details["entity_type"] as? String) == "event"
-                        && (details["entity_id"] as? String) == self.eventFixtureId
-                }
-            )
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        // Event is the second visible tab for an event fixture. Use the real tab
+        // bar position as a fallback because iOS 27 currently drops this one
+        // tab-item identifier while exposing the neighboring identifiers.
+        let eventsTab = context.app.tabBars.buttons.element(boundBy: 1)
+        XCTAssertTrue(eventsTab.waitForExistence(timeout: 8))
+        eventsTab.tap()
+        let eventTitle = context.app.staticTexts["P2 Event Active"]
+        XCTAssertTrue(eventTitle.waitForExistence(timeout: 8))
+        eventTitle.tap()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "sheet.event.detail")
+                .waitForExistence(timeout: 10)
         )
-        XCTAssertTrue(waitForFileNonEmpty(context.eventsURL, timeout: 10))
+        XCTAssertTrue(context.app.staticTexts["P2 Event Active"].waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            context.app.staticTexts["Event fixture for app-owned UI validation."]
+                .waitForExistence(timeout: 5)
+        )
     }
 
     func testImportedThingFixtureCanOpenThingDetail() {
-        let context = configuredLaunchContext(
-            startupFixturePath: thingFixturePath,
-            requestName: "entity.open",
-            args: ["entity_type": "thing", "entity_id": thingFixtureId]
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: "ios-thing-\(UUID().uuidString.lowercased())",
+            fixture: "thing.standard"
         )
         launch(context.app)
 
-        assertVisibleScreen("screen.things.detail", in: context)
-        XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: 12, matching: { $0.ok }))
-        XCTAssertNotNil(
-            waitForAutomationEvent(
-                at: context.eventsURL,
-                timeout: 12,
-                matching: { event in
-                    guard (event["type"] as? String) == "entity.opened",
-                          let details = event["details"] as? [String: Any]
-                    else { return false }
-                    return (details["entity_type"] as? String) == "thing"
-                        && (details["entity_id"] as? String) == self.thingFixtureId
-                }
-            )
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        let thingsTab = element(in: context.app, identifier: "tab.things")
+        XCTAssertTrue(thingsTab.waitForExistence(timeout: 8))
+        thingsTab.tap()
+        let thingTitle = context.app.staticTexts["P2 Thing Rich"]
+        XCTAssertTrue(thingTitle.waitForExistence(timeout: 8))
+        thingTitle.tap()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "sheet.thing.detail")
+                .waitForExistence(timeout: 10)
         )
+        XCTAssertTrue(context.app.staticTexts["P2 Thing Rich"].waitForExistence(timeout: 8))
+        XCTAssertTrue(context.app.staticTexts["Fixture thing summary"].waitForExistence(timeout: 5))
     }
 
     func testPushSettingsCanOpenDecryptionScreen() {
@@ -1422,6 +1518,28 @@ final class PushGo_iOSUITests: XCTestCase {
             .appendingPathComponent("PushGo-iOSUITests-\(UUID().uuidString)", isDirectory: true)
     }
 
+    private func qualitySessionPayload(
+        sessionID: String,
+        fixture: String,
+        messageLoadDelayMilliseconds: Int? = nil,
+        failMessageLoad: Bool = false
+    ) -> String {
+        var faults: [String: Any] = [
+            "fail_message_load": failMessageLoad,
+        ]
+        if let messageLoadDelayMilliseconds {
+            faults["message_load_delay_ms"] = messageLoadDelayMilliseconds
+        }
+        let payload: [String: Any] = [
+            "schema_version": 1,
+            "session_id": sessionID,
+            "fixture": fixture,
+            "faults": faults,
+        ]
+        let data = try! JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+        return data.base64EncodedString()
+    }
+
     private func launch(_ app: XCUIApplication) {
         app.launch()
     }
@@ -1467,6 +1585,48 @@ final class PushGo_iOSUITests: XCTestCase {
     ) {
         let target = element(in: app, identifier: identifier)
         XCTAssertTrue(target.waitForExistence(timeout: timeout), "Missing element: \(identifier)", file: file, line: line)
+    }
+
+    private func assertQualityRuntimeReady(
+        in app: XCUIApplication,
+        timeout: TimeInterval,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        if element(in: app, identifier: "quality-runtime.ready").waitForExistence(timeout: timeout) {
+            return
+        }
+        let observedStatus = [
+            "failed",
+            "seeding.messages.system_snapshot.end",
+            "seeding.messages.live_activity.end",
+            "seeding.messages.notification_snapshot.end",
+            "seeding.messages.system_search.end",
+            "seeding.messages.metadata.end",
+            "seeding.messages.search.end",
+            "seeding.messages.search.start",
+            "seeding.messages.backend.end",
+            "seeding.messages.backend.start",
+            "seeding.messages.saved",
+            "seeding.messages",
+            "seeding.entities",
+            "seeding.entities.saved",
+            "seeding.channels",
+            "seeding.channels.saved",
+            "seeding.refresh",
+            "seeding.complete",
+            "seeding",
+            "executing",
+            "finalizing",
+            "initializing",
+        ]
+            .first { element(in: app, identifier: "quality-runtime.\($0)").exists }
+            ?? "missing"
+        XCTFail(
+            "App-owned quality session did not become ready; observed status: \(observedStatus)",
+            file: file,
+            line: line
+        )
     }
 
     private func localizationFixtureIDs(at fixturePath: String) throws -> LocalizationFixtureIDs {

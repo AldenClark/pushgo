@@ -1,58 +1,58 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PROJECT_PATH="${PROJECT_PATH:-$ROOT/pushgo.xcodeproj}"
-SCHEME="${SCHEME:-PushGo-iOS}"
-SIM_NAME="${IOS_SIM_NAME:-iPhone 17e}"
-SIM_OS="${IOS_SIM_OS:-26.4}"
-TEST_SCOPE="${TEST_SCOPE:-}"
-MAX_RETRIES="${MAX_RETRIES:-2}"
-DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-$ROOT/.deriveddata-ui-tests}"
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+project_path="${PROJECT_PATH:-$repo_root/pushgo.xcodeproj}"
+scheme="${SCHEME:-PushGo-iOS}"
+test_scopes="${TEST_SCOPES:-${TEST_SCOPE:-}}"
+max_retries="${MAX_RETRIES:-1}"
+derived_data_path="${DERIVED_DATA_PATH:-$repo_root/.deriveddata-ui-tests}"
+results_root="${RESULTS_ROOT:-$repo_root/build/quality-results/ios}"
 
-RUNTIME_ID="com.apple.CoreSimulator.SimRuntime.iOS-${SIM_OS//./-}"
-SIM_UDID="$(
-  xcrun simctl list devices available -j \
-    | jq -r --arg runtime "$RUNTIME_ID" --arg name "$SIM_NAME" '.devices[$runtime][]? | select(.name == $name) | .udid' \
-    | head -n 1
-)"
-
-if [[ -z "$SIM_UDID" ]]; then
-  echo "Unable to find simulator: ${SIM_NAME} (iOS ${SIM_OS})"
-  echo "Available iOS runtimes:"
-  xcrun simctl list devices available | sed -n '/-- iOS /,/--/p'
+doctor_output="$("$repo_root/scripts/quality_doctor.sh")"
+printf '%s\n' "$doctor_output"
+target="$(printf '%s\n' "$doctor_output" | awk -F= '$1 == "simulator_id" { print $2; exit }')"
+if [[ -z "$target" ]]; then
+  echo "status=BLOCKED"
+  echo "reason=no_available_ios_simulator"
   exit 2
 fi
 
-COMMON_ARGS=(
-  -project "$PROJECT_PATH"
-  -scheme "$SCHEME"
+mkdir -p "$results_root"
+
+common_args=(
+  -project "$project_path"
+  -scheme "$scheme"
   -configuration Debug
-  -derivedDataPath "$DERIVED_DATA_PATH"
-  -destination "platform=iOS Simulator,id=${SIM_UDID}"
+  -derivedDataPath "$derived_data_path"
+  -destination "platform=iOS Simulator,id=${target}"
   -onlyUsePackageVersionsFromResolvedFile
   -disableAutomaticPackageResolution
   -skipPackageUpdates
   -parallel-testing-enabled NO
   -maximum-parallel-testing-workers 1
+  -collect-test-diagnostics never
 )
 
-if [[ -n "$TEST_SCOPE" ]]; then
-  COMMON_ARGS+=("-only-testing:${TEST_SCOPE}")
+if [[ -n "$test_scopes" ]]; then
+  IFS=',' read -r -a scope_list <<< "$test_scopes"
+  for scope in "${scope_list[@]}"; do
+    [[ -n "$scope" ]] && common_args+=("-only-testing:${scope}")
+  done
 fi
 
-echo "==> preboot simulator: ${SIM_NAME} (${SIM_OS}) [${SIM_UDID}]"
-xcrun simctl shutdown "$SIM_UDID" >/dev/null 2>&1 || true
-xcrun simctl boot "$SIM_UDID" >/dev/null 2>&1 || true
-xcrun simctl bootstatus "$SIM_UDID" -b
+xcrun simctl shutdown "$target" >/dev/null 2>&1 || true
+xcrun simctl boot "$target" >/dev/null 2>&1 || true
+xcrun simctl bootstatus "$target" -b
 
 echo "==> build-for-testing"
-xcodebuild "${COMMON_ARGS[@]}" build-for-testing
+xcodebuild "${common_args[@]}" build-for-testing
 
 run_test_once() {
   local logfile="$1"
+  local result_bundle="$2"
   set +e
-  xcodebuild "${COMMON_ARGS[@]}" test-without-building 2>&1 | tee "$logfile"
+  xcodebuild "${common_args[@]}" -resultBundlePath "$result_bundle" test-without-building 2>&1 | tee "$logfile"
   local status=${PIPESTATUS[0]}
   set -e
   return "$status"
@@ -66,26 +66,30 @@ is_transient_runner_failure() {
 }
 
 attempt=1
-until [[ $attempt -gt $((MAX_RETRIES + 1)) ]]; do
-  echo "==> test-without-building (attempt ${attempt}/$((MAX_RETRIES + 1)))"
+until [[ $attempt -gt $((max_retries + 1)) ]]; do
   log_file="$(mktemp -t pushgo-ui-tests.XXXXXX.log)"
+  result_bundle="$results_root/run-${attempt}-$(date +%Y%m%d-%H%M%S).xcresult"
+  echo "==> test-without-building (attempt ${attempt}/$((max_retries + 1)))"
 
-  if run_test_once "$log_file"; then
+  if run_test_once "$log_file" "$result_bundle"; then
     rm -f "$log_file"
-    echo "iOS UI tests passed"
+    echo "status=PASSED"
+    echo "result_bundle=$result_bundle"
     exit 0
   fi
 
-  if [[ $attempt -le $MAX_RETRIES ]] && is_transient_runner_failure "$log_file"; then
-    echo "Transient runner launch failure detected, rebooting simulator and retrying..."
-    xcrun simctl shutdown "$SIM_UDID" >/dev/null 2>&1 || true
-    xcrun simctl boot "$SIM_UDID" >/dev/null 2>&1 || true
-    xcrun simctl bootstatus "$SIM_UDID" -b
+  if [[ $attempt -le $max_retries ]] && is_transient_runner_failure "$log_file"; then
+    echo "classification=BLOCKED_TRANSIENT_RUNNER"
+    xcrun simctl shutdown "$target" >/dev/null 2>&1 || true
+    xcrun simctl boot "$target" >/dev/null 2>&1 || true
+    xcrun simctl bootstatus "$target" -b
     rm -f "$log_file"
     attempt=$((attempt + 1))
     continue
   fi
 
-  echo "UI tests failed. Log retained at: $log_file"
+  echo "status=FAILED"
+  echo "log=$log_file"
+  echo "result_bundle=$result_bundle"
   exit 1
 done

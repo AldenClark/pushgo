@@ -121,6 +121,9 @@ final class AppEnvironment {
     private(set) var toastMessage: ToastMessage?
     private(set) var messageIngressNotice: MessageIngressNotice?
     private(set) var isDeletionRecoveryReady = false
+#if DEBUG
+    private(set) var qualityRuntimeReadiness = "inactive"
+#endif
     var localStoreRecoveryState: LocalStoreRecoveryState? { localStoreRecoveryController.localStoreRecoveryState }
     private(set) var shouldPresentNotificationPermissionAlert: Bool = false
     var pendingMessageToOpen: UUID? {
@@ -384,6 +387,12 @@ final class AppEnvironment {
         didBootstrap = true
         bootstrapTask = nil
     }
+
+#if DEBUG
+    func markQualityRuntimeReadiness(_ status: String?) {
+        qualityRuntimeReadiness = status ?? "inactive"
+    }
+#endif
 
     private func performBootstrap() async {
 #if DEBUG
@@ -1460,7 +1469,7 @@ final class AppEnvironment {
         dataPageVisibilityController.setThingPageEnabled(isEnabled)
     }
 
-    private func autoEnableDataPageIfNeeded(for message: PushMessage) {
+    func autoEnableDataPageIfNeeded(for message: PushMessage) {
         dataPageVisibilityController.autoEnableDataPageIfNeeded(for: message)
     }
 

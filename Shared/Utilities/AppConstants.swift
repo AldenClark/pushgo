@@ -41,8 +41,109 @@ enum PushGoAnimatedImageRuntime {
 #endif
 }
 
+enum PushGoQualityFixture: String, Codable, CaseIterable, Sendable {
+    case emptyClean = "empty.clean"
+    case messagesStandard = "messages.standard"
+    case messagesLarge = "messages.large"
+    case eventStandard = "event.standard"
+    case thingStandard = "thing.standard"
+}
+
+struct PushGoQualityFaults: Codable, Equatable, Sendable {
+    let messageLoadDelayMilliseconds: Int?
+    let failMessageLoad: Bool
+
+    init(
+        messageLoadDelayMilliseconds: Int? = nil,
+        failMessageLoad: Bool = false
+    ) {
+        self.messageLoadDelayMilliseconds = messageLoadDelayMilliseconds
+        self.failMessageLoad = failMessageLoad
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case messageLoadDelayMilliseconds = "message_load_delay_ms"
+        case failMessageLoad = "fail_message_load"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        messageLoadDelayMilliseconds = try container.decodeIfPresent(
+            Int.self,
+            forKey: .messageLoadDelayMilliseconds
+        )
+        failMessageLoad = try container.decodeIfPresent(Bool.self, forKey: .failMessageLoad) ?? false
+    }
+}
+
+struct PushGoQualitySessionDescriptor: Codable, Equatable, Sendable {
+    static let currentSchemaVersion = 1
+
+    let schemaVersion: Int
+    let sessionID: String
+    let fixture: PushGoQualityFixture
+    let faults: PushGoQualityFaults
+
+    init(
+        schemaVersion: Int = currentSchemaVersion,
+        sessionID: String,
+        fixture: PushGoQualityFixture,
+        faults: PushGoQualityFaults = PushGoQualityFaults()
+    ) {
+        self.schemaVersion = schemaVersion
+        self.sessionID = sessionID
+        self.fixture = fixture
+        self.faults = faults
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case sessionID = "session_id"
+        case fixture
+        case faults
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        sessionID = try container.decode(String.self, forKey: .sessionID)
+        fixture = try container.decode(PushGoQualityFixture.self, forKey: .fixture)
+        faults = try container.decodeIfPresent(PushGoQualityFaults.self, forKey: .faults)
+            ?? PushGoQualityFaults()
+    }
+}
+
+enum PushGoRuntimeProfile: Equatable, Sendable {
+    case production
+    case quality(PushGoQualitySessionDescriptor)
+}
+
+enum PushGoQualitySessionError: Error, Equatable, LocalizedError {
+    case payloadTooLarge
+    case invalidEncoding
+    case invalidSchemaVersion(Int)
+    case invalidSessionID
+    case invalidMessageLoadDelay(Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .payloadTooLarge:
+            return "Quality session payload exceeds the 64 KiB limit."
+        case .invalidEncoding:
+            return "Quality session payload is not valid base64 JSON."
+        case let .invalidSchemaVersion(version):
+            return "Unsupported quality session schema version: \(version)."
+        case .invalidSessionID:
+            return "Quality session ID must contain 1...64 ASCII letters, digits, underscores, or hyphens."
+        case let .invalidMessageLoadDelay(delay):
+            return "Message load delay must be between 0 and 30000 ms: \(delay)."
+        }
+    }
+}
+
 enum PushGoAutomationContext {
     private static let storageRootEnv = "PUSHGO_AUTOMATION_STORAGE_ROOT"
+    private static let qualitySessionEnv = "PUSHGO_QUALITY_SESSION_BASE64"
     private static let sandboxTempStoragePrefix = "sandbox-tmp:"
     private static let providerTokenEnv = "PUSHGO_AUTOMATION_PROVIDER_TOKEN"
     private static let skipPushAuthorizationEnv = "PUSHGO_AUTOMATION_SKIP_PUSH_AUTHORIZATION"
@@ -63,8 +164,148 @@ enum PushGoAutomationContext {
         if let storageRootOverrideURL {
             return storageRootOverrideURL
         }
-        #endif
+        if let sessionRootURL = qualitySessionRootURL {
+            return sessionRootURL.appendingPathComponent("storage", isDirectory: true)
+        }
         return normalizedURL(for: storageRootEnv)
+        #else
+        return nil
+        #endif
+    }
+
+    static var runtimeProfile: PushGoRuntimeProfile {
+        resolveRuntimeProfile(encodedQualitySession: normalizedString(for: qualitySessionEnv))
+    }
+
+    static var qualitySession: PushGoQualitySessionDescriptor? {
+        guard case let .quality(session) = runtimeProfile else { return nil }
+        return session
+    }
+
+    static var qualitySessionRootURL: URL? {
+        guard let session = qualitySession,
+              let baseURL = FileManager.default.urls(
+                  for: .applicationSupportDirectory,
+                  in: .userDomainMask
+              ).first
+        else {
+            return nil
+        }
+        return qualitySessionRootURL(for: session, baseURL: baseURL)
+    }
+
+    static func qualitySessionRootURL(
+        for session: PushGoQualitySessionDescriptor,
+        baseURL: URL
+    ) -> URL? {
+        guard session.schemaVersion == PushGoQualitySessionDescriptor.currentSchemaVersion,
+              isValidSessionID(session.sessionID)
+        else {
+            return nil
+        }
+        return baseURL
+            .appendingPathComponent("PushGoQuality", isDirectory: true)
+            .appendingPathComponent("Sessions", isDirectory: true)
+            .appendingPathComponent(session.sessionID, isDirectory: true)
+    }
+
+    static func qualityArtifactURL(filename: String) -> URL? {
+        guard let rootURL = qualitySessionRootURL,
+              isSafeArtifactFilename(filename)
+        else {
+            return nil
+        }
+        return rootURL
+            .appendingPathComponent("artifacts", isDirectory: true)
+            .appendingPathComponent(filename, isDirectory: false)
+    }
+
+    @discardableResult
+    static func cleanupPriorQualitySessions(
+        activeSession: PushGoQualitySessionDescriptor,
+        baseURL: URL,
+        fileManager: FileManager = .default
+    ) throws -> Int {
+        guard isValidSessionID(activeSession.sessionID) else {
+            throw PushGoQualitySessionError.invalidSessionID
+        }
+        let sessionsRoot = baseURL
+            .appendingPathComponent("PushGoQuality", isDirectory: true)
+            .appendingPathComponent("Sessions", isDirectory: true)
+        try fileManager.createDirectory(at: sessionsRoot, withIntermediateDirectories: true)
+        let children = try fileManager.contentsOfDirectory(
+            at: sessionsRoot,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )
+        var removed = 0
+        for child in children {
+            guard child.lastPathComponent != activeSession.sessionID,
+                  isValidSessionID(child.lastPathComponent),
+                  try child.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
+            else {
+                continue
+            }
+            try fileManager.removeItem(at: child)
+            removed += 1
+        }
+        return removed
+    }
+
+    @discardableResult
+    static func cleanupPriorQualitySessionsIfNeeded() -> Int {
+#if DEBUG
+        guard let session = qualitySession,
+              let baseURL = FileManager.default.urls(
+                  for: .applicationSupportDirectory,
+                  in: .userDomainMask
+              ).first
+        else {
+            return 0
+        }
+        return (try? cleanupPriorQualitySessions(activeSession: session, baseURL: baseURL)) ?? 0
+#else
+        return 0
+#endif
+    }
+
+    static func decodeQualitySession(_ encoded: String) throws -> PushGoQualitySessionDescriptor {
+        guard encoded.utf8.count <= 65_536 else {
+            throw PushGoQualitySessionError.payloadTooLarge
+        }
+        guard let data = Data(base64Encoded: encoded), !data.isEmpty else {
+            throw PushGoQualitySessionError.invalidEncoding
+        }
+        let descriptor: PushGoQualitySessionDescriptor
+        do {
+            descriptor = try JSONDecoder().decode(PushGoQualitySessionDescriptor.self, from: data)
+        } catch {
+            throw PushGoQualitySessionError.invalidEncoding
+        }
+        guard descriptor.schemaVersion == PushGoQualitySessionDescriptor.currentSchemaVersion else {
+            throw PushGoQualitySessionError.invalidSchemaVersion(descriptor.schemaVersion)
+        }
+        guard isValidSessionID(descriptor.sessionID) else {
+            throw PushGoQualitySessionError.invalidSessionID
+        }
+        if let delay = descriptor.faults.messageLoadDelayMilliseconds,
+           !(0 ... 30_000).contains(delay) {
+            throw PushGoQualitySessionError.invalidMessageLoadDelay(delay)
+        }
+        return descriptor
+    }
+
+    static func resolveRuntimeProfile(encodedQualitySession: String?) -> PushGoRuntimeProfile {
+        #if DEBUG
+        guard let encodedQualitySession,
+              let descriptor = try? decodeQualitySession(encodedQualitySession)
+        else {
+            return .production
+        }
+        return .quality(descriptor)
+        #else
+        return .production
+        #endif
     }
 
     static var keychainDirectoryURL: URL? {
@@ -72,22 +313,39 @@ enum PushGoAutomationContext {
     }
 
     static var providerToken: String? {
+        #if DEBUG
         normalizedString(for: providerTokenEnv)
+        #else
+        nil
+        #endif
     }
 
     static var gatewayBaseURLString: String? {
+        #if DEBUG
         normalizedString(for: gatewayBaseURLEnv)
+        #else
+        nil
+        #endif
     }
 
     static var gatewayToken: String? {
+        #if DEBUG
         normalizedString(for: gatewayTokenEnv)
+        #else
+        nil
+        #endif
     }
 
     static var isActive: Bool {
-        storageRootURL != nil
+        #if DEBUG
+        qualitySession != nil
+            || storageRootURL != nil
             || providerToken != nil
             || gatewayBaseURLString != nil
             || gatewayToken != nil
+        #else
+        false
+        #endif
     }
 
     static var forceForegroundApp: Bool {
@@ -176,6 +434,30 @@ enum PushGoAutomationContext {
         }
         let raw = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
         return raw.isEmpty ? nil : raw
+    }
+
+    private static func isValidSessionID(_ value: String) -> Bool {
+        guard (1 ... 64).contains(value.utf8.count) else { return false }
+        return value.unicodeScalars.allSatisfy { scalar in
+            switch scalar.value {
+            case 45, 48 ... 57, 65 ... 90, 95, 97 ... 122:
+                return true
+            default:
+                return false
+            }
+        }
+    }
+
+    private static func isSafeArtifactFilename(_ value: String) -> Bool {
+        guard !value.isEmpty, value.utf8.count <= 80 else { return false }
+        return value.unicodeScalars.allSatisfy { scalar in
+            switch scalar.value {
+            case 45, 46, 48 ... 57, 65 ... 90, 95, 97 ... 122:
+                return true
+            default:
+                return false
+            }
+        } && value != "." && value != ".."
     }
 
     private static func launchArgumentValue(for envKey: String) -> String? {

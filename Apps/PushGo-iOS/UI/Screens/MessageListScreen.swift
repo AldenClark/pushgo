@@ -167,28 +167,9 @@ struct MessageListScreen: View {
     @ViewBuilder
     private var screenContent: some View {
         if !viewModel.hasLoadedOnce {
-            List {
-                ingressNoticeRow
-
-                ForEach(0 ..< 6, id: \.self) { _ in
-                    HStack(spacing: 12) {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color.secondary.opacity(0.18))
-                            .frame(width: 42, height: 42)
-                        VStack(alignment: .leading, spacing: 8) {
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .fill(Color.secondary.opacity(0.18))
-                                .frame(height: 14)
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                .fill(Color.secondary.opacity(0.12))
-                                .frame(width: 180, height: 11)
-                        }
-                    }
-                    .redacted(reason: .placeholder)
-                    .accessibilityHidden(true)
-                }
-            }
-            .allowsHitTesting(false)
+            initialLoadingState
+        } else if viewModel.loadState == .failed && visibleFilteredMessages.isEmpty {
+            messageLoadFailureState
         } else {
             ZStack {
                 messageList
@@ -199,9 +180,70 @@ struct MessageListScreen: View {
                 if showsEmptyState {
                     emptyState
                 }
+
+                if viewModel.loadState == .failed && !visibleFilteredMessages.isEmpty {
+                    messageLoadFailureBanner
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private var initialLoadingState: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+            Text(localizationManager.localized(
+                viewModel.loadState == .slow
+                    ? "message_ingress_processing_slow"
+                    : "message_ingress_processing_progress"
+            ))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(
+            viewModel.loadState == .slow ? "state.messages.loading.slow" : "state.messages.loading"
+        )
+    }
+
+    private var messageLoadFailureState: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text(localizationManager.localized("message_load_failed"))
+                .multilineTextAlignment(.center)
+            Button(localizationManager.localized("retry")) {
+                Task { await viewModel.retryAfterFailure() }
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("action.messages.retry")
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("state.messages.load_failed")
+    }
+
+    private var messageLoadFailureBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+            Text(localizationManager.localized("message_load_failed"))
+                .font(.callout)
+            Spacer(minLength: 8)
+            Button(localizationManager.localized("retry")) {
+                Task { await viewModel.retryAfterFailure() }
+            }
+            .accessibilityIdentifier("action.messages.retry")
+        }
+        .padding(12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityIdentifier("state.messages.load_failed")
     }
 
     private var isShowingSearchResults: Bool {
@@ -475,6 +517,7 @@ struct MessageListScreen: View {
                 )
             }
         }
+        .accessibilityIdentifier("state.messages.empty")
     }
 
     private func configureNavigationAppearance() {
