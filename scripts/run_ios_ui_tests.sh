@@ -4,6 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 project_path="${PROJECT_PATH:-$repo_root/pushgo.xcodeproj}"
 scheme="${SCHEME:-PushGo-iOS}"
+app_bundle_identifier="${APP_BUNDLE_IDENTIFIER:-io.ethan.pushgo}"
 test_scopes="${TEST_SCOPES:-${TEST_SCOPE:-}}"
 max_retries="${MAX_RETRIES:-1}"
 derived_data_path="${DERIVED_DATA_PATH:-$repo_root/.deriveddata-ui-tests}"
@@ -57,6 +58,10 @@ xcodebuild "${common_args[@]}" build-for-testing
 run_test_once() {
   local logfile="$1"
   local result_bundle="$2"
+  # Xcode otherwise races its own terminate-and-relaunch operation when a prior
+  # UI-test process is still registered with CoreSimulator. Terminate it as an
+  # explicit preparation step; absence is already the desired state.
+  xcrun simctl terminate "$target" "$app_bundle_identifier" >/dev/null 2>&1 || true
   set +e
   xcodebuild "${common_args[@]}" -resultBundlePath "$result_bundle" test-without-building 2>&1 | tee "$logfile"
   local status=${PIPESTATUS[0]}
@@ -67,7 +72,7 @@ run_test_once() {
 is_transient_runner_failure() {
   local logfile="$1"
   rg -q \
-    "Failed to launch app with identifier: .*xctrunner|RequestDenied|timed out waiting for simulator|Unable to boot the Simulator" \
+    "Failed to launch app with identifier: .*xctrunner|Failed to launch app with identifier: .*No such process|Application launch for .* did not return a process handle|RequestDenied|timed out waiting for simulator|Unable to boot the Simulator" \
     "$logfile"
 }
 

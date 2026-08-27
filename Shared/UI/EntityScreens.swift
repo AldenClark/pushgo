@@ -1229,7 +1229,7 @@ final class EntityProjectionViewModel {
             channelId: channelId,
             severity: normalizedID(event.severity)
         )
-        await reload()
+        await reloadEvents()
     }
 
     func deleteThing(thingId: String) async throws {

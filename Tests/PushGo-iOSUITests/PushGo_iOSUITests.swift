@@ -576,11 +576,13 @@ final class PushGo_iOSUITests: XCTestCase {
         assertElementExists("screen.settings", in: context.app, timeout: 8)
     }
 
-    func testImportedEventFixtureCanOpenEventDetail() {
+    func testEventClosePersistsAndOngoingFilterReflectsRealProjection() {
         let context = configuredLaunchContext()
+        let sessionID = "ios-event-close-\(UUID().uuidString.lowercased())"
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
-            sessionID: "ios-event-\(UUID().uuidString.lowercased())",
-            fixture: "event.standard"
+            sessionID: sessionID,
+            fixture: "event.standard",
+            eventCloseScenario: "accepted_and_delivered"
         )
         launch(context.app)
 
@@ -591,17 +593,59 @@ final class PushGo_iOSUITests: XCTestCase {
         let eventsTab = context.app.tabBars.buttons.element(boundBy: 1)
         XCTAssertTrue(eventsTab.waitForExistence(timeout: 8))
         eventsTab.tap()
-        let eventTitle = context.app.staticTexts["P2 Event Active"]
-        XCTAssertTrue(eventTitle.waitForExistence(timeout: 8))
-        eventTitle.tap()
-        XCTAssertTrue(
-            element(in: context.app, identifier: "sheet.event.detail")
-                .waitForExistence(timeout: 10)
-        )
+        let eventRow = element(in: context.app, identifier: "event.row.quality-event-active")
+        XCTAssertTrue(eventRow.waitForExistence(timeout: 8))
+        eventRow.tap()
+        let detailSheet = element(in: context.app, identifier: "sheet.event.detail")
+        XCTAssertTrue(detailSheet.waitForExistence(timeout: 10))
         XCTAssertTrue(context.app.staticTexts["P2 Event Active"].waitForExistence(timeout: 8))
         XCTAssertTrue(
             context.app.staticTexts["Event fixture for app-owned UI validation."]
                 .waitForExistence(timeout: 5)
+        )
+
+        let closeAction = element(in: context.app, identifier: "action.event.close")
+        XCTAssertTrue(closeAction.waitForExistence(timeout: 5))
+        XCTAssertTrue(closeAction.isHittable)
+        closeAction.tap()
+        let confirm = context.app.alerts.buttons.element(boundBy: 1)
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+
+        XCTAssertTrue(
+            detailSheet.waitForNonExistence(timeout: 15),
+            "Closing is complete only after the real async action succeeds and the detail dismisses"
+        )
+        XCTAssertTrue(eventRow.waitForExistence(timeout: 10))
+        let filters = context.app.buttons["action.events.filters"]
+        tapWhenHittable(filters, timeout: 5, message: "Event filters must be an actionable control")
+        let ongoingOnly = element(in: context.app, identifier: "filter.events.ongoing")
+        XCTAssertTrue(ongoingOnly.waitForExistence(timeout: 5))
+        ongoingOnly.tap()
+        XCTAssertEqual(ongoingOnly.value as? String, "selected")
+        context.app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.75)).tap()
+        let filteredEventRow = element(in: context.app, identifier: "event.row.quality-event-active")
+        XCTAssertTrue(filteredEventRow.waitForNonExistence(timeout: 8))
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "event.standard",
+            eventCloseScenario: "accepted_and_delivered"
+        )
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        let relaunchedEventsTab = context.app.tabBars.buttons.element(boundBy: 1)
+        XCTAssertTrue(relaunchedEventsTab.waitForExistence(timeout: 8))
+        relaunchedEventsTab.tap()
+        let persistedRow = element(in: context.app, identifier: "event.row.quality-event-active")
+        XCTAssertTrue(persistedRow.waitForExistence(timeout: 8))
+        persistedRow.tap()
+        let persistedStatus = element(in: context.app, identifier: "field.event.detail.status.closed")
+        XCTAssertTrue(persistedStatus.waitForExistence(timeout: 8))
+        XCTAssertFalse(
+            element(in: context.app, identifier: "action.event.close")
+                .waitForExistence(timeout: 2)
         )
     }
 
@@ -1792,7 +1836,8 @@ final class PushGo_iOSUITests: XCTestCase {
         messageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         failMessageLoad: Bool = false,
-        messageRefreshScenario: String? = nil
+        messageRefreshScenario: String? = nil,
+        eventCloseScenario: String? = nil
     ) -> String {
         var faults: [String: Any] = [
             "fail_message_load": failMessageLoad,
@@ -1808,13 +1853,69 @@ final class PushGo_iOSUITests: XCTestCase {
             "session_id": sessionID,
             "fixture": fixture,
             "faults": faults,
-        ].merging(messageRefreshScenario.map { ["message_refresh_scenario": $0] } ?? [:]) { _, new in new }
+        ]
+            .merging(messageRefreshScenario.map { ["message_refresh_scenario": $0] } ?? [:]) { _, new in new }
+            .merging(eventCloseScenario.map { ["event_close_scenario": $0] } ?? [:]) { _, new in new }
         let data = try! JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
         return data.base64EncodedString()
     }
 
     private func launch(_ app: XCUIApplication) {
-        app.launch()
+        let qualitySessionKey = "PUSHGO_QUALITY_SESSION_BASE64"
+        let qualitySessionArgument = "-\(qualitySessionKey)"
+        var launchArguments = app.launchArguments
+        while let index = launchArguments.firstIndex(of: qualitySessionArgument) {
+            launchArguments.remove(at: index)
+            if launchArguments.indices.contains(index) {
+                launchArguments.remove(at: index)
+            }
+        }
+        if let encodedSession = app.launchEnvironment[qualitySessionKey], !encodedSession.isEmpty {
+            launchArguments.append(contentsOf: [qualitySessionArgument, encodedSession])
+        }
+        app.launchArguments = launchArguments
+        let requiresQualityHandshake = app.launchEnvironment[qualitySessionKey]?.isEmpty == false
+        let launchAttemptLimit = requiresQualityHandshake ? 2 : 1
+
+        for attempt in 1 ... launchAttemptLimit {
+            if app.state != .notRunning {
+                app.terminate()
+                XCTAssertEqual(
+                    app.state,
+                    .notRunning,
+                    "The app must be fully stopped so the next quality session receives fresh launch inputs"
+                )
+            }
+            app.launch()
+            guard requiresQualityHandshake else { return }
+
+            let runtimeHandshake = app.descendants(matching: .any)
+                .matching(NSPredicate(format: "identifier BEGINSWITH %@", "quality-runtime."))
+                .firstMatch
+            if runtimeHandshake.waitForExistence(timeout: 5) {
+                return
+            }
+            if attempt < launchAttemptLimit {
+                app.terminate()
+            }
+        }
+    }
+
+    private func tapWhenHittable(
+        _ element: XCUIElement,
+        timeout: TimeInterval,
+        message: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let actionable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND hittable == true"),
+            object: element
+        )
+        let result = XCTWaiter.wait(for: [actionable], timeout: timeout)
+        XCTAssertEqual(result, .completed, message, file: file, line: line)
+        guard result == .completed else { return }
+        element.tap()
     }
 
     private func assertVisibleScreen(
@@ -1876,6 +1977,8 @@ final class PushGo_iOSUITests: XCTestCase {
             return
         }
         let observedStatus = [
+            "invalid",
+            "missing",
             "failed",
             "seeding.messages.system_snapshot.end",
             "seeding.messages.live_activity.end",

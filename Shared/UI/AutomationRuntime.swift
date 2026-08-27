@@ -3564,34 +3564,41 @@ final class PushGoAutomationRuntime {
     ) throws -> PushGoAutomationFixtureBundle {
         let messages: [[String: Any]]
         let entityRecords: [[String: Any]]
+        let channelSubscriptions: [[String: Any]]
         switch fixture {
         case .emptyClean:
             messages = []
             entityRecords = []
+            channelSubscriptions = []
         case .messagesStandard:
             messages = [qualityFixtureMessage(index: 0)]
             entityRecords = []
+            channelSubscriptions = []
         case .messagesWorkflow:
             messages = (0..<52).map(qualityWorkflowFixtureMessage)
             entityRecords = []
+            channelSubscriptions = []
         case .messagesLarge:
             messages = (0..<1_000).map(qualityFixtureMessage)
             entityRecords = []
+            channelSubscriptions = []
         case .eventStandard:
             // Events enter the product through the message ingestion path. Saving this
             // as an entity record would bypass projection, so the detail could never
             // be opened even though a fixture row existed.
             messages = [qualityEventFixture()]
             entityRecords = []
+            channelSubscriptions = []
         case .thingStandard:
             // Things use the same user-visible ingestion path as production pushes.
             messages = [qualityThingFixture()]
             entityRecords = []
+            channelSubscriptions = []
         }
         let payload: [String: Any] = [
             "messages": messages,
             "entity_records": entityRecords,
-            "channel_subscriptions": [],
+            "channel_subscriptions": channelSubscriptions,
         ]
         return try decodeFixtureBundle(data: JSONSerialization.data(withJSONObject: payload))
     }
@@ -3650,7 +3657,7 @@ final class PushGoAutomationRuntime {
             "message_id": "quality-event-message",
             "title": "P2 Event Active",
             "body": "Event fixture for app-owned UI validation.",
-            "channel_id": "quality",
+            "channel_id": "01H00000000000000000000000",
             "is_read": false,
             "received_at": "2026-01-15T08:01:00Z",
             "raw_payload": [

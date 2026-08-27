@@ -14,8 +14,9 @@ struct EventDetailScreen: View {
     let event: EventProjection
     var onCommitDelete: (@MainActor () async throws -> Void)? = nil
     var onPrepareDelete: (() -> Void)? = nil
-    var onCloseEvent: (() -> Void)? = nil
+    var onCloseEvent: (@MainActor () async throws -> Void)? = nil
     @State private var activeConfirmation: ConfirmationKind?
+    @State private var isClosing = false
 
     var body: some View {
         navigationContainer {
@@ -45,8 +46,7 @@ struct EventDetailScreen: View {
                         )
                     ),
                     primaryButton: .default(Text(localizationManager.localized("confirm"))) {
-                        onCloseEvent?()
-                        dismiss()
+                        Task { await closeEvent() }
                     },
                     secondaryButton: .cancel(Text(localizationManager.localized("cancel")))
                 )
@@ -64,6 +64,8 @@ struct EventDetailScreen: View {
                     Image(systemName: "checkmark.circle")
                 }
                 .accessibilityLabel(localizationManager.localized("close"))
+                .accessibilityIdentifier("action.event.close")
+                .disabled(isClosing)
             }
 
             if onCommitDelete != nil {
@@ -80,6 +82,23 @@ struct EventDetailScreen: View {
     private var canShowCloseAction: Bool {
         guard onCloseEvent != nil else { return false }
         return eventLifecycleState(from: event.state) != .closed
+    }
+
+    @MainActor
+    private func closeEvent() async {
+        guard let onCloseEvent, !isClosing else { return }
+        isClosing = true
+        do {
+            try await onCloseEvent()
+            dismiss()
+        } catch {
+            isClosing = false
+            environment.showErrorToast(
+                error,
+                fallbackMessage: localizationManager.localized("operation_failed"),
+                duration: 2
+            )
+        }
     }
 
     @MainActor
@@ -155,6 +174,9 @@ private struct EventDetailPanel: View {
                             .lineLimit(2)
                         Spacer(minLength: 8)
                         EntityStateBadge(text: statusLabel, tone: statusTone)
+                            .accessibilityIdentifier(
+                                "field.event.detail.status.\(eventLifecycleState(from: event.state).rawValue.lowercased())"
+                            )
                     }
                     if let summary = event.summary, !summary.isEmpty {
                         Text(summary)

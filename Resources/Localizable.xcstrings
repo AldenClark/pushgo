@@ -2462,6 +2462,29 @@
         }
       }
     },
+    "filter_ongoing_events" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ongoing events"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "进行中的事件"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "進行中的事件"
+          }
+        }
+      }
+    },
     "failed_to_read_historical_messages" : {
       "extractionState" : "manual",
       "localizations" : {

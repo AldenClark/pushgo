@@ -56,6 +56,11 @@ enum PushGoQualityMessageRefreshScenario: String, Codable, Sendable {
     case failOnceThenNewMessage = "fail_once_then_new_message"
 }
 
+enum PushGoQualityEventCloseScenario: String, Codable, Sendable {
+    case none
+    case acceptedAndDelivered = "accepted_and_delivered"
+}
+
 struct PushGoQualityFaults: Codable, Equatable, Sendable {
     let messageLoadDelayMilliseconds: Int?
     let messageRefreshDelayMilliseconds: Int?
@@ -99,19 +104,22 @@ struct PushGoQualitySessionDescriptor: Codable, Equatable, Sendable {
     let fixture: PushGoQualityFixture
     let faults: PushGoQualityFaults
     let messageRefreshScenario: PushGoQualityMessageRefreshScenario
+    let eventCloseScenario: PushGoQualityEventCloseScenario
 
     init(
         schemaVersion: Int = currentSchemaVersion,
         sessionID: String,
         fixture: PushGoQualityFixture,
         faults: PushGoQualityFaults = PushGoQualityFaults(),
-        messageRefreshScenario: PushGoQualityMessageRefreshScenario = .none
+        messageRefreshScenario: PushGoQualityMessageRefreshScenario = .none,
+        eventCloseScenario: PushGoQualityEventCloseScenario = .none
     ) {
         self.schemaVersion = schemaVersion
         self.sessionID = sessionID
         self.fixture = fixture
         self.faults = faults
         self.messageRefreshScenario = messageRefreshScenario
+        self.eventCloseScenario = eventCloseScenario
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -120,6 +128,7 @@ struct PushGoQualitySessionDescriptor: Codable, Equatable, Sendable {
         case fixture
         case faults
         case messageRefreshScenario = "message_refresh_scenario"
+        case eventCloseScenario = "event_close_scenario"
     }
 
     init(from decoder: Decoder) throws {
@@ -132,6 +141,10 @@ struct PushGoQualitySessionDescriptor: Codable, Equatable, Sendable {
         messageRefreshScenario = try container.decodeIfPresent(
             PushGoQualityMessageRefreshScenario.self,
             forKey: .messageRefreshScenario
+        ) ?? .none
+        eventCloseScenario = try container.decodeIfPresent(
+            PushGoQualityEventCloseScenario.self,
+            forKey: .eventCloseScenario
         ) ?? .none
     }
 }
@@ -206,6 +219,11 @@ enum PushGoAutomationContext {
     static var qualitySession: PushGoQualitySessionDescriptor? {
         guard case let .quality(session) = runtimeProfile else { return nil }
         return session
+    }
+
+    static var qualitySessionInputStatus: String {
+        guard let encoded = normalizedString(for: qualitySessionEnv) else { return "missing" }
+        return (try? decodeQualitySession(encoded)) == nil ? "invalid" : "valid"
     }
 
     static var qualitySessionRootURL: URL? {
@@ -454,16 +472,16 @@ enum PushGoAutomationContext {
     }
 
     private static func normalizedString(for envKey: String) -> String? {
-        let rawValue: String
-        if let cString = getenv(envKey) {
-            rawValue = String(cString: cString)
-        } else {
-            rawValue = ProcessInfo.processInfo.environment[envKey]
-                ?? launchArgumentValue(for: envKey)
-                ?? ""
-        }
-        let raw = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        return raw.isEmpty ? nil : raw
+        let processValue = getenv(envKey).map { String(cString: $0) }
+        let candidates = [
+            processValue,
+            ProcessInfo.processInfo.environment[envKey],
+            launchArgumentValue(for: envKey),
+        ]
+        return candidates.lazy.compactMap { candidate in
+            let normalized = candidate?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return normalized?.isEmpty == false ? normalized : nil
+        }.first
     }
 
     private static func isValidSessionID(_ value: String) -> Bool {

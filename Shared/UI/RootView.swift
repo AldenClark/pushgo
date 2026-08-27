@@ -59,6 +59,16 @@ private extension View {
                     .accessibilityIdentifier("quality-runtime.\(status)")
                     .accessibilityValue(session.sessionID)
             }
+        } else if PushGoAutomationContext.isActive {
+            overlay(alignment: .topLeading) {
+                Text("Quality runtime \(PushGoAutomationContext.qualitySessionInputStatus)")
+                    .font(.system(size: 1))
+                    .foregroundStyle(.clear)
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier(
+                        "quality-runtime.\(PushGoAutomationContext.qualitySessionInputStatus)"
+                    )
+            }
         } else {
             self
         }

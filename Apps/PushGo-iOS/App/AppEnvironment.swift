@@ -650,6 +650,32 @@ final class AppEnvironment {
             return severity
         }()
 
+#if DEBUG
+        if PushGoAutomationContext.qualitySession?.eventCloseScenario == .acceptedAndDelivered {
+            var boundaryPayload: [String: Any] = [
+                "channel_id": normalizedChannelId,
+                "op_id": OpaqueId.generateHex128(),
+                "event_id": normalizedEventId,
+                "event_time": Int64(Date().timeIntervalSince1970),
+                "status": resolvedStatus,
+                "message": resolvedMessage,
+                "attrs": [String: Any](),
+                "severity": resolvedSeverity,
+            ]
+            if let normalizedThingId {
+                boundaryPayload["thing_id"] = normalizedThingId
+            }
+            let boundaryPath: String
+            if let normalizedThingId {
+                boundaryPath = "/thing/\(escapedGatewayPathComponent(normalizedThingId))/event/close"
+            } else {
+                boundaryPath = "/event/close"
+            }
+            try await postGatewayPayload(boundaryPayload, endpointPath: boundaryPath, config: config)
+            return
+        }
+#endif
+
         guard let password = await dataStore.channelPassword(gateway: gatewayKey, for: normalizedChannelId) else {
             throw AppError.typedLocal(
                 code: "channel_password_missing",
@@ -2003,6 +2029,14 @@ final class AppEnvironment {
         guard JSONSerialization.isValidJSONObject(payload) else {
             throw AppError.invalidURL
         }
+#if DEBUG
+        if try await persistQualityEventCloseRoundTripIfNeeded(
+            payload: payload,
+            endpointPath: endpointPath
+        ) {
+            return
+        }
+#endif
         guard var components = URLComponents(url: config.baseURL, resolvingAgainstBaseURL: false) else {
             throw AppError.invalidURL
         }
@@ -2029,6 +2063,50 @@ final class AppEnvironment {
             response: response
         )
     }
+
+#if DEBUG
+    /// Replaces only the external Gateway round trip for an explicitly typed quality
+    /// session. The simulated delivery still enters through the production notification
+    /// parser, canonical event projection, and App-owned store.
+    private func persistQualityEventCloseRoundTripIfNeeded(
+        payload: [String: Any],
+        endpointPath: String
+    ) async throws -> Bool {
+        guard PushGoAutomationContext.qualitySession?.eventCloseScenario == .acceptedAndDelivered,
+              endpointPath.hasSuffix("/event/close"),
+              let eventID = payload["event_id"] as? String,
+              !eventID.isEmpty
+        else {
+            return false
+        }
+
+        var delivered = payload.reduce(into: [AnyHashable: Any]()) { result, item in
+            result[item.key] = item.value
+        }
+        delivered["entity_type"] = "event"
+        delivered["entity_id"] = eventID
+        delivered["event_state"] = "closed"
+        delivered["projection_destination"] = "event_head"
+        delivered["delivery_id"] = "quality-event-close-\(eventID)"
+        delivered["received_at"] = "2026-01-15T08:03:00Z"
+
+        let outcome = await persistRemotePayloadIfNeeded(
+            delivered,
+            requestIdentifier: "quality-event-close-\(eventID)"
+        )
+        switch outcome {
+        case .persistedMain, .duplicate:
+            return true
+        case .persistedPending, .rejected, .failed:
+            throw AppError.typedLocal(
+                code: "quality_event_close_delivery_failed",
+                category: .local,
+                message: localizationManager.localized("operation_failed"),
+                detail: "quality event close response did not reach the canonical store"
+            )
+        }
+    }
+#endif
 
     private func escapedGatewayPathComponent(_ raw: String) -> String {
         var allowed = CharacterSet.urlPathAllowed

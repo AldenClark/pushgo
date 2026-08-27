@@ -19,6 +19,7 @@ struct EventListScreen: View {
     @State private var searchQuery: String = ""
     @State private var selectedChannelIDs: Set<String> = []
     @State private var selectedTags: Set<String> = []
+    @State private var showOnlyOngoing = false
     @State private var isFilterPopoverPresented = false
     @State private var hydrationRequestedEventIDs: Set<String> = []
 
@@ -77,7 +78,7 @@ struct EventListScreen: View {
                     selectedEvent = nil
                 },
                 onCloseEvent: {
-                    Task { await closeEvent(event: event) }
+                    try await viewModel.closeEvent(event: event)
                 }
             )
             .toastOverlay(environment: environment, showsPendingDeletionBar: false)
@@ -90,10 +91,9 @@ struct EventListScreen: View {
     private func listContainer(filteredEvents: [EventProjection]) -> some View {
         let overlayState = overlayState(for: filteredEvents)
         ZStack {
-            eventList(filteredEvents: filteredEvents)
-                .opacity(overlayState == nil ? 1 : 0.001)
-                .allowsHitTesting(overlayState == nil)
-                .accessibilityHidden(overlayState != nil)
+            if overlayState == nil {
+                eventList(filteredEvents: filteredEvents)
+            }
 
             switch overlayState {
             case .onboarding:
@@ -248,6 +248,7 @@ struct EventListScreen: View {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let matched = viewModel.events.filter { event in
             guard !isPendingLocalDeletion(event) else { return false }
+            guard !showOnlyOngoing || eventLifecycleState(from: event.state) == .ongoing else { return false }
             let channelMatched = selectedChannelIDs.isEmpty || selectedChannelIDs.contains(normalizedChannel(event.channelId) ?? "")
             guard channelMatched else { return false }
             if !selectedTags.isEmpty {
@@ -270,7 +271,7 @@ struct EventListScreen: View {
     private func searchAutoloadTrigger(filteredEventsCount: Int) -> String {
         let channelsSignature = selectedChannelIDs.sorted().joined(separator: ",")
         let tagsSignature = selectedTags.sorted().joined(separator: ",")
-        return "\(normalizedSearchQuery)|\(channelsSignature)|\(tagsSignature)|\(viewModel.events.count)|\(filteredEventsCount)|\(viewModel.hasMoreEvents)|\(viewModel.isLoadingMoreEvents)"
+        return "\(normalizedSearchQuery)|\(channelsSignature)|\(tagsSignature)|\(showOnlyOngoing)|\(viewModel.events.count)|\(filteredEventsCount)|\(viewModel.hasMoreEvents)|\(viewModel.isLoadingMoreEvents)"
     }
 
     private var normalizedSearchQuery: String {
@@ -278,7 +279,7 @@ struct EventListScreen: View {
     }
 
     private func shouldAutoloadSearchResults(filteredEventsCount: Int) -> Bool {
-        let hasActiveFilter = !normalizedSearchQuery.isEmpty || !selectedChannelIDs.isEmpty || !selectedTags.isEmpty
+        let hasActiveFilter = !normalizedSearchQuery.isEmpty || !selectedChannelIDs.isEmpty || !selectedTags.isEmpty || showOnlyOngoing
         return hasActiveFilter
             && filteredEventsCount == 0
             && viewModel.hasMoreEvents
@@ -348,6 +349,7 @@ struct EventListScreen: View {
                 filterToolbarIcon(isHighlighted: isFilterMenuHighlighted)
             }
             .accessibilityLabel(localizationManager.localized("channel"))
+            .accessibilityIdentifier("action.events.filters")
             .popover(isPresented: $isFilterPopoverPresented, arrowEdge: .top) {
                 if #available(iOS 16.4, *) {
                     filterPopoverContent
@@ -424,19 +426,6 @@ struct EventListScreen: View {
         }
     }
 
-    private func closeEvent(event: EventProjection) async {
-        do {
-            try await viewModel.closeEvent(event: event)
-            selectedEvent = nil
-        } catch {
-            environment.showErrorToast(
-                error,
-                fallbackMessage: localizationManager.localized("operation_failed"),
-                duration: 2
-            )
-        }
-    }
-
     private func isPendingLocalDeletion(_ event: EventProjection) -> Bool {
         pendingLocalDeletionController.suppressesEvent(
             id: event.id,
@@ -467,7 +456,7 @@ struct EventListScreen: View {
     }
 
     private var isFilterMenuHighlighted: Bool {
-        !selectedChannelIDs.isEmpty || !selectedTags.isEmpty
+        !selectedChannelIDs.isEmpty || !selectedTags.isEmpty || showOnlyOngoing
     }
 
     private func filterToolbarIcon(isHighlighted: Bool) -> some View {
@@ -478,6 +467,14 @@ struct EventListScreen: View {
 
     private var filterPopoverContent: some View {
         VStack(alignment: .leading, spacing: 14) {
+            filterCloudChip(
+                title: localizationManager.localized("filter_ongoing_events"),
+                isSelected: showOnlyOngoing
+            ) {
+                showOnlyOngoing.toggle()
+            }
+            .accessibilityIdentifier("filter.events.ongoing")
+
             if !allChannelIds.isEmpty {
                 Rectangle()
                     .fill(Color.appDividerSubtle.opacity(0.9))
@@ -574,6 +571,7 @@ struct EventListScreen: View {
                 )
         }
         .buttonStyle(.plain)
+        .accessibilityValue(Text(verbatim: isSelected ? "selected" : "not_selected"))
     }
 
     private func filterMenuSelectionRow(title: String, systemImage: String, isSelected: Bool) -> some View {

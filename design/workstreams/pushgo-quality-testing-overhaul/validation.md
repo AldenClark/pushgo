@@ -28,6 +28,7 @@
 | 删除撤销 | 详情页点删除、点 Undo、重启 | pending record → suppression scope → List → undo → Store | 行立即隐藏；Undo 可点击；重启仍为同一对象 | 只出现撤销条、对象仍在列表会失败 |
 | 主导航 | 连续点击真实 Tab 与 Settings 按钮 | 用户控件 → route → 页面根视图 | 四个主页面及 Settings 均可达 | Runtime command 直达不计入 |
 | Event/Thing | 点 Tab、点准确列表行 | fixture → message ingestion → projection → list/detail | 准确对象及字段详情 | 把 fixture 直接塞实体表曾导致列表对象与真实详情路径分离，测试确实失败 |
+| Event 关闭 | 点 Event 行、在详情确认关闭、启用仅进行中筛选、重启 | close intent → Gateway 边界替身 → 正式通知解析 → canonical message/event head → list/detail | closed 可见；进行中集合排除；重启后仍 closed 且不可重复关闭 | 只 dismiss、只保存消息但不更新 projection destination、状态别名不一致或隐藏行仍暴露给 a11y 都会失败 |
 | Release 隔离 | 向 Release 注入合法会话 | launch env → runtime resolver | Quality Runtime 不激活 | Debug-only 条件移除会使负控失败 |
 
 ## 红队攻击结果（设计防线与已实现防线分开理解）
@@ -67,6 +68,11 @@
 33. **故障注入点过宽攻击**：Apple 延迟最初挂在通用 `ViewModel.refresh()`，启动后台刷新可提前消费故障，用户刷新没有变慢。结果：失败保持原 Oracle，注入点移动到用户刷新边界后通过；说明测试接入点必须贴近被验证目的，不能由相邻内部调用自证。
 34. **刷新假数据攻击**：若测试直接向 ViewModel/Repository 插入对象，只能证明列表重绘，不能证明 Provider 摄入。结果：两端类型化刷新场景在用户刷新边界提供远端载荷/拉取页，继续经过入站解析、规范化持久化、查询、详情和 relaunch Oracle；新旧准确对象同时存在。
 35. **失败被日志吞掉攻击**：Android 原刷新异常只写日志，用户与测试无法区分“无新数据”和“请求失败”；Apple 首版重复的 List 内 Retry 控件不可命中。结果：两端显示明确失败状态并保留旧快照；Android 使用已验证列表 Retry，Apple 使用始终可见且已验证的正式刷新按钮，恢复后失败状态必须消失且新对象可打开。
+36. **关闭动作形式成功攻击**：只验证确认框消失或详情 dismiss，会在远端/持久化失败时假绿。结果：Apple 仅在 async close 成功后 dismiss；两端最终核对 canonical event head 的 closed 投影、筛选集合和 relaunch，动作可见性不能单独通过。
+37. **投影目的地缺失攻击**：质量回送载荷成功写入 message，但未声明 `projection_destination=event_head`，因此 Event head 仍 ongoing。结果：真实 UI Oracle 失败；补齐与生产通知相同的投影语义后才通过，证明“Store 有新行”不是充分条件。
+38. **生命周期词汇漂移攻击**：生产数据使用 active/open，UI 筛选只识别 ONGOING，导致真实进行中事件被错误排除。结果：两端统一 ongoing/closed 语义别名并增加低层负控；UI 旅程同时验证关闭前可见、关闭后被排除。
+39. **透明隐藏伪空态攻击**：Apple 无匹配结果时把原 List 设为 `opacity(0.001)`，视觉上为空但 VoiceOver/XCTest 树仍暴露 closed 行。结果：改为结构性条件渲染；最终层级只保留无匹配状态，视觉与辅助技术语义一致。
+40. **首次启动控制面丢失攻击**：iOS 27/XCTest 偶发拉起时丢失所有 Quality env/arguments，业务用例会拖到超时并错误归因。结果：Runner 预终止，App 对 missing/invalid session 发出明确 readiness；测试在任何业务动作前做 5 秒握手，只允许尚未执行过业务动作的首次启动恢复一次，业务失败绝不重跑。
 
 ## 归因分析
 

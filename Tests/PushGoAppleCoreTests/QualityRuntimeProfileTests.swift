@@ -21,6 +21,7 @@ struct QualityRuntimeProfileTests {
         #expect(descriptor.faults.messageRefreshDelayMilliseconds == 2_500)
         #expect(descriptor.faults.failMessageLoad == false)
         #expect(descriptor.messageRefreshScenario == .none)
+        #expect(descriptor.eventCloseScenario == .none)
     }
 
     @Test("decodes the typed provider refresh scenario")
@@ -34,6 +35,19 @@ struct QualityRuntimeProfileTests {
         let descriptor = try PushGoAutomationContext.decodeQualitySession(encoded)
 
         #expect(descriptor.messageRefreshScenario == .failOnceThenNewMessage)
+    }
+
+    @Test("decodes the typed event close round trip")
+    func decodesEventCloseScenario() throws {
+        let encoded = try encodedSession(
+            sessionID: "event-close-result",
+            fixture: "event.standard",
+            eventCloseScenario: "accepted_and_delivered"
+        )
+
+        let descriptor = try PushGoAutomationContext.decodeQualitySession(encoded)
+
+        #expect(descriptor.eventCloseScenario == .acceptedAndDelivered)
     }
 
     @Test("rejects path traversal instead of treating a host path as a session")
@@ -145,7 +159,8 @@ struct QualityRuntimeProfileTests {
         sessionID: String,
         fixture: String,
         faults: [String: Any]? = nil,
-        messageRefreshScenario: String? = nil
+        messageRefreshScenario: String? = nil,
+        eventCloseScenario: String? = nil
     ) throws -> String {
         var payload: [String: Any] = [
             "schema_version": 1,
@@ -157,6 +172,9 @@ struct QualityRuntimeProfileTests {
         }
         if let messageRefreshScenario {
             payload["message_refresh_scenario"] = messageRefreshScenario
+        }
+        if let eventCloseScenario {
+            payload["event_close_scenario"] = eventCloseScenario
         }
         return try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
             .base64EncodedString()

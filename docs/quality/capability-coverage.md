@@ -10,7 +10,7 @@
 | I/M Search | 找到且只找到目标消息 | latest query/empty/error/rebuild | search index、结果集合、详情 | property + Store + UI | P0；错误查询排除、目标集合与真实详情 UI 已有；index error/rebuild 仍在低层 | Search VM/Store/UI |
 | I/M Filters/cleanup | 限定范围并清理历史 | channel/tag/unread/cutoff/cancel/failure | Message/Event/Thing、stats/index | Store boundary + UI | P0/P1；未读筛选空态与恢复全部已有，channel/tag/cleanup UI 待补 | List/Store/Cleanup |
 | I/M Delete/Undo | 删除或撤销且重启一致 | pending/undo/claim/failure/reopen | canonical rows、通知、派生表面 | coordinator + Store + UI | P0；iOS 删除→隐藏→Undo→relaunch 已有，macOS/过期提交/通知对账待补 | Pending deletion |
-| I/M Events | 浏览、筛选、关闭事件 | ongoing/closed/slow/error/duplicate | event head/timeline、Thing 关联 | Store + contract + UI | P0；iOS 内置摄入→列表→详情字段旅程已实现，关闭/筛选待补 | Entity Store/VM/UI |
+| I/M Events | 浏览、筛选、关闭事件 | ongoing/closed/slow/error/duplicate | event head/timeline、Thing 关联 | Store + contract + UI | P0；iOS 内置摄入→列表→详情→确认关闭→投影更新→仅进行中筛选排除→relaunch 后 closed 持久化已实现；slow/error/duplicate close 待补 | Entity Store/VM/UI |
 | I/M Things | 浏览对象和三个真实页签 | active/filter/missing/deep link | head、Events/Messages/Updates | Store + router + UI | P0；iOS 内置摄入→列表→详情字段旅程已实现，三个页签/深链待补 | Thing Store/VM/UI |
 | I/M Channels | 创建、订阅、改名、退订 | invalid/auth/failure/keep/delete/undo | 远端订阅、凭据、历史 | contract + Store + UI | P0；UI/远端对账缺口 | Channel controller/UI |
 | I/M Settings server | 修改真实 Gateway | invalid/cancel/failure/default | secure token、后续 endpoint | unit + contract + UI | P0；invalid UI 已有 | Settings VM/Environment |

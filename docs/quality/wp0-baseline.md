@@ -8,6 +8,7 @@
 | --- | --- | --- |
 | `swift test` | PASSED：24 XCTest；393 Swift Testing tests/36 suites | Core/Store/集成；100k opt-in runtime-quality 未启用 |
 | iOS `testLaunchesIntoMessageList` | PASSED：1/1，当前 iOS 27.0 Simulator，66.5s（含构建） | 只证明旧 smoke 的 screen-id Oracle；不证明内容、慢加载或性能 |
+| iOS Event 关闭纵向旅程（WP0 后续迁移证据） | PASSED：1/1，iOS 27.0 Simulator；结果包 `run-1-20260828-040321.xcresult` | 证明真实详情确认关闭、canonical projection 更新、仅进行中筛选排除以及同 session relaunch 后 closed 持久化；不证明 slow/error/duplicate close 或真实 Gateway |
 | Android/物理 Apple/真实推送 | NOT RUN | WP0 当前无 Android device；真实系统不由本基线替代 |
 
 ## 现有 Apple UI 测试形态
