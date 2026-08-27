@@ -19,6 +19,7 @@ struct MainTabContainerView: View {
     @State private var thingScrollToTopToken: Int = 0
     @State private var pendingMessageReselectTask: Task<Void, Never>?
     @State private var dataRefreshTask: Task<Void, Never>?
+    @State private var isDataRefreshRequested = false
 
     var body: some View {
         tabLayout
@@ -134,6 +135,12 @@ struct MainTabContainerView: View {
         case .messages:
             await messageListViewModel.refresh()
             searchViewModel.refreshMessagesIfNeeded()
+#if DEBUG
+            environment.recordIngressPerformanceUIRefreshCompleted(
+                totalMessageCount: messageListViewModel.totalMessageCount,
+                visibleMessageCount: messageListViewModel.filteredMessages.count
+            )
+#endif
         case .events:
             await entityViewModel.reloadEvents()
         case .things:
@@ -145,9 +152,14 @@ struct MainTabContainerView: View {
     }
 
     private func scheduleDataRefreshForStoreChange() {
-        dataRefreshTask?.cancel()
+        isDataRefreshRequested = true
+        guard dataRefreshTask == nil else { return }
         dataRefreshTask = Task { @MainActor in
-            await refreshData(for: selection)
+            repeat {
+                isDataRefreshRequested = false
+                await refreshData(for: selection)
+            } while isDataRefreshRequested && !Task.isCancelled
+            dataRefreshTask = nil
         }
     }
 

@@ -64,14 +64,19 @@ final class AppEnvironment {
     private let channelSubscriptionService = ChannelSubscriptionService()
     private let notificationIngressInbox = NotificationIngressInbox.shared
     private let ackFailureStore = ProviderDeliveryAckFailureStore.shared
-    @ObservationIgnored private lazy var providerIngressCoordinator = ProviderIngressCoordinator(
-        platformSuffix: "watchos",
-        dataStore: dataStore,
-        channelSubscriptionService: channelSubscriptionService,
-        notificationIngressInbox: notificationIngressInbox,
-        ackMarkerStore: ackFailureStore,
-        wakeupPullClaimStore: .shared,
-        hooks: ProviderIngressCoordinator.Hooks(
+    @ObservationIgnored private var providerIngressCoordinatorStorage: ProviderIngressCoordinator?
+    private var providerIngressCoordinator: ProviderIngressCoordinator {
+        if let providerIngressCoordinatorStorage { return providerIngressCoordinatorStorage }
+        let coordinator = ProviderIngressCoordinator(
+            platformSuffix: "watchos",
+            dataStore: dataStore,
+            channelSubscriptionService: channelSubscriptionService,
+            notificationIngressInbox: notificationIngressInbox,
+            ackMarkerStore: ackFailureStore,
+            wakeupPullClaimStore: .shared,
+            gatewayTokenStore: ProviderGatewayTokenStore(),
+            ackMarkerMinimumAge: 0,
+            hooks: ProviderIngressCoordinator.Hooks(
             isEnabled: { [weak self] in self?.isStandaloneMode == true },
             serverConfig: { [weak self] in self?.serverConfig },
             cachedDeviceKey: { [weak self] in
@@ -90,27 +95,41 @@ final class AppEnvironment {
                     entityId: identity.entityId
                 ))
             },
-            persistPayload: { [weak self] payload, requestIdentifier in
-                guard let self else { return .failed }
-                let persisted = await self.persistStandaloneResolvedPayload(
-                    payload,
-                    requestIdentifier: requestIdentifier,
-                    fallbackRequestIdentifier: requestIdentifier,
-                    fallbackTitle: "",
-                    fallbackBody: "",
-                    ingressSource: .watchPull
-                )
-                return persisted ? .persisted : .failed
+            persistPayloads: { [weak self] inputs in
+                guard let self else {
+                    return Array(repeating: .failed, count: inputs.count)
+                }
+                var results: [ProviderIngressPersistenceResult] = []
+                results.reserveCapacity(inputs.count)
+                for input in inputs {
+                    let persisted = await self.persistStandaloneResolvedPayload(
+                        input.payload,
+                        requestIdentifier: input.requestIdentifier,
+                        fallbackRequestIdentifier: input.requestIdentifier,
+                        fallbackTitle: "",
+                        fallbackBody: "",
+                        ingressSource: .watchPull
+                    )
+                    results.append(persisted ? .persisted : .failed)
+                }
+                return results
             },
-            applyPersistenceResult: { [weak self] result in
-                guard case .persisted = result else { return }
+            applyPersistenceResults: { [weak self] results in
+                guard results.contains(where: { result in
+                    if case .persisted = result { return true }
+                    return false
+                }) else { return }
                 self?.scheduleMessageListRefresh()
             },
+            reportInboxProgress: { _ in },
             recordProviderError: { [weak self] error, source in
                 self?.recordAutomationRuntimeError(error, source: source, category: "provider")
             }
+            )
         )
-    )
+        providerIngressCoordinatorStorage = coordinator
+        return coordinator
+    }
 
     private init(
         dataStore: LocalDataStore = LocalDataStore(),

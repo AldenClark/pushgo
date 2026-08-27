@@ -21,15 +21,16 @@ struct LocalDataStoreTests {
             )
 
             let initialOutcome = try await store.persistNotificationMessageIfNeeded(first)
-            let duplicateOutcome = try await store.persistNotificationMessageIfNeeded(second)
-            let stored = try await store.loadMessage(notificationRequestId: "req-duplicate-request-001")
-            let messages = try await store.loadMessages()
-
             guard case let .persisted(initialStored) = initialOutcome else {
                 Issue.record("Expected initial notification persistence to create a message row.")
                 return
             }
             #expect(initialStored.title == "Original title")
+
+            try await store.setMessageReadState(id: initialStored.id, isRead: true)
+            let duplicateOutcome = try await store.persistNotificationMessageIfNeeded(second)
+            let stored = try await store.loadMessage(notificationRequestId: "req-duplicate-request-001")
+            let messages = try await store.loadMessages()
 
             guard case let .duplicateRequest(updated) = duplicateOutcome else {
                 Issue.record("Expected same notification request id to be treated as duplicateRequest.")
@@ -37,9 +38,53 @@ struct LocalDataStoreTests {
             }
             #expect(updated.title == "Updated title")
             #expect(updated.body == "Updated body")
+            #expect(updated.isRead)
             #expect(stored?.title == "Updated title")
             #expect(stored?.body == "Updated body")
+            #expect(stored?.isRead == true)
             #expect(messages.count == 1)
+        }
+    }
+
+    @Test
+    func persistNotificationMessageBatchPreservesInputOrderAndDuplicateSemantics() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let first = makeMessage(
+                messageId: "msg-batch-001",
+                notificationRequestId: "req-batch-shared",
+                title: "First title",
+                body: "First body"
+            )
+            let duplicateRequest = makeMessage(
+                messageId: "msg-batch-002",
+                notificationRequestId: "req-batch-shared",
+                title: "Updated title",
+                body: "Updated body"
+            )
+            let independent = makeMessage(
+                messageId: "msg-batch-003",
+                notificationRequestId: "req-batch-independent",
+                title: "Independent",
+                body: "Independent body"
+            )
+
+            let outcomes = try await store.persistNotificationMessagesIfNeeded([
+                first,
+                duplicateRequest,
+                independent,
+            ])
+
+            #expect(outcomes.count == 3)
+            guard case .persisted = outcomes[0],
+                  case let .duplicateRequest(updated) = outcomes[1],
+                  case .persisted = outcomes[2]
+            else {
+                Issue.record("Expected ordered persisted/duplicateRequest/persisted batch outcomes.")
+                return
+            }
+            #expect(updated.title == "Updated title")
+            #expect(try await store.loadMessages().count == 2)
+            #expect(try await store.loadMessage(notificationRequestId: "req-batch-shared")?.title == "Updated title")
         }
     }
 

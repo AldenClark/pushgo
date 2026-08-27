@@ -841,6 +841,95 @@ struct NotificationIngressInboxTests {
     }
 
     @Test
+    func expiredCanonicalApplyOwnerCannotCompletePeerTakeover() async throws {
+        await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let inbox = NotificationIngressInbox(appGroupIdentifier: appGroupIdentifier)
+            let accepted = await inbox.enqueue(
+                codablePayload: [
+                    "message_id": AnyCodable("canonical-lease-fence-001"),
+                    "title": AnyCodable("Lease fence"),
+                ],
+                requestIdentifier: "canonical-lease-fence-001",
+                source: "test.canonical_lease"
+            )
+            #expect(accepted)
+
+            let start = Date()
+            let crashed = await inbox.claimPendingEntries(
+                owner: "app.crashed",
+                leaseDuration: 5,
+                limit: 1,
+                now: start
+            )
+            #expect(crashed.count == 1)
+            #expect(await inbox.claimPendingEntries(
+                owner: "app.too_early",
+                leaseDuration: 5,
+                limit: 1,
+                now: start.addingTimeInterval(4)
+            ).isEmpty)
+
+            let peer = await inbox.claimPendingEntries(
+                owner: "app.peer",
+                leaseDuration: 30,
+                limit: 1,
+                now: start.addingTimeInterval(6)
+            )
+            #expect(peer.count == 1)
+            #expect(peer.first?.leaseGeneration == (crashed.first?.leaseGeneration ?? 0) + 1)
+
+            #expect(await inbox.markCompleted(crashed[0]) == false)
+            #expect(await inbox.markCompleted(peer[0]))
+            #expect(await inbox.pendingEntries().isEmpty)
+        }
+    }
+
+    @Test
+    func queueCountsSeparateImmediatelyDueWorkFromLeasedAndDelayedWork() async throws {
+        await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let inbox = NotificationIngressInbox(appGroupIdentifier: appGroupIdentifier)
+            for index in 0..<2 {
+                #expect(await inbox.enqueue(
+                    codablePayload: [
+                        "message_id": AnyCodable("queue-count-\(index)"),
+                        "title": AnyCodable("Queue count \(index)"),
+                    ],
+                    requestIdentifier: "queue-count-\(index)",
+                    source: "test.queue_count"
+                ))
+            }
+
+            let now = Date()
+            #expect(await inbox.queueCounts(now: now) == .init(due: 2, outstanding: 2))
+
+            let firstClaim = await inbox.claimPendingEntries(
+                owner: "app.queue_count",
+                leaseDuration: 30,
+                limit: 1,
+                now: now
+            )
+            #expect(firstClaim.count == 1)
+            #expect(await inbox.queueCounts(now: now) == .init(due: 1, outstanding: 2))
+            #expect(await inbox.markCompleted(firstClaim[0]))
+            #expect(await inbox.queueCounts(now: now) == .init(due: 1, outstanding: 1))
+
+            let secondClaim = await inbox.claimPendingEntries(
+                owner: "app.queue_count",
+                leaseDuration: 30,
+                limit: 1,
+                now: now
+            )
+            #expect(secondClaim.count == 1)
+            #expect(await inbox.markRetry(
+                secondClaim[0],
+                reason: "test_delayed_retry",
+                retryAfter: now.addingTimeInterval(60)
+            ))
+            #expect(await inbox.queueCounts(now: now) == .init(due: 0, outstanding: 1))
+        }
+    }
+
+    @Test
     func providerWakeupPullClaimCompletionIsDurableAcrossStoreRestart() async throws {
         try await withIsolatedAutomationStorage { _, appGroupIdentifier in
             let store = ProviderWakeupPullClaimStore(appGroupIdentifier: appGroupIdentifier)

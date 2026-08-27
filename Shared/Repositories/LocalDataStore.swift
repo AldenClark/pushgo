@@ -2303,12 +2303,26 @@ actor LocalDataStore {
     func persistNotificationMessageIfNeeded(
         _ message: PushMessage
     ) async throws -> NotificationStoreSaveOutcome {
-        let canonicalMessage = canonicalizedMessageForPersistence(message)
-        let outcome = try await performBackendWrite { backend in
-            try await backend.persistNotificationMessageIfNeeded(canonicalMessage)
+        let outcomes = try await persistNotificationMessagesIfNeeded([message])
+        guard let outcome = outcomes.first else {
+            throw AppError.localStore("Notification batch commit returned no outcome.")
+        }
+        return outcome
+    }
+
+    /// Commits one bounded ingress batch atomically. The durable derived-work
+    /// rows remain per canonical identity, while the worker is kicked once only
+    /// after the whole transaction is visible to database observers.
+    func persistNotificationMessagesIfNeeded(
+        _ messages: [PushMessage]
+    ) async throws -> [NotificationStoreSaveOutcome] {
+        guard !messages.isEmpty else { return [] }
+        let canonicalMessages = messages.map(canonicalizedMessageForPersistence)
+        let outcomes = try await performBackendWrite { backend in
+            try await backend.persistNotificationMessagesIfNeeded(canonicalMessages)
         }
         scheduleDerivedWorkDrain()
-        return outcome
+        return outcomes
     }
 
     /// Starts (or joins) the single owned worker for canonical post-commit
@@ -8354,85 +8368,103 @@ private actor GRDBStore {
         _ message: PushMessage
     ) async throws -> NotificationStoreSaveOutcome {
         try write { db in
-            let canonicalMessage = canonicalizedMessageForPersistence(message)
-            let record = try buildMessageRecord(from: canonicalMessage)
-            if let thingId = referencedThingIdRequiringExistingParent(canonicalMessage),
-               try !hasThingParentRecord(thingId: thingId, db: db)
-            {
-                try enqueuePendingInboundMessage(record, thingId: thingId, db: db)
-                return .persistedPending(canonicalMessage)
-            }
+            try persistNotificationMessageIfNeeded(message, db: db)
+        }
+    }
 
-            if let notificationRequestId = record.notificationRequestId,
-               let existing = try loadMessageRecordByNotificationRequestId(notificationRequestId, db: db)
-            {
-                let updatedRecord = GRDBMessageRecord(
-                    id: existing.id,
-                    messageId: existing.messageId,
-                    title: record.title,
-                    body: record.body,
-                    channel: record.channel,
-                    url: record.url,
-                    isRead: record.isRead,
-                    receivedAt: record.receivedAt,
-                    rawPayloadJSON: record.rawPayloadJSON,
-                    status: record.status,
-                    decryptionState: record.decryptionState,
-                    notificationRequestId: existing.notificationRequestId,
-                    deliveryId: record.deliveryId,
-                    operationId: record.operationId,
-                    entityType: record.entityType,
-                    entityId: record.entityId,
-                    eventId: record.eventId,
-                    thingId: record.thingId,
-                    projectionDestination: record.projectionDestination,
-                    eventState: record.eventState,
-                    eventTimeEpoch: record.eventTimeEpoch,
-                    observedTimeEpoch: record.observedTimeEpoch,
-                    occurredAtEpoch: record.occurredAtEpoch,
-                    topLevelMessage: record.topLevelMessage
-                )
-                try insertOrUpdateMessage(
-                    updatedRecord,
-                    db: db,
-                    updateOnConflict: true,
-                    projectionMessage: canonicalMessage
-                )
-                try enqueueCanonicalDerivedWork(messageID: updatedRecord.id, db: db)
-                return .duplicateRequest(updatedRecord.toPushMessage(decoder: decoder))
-            }
+    func persistNotificationMessagesIfNeeded(
+        _ messages: [PushMessage]
+    ) async throws -> [NotificationStoreSaveOutcome] {
+        guard !messages.isEmpty else { return [] }
+        return try write { db in
+            try messages.map { try persistNotificationMessageIfNeeded($0, db: db) }
+        }
+    }
 
-            if let identity = resolveOperationScopeIdentity(from: canonicalMessage),
-               let ledger = try fetchOperationLedger(scopeKey: identity.scopeKey, db: db),
-               let existing = try loadMessageRecordByMessageId(ledger.messageId, db: db)
-            {
-                return .duplicateMessage(existing.toPushMessage(decoder: decoder))
-            }
+    private func persistNotificationMessageIfNeeded(
+        _ message: PushMessage,
+        db: Database
+    ) throws -> NotificationStoreSaveOutcome {
+        let canonicalMessage = canonicalizedMessageForPersistence(message)
+        let record = try buildMessageRecord(from: canonicalMessage)
+        if let thingId = referencedThingIdRequiringExistingParent(canonicalMessage),
+           try !hasThingParentRecord(thingId: thingId, db: db)
+        {
+            try enqueuePendingInboundMessage(record, thingId: thingId, db: db)
+            return .persistedPending(canonicalMessage)
+        }
 
-            if let existing = try loadMessageRecordByMessageId(record.messageId, db: db) {
-                return .duplicateMessage(existing.toPushMessage(decoder: decoder))
-            }
-
+        if let notificationRequestId = record.notificationRequestId,
+           let existing = try loadMessageRecordByNotificationRequestId(notificationRequestId, db: db)
+        {
+            let updatedRecord = GRDBMessageRecord(
+                id: existing.id,
+                messageId: existing.messageId,
+                title: record.title,
+                body: record.body,
+                channel: record.channel,
+                url: record.url,
+                // A delivery replay may refresh canonical content, but it must
+                // not undo an explicit local read transition.
+                isRead: existing.isRead || record.isRead,
+                receivedAt: record.receivedAt,
+                rawPayloadJSON: record.rawPayloadJSON,
+                status: record.status,
+                decryptionState: record.decryptionState,
+                notificationRequestId: existing.notificationRequestId,
+                deliveryId: record.deliveryId,
+                operationId: record.operationId,
+                entityType: record.entityType,
+                entityId: record.entityId,
+                eventId: record.eventId,
+                thingId: record.thingId,
+                projectionDestination: record.projectionDestination,
+                eventState: record.eventState,
+                eventTimeEpoch: record.eventTimeEpoch,
+                observedTimeEpoch: record.observedTimeEpoch,
+                occurredAtEpoch: record.occurredAtEpoch,
+                topLevelMessage: record.topLevelMessage
+            )
             try insertOrUpdateMessage(
-                record,
+                updatedRecord,
                 db: db,
-                updateOnConflict: false,
+                updateOnConflict: true,
                 projectionMessage: canonicalMessage
             )
-            if let identity = resolveOperationScopeIdentity(from: canonicalMessage) {
-                try upsertOperationLedger(
-                    identity: identity,
-                    messageId: record.messageId,
-                    appliedAt: Date(),
-                    db: db
-                )
-            }
-            if let thingId = thingParentIdentity(from: canonicalMessage) {
-                try replayPendingInboundMessages(thingId: thingId, db: db)
-            }
-            try enqueueCanonicalDerivedWork(messageID: record.id, db: db)
-            return .persisted(record.toPushMessage(decoder: decoder))
+            try enqueueCanonicalDerivedWork(messageID: updatedRecord.id, db: db)
+            return .duplicateRequest(updatedRecord.toPushMessage(decoder: decoder))
         }
+
+        if let identity = resolveOperationScopeIdentity(from: canonicalMessage),
+           let ledger = try fetchOperationLedger(scopeKey: identity.scopeKey, db: db),
+           let existing = try loadMessageRecordByMessageId(ledger.messageId, db: db)
+        {
+            return .duplicateMessage(existing.toPushMessage(decoder: decoder))
+        }
+
+        if let existing = try loadMessageRecordByMessageId(record.messageId, db: db) {
+            return .duplicateMessage(existing.toPushMessage(decoder: decoder))
+        }
+
+        try insertOrUpdateMessage(
+            record,
+            db: db,
+            updateOnConflict: false,
+            projectionMessage: canonicalMessage
+        )
+        if let identity = resolveOperationScopeIdentity(from: canonicalMessage) {
+            try upsertOperationLedger(
+                identity: identity,
+                messageId: record.messageId,
+                appliedAt: Date(),
+                db: db
+            )
+        }
+        if let thingId = thingParentIdentity(from: canonicalMessage) {
+            try replayPendingInboundMessages(thingId: thingId, db: db)
+        }
+        try enqueueCanonicalDerivedWork(messageID: record.id, db: db)
+        return .persisted(record.toPushMessage(decoder: decoder))
     }
 
     private func enqueueCanonicalDerivedWork(messageID: UUID, db: Database) throws {

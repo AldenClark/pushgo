@@ -167,22 +167,26 @@ struct MessageListScreen: View {
     @ViewBuilder
     private var screenContent: some View {
         if !viewModel.hasLoadedOnce {
-            List(0 ..< 6, id: \.self) { _ in
-                HStack(spacing: 12) {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.secondary.opacity(0.18))
-                        .frame(width: 42, height: 42)
-                    VStack(alignment: .leading, spacing: 8) {
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+            List {
+                ingressNoticeRow
+
+                ForEach(0 ..< 6, id: \.self) { _ in
+                    HStack(spacing: 12) {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .fill(Color.secondary.opacity(0.18))
-                            .frame(height: 14)
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(Color.secondary.opacity(0.12))
-                            .frame(width: 180, height: 11)
+                            .frame(width: 42, height: 42)
+                        VStack(alignment: .leading, spacing: 8) {
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .fill(Color.secondary.opacity(0.18))
+                                .frame(height: 14)
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .fill(Color.secondary.opacity(0.12))
+                                .frame(width: 180, height: 11)
+                        }
                     }
+                    .redacted(reason: .placeholder)
+                    .accessibilityHidden(true)
                 }
-                .redacted(reason: .placeholder)
-                .accessibilityHidden(true)
             }
             .allowsHitTesting(false)
         } else {
@@ -268,6 +272,8 @@ struct MessageListScreen: View {
         let filteredMessages = visibleFilteredMessages
         ScrollViewReader { proxy in
             List {
+                ingressNoticeRow
+
                 if isShowingSearchResults {
                     if searchResults.isEmpty {
                         if searchViewModel.isSearching {
@@ -364,6 +370,19 @@ struct MessageListScreen: View {
             .onChange(of: scrollToTopToken) { _, _ in
                 scrollToTopIfNeeded(proxy)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var ingressNoticeRow: some View {
+        if let notice = environment.messageIngressNotice {
+            MessageIngressNoticeView(
+                notice: notice,
+                text: environment.messageIngressNoticeText(for: notice)
+            )
+            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
         }
     }
 
@@ -488,6 +507,64 @@ struct MessageListScreen: View {
         .listRowInsets(EdgeInsets())
         .listRowBackground(Group { Color.clear })
         .hideListSeparator()
+    }
+}
+
+private struct MessageIngressNoticeView: View {
+    let notice: AppEnvironment.MessageIngressNotice
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            statusIcon
+                .frame(width: 16, height: 16)
+
+            Text(text)
+                .font(.footnote)
+                .foregroundStyle(Color.appTextSecondary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.appSurfaceSunken.opacity(0.7), in: .rect(cornerRadius: 10))
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(text)
+        .accessibilityIdentifier("message.ingress.notice")
+    }
+
+    @ViewBuilder
+    private var statusIcon: some View {
+        switch notice {
+        case .processing, .processingSlow:
+            ProgressView()
+                .progressViewStyle(.circular)
+                .controlSize(.small)
+                .tint(tone.foreground)
+                .accessibilityHidden(true)
+        case .waitingRetry:
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(tone.foreground)
+                .accessibilityHidden(true)
+        case .completed:
+            Image(systemName: "checkmark.circle.fill")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(tone.foreground)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private var tone: AppSemanticTone {
+        switch notice {
+        case .processing:
+            .info
+        case .processingSlow, .waitingRetry:
+            .warning
+        case .completed:
+            .success
+        }
     }
 }
 

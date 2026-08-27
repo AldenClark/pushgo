@@ -26,6 +26,7 @@ final class AppEnvironment {
     @ObservationIgnored private var messageSyncObserver: DarwinNotificationObserver?
     @ObservationIgnored private var notificationIngressObserver: DarwinNotificationObserver?
     @ObservationIgnored private var pendingCountsRefreshTask: Task<Void, Never>?
+    @ObservationIgnored private var isCountsRefreshRequested = false
     @ObservationIgnored private var messageStoreObservationTask: Task<Void, Never>?
     @ObservationIgnored private var bootstrapTask: Task<Void, Never>?
     @ObservationIgnored private var didBootstrap = false
@@ -472,9 +473,15 @@ final class AppEnvironment {
     }
 
     private func scheduleCountsRefresh() {
-        pendingCountsRefreshTask?.cancel()
+        isCountsRefreshRequested = true
+        guard pendingCountsRefreshTask == nil else { return }
         pendingCountsRefreshTask = Task { @MainActor [weak self] in
-            await self?.refreshMessageCountsAndNotify()
+            guard let self else { return }
+            repeat {
+                self.isCountsRefreshRequested = false
+                await self.refreshMessageCountsAndNotify()
+            } while self.isCountsRefreshRequested && !Task.isCancelled
+            self.pendingCountsRefreshTask = nil
         }
     }
 

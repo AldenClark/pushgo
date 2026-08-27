@@ -17,7 +17,9 @@ struct NormalizedRemoteNotification {
     let thingId: String?
 }
 
-enum ProviderWakeupResolution {
+// Values are sanitized into immutable Foundation property-list leaves before
+// construction. The legacy dictionary type itself cannot express Sendable.
+enum ProviderWakeupResolution: @unchecked Sendable {
     case notWakeup
     case recoveredDurable(payload: [AnyHashable: Any], requestIdentifier: String)
     case pulled(payload: [AnyHashable: Any], requestIdentifier: String, context: ProviderPullContext)
@@ -25,7 +27,7 @@ enum ProviderWakeupResolution {
     case unresolvedWakeup(payload: [AnyHashable: Any], requestIdentifier: String?)
 }
 
-enum NotificationIngressResolution {
+enum NotificationIngressResolution: @unchecked Sendable {
     case direct(payload: [AnyHashable: Any], requestIdentifier: String?)
     case pulled(payload: [AnyHashable: Any], requestIdentifier: String, context: ProviderPullContext)
     case claimedByPeer(payload: [AnyHashable: Any], requestIdentifier: String?)
@@ -58,27 +60,80 @@ enum NotificationPersistenceOutcome {
 
 #if !NSE_NO_DATABASE
 enum NotificationPersistenceCoordinator {
+    struct RemotePayload: @unchecked Sendable {
+        let payload: [AnyHashable: Any]
+        let requestIdentifier: String?
+    }
+
     static func persistRemotePayloadIfNeeded(
         _ payload: [AnyHashable: Any],
         requestIdentifier: String? = nil,
         dataStore: LocalDataStore,
         beforeSave: (@Sendable (PushMessage) async -> Void)? = nil
     ) async -> NotificationPersistenceOutcome {
-        if NotificationHandling.shouldSkipPersistence(for: payload) {
-            return .rejected
-        }
-        let preparedContent = await preparedContentForPersistence(from: payload)
-        let resolvedFallbackRequestIdentifier = normalizedText(requestIdentifier)
-            ?? normalizedText(preparedContent.userInfo["delivery_id"] as? String)
-            ?? UUID().uuidString
-
-        return await persistPreparedContentIfNeeded(
-            content: preparedContent,
-            requestIdentifier: requestIdentifier,
-            fallbackRequestIdentifier: resolvedFallbackRequestIdentifier,
+        await persistRemotePayloadsIfNeeded(
+            [RemotePayload(payload: payload, requestIdentifier: requestIdentifier)],
             dataStore: dataStore,
             beforeSave: beforeSave
+        ).first ?? .failed
+    }
+
+    /// Prepares a bounded ingress batch outside the canonical transaction, then
+    /// commits every valid message in one GRDB write while preserving an outcome
+    /// for each original payload.
+    static func persistRemotePayloadsIfNeeded(
+        _ inputs: [RemotePayload],
+        dataStore: LocalDataStore,
+        beforeSave: (@Sendable (PushMessage) async -> Void)? = nil
+    ) async -> [NotificationPersistenceOutcome] {
+        guard !inputs.isEmpty else { return [] }
+        var results = Array<NotificationPersistenceOutcome?>(
+            repeating: nil,
+            count: inputs.count
         )
+        var prepared: [(index: Int, message: PushMessage)] = []
+        prepared.reserveCapacity(inputs.count)
+
+        for (index, input) in inputs.enumerated() {
+            if NotificationHandling.shouldSkipPersistence(for: input.payload) {
+                results[index] = .rejected
+                continue
+            }
+            let content = await preparedContentForPersistence(from: input.payload)
+            let fallbackRequestIdentifier = normalizedText(input.requestIdentifier)
+                ?? normalizedText(content.userInfo["delivery_id"] as? String)
+                ?? UUID().uuidString
+            guard let message = await prepareMessageForPersistence(
+                content: content,
+                requestIdentifier: input.requestIdentifier,
+                fallbackRequestIdentifier: fallbackRequestIdentifier,
+                dataStore: dataStore,
+                beforeSave: beforeSave
+            ) else {
+                results[index] = .rejected
+                continue
+            }
+            prepared.append((index, message))
+        }
+
+        guard !prepared.isEmpty else {
+            return results.map { $0 ?? .rejected }
+        }
+        do {
+            let outcomes = try await dataStore.persistNotificationMessagesIfNeeded(
+                prepared.map(\.message)
+            )
+            guard outcomes.count == prepared.count else {
+                for item in prepared { results[item.index] = .failed }
+                return results.map { $0 ?? .failed }
+            }
+            for (item, outcome) in zip(prepared, outcomes) {
+                results[item.index] = persistenceOutcome(from: outcome)
+            }
+        } catch {
+            for item in prepared { results[item.index] = .failed }
+        }
+        return results.map { $0 ?? .failed }
     }
 
     static func persistIfNeeded(
@@ -116,84 +171,76 @@ enum NotificationPersistenceCoordinator {
         dataStore: LocalDataStore,
         beforeSave: (@Sendable (PushMessage) async -> Void)? = nil
     ) async -> NotificationPersistenceOutcome {
-        let preparedContent = await preparedContentForPersistence(from: content)
-        if NotificationHandling.shouldSkipPersistence(for: preparedContent.userInfo) {
-            return .rejected
+        guard let message = await prepareMessageForPersistence(
+            content: await preparedContentForPersistence(from: content),
+            requestIdentifier: requestIdentifier,
+            fallbackRequestIdentifier: fallbackRequestIdentifier,
+            dataStore: dataStore,
+            beforeSave: beforeSave
+        ) else { return .rejected }
+        do {
+            return persistenceOutcome(
+                from: try await dataStore.persistNotificationMessageIfNeeded(message)
+            )
+        } catch {
+            return .failed
         }
+    }
 
+    private static func prepareMessageForPersistence(
+        content: UNNotificationContent,
+        requestIdentifier: String?,
+        fallbackRequestIdentifier: String,
+        dataStore: LocalDataStore,
+        beforeSave: (@Sendable (PushMessage) async -> Void)? = nil
+    ) async -> PushMessage? {
+        if NotificationHandling.shouldSkipPersistence(for: content.userInfo) {
+            return nil
+        }
         let resolvedRequestIdentifier = normalizedText(requestIdentifier)
             ?? normalizedText(fallbackRequestIdentifier)
             ?? UUID().uuidString
         let normalized = NotificationPayloadNormalizer.normalize(
-            content: preparedContent,
+            content: content,
             requestId: resolvedRequestIdentifier
         )
-        return await persistNormalizedPayload(
-            title: normalized.title,
-            body: normalized.body,
-            hasExplicitTitle: normalized.hasExplicitTitle,
-            channel: normalized.channel,
-            url: normalized.url,
-            decryptionState: normalized.decryptionState,
-            rawPayload: normalized.rawPayload,
-            messageId: normalized.messageId,
-            dataStore: dataStore,
-            beforeSave: beforeSave
-        )
-    }
-
-    private static func persistNormalizedPayload(
-        title: String,
-        body: String,
-        hasExplicitTitle: Bool,
-        channel: String?,
-        url: URL?,
-        decryptionState: PushMessage.DecryptionState?,
-        rawPayload: [String: AnyCodable],
-        messageId: String?,
-        dataStore: LocalDataStore,
-        beforeSave: (@Sendable (PushMessage) async -> Void)? = nil
-	    ) async -> NotificationPersistenceOutcome {
-	        let now = Date()
-	        var resolvedTitle = title
-	        let resolvedRawPayload = rawPayload
-        if !hasExplicitTitle,
+        var resolvedTitle = normalized.title
+        if !normalized.hasExplicitTitle,
            let storedTitle = await resolveStoredEntityTitle(
-               from: resolvedRawPayload,
+               from: normalized.rawPayload,
                dataStore: dataStore
            )
         {
             resolvedTitle = storedTitle
         }
 
-        let receivedAt = PayloadTimeParser.date(from: resolvedRawPayload["sent_at"]) ?? now
+        let receivedAt = PayloadTimeParser.date(from: normalized.rawPayload["sent_at"]) ?? Date()
         let message = PushMessage(
-            messageId: messageId,
+            messageId: normalized.messageId,
             title: resolvedTitle,
-            body: body,
-            channel: channel,
-            url: url,
+            body: normalized.body,
+            channel: normalized.channel,
+            url: normalized.url,
             isRead: false,
             receivedAt: receivedAt,
-            rawPayload: resolvedRawPayload,
+            rawPayload: normalized.rawPayload,
             status: .normal,
-            decryptionState: decryptionState
+            decryptionState: normalized.decryptionState
         )
         await beforeSave?(message)
+        return message
+    }
 
-        do {
-            switch try await dataStore.persistNotificationMessageIfNeeded(message) {
-            case let .persisted(stored):
-                return .persistedMain(stored)
-            case let .persistedPending(stored):
-                return .persistedPending(stored)
-            case .duplicateRequest(_):
-                return .duplicate
-            case .duplicateMessage(_):
-                return .duplicate
-            }
-        } catch {
-            return .failed
+    private static func persistenceOutcome(
+        from outcome: NotificationStoreSaveOutcome
+    ) -> NotificationPersistenceOutcome {
+        switch outcome {
+        case let .persisted(stored):
+            return .persistedMain(stored)
+        case let .persistedPending(stored):
+            return .persistedPending(stored)
+        case .duplicateRequest, .duplicateMessage:
+            return .duplicate
         }
     }
 
@@ -891,6 +938,7 @@ enum NotificationHandling {
     }
 
 #if !NSE_NO_DATABASE
+    @MainActor
     static func resolveNotificationIngress(
         from payload: [AnyHashable: Any],
         dataStore: LocalDataStore,
@@ -1012,6 +1060,7 @@ enum NotificationHandling {
     }
 
 #if !NSE_NO_DATABASE
+    @MainActor
     static func resolveProviderWakeup(
         from payload: [AnyHashable: Any],
         dataStore: LocalDataStore,
@@ -1248,6 +1297,7 @@ enum NotificationHandling {
     }
 
 #if !NSE_NO_DATABASE
+    @MainActor
     private static func activeServerConfigsForWakeupIngress(
         dataStore: LocalDataStore,
         payload: [String: Any],

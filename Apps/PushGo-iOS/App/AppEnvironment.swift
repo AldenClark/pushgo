@@ -7,9 +7,70 @@ import SwiftUI
 import UserNotifications
 import UIKit
 
+#if DEBUG
+private let pushGoIngressPerformanceProcessStartUptime = ProcessInfo.processInfo.systemUptime
+
+private struct PushGoIngressPerformanceMeasurement {
+    enum Mode: String {
+        case baseline
+        case seed
+        case measure
+        case cleanup
+    }
+
+    enum PayloadKind: String {
+        case short
+        case long
+    }
+
+    let mode: Mode
+    let runID: String
+    let pendingCount: Int
+    let payloadKind: PayloadKind
+    let processStartUptime: TimeInterval
+    var baselineMessageCount: Int?
+    var didLogFirstBatchCommit = false
+    var didLogCachedUI = false
+    var didLogFirstBatchUI = false
+    var didLogAllPendingUI = false
+
+    var fixtureChannel: String { "__pushgo_ingress_perf_\(runID)__" }
+
+    static func fromEnvironment() -> Self? {
+        let environment = ProcessInfo.processInfo.environment
+        guard let mode = environment["PUSHGO_INGRESS_PERF_MODE"].flatMap(Mode.init(rawValue:)),
+              let rawRunID = environment["PUSHGO_INGRESS_PERF_RUN_ID"]?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawRunID.isEmpty,
+              let pendingCount = Int(environment["PUSHGO_INGRESS_PERF_COUNT"] ?? ""),
+              (0...1_000).contains(pendingCount),
+              let payloadKind = PayloadKind(
+                rawValue: environment["PUSHGO_INGRESS_PERF_PAYLOAD"] ?? "short"
+              )
+        else { return nil }
+        let safeRunID = rawRunID.filter { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
+        guard !safeRunID.isEmpty else { return nil }
+        return Self(
+            mode: mode,
+            runID: safeRunID,
+            pendingCount: pendingCount,
+            payloadKind: payloadKind,
+            processStartUptime: pushGoIngressPerformanceProcessStartUptime
+        )
+    }
+}
+#endif
+
 @MainActor
 @Observable
 final class AppEnvironment {
+    enum MessageIngressNotice: Equatable {
+        case processing(completed: Int, total: Int)
+        case processingSlow(completed: Int, total: Int)
+        case waitingRetry(remaining: Int)
+        case completed
+    }
+
     enum SettingsPresentationRequest: String, Identifiable {
         case settings
         case decryption
@@ -33,6 +94,15 @@ final class AppEnvironment {
     @ObservationIgnored private var messageSyncObserver: DarwinNotificationObserver?
     @ObservationIgnored private var notificationIngressObserver: DarwinNotificationObserver?
     @ObservationIgnored private var pendingCountsRefreshTask: Task<Void, Never>?
+    @ObservationIgnored private var isCountsRefreshRequested = false
+    @ObservationIgnored private var ingressNoticeRevealTask: Task<Void, Never>?
+    @ObservationIgnored private var ingressNoticeWatchdogTask: Task<Void, Never>?
+    @ObservationIgnored private var ingressNoticeDismissTask: Task<Void, Never>?
+    @ObservationIgnored private var pendingInboxProgress: ProviderInboxProgress?
+#if DEBUG
+    @ObservationIgnored private var ingressPerformanceMeasurement =
+        PushGoIngressPerformanceMeasurement.fromEnvironment()
+#endif
     @ObservationIgnored private var messageStoreObservationTask: Task<Void, Never>?
     @ObservationIgnored private var bootstrapTask: Task<Void, Never>?
     @ObservationIgnored private var didBootstrap = false
@@ -49,6 +119,7 @@ final class AppEnvironment {
     private(set) var unreadMessageCount: Int = 0
     private(set) var messageStoreRevision: UUID = UUID()
     private(set) var toastMessage: ToastMessage?
+    private(set) var messageIngressNotice: MessageIngressNotice?
     private(set) var isDeletionRecoveryReady = false
     var localStoreRecoveryState: LocalStoreRecoveryState? { localStoreRecoveryController.localStoreRecoveryState }
     private(set) var shouldPresentNotificationPermissionAlert: Bool = false
@@ -240,14 +311,23 @@ final class AppEnvironment {
                 await self.reloadMessagesFromStore()
             }
         }
-        notificationIngressObserver = DarwinNotificationObserver(
-            name: AppConstants.notificationIngressChangedNotificationName
-        ) { [weak self] in
-            guard let self else { return }
-            Task { @MainActor in
-                await self.notificationIngressController.handleNotificationIngressChanged(
-                    reason: "darwin_notification"
-                )
+#if DEBUG
+        let suppressIngressObserver = ingressPerformanceMeasurement?.mode == .baseline
+            || ingressPerformanceMeasurement?.mode == .seed
+            || ingressPerformanceMeasurement?.mode == .cleanup
+#else
+        let suppressIngressObserver = false
+#endif
+        if !suppressIngressObserver {
+            notificationIngressObserver = DarwinNotificationObserver(
+                name: AppConstants.notificationIngressChangedNotificationName
+            ) { [weak self] in
+                guard let self else { return }
+                Task { @MainActor in
+                    await self.notificationIngressController.handleNotificationIngressChanged(
+                        reason: "darwin_notification"
+                    )
+                }
             }
         }
         registerDefaultNotificationCategories()
@@ -272,6 +352,9 @@ final class AppEnvironment {
             },
             scheduleCountsRefresh: { [weak self] in
                 self?.scheduleCountsRefresh()
+            },
+            reportInboxProgress: { [weak self] progress in
+                self?.handleInboxProgress(progress)
             },
             recordProviderError: { [weak self] error, source in
                 self?.recordAutomationRuntimeError(error, source: source, category: "provider")
@@ -303,8 +386,22 @@ final class AppEnvironment {
     }
 
     private func performBootstrap() async {
+#if DEBUG
+        if await runIngressPerformancePreparationIfNeeded() {
+            isDeletionRecoveryReady = true
+            return
+        }
+#endif
         beginProviderIngressBootstrapRecovery()
         await loadPersistedState()
+#if DEBUG
+        if ingressPerformanceMeasurement?.mode == .measure {
+            ingressPerformanceMeasurement?.baselineMessageCount = totalMessageCount
+            logIngressPerformancePhase("canonical_baseline", details: [
+                "message_count": "\(totalMessageCount)",
+            ])
+        }
+#endif
         startMessageStoreObservationIfNeeded()
         await pendingLocalDeletionController.restorePendingState()
         isDeletionRecoveryReady = true
@@ -318,10 +415,17 @@ final class AppEnvironment {
             defer {
                 finishProviderIngressBootstrapRecovery()
             }
-            _ = await mergeNotificationIngressInbox(
+            let applied = await mergeNotificationIngressInbox(
                 reason: "bootstrap",
                 allowFallbackPull: false
             )
+#if DEBUG
+            if self.ingressPerformanceMeasurement?.mode == .measure {
+                self.logIngressPerformancePhase("canonical_drain_complete", details: [
+                    "applied": "\(applied)",
+                ])
+            }
+#endif
             await dataStore.scheduleDerivedWorkDrain()
             await preparePushInfrastructure()
             let syncOutcome = await syncProviderIngressOutcome(reason: "bootstrap_ready")
@@ -589,15 +693,333 @@ final class AppEnvironment {
     }
 
     private func scheduleCountsRefresh() {
-        pendingCountsRefreshTask?.cancel()
+#if DEBUG
+        if ingressPerformanceMeasurement?.mode == .measure,
+           ingressPerformanceMeasurement?.didLogFirstBatchCommit == false
+        {
+            ingressPerformanceMeasurement?.didLogFirstBatchCommit = true
+            logIngressPerformancePhase("first_batch_canonical_commit")
+        }
+#endif
+        isCountsRefreshRequested = true
+        guard pendingCountsRefreshTask == nil else { return }
         pendingCountsRefreshTask = Task { @MainActor [weak self] in
-            await self?.refreshMessageCountsAndNotify()
+            guard let self else { return }
+            repeat {
+                self.isCountsRefreshRequested = false
+                await self.refreshMessageCountsAndNotify()
+            } while self.isCountsRefreshRequested && !Task.isCancelled
+            self.pendingCountsRefreshTask = nil
+        }
+    }
+
+    private func handleInboxProgress(_ progress: ProviderInboxProgress) {
+        pendingInboxProgress = progress
+        switch progress {
+        case let .processing(completed, total):
+            ingressNoticeDismissTask?.cancel()
+            ingressNoticeDismissTask = nil
+            if messageIngressNotice != nil {
+                messageIngressNotice = .processing(completed: completed, total: total)
+            } else if ingressNoticeRevealTask == nil {
+                scheduleIngressNoticeReveal(total: total)
+            }
+            scheduleIngressNoticeWatchdog()
+
+        case let .waitingRetry(remaining):
+            ingressNoticeRevealTask?.cancel()
+            ingressNoticeRevealTask = nil
+            ingressNoticeWatchdogTask?.cancel()
+            ingressNoticeWatchdogTask = nil
+            ingressNoticeDismissTask?.cancel()
+            ingressNoticeDismissTask = nil
+            let wasWaiting: Bool
+            if case .waitingRetry = messageIngressNotice {
+                wasWaiting = true
+            } else {
+                wasWaiting = false
+            }
+            messageIngressNotice = .waitingRetry(remaining: remaining)
+            if !wasWaiting {
+                announceAccessibility(messageIngressNoticeText())
+            }
+            ingressNoticeDismissTask = Task { @MainActor [weak self] in
+                do {
+                    try await Task.sleep(for: .seconds(4))
+                } catch {
+                    return
+                }
+                guard self?.messageIngressNotice == .waitingRetry(remaining: remaining) else {
+                    return
+                }
+                self?.messageIngressNotice = nil
+                self?.ingressNoticeDismissTask = nil
+            }
+
+        case .completed:
+            ingressNoticeRevealTask?.cancel()
+            ingressNoticeRevealTask = nil
+            ingressNoticeWatchdogTask?.cancel()
+            ingressNoticeWatchdogTask = nil
+            pendingInboxProgress = nil
+            guard messageIngressNotice != nil else { return }
+            messageIngressNotice = .completed
+            announceAccessibility(messageIngressNoticeText())
+            ingressNoticeDismissTask?.cancel()
+            ingressNoticeDismissTask = Task { @MainActor [weak self] in
+                do {
+                    try await Task.sleep(for: .milliseconds(800))
+                } catch {
+                    return
+                }
+                guard self?.messageIngressNotice == .completed else { return }
+                self?.messageIngressNotice = nil
+                self?.ingressNoticeDismissTask = nil
+            }
+        }
+    }
+
+    private func scheduleIngressNoticeReveal(total: Int) {
+        let delay: Duration = total >= 500 ? .milliseconds(350) : .milliseconds(900)
+        ingressNoticeRevealTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: delay)
+            } catch {
+                return
+            }
+            guard let self,
+                  case let .processing(completed, latestTotal) = pendingInboxProgress,
+                  messageIngressNotice == nil
+            else { return }
+            messageIngressNotice = .processing(completed: completed, total: latestTotal)
+            ingressNoticeRevealTask = nil
+            announceAccessibility(messageIngressNoticeText())
+        }
+    }
+
+    private func scheduleIngressNoticeWatchdog() {
+        ingressNoticeWatchdogTask?.cancel()
+        ingressNoticeWatchdogTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(10))
+            } catch {
+                return
+            }
+            guard let self,
+                  case let .processing(completed, total) = pendingInboxProgress
+            else { return }
+            messageIngressNotice = .processingSlow(completed: completed, total: total)
+            ingressNoticeWatchdogTask = nil
+            announceAccessibility(messageIngressNoticeText())
+        }
+    }
+
+    func messageIngressNoticeText(
+        for notice: MessageIngressNotice? = nil
+    ) -> String {
+        let resolvedNotice = notice ?? messageIngressNotice
+        switch resolvedNotice {
+        case .processing:
+            return localizationManager.localized("message_ingress_processing_progress")
+        case .processingSlow:
+            return localizationManager.localized("message_ingress_processing_slow")
+        case .waitingRetry:
+            return localizationManager.localized("message_ingress_waiting_retry")
+        case .completed:
+            return localizationManager.localized("message_ingress_completed")
+        case nil:
+            return ""
         }
     }
 
     private func scheduleMessageListRefresh() {
         messageStoreRevision = UUID()
     }
+
+#if DEBUG
+    func recordIngressPerformanceUIRefreshCompleted(
+        totalMessageCount displayedTotal: Int,
+        visibleMessageCount: Int
+    ) {
+        guard ingressPerformanceMeasurement?.mode == .measure,
+              let baseline = ingressPerformanceMeasurement?.baselineMessageCount,
+              let pendingCount = ingressPerformanceMeasurement?.pendingCount
+        else { return }
+        if ingressPerformanceMeasurement?.didLogCachedUI == false {
+            ingressPerformanceMeasurement?.didLogCachedUI = true
+            logIngressPerformancePhase("first_ui_refresh", details: [
+                "displayed_total": "\(displayedTotal)",
+                "visible": "\(visibleMessageCount)",
+            ])
+        }
+        let firstBatchTarget = baseline + min(64, pendingCount)
+        if displayedTotal >= firstBatchTarget,
+           ingressPerformanceMeasurement?.didLogFirstBatchUI == false
+        {
+            ingressPerformanceMeasurement?.didLogFirstBatchUI = true
+            logIngressPerformancePhase("first_batch_ui_visible", details: [
+                "displayed_total": "\(displayedTotal)",
+                "visible": "\(visibleMessageCount)",
+            ])
+        }
+        let allPendingTarget = baseline + pendingCount
+        if displayedTotal >= allPendingTarget,
+           ingressPerformanceMeasurement?.didLogAllPendingUI == false
+        {
+            ingressPerformanceMeasurement?.didLogAllPendingUI = true
+            logIngressPerformancePhase("all_pending_ui_visible", details: [
+                "displayed_total": "\(displayedTotal)",
+                "visible": "\(visibleMessageCount)",
+            ])
+        }
+    }
+
+    private func runIngressPerformancePreparationIfNeeded() async -> Bool {
+        guard let measurement = ingressPerformanceMeasurement else { return false }
+        switch measurement.mode {
+        case .measure:
+            logIngressPerformancePhase("process_bootstrap_start")
+            return false
+        case .baseline:
+            return await seedIngressPerformanceBaseline(measurement)
+        case .seed:
+            return await seedIngressPerformanceFixture(measurement)
+        case .cleanup:
+            do {
+                let removed = try await dataStore.deleteMessages(channel: measurement.fixtureChannel)
+                let journalCleanup = await NotificationIngressInbox.shared.purgePerformanceFixtures()
+                logIngressPerformancePhase("cleanup_ready", details: [
+                    "journal_rows": "\(journalCleanup.rows)",
+                    "removed": "\(removed)",
+                    "shadows": "\(journalCleanup.shadows)",
+                ])
+            } catch {
+                logIngressPerformancePhase("cleanup_failed")
+            }
+            return true
+        }
+    }
+
+    private func seedIngressPerformanceBaseline(
+        _ measurement: PushGoIngressPerformanceMeasurement
+    ) async -> Bool {
+        do {
+            let before = try await dataStore.messageCounts().total
+            let requiredCount = max(0, measurement.pendingCount - before)
+            let inputs = (0..<requiredCount).map { index in
+                let identity = "ingress-baseline-\(measurement.runID)-\(index)"
+                return NotificationPersistenceCoordinator.RemotePayload(
+                    payload: [
+                        "message_id": identity,
+                        "delivery_id": identity,
+                        "title": "Baseline message \(index)",
+                        "body": "Baseline",
+                        "channel": measurement.fixtureChannel,
+                        "channel_id": measurement.fixtureChannel,
+                    ],
+                    requestIdentifier: identity
+                )
+            }
+            let outcomes = await NotificationPersistenceCoordinator.persistRemotePayloadsIfNeeded(
+                inputs,
+                dataStore: dataStore
+            )
+            let accepted = outcomes.reduce(into: 0) { result, outcome in
+                switch outcome {
+                case .persistedMain, .persistedPending, .duplicate:
+                    result += 1
+                case .rejected, .failed:
+                    break
+                }
+            }
+            let after = try await dataStore.messageCounts().total
+            logIngressPerformancePhase("baseline_ready", details: [
+                "accepted": "\(accepted)",
+                "after": "\(after)",
+                "before": "\(before)",
+            ])
+        } catch {
+            logIngressPerformancePhase("baseline_failed")
+        }
+        return true
+    }
+
+    private func seedIngressPerformanceFixture(
+        _ measurement: PushGoIngressPerformanceMeasurement
+    ) async -> Bool {
+        let inbox = NotificationIngressInbox.shared
+        let preexistingPendingCount = await inbox.pendingEntries(limit: 10_000).count
+        guard preexistingPendingCount == 0 else {
+            logIngressPerformancePhase("seed_aborted", details: [
+                "preexisting_pending": "\(preexistingPendingCount)",
+            ])
+            return true
+        }
+        var acceptedCount = 0
+        let sentAtBase = Int64(Date().timeIntervalSince1970 * 1_000)
+        let fixtureBody: String
+        switch measurement.payloadKind {
+        case .short:
+            fixtureBody = "短消息实机性能测试"
+        case .long:
+            fixtureBody = String(
+                repeating: "长消息性能测试正文用于验证批量入库首屏加载数据库观察刷新与最终一致性。",
+                count: 40
+            )
+        }
+        for index in 0..<measurement.pendingCount {
+            let identity = "ingress-perf-\(measurement.runID)-\(index)"
+            let accepted = await inbox.enqueue(
+                codablePayload: [
+                    "message_id": AnyCodable(identity),
+                    "delivery_id": AnyCodable(identity),
+                    "title": AnyCodable("Ingress performance \(index)"),
+                    "body": AnyCodable(fixtureBody),
+                    "channel": AnyCodable(measurement.fixtureChannel),
+                    "channel_id": AnyCodable(measurement.fixtureChannel),
+                    "sent_at": AnyCodable("\(sentAtBase + Int64(index))"),
+                ],
+                requestIdentifier: identity,
+                source: "debug.ingress_performance",
+                postChangeNotification: false
+            )
+            if accepted { acceptedCount += 1 }
+        }
+        let duePendingCount = await inbox.pendingEntries(limit: 10_000).count
+        logIngressPerformancePhase("seed_ready", details: [
+            "accepted": "\(acceptedCount)",
+            "body_characters": "\(fixtureBody.count)",
+            "due_pending": "\(duePendingCount)",
+        ])
+        return true
+    }
+
+    private func logIngressPerformancePhase(
+        _ phase: String,
+        details: [String: String] = [:]
+    ) {
+        guard let measurement = ingressPerformanceMeasurement else { return }
+        let elapsedMilliseconds = max(
+            0,
+            Int(
+                (ProcessInfo.processInfo.systemUptime - measurement.processStartUptime) * 1_000
+            )
+        )
+        let detailText = details
+            .sorted { $0.key < $1.key }
+            .map { key, value in
+                "\(key)=\(value.replacingOccurrences(of: " ", with: "_"))"
+            }
+            .joined(separator: " ")
+        let suffix = detailText.isEmpty ? "" : " \(detailText)"
+        print(
+            "[PushGoIngressPerf] run=\(measurement.runID) count=\(measurement.pendingCount) "
+                + "payload=\(measurement.payloadKind.rawValue) "
+                + "phase=\(phase) elapsed_ms=\(elapsedMilliseconds)\(suffix)"
+        )
+        fflush(stdout)
+    }
+#endif
 
     func publishStoreRefreshForAutomation() {
         messageStoreRevision = UUID()
@@ -1394,7 +1816,15 @@ final class AppEnvironment {
         allowFallbackPull: Bool,
         limit: Int = 256
     ) async -> Int {
-        await notificationIngressController.mergeNotificationIngressInbox(
+#if DEBUG
+        if ingressPerformanceMeasurement?.mode == .baseline
+            || ingressPerformanceMeasurement?.mode == .seed
+            || ingressPerformanceMeasurement?.mode == .cleanup
+        {
+            return 0
+        }
+#endif
+        return await notificationIngressController.mergeNotificationIngressInbox(
             reason: reason,
             allowFallbackPull: allowFallbackPull,
             limit: limit
@@ -1406,7 +1836,18 @@ final class AppEnvironment {
         allowFallbackPull: Bool,
         limit: Int = 256
     ) async -> NotificationIngressController.MergeOutcome {
-        await notificationIngressController.mergeNotificationIngressInboxOutcome(
+#if DEBUG
+        if ingressPerformanceMeasurement?.mode == .baseline
+            || ingressPerformanceMeasurement?.mode == .seed
+            || ingressPerformanceMeasurement?.mode == .cleanup
+        {
+            return NotificationIngressController.MergeOutcome(
+                appliedCount: 0,
+                stageOutcome: .succeeded
+            )
+        }
+#endif
+        return await notificationIngressController.mergeNotificationIngressInboxOutcome(
             reason: reason,
             allowFallbackPull: allowFallbackPull,
             limit: limit
