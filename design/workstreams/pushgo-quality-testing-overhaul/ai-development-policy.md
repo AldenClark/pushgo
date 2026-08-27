@@ -53,6 +53,18 @@ Identifier 只负责稳定定位；readiness 只证明准备完成；Automation 
 
 业务断言失败立即失败；只允许对已识别的 Runner/Simulator 启动故障进行一次隔离重试。重试前后的状态都必须留证。
 
+## 可执行变更影响下限
+
+两仓库分别维护 `config/quality-impact.json`、`scripts/quality_impact.py` 和 `scripts/quality_changed.sh`。本地 AI/开发者完成编辑后直接运行：
+
+```bash
+./scripts/quality_changed.sh
+```
+
+也可以用 `--changed-file` 做修改前计划，或用 `--base/--head` 对提交范围计划。输出必须包含：受影响用户能力、确定性最低证据、推荐 Lane、已知证据缺口、路径命中和未映射产品路径。Apple 直接执行推荐 Lane；Android 本地执行完整推荐 Lane，CI 则把主机 `pr` 与 `pr-ui/device/nightly/release` 设备阶段拆开，避免重复构建。
+
+该机制只负责**不可低于的下限**，不负责替 AI 作完整判断。任何产品路径未映射都 `BLOCKED`；共享 Store/Room、Runtime、Ingress、系统消费者和构建边界必须自动升级。即使命中为 `READY`，AI 仍必须沿 caller、状态/数据 owner、错误、配置、生成物和平台消费者追踪，并在现有 Oracle 无法击穿本次风险时新增或强化测试。文档或无关支持文件可以明确产生 `NOT RUN`，不得伪造产品绿色。
+
 ## AI 交付报告模板
 
 交付时必须回答：改了哪个用户目的；新增/强化了什么可信 Oracle；跑了哪些 lane 和新鲜结果；哪些系统能力仍是 `BLOCKED/NOT RUN`；是否更新能力矩阵；是否存在因价值较低而明确延期的场景。禁止用“测试文件存在”“编译通过”替代功能结论。

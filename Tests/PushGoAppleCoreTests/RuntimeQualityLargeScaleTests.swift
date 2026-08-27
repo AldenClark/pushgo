@@ -7,6 +7,8 @@ import Darwin
 import Testing
 @testable import PushGoAppleCore
 
+private let runtimeQualityOptInEnabled = RuntimeQualityConfiguration.fromEnvironment().enabled
+
 @Suite(.serialized)
 struct RuntimeQualityLargeScaleTests {
     @Test
@@ -286,14 +288,9 @@ struct RuntimeQualityLargeScaleTests {
         )
     }
 
-    @Test
+    @Test(.enabled(if: runtimeQualityOptInEnabled))
     func legacyUpgradeHundredThousandOpensRebuildsAndServesCanonicalQueries() async throws {
         let configuration = RuntimeQualityConfiguration.fromEnvironment()
-        guard configuration.enabled else {
-            print("[runtime-quality] skipped; run with PUSHGO_RUNTIME_QUALITY=1 swift test --filter legacyUpgradeHundredThousandOpensRebuildsAndServesCanonicalQueries")
-            return
-        }
-
         try await runLegacyUpgradeScenario(
             scale: max(100_000, configuration.coreScale),
             metricPrefix: "upgrade100k",
@@ -302,14 +299,9 @@ struct RuntimeQualityLargeScaleTests {
         )
     }
 
-    @Test
+    @Test(.enabled(if: runtimeQualityOptInEnabled))
     func largeScaleCoreStorePathsHaveStableCorrectnessAndPerformance() async throws {
         let configuration = RuntimeQualityConfiguration.fromEnvironment()
-        guard configuration.enabled else {
-            print("[runtime-quality] skipped; run with PUSHGO_RUNTIME_QUALITY=1 swift test --filter RuntimeQualityLargeScaleTests")
-            return
-        }
-
         try await withIsolatedLocalDataStore { store, appGroupIdentifier in
             let generator = RuntimeQualityFixtureGenerator(seed: configuration.seed, platform: .iOS)
             let dataset = generator.makeDataset(count: configuration.coreScale)
@@ -502,14 +494,9 @@ struct RuntimeQualityLargeScaleTests {
         }
     }
 
-    @Test
+    @Test(.enabled(if: runtimeQualityOptInEnabled))
     func watchLightStoreHandlesTenThousandItemSnapshot() async throws {
         let configuration = RuntimeQualityConfiguration.fromEnvironment()
-        guard configuration.enabled else {
-            print("[runtime-quality] skipped; run with PUSHGO_RUNTIME_QUALITY=1 swift test --filter RuntimeQualityLargeScaleTests")
-            return
-        }
-
         try await withIsolatedLocalDataStore { store, _ in
             let generator = RuntimeQualityFixtureGenerator(seed: configuration.seed, platform: .watchOS)
             let snapshot = generator.makeWatchSnapshot(
@@ -560,14 +547,9 @@ struct RuntimeQualityLargeScaleTests {
         }
     }
 
-    @Test
+    @Test(.enabled(if: runtimeQualityOptInEnabled))
     func concurrentOutOfOrderBatchesConvergeWithoutDuplicates() async throws {
         let configuration = RuntimeQualityConfiguration.fromEnvironment()
-        guard configuration.enabled else {
-            print("[runtime-quality] skipped; run with PUSHGO_RUNTIME_QUALITY=1 swift test --filter RuntimeQualityLargeScaleTests")
-            return
-        }
-
         try await withIsolatedLocalDataStore { store, _ in
             let batchCount = 8
             let batchSize = max(1, configuration.concurrentScale / batchCount)

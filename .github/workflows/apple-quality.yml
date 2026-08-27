@@ -35,14 +35,52 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Plan changed capability evidence
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        env:
+          QUALITY_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          python3 -m unittest discover -s scripts/tests -p 'test_quality_impact.py'
+          python3 scripts/quality_impact.py \
+            --audit-product-tree \
+            --output build/quality-results/apple-impact-tree-audit.json \
+            --check
+          python3 scripts/quality_impact.py \
+            --base "$QUALITY_BASE_SHA" \
+            --head "$GITHUB_SHA" \
+            --output build/quality-results/apple-impact-plan.json \
+            --check
+          impact_lane="$(python3 -c 'import json; print(json.load(open("build/quality-results/apple-impact-plan.json"))["recommended_lane"])')"
+          if [[ "$impact_lane" == "not-run" ]]; then
+            echo "QUALITY_SKIP_PRODUCT=1" >> "$GITHUB_ENV"
+          else
+            echo "QUALITY_LANE=$impact_lane" >> "$GITHUB_ENV"
+          fi
 
       - name: Select Xcode
+        if: env.QUALITY_SKIP_PRODUCT != '1'
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: "26.4"
 
       - name: Run value-based Apple quality lane
+        if: env.QUALITY_SKIP_PRODUCT != '1'
         run: ./scripts/quality_test.sh "$QUALITY_LANE"
+
+      - name: Record intentional no-product run
+        if: env.QUALITY_SKIP_PRODUCT == '1'
+        run: |
+          python3 scripts/quality_result.py \
+            --output build/quality-results/apple-changed-summary.json \
+            --platform apple \
+            --lane changed \
+            --product-status NOT_RUN \
+            --test-system-status PASSED \
+            --not-run "No mapped Apple product capability changed; product lane intentionally not run." \
+            --reason "documentation or unrelated support-only change"
 
       - name: Upload diagnostic evidence
         if: always()

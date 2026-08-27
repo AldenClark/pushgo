@@ -11,7 +11,10 @@ rm -f "$runner_status_file"
 
 claims=()
 selected_claims=()
-not_run=("physical APNs/notification/permission/system-surface evidence")
+not_run=(
+  "physical APNs/notification/permission/system-surface evidence"
+  "opt-in 100k Store/watch/concurrency performance evidence"
+)
 
 write_result() {
   local product_status="$1"

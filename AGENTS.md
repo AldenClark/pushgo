@@ -4,6 +4,7 @@ Repository-wide instructions for humans and coding agents:
 
 - Treat a test as product evidence only when it exercises a reachable entry and asserts a user-visible, persisted, network, or platform result. File existence, version strings, accessibility identifiers, Automation State, and successful launch are supporting diagnostics, never sufficient oracles.
 - Before changing behavior, identify the affected row in `docs/quality/capability-coverage.md`. Add or strengthen the smallest test that would fail if the intended user outcome were broken.
+- After edits, run `scripts/quality_changed.sh` (or pass explicit `--base/--head`) to enforce the deterministic minimum lane. Treat its impact plan as a lower bound: still trace callers, state/data owners, errors, generated artifacts, and platform consumers. Never bypass an unmapped product path; map the real capability first.
 - During implementation run focused tests. Before handoff run `scripts/quality_test.sh pr` for product changes. Documentation-only or CI-only changes may run syntax/static checks instead, with the skipped product lane reported as `NOT RUN`.
 - UI changes must cover the meaningful loading/content/empty/error/retry states affected by the change. Data changes must verify accurate values and relaunch persistence where persistence is part of the contract.
 - Performance-sensitive changes require correctness evidence plus a measured milestone in nightly/release scope. Never use a sleep duration, file marker, or process lifetime as a performance proxy.

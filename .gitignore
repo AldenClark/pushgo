@@ -21,3 +21,5 @@ docs/
 *.dSYM
 *.xcresult
 *.profraw
+__pycache__/
+*.py[cod]

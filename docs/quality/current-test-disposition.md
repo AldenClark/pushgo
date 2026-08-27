@@ -77,3 +77,9 @@
 - `testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen`
 
 前六条进入 PR 核心集，真实导航及 Event/Thing/配置失败等代表性旅程进入 Nightly/Release。Release 已改为显式高价值清单，不再默认执行所有遗留 UI 用例；旧 Runtime command/state 用例不得以绿色覆盖新用例失败，已有更强证据的弱重复从常规 lane 移除。
+
+## 变更影响门禁
+
+`config/quality-impact.json` 把当前产品源码分配到 Messages、Entity、Channel/Settings、Ingress、系统表面、Watch、App shell、共享 UI/媒体和 Release 等具名能力。`scripts/quality_changed.sh` 先执行选择器负控，再运行不低于推荐值的真实 Lane；新产品路径未映射时直接 `BLOCKED`。这只是确定性下限，不能替代对 caller、Store、错误分支和平台消费者的语义追踪。
+
+四个 100k/Watch/concurrency 重型用例已从函数内提前 return 改为框架条件禁用；日常输出必须显示 skipped，并在结果 `not_run` 中列出。只有设置 `PUSHGO_RUNTIME_QUALITY=1` 的受控性能 Lane 才能声称这些证据执行过。

@@ -1,0 +1,130 @@
+{
+  "schema_version": 1,
+  "platform": "apple",
+  "lane_order": ["not-run", "pr", "nightly", "release"],
+  "product_paths": [
+    "Shared/**",
+    "Apps/**",
+    "Extensions/**",
+    "Resources/**",
+    "Package.swift",
+    "Package.resolved",
+    "pushgo.xcodeproj/**",
+    "config/*.xcconfig",
+    "config/*.plist",
+    "config/concurrency_allowlist.txt"
+  ],
+  "manual_impact_questions": [
+    "Which user-visible outcome and protected behavior can change?",
+    "Which callers, state/data owners, error paths, migrations, and relaunch outcomes are affected?",
+    "Which notification, Widget, Intent, Watch, window, background, or other platform consumers share this contract?",
+    "Does an existing Oracle fail on a credible wrong value/state, or must the change add or strengthen one?"
+  ],
+  "rules": [
+    {
+      "id": "quality-system",
+      "paths": ["AGENTS.md", "Tests/**", "scripts/tests/**", "scripts/quality_*.py", "scripts/quality_*.sh", "scripts/run_ios_ui_tests.sh", ".github/workflows/apple-quality.yml", "config/quality-impact.json"],
+      "capabilities": ["quality-system-trustworthiness"],
+      "minimum_evidence": ["quality selector unit/negative controls", "Apple PR representative lane"],
+      "lane": "pr",
+      "known_evidence_gaps": ["A changed test outside curated lanes may need an explicit focused invocation."],
+      "escalation_reasons": ["Test infrastructure changes require one representative product journey; syntax alone is insufficient."]
+    },
+    {
+      "id": "quality-runtime-release-isolation",
+      "paths": ["Shared/UI/AutomationRuntime.swift", "Apps/*/App/AppEnvironment.swift", "Apps/*/App/AppContext.swift"],
+      "capabilities": ["app-owned-quality-runtime", "release-runtime-isolation", "app-launch"],
+      "minimum_evidence": ["QualityRuntime profile tests", "one App-owned iOS UI journey", "Release isolation build/negative control"],
+      "lane": "release",
+      "escalation_reasons": ["Composition-root or Runtime changes cross storage and Release boundaries."]
+    },
+    {
+      "id": "canonical-store-and-migration",
+      "paths": ["Shared/Repositories/LocalDataStore.swift", "Shared/Repositories/SwiftDataModels.swift", "Shared/Application/LocalStoreRecovery*.swift"],
+      "capabilities": ["app-launch", "messages", "events", "things", "channels", "ingress-recovery"],
+      "minimum_evidence": ["Swift Store/recovery suite", "old-store reopen/migration evidence", "representative iOS UI content/relaunch journeys"],
+      "lane": "nightly",
+      "known_evidence_gaps": ["macOS migration UI and 50-run startup reliability are not yet proven."],
+      "escalation_reasons": ["The canonical Store is a shared state/data owner with cross-capability consumers."]
+    },
+    {
+      "id": "messages-search-delete",
+      "paths": ["Shared/Models/PushMessage*.swift", "Shared/Models/MessageFilter.swift", "Shared/Repositories/MessageSearchIndex.swift", "Shared/Services/MessageStateCoordinator.swift", "Shared/Application/PendingLocalDeletionController.swift", "Shared/UI/Message*.swift", "Shared/UI/PendingLocalDeletionBar.swift", "Shared/Utilities/SearchQuerySemantics.swift", "Apps/*/UI/Components/MessageRowView.swift", "Apps/*/UI/Screens/Message*.swift"],
+      "capabilities": ["messages", "message-detail", "search-filter", "delete-undo"],
+      "minimum_evidence": ["Swift message/search/deletion tests", "iOS accurate content/search/delete/relaunch UI journeys"],
+      "lane": "pr",
+      "known_evidence_gaps": ["pagination/refresh/mark-read/media and macOS UI remain incomplete."]
+    },
+    {
+      "id": "events-things",
+      "paths": ["Shared/Models/EntityProjectionDetail.swift", "Shared/Utilities/ProjectionSemantics.swift", "Shared/UI/Entity*.swift", "Apps/*/UI/Screens/Event*.swift", "Apps/*/UI/Screens/Thing*.swift", "Apps/*/UI/Screens/Entity*.swift"],
+      "capabilities": ["events", "things"],
+      "minimum_evidence": ["projection semantics tests", "iOS Event and Thing accurate list/detail journeys"],
+      "lane": "nightly",
+      "known_evidence_gaps": ["Event close/filter and Thing relation tabs/deep links are not yet fully protected."],
+      "escalation_reasons": ["Entity projections feed list, detail, Thing relations, notifications, and system surfaces."]
+    },
+    {
+      "id": "channels-settings",
+      "paths": ["Shared/Application/Channel*.swift", "Shared/Application/DataPageVisibilityController.swift", "Shared/Models/ServerConfig.swift", "Shared/Models/SystemIntegrationSettings.swift", "Shared/Repositories/ChannelSubscriptionStore.swift", "Shared/Services/ChannelSubscription*.swift", "Shared/UI/SettingsViewModel.swift", "Shared/Utilities/Channel*.swift", "Shared/Utilities/KeychainStore.swift", "Shared/Utilities/ManualNotificationKeyValidator.swift", "Apps/*/UI/Screens/Channel*.swift", "Apps/*/UI/Screens/Settings*.swift"],
+      "capabilities": ["channels", "gateway-settings", "decryption-settings", "page-visibility"],
+      "minimum_evidence": ["channel/settings validation and service tests", "representative Settings UI journey", "relaunch persistence where state changes"],
+      "lane": "nightly",
+      "known_evidence_gaps": ["Channel create/rename/two unsubscribe outcomes and complete Settings persistence UI are missing."],
+      "escalation_reasons": ["Credentials and remote/local reconciliation require failure and recovery evidence."]
+    },
+    {
+      "id": "ingress-notification-background",
+      "paths": ["Shared/Application/Notification*.swift", "Shared/Application/ProviderRouteController.swift", "Shared/Services/BadgeManager.swift", "Shared/Services/DurableIngressJournal.swift", "Shared/Services/Notification*.swift", "Shared/Services/Provider*.swift", "Shared/Services/PushRegistrationService.swift", "Shared/Utilities/AnyCodable.swift", "Shared/Utilities/Notification*.swift", "Shared/Utilities/PushGoNotificationNames.swift", "Shared/Utilities/PushRegistrationSemantics.swift", "Shared/Utilities/UserInfoSanitizer.swift", "Extensions/PushGoNSE-*/**"],
+      "capabilities": ["ingress-ack", "notification-route-actions", "background-recovery"],
+      "minimum_evidence": ["ingress/ACK/idempotency/recovery integration suite", "notification routing contract", "representative App UI terminal state"],
+      "lane": "nightly",
+      "known_evidence_gaps": ["real APNs, notification center actions, permissions, and physical background execution remain NOT RUN."],
+      "escalation_reasons": ["Ingress changes cross extension, durable Store, notification, ACK, and App consumers."]
+    },
+    {
+      "id": "system-surfaces",
+      "paths": ["Shared/SystemIntegration/**", "Extensions/PushGoWidgets/**"],
+      "capabilities": ["widgets", "controls-intents-shortcuts", "spotlight-user-activity", "live-activity-focus"],
+      "minimum_evidence": ["system surface privacy/router/snapshot contracts", "Release real-system checklist"],
+      "lane": "nightly",
+      "known_evidence_gaps": ["physical Widget/Intent/Shortcut/Spotlight/Focus/Live Activity entry evidence remains NOT RUN."],
+      "escalation_reasons": ["System surfaces are independently failing consumers and cannot be inferred from the main App UI."]
+    },
+    {
+      "id": "watch",
+      "paths": ["Apps/PushGo-watchOS/**", "Shared/Models/WatchLightModels.swift", "Shared/Utilities/WatchLightQuantizer.swift", "Apps/PushGo-iOS/App/Watch*.swift", "Extensions/PushGoNSE-watchOS/**", "Extensions/PushGoWidgets/*Watch*.swift"],
+      "capabilities": ["watch-messages-events-things", "watch-receiver-complication"],
+      "minimum_evidence": ["Watch model/connectivity/quantizer tests", "watchOS simulator UI lane"],
+      "lane": "nightly",
+      "known_evidence_gaps": ["watchOS P0 UI and physical receiver/complication evidence are incomplete."],
+      "escalation_reasons": ["Watch is a separate Store/UI/system consumer and is promoted when shared contracts change."]
+    },
+    {
+      "id": "app-shell-window-navigation",
+      "paths": ["Shared/Application/AppNavigationState.swift", "Shared/Application/MainTab.swift", "Shared/Application/FeedbackPresentationPolicy.swift", "Shared/Models/AppError.swift", "Shared/UI/RootView.swift", "Shared/Utilities/AppConstants.swift", "Apps/PushGo-iOS/ContentView.swift", "Apps/PushGo-iOS/pushgoApp.swift", "Apps/PushGo-iOS/App/**", "Apps/PushGo-iOS/UI/Screens/MainTabContainerView.swift", "Apps/PushGo-macOS/ContentView.swift", "Apps/PushGo-macOS/pushgomacApp.swift", "Apps/PushGo-macOS/App/**", "Apps/PushGo-macOS/MainWindowController.swift", "Apps/PushGo-macOS/MacMenuBarContentView.swift", "Apps/PushGo-macOS/UI/Screens/MainTabContainerView.swift", "Apps/PushGo-macOS/UI/ViewModels/**"],
+      "capabilities": ["app-launch", "primary-navigation", "mac-window-status-item"],
+      "minimum_evidence": ["navigation/window state tests", "real control navigation UI journey", "macOS open/close/reopen UI evidence when available"],
+      "lane": "nightly",
+      "known_evidence_gaps": ["macOS UI execution remains BLOCKED by automation authorization; status-item reachability is unresolved."],
+      "escalation_reasons": ["Composition and window changes affect reachability of every downstream capability."]
+    },
+    {
+      "id": "shared-ui-media-accessibility-localization",
+      "paths": ["Shared/UI/AppFormControls.swift", "Shared/UI/KeyboardDismiss.swift", "Shared/UI/LiquidGlassEffect.swift", "Shared/UI/NotificationSoundEditorView.swift", "Shared/UI/PlatformColor.swift", "Shared/UI/PushGoMarkdownView.swift", "Shared/UI/RemoteImageView.swift", "Shared/UI/ToastView.swift", "Shared/Models/NotificationSoundSettings.swift", "Shared/Services/NotificationSound*.swift", "Shared/Utilities/Localization*.swift", "Shared/Utilities/PushGoMarkdownCore.swift", "Shared/Utilities/SharedImageCache.swift", "Shared/Utilities/NotificationSound*.swift", "Resources/**"],
+      "capabilities": ["accessibility-localization", "message-media", "notification-sound"],
+      "minimum_evidence": ["format/parser/component correctness", "representative UI task", "nightly accessibility/localization review"],
+      "lane": "nightly",
+      "known_evidence_gaps": ["physical VoiceOver, large text, media lifecycle, and notification sound system evidence are incomplete."]
+    },
+    {
+      "id": "release-build-platform-contract",
+      "paths": ["Package.swift", "Package.resolved", "pushgo.xcodeproj/**", "config/*.xcconfig", "config/*.plist", "config/concurrency_allowlist.txt", "Apps/*/*.entitlements", "Apps/*/Info.plist", "Apps/*/*Info.plist", "Extensions/*/*.entitlements", "Extensions/*/Info.plist", "Extensions/*/*.xcprivacy", "Resources/PrivacyInfo.xcprivacy", ".github/workflows/apple-release.yml", "scripts/*release*.py", "scripts/*release*.sh", "scripts/verify_*.py", "scripts/verify_*.sh"],
+      "capabilities": ["build-package-signing-privacy-release"],
+      "minimum_evidence": ["locked dependency/privacy/release contract checks", "Release build", "Release Quality Runtime isolation"],
+      "lane": "release",
+      "known_evidence_gaps": ["Signing, notarization, install/upgrade, and distribution require the controlled Release environment."],
+      "escalation_reasons": ["Build and entitlement changes cross packaging, privacy, signing, and Release boundaries."]
+    }
+  ]
+}
