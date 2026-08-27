@@ -29,6 +29,7 @@
 | 主导航 | 连续点击真实 Tab 与 Settings 按钮 | 用户控件 → route → 页面根视图 | 四个主页面及 Settings 均可达 | Runtime command 直达不计入 |
 | Event/Thing | 点 Tab、点准确列表行 | fixture → message ingestion → projection → list/detail | 准确对象及字段详情 | 把 fixture 直接塞实体表曾导致列表对象与真实详情路径分离，测试确实失败 |
 | Event 关闭 | 点 Event 行、在详情确认关闭、启用仅进行中筛选、重启 | close intent → Gateway 边界替身 → 正式通知解析 → canonical message/event head → list/detail | closed 可见；进行中集合排除；重启后仍 closed 且不可重复关闭 | 只 dismiss、只保存消息但不更新 projection destination、状态别名不一致或隐藏行仍暴露给 a11y 都会失败 |
+| Thing 关联对象 | 从准确 Thing 切 Events/Messages/Updates，逐个打开详情、返回并重启 | 多条乱序 fixture → canonical Thing head/relations → 三页签 → 关联详情 | 当前 head 不回退；三个集合及详情数据准确；返回保留原 Thing/页签；重启后仍可打开同一 Event | 旧尾快照覆盖新 head、只断言页签壳、关联串页、返回关闭父页或重启丢关系均失败 |
 | Settings 页面可见性 | Channels→Settings，关闭/恢复 Event，再分别重启 | 真实 Toggle/FilterChip → visibility controller/repository → persisted setting → root navigation | 关闭后入口少一个且重启仍隐藏；恢复后可打开准确 Event 页且再次重启仍可达 | 直接写 preference、只看开关 selected、只数标识或 Runtime state 均不能通过 |
 | Release 隔离 | 向 Release 注入合法会话 | launch env → runtime resolver | Quality Runtime 不激活 | Debug-only 条件移除会使负控失败 |
 
@@ -77,6 +78,10 @@
 41. **父语义吞掉真实控件攻击**：Apple Settings 页面可见性组把 identifier 挂在整个父容器，XCTest 只能看到组而看不到 Event 子开关。结果：组 identifier 移到标题文本，子开关继续保留独立动作语义；不以扩大坐标点击或跳过动作规避。
 42. **滚动协议挂错层攻击**：Android `screen.settings.content` 原本标在 `Scaffold`，测试无法让真正的 `LazyColumn` 滚到 Event 开关。结果：页面根与可滚动内容分别使用 `screen.settings`/`screen.settings.content`，真实滚动动作通过；测试接入点表达产品结构，不暴露数据库或内部状态。
 43. **动态标识形式主义攻击**：Apple 恢复 Event 后，SwiftUI 动态重插入的真实按钮存在且可点击，但该轮渲染丢失 `tab.events` identifier。层级证据确认业务正确后，Oracle 改为导航项真实减少/恢复、按稳定产品顺序点击恢复项并核对独有 Event 页面；不把 identifier 版本当功能目的，也没有删除“入口可操作且到达正确页面”的断言。
+44. **乱序批次旧尾覆盖新 head 攻击**：Apple fixture 按 newest-first 保存时，投影循环无条件让稍后遍历的旧 Thing 快照覆盖当前 head，列表显示旧标题。结果：UI 准确内容 Oracle 真实失败；Store 现在只接受逻辑时间更新的 head，并以“先新后旧批次 + 旧记录再次迟到”负控锁定不回退语义。
+45. **嵌套 Sheet 返回所有权攻击**：Android 同时保留父 Thing 与关联详情两个 `ModalBottomSheet`，测试又直接调用 Activity dispatcher，返回可能绕过顶层 Dialog 或让两个层级共同关闭。结果：产品状态只渲染一个顶层 Sheet、父页签由上层持有；测试使用真实系统 Back 输入并要求父 Thing/原页签恢复，不用延时或重新打开掩盖导航错误。
+46. **AndroidView 文本黑箱攻击**：消息详情视觉上由 `TextView` 显示准确标题/正文，但 Compose 语义树无法稳定读取，测试只能证明弹窗存在。结果：生产详情标题/正文节点公开准确文本语义和稳定字段标识；Oracle 直接比较真实用户内容，也为后续 TalkBack 审查提供可观测接入点。
+47. **弹窗容器冒充内容攻击**：Material Sheet 外壳的 test tag 存在，但正文处于独立语义子树，限定外壳后仍无法证明内容。结果：壳只证明呈现状态，标题/正文/更新内容分别在真实内容节点判定；不再把容器存在汇总为功能正确。
 
 ## 归因分析
 
@@ -89,6 +94,7 @@
 | 删除后 UI 仍显示对象 | 待删除数据正确，但 SwiftUI 嵌套观察未使 List 结构重建；可访问性父标识覆盖子动作 | 直接观察控制器、作用域身份重建、独立状态/动作语义，并跨 Apple 列表推广 | 业务失败=`FAILED`，不得延长等待或仅断言撤销条 |
 | AI 只补形式测试或漏跑跨层证据 | 缺少可执行的变更→能力→最低证据合同，或把静态路径匹配误当完整语义分析 | 版本化 impact manifest + 本地/CI 选择器 + 未映射阻断 + AGENTS/AI policy；路径结果只作下限，继续追 caller/数据/平台消费者 | 文档/文件检查不能替代功能 Oracle；未知产品路径=`BLOCKED` |
 | Settings 用例无法操作或误报 | 父级语义合并、滚动标识挂错容器、动态 UI identifier 不稳定 | 语义标识贴近实际可操作/滚动节点；最终 Oracle 使用入口集合变化、真实点击、准确目标页和 relaunch | 准备/语义错误=`BLOCKED/FAILED_TEST_SYSTEM`；真实状态或目的错误=`FAILED` |
+| Thing 显示旧对象或返回丢失 | head 更新没有比较逻辑时间；嵌套 modal 同时持有返回；AndroidView 内容不进入 Compose Oracle | canonical head 新旧裁决负控；单顶层 Sheet + 父级页签状态；真实字段文本语义 | 数据/导航结果错误=`FAILED`；输入注入或语义树不可判定=`FAILED_TEST_SYSTEM` |
 
 ## 双向覆盖反查
 

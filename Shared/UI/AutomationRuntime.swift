@@ -3591,7 +3591,12 @@ final class PushGoAutomationRuntime {
             channelSubscriptions = []
         case .thingStandard:
             // Things use the same user-visible ingestion path as production pushes.
-            messages = [qualityThingFixture()]
+            messages = [
+                qualityThingInitialFixture(),
+                qualityThingFixture(),
+                qualityThingRelatedEventFixture(),
+                qualityThingRelatedMessageFixture(),
+            ]
             entityRecords = []
             channelSubscriptions = []
         }
@@ -3693,8 +3698,89 @@ final class PushGoAutomationRuntime {
                 "description": "Fixture thing summary",
                 "thing_title": "P2 Thing Rich",
                 "thing_summary": "Fixture thing summary",
+                "op_id": "quality-op-thing-current",
+                "delivery_id": "quality-delivery-thing-current",
+                "observed_at": "2026-01-15T08:02:00Z",
+                "state": "active",
                 "attrs": "{\"region\":\"cn-sh\",\"owner\":\"qa\"}",
                 "projection_destination": "things",
+            ],
+            "status": "normal",
+        ]
+    }
+
+    private func qualityThingInitialFixture() -> [String: Any] {
+        [
+            "id": "00000000-0000-0000-0000-00000000a000",
+            "message_id": "quality-thing-initial",
+            "title": "Quality Initial Thing Snapshot",
+            "body": "Initial deterministic Thing state before the current snapshot.",
+            "channel_id": "quality",
+            "is_read": false,
+            "received_at": "2026-01-15T08:00:00Z",
+            "raw_payload": [
+                "entity_type": "thing",
+                "entity_id": "quality-thing-rich",
+                "thing_id": "quality-thing-rich",
+                "title": "Quality Initial Thing Snapshot",
+                "description": "Initial deterministic Thing state before the current snapshot.",
+                "thing_title": "Quality Initial Thing Snapshot",
+                "thing_summary": "Initial deterministic Thing state before the current snapshot.",
+                "op_id": "quality-op-thing-initial",
+                "delivery_id": "quality-delivery-thing-initial",
+                "observed_at": "2026-01-15T08:00:00Z",
+                "state": "active",
+                "projection_destination": "things",
+            ],
+            "status": "normal",
+        ]
+    }
+
+    private func qualityThingRelatedEventFixture() -> [String: Any] {
+        [
+            "id": "00000000-0000-0000-0000-00000000a002",
+            "message_id": "quality-related-event-message",
+            "title": "Quality Related Event",
+            "body": "A deterministic event associated with P2 Thing Rich.",
+            "channel_id": "quality",
+            "is_read": false,
+            "received_at": "2026-01-15T08:03:00Z",
+            "raw_payload": [
+                "entity_type": "event",
+                "entity_id": "quality-related-event",
+                "event_id": "quality-related-event",
+                "thing_id": "quality-thing-rich",
+                "event_state": "active",
+                "status": "ongoing",
+                "message": "Inspect the deterministic Thing relation.",
+                "severity": "high",
+                "event_title": "Quality Related Event",
+                "event_message": "A deterministic event associated with P2 Thing Rich.",
+                "op_id": "quality-op-related-event",
+                "delivery_id": "quality-delivery-related-event",
+                "projection_destination": "event_head",
+            ],
+            "status": "normal",
+        ]
+    }
+
+    private func qualityThingRelatedMessageFixture() -> [String: Any] {
+        [
+            "id": "00000000-0000-0000-0000-00000000a003",
+            "message_id": "quality-related-message",
+            "title": "Quality Related Message",
+            "body": "The linked Thing message opens its canonical detail.",
+            "channel_id": "quality",
+            "is_read": false,
+            "received_at": "2026-01-15T08:04:00Z",
+            "raw_payload": [
+                "entity_type": "message",
+                "entity_id": "quality-related-message",
+                "message_id": "quality-related-message",
+                "thing_id": "quality-thing-rich",
+                "op_id": "quality-op-related-message",
+                "delivery_id": "quality-delivery-related-message",
+                "occurred_at": "2026-01-15T08:04:00Z",
             ],
             "status": "normal",
         ]

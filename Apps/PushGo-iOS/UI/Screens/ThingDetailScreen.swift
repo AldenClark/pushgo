@@ -227,7 +227,9 @@ private struct ThingDetailPanel: View {
 
                 Picker("", selection: $selectedTab) {
                     ForEach(Tab.allCases) { tab in
-                        Text(localizationManager.localized(tab.titleKey)).tag(tab)
+                        Text(localizationManager.localized(tab.titleKey))
+                            .tag(tab)
+                            .accessibilityIdentifier("tab.thing.detail.\(tab.rawValue)")
                     }
                 }
                 .pickerStyle(.segmented)
@@ -424,6 +426,7 @@ private struct ThingDetailPanel: View {
                         EventListRow(event: event)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("thing.related.event.\(event.id)")
                 }
             }
         }
@@ -447,6 +450,7 @@ private struct ThingDetailPanel: View {
                         ThingRelatedMessageRow(message: message)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("thing.related.message.\(message.messageIdentity)")
                 }
             }
         }
@@ -470,6 +474,7 @@ private struct ThingDetailPanel: View {
                         ThingRelatedUpdateRow(update: update)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("thing.related.update.\(update.id.uuidString.lowercased())")
                 }
             }
         }
@@ -707,6 +712,7 @@ private struct ThingRelatedUpdateRow: View {
 }
 
 private struct ThingRelatedUpdateDetailScreen: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     let update: ThingRelatedUpdate
@@ -758,6 +764,13 @@ private struct ThingRelatedUpdateDetailScreen: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 18)
             }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(localizationManager.localized("done")) { dismiss() }
+                        .accessibilityIdentifier("action.thing.update.close")
+                }
+            }
         }
+        .accessibilityIdentifier("screen.thing.update.detail")
     }
 }

@@ -696,10 +696,11 @@ final class PushGo_iOSUITests: XCTestCase {
 
     func testImportedThingFixtureCanOpenThingDetail() {
         let context = configuredLaunchContext()
-        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+        let encodedSession = qualitySessionPayload(
             sessionID: "ios-thing-\(UUID().uuidString.lowercased())",
             fixture: "thing.standard"
         )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
         launch(context.app)
 
         assertQualityRuntimeReady(in: context.app, timeout: 15)
@@ -715,6 +716,73 @@ final class PushGo_iOSUITests: XCTestCase {
         )
         XCTAssertTrue(context.app.staticTexts["P2 Thing Rich"].waitForExistence(timeout: 8))
         XCTAssertTrue(context.app.staticTexts["Fixture thing summary"].waitForExistence(timeout: 5))
+
+        let messagesTab = element(in: context.app, identifier: "tab.thing.detail.messages")
+        tapWhenHittable(messagesTab, timeout: 8, message: "Thing Messages tab must be actionable")
+        let relatedMessage = element(
+            in: context.app,
+            identifier: "thing.related.message.quality-related-message"
+        )
+        tapWhenHittable(relatedMessage, timeout: 8, message: "Related Message must open")
+        assertElementExists("screen.message.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(context.app.staticTexts["Quality Related Message"].waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            context.app.staticTexts["The linked Thing message opens its canonical detail."]
+                .waitForExistence(timeout: 8)
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.message.close"),
+            timeout: 8,
+            message: "Related Message detail must return to the Thing"
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "thing.related.message.quality-related-message")
+                .waitForExistence(timeout: 8),
+            "Returning from Message detail must preserve the same Thing Messages tab"
+        )
+
+        let updatesTab = element(in: context.app, identifier: "tab.thing.detail.updates")
+        tapWhenHittable(updatesTab, timeout: 8, message: "Thing Updates tab must be actionable")
+        let relatedUpdate = element(
+            in: context.app,
+            identifier: "thing.related.update.00000000-0000-0000-0000-00000000a000"
+        )
+        tapWhenHittable(relatedUpdate, timeout: 8, message: "Related Update must open")
+        assertElementExists("screen.thing.update.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Quality Initial Thing Snapshot"].waitForExistence(timeout: 8)
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.thing.update.close"),
+            timeout: 8,
+            message: "Related Update detail must return to the Thing"
+        )
+        XCTAssertTrue(
+            element(
+                in: context.app,
+                identifier: "thing.related.update.00000000-0000-0000-0000-00000000a000"
+            ).waitForExistence(timeout: 8),
+            "Returning from Update detail must preserve the same Thing Updates tab"
+        )
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        tapWhenHittable(
+            element(in: context.app, identifier: "tab.things"),
+            timeout: 8,
+            message: "Things must remain reachable after relaunch"
+        )
+        let relaunchedThing = element(in: context.app, identifier: "thing.row.quality-thing-rich")
+        tapWhenHittable(relaunchedThing, timeout: 8, message: "The same Thing must survive relaunch")
+        let relatedEvent = element(
+            in: context.app,
+            identifier: "thing.related.event.quality-related-event"
+        )
+        tapWhenHittable(relatedEvent, timeout: 8, message: "Related Event must open")
+        assertElementExists("screen.events.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(context.app.staticTexts["Quality Related Event"].waitForExistence(timeout: 8))
     }
 
     func testPushSettingsCanOpenDecryptionScreen() {

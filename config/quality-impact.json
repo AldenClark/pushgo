@@ -65,9 +65,9 @@
       "id": "events-things",
       "paths": ["Shared/Models/EntityProjectionDetail.swift", "Shared/Utilities/ProjectionSemantics.swift", "Shared/UI/Entity*.swift", "Apps/*/UI/Screens/Event*.swift", "Apps/*/UI/Screens/Thing*.swift", "Apps/*/UI/Screens/Entity*.swift"],
       "capabilities": ["events", "things"],
-      "minimum_evidence": ["projection semantics tests", "iOS Event close/filter/relaunch and Thing accurate list/detail journeys"],
+      "minimum_evidence": ["projection semantics tests including out-of-order head rejection", "iOS Event close/filter/relaunch and Thing accurate list/detail/three-relation/open/return/relaunch journeys"],
       "lane": "nightly",
-      "known_evidence_gaps": ["Event slow/error/duplicate-close recovery and Thing relation tabs/deep links are not yet fully protected."],
+      "known_evidence_gaps": ["Event slow/error/duplicate-close recovery and Thing filters/deep links/delete outcomes are not yet fully protected."],
       "escalation_reasons": ["Entity projections feed list, detail, Thing relations, notifications, and system surfaces."]
     },
     {

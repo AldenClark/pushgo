@@ -6927,6 +6927,9 @@ private actor GRDBStore {
 	        existing: GRDBMessageRecord?,
 	        incoming: GRDBMessageRecord
 	    ) -> GRDBMessageRecord {
+	        if let existing, !projectionHeadIncomingSupersedes(existing: existing, incoming: incoming) {
+	            return existing
+	        }
 	        let incomingPayload = Self.jsonObject(fromJSONString: incoming.rawPayloadJSON)
 	        let mergedPayloadJSON = Self.mergeEntityPayloadJSON(
 	            existingRaw: existing?.rawPayloadJSON,
@@ -6973,6 +6976,39 @@ private actor GRDBStore {
 	            occurredAtEpoch: incoming.occurredAtEpoch ?? existing?.occurredAtEpoch,
 	            topLevelMessage: incoming.topLevelMessage
 	        )
+	    }
+
+	    private static func projectionHeadIncomingSupersedes(
+	        existing: GRDBMessageRecord,
+	        incoming: GRDBMessageRecord
+	    ) -> Bool {
+	        let existingLogicalTime = projectionHeadLogicalTime(existing)
+	        let incomingLogicalTime = projectionHeadLogicalTime(incoming)
+	        if incomingLogicalTime != existingLogicalTime {
+	            return incomingLogicalTime > existingLogicalTime
+	        }
+	        return incoming.receivedAt >= existing.receivedAt
+	    }
+
+	    private static func projectionHeadLogicalTime(_ record: GRDBMessageRecord) -> Int64 {
+	        let receivedAtEpoch = Int64(storedEpoch(record.receivedAt).rounded())
+	        switch record.entityType {
+	        case "thing":
+	            return record.observedTimeEpoch
+	                ?? record.occurredAtEpoch
+	                ?? record.eventTimeEpoch
+	                ?? receivedAtEpoch
+	        case "event":
+	            return record.eventTimeEpoch
+	                ?? record.observedTimeEpoch
+	                ?? record.occurredAtEpoch
+	                ?? receivedAtEpoch
+	        default:
+	            return record.occurredAtEpoch
+	                ?? record.observedTimeEpoch
+	                ?? record.eventTimeEpoch
+	                ?? receivedAtEpoch
+	        }
 	    }
 
 	    private static func upsertEventProjectionHead(

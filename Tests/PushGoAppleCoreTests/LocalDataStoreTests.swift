@@ -223,6 +223,55 @@ struct LocalDataStoreTests {
 	    }
 
 	    @Test
+	    func thingProjectionHeadRejectsOlderSnapshotAfterNewerSnapshot() async throws {
+	        try await withIsolatedLocalDataStore { store, _ in
+	            let newer = makeMessage(
+	                messageId: "thing-head-order-newer",
+	                notificationRequestId: "req-thing-head-order-newer",
+	                title: "Current Thing",
+	                body: "Current Thing body",
+	                receivedAt: Date(timeIntervalSince1970: 1_800_020_020),
+	                rawPayload: [
+	                    "entity_type": "thing",
+	                    "entity_id": "thing-head-order-001",
+	                    "thing_id": "thing-head-order-001",
+	                    "title": "Current Thing",
+	                    "description": "Current Thing body",
+	                    "observed_at": "1800020020000",
+	                ]
+	            )
+	            let older = makeMessage(
+	                messageId: "thing-head-order-older",
+	                notificationRequestId: "req-thing-head-order-older",
+	                title: "Stale Thing",
+	                body: "Stale Thing body",
+	                receivedAt: Date(timeIntervalSince1970: 1_800_020_000),
+	                rawPayload: [
+	                    "entity_type": "thing",
+	                    "entity_id": "thing-head-order-001",
+	                    "thing_id": "thing-head-order-001",
+	                    "title": "Stale Thing",
+	                    "description": "Stale Thing body",
+	                    "observed_at": "1800020000000",
+	                ]
+	            )
+
+	            // Provider/import batches are newest-first. A stale tail item must remain
+	            // in history without replacing the canonical current projection.
+	            try await store.saveMessages([newer, older])
+	            var head = try #require(try await store.loadThingMessagesForProjection().first)
+	            #expect(head.title == "Current Thing")
+	            #expect(head.body == "Current Thing body")
+
+	            // The same ordering rule must hold when an older delivery arrives later.
+	            try await store.saveMessage(older)
+	            head = try #require(try await store.loadThingMessagesForProjection().first)
+	            #expect(head.title == "Current Thing")
+	            #expect(head.body == "Current Thing body")
+	        }
+	    }
+
+	    @Test
 	    func dataPageVisibilityPersistsAcrossStoreReload() async throws {
         await withIsolatedAutomationStorage { _, appGroupIdentifier in
             let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
