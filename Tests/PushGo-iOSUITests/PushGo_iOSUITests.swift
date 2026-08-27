@@ -414,6 +414,33 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertFalse(element(in: context.app, identifier: "state.messages.load_failed").exists)
     }
 
+    func testSlowMessageRefreshKeepsAccurateContentVisibleUntilCompletion() {
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: "ios-refresh-slow-\(UUID().uuidString.lowercased())",
+            fixture: "messages.standard",
+            messageRefreshDelayMilliseconds: 2_500
+        )
+
+        launch(context.app)
+
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        let title = context.app.staticTexts["P2 Split Seed Message"]
+        XCTAssertTrue(title.waitForExistence(timeout: 8))
+        let refresh = context.app.buttons["action.messages.refresh"]
+        XCTAssertTrue(refresh.waitForExistence(timeout: 5))
+        refresh.tap()
+
+        XCTAssertTrue(title.exists, "Refresh must not blank the last accurate snapshot")
+        assertElementExists("state.messages.refresh.slow", in: context.app, timeout: 2)
+        XCTAssertTrue(title.exists, "Slow-state feedback must coexist with the last accurate snapshot")
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.refresh.slow")
+                .waitForNonExistence(timeout: 5)
+        )
+        XCTAssertTrue(title.exists, "Successful refresh must end on accurate content")
+    }
+
     func testMessageLoadFailureShowsRetryAndRecoversToRealDataState() {
         let context = configuredLaunchContext()
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
@@ -1702,6 +1729,7 @@ final class PushGo_iOSUITests: XCTestCase {
         sessionID: String,
         fixture: String,
         messageLoadDelayMilliseconds: Int? = nil,
+        messageRefreshDelayMilliseconds: Int? = nil,
         failMessageLoad: Bool = false
     ) -> String {
         var faults: [String: Any] = [
@@ -1709,6 +1737,9 @@ final class PushGo_iOSUITests: XCTestCase {
         ]
         if let messageLoadDelayMilliseconds {
             faults["message_load_delay_ms"] = messageLoadDelayMilliseconds
+        }
+        if let messageRefreshDelayMilliseconds {
+            faults["message_refresh_delay_ms"] = messageRefreshDelayMilliseconds
         }
         let payload: [String: Any] = [
             "schema_version": 1,

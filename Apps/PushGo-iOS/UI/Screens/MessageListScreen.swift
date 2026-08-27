@@ -20,6 +20,8 @@ struct MessageListScreen: View {
     @State private var pendingScrollTarget: UUID?
     @State private var isFilterPopoverPresented = false
     @State private var isHistoryCleanupPresented = false
+    @State private var isPullRefreshing = false
+    @State private var isPullRefreshSlow = false
 
     private struct MessageTagSummary: Identifiable, Hashable {
         let tag: String
@@ -189,6 +191,13 @@ struct MessageListScreen: View {
                         .padding(.horizontal)
                         .padding(.top, 8)
                 }
+
+                if (isPullRefreshSlow || viewModel.loadState == .slow) && !visibleFilteredMessages.isEmpty {
+                    messageRefreshSlowBanner
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -248,6 +257,19 @@ struct MessageListScreen: View {
         .accessibilityIdentifier("state.messages.load_failed")
     }
 
+    private var messageRefreshSlowBanner: some View {
+        Label(
+            localizationManager.localized("message_ingress_processing_slow"),
+            systemImage: "arrow.clockwise"
+        )
+        .font(.subheadline.weight(.semibold))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.regularMaterial, in: Capsule())
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("state.messages.refresh.slow")
+    }
+
     private var isShowingSearchResults: Bool {
         searchViewModel.hasSearched
     }
@@ -296,6 +318,29 @@ struct MessageListScreen: View {
     }
 
     private func handlePullToRefresh() async {
+        guard !isPullRefreshing else { return }
+        isPullRefreshing = true
+        isPullRefreshSlow = false
+        let slowStateTask = Task { @MainActor in
+            try await Task.sleep(for: .seconds(1))
+            try Task.checkCancellation()
+            isPullRefreshSlow = true
+        }
+        defer {
+            slowStateTask.cancel()
+            isPullRefreshSlow = false
+            isPullRefreshing = false
+        }
+#if DEBUG
+        if let delay = PushGoAutomationContext.qualitySession?.faults.messageRefreshDelayMilliseconds,
+           delay > 0 {
+            do {
+                try await Task.sleep(for: .milliseconds(delay))
+            } catch {
+                return
+            }
+        }
+#endif
         _ = await environment.syncProviderIngress(reason: "messages_pull_to_refresh")
         await refreshVisibleMessageData()
     }
@@ -754,6 +799,19 @@ private extension MessageListScreen {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
+            Button {
+                Task { await handlePullToRefresh() }
+            } label: {
+                if isPullRefreshing {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
+            .disabled(isPullRefreshing)
+            .accessibilityLabel(localizationManager.localized("refresh"))
+            .accessibilityIdentifier("action.messages.refresh")
             if !isShowingSearchResults && viewModel.hasUnreadMessagesInCurrentScope {
                 Button {
                     Task { await markAllCurrentScopeMessagesAsRead() }

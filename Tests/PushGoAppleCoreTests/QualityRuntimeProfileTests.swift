@@ -8,7 +8,8 @@ struct QualityRuntimeProfileTests {
     func acceptsTypedSession() throws {
         let encoded = try encodedSession(
             sessionID: "ios-pr-123_retry-1",
-            fixture: "messages.standard"
+            fixture: "messages.standard",
+            faults: ["message_refresh_delay_ms": 2_500]
         )
 
         let descriptor = try PushGoAutomationContext.decodeQualitySession(encoded)
@@ -17,6 +18,7 @@ struct QualityRuntimeProfileTests {
         #expect(descriptor.sessionID == "ios-pr-123_retry-1")
         #expect(descriptor.fixture == .messagesStandard)
         #expect(descriptor.faults.messageLoadDelayMilliseconds == nil)
+        #expect(descriptor.faults.messageRefreshDelayMilliseconds == 2_500)
         #expect(descriptor.faults.failMessageLoad == false)
     }
 
@@ -41,6 +43,19 @@ struct QualityRuntimeProfileTests {
         )
 
         #expect(throws: PushGoQualitySessionError.invalidMessageLoadDelay(30_001)) {
+            try PushGoAutomationContext.decodeQualitySession(encoded)
+        }
+    }
+
+    @Test("rejects unbounded refresh delay faults before app startup")
+    func rejectsUnboundedRefreshDelay() throws {
+        let encoded = try encodedSession(
+            sessionID: "slow-refresh-negative-control",
+            fixture: "messages.standard",
+            faults: ["message_refresh_delay_ms": 30_001]
+        )
+
+        #expect(throws: PushGoQualitySessionError.invalidMessageRefreshDelay(30_001)) {
             try PushGoAutomationContext.decodeQualitySession(encoded)
         }
     }

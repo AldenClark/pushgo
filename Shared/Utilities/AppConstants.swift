@@ -52,18 +52,22 @@ enum PushGoQualityFixture: String, Codable, CaseIterable, Sendable {
 
 struct PushGoQualityFaults: Codable, Equatable, Sendable {
     let messageLoadDelayMilliseconds: Int?
+    let messageRefreshDelayMilliseconds: Int?
     let failMessageLoad: Bool
 
     init(
         messageLoadDelayMilliseconds: Int? = nil,
+        messageRefreshDelayMilliseconds: Int? = nil,
         failMessageLoad: Bool = false
     ) {
         self.messageLoadDelayMilliseconds = messageLoadDelayMilliseconds
+        self.messageRefreshDelayMilliseconds = messageRefreshDelayMilliseconds
         self.failMessageLoad = failMessageLoad
     }
 
     private enum CodingKeys: String, CodingKey {
         case messageLoadDelayMilliseconds = "message_load_delay_ms"
+        case messageRefreshDelayMilliseconds = "message_refresh_delay_ms"
         case failMessageLoad = "fail_message_load"
     }
 
@@ -72,6 +76,10 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         messageLoadDelayMilliseconds = try container.decodeIfPresent(
             Int.self,
             forKey: .messageLoadDelayMilliseconds
+        )
+        messageRefreshDelayMilliseconds = try container.decodeIfPresent(
+            Int.self,
+            forKey: .messageRefreshDelayMilliseconds
         )
         failMessageLoad = try container.decodeIfPresent(Bool.self, forKey: .failMessageLoad) ?? false
     }
@@ -125,6 +133,7 @@ enum PushGoQualitySessionError: Error, Equatable, LocalizedError {
     case invalidSchemaVersion(Int)
     case invalidSessionID
     case invalidMessageLoadDelay(Int)
+    case invalidMessageRefreshDelay(Int)
 
     var errorDescription: String? {
         switch self {
@@ -138,6 +147,8 @@ enum PushGoQualitySessionError: Error, Equatable, LocalizedError {
             return "Quality session ID must contain 1...64 ASCII letters, digits, underscores, or hyphens."
         case let .invalidMessageLoadDelay(delay):
             return "Message load delay must be between 0 and 30000 ms: \(delay)."
+        case let .invalidMessageRefreshDelay(delay):
+            return "Message refresh delay must be between 0 and 30000 ms: \(delay)."
         }
     }
 }
@@ -292,6 +303,10 @@ enum PushGoAutomationContext {
         if let delay = descriptor.faults.messageLoadDelayMilliseconds,
            !(0 ... 30_000).contains(delay) {
             throw PushGoQualitySessionError.invalidMessageLoadDelay(delay)
+        }
+        if let delay = descriptor.faults.messageRefreshDelayMilliseconds,
+           !(0 ... 30_000).contains(delay) {
+            throw PushGoQualitySessionError.invalidMessageRefreshDelay(delay)
         }
         return descriptor
     }

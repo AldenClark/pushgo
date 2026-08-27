@@ -21,6 +21,7 @@
 | 消息空态 | 冷启动 App | 唯一空 Store → Paging/VM → UI | 可操作空态，无永久 Loading/错误 | Store 不可用或 Loading 不结束必须失败 |
 | 消息准确性 | 启动、点列表行、重启 | fixture → canonical Store → query → row/detail | 准确标题、正文、详情，重启仍一致 | 只 seed 文件、字段串行或未持久化均失败 |
 | 消息分页与已读 | 滚过 page size 50、点未读详情、全部已读、重启、切仅未读 | 52 条 fixture → paged query → read coordinator → Store → list/filter | 第二页可达；单条语义变为已读；全部已读跨重启保留；未读为空且可恢复全部 | 固定首屏、只改内存、重启 reseed、历史筛选污染或批量动作崩溃均失败 |
+| 消息慢刷新 | 点击正式刷新动作（下拉同调用链） | typed delay → user refresh boundary → provider/Store → list state | >1 秒出现 slow；准确旧快照不清空；完成后 slow 退出 | 后台刷新抢占 fault、只显示 spinner、清空旧行或永久 slow 均失败 |
 | 慢加载 | 启动列表并等待里程碑 | fault → repository/paging → UI state | 数据完成前出现明确 slow；完成后是真实内容/空态 | spinner 永久转或直接空态均失败 |
 | 失败恢复 | 首次查询失败、点 Retry | latched fault → error → retry → real query | 错误可见；Retry 后真实终点 | 自动吞错、假成功或 Retry 无效均失败 |
 | 搜索 | 真实搜索框输入错误词、再输入目标词并点行 | query → FTS/Store → 结果集合 → 详情 | 错误词排除目标；目标词只返回并打开准确对象 | 仅检查输入框/“App 仍运行”不能通过 |
@@ -62,6 +63,8 @@
 29. **共享偏好跨会话污染攻击**：前一失败用例留下“仅未读”，新 session 的已读 `workflow 0` 被隐藏，固定滑动次数误报分页失败。结果：Apple quality profile 每次启动从“全部消息”UI 基线构造 ViewModel；Android 偏好位于 session Room。失败附件证明列表已到 `workflow 1` 而非分页未加载。
 30. **错误语义字段攻击**：已读状态位于 accessibility label，正文位于 value；最初测试比较 value，功能正确也失败。结果：Oracle 等待真实行 label 从未读语义变化，不删除状态断言，也不使用内部数据库 shortcut。
 31. **批量动作 UI 线程攻击**：Android Room 批量已读成功后协程恢复在线程池，随后 Toast/announce 崩溃。结果：产品反馈切回 `Dispatchers.Main.immediate`，原完整旅程回归 1/1 通过；这证明 device UI 不可被 repository 单测替代。
+32. **不稳定手势消耗预算攻击**：Apple XCUITest 两种下拉手势都没有触发 SwiftUI `.refreshable`，继续调坐标只会验证自动化偶然性。结果：增加正式、可访问的刷新按钮并与下拉共用同一生产入口；测试点击真实用户控件，不引入测试专用业务捷径。
+33. **故障注入点过宽攻击**：Apple 延迟最初挂在通用 `ViewModel.refresh()`，启动后台刷新可提前消费故障，用户刷新没有变慢。结果：失败保持原 Oracle，注入点移动到用户刷新边界后通过；说明测试接入点必须贴近被验证目的，不能由相邻内部调用自证。
 
 ## 归因分析
 
