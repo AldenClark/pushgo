@@ -176,7 +176,6 @@ struct SettingsView: View {
                 eventIsOn: $bindableEnvironment.eventPageEnabled,
                 thingIsOn: $bindableEnvironment.thingPageEnabled
             )
-            .accessibilityIdentifier("group.settings.page_visibility")
             .listRowInsets(rowInsets)
             .listRowBackground(Color.clear)
 

@@ -15,7 +15,7 @@
 | I/M Channels | 创建、订阅、改名、退订 | invalid/auth/failure/keep/delete/undo | 远端订阅、凭据、历史 | contract + Store + UI | P0；UI/远端对账缺口 | Channel controller/UI |
 | I/M Settings server | 修改真实 Gateway | invalid/cancel/failure/default | secure token、后续 endpoint | unit + contract + UI | P0；invalid UI 已有 | Settings VM/Environment |
 | I/M Settings decryption | 配置 Key 并恢复消息 | encoding/invalid/missing/wrong | secure material、明文状态 | validator + Store + UI | P0；需去 Runtime command | Settings/Decryptor |
-| I/M Settings visibility | 控制主页面入口 | hide/show/relaunch/legal selection | settings Store、Tab/Sidebar | controller + UI + relaunch | P0；旧 command rewrite | Visibility controller/UI |
+| I/M Settings visibility | 控制主页面入口 | hide/show/relaunch/legal selection | settings Store、Tab/Sidebar | controller + UI + relaunch | P0；iOS 已从真实 Settings 控件关闭/恢复 Event 入口并两次 relaunch 核对，macOS 待补 | Visibility controller/UI |
 | I/M Notification sound | 配置真实声音行为 | priority/mode/preview/import/failure | audio session、文件、notification | unit + platform + UI | P1；系统证据缺口 | Sound settings/presenter |
 | I/M Notification route/actions | 从通知完成目标动作 | cold/hot/missing/read/delete/copy | Store、通知中心、badge、route | integration + physical UI | P0 Release；NOT RUN | AppDelegate/Notification controllers |
 | I/M Ingress/ACK | 收到消息且最终显示 | duplicate/order/persist fail/ACK retry/death | journal、canonical Store、UI | property + integration + real system | P0；低层强，real-system NOT RUN | Ingress coordinators |

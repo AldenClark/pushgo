@@ -21,12 +21,13 @@
 | keep（已迁移） | `testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch` | 从真实详情删除，验证行立即隐藏、Undo 可操作、重启后 canonical 对象仍在。 |
 | keep（已迁移） | `testImportedEventFixtureCanOpenEventDetail`、`testImportedThingFixtureCanOpenThingDetail` | 已改为 App-owned 内置 fixture，走真实消息摄入/投影并点击 Tab、列表行、详情字段；不以 response/events 文件作最终 Oracle。 |
 | keep（已迁移） | `testEventClosePersistsAndOngoingFilterReflectsRealProjection` | 从真实 Event 行进入详情并确认关闭；关闭载荷经正式通知解析与 canonical projection 更新，验证状态变为 closed、仅进行中筛选排除该事件、重启后 closed 仍保留且关闭动作不再出现。Runtime marker 仅用于启动归因，不作为产品 Oracle。 |
+| keep（已迁移） | `testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch` | 从真实 Channels→Settings 入口操作 Event 开关，验证 Tab 真实减少/恢复、恢复后可打开准确 Event 页面，并在关闭和恢复后分别 relaunch 核对持久化；替代 Runtime command/state 用例。 |
 | keep/rewrite-launcher | `testPushSettingsCanOpenDecryptionScreen` | 保留真实页面结果，改成用户点击 Settings 与解密入口；不由 Runtime command 打开。 |
 | keep/rewrite-launcher | `testInvalidServerAddressShowsInlineFeedbackInsteadOfToast` | 已验证真实输入和错误呈现；仅替换 Runtime 导航/宿主路径，继续验证旧配置未生效。 |
 | rewrite；由新核心旅程替代 | `testFixtureSeedMessagesRefreshesMessageList` | `testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch` 已证明准确行/详情/relaunch；旧 seed count/state 用例应在后续删除。 |
 | rewrite | `testSubmittingPopulatedSearchResultsKeepsAppRunning` | “App 仍运行”过弱；改为目标集合、排除集合、最新 query 和打开准确详情。 |
 | rewrite | `testFixtureSeedEntityRecordsPublishesProjectionCounts`、`testFixtureSeedSubscriptionsPublishesImportState` | 改为真实 Event/Thing/Channel 内容与后续操作；内部 count 只诊断。 |
-| rewrite | `testSettingsPageVisibilityCommandCanHideEventPage`、`testSettingsPageVisibilityCommandCanRoundTripEventPage` | 通过 Settings 控件修改；验证入口、选择合法性和 relaunch 持久化，不用 command/state。 |
+| delete（已被更强旅程替代） | `testSettingsPageVisibilityCommandCanHideEventPage`、`testSettingsPageVisibilityCommandCanRoundTripEventPage` | `testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch` 已覆盖真实入口、动作、准确页面和双向 relaunch；旧 command/state 不再进入常规 lane。 |
 | rewrite | `testEntityOpenPublishesEntityStateAndProjectionCounts`、`testMessageOpenPublishesMessageDetailState`、`testNotificationOpenPublishesMessageDetailState` | 用真实列表/通知路由打开，核对目标对象和字段；Automation State/Event 不再是最终 Oracle。 |
 | rewrite | `testNotificationMarkReadCommandUpdatesUnreadState`、`testNotificationDeleteCommandUpdatesCounts` | 通过真实通知动作；对账通知、Store、列表、badge 和 relaunch。 |
 | rewrite | `testGatewaySetServerCommandUpdatesConfigurationState` | 通过 Settings 编辑保存，并在 contract 层证明后续请求到新 endpoint。 |
@@ -81,8 +82,9 @@
 - `testMessageLoadFailureShowsRetryAndRecoversToRealDataState`
 - `testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen`
 - `testEventClosePersistsAndOngoingFilterReflectsRealProjection`
+- `testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch`
 
-前十条进入 PR 核心集，其中 workflow 用 52 条数据跨越真实 page size 50，并验证单条/全部已读、relaunch 与未读筛选。刷新旅程分别证明慢态与上次准确快照共存、Provider 刷新载荷经过规范化摄入后出现在列表和真实详情并在 relaunch 后保留，以及首次失败可见、旧快照保留、同一正式刷新动作重试后恢复；不把直接修改 ViewModel 集合或检查数据库文件当结果。真实导航、Event 关闭/筛选/relaunch、Thing 和配置失败等代表性旅程进入 Nightly/Release。Release 已改为显式高价值清单，不再默认执行所有遗留 UI 用例；旧 Runtime command/state 用例不得以绿色覆盖新用例失败，已有更强证据的弱重复从常规 lane 移除。
+前十条进入 PR 核心集，其中 workflow 用 52 条数据跨越真实 page size 50，并验证单条/全部已读、relaunch 与未读筛选。刷新旅程分别证明慢态与上次准确快照共存、Provider 刷新载荷经过规范化摄入后出现在列表和真实详情并在 relaunch 后保留，以及首次失败可见、旧快照保留、同一正式刷新动作重试后恢复；不把直接修改 ViewModel 集合或检查数据库文件当结果。真实导航、Event 关闭/筛选/relaunch、Settings 页面可见性、Thing 和配置失败等代表性旅程进入 Nightly/Release。Release 已改为显式高价值清单，不再默认执行所有遗留 UI 用例；旧 Runtime command/state 用例不得以绿色覆盖新用例失败，已有更强证据的弱重复从常规 lane 移除。
 
 ## 变更影响门禁
 

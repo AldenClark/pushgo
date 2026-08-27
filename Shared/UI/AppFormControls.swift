@@ -691,6 +691,7 @@ struct DataPageToggleGroupRow: View {
                     .font(.headline)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, 4)
+                    .accessibilityIdentifier("group.settings.page_visibility")
 
                 HStack(spacing: 8) {
                     DataPageToggleChip(

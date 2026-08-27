@@ -576,6 +576,51 @@ final class PushGo_iOSUITests: XCTestCase {
         assertElementExists("screen.settings", in: context.app, timeout: 8)
     }
 
+    func testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch() {
+        let context = configuredLaunchContext()
+        let sessionID = "ios-settings-visibility-\(UUID().uuidString.lowercased())"
+        let encodedSession = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard"
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        assertEventTabVisibility(true, in: context.app, openWhenVisible: false)
+
+        openSettingsFromChannels(in: context.app)
+        let eventToggle = scrollToHittableElement(
+            identifier: "toggle.settings.page.events",
+            in: context.app
+        )
+        XCTAssertTrue(eventToggle.isHittable)
+        eventToggle.tap()
+        leaveSettings(in: context.app)
+        assertEventTabVisibility(false, in: context.app)
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        assertEventTabVisibility(false, in: context.app)
+
+        openSettingsFromChannels(in: context.app)
+        let persistedOffToggle = scrollToHittableElement(
+            identifier: "toggle.settings.page.events",
+            in: context.app
+        )
+        XCTAssertTrue(persistedOffToggle.isHittable)
+        persistedOffToggle.tap()
+        leaveSettings(in: context.app)
+        assertEventTabVisibility(true, in: context.app, openWhenVisible: true)
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        assertEventTabVisibility(true, in: context.app, openWhenVisible: true)
+    }
+
     func testEventClosePersistsAndOngoingFilterReflectsRealProjection() {
         let context = configuredLaunchContext()
         let sessionID = "ios-event-close-\(UUID().uuidString.lowercased())"
@@ -864,108 +909,6 @@ final class PushGo_iOSUITests: XCTestCase {
             )
         )
         XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: 12, matching: { $0.ok }))
-    }
-
-    func testSettingsPageVisibilityCommandCanHideEventPage() {
-        let context = configuredLaunchContext(
-            requestName: "settings.set_page_visibility",
-            args: ["page": "events", "enabled": "false"]
-        )
-        launch(context.app)
-
-        let state = waitForAutomationState(
-            at: context.stateURL,
-            timeout: 12,
-            matching: { $0.eventPageEnabled == false }
-        )
-        XCTAssertNotNil(state)
-        XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: 12, matching: { $0.ok }))
-        XCTAssertNotNil(
-            waitForAutomationEvent(
-                at: context.eventsURL,
-                timeout: 12,
-                matching: { event in
-                    guard (event["type"] as? String) == "settings.changed",
-                          let details = event["details"] as? [String: Any]
-                    else { return false }
-                    let changedKeys = (details["changed_keys"] as? String) ?? ""
-                    let enabled = (details["event_page_enabled"] as? String) ?? ""
-                    return changedKeys.contains("event_page_enabled") && enabled == "false"
-                }
-            )
-        )
-        XCTAssertTrue(waitForFileNonEmpty(context.eventsURL, timeout: 8))
-    }
-
-    func testSettingsPageVisibilityCommandCanRoundTripEventPage() {
-        let sharedRuntimeRoot = makeRuntimeRoot()
-        let disableContext = configuredLaunchContext(
-            runtimeRoot: sharedRuntimeRoot,
-            requestName: "settings.set_page_visibility",
-            args: ["page": "events", "enabled": "false"]
-        )
-        launch(disableContext.app)
-        let disabledState = waitForAutomationState(
-            at: disableContext.stateURL,
-            timeout: 12,
-            matching: { $0.eventPageEnabled == false }
-        )
-        XCTAssertNotNil(disabledState)
-        XCTAssertTrue(
-            waitForAutomationResponse(
-                at: disableContext.responseURL,
-                timeout: 12,
-                matching: { $0.ok }
-            ) != nil
-        )
-        XCTAssertNotNil(
-            waitForAutomationEvent(
-                at: disableContext.eventsURL,
-                timeout: 12,
-                matching: { event in
-                    guard (event["type"] as? String) == "settings.changed",
-                          let details = event["details"] as? [String: Any]
-                    else { return false }
-                    let changedKeys = (details["changed_keys"] as? String) ?? ""
-                    let enabled = (details["event_page_enabled"] as? String) ?? ""
-                    return changedKeys.contains("event_page_enabled") && enabled == "false"
-                }
-            )
-        )
-
-        let enableContext = configuredLaunchContext(
-            runtimeRoot: sharedRuntimeRoot,
-            requestName: "settings.set_page_visibility",
-            args: ["page": "events", "enabled": "true"]
-        )
-        launch(enableContext.app)
-        let enabledState = waitForAutomationState(
-            at: enableContext.stateURL,
-            timeout: 12,
-            matching: { $0.eventPageEnabled == true }
-        )
-        XCTAssertNotNil(enabledState)
-        XCTAssertTrue(
-            waitForAutomationResponse(
-                at: enableContext.responseURL,
-                timeout: 12,
-                matching: { $0.ok }
-            ) != nil
-        )
-        XCTAssertNotNil(
-            waitForAutomationEvent(
-                at: enableContext.eventsURL,
-                timeout: 12,
-                matching: { event in
-                    guard (event["type"] as? String) == "settings.changed",
-                          let details = event["details"] as? [String: Any]
-                    else { return false }
-                    let changedKeys = (details["changed_keys"] as? String) ?? ""
-                    let enabled = (details["event_page_enabled"] as? String) ?? ""
-                    return changedKeys.contains("event_page_enabled") && enabled == "true"
-                }
-            )
-        )
     }
 
     func testEntityOpenPublishesEntityStateAndProjectionCounts() {
@@ -1916,6 +1859,74 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertEqual(result, .completed, message, file: file, line: line)
         guard result == .completed else { return }
         element.tap()
+    }
+
+    private func openSettingsFromChannels(in app: XCUIApplication) {
+        let channels = element(in: app, identifier: "tab.channels")
+        tapWhenHittable(channels, timeout: 8, message: "Channels must remain reachable")
+        let settings = element(in: app, identifier: "action.channels.settings")
+        tapWhenHittable(settings, timeout: 8, message: "Settings must open through the real Channels action")
+        assertElementExists("screen.settings", in: app, timeout: 8)
+    }
+
+    private func leaveSettings(in app: XCUIApplication) {
+        let back = app.navigationBars.buttons.firstMatch
+        tapWhenHittable(back, timeout: 8, message: "Settings must provide a real back navigation action")
+        assertElementExists("screen.channels", in: app, timeout: 8)
+    }
+
+    private func scrollToHittableElement(
+        identifier: String,
+        in app: XCUIApplication
+    ) -> XCUIElement {
+        let target = element(in: app, identifier: identifier)
+        for _ in 0..<6 {
+            if target.exists, target.isHittable {
+                return target
+            }
+            if app.tables.firstMatch.exists {
+                app.tables.firstMatch.swipeUp()
+            } else if app.scrollViews.firstMatch.exists {
+                app.scrollViews.firstMatch.swipeUp()
+            } else {
+                app.swipeUp()
+            }
+        }
+        return target
+    }
+
+    private func assertEventTabVisibility(
+        _ expectedVisible: Bool,
+        in app: XCUIApplication,
+        openWhenVisible: Bool = false,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let buttons = app.tabBars.buttons
+        let expectedCount = expectedVisible ? 4 : 3
+        let countExpectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "count == %d", expectedCount),
+            object: buttons
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [countExpectation], timeout: 8),
+            .completed,
+            expectedVisible
+                ? "Events must restore a fourth real navigation entry"
+                : "Disabling Events must remove one real navigation entry",
+            file: file,
+            line: line
+        )
+        guard expectedVisible, openWhenVisible, buttons.count == expectedCount else { return }
+        let eventButton = buttons.element(boundBy: 1)
+        tapWhenHittable(
+            eventButton,
+            timeout: 5,
+            message: "The restored Events entry must be actionable",
+            file: file,
+            line: line
+        )
+        assertElementExists("screen.events.list", in: app, timeout: 8)
     }
 
     private func assertVisibleScreen(
