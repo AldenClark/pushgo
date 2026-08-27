@@ -22,6 +22,7 @@ struct MessageListScreen: View {
     @State private var isHistoryCleanupPresented = false
     @State private var isPullRefreshing = false
     @State private var isPullRefreshSlow = false
+    @State private var didPullRefreshFail = false
 
     private struct MessageTagSummary: Identifiable, Hashable {
         let tag: String
@@ -192,7 +193,9 @@ struct MessageListScreen: View {
                         .padding(.top, 8)
                 }
 
-                if (isPullRefreshSlow || viewModel.loadState == .slow) && !visibleFilteredMessages.isEmpty {
+                if !didPullRefreshFail
+                    && (isPullRefreshSlow || viewModel.loadState == .slow)
+                    && !visibleFilteredMessages.isEmpty {
                     messageRefreshSlowBanner
                         .frame(maxHeight: .infinity, alignment: .top)
                         .padding(.horizontal)
@@ -270,6 +273,23 @@ struct MessageListScreen: View {
         .accessibilityIdentifier("state.messages.refresh.slow")
     }
 
+    @ViewBuilder
+    private var messageRefreshFailureRow: some View {
+        if didPullRefreshFail {
+            HStack(spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                Text(localizationManager.localized("message_refresh_failed"))
+                    .font(.callout)
+            }
+            .padding(12)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .accessibilityIdentifier("state.messages.refresh.failed")
+        }
+    }
+
     private var isShowingSearchResults: Bool {
         searchViewModel.hasSearched
     }
@@ -277,7 +297,7 @@ struct MessageListScreen: View {
     private var hasMessages: Bool { viewModel.totalMessageCount > 0 }
 
     private var showsEmptyState: Bool {
-        visibleFilteredMessages.isEmpty && !isShowingSearchResults
+        visibleFilteredMessages.isEmpty && !isShowingSearchResults && !didPullRefreshFail
     }
 
     private var showsUnreadFilterEmptyState: Bool {
@@ -341,7 +361,12 @@ struct MessageListScreen: View {
             }
         }
 #endif
-        _ = await environment.syncProviderIngress(reason: "messages_pull_to_refresh")
+        let outcome = await environment.syncProviderIngressOutcome(reason: "messages_pull_to_refresh")
+        if case .failed = outcome {
+            didPullRefreshFail = true
+        } else {
+            didPullRefreshFail = false
+        }
         await refreshVisibleMessageData()
     }
 
@@ -362,6 +387,7 @@ struct MessageListScreen: View {
         ScrollViewReader { proxy in
             List {
                 ingressNoticeRow
+                messageRefreshFailureRow
 
                 if isShowingSearchResults {
                     if searchResults.isEmpty {

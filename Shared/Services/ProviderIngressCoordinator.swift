@@ -221,6 +221,7 @@ final class ProviderIngressCoordinator {
     private var pendingInboxAllowsFallbackPull = false
     private var pendingInboxLimit = 64
     private var pendingInboxReason = "unspecified"
+    private var qualityMessageRefreshAttempt = 0
     private let inboxApplyOwner = "app.ingress.\(UUID().uuidString.lowercased())"
     private static let recentFullSyncInterval: TimeInterval = 3
     // NSE never owns correctness-critical network work. The host may claim a
@@ -540,6 +541,11 @@ final class ProviderIngressCoordinator {
         skipInboxMerge: Bool = false
     ) async -> SyncOutcome {
         guard !Task.isCancelled, hooks.isEnabled() else { return .skipped }
+#if DEBUG
+        if let outcome = await consumeQualityMessageRefreshScenario(reason: reason) {
+            return outcome
+        }
+#endif
         let normalizedDeliveryId = normalizedText(deliveryId)
         let shouldCoalesceFullSync = normalizedDeliveryId == nil && !bypassesRecentFullSyncCoalescing(reason: reason)
         if shouldCoalesceFullSync {
@@ -792,6 +798,61 @@ final class ProviderIngressCoordinator {
             return .failed
         }
     }
+
+#if DEBUG
+    private func consumeQualityMessageRefreshScenario(reason: String) async -> SyncOutcome? {
+        guard reason == "messages_pull_to_refresh",
+              let session = PushGoAutomationContext.qualitySession,
+              session.messageRefreshScenario != .none
+        else {
+            return nil
+        }
+
+        qualityMessageRefreshAttempt += 1
+        if session.messageRefreshScenario == .failOnceThenNewMessage,
+           qualityMessageRefreshAttempt == 1 {
+            return .failed
+        }
+        guard qualityMessageRefreshAttempt == 1
+                || (session.messageRefreshScenario == .failOnceThenNewMessage
+                    && qualityMessageRefreshAttempt == 2)
+        else {
+            return .succeeded(appliedCount: 0)
+        }
+
+        let messageID = "quality-refresh-result"
+        let deliveryID = "quality-delivery-refresh-result"
+        let payload: [AnyHashable: Any] = [
+            "entity_type": "message",
+            "entity_id": messageID,
+            "message_id": messageID,
+            "delivery_id": deliveryID,
+            "title": "P2 Refresh Result",
+            "body": "Persisted through the provider refresh ingress path.",
+            "channel": "quality",
+            "received_at": "2026-01-16T08:00:00Z",
+            "aps": [
+                "alert": [
+                    "title": "P2 Refresh Result",
+                    "body": "Persisted through the provider refresh ingress path.",
+                ],
+            ],
+        ]
+        let results = await persistPayloads([
+            PersistenceInput(payload: payload, requestIdentifier: deliveryID),
+        ])
+        hooks.applyPersistenceResults(results)
+        guard let result = results.first else { return .failed }
+        switch result {
+        case .persisted:
+            return .succeeded(appliedCount: 1)
+        case .duplicate:
+            return .succeeded(appliedCount: 0)
+        case .rejected, .failed:
+            return .failed
+        }
+    }
+#endif
 
     private func persistPayloads(
         _ inputs: [PersistenceInput]

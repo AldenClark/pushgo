@@ -50,6 +50,12 @@ enum PushGoQualityFixture: String, Codable, CaseIterable, Sendable {
     case thingStandard = "thing.standard"
 }
 
+enum PushGoQualityMessageRefreshScenario: String, Codable, Sendable {
+    case none
+    case newMessage = "new_message"
+    case failOnceThenNewMessage = "fail_once_then_new_message"
+}
+
 struct PushGoQualityFaults: Codable, Equatable, Sendable {
     let messageLoadDelayMilliseconds: Int?
     let messageRefreshDelayMilliseconds: Int?
@@ -92,17 +98,20 @@ struct PushGoQualitySessionDescriptor: Codable, Equatable, Sendable {
     let sessionID: String
     let fixture: PushGoQualityFixture
     let faults: PushGoQualityFaults
+    let messageRefreshScenario: PushGoQualityMessageRefreshScenario
 
     init(
         schemaVersion: Int = currentSchemaVersion,
         sessionID: String,
         fixture: PushGoQualityFixture,
-        faults: PushGoQualityFaults = PushGoQualityFaults()
+        faults: PushGoQualityFaults = PushGoQualityFaults(),
+        messageRefreshScenario: PushGoQualityMessageRefreshScenario = .none
     ) {
         self.schemaVersion = schemaVersion
         self.sessionID = sessionID
         self.fixture = fixture
         self.faults = faults
+        self.messageRefreshScenario = messageRefreshScenario
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -110,6 +119,7 @@ struct PushGoQualitySessionDescriptor: Codable, Equatable, Sendable {
         case sessionID = "session_id"
         case fixture
         case faults
+        case messageRefreshScenario = "message_refresh_scenario"
     }
 
     init(from decoder: Decoder) throws {
@@ -119,6 +129,10 @@ struct PushGoQualitySessionDescriptor: Codable, Equatable, Sendable {
         fixture = try container.decode(PushGoQualityFixture.self, forKey: .fixture)
         faults = try container.decodeIfPresent(PushGoQualityFaults.self, forKey: .faults)
             ?? PushGoQualityFaults()
+        messageRefreshScenario = try container.decodeIfPresent(
+            PushGoQualityMessageRefreshScenario.self,
+            forKey: .messageRefreshScenario
+        ) ?? .none
     }
 }
 

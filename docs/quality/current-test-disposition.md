@@ -75,10 +75,12 @@
 - `testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch`
 - `testSlowMessageLoadBecomesVisibleBeforeDataCompletes`
 - `testSlowMessageRefreshKeepsAccurateContentVisibleUntilCompletion`
+- `testMessageRefreshPersistsNewProviderResultAndOpensItsRealDetail`
+- `testMessageRefreshFailureKeepsSnapshotAndRetryRecoversPersistedResult`
 - `testMessageLoadFailureShowsRetryAndRecoversToRealDataState`
 - `testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen`
 
-前八条进入 PR 核心集，其中 workflow 用 52 条数据跨越真实 page size 50，并验证单条/全部已读、relaunch 与未读筛选；慢刷新用正式刷新动作进入真实 provider→Store→列表调用链，并要求慢态与上次准确快照共存、完成后退出。它尚不证明服务端返回新消息或刷新失败恢复。真实导航及 Event/Thing/配置失败等代表性旅程进入 Nightly/Release。Release 已改为显式高价值清单，不再默认执行所有遗留 UI 用例；旧 Runtime command/state 用例不得以绿色覆盖新用例失败，已有更强证据的弱重复从常规 lane 移除。
+前十条进入 PR 核心集，其中 workflow 用 52 条数据跨越真实 page size 50，并验证单条/全部已读、relaunch 与未读筛选。刷新旅程分别证明慢态与上次准确快照共存、Provider 刷新载荷经过规范化摄入后出现在列表和真实详情并在 relaunch 后保留，以及首次失败可见、旧快照保留、同一正式刷新动作重试后恢复；不把直接修改 ViewModel 集合或检查数据库文件当结果。真实导航及 Event/Thing/配置失败等代表性旅程进入 Nightly/Release。Release 已改为显式高价值清单，不再默认执行所有遗留 UI 用例；旧 Runtime command/state 用例不得以绿色覆盖新用例失败，已有更强证据的弱重复从常规 lane 移除。
 
 ## 变更影响门禁
 

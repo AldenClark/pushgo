@@ -20,6 +20,20 @@ struct QualityRuntimeProfileTests {
         #expect(descriptor.faults.messageLoadDelayMilliseconds == nil)
         #expect(descriptor.faults.messageRefreshDelayMilliseconds == 2_500)
         #expect(descriptor.faults.failMessageLoad == false)
+        #expect(descriptor.messageRefreshScenario == .none)
+    }
+
+    @Test("decodes the typed provider refresh scenario")
+    func decodesMessageRefreshScenario() throws {
+        let encoded = try encodedSession(
+            sessionID: "refresh-result",
+            fixture: "messages.standard",
+            messageRefreshScenario: "fail_once_then_new_message"
+        )
+
+        let descriptor = try PushGoAutomationContext.decodeQualitySession(encoded)
+
+        #expect(descriptor.messageRefreshScenario == .failOnceThenNewMessage)
     }
 
     @Test("rejects path traversal instead of treating a host path as a session")
@@ -130,7 +144,8 @@ struct QualityRuntimeProfileTests {
     private func encodedSession(
         sessionID: String,
         fixture: String,
-        faults: [String: Any]? = nil
+        faults: [String: Any]? = nil,
+        messageRefreshScenario: String? = nil
     ) throws -> String {
         var payload: [String: Any] = [
             "schema_version": 1,
@@ -139,6 +154,9 @@ struct QualityRuntimeProfileTests {
         ]
         if let faults {
             payload["faults"] = faults
+        }
+        if let messageRefreshScenario {
+            payload["message_refresh_scenario"] = messageRefreshScenario
         }
         return try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
             .base64EncodedString()

@@ -441,6 +441,67 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(title.exists, "Successful refresh must end on accurate content")
     }
 
+    func testMessageRefreshPersistsNewProviderResultAndOpensItsRealDetail() {
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: "ios-refresh-result-\(UUID().uuidString.lowercased())",
+            fixture: "messages.standard",
+            messageRefreshScenario: "new_message"
+        )
+
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        XCTAssertTrue(context.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8))
+        context.app.buttons["action.messages.refresh"].tap()
+
+        let refreshedTitle = context.app.staticTexts["P2 Refresh Result"]
+        XCTAssertTrue(refreshedTitle.waitForExistence(timeout: 8))
+        XCTAssertTrue(context.app.staticTexts["P2 Split Seed Message"].exists)
+        refreshedTitle.tap()
+        XCTAssertTrue(
+            context.app.staticTexts["Persisted through the provider refresh ingress path."]
+                .waitForExistence(timeout: 5)
+        )
+
+        context.app.terminate()
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        XCTAssertTrue(context.app.staticTexts["P2 Refresh Result"].waitForExistence(timeout: 8))
+    }
+
+    func testMessageRefreshFailureKeepsSnapshotAndRetryRecoversPersistedResult() {
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: "ios-refresh-recovery-\(UUID().uuidString.lowercased())",
+            fixture: "messages.standard",
+            messageRefreshScenario: "fail_once_then_new_message"
+        )
+
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        let originalTitle = context.app.staticTexts["P2 Split Seed Message"]
+        XCTAssertTrue(originalTitle.waitForExistence(timeout: 8))
+        context.app.buttons["action.messages.refresh"].tap()
+
+        assertElementExists("state.messages.refresh.failed", in: context.app, timeout: 5)
+        XCTAssertTrue(originalTitle.exists)
+        let retry = context.app.buttons["action.messages.refresh"]
+        XCTAssertTrue(retry.isHittable)
+        retry.tap()
+
+        let refreshedTitle = context.app.staticTexts["P2 Refresh Result"]
+        XCTAssertTrue(refreshedTitle.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.refresh.failed")
+                .waitForNonExistence(timeout: 5)
+        )
+        refreshedTitle.tap()
+        XCTAssertTrue(
+            context.app.staticTexts["Persisted through the provider refresh ingress path."]
+                .waitForExistence(timeout: 5)
+        )
+    }
+
     func testMessageLoadFailureShowsRetryAndRecoversToRealDataState() {
         let context = configuredLaunchContext()
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
@@ -1730,7 +1791,8 @@ final class PushGo_iOSUITests: XCTestCase {
         fixture: String,
         messageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
-        failMessageLoad: Bool = false
+        failMessageLoad: Bool = false,
+        messageRefreshScenario: String? = nil
     ) -> String {
         var faults: [String: Any] = [
             "fail_message_load": failMessageLoad,
@@ -1746,7 +1808,7 @@ final class PushGo_iOSUITests: XCTestCase {
             "session_id": sessionID,
             "fixture": fixture,
             "faults": faults,
-        ]
+        ].merging(messageRefreshScenario.map { ["message_refresh_scenario": $0] } ?? [:]) { _, new in new }
         let data = try! JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
         return data.base64EncodedString()
     }

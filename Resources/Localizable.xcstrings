@@ -3873,6 +3873,29 @@
         }
       }
     },
+    "message_refresh_failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh failed. Tap Refresh to retry."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刷新失败。点击刷新以重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新整理失敗。點擊重新整理以重試。"
+          }
+        }
+      }
+    },
     "message_load_failed" : {
       "extractionState" : "manual",
       "localizations" : {

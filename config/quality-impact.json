@@ -57,9 +57,9 @@
       "id": "messages-search-delete",
       "paths": ["Shared/Models/PushMessage*.swift", "Shared/Models/MessageFilter.swift", "Shared/Repositories/MessageSearchIndex.swift", "Shared/Services/MessageStateCoordinator.swift", "Shared/Application/PendingLocalDeletionController.swift", "Shared/UI/Message*.swift", "Shared/UI/PendingLocalDeletionBar.swift", "Shared/Utilities/SearchQuerySemantics.swift", "Apps/*/UI/Components/MessageRowView.swift", "Apps/*/UI/Screens/Message*.swift"],
       "capabilities": ["messages", "message-detail", "search-filter", "delete-undo"],
-      "minimum_evidence": ["Swift message/search/deletion tests", "iOS accurate content/search/delete/relaunch UI journeys"],
+      "minimum_evidence": ["Swift message/search/deletion tests", "iOS accurate content/search/delete/relaunch UI journeys", "iOS provider refresh new-result/failure-recovery UI journeys"],
       "lane": "pr",
-      "known_evidence_gaps": ["refresh new-result/failure recovery, media, and macOS UI remain incomplete; representative iOS pagination/read and slow-refresh snapshot-preservation workflows are protected."]
+      "known_evidence_gaps": ["media and macOS UI remain incomplete; representative iOS pagination/read plus slow, new-result, and failure-recovery refresh workflows are protected."]
     },
     {
       "id": "events-things",
