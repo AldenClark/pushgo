@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ChannelManagementView: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
+    @Environment(PendingLocalDeletionController.self) private var pendingLocalDeletionController
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @State private var pendingRemoval: ChannelSubscription?
     @State private var isRemoving = false
@@ -120,6 +121,7 @@ struct ChannelManagementView: View {
                 }
             }
         }
+        .id(pendingLocalDeletionController.effectiveScope)
         .accessibilityIdentifier("screen.channels")
         .sheet(
             isPresented: $isChannelEntrySheetPresented,
@@ -159,7 +161,7 @@ struct ChannelManagementView: View {
     }
 
     private var visibleChannelSubscriptions: [ChannelSubscription] {
-        let suppressed = environment.pendingLocalDeletionController.effectiveScope.channelIDs
+        let suppressed = pendingLocalDeletionController.effectiveScope.channelIDs
         return environment.channelSubscriptions.filter {
             !suppressed.contains($0.channelId.trimmingCharacters(in: .whitespacesAndNewlines))
         }

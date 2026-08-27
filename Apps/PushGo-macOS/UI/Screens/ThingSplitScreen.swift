@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ThingSplitScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
+    @Environment(PendingLocalDeletionController.self) private var pendingLocalDeletionController
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     let viewModel: EntityProjectionViewModel
@@ -37,6 +38,7 @@ struct ThingSplitScreen: View {
             thingListPane
             thingDetailPane
         }
+        .id(pendingLocalDeletionController.effectiveScope)
         .onAppear {
             if searchFieldText != searchQuery {
                 searchFieldText = searchQuery
@@ -66,7 +68,7 @@ struct ThingSplitScreen: View {
                 }
             }
         }
-        .onChange(of: environment.pendingLocalDeletionController.effectiveScope) { _, _ in
+        .onChange(of: pendingLocalDeletionController.effectiveScope) { _, _ in
             syncSelection()
         }
     }
@@ -218,7 +220,7 @@ struct ThingSplitScreen: View {
     }
 
     private func isPendingLocalDeletion(_ thing: ThingProjection) -> Bool {
-        environment.pendingLocalDeletionController.suppressesThing(
+        pendingLocalDeletionController.suppressesThing(
             id: thing.id,
             channelId: thing.channelId
         )
@@ -267,7 +269,7 @@ struct ThingSplitScreen: View {
 
     @MainActor
     private func scheduleDeletion(for thing: ThingProjection) async {
-        guard let result = await environment.pendingLocalDeletionController.scheduleItems(
+        guard let result = await pendingLocalDeletionController.scheduleItems(
             [thing],
             identity: { $0.id },
             title: { $0.title },

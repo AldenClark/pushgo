@@ -24,6 +24,7 @@ struct PendingLocalDeletionBar: View {
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
+                .accessibilityIdentifier("state.pending_deletion")
 
             Text(verbatim: "· \(remainingSeconds)s")
                 .font(.footnote.monospacedDigit())
@@ -34,6 +35,7 @@ struct PendingLocalDeletionBar: View {
             Button(localizedUndoLabel) {
                 controller.undoCurrent()
             }
+            .accessibilityIdentifier("action.pending_deletion.undo")
             .disabled(controller.isUndoInFlight)
             .buttonStyle(.plain)
             .font(.footnote.weight(.semibold))

@@ -10,12 +10,15 @@
 - `delete`：存在性、聚合状态或重复代理没有独立缺陷敏感度；在更强证据通过后删除。
 - `diagnostic`：只提供截图、环境或外部系统诊断，不得进入产品绿色汇总。
 
-## iOS：`PushGo_iOSUITests.swift`（26 个）
+## iOS：`PushGo_iOSUITests.swift`
 
 | 处置 | 当前测试 | 原因与替代终点 |
 | --- | --- | --- |
 | rewrite | `testLaunchesIntoMessageList` | 不能只断言 screen id；改为 Empty/Content/Error 正确状态、可操作和无永久 Loading。 |
 | rewrite | `testAutomationRequestCanOpenChannelsScreen`、`testNavSwitchTabMatrixCoversPrimaryScreens` | 删除 Runtime 直接导航；改为真实 Tab 点击并检查目标页独有内容、选中和返回。 |
+| keep（已迁移） | `testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen` | 单次真实会话点击四个主入口及 Settings，并核对各目标页；替代 Runtime 导航矩阵进入 Nightly/Release。 |
+| keep（已迁移） | `testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail` | 输入错误查询证明排除集合，再输入目标查询并打开准确正文；替代“App 没崩”Oracle。 |
+| keep（已迁移） | `testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch` | 从真实详情删除，验证行立即隐藏、Undo 可操作、重启后 canonical 对象仍在。 |
 | keep（已迁移） | `testImportedEventFixtureCanOpenEventDetail`、`testImportedThingFixtureCanOpenThingDetail` | 已改为 App-owned 内置 fixture，走真实消息摄入/投影并点击 Tab、列表行、详情字段；不以 response/events 文件作最终 Oracle。 |
 | keep/rewrite-launcher | `testPushSettingsCanOpenDecryptionScreen` | 保留真实页面结果，改成用户点击 Settings 与解密入口；不由 Runtime command 打开。 |
 | keep/rewrite-launcher | `testInvalidServerAddressShowsInlineFeedbackInsteadOfToast` | 已验证真实输入和错误呈现；仅替换 Runtime 导航/宿主路径，继续验证旧配置未生效。 |
@@ -65,9 +68,12 @@
 
 ## 本轮新增高价值纵向用例
 
-- `testQualityEmptyFixtureShowsRealEmptyState`
+- `testQualitySessionUsesAppOwnedStoreAndReachesFunctionalEmptyState`
 - `testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch`
+- `testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail`
+- `testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch`
 - `testSlowMessageLoadBecomesVisibleBeforeDataCompletes`
 - `testMessageLoadFailureShowsRetryAndRecoversToRealDataState`
+- `testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen`
 
-这些用例进入 PR 核心集。旧 Runtime command/state 用例暂只留在 Nightly/Release 迁移清单，不允许其绿色覆盖新用例失败；当同一用户目的已有更强证据后删除弱重复，避免持续消耗预算。
+前六条进入 PR 核心集，真实导航及 Event/Thing/配置失败等代表性旅程进入 Nightly/Release。Release 已改为显式高价值清单，不再默认执行所有遗留 UI 用例；旧 Runtime command/state 用例不得以绿色覆盖新用例失败，已有更强证据的弱重复从常规 lane 移除。

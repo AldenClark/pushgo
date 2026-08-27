@@ -7,7 +7,7 @@
 | I/M/W App launch | 进入可操作 App | Empty/Content/slow/error/migration | App-owned Store、首屏、导航 | Store + UI + launch metric | P0；iOS empty/content/slow/error 已有，M/W 与 migration UI 待补 | `AppEnvironment`、`LocalDataStore`、Root UI |
 | I/M Messages | 浏览和刷新消息 | first/page/refresh/slow/error | summary query、revision、列表行 | Store + VM + UI | P0；iOS 首次 slow/error/retry 已有，分页/refresh 性能待补 | Message Store/VM/List |
 | I/M Messages row/detail | 阅读准确对象 | read/unread/missing/decrypt/media | detail、read state、badge | Core + UI + relaunch | P0；iOS 准确字段/详情/relaunch 已有，变更动作与媒体待补 | Message Detail/Store |
-| I/M Search | 找到且只找到目标消息 | latest query/empty/error/rebuild | search index、结果集合、详情 | property + Store + UI | P0；真实集合 UI 缺口 | Search VM/Store/UI |
+| I/M Search | 找到且只找到目标消息 | latest query/empty/error/rebuild | search index、结果集合、详情 | property + Store + UI | P0；错误查询排除、目标集合与真实详情 UI 已有；index error/rebuild 仍在低层 | Search VM/Store/UI |
 | I/M Filters/cleanup | 限定范围并清理历史 | channel/tag/unread/cutoff/cancel/failure | Message/Event/Thing、stats/index | Store boundary + UI | P0/P1；部分低层已有 | List/Store/Cleanup |
 | I/M Delete/Undo | 删除或撤销且重启一致 | pending/undo/claim/failure/reopen | canonical rows、通知、派生表面 | coordinator + Store + UI | P0；强低层、UI 待重写 | Pending deletion |
 | I/M Events | 浏览、筛选、关闭事件 | ongoing/closed/slow/error/duplicate | event head/timeline、Thing 关联 | Store + contract + UI | P0；iOS 内置摄入→列表→详情字段旅程已实现，关闭/筛选待补 | Entity Store/VM/UI |

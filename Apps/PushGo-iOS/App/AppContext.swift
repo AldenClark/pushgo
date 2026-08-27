@@ -37,6 +37,7 @@ private struct DynamicLocaleWrapper<Content: View>: View {
     var body: some View {
         content
             .environment(environment)
+            .environment(environment.pendingLocalDeletionController)
             .environment(localizationManager)
             .environment(\.locale, localizationManager.swiftUILocale)
             .toastOverlay(environment: environment)

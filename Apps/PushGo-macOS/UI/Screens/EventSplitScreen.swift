@@ -2,6 +2,7 @@ import SwiftUI
 
 struct EventSplitScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
+    @Environment(PendingLocalDeletionController.self) private var pendingLocalDeletionController
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     let viewModel: EntityProjectionViewModel
@@ -23,6 +24,7 @@ struct EventSplitScreen: View {
             eventListPane
             eventDetailPane
         }
+        .id(pendingLocalDeletionController.effectiveScope)
         .alert(
             "\(localizationManager.localized("close")) \(localizationManager.localized("push_type_event"))?",
             isPresented: $showCloseConfirmation
@@ -67,7 +69,7 @@ struct EventSplitScreen: View {
             hydratedSelectedEvent = nil
             requestSelectedEventHydration(id)
         }
-        .onChange(of: environment.pendingLocalDeletionController.effectiveScope) { _, _ in
+        .onChange(of: pendingLocalDeletionController.effectiveScope) { _, _ in
             syncSelection()
         }
     }
@@ -236,7 +238,7 @@ struct EventSplitScreen: View {
     }
 
     private func isPendingLocalDeletion(_ event: EventProjection) -> Bool {
-        environment.pendingLocalDeletionController.suppressesEvent(
+        pendingLocalDeletionController.suppressesEvent(
             id: event.id,
             channelId: event.channelId
         )
@@ -273,7 +275,7 @@ struct EventSplitScreen: View {
 
     @MainActor
     private func scheduleDeletion(for event: EventProjection) async {
-        guard let result = await environment.pendingLocalDeletionController.scheduleItems(
+        guard let result = await pendingLocalDeletionController.scheduleItems(
             [event],
             identity: { $0.id },
             title: { $0.title },

@@ -4,8 +4,8 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 lane="${1:-pr}"
 
-core_ui_scopes="PushGo-iOSUITests/PushGo_iOSUITests/testQualitySessionUsesAppOwnedStoreAndReachesFunctionalEmptyState,PushGo-iOSUITests/PushGo_iOSUITests/testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testSlowMessageLoadBecomesVisibleBeforeDataCompletes,PushGo-iOSUITests/PushGo_iOSUITests/testMessageLoadFailureShowsRetryAndRecoversToRealDataState"
-nightly_ui_scopes="$core_ui_scopes,PushGo-iOSUITests/PushGo_iOSUITests/testNavSwitchTabMatrixCoversPrimaryScreens,PushGo-iOSUITests/PushGo_iOSUITests/testImportedEventFixtureCanOpenEventDetail,PushGo-iOSUITests/PushGo_iOSUITests/testImportedThingFixtureCanOpenThingDetail,PushGo-iOSUITests/PushGo_iOSUITests/testInvalidServerAddressShowsInlineFeedbackInsteadOfToast,PushGo-iOSUITests/PushGo_iOSUITests/testSubmittingPopulatedSearchResultsKeepsAppRunning"
+core_ui_scopes="PushGo-iOSUITests/PushGo_iOSUITests/testQualitySessionUsesAppOwnedStoreAndReachesFunctionalEmptyState,PushGo-iOSUITests/PushGo_iOSUITests/testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail,PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testSlowMessageLoadBecomesVisibleBeforeDataCompletes,PushGo-iOSUITests/PushGo_iOSUITests/testMessageLoadFailureShowsRetryAndRecoversToRealDataState"
+nightly_ui_scopes="$core_ui_scopes,PushGo-iOSUITests/PushGo_iOSUITests/testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen,PushGo-iOSUITests/PushGo_iOSUITests/testImportedEventFixtureCanOpenEventDetail,PushGo-iOSUITests/PushGo_iOSUITests/testImportedThingFixtureCanOpenThingDetail,PushGo-iOSUITests/PushGo_iOSUITests/testInvalidServerAddressShowsInlineFeedbackInsteadOfToast"
 
 run_core() {
   "$repo_root/scripts/quality_doctor.sh"
@@ -35,7 +35,9 @@ case "$lane" in
     ;;
   release)
     run_core
-    TEST_SCOPES="${TEST_SCOPES:-}" "$repo_root/scripts/run_ios_ui_tests.sh"
+    TEST_SCOPES="${TEST_SCOPES:-$nightly_ui_scopes}" \
+      MAX_RETRIES="${MAX_RETRIES:-1}" \
+      "$repo_root/scripts/run_ios_ui_tests.sh"
     xcodebuild \
       -project "$repo_root/pushgo.xcodeproj" \
       -scheme PushGo-iOS \

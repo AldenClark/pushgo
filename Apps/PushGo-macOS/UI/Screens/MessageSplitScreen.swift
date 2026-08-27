@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MessageSplitScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
+    @Environment(PendingLocalDeletionController.self) private var pendingLocalDeletionController
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     let messageListViewModel: MessageListViewModel
@@ -24,6 +25,7 @@ struct MessageSplitScreen: View {
             messageListPane
             messageDetailPane
         }
+        .id(pendingLocalDeletionController.effectiveScope)
         .navigationTitle(localizationManager.localized("messages"))
         .environment(searchViewModel)
         .onAppear {
@@ -67,7 +69,7 @@ struct MessageSplitScreen: View {
         .onChange(of: openMessageId) { _, _ in
             openPendingMessageIfNeeded()
         }
-        .onChange(of: environment.pendingLocalDeletionController.effectiveScope) { _, _ in
+        .onChange(of: pendingLocalDeletionController.effectiveScope) { _, _ in
             if let selectedMessageSnapshot,
                isPendingLocalDeletion(selectedMessageSnapshot.id, channelId: selectedMessageSnapshot.channel)
             {
@@ -355,7 +357,7 @@ struct MessageSplitScreen: View {
     }
 
     private func isPendingLocalDeletion(_ messageId: UUID, channelId: String?) -> Bool {
-        environment.pendingLocalDeletionController.suppressesMessage(id: messageId, channelId: channelId)
+        pendingLocalDeletionController.suppressesMessage(id: messageId, channelId: channelId)
     }
 
     private var displayedTagOptions: [String] {
@@ -384,7 +386,7 @@ struct MessageSplitScreen: View {
 
     @MainActor
     private func scheduleDeletion(for message: PushMessageSummary) async {
-        guard let result = await environment.pendingLocalDeletionController.scheduleItems(
+        guard let result = await pendingLocalDeletionController.scheduleItems(
             [message],
             identity: { $0.id },
             title: { $0.title },

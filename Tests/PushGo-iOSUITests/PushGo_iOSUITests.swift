@@ -246,6 +246,77 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.empty").exists)
     }
 
+    func testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail() {
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: "ios-search-\(UUID().uuidString.lowercased())",
+            fixture: "messages.standard"
+        )
+
+        launch(context.app)
+
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        let searchField = runtimeQualitySearchField(in: context.app)
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
+        replaceText(in: searchField, with: "not-present-in-any-message")
+        XCTAssertEqual(searchField.value as? String, "not-present-in-any-message")
+        assertElementExists("state.messages.search.empty", in: context.app, timeout: 8)
+        XCTAssertFalse(context.app.staticTexts["P2 Split Seed Message"].exists)
+
+        replaceText(in: searchField, with: "P2 Split")
+        XCTAssertEqual(searchField.value as? String, "P2 Split")
+        let target = context.app.staticTexts["P2 Split Seed Message"]
+        XCTAssertTrue(target.waitForExistence(timeout: 8))
+        XCTAssertFalse(element(in: context.app, identifier: "state.messages.search.empty").exists)
+        target.tap()
+        assertElementExists("sheet.message.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."].exists
+        )
+    }
+
+    func testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch() {
+        let sessionID = "ios-delete-undo-\(UUID().uuidString.lowercased())"
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard"
+        )
+
+        launch(context.app)
+
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        let title = context.app.staticTexts["P2 Split Seed Message"]
+        XCTAssertTrue(title.waitForExistence(timeout: 8))
+        title.tap()
+        let delete = element(in: context.app, identifier: "action.message.delete")
+        XCTAssertTrue(delete.waitForExistence(timeout: 8))
+        delete.tap()
+        let row = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertTrue(row.waitForNonExistence(timeout: 2))
+        assertElementExists("state.pending_deletion", in: context.app, timeout: 5)
+        let undo = element(in: context.app, identifier: "action.pending_deletion.undo")
+        XCTAssertTrue(undo.isHittable)
+        undo.tap()
+        XCTAssertTrue(title.waitForExistence(timeout: 8))
+        context.app.terminate()
+
+        let relaunched = configuredLaunchContext()
+        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard"
+        )
+        launch(relaunched.app)
+        assertQualityRuntimeReady(in: relaunched.app, timeout: 15)
+        XCTAssertTrue(
+            relaunched.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8),
+            "Undo must restore the canonical object, not only the visible row"
+        )
+    }
+
     func testSlowMessageLoadBecomesVisibleBeforeDataCompletes() {
         let context = configuredLaunchContext()
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
@@ -306,6 +377,33 @@ final class PushGo_iOSUITests: XCTestCase {
             assertVisibleScreen(route.screen, in: context, timeout: 12)
             context.app.terminate()
         }
+    }
+
+    func testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen() {
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: "ios-navigation-\(UUID().uuidString.lowercased())",
+            fixture: "empty.clean"
+        )
+        launch(context.app)
+
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        assertElementExists("screen.messages.list", in: context.app, timeout: 8)
+        let tabs = context.app.tabBars.buttons
+        XCTAssertGreaterThanOrEqual(tabs.count, 4, "The four primary product destinations must be reachable")
+
+        tabs.element(boundBy: 1).tap()
+        assertElementExists("screen.events.list", in: context.app, timeout: 8)
+        tabs.element(boundBy: 2).tap()
+        assertElementExists("screen.things.list", in: context.app, timeout: 8)
+        tabs.element(boundBy: 3).tap()
+        assertElementExists("screen.channels", in: context.app, timeout: 8)
+
+        let settings = element(in: context.app, identifier: "action.channels.settings")
+        XCTAssertTrue(settings.waitForExistence(timeout: 5))
+        XCTAssertTrue(settings.isHittable)
+        settings.tap()
+        assertElementExists("screen.settings", in: context.app, timeout: 8)
     }
 
     func testImportedEventFixtureCanOpenEventDetail() {
@@ -1571,9 +1669,15 @@ final class PushGo_iOSUITests: XCTestCase {
 
     private func replaceText(in field: XCUIElement, with text: String) {
         field.tap()
-        let existingLength = (field.value as? String)?.count ?? 0
-        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: max(existingLength, 80)))
-        field.typeText(text)
+        let existing = (field.value as? String) ?? ""
+        if !existing.isEmpty {
+            field.typeKey("a", modifierFlags: .command)
+        }
+        if !text.isEmpty {
+            field.typeText(text)
+        } else if !existing.isEmpty {
+            field.typeText(XCUIKeyboardKey.delete.rawValue)
+        }
     }
 
     private func assertElementExists(

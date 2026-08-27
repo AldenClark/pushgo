@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ChannelManagementScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
+    @Environment(PendingLocalDeletionController.self) private var pendingLocalDeletionController
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @State private var pendingRemoval: ChannelSubscription?
     @State private var isRemoving = false
@@ -30,6 +31,7 @@ struct ChannelManagementScreen: View {
         navigationContainer {
             channelManagementScaffold
         }
+        .id(pendingLocalDeletionController.effectiveScope)
         .confirmationDialog(
             pendingRemoval.map { localizationManager.localized("unsubscribe_channel_title", $0.displayName) }
                 ?? "",
@@ -169,7 +171,7 @@ struct ChannelManagementScreen: View {
     }
 
     private var visibleChannelSubscriptions: [ChannelSubscription] {
-        let suppressed = environment.pendingLocalDeletionController.effectiveScope.channelIDs
+        let suppressed = pendingLocalDeletionController.effectiveScope.channelIDs
         return environment.channelSubscriptions.filter {
             !suppressed.contains($0.channelId.trimmingCharacters(in: .whitespacesAndNewlines))
         }

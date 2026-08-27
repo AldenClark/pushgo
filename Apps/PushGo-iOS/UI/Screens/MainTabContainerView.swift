@@ -175,6 +175,7 @@ struct MainTabContainerView: View {
                 )
                 .tabItem {
                     Label(LocalizationManager.localizedSync("messages"), systemImage: "tray.full")
+                        .accessibilityIdentifier("tab.messages")
                 }
                 .tag(MainTab.messages)
                 .badge(unreadCount > 0 ? Text(verbatim: "\(unreadCount)") : nil)
@@ -219,6 +220,7 @@ struct MainTabContainerView: View {
             ChannelManagementScreen()
                 .tabItem {
                     Label(LocalizationManager.localizedSync("channels"), systemImage: "dot.radiowaves.left.and.right")
+                        .accessibilityIdentifier("tab.channels")
                 }
                 .tag(MainTab.channels)
         }

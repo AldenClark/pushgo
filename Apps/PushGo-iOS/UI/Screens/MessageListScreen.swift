@@ -4,6 +4,7 @@ import Observation
 @MainActor
 struct MessageListScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
+    @Environment(PendingLocalDeletionController.self) private var pendingLocalDeletionController
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @Environment(MessageSearchViewModel.self) private var searchViewModel: MessageSearchViewModel
     @Environment(\.scenePhase) private var scenePhase
@@ -84,7 +85,7 @@ struct MessageListScreen: View {
                 )
 #endif
             }
-            .onChange(of: environment.pendingLocalDeletionController.effectiveScope) { _, _ in
+            .onChange(of: pendingLocalDeletionController.effectiveScope) { _, _ in
                 if let selectedMessage, isPendingLocalDeletion(selectedMessage) {
                     self.selectedMessage = nil
                 }
@@ -173,6 +174,7 @@ struct MessageListScreen: View {
         } else {
             ZStack {
                 messageList
+                    .id(pendingLocalDeletionController.effectiveScope)
                     .opacity(showsEmptyState ? 0.001 : 1)
                     .allowsHitTesting(!showsEmptyState)
                     .accessibilityHidden(showsEmptyState)
@@ -536,6 +538,7 @@ struct MessageListScreen: View {
             Group { Color.clear },
         )
         .hideListSeparator()
+        .accessibilityIdentifier("state.messages.search.empty")
     }
 
     private var searchProgressRow: some View {
@@ -1015,7 +1018,7 @@ private extension MessageListScreen {
     }
 
     private func isPendingLocalDeletion(_ message: PushMessageSummary) -> Bool {
-        environment.pendingLocalDeletionController.suppressesMessage(
+        return pendingLocalDeletionController.suppressesMessage(
             id: message.id,
             channelId: message.channel
         )
@@ -1027,7 +1030,7 @@ private extension MessageListScreen {
 
     @MainActor
     private func scheduleDeletion(for message: PushMessageSummary) async {
-        guard let result = await environment.pendingLocalDeletionController.scheduleItems(
+        guard let result = await pendingLocalDeletionController.scheduleItems(
             [message],
             identity: { $0.id },
             title: { $0.title },

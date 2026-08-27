@@ -7,6 +7,7 @@ struct ThingListScreen: View {
     }
 
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
+    @Environment(PendingLocalDeletionController.self) private var pendingLocalDeletionController
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -24,6 +25,7 @@ struct ThingListScreen: View {
     var body: some View {
         let filteredThingsSnapshot = filteredThings
         let baseContent = listContainer(filteredThings: filteredThingsSnapshot)
+            .id(pendingLocalDeletionController.effectiveScope)
         let content = applySearchIfNeeded(baseContent)
         .accessibilityIdentifier("screen.things.list")
         .refreshable {
@@ -60,7 +62,7 @@ struct ThingListScreen: View {
             publishAutomationState()
 #endif
         }
-        .onChange(of: environment.pendingLocalDeletionController.effectiveScope) { _, _ in
+        .onChange(of: pendingLocalDeletionController.effectiveScope) { _, _ in
             if let selectedThing, isPendingLocalDeletion(selectedThing) {
                 self.selectedThing = nil
             }
@@ -419,7 +421,7 @@ struct ThingListScreen: View {
     }
 
     private func isPendingLocalDeletion(_ thing: ThingProjection) -> Bool {
-        environment.pendingLocalDeletionController.suppressesThing(
+        pendingLocalDeletionController.suppressesThing(
             id: thing.id,
             channelId: thing.channelId
         )
@@ -427,7 +429,7 @@ struct ThingListScreen: View {
 
     @MainActor
     private func scheduleDeletion(for thing: ThingProjection) async {
-        guard let result = await environment.pendingLocalDeletionController.scheduleItems(
+        guard let result = await pendingLocalDeletionController.scheduleItems(
             [thing],
             identity: { $0.id },
             title: { $0.title },
