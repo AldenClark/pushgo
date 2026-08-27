@@ -54,3 +54,4 @@ jobs:
           path: |
             build/quality-results/ios/**/*.xcresult
             build/quality-results/ios/**/*.log
+            build/quality-results/*.json

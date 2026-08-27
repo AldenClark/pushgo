@@ -2,7 +2,17 @@
 
 ## 验证结论
 
-方案与实现保持同一目标：用最少充分证据证明用户任务、数据终点和可恢复性；readiness、identifier、fixture、版本、文件和报告只负责准备或归因，不能单独让产品能力通过。当前核心纵向切片可实施且已被真实负控击穿过；真实系统能力仍按 `BLOCKED/NOT RUN` 独立呈现。
+方案目标仍正确，但 2026-08-28 的实现复核发现此前“只剩真机/外部证据”的结论不成立。readiness、identifier、fixture、版本、文件和报告只能准备或归因；当前已证明 Runtime/环境底座、Messages 核心样板和两端 Event/Thing 的首批准确内容旅程，WP3–WP6 的可达产品能力仍有显著缺口。真实系统能力继续按 `BLOCKED/NOT RUN` 独立呈现，局部 lane 绿色不得提升为整体完成。
+
+## 完成声明对抗复核
+
+| 被攻击的声明 | 当前源码/CI 反例 | 裁决与修正 |
+| --- | --- | --- |
+| “完整测试体系已经实施” | Apple 没有设计要求的 Test Plans/Performance suites；Android 没有 macrobenchmark 模块；两端大量第 25 节 P0/P1 仍无真实旅程 | `REJECTED`；整体保持 `PARTIAL` |
+| “Android PR 已保护核心 UI” | 原 workflow 的 PR 只执行 JVM、androidTest compile 和 assembleDebug | `REJECTED`；本轮新增 PR emulator `pr-ui` 核心旅程 |
+| “所有绿色都能区分产品与环境” | 原脚本只输出一个 `status=PASSED`；iOS transient retry 后最终绿无法结构化保留 flake | `REJECTED`；本轮新增双状态 JSON，恢复后 test system 保持 `FLAKY` |
+| “剩余只是真机/外部系统” | Messages 分页/refresh/筛选/mark-read、Android Event/Thing、Channels/Settings、性能等均可在本地继续实现 | `REJECTED`；从 Release 外部清单移回 WP3–WP6 |
+| “能力矩阵证明覆盖” | 矩阵多行明确写着 UI/性能缺口；它本身也声明不是 Oracle | 只能作防漏索引，不能作完成证据 |
 
 ## 蓝队正向证明链
 
@@ -18,7 +28,7 @@
 | Event/Thing | 点 Tab、点准确列表行 | fixture → message ingestion → projection → list/detail | 准确对象及字段详情 | 把 fixture 直接塞实体表曾导致列表对象与真实详情路径分离，测试确实失败 |
 | Release 隔离 | 向 Release 注入合法会话 | launch env → runtime resolver | Quality Runtime 不激活 | Debug-only 条件移除会使负控失败 |
 
-## 红队攻击结果
+## 红队攻击结果（设计防线与已实现防线分开理解）
 
 1. **形式 Oracle 攻击**：只保留文件存在、版本、screen id、count 或 response=ok。裁决：不能阻断；必须绑定准确内容/动作/重启或数据终点。
 2. **宿主权限攻击**：App 无权读 Runner 临时目录/数据库。裁决：fixture 与结果写入 App container；宿主路径协议只留旧诊断迁移清单，不再用于新核心纵向用例。
@@ -29,10 +39,14 @@
 7. **环境悬挂攻击**：损坏 iOS Simulator 在测试后采集 600 秒诊断。结果：创建健康代表设备、doctor 优先健康设备、禁用自动长诊断；已有损坏设备不作为产品失败。
 8. **Release 后门攻击**：合法 session payload 注入正式构建。结果：Release 负控确认 Quality Runtime 不激活。
 9. **矩阵预算攻击**：为设备×语言×数据量×故障构造全组合。结果：PR 一个代表配置和核心旅程；Nightly 扩展风险代表；Release 才全量，100k 显式 opt-in。
-10. **跨套件会话污染攻击**：Android Runner 默认 Quality DB 会让迁移测试绕过其旧库。结果：实跑出现 3 个可信失败；已拆成显式 Quality 进程与 Production 数据进程，本轮扩展后最终 7/7 UI + 18/18 数据边界通过。
+10. **跨套件会话污染攻击**：Android Runner 默认 Quality DB 会让迁移测试绕过其旧库。结果：实跑出现 3 个可信失败；已拆成显式 Quality 进程与 Production 数据进程，本轮扩展后最终 9/9 UI + 18/18 数据边界通过。
 11. **待删除“只显示撤销条”攻击**：数据库和撤销条正确，但消息行仍可见。结果：新 UI 旅程真实失败；归因为嵌套 Observation 未使 SwiftUI `List` 结构失效，改为直接注入控制器并用消息/事件/物品/频道作用域驱动低频列表重建，随后删除/撤销/relaunch 通过。
 12. **可访问性标识覆盖攻击**：父撤销条状态 identifier 覆盖子 Undo 按钮，用户动作无法被可靠定位。结果：状态 identifier 移至摘要文本，按钮保留独立语义；未通过放宽选择器处理。
 13. **低价值全量攻击**：Release 默认遍历全部遗留 UI/androidTest，弱 Oracle 与极端组合消耗预算。结果：两端 Release 均改为显式高价值旅程 + 风险代表数据边界；全量遗留不再天然等于“更严格”。
+14. **局部绿色冒充体系完成攻击**：核心样板 6/6 或 7/7 通过后，把其余 WP 归为真机缺口。结果：攻击曾成功；本轮已纠正进度状态并引入按实际 claim 报告，但完整能力迁移仍需继续实施。
+15. **Scenario 只支持首次启动攻击**：Android Event/Thing 首次 seed 成功后，relaunch 的重复 delivery 正常返回 false，却被准备代码 `check(false)` 误判为失败。结果：最终复核发现并改为幂等摄入后核对 canonical Event/Thing 终点；两条 Entity UI 旅程均新增 relaunch 后对象仍可见并通过。
+16. **稳定 ID 冒充内容正确攻击**：Entity 行只按 test tag 命中时，即使用户看到的标题投影错误也可能通过。结果：新增“对象行内准确标题”与“详情 Sheet 内当前标题”断言；首次全屏文本选择器因双语义节点可信失败，未重跑掩盖，改为限定真实容器后 2/2 通过。
+17. **selected 未执行仍写绿攻击**：结果脚本若只接受调用参数，未来 lane 漏记 `executed_claims` 仍可能输出 `PASSED`。结果：写入器增加负控不变量；`PASSED` 必须至少选择一个 claim 且全部进入 executed，故意缺失 claim 的写入已被拒绝。Android focused 真实入口随后以 6/6 生成完整收据。
 
 ## 归因分析
 

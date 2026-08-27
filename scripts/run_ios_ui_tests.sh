@@ -8,6 +8,12 @@ test_scopes="${TEST_SCOPES:-${TEST_SCOPE:-}}"
 max_retries="${MAX_RETRIES:-1}"
 derived_data_path="${DERIVED_DATA_PATH:-$repo_root/.deriveddata-ui-tests}"
 results_root="${RESULTS_ROOT:-$repo_root/build/quality-results/ios}"
+runner_status_file="${QUALITY_RUNNER_STATUS_FILE:-}"
+
+if [[ -n "$runner_status_file" ]]; then
+  mkdir -p "$(dirname "$runner_status_file")"
+  printf 'PASSED\n' > "$runner_status_file"
+fi
 
 doctor_output="$("$repo_root/scripts/quality_doctor.sh")"
 printf '%s\n' "$doctor_output"
@@ -78,8 +84,22 @@ until [[ $attempt -gt $((max_retries + 1)) ]]; do
     exit 0
   fi
 
-  if [[ $attempt -le $max_retries ]] && is_transient_runner_failure "$log_file"; then
+  if is_transient_runner_failure "$log_file"; then
     echo "classification=BLOCKED_TRANSIENT_RUNNER"
+    if [[ -n "$runner_status_file" ]]; then
+      if [[ $attempt -le $max_retries ]]; then
+        printf 'FLAKY\n' > "$runner_status_file"
+      else
+        printf 'BLOCKED\n' > "$runner_status_file"
+      fi
+    fi
+    if [[ $attempt -gt $max_retries ]]; then
+      echo "status=BLOCKED"
+      echo "reason=transient_runner_failure_exhausted_retries"
+      echo "log=$log_file"
+      echo "result_bundle=$result_bundle"
+      exit 2
+    fi
     xcrun simctl shutdown "$target" >/dev/null 2>&1 || true
     xcrun simctl boot "$target" >/dev/null 2>&1 || true
     xcrun simctl bootstatus "$target" -b

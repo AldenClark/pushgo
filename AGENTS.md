@@ -10,6 +10,7 @@ Repository-wide instructions for humans and coding agents:
 - Do not construct device × locale × state × fault Cartesian products. Prioritize frequent core journeys, prior incidents, data-loss/corruption risks, irreversible actions, and release boundaries. Cover equivalent long tails below the UI layer or document them as deferred.
 - A retry may classify and recover infrastructure failures only. Never retry a product assertion until it turns green.
 - Report `PASSED`, `FAILED`, `FLAKY`, `BLOCKED`, and `NOT RUN` distinctly. Do not claim physical-device, APNs, permission, background, or system-surface coverage from Simulator evidence.
+- Treat `build/quality-results/*-summary.json` as an execution receipt, never as whole-product coverage. `selected_claims` states intent; only `executed_claims` completed. Keep product and test-system status separate; a recovered runner remains `FLAKY`.
 - Update the capability index and the workstream progress record whenever capability scope or fresh evidence changes.
 
 The implementation authority is `design/workstreams/pushgo-quality-testing-overhaul/ai-development-policy.md`.
