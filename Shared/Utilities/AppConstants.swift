@@ -48,6 +48,7 @@ enum PushGoQualityFixture: String, Codable, CaseIterable, Sendable {
     case messagesLarge = "messages.large"
     case eventStandard = "event.standard"
     case thingStandard = "thing.standard"
+    case channelsStandard = "channels.standard"
 }
 
 enum PushGoQualityMessageRefreshScenario: String, Codable, Sendable {
@@ -59,6 +60,11 @@ enum PushGoQualityMessageRefreshScenario: String, Codable, Sendable {
 enum PushGoQualityEventCloseScenario: String, Codable, Sendable {
     case none
     case acceptedAndDelivered = "accepted_and_delivered"
+}
+
+enum PushGoQualityChannelMutationScenario: String, Codable, Sendable {
+    case none
+    case accepted
 }
 
 struct PushGoQualityFaults: Codable, Equatable, Sendable {
@@ -105,6 +111,7 @@ struct PushGoQualitySessionDescriptor: Codable, Equatable, Sendable {
     let faults: PushGoQualityFaults
     let messageRefreshScenario: PushGoQualityMessageRefreshScenario
     let eventCloseScenario: PushGoQualityEventCloseScenario
+    let channelMutationScenario: PushGoQualityChannelMutationScenario
 
     init(
         schemaVersion: Int = currentSchemaVersion,
@@ -112,7 +119,8 @@ struct PushGoQualitySessionDescriptor: Codable, Equatable, Sendable {
         fixture: PushGoQualityFixture,
         faults: PushGoQualityFaults = PushGoQualityFaults(),
         messageRefreshScenario: PushGoQualityMessageRefreshScenario = .none,
-        eventCloseScenario: PushGoQualityEventCloseScenario = .none
+        eventCloseScenario: PushGoQualityEventCloseScenario = .none,
+        channelMutationScenario: PushGoQualityChannelMutationScenario = .none
     ) {
         self.schemaVersion = schemaVersion
         self.sessionID = sessionID
@@ -120,6 +128,7 @@ struct PushGoQualitySessionDescriptor: Codable, Equatable, Sendable {
         self.faults = faults
         self.messageRefreshScenario = messageRefreshScenario
         self.eventCloseScenario = eventCloseScenario
+        self.channelMutationScenario = channelMutationScenario
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -129,6 +138,7 @@ struct PushGoQualitySessionDescriptor: Codable, Equatable, Sendable {
         case faults
         case messageRefreshScenario = "message_refresh_scenario"
         case eventCloseScenario = "event_close_scenario"
+        case channelMutationScenario = "channel_mutation_scenario"
     }
 
     init(from decoder: Decoder) throws {
@@ -145,6 +155,10 @@ struct PushGoQualitySessionDescriptor: Codable, Equatable, Sendable {
         eventCloseScenario = try container.decodeIfPresent(
             PushGoQualityEventCloseScenario.self,
             forKey: .eventCloseScenario
+        ) ?? .none
+        channelMutationScenario = try container.decodeIfPresent(
+            PushGoQualityChannelMutationScenario.self,
+            forKey: .channelMutationScenario
         ) ?? .none
     }
 }

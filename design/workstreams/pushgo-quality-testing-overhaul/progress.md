@@ -9,10 +9,10 @@
 | 工作包 | 状态 | 已证明 | 尚未完成、不能被现有绿色替代 |
 | --- | --- | --- | --- |
 | WP0 去伪审计 | `VERIFIED` | 两仓库现有 UI/device 测试均有 disposition，弱 Oracle、路径协议、skip/return 和死代码候选已形成基线 | rewrite/move/delete 的实际迁移属于 WP3–WP7，不因 WP0 退出而视为完成 |
-| WP1 Runtime/环境 | `PARTIAL` | 两端 App-owned session Store、确定 fixture、readiness、doctor、teardown、Release 隔离；Apple fixture 首次初始化幂等并隔离历史筛选偏好 | 50 次启动 ≥98% 尚未执行；Apple/macOS 与 Android 遗留 Runtime 仍保留绝对路径/内部 state 协议；准备失败 10 秒内的全套证明不完整 |
+| WP1 Runtime/环境 | `PARTIAL` | 两端 App-owned session Store、确定 fixture、readiness、doctor、teardown、Release 隔离；两端 fixture 用会话级初始化记录与实时业务行数分离，重启不重复播种已被用户合法修改的数据；Apple 隔离历史筛选偏好 | 50 次启动 ≥98% 尚未执行；Apple/macOS 与 Android 遗留 Runtime 仍保留绝对路径/内部 state 协议；准备失败 10 秒内的全套证明不完整 |
 | WP2 慢加载样板 | `PARTIAL` | Messages 首次加载 slow/error/retry；主动刷新超过 1 秒出现 slow 且保留上次准确内容；刷新新结果与首次失败后恢复已覆盖 | 里程碑、真实参考设备预算、超预算性能负控未完成 |
 | WP3 Messages | `PARTIAL` | 空态、标准字段/详情/relaunch、跨 50 条页界、单条/全部已读、未读筛选往返与重启持久化、搜索代表例、删除 Undo、首次慢/错恢复、慢刷新旧快照、新结果持久化与失败恢复 | channel/tag 筛选、删除不撤销、历史清理、Markdown/media/decrypt 以及 10k UI/性能未完成 |
-| WP4 Entity/Channel/Settings/watch UI | `PARTIAL` | Apple/Android Event/Thing App-owned 摄入→投影→准确详情；两端 Event 确认关闭→canonical projection→筛选→relaunch；两端 Thing 三个真实关系页签、准确关联对象打开、逐层返回及 relaunch；两端真实主导航与 Settings Event 页面开关双向 relaunch；部分低层合同 | Event slow/error/duplicate close；Thing 筛选/深链/删除；Channel create/rename/双退订；Settings server/解密/声音/transport 持久化；watch P0 UI 未完成 |
+| WP4 Entity/Channel/Settings/watch UI | `PARTIAL` | Apple/Android Event/Thing App-owned 摄入→投影→准确详情；两端 Event 确认关闭→canonical projection→筛选→relaunch；两端 Thing 三个真实关系页签、准确关联对象打开、逐层返回及 relaunch；两端 Channel 创建→改名→重启→保留/删除历史双退订→再次重启；两端真实主导航与 Settings Event 页面开关双向 relaunch；部分低层合同 | Event slow/error/duplicate close；Thing 筛选/深链/删除；Channel 订阅既有频道、远端拒绝/补偿；Settings server/解密/声音/transport 持久化；watch P0 UI 未完成 |
 | WP5 Ingress/系统能力 | `PARTIAL` | 两端 ACK/去重/迁移等低层证据较强 | 当前可模拟的通知路由、后台恢复、macOS Window/Status Item、Apple 系统表面仍缺；真实 APNs/FCM/private/权限/安装需外部环境 |
 | WP6 性能/a11y/l10n | `NOT STARTED/PARTIAL ASSETS` | Android 部分 semantics、两端慢状态可证伪 | Macrobenchmark/Baseline Profile、Apple XCTMetric、参考设备/SLO 样本、物理辅助任务、多语言/尺寸矩阵未完成 |
 | WP7 CI/AI/治理 | `PARTIAL` | lane wrapper、双状态结果、CI、AGENTS/AI policy 已建立；两仓库已实现变更→能力→最低证据合同、未知产品路径阻断、全产品树审计、120+120 次历史产品变更回放校准、补充语义契约与 PR 自动 Lane 选择 | flake owner、两周观察、历史 AI 任务“是否补对测试”的任务级评估和旧 Runtime 退役尚未完成；确定性路径映射只提供下限，不能替代语义影响分析 |
@@ -47,12 +47,14 @@
 - Apple iOS Event 与 Thing 均已从真实 Tab、列表行进入详情并核对准确字段，PASSED。
 - Apple iOS Event 关闭 focused 1/1 PASSED（`run-1-20260828-040321.xcresult`，无业务断言重试）；Android 同等 Event 旅程 1/1 PASSED。两端均从真实详情确认关闭，让关闭结果经过生产解析/持久化/投影链，验证 closed 状态、仅进行中筛选排除以及 relaunch 后状态保留；不以内部 count、marker 或测试直接改表作为终点。
 - Apple iOS Settings 页面可见性最终 focused 回归 1/1 PASSED（`run-1-20260828-042701.xcresult`，无业务断言重试）；Android 同等旅程 1/1 PASSED。两端均从真实 Channels→Settings 入口关闭 Event 页面、退出并核对入口消失，activity/process relaunch 后仍隐藏；随后用同一控件恢复、打开准确 Event 页面并再次 relaunch 核对。测试没有直接写 preference，也不以控件存在或内部 state 为终点；Apple 两个 Runtime command/state 弱重复已实际删除。
+- Apple iOS Channel focused 1/1 PASSED（`run-1-20260828-054300.xcresult`，无业务断言重试）；Android 同等 Channel focused 1/1 PASSED。两端均从真实 Channel UI 创建、改名并重启核对，再分别执行保留历史与删除历史退订，以准确频道行、消息内容和再次重启后的持久状态为 Oracle；只有外部 Gateway accepted mutation 被类型化替身接管，远端拒绝/补偿仍明确未证明。实跑同时修正了两端 readiness 把实时行数误作准备状态、导致合法删除后误失败或重启重新播种的测试系统缺陷；初始化记录只证明准备成功，产品结果仍由 UI/Store 断言负责。
 - Apple iOS Thing 关联旅程最终代码的产品断言 focused 1/1 PASSED（`run-1-20260828-044802.xcresult`，Messages/Updates 均验证返回原 Thing/页签；首次启动在任何业务动作前发生控制面丢失并受控恢复，因此测试系统记 `FLAKY`，不是稳定绿色）；Android 同等旅程 focused 1/1 稳定 PASSED。两端均从真实 Thing 打开 Events/Messages/Updates，核对准确关联标题与正文/摘要，打开关联详情并回到原 Thing/原页签，重启后再次打开准确 Event。Apple 负控同时发现并修复“newest-first 批次中的旧尾记录覆盖当前 Thing head”的投影缺陷，并增加旧快照再次到达也不能回退 head 的 Store 回归；完整 `swift test` 通过，邻接 Event close focused 1/1 也在 `run-1-20260828-044513.xcresult` 通过。紧随其后的 Apple 基础设施复核在 0 个业务动作前因 Simulator `No such process` 被分类为 `BLOCKED_TRANSIENT_RUNNER`（`run-1-20260828-044956.xcresult`）；现有默认 runner 已只针对该分类执行一次 shutdown/boot 恢复，本轮不继续重复消耗预算。Android 修复只允许一个顶层 Sheet 消费返回及 AndroidView 详情文本缺少稳定语义的问题。
 - Apple iOS 消息 workflow focused 1/1 PASSED（`run-1-20260828-023135.xcresult`，无业务重试）；Android 同等 workflow focused 1/1 PASSED。两端证据均覆盖分页、单条/全部已读、relaunch 和筛选往返，不以 fixture count 或文件 marker 作最终 Oracle。
 - Apple iOS 慢刷新 focused 1/1 PASSED（`run-1-20260828-025236.xcresult`，无业务重试）；Android API 37 emulator 同等旅程 1/1 PASSED。刷新新结果与失败恢复的最终回归：Apple 2/2 PASSED（`run-1-20260828-031204.xcresult`，无业务重试），Android 2/2 PASSED。两端均核对准确新标题和详情正文，Apple 成功路径额外核对 relaunch 持久化。
 - Apple Release Simulator 构建 PASSED；合法 Quality Session 注入在 Release 中无效，负控 PASSED。
+- 本 Channel 切片最终字节的 Apple iOS Release Simulator App 与 Android Release APK 构建均 PASSED；该证据只证明编译和 Release 隔离，不替代签名、安装或真机系统验证。
 - 本 Event 切片的 iOS Release Simulator App 重新构建 PASSED。`swift test -c release` 不是当前可用的独立隔离 gate：整套测试会引用仅在 DEBUG 产品代码开放的 storage/push-registration helper，并在到达 `releaseIsolation` 前编译失败；此项按测试系统限制记录，未被 Event UI 或 Release App 构建绿色掩盖，也不为迁移无关测试 helper 追加本轮预算。
-- Android JVM：275 tests PASSED；`compileDebugAndroidTestKotlin` 与 Release APK 构建 PASSED。
+- Android JVM：282 tests PASSED；`compileDebugAndroidTestKotlin` 与本 Channel 切片后的 Release APK 新鲜构建均 PASSED。
 - Android API 37 emulator：消息/搜索/删除撤销/慢失败恢复/真实导航/Event 准确详情/Thing 三关系页签纵向旅程 9/9 PASSED；隔离的迁移/删除/ACK 核心数据集 18/18 PASSED。
 - Apple 与 Android 变更影响选择器单元/负控均为 11/11 PASSED；全已跟踪产品树审计分别命中具名能力且 `unmapped_product_paths=0`。虚构的新 Screen 在两端均为 `BLOCKED`，文档变更均为 `NOT_RUN`，共享 Store/Room 与 Runtime 分别升级到 Nightly/Device 或 Release；Android instrumented-test 变化会升级到 `pr-ui`，不再停在“只编译”。
 - 最近 120 个 Apple 与 120 个 Android first-parent 历史提交回放均为 114 `READY` + 6 `NOT_RUN` + 0 `BLOCKED`；有内容的 `NOT_RUN` 各仅一条且均为纯文档，其余为空 diff merge。回放真实发现并修复 Appcast/update feed、旧 Connection Diagnosis、System Integration Settings、Room schema export 与临时发布工作流的漏选。
@@ -71,7 +73,7 @@
 
 1. 变更影响下限已实施并完成首轮历史校准：两端路径合同、选择器、补充语义契约、负控、全树审计、120+120 次回放、本地入口与 PR/main CI 门禁均已落地；
 2. 下一阶段仍需用历史 AI 任务评估“是否补对 Oracle”，并以连续两周真实变更校准漏选、过度升级、时长和 flake；当前历史样本 0 `BLOCKED` 不能推断未来语义无遗漏；
-3. Messages 分页/已读链、慢刷新旧快照、新结果持久化与失败恢复、两端 Event close/filter/relaunch、Thing 三类关联打开/返回/relaunch 和 Settings 页面可见性双向 relaunch 已完成；下一步推进 Channel create/rename/双退订与 Settings server/decryption 等当前 P0，而不是继续扩张 Thing 边缘组合；
+3. Messages 分页/已读链、慢刷新旧快照、新结果持久化与失败恢复、两端 Event close/filter/relaunch、Thing 三类关联打开/返回/relaunch、Channel create/rename/双退订和 Settings 页面可见性双向 relaunch 已完成；下一步推进 Settings server/decryption 等当前 P0，而不是扩张 Entity/Channel 边缘组合；
 4. 旧 Runtime command/state 测试只在更强旅程接管相同风险后退役；性能、真机与系统证据继续单列 `NOT_RUN/BLOCKED`，不得借模拟器绿色结案。
 
 ## 需要 Release/外部环境的明确证据

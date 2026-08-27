@@ -152,6 +152,13 @@ final class AppEnvironment {
     var pendingSettingsPresentation: SettingsPresentationRequest?
     private(set) var channelListFeedbackMessage: String?
     var channelSubscriptions: [ChannelSubscription] { channelSyncController.channelSubscriptions }
+    private var isQualityChannelMutationSession: Bool {
+#if DEBUG
+        PushGoAutomationContext.qualitySession?.channelMutationScenario == .accepted
+#else
+        false
+#endif
+    }
     private let channelSubscriptionService = ChannelSubscriptionService()
     private let networkPermissionChecker = NetworkPermissionChecker()
     @ObservationIgnored private let localStoreFailureStreakThreshold = 3
@@ -251,7 +258,8 @@ final class AppEnvironment {
         },
         messageStateCoordinatorProvider: { [weak self] in
             self?.messageStateCoordinator
-        }
+        },
+        channelMutationRoundTrip: Self.makeQualityChannelMutationRoundTrip()
     )
     @ObservationIgnored private(set) lazy var pendingLocalDeletionController = PendingLocalDeletionController(
         dataStore: dataStore,
@@ -334,6 +342,17 @@ final class AppEnvironment {
             }
         }
         registerDefaultNotificationCategories()
+    }
+
+    private static func makeQualityChannelMutationRoundTrip() -> (any ChannelMutationRoundTrip)? {
+#if DEBUG
+        guard PushGoAutomationContext.qualitySession?.channelMutationScenario == .accepted else {
+            return nil
+        }
+        return AcceptedQualityChannelMutationRoundTrip()
+#else
+        return nil
+#endif
     }
 
     private func makeNotificationIngressController() -> NotificationIngressController {
@@ -1432,10 +1451,19 @@ final class AppEnvironment {
     }
 
     private func syncSubscriptionsOnLaunch() async {
+        if isQualityChannelMutationSession {
+            await refreshChannelSubscriptions(syncProviderRoute: false)
+            return
+        }
         await channelSyncController.syncSubscriptionsOnLaunch()
     }
 
     func syncSubscriptionsOnChannelListEntry() async {
+        if isQualityChannelMutationSession {
+            channelListFeedbackMessage = nil
+            await refreshChannelSubscriptions(syncProviderRoute: false)
+            return
+        }
         await channelSyncController.syncSubscriptionsOnChannelListEntry()
     }
 
@@ -2114,6 +2142,58 @@ final class AppEnvironment {
         return raw.addingPercentEncoding(withAllowedCharacters: allowed) ?? raw
     }
 
+}
+
+private struct AcceptedQualityChannelMutationRoundTrip: ChannelMutationRoundTrip {
+    func subscribe(
+        channelId: String?,
+        channelName: String?,
+        credential: String
+    ) async throws -> ChannelSubscriptionService.SubscribePayload {
+        guard !credential.isEmpty else {
+            throw AppError.typedLocal(
+                code: "quality_channel_credential_required",
+                category: .validation,
+                message: "A channel credential is required."
+            )
+        }
+        let resolvedID = channelId ?? "01H00000000000000000000003"
+        let resolvedName = channelName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ChannelSubscriptionService.SubscribePayload(
+            channelId: resolvedID,
+            channelName: resolvedName.flatMap { $0.isEmpty ? nil : $0 } ?? resolvedID,
+            created: channelId == nil,
+            subscribed: true
+        )
+    }
+
+    func rename(
+        channelId: String,
+        channelName: String,
+        credential: String
+    ) async throws -> ChannelSubscriptionService.RenamePayload {
+        guard !credential.isEmpty else {
+            throw AppError.typedLocal(
+                code: "quality_channel_credential_required",
+                category: .validation,
+                message: "A channel credential is required."
+            )
+        }
+        return ChannelSubscriptionService.RenamePayload(
+            channelId: channelId,
+            channelName: channelName
+        )
+    }
+
+    func unsubscribe(channelId: String) async throws {
+        guard !channelId.isEmpty else {
+            throw AppError.typedLocal(
+                code: "quality_channel_id_required",
+                category: .validation,
+                message: "A channel identifier is required."
+            )
+        }
+    }
 }
 
 private final class NetworkPermissionChecker {

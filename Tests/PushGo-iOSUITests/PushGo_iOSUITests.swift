@@ -785,6 +785,156 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(context.app.staticTexts["Quality Related Event"].waitForExistence(timeout: 8))
     }
 
+    func testChannelCreateRenameAndBothUnsubscribeOutcomesPersist() {
+        let context = configuredLaunchContext(
+            launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        )
+        let encodedSession = qualitySessionPayload(
+            sessionID: "ios-channels-\(UUID().uuidString.lowercased())",
+            fixture: "channels.standard",
+            channelMutationScenario: "accepted"
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+
+        tapWhenHittable(
+            element(in: context.app, identifier: "tab.channels"),
+            timeout: 8,
+            message: "Channels must be reachable"
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channels.add"),
+            timeout: 8,
+            message: "Add Channel must be actionable"
+        )
+        let createName = element(in: context.app, identifier: "field.channels.create.name")
+        let createCredential = element(in: context.app, identifier: "field.channels.create.password")
+        XCTAssertTrue(createName.waitForExistence(timeout: 8))
+        replaceText(in: createName, with: "Quality Created Channel")
+        enterSecureText(in: createCredential, with: "qualityx")
+        let credentialLength = element(
+            in: context.app,
+            identifier: "quality.channels.create.credential_length"
+        )
+        XCTAssertTrue(credentialLength.waitForExistence(timeout: 3))
+        XCTAssertEqual(credentialLength.value as? String, "8")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channels.entry.submit"),
+            timeout: 8,
+            message: "Create Channel must submit through the real form"
+        )
+
+        var createdRow = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000003"
+        )
+        XCTAssertTrue(createdRow.waitForExistence(timeout: 8))
+        XCTAssertTrue(context.app.staticTexts["Quality Created Channel"].waitForExistence(timeout: 8))
+
+        createdRow.swipeLeft()
+        tapWhenHittable(
+            element(
+                in: context.app,
+                identifier: "action.channel.01H00000000000000000000003.rename"
+            ),
+            timeout: 5,
+            message: "Created Channel must expose Rename"
+        )
+        let renameAlert = context.app.alerts.firstMatch
+        XCTAssertTrue(renameAlert.waitForExistence(timeout: 5))
+        let renameField = renameAlert.textFields.firstMatch
+        XCTAssertTrue(renameField.waitForExistence(timeout: 5))
+        replaceText(in: renameField, with: "Quality Renamed Channel")
+        renameField.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        if renameAlert.exists {
+            let renameButton = renameAlert.buttons["Confirm"].firstMatch
+            XCTAssertTrue(renameButton.waitForExistence(timeout: 5))
+            XCTAssertTrue(renameButton.isEnabled, "Rename confirmation must be enabled")
+            renameButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        }
+        XCTAssertTrue(context.app.staticTexts["Quality Renamed Channel"].waitForExistence(timeout: 8))
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        tapWhenHittable(element(in: context.app, identifier: "tab.channels"), timeout: 8)
+        XCTAssertTrue(context.app.staticTexts["Quality Renamed Channel"].waitForExistence(timeout: 8))
+
+        let keepRow = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000001"
+        )
+        XCTAssertTrue(keepRow.waitForExistence(timeout: 8))
+        keepRow.swipeLeft()
+        tapWhenHittable(
+            element(
+                in: context.app,
+                identifier: "action.channel.01H00000000000000000000001.unsubscribe"
+            ),
+            timeout: 5
+        )
+        tapWhenHittable(
+            context.app.buttons["Unsubscribe and keep history"].firstMatch,
+            timeout: 5
+        )
+        XCTAssertTrue(keepRow.waitForNonExistence(timeout: 8))
+        tapWhenHittable(element(in: context.app, identifier: "tab.messages"), timeout: 8)
+        XCTAssertTrue(context.app.staticTexts["Quality Keep History Message"].waitForExistence(timeout: 8))
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        tapWhenHittable(element(in: context.app, identifier: "tab.channels"), timeout: 8)
+        XCTAssertFalse(keepRow.exists)
+        tapWhenHittable(element(in: context.app, identifier: "tab.messages"), timeout: 8)
+        XCTAssertTrue(context.app.staticTexts["Quality Keep History Message"].waitForExistence(timeout: 8))
+
+        tapWhenHittable(element(in: context.app, identifier: "tab.channels"), timeout: 8)
+        let deleteRow = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000002"
+        )
+        XCTAssertTrue(deleteRow.waitForExistence(timeout: 8))
+        deleteRow.swipeLeft()
+        tapWhenHittable(
+            element(
+                in: context.app,
+                identifier: "action.channel.01H00000000000000000000002.unsubscribe"
+            ),
+            timeout: 5
+        )
+        tapWhenHittable(
+            context.app.buttons["Unsubscribe and delete history"].firstMatch,
+            timeout: 5
+        )
+        XCTAssertTrue(deleteRow.waitForNonExistence(timeout: 8))
+        let pendingDeletion = element(in: context.app, identifier: "state.pending_deletion")
+        XCTAssertTrue(pendingDeletion.waitForExistence(timeout: 5))
+        XCTAssertTrue(pendingDeletion.waitForNonExistence(timeout: 15))
+
+        tapWhenHittable(element(in: context.app, identifier: "tab.messages"), timeout: 8)
+        XCTAssertTrue(context.app.staticTexts["Quality Keep History Message"].waitForExistence(timeout: 8))
+        XCTAssertFalse(context.app.staticTexts["Quality Delete History Message"].exists)
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        tapWhenHittable(element(in: context.app, identifier: "tab.channels"), timeout: 8)
+        createdRow = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000003"
+        )
+        XCTAssertTrue(createdRow.waitForExistence(timeout: 8))
+        XCTAssertFalse(deleteRow.exists)
+        tapWhenHittable(element(in: context.app, identifier: "tab.messages"), timeout: 8)
+        XCTAssertTrue(context.app.staticTexts["Quality Keep History Message"].waitForExistence(timeout: 8))
+        XCTAssertFalse(context.app.staticTexts["Quality Delete History Message"].exists)
+    }
+
     func testPushSettingsCanOpenDecryptionScreen() {
         let context = configuredLaunchContext(
             requestName: "settings.open_decryption"
@@ -1848,7 +1998,8 @@ final class PushGo_iOSUITests: XCTestCase {
         messageRefreshDelayMilliseconds: Int? = nil,
         failMessageLoad: Bool = false,
         messageRefreshScenario: String? = nil,
-        eventCloseScenario: String? = nil
+        eventCloseScenario: String? = nil,
+        channelMutationScenario: String? = nil
     ) -> String {
         var faults: [String: Any] = [
             "fail_message_load": failMessageLoad,
@@ -1867,6 +2018,7 @@ final class PushGo_iOSUITests: XCTestCase {
         ]
             .merging(messageRefreshScenario.map { ["message_refresh_scenario": $0] } ?? [:]) { _, new in new }
             .merging(eventCloseScenario.map { ["event_close_scenario": $0] } ?? [:]) { _, new in new }
+            .merging(channelMutationScenario.map { ["channel_mutation_scenario": $0] } ?? [:]) { _, new in new }
         let data = try! JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
         return data.base64EncodedString()
     }
@@ -1915,7 +2067,7 @@ final class PushGo_iOSUITests: XCTestCase {
     private func tapWhenHittable(
         _ element: XCUIElement,
         timeout: TimeInterval,
-        message: String,
+        message: String = "Expected control to become hittable",
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
@@ -2025,14 +2177,27 @@ final class PushGo_iOSUITests: XCTestCase {
     private func replaceText(in field: XCUIElement, with text: String) {
         field.tap()
         let existing = (field.value as? String) ?? ""
-        if !existing.isEmpty {
+        let placeholder = field.placeholderValue ?? ""
+        let hasEnteredText = !existing.isEmpty && existing != placeholder
+        if hasEnteredText {
             field.typeKey("a", modifierFlags: .command)
         }
         if !text.isEmpty {
             field.typeText(text)
-        } else if !existing.isEmpty {
+        } else if hasEnteredText {
             field.typeText(XCUIKeyboardKey.delete.rawValue)
         }
+    }
+
+    private func enterSecureText(in field: XCUIElement, with text: String) {
+        field.tap()
+        let existing = (field.value as? String) ?? ""
+        let placeholder = field.placeholderValue ?? ""
+        if !existing.isEmpty && existing != placeholder {
+            field.typeKey("a", modifierFlags: .command)
+            field.typeText(XCUIKeyboardKey.delete.rawValue)
+        }
+        field.typeText(text)
     }
 
     private func assertElementExists(

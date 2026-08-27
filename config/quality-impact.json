@@ -74,9 +74,9 @@
       "id": "channels-settings",
       "paths": ["Shared/Application/Channel*.swift", "Shared/Application/DataPageVisibilityController.swift", "Shared/Models/ServerConfig.swift", "Shared/Models/SystemIntegrationSettings.swift", "Shared/Repositories/ChannelSubscriptionStore.swift", "Shared/Services/ChannelSubscription*.swift", "Shared/UI/SettingsViewModel.swift", "Shared/Utilities/Channel*.swift", "Shared/Utilities/KeychainStore.swift", "Shared/Utilities/ManualNotificationKeyValidator.swift", "Apps/*/UI/Screens/Channel*.swift", "Apps/*/UI/Screens/Settings*.swift"],
       "capabilities": ["channels", "gateway-settings", "decryption-settings", "page-visibility"],
-      "minimum_evidence": ["channel/settings validation and service tests", "real Settings page-visibility control and accurate destination journey", "relaunch persistence where state changes"],
+      "minimum_evidence": ["channel/settings validation and service tests", "real Channel create/rename/keep-history/delete-history/relaunch journey", "real Settings page-visibility control and accurate destination journey", "relaunch persistence where state changes"],
       "lane": "nightly",
-      "known_evidence_gaps": ["Page visibility has a real-control bidirectional relaunch journey; Channel create/rename/two unsubscribe outcomes and server/decryption/sound Settings persistence UI remain missing."],
+      "known_evidence_gaps": ["Channel accepted-mutation and page visibility now have real-control relaunch journeys; remote rejection/compensation and server/decryption/sound Settings persistence UI remain missing."],
       "escalation_reasons": ["Credentials and remote/local reconciliation require failure and recovery evidence."]
     },
     {

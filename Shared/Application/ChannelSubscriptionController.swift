@@ -1,6 +1,21 @@
 import Foundation
 
 @MainActor
+protocol ChannelMutationRoundTrip {
+    func subscribe(
+        channelId: String?,
+        channelName: String?,
+        credential: String
+    ) async throws -> ChannelSubscriptionService.SubscribePayload
+    func rename(
+        channelId: String,
+        channelName: String,
+        credential: String
+    ) async throws -> ChannelSubscriptionService.RenamePayload
+    func unsubscribe(channelId: String) async throws
+}
+
+@MainActor
 final class ChannelSubscriptionController {
     typealias ServerConfigProvider = @MainActor () -> ServerConfig?
     typealias MessageStateCoordinatorProvider = @MainActor () -> MessageStateCoordinator?
@@ -12,6 +27,7 @@ final class ChannelSubscriptionController {
     private let localizationManager: LocalizationManager
     private let serverConfigProvider: ServerConfigProvider
     private let messageStateCoordinatorProvider: MessageStateCoordinatorProvider
+    private let channelMutationRoundTrip: (any ChannelMutationRoundTrip)?
     private let platform: String
 
     init(
@@ -22,7 +38,8 @@ final class ChannelSubscriptionController {
         channelSyncController: ChannelSyncController,
         localizationManager: LocalizationManager,
         serverConfigProvider: @escaping ServerConfigProvider,
-        messageStateCoordinatorProvider: @escaping MessageStateCoordinatorProvider
+        messageStateCoordinatorProvider: @escaping MessageStateCoordinatorProvider,
+        channelMutationRoundTrip: (any ChannelMutationRoundTrip)? = nil
     ) {
         self.platform = platform
         self.dataStore = dataStore
@@ -32,6 +49,7 @@ final class ChannelSubscriptionController {
         self.localizationManager = localizationManager
         self.serverConfigProvider = serverConfigProvider
         self.messageStateCoordinatorProvider = messageStateCoordinatorProvider
+        self.channelMutationRoundTrip = channelMutationRoundTrip
     }
 
     func channelExists(channelId: String) async throws -> ChannelSubscriptionService.ExistsPayload {
@@ -68,13 +86,21 @@ final class ChannelSubscriptionController {
             )
         }
 
-        let payload = try await channelSubscriptionService.renameChannel(
-            baseURL: config.baseURL,
-            token: config.token,
-            channelId: normalizedId,
-            channelName: normalizedAlias,
-            password: password
-        )
+        let payload = if let channelMutationRoundTrip {
+            try await channelMutationRoundTrip.rename(
+                channelId: normalizedId,
+                channelName: normalizedAlias,
+                credential: password
+            )
+        } else {
+            try await channelSubscriptionService.renameChannel(
+                baseURL: config.baseURL,
+                token: config.token,
+                channelId: normalizedId,
+                channelName: normalizedAlias,
+                password: password
+            )
+        }
 
         try await dataStore.updateChannelDisplayName(
             gateway: gatewayKey,
@@ -88,18 +114,21 @@ final class ChannelSubscriptionController {
         guard let config = serverConfigProvider() else { throw AppError.noServer }
         let gatewayKey = config.gatewayKey
         let normalized = try ChannelIdValidator.normalize(channelId)
-        let token = try await channelSyncController.ensureActivePushToken(serverConfig: config)
-        let deviceKey = try await providerRouteController.ensureProviderRoute(
-            config: config,
-            providerToken: token
-        )
-
-        _ = try await channelSubscriptionService.unsubscribe(
-            baseURL: config.baseURL,
-            token: config.token,
-            deviceKey: deviceKey,
-            channelId: normalized
-        )
+        if let channelMutationRoundTrip {
+            try await channelMutationRoundTrip.unsubscribe(channelId: normalized)
+        } else {
+            let token = try await channelSyncController.ensureActivePushToken(serverConfig: config)
+            let deviceKey = try await providerRouteController.ensureProviderRoute(
+                config: config,
+                providerToken: token
+            )
+            _ = try await channelSubscriptionService.unsubscribe(
+                baseURL: config.baseURL,
+                token: config.token,
+                deviceKey: deviceKey,
+                channelId: normalized
+            )
+        }
 
         try await dataStore.softDeleteChannelSubscription(gateway: gatewayKey, channelId: normalized)
         await channelSyncController.refreshChannelSubscriptions()
@@ -157,16 +186,8 @@ final class ChannelSubscriptionController {
                 detail: "messageStateCoordinatorProvider returned nil during channel cleanup"
             )
         }
-        let token = try await channelSyncController.ensureActivePushToken(serverConfig: config)
-        let deviceKey = try await providerRouteController.ensureProviderRoute(
+        let providerToken = try await performRemoteUnsubscribe(
             config: config,
-            providerToken: token
-        )
-
-        _ = try await channelSubscriptionService.unsubscribe(
-            baseURL: config.baseURL,
-            token: config.token,
-            deviceKey: deviceKey,
             channelId: normalized
         )
 
@@ -179,6 +200,9 @@ final class ChannelSubscriptionController {
             )
         } catch {
             let localError = error
+            if channelMutationRoundTrip != nil {
+                throw localError
+            }
             let currentPassword: String?
             do {
                 currentPassword = try await dataStore.activeChannelPassword(
@@ -200,7 +224,7 @@ final class ChannelSubscriptionController {
             do {
                 _ = try await subscribeWithDeviceKeyRecovery(
                     config: config,
-                    providerToken: token,
+                    providerToken: providerToken,
                     channelId: normalized,
                     alias: nil,
                     password: currentPassword
@@ -307,10 +331,8 @@ final class ChannelSubscriptionController {
         guard let config = serverConfigProvider() else { throw AppError.noServer }
         let gatewayKey = config.gatewayKey
         let validatedPassword = try ChannelPasswordValidator.validate(password)
-        let token = try await channelSyncController.ensureActivePushToken(serverConfig: config)
-        let payload = try await subscribeWithDeviceKeyRecovery(
+        let payload = try await performRemoteSubscribe(
             config: config,
-            providerToken: token,
             channelId: channelId,
             alias: alias,
             password: validatedPassword
@@ -335,6 +357,51 @@ final class ChannelSubscriptionController {
         )
         await channelSyncController.refreshChannelSubscriptions()
         return payload
+    }
+
+    private func performRemoteUnsubscribe(
+        config: ServerConfig,
+        channelId: String
+    ) async throws -> String {
+        if let channelMutationRoundTrip {
+            try await channelMutationRoundTrip.unsubscribe(channelId: channelId)
+            return ""
+        }
+        let token = try await channelSyncController.ensureActivePushToken(serverConfig: config)
+        let deviceKey = try await providerRouteController.ensureProviderRoute(
+            config: config,
+            providerToken: token
+        )
+        _ = try await channelSubscriptionService.unsubscribe(
+            baseURL: config.baseURL,
+            token: config.token,
+            deviceKey: deviceKey,
+            channelId: channelId
+        )
+        return token
+    }
+
+    private func performRemoteSubscribe(
+        config: ServerConfig,
+        channelId: String?,
+        alias: String?,
+        password: String
+    ) async throws -> ChannelSubscriptionService.SubscribePayload {
+        if let channelMutationRoundTrip {
+            return try await channelMutationRoundTrip.subscribe(
+                channelId: channelId,
+                channelName: alias,
+                credential: password
+            )
+        }
+        let token = try await channelSyncController.ensureActivePushToken(serverConfig: config)
+        return try await subscribeWithDeviceKeyRecovery(
+            config: config,
+            providerToken: token,
+            channelId: channelId,
+            alias: alias,
+            password: password
+        )
     }
 
     private func subscribeWithDeviceKeyRecovery(

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ChannelManagementScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
@@ -45,6 +46,7 @@ struct ChannelManagementScreen: View {
             } label: {
                 Text(localizationManager.localized("unsubscribe_and_delete_history"))
             }
+            .accessibilityIdentifier("action.channel.unsubscribe.delete_history")
             Button {
                 if let target = pendingRemoval {
                     Task { await removeChannel(target, deleteHistory: false) }
@@ -52,6 +54,7 @@ struct ChannelManagementScreen: View {
             } label: {
                 Text(localizationManager.localized("unsubscribe_keep_history"))
             }
+            .accessibilityIdentifier("action.channel.unsubscribe.keep_history")
             Button(role: .cancel) {
             } label: {
                 Text(localizationManager.localized("cancel"))
@@ -65,12 +68,14 @@ struct ChannelManagementScreen: View {
                 localizationManager.localized("channel_name_placeholder"),
                 text: $renameAlias
             )
+            .accessibilityIdentifier("field.channel.rename.alias")
             Button(localizationManager.localized("confirm")) {
                 if let target = pendingRename {
                     Task { await renameChannel(target) }
                 }
             }
             .disabled(isRenaming || renameAlias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .accessibilityIdentifier("action.channel.rename.save")
             Button(localizationManager.localized("cancel"), role: .cancel) {
                 pendingRename = nil
             }
@@ -214,6 +219,7 @@ struct ChannelManagementScreen: View {
                 Label(localizationManager.localized("rename_channel"), systemImage: "pencil")
             }
             .tint(.appAccentPrimary)
+            .accessibilityIdentifier("action.channel.\(channelId).rename")
 
             Button(role: .destructive) {
                 pendingRemoval = subscription
@@ -221,6 +227,7 @@ struct ChannelManagementScreen: View {
             } label: {
                 Label(localizationManager.localized("unsubscribe_channel"), systemImage: "trash")
             }
+            .accessibilityIdentifier("action.channel.\(channelId).unsubscribe")
         }
         .disabled(isRemoving || isRenaming)
     }
@@ -254,16 +261,12 @@ struct ChannelManagementScreen: View {
 
     @ViewBuilder
     private var channelEntryFields: some View {
-        ZStack(alignment: .topLeading) {
-            channelEntryCreateFields
-                .opacity(channelEntryMode == .create ? 1 : 0)
-                .allowsHitTesting(channelEntryMode == .create)
-                .accessibilityHidden(channelEntryMode != .create)
-
-            channelEntrySubscribeFields
-                .opacity(channelEntryMode == .subscribe ? 1 : 0)
-                .allowsHitTesting(channelEntryMode == .subscribe)
-                .accessibilityHidden(channelEntryMode != .subscribe)
+        Group {
+            if channelEntryMode == .create {
+                channelEntryCreateFields
+            } else {
+                channelEntrySubscribeFields
+            }
         }
         .frame(maxWidth: .infinity, minHeight: channelEntryFieldsMinHeight, alignment: .topLeading)
         .transaction { transaction in
@@ -292,20 +295,31 @@ struct ChannelManagementScreen: View {
             AppFormField(
                 titleText: localizationManager.localized("channel_password")
             ) {
-                SecureField(
-                    "",
+                ChannelSecureTextField(
                     text: $createChannelPassword,
-                    prompt: AppFieldPrompt.text(localizationManager.localized("channel_password_placeholder"))
-                )
+                    placeholder: localizationManager.localized("channel_password_placeholder"),
+                    accessibilityIdentifier: "field.channels.create.password",
+                    isSecureEntry: PushGoAutomationContext.qualitySession == nil,
+                    isEnabled: !isCreateSubmitting
+                ) {
+                    Task { await submitChannelEntryFromSheet() }
+                }
                 .textFieldStyle(.plain)
                 .accessibilityIdentifier("field.channels.create.password")
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
                 .submitLabel(.go)
-                .onSubmit {
-                    Task { await submitChannelEntryFromSheet() }
-                }
                 .disabled(isCreateSubmitting)
+            }
+
+            if PushGoAutomationContext.qualitySession != nil {
+                Text("\(createChannelPassword.count)")
+                    .font(.caption2)
+                    .foregroundStyle(.clear)
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier("quality.channels.create.credential_length")
+                    .accessibilityLabel("Credential length")
+                    .accessibilityValue("\(createChannelPassword.count)")
             }
 
         }
@@ -333,19 +347,20 @@ struct ChannelManagementScreen: View {
             AppFormField(
                 titleText: localizationManager.localized("channel_password")
             ) {
-                SecureField(
-                    "",
+                ChannelSecureTextField(
                     text: $subscribeChannelPassword,
-                    prompt: AppFieldPrompt.text(localizationManager.localized("channel_password_placeholder"))
-                )
+                    placeholder: localizationManager.localized("channel_password_placeholder"),
+                    accessibilityIdentifier: "field.channels.subscribe.password",
+                    isSecureEntry: PushGoAutomationContext.qualitySession == nil,
+                    isEnabled: !isSubscribeSubmitting
+                ) {
+                    Task { await submitChannelEntryFromSheet() }
+                }
                 .textFieldStyle(.plain)
                 .accessibilityIdentifier("field.channels.subscribe.password")
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled(true)
                 .submitLabel(.go)
-                .onSubmit {
-                    Task { await submitChannelEntryFromSheet() }
-                }
                 .disabled(isSubscribeSubmitting)
             }
 
@@ -608,4 +623,64 @@ struct ChannelManagementScreen: View {
 private enum ChannelEntryMode: Hashable {
     case create
     case subscribe
+}
+
+private struct ChannelSecureTextField: UIViewRepresentable {
+    @Binding var text: String
+    let placeholder: String
+    let accessibilityIdentifier: String
+    let isSecureEntry: Bool
+    let isEnabled: Bool
+    let onSubmit: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeUIView(context: Context) -> UITextField {
+        let textField = UITextField(frame: .zero)
+        textField.delegate = context.coordinator
+        textField.isSecureTextEntry = isSecureEntry
+        textField.borderStyle = .none
+        textField.autocorrectionType = .no
+        textField.autocapitalizationType = .none
+        textField.returnKeyType = .go
+        textField.textContentType = isSecureEntry ? .password : nil
+        textField.accessibilityIdentifier = accessibilityIdentifier
+        textField.addTarget(
+            context.coordinator,
+            action: #selector(Coordinator.textDidChange(_:)),
+            for: .editingChanged
+        )
+        return textField
+    }
+
+    func updateUIView(_ textField: UITextField, context: Context) {
+        context.coordinator.parent = self
+        if textField.text != text {
+            textField.text = text
+        }
+        textField.placeholder = placeholder
+        textField.isSecureTextEntry = isSecureEntry
+        textField.textContentType = isSecureEntry ? .password : nil
+        textField.isEnabled = isEnabled
+        textField.accessibilityIdentifier = accessibilityIdentifier
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var parent: ChannelSecureTextField
+
+        init(parent: ChannelSecureTextField) {
+            self.parent = parent
+        }
+
+        @objc func textDidChange(_ sender: UITextField) {
+            parent.text = sender.text ?? ""
+        }
+
+        func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+            parent.onSubmit()
+            return true
+        }
+    }
 }

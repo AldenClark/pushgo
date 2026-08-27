@@ -2,7 +2,7 @@
 
 ## 验证结论
 
-方案目标仍正确，但 2026-08-28 的实现复核发现此前“只剩真机/外部证据”的结论不成立。readiness、identifier、fixture、版本、文件和报告只能准备或归因；当前已证明 Runtime/环境底座、Messages 核心样板和两端 Event/Thing 的首批准确内容旅程，WP3–WP6 的可达产品能力仍有显著缺口。真实系统能力继续按 `BLOCKED/NOT RUN` 独立呈现，局部 lane 绿色不得提升为整体完成。
+方案目标仍正确，但 2026-08-28 的实现复核发现此前“只剩真机/外部证据”的结论不成立。readiness、identifier、fixture、版本、文件和报告只能准备或归因；当前已证明 Runtime/环境底座、Messages 核心样板，以及两端 Event/Thing/Channel accepted-mutation 的首批准确用户旅程，WP3–WP6 的可达产品能力仍有显著缺口。真实系统能力继续按 `BLOCKED/NOT RUN` 独立呈现，局部 lane 绿色不得提升为整体完成。
 
 ## 完成声明对抗复核
 
@@ -30,6 +30,7 @@
 | Event/Thing | 点 Tab、点准确列表行 | fixture → message ingestion → projection → list/detail | 准确对象及字段详情 | 把 fixture 直接塞实体表曾导致列表对象与真实详情路径分离，测试确实失败 |
 | Event 关闭 | 点 Event 行、在详情确认关闭、启用仅进行中筛选、重启 | close intent → Gateway 边界替身 → 正式通知解析 → canonical message/event head → list/detail | closed 可见；进行中集合排除；重启后仍 closed 且不可重复关闭 | 只 dismiss、只保存消息但不更新 projection destination、状态别名不一致或隐藏行仍暴露给 a11y 都会失败 |
 | Thing 关联对象 | 从准确 Thing 切 Events/Messages/Updates，逐个打开详情、返回并重启 | 多条乱序 fixture → canonical Thing head/relations → 三页签 → 关联详情 | 当前 head 不回退；三个集合及详情数据准确；返回保留原 Thing/页签；重启后仍可打开同一 Event | 旧尾快照覆盖新 head、只断言页签壳、关联串页、返回关闭父页或重启丢关系均失败 |
+| Channel 创建/改名/退订 | 从真实 Channel 页创建、改名，分别选择保留历史与删除历史并多次重启 | 类型化 Gateway accepted 边界 → 生产 Controller/Repository → 凭据/订阅 Store → 延迟删除事务 → 消息查询/UI | 新频道和改名跨重启保留；保留历史只移除订阅；删除历史同时移除订阅与准确频道消息，重启不回种 | 只看响应成功、直接改表、把实时 count 当 readiness、重启重复播种或把 accepted 冒充拒绝/补偿证据均失败 |
 | Settings 页面可见性 | Channels→Settings，关闭/恢复 Event，再分别重启 | 真实 Toggle/FilterChip → visibility controller/repository → persisted setting → root navigation | 关闭后入口少一个且重启仍隐藏；恢复后可打开准确 Event 页且再次重启仍可达 | 直接写 preference、只看开关 selected、只数标识或 Runtime state 均不能通过 |
 | Release 隔离 | 向 Release 注入合法会话 | launch env → runtime resolver | Quality Runtime 不激活 | Debug-only 条件移除会使负控失败 |
 
@@ -82,6 +83,8 @@
 45. **嵌套 Sheet 返回所有权攻击**：Android 同时保留父 Thing 与关联详情两个 `ModalBottomSheet`，测试又直接调用 Activity dispatcher，返回可能绕过顶层 Dialog 或让两个层级共同关闭。结果：产品状态只渲染一个顶层 Sheet、父页签由上层持有；测试使用真实系统 Back 输入并要求父 Thing/原页签恢复，不用延时或重新打开掩盖导航错误。
 46. **AndroidView 文本黑箱攻击**：消息详情视觉上由 `TextView` 显示准确标题/正文，但 Compose 语义树无法稳定读取，测试只能证明弹窗存在。结果：生产详情标题/正文节点公开准确文本语义和稳定字段标识；Oracle 直接比较真实用户内容，也为后续 TalkBack 审查提供可观测接入点。
 47. **弹窗容器冒充内容攻击**：Material Sheet 外壳的 test tag 存在，但正文处于独立语义子树，限定外壳后仍无法证明内容。结果：壳只证明呈现状态，标题/正文/更新内容分别在真实内容节点判定；不再把容器存在汇总为功能正确。
+48. **实时行数冒充准备状态攻击**：Channel 旅程合法删除消息后，readiness 仍要求 fixture 初始 count，导致业务正确却被准备层判失败；若重启为满足 count 而重新播种，又会掩盖持久化缺陷。结果：两端使用会话级 fixture 初始化记录，只在全部播种/投影检查成功后提交；实时行数归还给 UI/Store 产品 Oracle，初始化记录不能单独判产品通过。
+49. **安全输入自动化边界攻击**：iOS 27 的 XCUITest 对 SwiftUI/UIKit secure entry 只提交首字符，创建频道在到达 Controller 前失败。结果：生产仍使用 masked UIKit secure text entry；仅 DEBUG Quality Session 对合成凭据关闭输入遮罩，并用长度语义证明完整输入后继续走同一绑定、校验、Controller 与 Store。该适配只解决输入系统可测性，不绕过业务路径，也不输出凭据内容。
 
 ## 归因分析
 
@@ -95,6 +98,7 @@
 | AI 只补形式测试或漏跑跨层证据 | 缺少可执行的变更→能力→最低证据合同，或把静态路径匹配误当完整语义分析 | 版本化 impact manifest + 本地/CI 选择器 + 未映射阻断 + AGENTS/AI policy；路径结果只作下限，继续追 caller/数据/平台消费者 | 文档/文件检查不能替代功能 Oracle；未知产品路径=`BLOCKED` |
 | Settings 用例无法操作或误报 | 父级语义合并、滚动标识挂错容器、动态 UI identifier 不稳定 | 语义标识贴近实际可操作/滚动节点；最终 Oracle 使用入口集合变化、真实点击、准确目标页和 relaunch | 准备/语义错误=`BLOCKED/FAILED_TEST_SYSTEM`；真实状态或目的错误=`FAILED` |
 | Thing 显示旧对象或返回丢失 | head 更新没有比较逻辑时间；嵌套 modal 同时持有返回；AndroidView 内容不进入 Compose Oracle | canonical head 新旧裁决负控；单顶层 Sheet + 父级页签状态；真实字段文本语义 | 数据/导航结果错误=`FAILED`；输入注入或语义树不可判定=`FAILED_TEST_SYSTEM` |
+| Channel 重启后数据恢复或 readiness 误失败 | 准备生命周期与实时业务行数耦合；每次进程启动重复播种同一 fixture | session/fixture 初始化记录与 live Store 分离；只在初始化全成功后记录，旅程以频道行、准确历史和重启为终点 | 标记不可读/不匹配=`FAILED_TEST_SYSTEM`；产品结果错误=`FAILED`；远端拒绝/补偿=`NOT RUN` |
 
 ## 双向覆盖反查
 

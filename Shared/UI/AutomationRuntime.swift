@@ -590,21 +590,11 @@ final class PushGoAutomationRuntime {
         guard let session = PushGoAutomationContext.qualitySession else { return nil }
 
         let state = await currentState(environment: environment)
-        let fixtureReady: Bool
-        switch session.fixture {
-        case .emptyClean:
-            fixtureReady = state.totalMessageCount == 0
-        case .messagesStandard:
-            fixtureReady = state.totalMessageCount > 0
-        case .messagesWorkflow:
-            fixtureReady = state.totalMessageCount == 52
-        case .messagesLarge:
-            fixtureReady = state.totalMessageCount >= 1_000
-        case .eventStandard:
-            fixtureReady = state.eventCount == 1
-        case .thingStandard:
-            fixtureReady = state.thingCount == 1
-        }
+        // Readiness proves that this session's fixture transaction completed and
+        // the app-owned store reopened cleanly. Live row counts are product state,
+        // not preparation state: journeys may legitimately create, delete, close,
+        // or unsubscribe before relaunching the same session.
+        let fixtureReady = (try? qualityFixtureWasInitialized(for: session)) == true
         let status = state.localStoreMode == "persistent"
             && state.runtimeErrorCount == 0
             && fixtureReady
@@ -3570,6 +3560,32 @@ final class PushGoAutomationRuntime {
             messages = []
             entityRecords = []
             channelSubscriptions = []
+        case .channelsStandard:
+            messages = [
+                qualityChannelFixtureMessage(
+                    id: "00000000-0000-0000-0000-00000000c001",
+                    messageID: "quality-channel-keep-message",
+                    title: "Quality Keep History Message",
+                    channelID: "01H00000000000000000000001"
+                ),
+                qualityChannelFixtureMessage(
+                    id: "00000000-0000-0000-0000-00000000c002",
+                    messageID: "quality-channel-delete-message",
+                    title: "Quality Delete History Message",
+                    channelID: "01H00000000000000000000002"
+                ),
+            ]
+            entityRecords = []
+            channelSubscriptions = [
+                qualityChannelFixtureSubscription(
+                    channelID: "01H00000000000000000000001",
+                    displayName: "Quality Keep History"
+                ),
+                qualityChannelFixtureSubscription(
+                    channelID: "01H00000000000000000000002",
+                    displayName: "Quality Delete History"
+                ),
+            ]
         case .messagesStandard:
             messages = [qualityFixtureMessage(index: 0)]
             entityRecords = []
@@ -3629,6 +3645,46 @@ final class PushGoAutomationRuntime {
                 "delivery_id": "quality-delivery-\(stableID)",
             ],
             "status": "normal",
+        ]
+    }
+
+    private func qualityChannelFixtureMessage(
+        id: String,
+        messageID: String,
+        title: String,
+        channelID: String
+    ) -> [String: Any] {
+        let body = "Deterministic history owned by \(channelID)."
+        return [
+            "id": id,
+            "message_id": messageID,
+            "title": title,
+            "body": body,
+            "channel_id": channelID,
+            "is_read": false,
+            "received_at": "2026-01-15T08:00:00Z",
+            "raw_payload": [
+                "entity_type": "message",
+                "message_id": messageID,
+                "delivery_id": "quality-delivery-\(messageID)",
+                "channel_id": channelID,
+                "title": title,
+                "body": body,
+            ],
+            "status": "normal",
+        ]
+    }
+
+    private func qualityChannelFixtureSubscription(
+        channelID: String,
+        displayName: String
+    ) -> [String: Any] {
+        [
+            "channel_id": channelID,
+            "display_name": displayName,
+            "password": "quality-channel-fixture-value",
+            "last_synced_at": "2026-01-15T08:00:00Z",
+            "updated_at": "2026-01-15T08:00:00Z",
         ]
     }
 

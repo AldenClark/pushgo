@@ -82,9 +82,11 @@
 - `testMessageLoadFailureShowsRetryAndRecoversToRealDataState`
 - `testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen`
 - `testEventClosePersistsAndOngoingFilterReflectsRealProjection`
+- `testImportedThingFixtureCanOpenThingDetail`
+- `testChannelCreateRenameAndBothUnsubscribeOutcomesPersist`
 - `testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch`
 
-前十条进入 PR 核心集，其中 workflow 用 52 条数据跨越真实 page size 50，并验证单条/全部已读、relaunch 与未读筛选。刷新旅程分别证明慢态与上次准确快照共存、Provider 刷新载荷经过规范化摄入后出现在列表和真实详情并在 relaunch 后保留，以及首次失败可见、旧快照保留、同一正式刷新动作重试后恢复；不把直接修改 ViewModel 集合或检查数据库文件当结果。真实导航、Event 关闭/筛选/relaunch、Settings 页面可见性、Thing 和配置失败等代表性旅程进入 Nightly/Release。Release 已改为显式高价值清单，不再默认执行所有遗留 UI 用例；旧 Runtime command/state 用例不得以绿色覆盖新用例失败，已有更强证据的弱重复从常规 lane 移除。
+前十条进入 PR 核心集，其中 workflow 用 52 条数据跨越真实 page size 50，并验证单条/全部已读、relaunch 与未读筛选。刷新旅程分别证明慢态与上次准确快照共存、Provider 刷新载荷经过规范化摄入后出现在列表和真实详情并在 relaunch 后保留，以及首次失败可见、旧快照保留、同一正式刷新动作重试后恢复；不把直接修改 ViewModel 集合或检查数据库文件当结果。真实导航、Event 关闭/筛选/relaunch、Thing 三类关系、Channel 创建/改名/两类退订/多次 relaunch、Settings 页面可见性和配置失败等代表性旅程进入 Nightly/Release。Channel 只替换外部 Gateway mutation 边界，UI、Controller、Store、延迟删除与重启均走生产路径；accepted 场景不冒充远端拒绝/补偿证据。Release 已改为显式高价值清单，不再默认执行所有遗留 UI 用例；旧 Runtime command/state 用例不得以绿色覆盖新用例失败，已有更强证据的弱重复从常规 lane 移除。
 
 ## 变更影响门禁
 
