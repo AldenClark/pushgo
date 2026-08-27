@@ -50,6 +50,63 @@ on_exit() {
 }
 trap on_exit EXIT
 
+run_impact_contracts() {
+  local plan_path="${QUALITY_IMPACT_PLAN:-}"
+  local check
+  local checks_output
+  if ! checks_output="$(
+    python3 - "$plan_path" "$lane" <<'PY'
+import json
+import pathlib
+import sys
+
+plan_path, lane = sys.argv[1:]
+checks = set()
+if plan_path:
+    path = pathlib.Path(plan_path)
+    if not path.is_file():
+        raise SystemExit(f"impact plan is not a regular file: {path}")
+    checks.update(json.loads(path.read_text()).get("required_checks", []))
+if lane == "release":
+    checks.update({"apple-release-static-contract", "apple-update-distribution-contract"})
+print("\n".join(sorted(checks)))
+PY
+  )"; then
+    echo "status=BLOCKED"
+    echo "reason=invalid_apple_impact_plan"
+    exit 2
+  fi
+  while IFS= read -r check; do
+    [[ -n "$check" ]] || continue
+    case "$check" in
+      apple-update-distribution-contract)
+        selected_claims+=("Apple Sparkle/App Store update distribution contract")
+        python3 "$repo_root/scripts/verify_update_distribution.py" \
+          --appcast "$repo_root/release/appcast.xml" \
+          --app-store "$repo_root/release/appstore.json" \
+          --update-notes "$repo_root/release/update-notes"
+        claims+=("Apple Sparkle/App Store update distribution contract")
+        ;;
+      apple-release-static-contract)
+        selected_claims+=("Apple locked dependency/privacy/release/rollback static contracts")
+        "$repo_root/scripts/verify_locked_packages.sh"
+        "$repo_root/scripts/verify_privacy_manifests.sh"
+        python3 "$repo_root/scripts/verify_release_workflow_security.py"
+        python3 "$repo_root/scripts/verify_release_distribution_contract.py"
+        "$repo_root/scripts/verify_rollback_compatibility.sh"
+        claims+=("Apple locked dependency/privacy/release/rollback static contracts")
+        ;;
+      *)
+        echo "status=BLOCKED"
+        echo "reason=unsupported_apple_impact_check:$check"
+        exit 2
+        ;;
+    esac
+  done <<< "$checks_output"
+}
+
+run_impact_contracts
+
 core_ui_scopes="PushGo-iOSUITests/PushGo_iOSUITests/testQualitySessionUsesAppOwnedStoreAndReachesFunctionalEmptyState,PushGo-iOSUITests/PushGo_iOSUITests/testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail,PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testSlowMessageLoadBecomesVisibleBeforeDataCompletes,PushGo-iOSUITests/PushGo_iOSUITests/testMessageLoadFailureShowsRetryAndRecoversToRealDataState"
 nightly_ui_scopes="$core_ui_scopes,PushGo-iOSUITests/PushGo_iOSUITests/testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen,PushGo-iOSUITests/PushGo_iOSUITests/testImportedEventFixtureCanOpenEventDetail,PushGo-iOSUITests/PushGo_iOSUITests/testImportedThingFixtureCanOpenThingDetail,PushGo-iOSUITests/PushGo_iOSUITests/testInvalidServerAddressShowsInlineFeedbackInsteadOfToast"
 

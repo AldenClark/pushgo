@@ -15,7 +15,7 @@
 | WP4 Entity/Channel/Settings/watch UI | `PARTIAL` | Apple/Android Event/Thing App-owned 摄入→投影→准确详情；Android Thing 三个真实关系页签；两端真实主导航；部分低层合同 | Event close/筛选；Thing 关联打开/深链；Channel create/rename/双退订；Settings 持久化/解密/可见性/transport；watch P0 UI 未完成 |
 | WP5 Ingress/系统能力 | `PARTIAL` | 两端 ACK/去重/迁移等低层证据较强 | 当前可模拟的通知路由、后台恢复、macOS Window/Status Item、Apple 系统表面仍缺；真实 APNs/FCM/private/权限/安装需外部环境 |
 | WP6 性能/a11y/l10n | `NOT STARTED/PARTIAL ASSETS` | Android 部分 semantics、两端慢状态可证伪 | Macrobenchmark/Baseline Profile、Apple XCTMetric、参考设备/SLO 样本、物理辅助任务、多语言/尺寸矩阵未完成 |
-| WP7 CI/AI/治理 | `PARTIAL` | lane wrapper、双状态结果、CI、AGENTS/AI policy 已建立；两仓库已实现变更→能力→最低证据合同、未知产品路径阻断、全产品树审计与 PR 自动 Lane 选择 | flake owner、两周观察、历史 AI 任务回放评估和旧 Runtime 退役尚未完成；确定性路径映射只提供下限，不能替代语义影响分析 |
+| WP7 CI/AI/治理 | `PARTIAL` | lane wrapper、双状态结果、CI、AGENTS/AI policy 已建立；两仓库已实现变更→能力→最低证据合同、未知产品路径阻断、全产品树审计、120+120 次历史产品变更回放校准、补充语义契约与 PR 自动 Lane 选择 | flake owner、两周观察、历史 AI 任务“是否补对测试”的任务级评估和旧 Runtime 退役尚未完成；确定性路径映射只提供下限，不能替代语义影响分析 |
 
 ## 已交付
 
@@ -30,6 +30,7 @@
 - 两仓库均实现 `focused/pr/nightly/release` 脚本、CI workflow、`AGENTS.md` 与 AI 增量开发规则。
 - 两仓库均新增版本化 `config/quality-impact.json`、可单测的 `scripts/quality_impact.py` 和本地 AI/开发者入口 `scripts/quality_changed.sh`。计划输出真实能力、最低证据、推荐 Lane、升级原因、已知缺口和未映射路径；`READY` 明确不等于产品通过。
 - PR/main CI 先审计全部已跟踪产品路径，再对 base/head 变更选 Lane；未知新产品路径直接阻断。文档变更产生结构化 `NOT_RUN`，共享 Store/Room、Runtime、Ingress、系统消费者和构建边界会升级到更高 Lane。
+- 影响计划现在还能声明 `required_checks`：机器消费的更新 Feed/Appcast 只进入快速语义契约，不为低成本元数据修改启动完整设备/Release；Fastlane、构建、JNI、隐私和回滚边界则在真实 Lane 前强制执行静态发布契约。声明的计划不存在、不是普通文件、JSON 损坏或含未知检查时直接 `BLOCKED`，不能静默降级。
 
 ## 新鲜证据
 
@@ -43,7 +44,9 @@
 - Apple Release Simulator 构建 PASSED；合法 Quality Session 注入在 Release 中无效，负控 PASSED。
 - Android JVM：275 tests PASSED；`compileDebugAndroidTestKotlin` 与 Release APK 构建 PASSED。
 - Android API 37 emulator：消息/搜索/删除撤销/慢失败恢复/真实导航/Event 准确详情/Thing 三关系页签纵向旅程 9/9 PASSED；隔离的迁移/删除/ACK 核心数据集 18/18 PASSED。
-- Apple 变更影响选择器单元/负控 7/7、Android 8/8 PASSED；全已跟踪产品树审计分别命中 30、28 个能力类，`unmapped_product_paths=0`。虚构的新 Screen 在两端均为 `BLOCKED`，文档变更均为 `NOT_RUN`，共享 Store/Room 与 Runtime 分别升级到 Nightly/Device 或 Release；Android instrumented-test 变化会升级到 `pr-ui`，不再停在“只编译”。
+- Apple 变更影响选择器单元/负控 13/13、Android 11/11 PASSED；全已跟踪产品树审计分别命中具名能力且 `unmapped_product_paths=0`。虚构的新 Screen 在两端均为 `BLOCKED`，文档变更均为 `NOT_RUN`，共享 Store/Room 与 Runtime 分别升级到 Nightly/Device 或 Release；Android instrumented-test 变化会升级到 `pr-ui`，不再停在“只编译”。
+- 最近 120 个 Apple 与 120 个 Android first-parent 历史提交回放均为 114 `READY` + 6 `NOT_RUN` + 0 `BLOCKED`；有内容的 `NOT_RUN` 各仅一条且均为纯文档，其余为空 diff merge。回放真实发现并修复 Appcast/update feed、旧 Connection Diagnosis、System Integration Settings、Room schema export 与临时发布工作流的漏选。
+- Apple Appcast 计划在 `pr` 内真实执行更新分发语义契约后完成 Core/Store/integration 与 iOS 6/6 核心旅程，收据中 selected/executed claim 完整且双状态 `PASSED`；Android update feed 同样在 `pr` 内执行结构语义检查、当前 Feed 的生产 ECDSA 验签及篡改负控，并完成 JVM/编译证据、双状态 `PASSED`。两端 Release 静态契约也各以缩小 focused 产品用例集成验证，selected/executed 无缺口且双状态 `PASSED`。
 - Apple 当前切片的 PR 代表证据：Core/Store/integration 全部通过，iOS 消息核心纵向旅程 6/6 PASSED；Android 当前切片的主机 PR 证据：JVM、`androidTest` 编译与 Debug assemble PASSED。CI YAML、Shell 和 manifest 均通过本地解析。
 - 首个 Android emulator 在开测前消失，0 tests，分类为 `BLOCKED_TRANSIENT_RUNNER`；仅一次受控恢复后通过，未把首轮伪装成绿色。
 - macOS UI target 已编译；执行被 macOS 系统自动化认证阻断，保持 `BLOCKED`。
@@ -56,8 +59,8 @@
 
 ## 当前执行切片
 
-1. 变更影响下限已实施：两端路径合同、选择器、负控、全树审计、本地入口与 PR/main CI 门禁均已落地；
-2. 下一步用历史 AI 任务和连续两周真实变更校准漏选、过度升级、时长和 flake，不以当前 0 未映射推断未来语义无遗漏；
+1. 变更影响下限已实施并完成首轮历史校准：两端路径合同、选择器、补充语义契约、负控、全树审计、120+120 次回放、本地入口与 PR/main CI 门禁均已落地；
+2. 下一阶段仍需用历史 AI 任务评估“是否补对 Oracle”，并以连续两周真实变更校准漏选、过度升级、时长和 flake；当前历史样本 0 `BLOCKED` 不能推断未来语义无遗漏；
 3. 按价值继续迁移 Messages 分页/refresh/mark-read、Event close、Channel/Settings 等当前 P0，而不是继续扩张低价值路径组合；
 4. 旧 Runtime command/state 测试只在更强旅程接管相同风险后退役；性能、真机与系统证据继续单列 `NOT_RUN/BLOCKED`，不得借模拟器绿色结案。
 

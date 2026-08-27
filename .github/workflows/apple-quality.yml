@@ -43,7 +43,7 @@ jobs:
         env:
           QUALITY_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: |
-          python3 -m unittest discover -s scripts/tests -p 'test_quality_impact.py'
+          python3 -m unittest discover -s scripts/tests -p 'test_*.py'
           python3 scripts/quality_impact.py \
             --audit-product-tree \
             --output build/quality-results/apple-impact-tree-audit.json \
@@ -53,6 +53,7 @@ jobs:
             --head "$GITHUB_SHA" \
             --output build/quality-results/apple-impact-plan.json \
             --check
+          echo "QUALITY_IMPACT_PLAN=build/quality-results/apple-impact-plan.json" >> "$GITHUB_ENV"
           impact_lane="$(python3 -c 'import json; print(json.load(open("build/quality-results/apple-impact-plan.json"))["recommended_lane"])')"
           if [[ "$impact_lane" == "not-run" ]]; then
             echo "QUALITY_SKIP_PRODUCT=1" >> "$GITHUB_ENV"

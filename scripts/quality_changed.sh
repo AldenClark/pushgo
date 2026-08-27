@@ -7,7 +7,7 @@ results_root="$repo_root/build/quality-results"
 impact_file="$results_root/apple-impact-plan.json"
 mkdir -p "$results_root"
 
-python3 -m unittest discover -s "$repo_root/scripts/tests" -p 'test_quality_impact.py'
+python3 -m unittest discover -s "$repo_root/scripts/tests" -p 'test_*.py'
 python3 "$repo_root/scripts/quality_impact.py" \
   --output "$impact_file" \
   --check \
@@ -35,4 +35,5 @@ if [[ "$lane" == "not-run" ]]; then
 fi
 
 echo "executing_recommended_lane=$lane"
+export QUALITY_IMPACT_PLAN="$impact_file"
 exec "$repo_root/scripts/quality_test.sh" "$lane"

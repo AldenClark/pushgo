@@ -53,6 +53,10 @@
 21. **性能提前 return 假阳性攻击**：Apple 四个 opt-in 大规模用例在环境变量缺失时打印 skipped 后直接 return，但测试框架把函数计入通过。结果：改为 Swift Testing `.enabled(if:)` 条件 Trait；无 opt-in 时逐项显示 skipped，并在结构化结果中明确列为 `not_run`。日常预算不增加，性能结论也不再失真。
 22. **自动选测冒充完整影响分析攻击**：路径命中为 `READY` 后停止追踪调用者、状态/数据和平台消费者。结果：计划文件固定声明 deterministic lower bound；产品路径均要求人工/AI 回答语义影响问题，`AGENTS.md` 明令不得把 READY 当成功能通过。
 23. **Android instrumented test 只编译攻击**：原 `quality-system` 将 `app/src/androidTest/**` 选为 `pr`，device 阶段会跳过，因此错误 Oracle 只要能编译就可能进入主干。结果：拆出 `quality-device-test-system`，任何 instrumented-test 变化最低升级 `pr-ui` 并执行代表 App UI；非 curated 新类仍在缺口中要求显式 focused 调用，避免把代表旅程误称为该新类已执行。
+24. **机器消费文件不算产品代码攻击**：历史 Appcast、Android update feed/update notes 和 Room schema export 可改变用户更新或迁移结果，却曾落为 `NOT_RUN`。结果：增加独立产品路径与语义契约；元数据进入快速 PR 检查，schema 进入 device 迁移证据，不靠“文件存在/JSON 能解析”判定。
+25. **manifest 声称最低证据但 Lane 未执行攻击**：规则写有发布、隐私、JNI、Feed 契约不代表脚本真的运行。结果：计划输出 `required_checks`，Lane 在产品测试前执行并把每项写入 selected/executed claims；Apple/Android 更新契约及 Release 静态契约均以真实 focused/PR 路径集成通过。Android 进一步用生产 ECDSA 算法验证当前仓库 Feed，并证明篡改一个 payload 字段后必然失败，不再以“signature 字段存在”冒充可验证。
+26. **无效计划静默降级攻击**：显式给出 `/dev/null` 或损坏计划，旧逻辑可能当“没有计划”继续跑默认范围。结果：任何已声明计划都必须是可解析普通文件；两端负控均得到 `product=NOT_RUN`、`test_system=BLOCKED`、退出码 2，而不是绿色。
+27. **只审当前树攻击**：全树审计为 0 仍不能发现已经删除但可能重现的能力入口。结果：回放两端各 120 个 first-parent 历史提交，先真实捕获旧 System Integration Settings 与 Connection Diagnosis 漏选；按能力边界修正后均为 114 `READY`、6 合理 `NOT_RUN`、0 `BLOCKED`。该证据校准路径下限，不替代任务级语义审查。
 
 ## 归因分析
 
@@ -79,3 +83,4 @@
 - 真实 APNs/FCM/权限/后台/升级只有在具备签名、账号、设备和隔离环境后进入 Release；缺条件即 `BLOCKED`。
 - 性能预算需在固定参考物理设备建立至少 10 次基线和 p50/p95，再设置回归阈值；当前只完成性能状态的可证伪性。
 - 两周观察期关注：Runner 启动失败率、业务失败率、p95、flake、无证据重试次数和每 lane 时长。基础设施修复连续两次不增加产品证据时，停止继续打磨并重新归因。
+- 当前红蓝复核由同一执行上下文完成，存在 `common-mode-risk`；未获得独立审查代理授权前，不把本轮校准描述为独立第三方验证。

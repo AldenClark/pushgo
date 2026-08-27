@@ -27,6 +27,7 @@
 | M Window/Status Item | 关闭后继续接收并恢复唯一窗口 | close/minimize/reopen/error | window identity、menu state、Store | component + physical UI | P0/P1；缺口 | AppDelegate/MainWindow/MenuBar VM |
 | W Messages/Events/Things | 在 Watch 浏览、已读、删除 | mirror/standalone/error/image/decrypt | Watch Store、pending action、ACK | integration + watch UI | P0/P1；UI/physical 缺口 | watch AppEnvironment/UI |
 | W Receiver/complication | 独立接收并显示未读 | generation/reset/auth failure/stale | provision、snapshot、timeline | integration + physical | P1；NOT RUN | Watch bridge/receiver/widget |
+| I/M Update distribution | 用户收到可验证、可安装且文案正确的更新 | stable/beta/build/signature/notes/URL | Sparkle Appcast、App Store metadata、版本化 notes | semantic contract + Release install | P0 Release；元数据契约已进 PR，真实安装仍 NOT RUN | release scripts/metadata |
 | I/M Export candidate | 导出消息文件 | reachable/cancel/failure/large | JSON/file consumer | product reachability review | 删除候选；不投入本轮预算 | Settings export helpers |
 | M MenuBar content candidate | 在菜单栏浏览未读 | mounted/loading/empty/error | MenuBar VM/Store | source reachability review | 删除候选；不投入本轮预算 | `MacMenuBarContentView` |
 

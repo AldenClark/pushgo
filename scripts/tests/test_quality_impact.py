@@ -61,6 +61,26 @@ class QualityImpactPlanTests(unittest.TestCase):
         self.assertEqual("pr", plan["recommended_lane"])
         self.assertIn("quality-system-trustworthiness", plan["impacted_capabilities"])
 
+    def test_machine_consumed_appcast_runs_contract_without_full_release_lane(self):
+        plan = self.plan("release/appcast.xml")
+
+        self.assertEqual("READY", plan["plan_status"])
+        self.assertEqual("pr", plan["recommended_lane"])
+        self.assertIn("update-distribution", plan["impacted_capabilities"])
+        self.assertEqual(["apple-update-distribution-contract"], plan["required_checks"])
+
+    def test_fastlane_change_requires_release_contract_and_build(self):
+        plan = self.plan("fastlane/Fastfile")
+
+        self.assertEqual("release", plan["recommended_lane"])
+        self.assertIn("apple-release-static-contract", plan["required_checks"])
+
+    def test_temporary_update_repair_workflow_is_not_treated_as_documentation(self):
+        plan = self.plan(".github/workflows/repair-v1.3.0-update-permissions.yml")
+
+        self.assertEqual("release", plan["recommended_lane"])
+        self.assertIn("apple-release-static-contract", plan["required_checks"])
+
     def test_system_consumer_upgrades_message_change_to_nightly(self):
         plan = self.plan(
             "Shared/UI/MessageListViewModel.swift",
@@ -69,6 +89,12 @@ class QualityImpactPlanTests(unittest.TestCase):
 
         self.assertEqual("nightly", plan["recommended_lane"])
         self.assertIn("spotlight-user-activity", plan["impacted_capabilities"])
+
+    def test_system_settings_component_from_history_is_mapped_to_real_consumers(self):
+        plan = self.plan("Shared/UI/SystemIntegrationSettingsGroup.swift")
+
+        self.assertEqual("nightly", plan["recommended_lane"])
+        self.assertIn("controls-intents-shortcuts", plan["impacted_capabilities"])
 
 
 if __name__ == "__main__":

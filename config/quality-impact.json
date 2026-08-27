@@ -10,6 +10,12 @@
     "Package.swift",
     "Package.resolved",
     "pushgo.xcodeproj/**",
+    "fastlane/**",
+    ".github/workflows/*release*.yml",
+    ".github/workflows/*update*.yml",
+    "release/appcast.xml",
+    "release/appstore.json",
+    "release/update-notes/*.json",
     "config/*.xcconfig",
     "config/*.plist",
     "config/concurrency_allowlist.txt"
@@ -84,7 +90,7 @@
     },
     {
       "id": "system-surfaces",
-      "paths": ["Shared/SystemIntegration/**", "Extensions/PushGoWidgets/**"],
+      "paths": ["Shared/SystemIntegration/**", "Shared/UI/SystemIntegration*.swift", "Extensions/PushGoWidgets/**"],
       "capabilities": ["widgets", "controls-intents-shortcuts", "spotlight-user-activity", "live-activity-focus"],
       "minimum_evidence": ["system surface privacy/router/snapshot contracts", "Release real-system checklist"],
       "lane": "nightly",
@@ -118,10 +124,20 @@
       "known_evidence_gaps": ["physical VoiceOver, large text, media lifecycle, and notification sound system evidence are incomplete."]
     },
     {
+      "id": "update-distribution-contract",
+      "paths": ["release/appcast.xml", "release/appstore.json", "release/update-notes/*.json", "scripts/release_appcast.sh", "scripts/publish_update_artifacts.sh", "scripts/verify_update_distribution.py"],
+      "capabilities": ["update-distribution"],
+      "minimum_evidence": ["Sparkle/App Store metadata semantic contract"],
+      "required_checks": ["apple-update-distribution-contract"],
+      "lane": "pr",
+      "escalation_reasons": ["Machine-consumed update metadata can prevent or misdirect user updates without changing App source."]
+    },
+    {
       "id": "release-build-platform-contract",
-      "paths": ["Package.swift", "Package.resolved", "pushgo.xcodeproj/**", "config/*.xcconfig", "config/*.plist", "config/concurrency_allowlist.txt", "Apps/*/*.entitlements", "Apps/*/Info.plist", "Apps/*/*Info.plist", "Extensions/*/*.entitlements", "Extensions/*/Info.plist", "Extensions/*/*.xcprivacy", "Resources/PrivacyInfo.xcprivacy", ".github/workflows/apple-release.yml", "scripts/*release*.py", "scripts/*release*.sh", "scripts/verify_*.py", "scripts/verify_*.sh"],
+      "paths": ["Package.swift", "Package.resolved", "pushgo.xcodeproj/**", "fastlane/**", "config/*.xcconfig", "config/*.plist", "config/concurrency_allowlist.txt", "Apps/*/*.entitlements", "Apps/*/Info.plist", "Apps/*/*Info.plist", "Extensions/*/*.entitlements", "Extensions/*/Info.plist", "Extensions/*/*.xcprivacy", "Resources/PrivacyInfo.xcprivacy", ".github/workflows/*release*.yml", ".github/workflows/*update*.yml", ".github/workflows/apple-concurrency-gate.yml", "scripts/*release*.py", "scripts/*release*.sh", "scripts/apple_concurrency_gate.sh", "scripts/concurrency_audit.sh", "scripts/create_pretty_dmg.sh", "scripts/ensure_macos_widget_app_store_profile.sh", "scripts/validate_release_profiles.py", "scripts/verify_built_privacy_manifests.sh", "scripts/verify_locked_packages.sh", "scripts/verify_privacy_manifests.sh", "scripts/verify_rollback_compatibility.sh"],
       "capabilities": ["build-package-signing-privacy-release"],
       "minimum_evidence": ["locked dependency/privacy/release contract checks", "Release build", "Release Quality Runtime isolation"],
+      "required_checks": ["apple-release-static-contract"],
       "lane": "release",
       "known_evidence_gaps": ["Signing, notarization, install/upgrade, and distribution require the controlled Release environment."],
       "escalation_reasons": ["Build and entitlement changes cross packaging, privacy, signing, and Release boundaries."]

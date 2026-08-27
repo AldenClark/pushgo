@@ -100,6 +100,10 @@ def load_manifest(path: Path) -> dict[str, Any]:
         for key in ("paths", "capabilities", "minimum_evidence"):
             if not isinstance(rule.get(key), list) or not rule[key]:
                 raise ValueError(f"rule {rule_id} requires a non-empty {key} list")
+        if "required_checks" in rule:
+            checks = rule["required_checks"]
+            if not isinstance(checks, list) or any(not isinstance(item, str) or not item for item in checks):
+                raise ValueError(f"rule {rule_id} required_checks must be a list of non-empty strings")
     return manifest
 
 
@@ -144,6 +148,7 @@ def build_plan(files: list[str], manifest: dict[str, Any], source: str) -> dict[
         "selected_rule_ids": sorted(matched_rules),
         "impacted_capabilities": sorted({item for rule in selected for item in rule["capabilities"]}),
         "minimum_evidence": sorted({item for rule in selected for item in rule["minimum_evidence"]}),
+        "required_checks": sorted({item for rule in selected for item in rule.get("required_checks", [])}),
         "recommended_lane": recommended_lane,
         "known_evidence_gaps": sorted({item for rule in selected for item in rule.get("known_evidence_gaps", [])}),
         "escalation_reasons": sorted({item for rule in selected for item in rule.get("escalation_reasons", [])}),

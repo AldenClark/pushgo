@@ -65,6 +65,8 @@ Identifier 只负责稳定定位；readiness 只证明准备完成；Automation 
 
 该机制只负责**不可低于的下限**，不负责替 AI 作完整判断。任何产品路径未映射都 `BLOCKED`；共享 Store/Room、Runtime、Ingress、系统消费者和构建边界必须自动升级。即使命中为 `READY`，AI 仍必须沿 caller、状态/数据 owner、错误、配置、生成物和平台消费者追踪，并在现有 Oracle 无法击穿本次风险时新增或强化测试。文档或无关支持文件可以明确产生 `NOT RUN`，不得伪造产品绿色。
 
+计划可能附带 `required_checks`。它们用于把 Feed/Appcast/schema/release 等“不是 App UI 源码、但会改变用户结果”的契约接入对应 Lane，必须进入结构化 selected/executed claims。禁止只在 manifest 写证据名称却不执行，也禁止因为一份轻量元数据变化无差别启动完整设备矩阵；检查强度由用户后果和真实消费者决定。
+
 ## AI 交付报告模板
 
 交付时必须回答：改了哪个用户目的；新增/强化了什么可信 Oracle；跑了哪些 lane 和新鲜结果；哪些系统能力仍是 `BLOCKED/NOT RUN`；是否更新能力矩阵；是否存在因价值较低而明确延期的场景。禁止用“测试文件存在”“编译通过”替代功能结论。
