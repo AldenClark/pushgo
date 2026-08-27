@@ -11,7 +11,7 @@
 | “完整测试体系已经实施” | Apple 没有设计要求的 Test Plans/Performance suites；Android 没有 macrobenchmark 模块；两端大量第 25 节 P0/P1 仍无真实旅程 | `REJECTED`；整体保持 `PARTIAL` |
 | “Android PR 已保护核心 UI” | 原 workflow 的 PR 只执行 JVM、androidTest compile 和 assembleDebug | `REJECTED`；本轮新增 PR emulator `pr-ui` 核心旅程 |
 | “所有绿色都能区分产品与环境” | 原脚本只输出一个 `status=PASSED`；iOS transient retry 后最终绿无法结构化保留 flake | `REJECTED`；本轮新增双状态 JSON，恢复后 test system 保持 `FLAKY` |
-| “剩余只是真机/外部系统” | Messages 分页/refresh/筛选/mark-read、Android Event/Thing、Channels/Settings、性能等均可在本地继续实现 | `REJECTED`；从 Release 外部清单移回 WP3–WP6 |
+| “剩余只是真机/外部系统” | Messages refresh/channel/tag/cleanup、Event close/filter、Channels/Settings、性能等仍可在本地继续实现 | `REJECTED`；从 Release 外部清单移回 WP3–WP6；代表性 pagination/read 已完成但不能覆盖这些缺口 |
 | “能力矩阵证明覆盖” | 矩阵多行明确写着 UI/性能缺口；它本身也声明不是 Oracle | 只能作防漏索引，不能作完成证据 |
 
 ## 蓝队正向证明链
@@ -20,6 +20,7 @@
 | --- | --- | --- | --- | --- |
 | 消息空态 | 冷启动 App | 唯一空 Store → Paging/VM → UI | 可操作空态，无永久 Loading/错误 | Store 不可用或 Loading 不结束必须失败 |
 | 消息准确性 | 启动、点列表行、重启 | fixture → canonical Store → query → row/detail | 准确标题、正文、详情，重启仍一致 | 只 seed 文件、字段串行或未持久化均失败 |
+| 消息分页与已读 | 滚过 page size 50、点未读详情、全部已读、重启、切仅未读 | 52 条 fixture → paged query → read coordinator → Store → list/filter | 第二页可达；单条语义变为已读；全部已读跨重启保留；未读为空且可恢复全部 | 固定首屏、只改内存、重启 reseed、历史筛选污染或批量动作崩溃均失败 |
 | 慢加载 | 启动列表并等待里程碑 | fault → repository/paging → UI state | 数据完成前出现明确 slow；完成后是真实内容/空态 | spinner 永久转或直接空态均失败 |
 | 失败恢复 | 首次查询失败、点 Retry | latched fault → error → retry → real query | 错误可见；Retry 后真实终点 | 自动吞错、假成功或 Retry 无效均失败 |
 | 搜索 | 真实搜索框输入错误词、再输入目标词并点行 | query → FTS/Store → 结果集合 → 详情 | 错误词排除目标；目标词只返回并打开准确对象 | 仅检查输入框/“App 仍运行”不能通过 |
@@ -57,6 +58,10 @@
 25. **manifest 声称最低证据但 Lane 未执行攻击**：规则写有发布、隐私、JNI、Feed 契约不代表脚本真的运行。结果：计划输出 `required_checks`，Lane 在产品测试前执行并把每项写入 selected/executed claims；Apple/Android 更新契约及 Release 静态契约均以真实 focused/PR 路径集成通过。Android 进一步用生产 ECDSA 算法验证当前仓库 Feed，并证明篡改一个 payload 字段后必然失败，不再以“signature 字段存在”冒充可验证。
 26. **无效计划静默降级攻击**：显式给出 `/dev/null` 或损坏计划，旧逻辑可能当“没有计划”继续跑默认范围。结果：任何已声明计划都必须是可解析普通文件；两端负控均得到 `product=NOT_RUN`、`test_system=BLOCKED`、退出码 2，而不是绿色。
 27. **只审当前树攻击**：全树审计为 0 仍不能发现已经删除但可能重现的能力入口。结果：回放两端各 120 个 first-parent 历史提交，先真实捕获旧 System Integration Settings 与 Connection Diagnosis 漏选；按能力边界修正后均为 114 `READY`、6 合理 `NOT_RUN`、0 `BLOCKED`。该证据校准路径下限，不替代任务级语义审查。
+28. **初始化覆盖业务变更攻击**：Apple 同一 quality session 重启时重复保存 fixture，把“全部已读”恢复为初始未读，持久化用例可信失败。结果：fixture 仅首次成功初始化后原子记录 session/fixture marker；同 session 重启复用真实 Store，新 session 才建立基线。Marker 只决定准备生命周期，最终 Oracle 仍是 UI 与 Store 行为。
+29. **共享偏好跨会话污染攻击**：前一失败用例留下“仅未读”，新 session 的已读 `workflow 0` 被隐藏，固定滑动次数误报分页失败。结果：Apple quality profile 每次启动从“全部消息”UI 基线构造 ViewModel；Android 偏好位于 session Room。失败附件证明列表已到 `workflow 1` 而非分页未加载。
+30. **错误语义字段攻击**：已读状态位于 accessibility label，正文位于 value；最初测试比较 value，功能正确也失败。结果：Oracle 等待真实行 label 从未读语义变化，不删除状态断言，也不使用内部数据库 shortcut。
+31. **批量动作 UI 线程攻击**：Android Room 批量已读成功后协程恢复在线程池，随后 Toast/announce 崩溃。结果：产品反馈切回 `Dispatchers.Main.immediate`，原完整旅程回归 1/1 通过；这证明 device UI 不可被 repository 单测替代。
 
 ## 归因分析
 

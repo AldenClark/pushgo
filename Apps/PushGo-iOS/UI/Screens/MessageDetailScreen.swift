@@ -381,6 +381,16 @@ struct MessageDetailScreen: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .accessibilityIdentifier("action.message.close")
+            .accessibilityLabel(localizationManager.localized("close"))
+        }
+
         ToolbarItemGroup(placement: .topBarTrailing) {
             Button(role: .destructive) {
                 if let message = viewModel.message {

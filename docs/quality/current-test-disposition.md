@@ -70,13 +70,14 @@
 
 - `testQualitySessionUsesAppOwnedStoreAndReachesFunctionalEmptyState`
 - `testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch`
+- `testQualityMessageWorkflowLoadsSecondPageAndPersistsReadActions`
 - `testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail`
 - `testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch`
 - `testSlowMessageLoadBecomesVisibleBeforeDataCompletes`
 - `testMessageLoadFailureShowsRetryAndRecoversToRealDataState`
 - `testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen`
 
-前六条进入 PR 核心集，真实导航及 Event/Thing/配置失败等代表性旅程进入 Nightly/Release。Release 已改为显式高价值清单，不再默认执行所有遗留 UI 用例；旧 Runtime command/state 用例不得以绿色覆盖新用例失败，已有更强证据的弱重复从常规 lane 移除。
+前七条进入 PR 核心集，其中 workflow 用 52 条数据跨越真实 page size 50，并验证单条/全部已读、relaunch 与未读筛选；真实导航及 Event/Thing/配置失败等代表性旅程进入 Nightly/Release。Release 已改为显式高价值清单，不再默认执行所有遗留 UI 用例；旧 Runtime command/state 用例不得以绿色覆盖新用例失败，已有更强证据的弱重复从常规 lane 移除。
 
 ## 变更影响门禁
 

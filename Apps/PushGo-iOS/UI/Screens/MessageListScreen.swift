@@ -487,6 +487,7 @@ struct MessageListScreen: View {
                 )
             }
             .tint(Color.appAccentPrimary)
+            .accessibilityIdentifier("action.message.mark_read.\(message.id.uuidString)")
         }
     }
 
@@ -760,6 +761,7 @@ private extension MessageListScreen {
                     Image(systemName: "envelope.open.fill")
                 }
                 .accessibilityLabel(localizationManager.localized("mark_all_as_read"))
+                .accessibilityIdentifier("action.messages.mark_all_read")
             }
             Button {
                 isFilterPopoverPresented = true

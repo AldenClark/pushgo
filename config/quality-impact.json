@@ -59,7 +59,7 @@
       "capabilities": ["messages", "message-detail", "search-filter", "delete-undo"],
       "minimum_evidence": ["Swift message/search/deletion tests", "iOS accurate content/search/delete/relaunch UI journeys"],
       "lane": "pr",
-      "known_evidence_gaps": ["pagination/refresh/mark-read/media and macOS UI remain incomplete."]
+      "known_evidence_gaps": ["refresh/media and macOS UI remain incomplete; the representative iOS pagination/read workflow is protected."]
     },
     {
       "id": "events-things",

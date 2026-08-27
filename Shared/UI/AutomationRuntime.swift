@@ -494,6 +494,20 @@ private struct PushGoAutomationFixtureSubscription: Decodable {
     }
 }
 
+private struct PushGoQualityFixtureInitializationMarker: Codable, Equatable {
+    static let currentSchemaVersion = 1
+
+    let schemaVersion: Int
+    let sessionID: String
+    let fixture: PushGoQualityFixture
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case sessionID = "session_id"
+        case fixture
+    }
+}
+
 @MainActor
 final class PushGoAutomationRuntime {
     static let shared = PushGoAutomationRuntime()
@@ -582,6 +596,8 @@ final class PushGoAutomationRuntime {
             fixtureReady = state.totalMessageCount == 0
         case .messagesStandard:
             fixtureReady = state.totalMessageCount > 0
+        case .messagesWorkflow:
+            fixtureReady = state.totalMessageCount == 52
         case .messagesLarge:
             fixtureReady = state.totalMessageCount >= 1_000
         case .eventStandard:
@@ -1072,12 +1088,29 @@ final class PushGoAutomationRuntime {
         else { return }
 
         do {
+            if let session = PushGoAutomationContext.qualitySession,
+               try qualityFixtureWasInitialized(for: session)
+            {
+                writeEvent(
+                    type: "fixture.initialization_reused",
+                    command: nil,
+                    details: [
+                        "session_id": session.sessionID,
+                        "fixture": session.fixture.rawValue,
+                    ]
+                )
+                refreshState(environment: environment)
+                return
+            }
             let bundle = try loadStartupFixtureBundle()
             try await applyFixtureBundle(
                 bundle,
                 sourcePath: startupFixturePath,
                 environment: environment
             )
+            if let session = PushGoAutomationContext.qualitySession {
+                try recordQualityFixtureInitialization(for: session)
+            }
             refreshState(environment: environment)
         } catch {
             recordRuntimeError(
@@ -1088,6 +1121,43 @@ final class PushGoAutomationRuntime {
             )
             refreshState(environment: environment)
         }
+    }
+
+    private func qualityFixtureWasInitialized(
+        for session: PushGoQualitySessionDescriptor
+    ) throws -> Bool {
+        guard let markerURL = qualityFixtureInitializationMarkerURL() else { return false }
+        guard FileManager.default.fileExists(atPath: markerURL.path) else { return false }
+        let data = try Data(contentsOf: markerURL)
+        let marker = try JSONDecoder().decode(PushGoQualityFixtureInitializationMarker.self, from: data)
+        return marker == PushGoQualityFixtureInitializationMarker(
+            schemaVersion: PushGoQualityFixtureInitializationMarker.currentSchemaVersion,
+            sessionID: session.sessionID,
+            fixture: session.fixture
+        )
+    }
+
+    private func recordQualityFixtureInitialization(
+        for session: PushGoQualitySessionDescriptor
+    ) throws {
+        guard let markerURL = qualityFixtureInitializationMarkerURL() else {
+            throw PushGoAutomationError.invalidArgument("quality_session_root")
+        }
+        try FileManager.default.createDirectory(
+            at: markerURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let marker = PushGoQualityFixtureInitializationMarker(
+            schemaVersion: PushGoQualityFixtureInitializationMarker.currentSchemaVersion,
+            sessionID: session.sessionID,
+            fixture: session.fixture
+        )
+        try JSONEncoder().encode(marker).write(to: markerURL, options: .atomic)
+    }
+
+    private func qualityFixtureInitializationMarkerURL() -> URL? {
+        PushGoAutomationContext.qualitySessionRootURL?
+            .appendingPathComponent("fixture-initialization.json", isDirectory: false)
     }
 
     private var platformIdentifier: String {
@@ -3501,6 +3571,9 @@ final class PushGoAutomationRuntime {
         case .messagesStandard:
             messages = [qualityFixtureMessage(index: 0)]
             entityRecords = []
+        case .messagesWorkflow:
+            messages = (0..<52).map(qualityWorkflowFixtureMessage)
+            entityRecords = []
         case .messagesLarge:
             messages = (0..<1_000).map(qualityFixtureMessage)
             entityRecords = []
@@ -3542,6 +3615,30 @@ final class PushGoAutomationRuntime {
                 "entity_type": "message",
                 "message_id": stableID,
                 "delivery_id": "quality-delivery-\(stableID)",
+            ],
+            "status": "normal",
+        ]
+    }
+
+    private func qualityWorkflowFixtureMessage(index: Int) -> [String: Any] {
+        let suffix = String(format: "%012x", index + 1)
+        let stableID = "quality-workflow-\(index)"
+        let title = "Quality workflow \(index)"
+        let body = "Cross-page deterministic workflow row \(index)."
+        let receivedAt = Date(timeIntervalSince1970: 1_768_464_000 + Double(index))
+        return [
+            "id": "00000000-0000-0000-0000-\(suffix)",
+            "message_id": stableID,
+            "title": title,
+            "body": body,
+            "channel_id": index.isMultiple(of: 2) ? "workflow-alpha" : "workflow-beta",
+            "is_read": index.isMultiple(of: 4),
+            "received_at": ISO8601DateFormatter().string(from: receivedAt),
+            "raw_payload": [
+                "entity_type": "message",
+                "message_id": stableID,
+                "delivery_id": "quality-delivery-\(stableID)",
+                "tags": ["workflow", index.isMultiple(of: 2) ? "even" : "odd"],
             ],
             "status": "normal",
         ]

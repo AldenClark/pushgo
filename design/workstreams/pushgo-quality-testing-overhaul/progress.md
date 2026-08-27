@@ -9,9 +9,9 @@
 | 工作包 | 状态 | 已证明 | 尚未完成、不能被现有绿色替代 |
 | --- | --- | --- | --- |
 | WP0 去伪审计 | `VERIFIED` | 两仓库现有 UI/device 测试均有 disposition，弱 Oracle、路径协议、skip/return 和死代码候选已形成基线 | rewrite/move/delete 的实际迁移属于 WP3–WP7，不因 WP0 退出而视为完成 |
-| WP1 Runtime/环境 | `PARTIAL` | 两端 App-owned session Store、确定 fixture、readiness、doctor、teardown、Release 隔离 | 50 次启动 ≥98% 尚未执行；Apple/macOS 与 Android 遗留 Runtime 仍保留绝对路径/内部 state 协议；准备失败 10 秒内的全套证明不完整 |
-| WP2 慢加载样板 | `PARTIAL` | Messages 首次加载 slow/error/retry 的真实 UI 状态与内容终点已证明 | 分页/refresh 的旧内容保留、里程碑、真实参考设备预算、超预算性能负控未完成 |
-| WP3 Messages | `PARTIAL` | 空态、标准字段/详情/relaunch、搜索代表例、删除 Undo、首次慢/错恢复 | 分页、筛选、refresh、mark read/all、删除不撤销、历史清理、Markdown/media/decrypt 以及 10k UI/性能未完成 |
+| WP1 Runtime/环境 | `PARTIAL` | 两端 App-owned session Store、确定 fixture、readiness、doctor、teardown、Release 隔离；Apple fixture 首次初始化幂等并隔离历史筛选偏好 | 50 次启动 ≥98% 尚未执行；Apple/macOS 与 Android 遗留 Runtime 仍保留绝对路径/内部 state 协议；准备失败 10 秒内的全套证明不完整 |
+| WP2 慢加载样板 | `PARTIAL` | Messages 首次加载 slow/error/retry 的真实 UI 状态与内容终点已证明；代表性功能分页已覆盖 | refresh 期间旧内容保留与结果更新、里程碑、真实参考设备预算、超预算性能负控未完成 |
+| WP3 Messages | `PARTIAL` | 空态、标准字段/详情/relaunch、跨 50 条页界、单条/全部已读、未读筛选往返与重启持久化、搜索代表例、删除 Undo、首次慢/错恢复 | refresh 旧内容保留/结果更新、channel/tag 筛选、删除不撤销、历史清理、Markdown/media/decrypt 以及 10k UI/性能未完成 |
 | WP4 Entity/Channel/Settings/watch UI | `PARTIAL` | Apple/Android Event/Thing App-owned 摄入→投影→准确详情；Android Thing 三个真实关系页签；两端真实主导航；部分低层合同 | Event close/筛选；Thing 关联打开/深链；Channel create/rename/双退订；Settings 持久化/解密/可见性/transport；watch P0 UI 未完成 |
 | WP5 Ingress/系统能力 | `PARTIAL` | 两端 ACK/去重/迁移等低层证据较强 | 当前可模拟的通知路由、后台恢复、macOS Window/Status Item、Apple 系统表面仍缺；真实 APNs/FCM/private/权限/安装需外部环境 |
 | WP6 性能/a11y/l10n | `NOT STARTED/PARTIAL ASSETS` | Android 部分 semantics、两端慢状态可证伪 | Macrobenchmark/Baseline Profile、Apple XCTMetric、参考设备/SLO 样本、物理辅助任务、多语言/尺寸矩阵未完成 |
@@ -21,9 +21,11 @@
 
 - Apple 设计基线 `2becfd8`、首轮实现 `af69dd1` 与 Android 首轮实现 `7096e43` 已提交；本轮搜索/删除/导航、边测边修和 lane 剪枝保持为独立后续提交，便于审阅与回滚。
 - 两仓库均有类型化 Quality Session、唯一 App-owned Store/数据库、内置确定性 fixture、readiness、doctor、teardown 和 Release 隔离。
-- Apple 已有 `empty.clean`、`messages.standard`、`messages.large`、`event.standard`、`thing.standard`；Android 已有前三项。Fixture 不再依赖 Runner 读取宿主数据库或把宿主 DB 路径交给 App。
+- 两端均已有 `empty.clean`、`messages.standard`、`messages.workflow`、`messages.large`、`event.standard`、`thing.standard`。Fixture 不再依赖 Runner 读取宿主数据库或把宿主 DB 路径交给 App；52 条 workflow 只跨一个真实页界，不把 1k/100k 性能数据塞入日常功能旅程。
 - 消息列表已把首次加载、慢加载、错误、Retry 和真实数据终点建模为产品状态；一次故障保持到用户 Retry，避免自动消耗造成假绿。
 - Apple iOS 与 Android 均新增 App-owned 纵向旅程：空态、准确列表字段、详情、重启、慢加载可见、失败可见、Retry 后真实恢复。
+- Apple iOS 与 Android 的 52 条消息旅程均从真实列表跨越 page size 50，打开未读详情并观察语义变为已读，执行全部已读、重启核对持久化，再验证仅未读空态和恢复全部消息。Apple 将该旅程纳入 PR 核心集；Android 既有 device 类已覆盖。
+- 该旅程实跑发现并修复 Apple 详情缺少明确可访问关闭动作、同一 quality session 重启重复灌入覆盖业务变更、共享 UserDefaults 跨 session 污染首屏；Android 实跑发现并修复批量已读后从非主线程调用 Toast/announce 的崩溃。
 - Apple 事件/事物 fixture 走真实消息摄入与投影，不以“实体文件/行存在”代替详情可打开；用例从真实 Tab 和列表行进入。
 - Apple Runner 串行执行、先 build-for-testing、再 test-without-building；只对已知 Runner 启动故障重试一次，业务断言不重试；禁用失败后的长时自动诊断采集。
 - Android Runner 在 Application 创建前配置会话，结束时释放 Room、删除唯一 DB 和 session artifacts；日常 device lane 只跑核心旅程与关键数据边界，Nightly/Release 扩展显式代表性集，不再用 Release 跑全部遗留 androidTest。
@@ -41,6 +43,7 @@
 - Apple iOS 搜索准确集合/详情、删除→立即隐藏→撤销→重启持久性均 PASSED；实跑发现并修复了待删除作用域未触发 `List` 重建及父可访问性标识覆盖 Undo 按钮两个产品缺陷。
 - Apple iOS 真实点击四个主 Tab 并从频道页进入 Settings 的导航旅程 PASSED；Runtime 直接导航矩阵已退出常规 lane。
 - Apple iOS Event 与 Thing 均已从真实 Tab、列表行进入详情并核对准确字段，PASSED。
+- Apple iOS 消息 workflow focused 1/1 PASSED（`run-1-20260828-023135.xcresult`，无业务重试）；Android 同等 workflow focused 1/1 PASSED。两端证据均覆盖分页、单条/全部已读、relaunch 和筛选往返，不以 fixture count 或文件 marker 作最终 Oracle。
 - Apple Release Simulator 构建 PASSED；合法 Quality Session 注入在 Release 中无效，负控 PASSED。
 - Android JVM：275 tests PASSED；`compileDebugAndroidTestKotlin` 与 Release APK 构建 PASSED。
 - Android API 37 emulator：消息/搜索/删除撤销/慢失败恢复/真实导航/Event 准确详情/Thing 三关系页签纵向旅程 9/9 PASSED；隔离的迁移/删除/ACK 核心数据集 18/18 PASSED。
@@ -61,7 +64,7 @@
 
 1. 变更影响下限已实施并完成首轮历史校准：两端路径合同、选择器、补充语义契约、负控、全树审计、120+120 次回放、本地入口与 PR/main CI 门禁均已落地；
 2. 下一阶段仍需用历史 AI 任务评估“是否补对 Oracle”，并以连续两周真实变更校准漏选、过度升级、时长和 flake；当前历史样本 0 `BLOCKED` 不能推断未来语义无遗漏；
-3. 按价值继续迁移 Messages 分页/refresh/mark-read、Event close、Channel/Settings 等当前 P0，而不是继续扩张低价值路径组合；
+3. Messages 分页/单条与全部已读/未读筛选代表链已完成；下一步按价值迁移 refresh 旧内容保留与结果更新，然后推进 Event close、Channel/Settings 等当前 P0，而不是继续扩张低价值路径组合；
 4. 旧 Runtime command/state 测试只在更强旅程接管相同风险后退役；性能、真机与系统证据继续单列 `NOT_RUN/BLOCKED`，不得借模拟器绿色结案。
 
 ## 需要 Release/外部环境的明确证据

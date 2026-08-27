@@ -59,8 +59,17 @@ enum MessageListSortMode: String, CaseIterable, Equatable, Hashable, Sendable {
 struct MessageUnreadOnlyFilterPreference {
     static let preferenceKey = "message_unread_only_filter"
 
-    static func load(defaults: UserDefaults = AppConstants.sharedUserDefaults()) -> Bool {
-        defaults.bool(forKey: preferenceKey)
+    static func load(
+        defaults: UserDefaults = AppConstants.sharedUserDefaults(),
+        qualitySessionActive: Bool = PushGoAutomationContext.qualitySession != nil
+    ) -> Bool {
+        // Each quality launch starts from a visible, deterministic message baseline.
+        // Tests may still toggle the filter during the journey, but a prior run must
+        // never hide fixture rows before the first functional assertion.
+        if qualitySessionActive {
+            return false
+        }
+        return defaults.bool(forKey: preferenceKey)
     }
 
     static func persist(

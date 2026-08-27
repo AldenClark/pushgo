@@ -246,6 +246,88 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.empty").exists)
     }
 
+    func testQualityMessageWorkflowLoadsSecondPageAndPersistsReadActions() {
+        let sessionID = "ios-message-workflow-\(UUID().uuidString.lowercased())"
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.workflow"
+        )
+
+        launch(context.app)
+
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        XCTAssertTrue(context.app.staticTexts["Quality workflow 51"].waitForExistence(timeout: 8))
+        let markAll = element(in: context.app, identifier: "action.messages.mark_all_read")
+        XCTAssertTrue(markAll.waitForExistence(timeout: 5))
+
+        let list = runtimeQualityScrollableList(in: context.app)
+        XCTAssertTrue(list.waitForExistence(timeout: 5))
+        let secondPageTarget = context.app.staticTexts["Quality workflow 0"]
+        for _ in 0..<14 where !secondPageTarget.exists {
+            list.swipeUp()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.15))
+        }
+        XCTAssertTrue(secondPageTarget.waitForExistence(timeout: 5), "The item beyond page 1 was not reachable")
+
+        let unreadRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000002"
+        )
+        XCTAssertTrue(unreadRow.waitForExistence(timeout: 5))
+        let unreadLabel = unreadRow.label
+        unreadRow.tap()
+        let detail = element(in: context.app, identifier: "sheet.message.detail")
+        XCTAssertTrue(detail.waitForExistence(timeout: 8))
+        let closeDetail = element(in: context.app, identifier: "action.message.close")
+        XCTAssertTrue(closeDetail.waitForExistence(timeout: 5))
+        closeDetail.tap()
+        XCTAssertTrue(detail.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(unreadRow.waitForExistence(timeout: 5))
+        let readStateChanged = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label != %@", unreadLabel),
+            object: unreadRow
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [readStateChanged], timeout: 5),
+            .completed,
+            "Opening the real detail must change the row's accessible read state"
+        )
+
+        XCTAssertTrue(markAll.waitForExistence(timeout: 5))
+        markAll.tap()
+        XCTAssertTrue(markAll.waitForNonExistence(timeout: 8), "All unread messages were not cleared")
+        context.app.terminate()
+
+        let relaunched = configuredLaunchContext()
+        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.workflow"
+        )
+        launch(relaunched.app)
+        assertQualityRuntimeReady(in: relaunched.app, timeout: 15)
+        XCTAssertFalse(
+            element(in: relaunched.app, identifier: "action.messages.mark_all_read")
+                .waitForExistence(timeout: 3),
+            "Read state was reset when the App relaunched"
+        )
+        element(in: relaunched.app, identifier: "action.messages.filter").tap()
+        let unreadFilter = element(in: relaunched.app, identifier: "filter.unread_only")
+        XCTAssertTrue(unreadFilter.waitForExistence(timeout: 5))
+        unreadFilter.tap()
+        assertElementExists("state.messages.empty", in: relaunched.app, timeout: 8)
+
+        if !unreadFilter.waitForExistence(timeout: 1) {
+            let filterButton = element(in: relaunched.app, identifier: "action.messages.filter")
+            XCTAssertTrue(filterButton.waitForExistence(timeout: 5))
+            filterButton.tap()
+            XCTAssertTrue(unreadFilter.waitForExistence(timeout: 5))
+        }
+        unreadFilter.tap()
+        XCTAssertTrue(relaunched.app.staticTexts["Quality workflow 51"].waitForExistence(timeout: 8))
+        XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.empty").exists)
+    }
+
     func testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail() {
         let context = configuredLaunchContext()
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
