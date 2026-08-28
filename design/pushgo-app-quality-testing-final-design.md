@@ -1526,6 +1526,8 @@ Apple 用 `os_signpost`/XCTMetric；Android 用 trace/Macrobenchmark。里程碑
 | P1 | 键盘导航 | M/D | Sidebar、搜索、详情、Dialog 可完成 |
 | P1 | Reduce Motion/高对比/非颜色唯一表达 | I/M/D | 状态仍可理解 |
 | P1 | en/zh-CN/zh-TW 主旅程 | I/M/D UI | 文案、布局、搜索、时间格式正确 |
+| P0 | 支持语言资源完整性 | A/W/D static contract | 每个生产 key 在支持语言中有非空译文，格式占位符兼容；该合同只防 fallback/格式崩坏，不冒充布局或任务完成 |
+| P1 | 代表性中文大字体任务 | I/D UI | 平台与 App 内环境均证明 locale/font 已实际生效；打开准确消息详情并完成一项真实写操作；成功/失败后恢复全局环境 |
 | P1 | visual diff | I/M/D | 只提示；变化需人审，不自动更新通过 |
 | P1 | 设备/窗口/旋转矩阵 | I/M/W/D UI | 第 33 节代表尺寸下关键任务可完成，无遮挡、越界、不可达或错误重排 |
 | P1 | Sheet/Dialog/IME/系统返回 | I/M/D UI | 焦点、键盘、嵌套展示、取消/确认和返回目标正确，不重复提交 |
@@ -1710,6 +1712,7 @@ scripts/quality_doctor.sh
 scripts/quality_test.sh focused
 scripts/quality_test.sh pr
 scripts/quality_test.sh nightly
+scripts/quality_test.sh accessibility
 scripts/quality_test.sh performance
 scripts/quality_test.sh release
 ```
@@ -1721,6 +1724,7 @@ scripts/quality_test.sh release
 | Focused | 受影响 compile + Pure/VM/Store + 最多一条核心 UI | 约 3 分钟 |
 | PR | Apple Core、Android JVM、iOS/macOS/Android 核心 P0 UI、fatal Store/slow-load 负控、Release isolation、影响补充 | 约 15–20 分钟，分片后校准 |
 | Nightly | iOS/macOS/watch simulator UI、Android min/main/latest、后台恢复、系统表面 contract、10k UI、fault、migration、a11y、sandbox | 约 90–120 分钟 |
+| Accessibility | 支持语言资源完整性 + 一个实际中文最大/大字体核心任务；复核产品实际 locale/font，并恢复平台设置；物理 VoiceOver/TalkBack 另报 | 约 1–3 分钟，按需和 Nightly/Release 执行 |
 | Performance | 每周或性能敏感变更显式触发；100k 生产 Store/Room correctness + provisional host/emulator ceiling，独立保存指标；不进入普通 PR | 当前约 3 分钟产品执行，随固定参考设备补充而校准 |
 | Release | 最新有效 Nightly P0 证据 + Nightly 必要集 + Release-like 性能 + 第 33 节代表物理设备/窗口 + real APNs/FCM/private + Widget/Intent/通知动作 + 升级安装 | 约 120–180 分钟，按设备池校准 |
 

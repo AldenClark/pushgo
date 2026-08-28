@@ -65,9 +65,11 @@
 
 按最终设计第 25 节执行 Messages、Events、Things、Channels、Settings、Ingress、通知、系统表面、watchOS、后台任务、性能、可访问性和本地化，不以聚合 smoke 替代分支证据。
 
+已落地的 accessibility/l10n 第一切片采用“两种互补 Oracle”：PR 静态合同枚举所有生产 string/plural/array key、所有支持语言、非空译文和格式占位符；独立设备任务在实际 zh-Hans/zh-CN 与 accessibility5/1.5 font scale 下完成准确消息详情和 accepted 频道创建。Runner 必须从平台读取并复核实际配置，捕获旧值并在任何退出路径恢复；App 内再断言实际 SwiftUI Dynamic Type 或 Activity Configuration，禁止把 launch argument/adb 命令成功当成 UI 已生效。该代表任务进入 Nightly/Release，但不扩成全设备×全语言×全状态矩阵；物理 VoiceOver/TalkBack 仍是独立 Release 证据。
+
 ### WP7 治理收口
 
-- Focused/PR/Nightly/Release 反馈 Lane，以及显式 opt-in 的 Performance 脚本和 CI/人工调度入口；
+- Focused/PR/Nightly/Accessibility/Release 反馈 Lane，以及显式 opt-in 的 Performance 脚本和 CI/人工调度入口；
 - AI 增量测试规则；
 - 删除或降级旧 Runtime 产品操作；
 - 连续两周与最终双向覆盖审查。

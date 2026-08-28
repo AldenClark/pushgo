@@ -2,7 +2,7 @@
 
 ## 状态
 
-**体系改造进行中，不能宣称完成。** 当前已完成 Runtime/环境底座和 Messages 的首个高价值纵向样板，但设计第 21.2 节的完成条件尚未满足。WP3–WP6 仍有大量当前产品可达能力未迁移，不只是需要真机/外部系统的发布证据。低价值边缘组合不进入日常门禁，但这不能用于延期高频 P0 功能。
+**体系改造进行中，不能宣称完成。** Runtime/环境底座及 Messages、Entity、Channel、Settings、数据层性能、代表性本地化/大字体任务已有多条高价值纵向证据，但设计第 21.2 节的完成条件尚未满足。WP3–WP6 仍有当前产品可达能力和真实平台证据未迁移。低价值边缘组合不进入日常门禁，但这不能用于延期高频 P0 功能。
 
 ## 工作包真实状态（2026-08-28 重新核账）
 
@@ -14,7 +14,7 @@
 | WP3 Messages | `PARTIAL` | 空态、标准字段/详情/relaunch、跨 50 条页界、单条/全部已读、未读筛选往返与重启持久化、搜索代表例、删除 Undo、首次慢/错恢复、慢刷新旧快照、新结果持久化与失败恢复 | channel/tag 筛选、删除不撤销、历史清理、Markdown/media/decrypt 以及 10k UI/性能未完成 |
 | WP4 Entity/Channel/Settings/watch UI | `PARTIAL` | Apple/Android Event/Thing/Channel 高价值纵向旅程；Sheet error owner 分区；两端 Gateway 覆盖 invalid、候选拒绝不提交、fresh identity、候选远端成功后本地 commit 中点失败→回滚→重启旧值→重试提交；两端 decryption 覆盖生命周期、受保护写失败→重启未配置→重试、错误 Key 纠正、合法恢复、坏密文安全失败及 relaunch | Event slow/error/duplicate close；Thing 筛选/深链/删除；Channel 订阅既有频道及远端拒绝/补偿；rollback 存储本身失败的 UI、macOS Settings UI、声音/transport；watch P0 UI 未完成 |
 | WP5 Ingress/系统能力 | `PARTIAL` | 两端 ACK/去重/迁移等低层证据较强 | 当前可模拟的通知路由、后台恢复、macOS Window/Status Item、Apple 系统表面仍缺；真实 APNs/FCM/private/权限/安装需外部环境 |
-| WP6 性能/a11y/l10n | `PARTIAL` | 两端慢状态可证伪；独立 opt-in Performance Lane 已执行 Apple 100k Store/upgrade、Watch/并发与 Android 真实 Room 100k correctness + provisional host/emulator ceilings；Android 部分 semantics 已有 | Macrobenchmark/Baseline Profile、Apple 真机 launch/frame ETTrace、固定参考物理设备 10 次 p50/p95、物理辅助任务、多语言/尺寸矩阵未完成 |
+| WP6 性能/a11y/l10n | `PARTIAL` | 两端慢状态可证伪；独立 opt-in Performance Lane 已执行 Apple 100k Store/upgrade、Watch/并发与 Android 真实 Room 100k correctness + provisional host/emulator ceilings；两端生产本地化资源完整性/占位符合同已进入 PR；独立 Accessibility Lane 在实际 zh-Hans/zh-CN 与最大/1.5 倍字体环境完成真实消息详情和频道创建任务，并验证环境恢复 | Macrobenchmark/Baseline Profile、Apple 真机 launch/frame ETTrace、固定参考物理设备 10 次 p50/p95、物理 VoiceOver/TalkBack 任务、macOS/watchOS 辅助任务及风险代表的其他尺寸/语言尚未完成；不构造全笛卡尔积 |
 | WP7 CI/AI/治理 | `PARTIAL` | lane wrapper、双状态结果、CI、AGENTS/AI policy 已建立；两仓库已实现变更→能力→最低证据合同、未知产品路径阻断、全产品树审计、120+120 次历史产品变更回放校准、补充语义契约与 PR 自动 Lane 选择 | flake owner、两周观察、历史 AI 任务“是否补对测试”的任务级评估和旧 Runtime 退役尚未完成；确定性路径映射只提供下限，不能替代语义影响分析 |
 
 ## 已交付
@@ -31,12 +31,16 @@
 - Apple 事件/事物 fixture 走真实消息摄入与投影，不以“实体文件/行存在”代替详情可打开；用例从真实 Tab 和列表行进入。
 - Apple Runner 串行执行、先 build-for-testing、再 test-without-building；只对已知 Runner 启动故障重试一次，业务断言不重试；禁用失败后的长时自动诊断采集。
 - Android Runner 在 Application 创建前配置会话，结束时释放 Room、删除唯一 DB 和 session artifacts；日常 device lane 只跑核心旅程与关键数据边界，Nightly/Release 扩展显式代表性集，不再用 Release 跑全部遗留 androidTest。
-- 两仓库均实现 `focused/pr/nightly/release` 脚本、CI workflow、`AGENTS.md` 与 AI 增量开发规则。
+- 两仓库均实现 `focused/pr/nightly/accessibility/performance/release` 脚本、CI workflow、`AGENTS.md` 与 AI 增量开发规则。
 - 两仓库均新增版本化 `config/quality-impact.json`、可单测的 `scripts/quality_impact.py` 和本地 AI/开发者入口 `scripts/quality_changed.sh`。计划输出真实能力、最低证据、推荐 Lane、升级原因、已知缺口和未映射路径；`READY` 明确不等于产品通过。
 - PR/main CI 先审计全部已跟踪产品路径，再对 base/head 变更选 Lane；未知新产品路径直接阻断。文档变更产生结构化 `NOT_RUN`，共享 Store/Room、Runtime、Ingress、系统消费者和构建边界会升级到更高 Lane。
 - 影响计划现在还能声明 `required_checks`：机器消费的更新 Feed/Appcast 只进入快速语义契约，不为低成本元数据修改启动完整设备/Release；Fastlane、构建、JNI、隐私和回滚边界则在真实 Lane 前强制执行静态发布契约。声明的计划不存在、不是普通文件、JSON 损坏或含未知检查时直接 `BLOCKED`，不能静默降级。
 
 ## 新鲜证据
+
+- 2026-08-28 本地化/大字体体系切片：资源合同逐项比较生产基线与所有受支持语言，不以“目录/文件存在”判通过；Apple 自动发现 `Resources/Apps/Extensions` 下生产 Catalog 并覆盖 iOS/macOS 共用 String Catalog 与 watchOS Catalog 的 en/zh-Hans/zh-Hant，Android 合并 `values*` 下全部资源 XML，覆盖 string/plurals/string-array 的 zh-CN/zh-TW 与格式占位符，新增资源文件不能绕开合同。负控证明缺语言、缺资源文件映射和占位符丢失会失败，并真实发现/补齐 Android 1 条简中字符串和 2 组繁中 plurals。独立 `accessibility` Lane 不信任请求参数：Apple 从 Simulator 读取、设置、复核并 finally 恢复 content size，App readiness 暴露实际 SwiftUI `DynamicTypeSize`；Android 同时复核平台 app locale、实际 Activity locale 与 `fontScale`。两端恢复后均再次回读，失败必须阻断而非 `|| true`；运行后 iOS=`large`、Android=`1.0` 且无残留 app locale。两端均在实际中文大字体环境从真实 Messages 打开准确详情，再进入 Channels 填表并要求 accepted mutation 生成准确频道行。Apple 旅程先可信发现固定高度 Sheet 在 accessibility5 下让密码框/提交动作重叠，后续完整 Nightly 又发现 SwiftUI 名称框到 UIKit 密码框的首次点击不转移键盘焦点；没有用二次点击或重跑求绿，公共输入 Oracle 统一“等待可点击→一次点击→`hasKeyboardFocus`”，同步 responder 修复仍失败，改为下一主循环仲裁后标准字号全频道旅程与 accessibility5 旅程分别 1/1 通过。最终单击结果包为 `build/quality-results/ios/run-1-20260828-122947.xcresult`、`run-1-20260828-125258.xcresult`，均零业务重试；Apple Nightly 核心 21/21 为 `run-1-20260828-123459.xcresult`，随后 a11y 子 Lane 在 0 动作前 Simulator `No such process`，聚合收据保持 `BLOCKED`，不抹除分项通过也不伪造聚合绿色。Android accessibility 首次增强清理后运行在最终行等待处失败；补齐字段值、按钮 enabled 与“行或 Sheet 错误”分叉 Oracle 后 1/1 通过，环境回读恢复；此前完整 Release（21 条 App 旅程、数据边界、R8/LintVital/assembleRelease）PASSED。收据分别为 `apple-accessibility-summary.json`、`apple-nightly-summary.json`、`android-accessibility-summary.json`、`android-release-summary.json`。物理 VoiceOver/TalkBack 和全部设备×语言组合仍明确 `not_run`。
+
+- 同一 Android 表单反向审计发现频道创建/订阅“密码”仍是明文普通 TextField；已改为生产 `PasswordVisualTransformation` + Password 键盘，标准频道旅程与大字体旅程都要求真实 Password semantics 后再输入，两个代表旅程最终各 1/1 通过。尝试用旧 `TEST_FILTER` 运行 instrumented class 还暴露 focused Lane 只支持 JVM 的调用缺口；新增 `ANDROID_TEST_CLASS` 正式入口后复用受控 emulator 并成功生成 focused 收据，避免开发者/AI 记忆原始 Gradle 参数或误判 “No tests found”。
 
 - 2026-08-28 性能体系切片：两仓库新增不进入日常 PR 的显式 `performance` Lane，并接入每周独立 cron 和 `workflow_dispatch`；普通 daily Nightly 仍执行功能风险集，不重复启动重型性能任务。结构化收据只声称实际执行的数据层范围，并继续把真机 launch/frame/Macrobenchmark/ETTrace 记为 `not_run`。Apple `RuntimeQualityLargeScaleTests` 10/10 在 132.850s 完成：100k upgrade 61.709s、100k core 60.048s、100k batch write 41.631s、search count 10.670s、最大主线程 stall 10.045ms、RSS 约 613MB；10k Watch 与并发写也满足既有 provisional host ceilings。Android 先以负控确认两个旧 JVM 100k 用例未 opt-in 时在 XML 中各为 skipped，而不是打印 skip 后假 PASSED；首次误纳入 synthetic 内存 Store 后在 search OOM，归因收据为 product `NOT_RUN` / test-system `FAILED`，不增大堆求绿。收敛后的 Lane 仅在 `emulator-5554` 执行真实 Room 100k：bulk write 143.612s、first page 92ms、five pages 414ms、FTS count 10ms、search page 417ms（provisional ceiling 2s）、reopen first page 89ms，正确性/投影/重开 1/1 通过。Apple/Android 收据分别为 `build/quality-results/apple-performance-summary.json`、`build/quality-results/android-performance-summary.json`。
 
@@ -88,7 +92,7 @@
 
 1. 变更影响下限已实施并完成首轮历史校准：两端路径合同、选择器、补充语义契约、负控、全树审计、120+120 次回放、本地入口与 PR/main CI 门禁均已落地；
 2. 下一阶段仍需用历史 AI 任务评估“是否补对 Oracle”，并以连续两周真实变更校准漏选、过度升级、时长和 flake；当前历史样本 0 `BLOCKED` 不能推断未来语义无遗漏；
-3. Messages、Entity/Channel/Settings 当前高价值切片及错 Key/坏密文、本地 commit/受保护写失败已完成；性能已建立首个真实数据层独立 Lane。下一步推进可在模拟器完成的 a11y/l10n 代表任务，并准备真机性能采集合同，不扩张 Entity/Channel 或设备×语言的低价值笛卡尔积；
+3. Messages、Entity/Channel/Settings 当前高价值切片及错 Key/坏密文、本地 commit/受保护写失败已完成；性能与 a11y/l10n 已建立首个独立 Lane 和真实代表任务。下一步推进当前可达的系统/后台/平台表面合同与 macOS/watchOS 高价值缺口，并准备真机性能和 VoiceOver/TalkBack 采集合同，不扩张设备×语言×状态×故障的低价值笛卡尔积；
 4. 旧 Runtime command/state 测试只在更强旅程接管相同风险后退役；数据层 provisional 性能绿色与真机 launch/frame/system 证据分开，后者继续单列 `NOT_RUN/BLOCKED`，不得借模拟器绿色结案。
 
 ## 需要 Release/外部环境的明确证据

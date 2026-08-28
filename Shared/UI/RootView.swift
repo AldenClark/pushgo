@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
 #if os(iOS)
@@ -9,7 +10,10 @@ struct RootView: View {
 #endif
         mainContent
 #if DEBUG
-            .qualityRuntimeReadinessOverlay(environment: environment)
+            .qualityRuntimeReadinessOverlay(
+                environment: environment,
+                dynamicTypeSize: dynamicTypeSize
+            )
 #endif
 #if os(iOS)
             .sheet(item: $bindableEnvironment.pendingSettingsPresentation) { presentation in
@@ -43,7 +47,10 @@ struct RootView: View {
 #if DEBUG
 private extension View {
     @ViewBuilder
-    func qualityRuntimeReadinessOverlay(environment: AppEnvironment) -> some View {
+    func qualityRuntimeReadinessOverlay(
+        environment: AppEnvironment,
+        dynamicTypeSize: DynamicTypeSize
+    ) -> some View {
 #if os(watchOS)
         self
 #else
@@ -53,11 +60,14 @@ private extension View {
                 : environment.qualityRuntimeReadiness
             overlay(alignment: .topLeading) {
                 Text("Quality runtime \(status)")
-                    .font(.system(size: 1))
-                    .foregroundStyle(.clear)
-                    .frame(width: 1, height: 1)
-                    .accessibilityIdentifier("quality-runtime.\(status)")
-                    .accessibilityValue(session.sessionID)
+                .font(.system(size: 1))
+                .foregroundStyle(.clear)
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("quality-runtime.\(status)")
+                .accessibilityLabel(
+                    "Quality runtime \(status); dynamic type \(qualityDynamicTypeName(dynamicTypeSize))"
+                )
+                .accessibilityValue(session.sessionID)
             }
         } else if PushGoAutomationContext.isActive {
             overlay(alignment: .topLeading) {
@@ -73,6 +83,24 @@ private extension View {
             self
         }
 #endif
+    }
+
+    private func qualityDynamicTypeName(_ size: DynamicTypeSize) -> String {
+        switch size {
+        case .xSmall: "xSmall"
+        case .small: "small"
+        case .medium: "medium"
+        case .large: "large"
+        case .xLarge: "xLarge"
+        case .xxLarge: "xxLarge"
+        case .xxxLarge: "xxxLarge"
+        case .accessibility1: "accessibility1"
+        case .accessibility2: "accessibility2"
+        case .accessibility3: "accessibility3"
+        case .accessibility4: "accessibility4"
+        case .accessibility5: "accessibility5"
+        @unknown default: "unknown"
+        }
     }
 }
 #endif

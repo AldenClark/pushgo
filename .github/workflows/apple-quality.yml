@@ -18,6 +18,7 @@ on:
         options:
           - pr
           - nightly
+          - accessibility
           - performance
           - release
 

@@ -10,7 +10,7 @@
 2. **追踪影响**：沿调用者、状态拥有者、持久层、后台/通知/Widget/Watch 消费者双向追踪。只有调用链可达才补测试，不为不可达 helper 制造覆盖。
 3. **选最低充分层级**：纯规则放单元/property；数据库、并发、迁移放集成；真实交互与可见状态放少量 UI；权限、推送、后台与系统表面保留代表性真机验证。
 4. **先造会失败的证据**：新增或强化用例必须能被一个明确负控击穿，例如错误字段、一次查询失败、超预算延迟、重复交付或重启。无需为了形式先提交红灯，但必须确认 Oracle 不是恒真。
-5. **实现并验证**：开发中跑 focused；产品代码完成后跑 PR lane；数据/Store 性能进入显式 `performance` lane，系统、真机性能和长时场景进入 nightly/release。不能运行的层级明确记为 `BLOCKED` 或 `NOT RUN`。
+5. **实现并验证**：开发中跑 focused；产品代码完成后跑 PR lane；本地化资源先跑完整性合同，布局/文字缩放/语义变化再跑代表性 `accessibility` 任务；数据/Store 性能进入显式 `performance` lane，系统、真机性能和长时场景进入 nightly/release。不能运行的层级明确记为 `BLOCKED` 或 `NOT RUN`。
 6. **同步知识**：更新能力矩阵、测试处置和 workstream progress。删除被新证据替代的弱测试，避免永久双轨。
 
 ## 风险到最低证据映射
@@ -23,6 +23,7 @@
 | Ingress/ACK/通知 | 幂等、顺序、持久化失败恢复、最终 UI/系统终点 | APNs、后台、权限改变时进入 Release 真机清单 |
 | 设置/凭据/频道 | 校验、取消、远端失败、本地与远端一致性 | 删除历史、替换 token 等不可逆动作加恢复/对账 |
 | 性能敏感查询/首屏/滚动 | 正确结果 + milestone 指标和回归预算 | 架构、数据量或 OS/runtime 升级时重建基线 |
+| 本地化资源、文字布局、Sheet/Dialog、语义 | 所有支持语言资源/占位符合同 + 一条受影响的真实中文大字体任务；实际 Activity/View 环境证明与 finally 恢复 | 新主流程、系统控件、焦点顺序或辅助技术行为改变时进入 Nightly/物理辅助任务 |
 | CI/测试基础设施 | 语法、静态校验、一次代表性 lane；故障分类负控 | 影响 Release 门禁时在合并前跑 Release dry run |
 
 ## UI Oracle 合同
@@ -49,6 +50,7 @@ Identifier 只负责稳定定位；readiness 只证明准备完成；Automation 
 - `focused`：开发循环，只跑受影响的最小测试。
 - `pr`：所有快速逻辑/集成测试 + 核心用户 UI 旅程；产品变更交付前必跑。
 - `nightly`：代表性模拟器/device，扩展业务旅程、故障恢复、a11y/l10n 与系统 contract。
+- `accessibility`：按需及 Nightly/Release 执行一个真实中文大字体高价值任务，同时跑全部支持语言资源合同；必须证明请求的 locale/font 实际进入产品 UI 并在成功或失败后恢复全局环境。它不冒充物理 VoiceOver/TalkBack。
 - `performance`：每周及性能敏感变更显式触发，执行 100k 生产 Store/Room correctness 与 provisional host/emulator ceiling；不冒充物理 launch/frame SLO。
 - `release`：全量可自动化套件 + Release 隔离/构建 + 真机系统清单。真机证据缺失时不能写成已通过。
 

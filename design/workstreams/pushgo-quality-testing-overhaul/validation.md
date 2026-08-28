@@ -119,6 +119,18 @@
 78. **替身规模测试冒充生产性能攻击**：首次 Performance Lane 同时运行 JVM 内存假 Store 与生产 Room；前者在 100k search OOM，既不能说明真实 App Room 慢，也不值得靠调大测试堆维护。结果：保留该失败证据并从 Lane claim 删除 synthetic helper；Android 性能通过条件收敛为真实 Room 的写入、分页、FTS、筛选、投影、重开正确性与 provisional emulator search ceiling。模拟器数字仍不能冒充 Macrobenchmark/物理 TTID、帧和功耗。
 79. **只有手动性能命令、长期无人执行攻击**：脚本存在且本地通过，但 CI 只调度 Nightly/Release，几周后 100k 资产可静默腐化。结果：两仓库增加独立每周 cron 与手动 `performance` 选项，日志和结构化收据进入 artifact；Android 定时任务不再额外重复 fast JVM job，定时 Nightly/Performance 也不会因 main ref 的通用 cancel 规则互相取消。Performance 保持不进入普通 PR，避免以治理为名消耗日常反馈预算。
 80. **宿主性能被无关模拟器阻断攻击**：Apple 100k Store suite 只需 Swift Package，却复用要求 iOS Simulator 的 UI doctor；设备损坏会把可执行的宿主证据错误归为 BLOCKED。结果：doctor 新增 fail-closed 的 `--host-only`，只验证 Swift 和 `Package.swift`，未知参数仍阻断；UI Lane 保持原 Simulator/scheme 检查，不能用 host 模式绕过设备准备。
+81. **本地化抽样冒充资源完整攻击**：只在一个页面找中文或检查 strings 文件存在，会漏掉单个 key fallback；全 UI 穷举又高成本。结果：两端新增生产资源集合差分与占位符合同，并用缺语言/丢占位符负控验证会失败；真实发现 Android 1 条简中字符串和 2 组繁中 plurals 缺失。静态合同只声称资源完整，不冒充文字布局或业务任务完成。
+82. **“已请求大字体/中文”冒充实际环境攻击**：Apple launch argument 和 Android 平台命令均可成功，但实际 SwiftUI/Activity 仍可能是默认字号或英文。结果：Apple Runner 读取、设置、回读 Simulator content size，App readiness 再报告实际 `DynamicTypeSize`；Android 同时核对 LocaleManager、实际 Activity locale 和 `fontScale`。任一层未生效归为 `FAILED_TEST_SYSTEM/BLOCKED`，不能继续用默认环境产生绿色。
+83. **元素存在冒充大字体可操作攻击**：控件都在 accessibility tree 中，仍可能重叠、被键盘遮挡或点到另一个字段。结果：Apple 真实频道创建在 accessibility5 首次把密码输入落入名称字段并触发空密码错误，可信发现固定高度 Sheet 的产品布局缺陷；改为大字体 `.large` detent、可滚动内容与交互式键盘收起后，同一准确 mutation Oracle 通过，标准字号全频道旅程也回归通过。
+84. **语言×设备×状态全笛卡尔积预算攻击**：为了“严谨”把每个业务故障在三语言、多尺寸和多设备重复，成本快速超过发现价值。结果：资源集合/placeholder 的广覆盖下沉到静态合同；UI 只选中文长文案 + 最大/大字体 + 高频消息读取/频道写入作为布局压力代表；物理辅助技术保持独立任务。只有历史事故、独有系统风险或新布局边界才增加代表例。
+85. **测试修改全局语言/字体后污染后续用例攻击**：成功路径恢复而失败路径遗留设置，会让后续测试随机中文或大字体。结果：两端先捕获原值、设置后回读验证，并在 trap/`@After` 的任何退出路径恢复；本轮执行后 iOS 回到 `large`、Android 回到 `1.0` 且测试包卸载后无 app locale。恢复失败应归测试系统失败，而不是忽略。
+86. **Compose 合并语义误当 contentDescription 攻击**：Android 实际 Activity 已是中文、Tab 视觉文本为“消息”，首版 Oracle 却按 contentDescription 查找，错误归因产品。结果：保留语言与字体前置证明，依据真实合并语义改为 `Text=[消息]` 精确断言；没有删除本地化或可操作性要求。选择器/owner 错误归测试系统，真实文本错误仍归产品。
+87. **二次点击/测试补偿掩盖真实焦点缺陷攻击**：Apple 大字体修复后，完整 Nightly 在标准字号频道旅程中仍发现从 SwiftUI 名称框切到 UIKit 密码框时，第一次点击没有转移键盘焦点。若测试再次点击、直接 `typeText` 或重跑即可偶然变绿，却会把真实用户交互缺陷留在产品中。结果：公共安全输入 helper 统一执行“等待可点击→一次点击→`hasKeyboardFocus=true`”；同步 `becomeFirstResponder` 修复仍被同一 Oracle 拒绝，最终在下一主循环仲裁 SwiftUI/UIKit responder 后，标准字号完整频道旅程和 accessibility5 中文频道创建均以一次点击通过。反向审计还发现大字体用例曾在 helper 前预点击一次，立即删除该自我补偿后重新证明。产品失败包 `run-1-20260828-122308.xcresult`、同步修复失败包 `run-1-20260828-122733.xcresult` 保留用于归因，最终单击回归为 `run-1-20260828-122947.xcresult`、`run-1-20260828-125258.xcresult`；这不是测试脆弱性重试。
+88. **资源文件清单随代码增长漂移攻击**：当前只有一个 Android `strings.xml` 和两个 Apple Catalog 时，写死文件路径能够绿色；未来新功能把文案拆到另一个 XML/Catalog 后，所谓“全生产资源合同”会静默漏检。结果：Apple 自动发现 `Resources/Apps/Extensions` 下全部生产 `.xcstrings`，Android 合并 `values*` 下全部资源 XML 再比较；新增独立资源文件但不补翻译的负控必须失败，测试目录资源明确不进入产品 claim。
+89. **环境恢复命令失败仍绿色攻击**：测试完成后执行恢复命令并不等于环境已恢复，`|| true` 会把污染留给下一条旅程。结果：Apple Runner 捕获原字号、恢复后再次读取并精确比较；失败写入 runner `BLOCKED`，且不覆盖已经发生的产品失败事实。Android `@After` 先完成 locale/font 两项恢复，再回读实际值断言，避免第一项校验中断第二项清理。最终 Lane 结束后还由宿主复核基线。
+90. **Compose 输入动作完成冒充表单状态已提交攻击**：Android 大字体旅程曾直接连续 `performTextInput` 与 submit，失败时只等待最终频道行，无法判断字段状态、按钮状态还是业务 mutation。一次最终回归因此在行等待处可信失败。结果：提交前逐字段核对真实文本、要求 submit enabled；提交后等待“准确频道行或 Sheet-owned 业务错误”二选一，再显式拒绝错误并核对行内容。增强后的同一旅程 1/1 通过，归因为测试同步与诊断 Oracle 不充分，不把前次失败改称产品 bug，也不靠盲目重跑求绿。
+91. **字段名叫密码但实际明文攻击**：Android Channel 创建/订阅字段使用普通 `OutlinedTextField`，功能旅程仍可成功，因此只看最终频道行永远不会发现凭据裸露。结果：两处生产字段均采用 `PasswordVisualTransformation` 与 `KeyboardType.Password`；标准频道旅程和中文大字体旅程均要求 Compose `Password` semantics 后才输入，最终 accepted mutation 仍通过。字段存在、label 正确和创建成功都不能替代隐私语义。
+92. **Focused 入口只支持 JVM 导致设备用例调用失败攻击**：给现有 `focused` Lane 传 instrumented class 会被 Gradle `--tests` 当 JVM 类并报 “No tests found”，开发者只能记住原始 Gradle 参数或误以为已测。结果：Lane 增加显式 `ANDROID_TEST_CLASS`，复用 doctor 选择的唯一 emulator 并生成 focused 双状态收据；`TEST_FILTER` 继续只用于 JVM。新入口实际执行完整频道旅程 1/1 通过，第一次误调用保留为测试系统失败。
 
 ## 归因分析
 
@@ -143,11 +155,13 @@
 | Android Lane 偶发跑到多个设备 | doctor 选第一行且 Gradle 未绑定已选 serial | emulator-first 确定选择、显式 serial override、Lane 单目标传递、双设备在线负控 | 指定设备不可用=`BLOCKED`；静默扩容=`FAILED_TEST_SYSTEM` |
 | 消息详情正确却出现双节点失败 | 列表行和详情同时包含同一正文，测试用全局文本选择器而没有声明真实 owner | 以详情字段稳定语义限定唯一 owner，并在 owner 内断言准确正文 | 多 owner/不可唯一归因=`FAILED_TEST_SYSTEM`；owner 唯一但内容错误=`FAILED` |
 | iOS 准备长期停在 seeding | 使用非专用 Simulator clone，环境身份不满足受控代表设备合同 | doctor 选择专用设备；首次环境失败与后续产品通过分别保留 | 受控设备不可用/准备不完成=`BLOCKED/FAILED_TEST_SYSTEM`；不得归为产品通过或失败 |
+| 中文或大字体 Lane 绿色但实际仍是英文/标准字号 | Runner 只相信 launch argument/命令返回；App 生命周期没有采用平台 locale；测试不核对真实环境 | 平台设置回读 + App 内 DynamicTypeSize/Activity Configuration 双证明；失败路径 finally 恢复 | 未应用/未恢复=`BLOCKED/FAILED_TEST_SYSTEM`；真实任务内容/动作错误=`FAILED` |
+| 资源齐全但大字体表单不可操作 | 静态资源合同与元素存在性都无法发现重叠、遮挡和错误命中 | 代表性中文大字体真实读取+写入任务；断言准确详情、真实输入、accepted mutation 和最终频道行 | 资源缺失=`FAILED`；控件不可达/写入错误=`FAILED`；物理辅助任务仍=`NOT RUN` |
 
 ## 双向覆盖反查
 
-- 源码→测试：消息 Store/Repository、Paging/VM、列表状态、Retry、fixture ingestion、Release resolver、Runner/teardown、CI lane 均有对应低层或纵向证据；两端全部已跟踪产品路径均至少命中一个具名能力规则，当前未映射为 0。
-- 测试→产品：新核心用例均能追到真实 App UI、Store/Paging/Projection 或 Release resolver；加密恢复明确追到 parser→canonical failed state→真实详情/Settings→reparse→同一 canonical/派生列表→relaunch，没有以孤立 helper 自证。
+- 源码→测试：消息 Store/Repository、Paging/VM、列表状态、Retry、fixture ingestion、Release resolver、Runner/teardown、CI lane 和生产本地化资源均有对应低层或纵向证据；两端全部已跟踪产品路径均至少命中一个具名能力规则，当前未映射为 0。大字体相关 Sheet 改动同时命中标准字号频道回归与 Accessibility Lane。
+- 测试→产品：新核心用例均能追到真实 App UI、Store/Paging/Projection 或 Release resolver；加密恢复明确追到 parser→canonical failed state→真实详情/Settings→reparse→同一 canonical/派生列表→relaunch；本地化大字体旅程追到平台配置→实际 View/Activity 环境→真实消息详情→频道 Controller/Store→最终频道行，没有以孤立 helper、资源文件或环境命令自证。
 - 变更→最低证据：Message UI 命中准确内容/搜索/删除/relaunch，Store/Room 命中跨能力数据与 UI，Runtime 命中 Release 隔离，通知/系统消费者提升 Nightly/Release；未知 Screen 阻断，文档明确 `NOT_RUN`。
 - 平台消费者：通知、后台、Widget、Spotlight、Watch、真机权限/FCM/APNs 已列入能力矩阵和 Release 清单，未被模拟器结果冒充。
 - 低价值边缘：不可达导出 helper、未挂载 MenuBar 内容、100k 日常执行、全语言全设备故障组合明确延期或删除候选，避免挤占核心预算。
@@ -157,5 +171,6 @@
 - macOS 系统自动化认证解除后，先跑消息 empty/standard/slow/retry 四条，不先迁移全部旧脚本。
 - 真实 APNs/FCM/权限/后台/升级只有在具备签名、账号、设备和隔离环境后进入 Release；缺条件即 `BLOCKED`。
 - 性能预算需在固定参考物理设备建立至少 10 次基线和 p50/p95，再设置回归阈值；当前只完成性能状态的可证伪性。
+- Simulator/emulator 的中文大字体代表任务不能替代物理 VoiceOver/TalkBack、焦点顺序和真实设备文字裁切；这些仍需按第 33 节代表环境执行，不能从本轮 1/1 外推。
 - 两周观察期关注：Runner 启动失败率、业务失败率、p95、flake、无证据重试次数和每 lane 时长。基础设施修复连续两次不增加产品证据时，停止继续打磨并重新归因。
 - 当前红蓝复核由同一执行上下文完成，存在 `common-mode-risk`；未获得独立审查代理授权前，不把本轮校准描述为独立第三方验证。

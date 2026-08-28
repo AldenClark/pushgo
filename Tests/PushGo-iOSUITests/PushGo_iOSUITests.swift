@@ -252,6 +252,71 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.empty").exists)
     }
 
+    func testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation() {
+        let context = configuredLaunchContext(
+            launchArguments: [
+                "-AppleLanguages", "(zh-Hans)",
+                "-AppleLocale", "zh_CN",
+            ]
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: "ios-zh-large-\(UUID().uuidString.lowercased())",
+            fixture: "messages.standard",
+            channelMutationScenario: "accepted"
+        )
+
+        launch(context.app)
+
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        XCTAssertTrue(
+            element(in: context.app, identifier: "quality-runtime.ready")
+                .label.contains("dynamic type accessibility5"),
+            "The SwiftUI environment must actually apply accessibility5, not merely receive a launch argument"
+        )
+        XCTAssertTrue(
+            context.app.staticTexts["消息"].firstMatch.waitForExistence(timeout: 8),
+            "The production navigation title must be localized, not merely the test fixture"
+        )
+        let messageTitle = context.app.staticTexts["P2 Split Seed Message"]
+        tapWhenHittable(messageTitle, timeout: 8, message: "The localized large-font list must open real data")
+        assertElementExists("sheet.message.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 5),
+            "The detail must still expose the canonical stored body at accessibility5"
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.message.close"),
+            timeout: 8,
+            message: "The large-font detail must keep its close action reachable"
+        )
+
+        let channels = channelsTab(in: context.app)
+        XCTAssertEqual(channels.label, "频道", "The real Channels destination must use zh-Hans")
+        tapWhenHittable(channels, timeout: 8, message: "Channels must remain reachable at accessibility5")
+        assertElementExists("screen.channels", in: context.app, timeout: 8)
+        let addChannel = element(in: context.app, identifier: "action.channels.add")
+        XCTAssertEqual(addChannel.label, "添加频道", "The real add action must use zh-Hans")
+        tapWhenHittable(addChannel, timeout: 8, message: "Add Channel must remain reachable at accessibility5")
+
+        let name = element(in: context.app, identifier: "field.channels.create.name")
+        let password = element(in: context.app, identifier: "field.channels.create.password")
+        tapWhenHittable(name, timeout: 8, message: "Channel name must remain editable at accessibility5")
+        replaceText(in: name, with: "大字体测试频道")
+        enterSecureText(in: password, with: "qualityx")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channels.entry.submit"),
+            timeout: 8,
+            message: "The real localized channel form must be submittable at accessibility5"
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "channel.row.01H00000000000000000000003")
+                .waitForExistence(timeout: 8),
+            "Successful creation must produce the expected real channel row"
+        )
+        XCTAssertTrue(context.app.staticTexts["大字体测试频道"].exists)
+    }
+
     func testQualityMessageWorkflowLoadsSecondPageAndPersistsReadActions() {
         let sessionID = "ios-message-workflow-\(UUID().uuidString.lowercased())"
         let context = configuredLaunchContext()
@@ -2789,8 +2854,39 @@ final class PushGo_iOSUITests: XCTestCase {
         }
     }
 
-    private func enterSecureText(in field: XCUIElement, with text: String) {
+    private func enterSecureText(
+        in field: XCUIElement,
+        with text: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let actionable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND hittable == true"),
+            object: field
+        )
+        let actionableResult = XCTWaiter.wait(for: [actionable], timeout: 8)
+        XCTAssertEqual(
+            actionableResult,
+            .completed,
+            "The secure field must be visible and reachable before its single focus tap",
+            file: file,
+            line: line
+        )
+        guard actionableResult == .completed else { return }
         field.tap()
+        let focused = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hasKeyboardFocus == true"),
+            object: field
+        )
+        let focusResult = XCTWaiter.wait(for: [focused], timeout: 2)
+        XCTAssertEqual(
+            focusResult,
+            .completed,
+            "A single tap must move keyboard focus to the requested secure field",
+            file: file,
+            line: line
+        )
+        guard focusResult == .completed else { return }
         let existing = (field.value as? String) ?? ""
         let placeholder = field.placeholderValue ?? ""
         if !existing.isEmpty && existing != placeholder {

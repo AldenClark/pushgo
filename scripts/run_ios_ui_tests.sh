@@ -11,7 +11,7 @@ derived_data_path="${DERIVED_DATA_PATH:-$repo_root/.deriveddata-ui-tests}"
 results_root="${RESULTS_ROOT:-$repo_root/build/quality-results/ios}"
 runner_status_file="${QUALITY_RUNNER_STATUS_FILE:-}"
 
-if [[ -n "$runner_status_file" ]]; then
+if [[ -n "$runner_status_file" && ! -f "$runner_status_file" ]]; then
   mkdir -p "$(dirname "$runner_status_file")"
   printf 'PASSED\n' > "$runner_status_file"
 fi
@@ -51,6 +51,62 @@ fi
 xcrun simctl shutdown "$target" >/dev/null 2>&1 || true
 xcrun simctl boot "$target" >/dev/null 2>&1 || true
 xcrun simctl bootstatus "$target" -b
+
+requested_content_size="${QUALITY_CONTENT_SIZE:-}"
+original_content_size=""
+restore_content_size() {
+  local command_status=$?
+  local restored_content_size=""
+  local restore_failed=0
+  trap - EXIT
+  if [[ -n "$original_content_size" ]]; then
+    if ! xcrun simctl ui "$target" content_size "$original_content_size" >/dev/null 2>&1; then
+      restore_failed=1
+    else
+      restored_content_size="$(xcrun simctl ui "$target" content_size 2>/dev/null || true)"
+      [[ "$restored_content_size" == "$original_content_size" ]] || restore_failed=1
+    fi
+  fi
+  if [[ $restore_failed -ne 0 ]]; then
+    echo "status=BLOCKED"
+    echo "reason=ios_content_size_restore_failed:${restored_content_size:-unreadable}"
+    if [[ -n "$runner_status_file" ]]; then
+      printf 'BLOCKED\n' > "$runner_status_file"
+    fi
+    if [[ $command_status -eq 0 ]]; then
+      command_status=2
+    fi
+  fi
+  exit "$command_status"
+}
+if [[ -n "$requested_content_size" ]]; then
+  case "$requested_content_size" in
+    extra-small|small|medium|large|extra-large|extra-extra-large|extra-extra-extra-large|accessibility-medium|accessibility-large|accessibility-extra-large|accessibility-extra-extra-large|accessibility-extra-extra-extra-large) ;;
+    *)
+      echo "status=BLOCKED"
+      echo "reason=unsupported_ios_content_size:$requested_content_size"
+      exit 2
+      ;;
+  esac
+  original_content_size="$(xcrun simctl ui "$target" content_size)"
+  case "$original_content_size" in
+    extra-small|small|medium|large|extra-large|extra-extra-large|extra-extra-extra-large|accessibility-medium|accessibility-large|accessibility-extra-large|accessibility-extra-extra-large|accessibility-extra-extra-extra-large) ;;
+    *)
+      echo "status=BLOCKED"
+      echo "reason=unable_to_capture_ios_content_size:$original_content_size"
+      exit 2
+      ;;
+  esac
+  trap restore_content_size EXIT
+  xcrun simctl ui "$target" content_size "$requested_content_size"
+  applied_content_size="$(xcrun simctl ui "$target" content_size)"
+  [[ "$applied_content_size" == "$requested_content_size" ]] || {
+    echo "status=BLOCKED"
+    echo "reason=ios_content_size_not_applied:$applied_content_size"
+    exit 2
+  }
+  echo "content_size=$applied_content_size"
+fi
 
 echo "==> build-for-testing"
 xcodebuild "${common_args[@]}" build-for-testing

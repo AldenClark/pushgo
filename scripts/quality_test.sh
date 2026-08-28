@@ -14,6 +14,7 @@ selected_claims=()
 not_run=(
   "physical APNs/notification/permission/system-surface evidence"
   "physical-device launch/frame performance and release ETTrace evidence"
+  "physical VoiceOver task-completion evidence"
 )
 if [[ "$lane" != "performance" ]]; then
   not_run+=("opt-in 100k Store plus 10k Watch/concurrency performance evidence")
@@ -40,14 +41,14 @@ write_result() {
 
 on_exit() {
   local status=$?
+  local runner_status="PASSED"
+  [[ ! -f "$runner_status_file" ]] || runner_status="$(<"$runner_status_file")"
   if [[ $status -eq 0 ]]; then
-    local runner_status="PASSED"
-    [[ ! -f "$runner_status_file" ]] || runner_status="$(<"$runner_status_file")"
     write_result PASSED "$runner_status"
   elif [[ $status -eq 2 ]]; then
     write_result NOT_RUN BLOCKED "lane preparation was blocked before product evidence completed"
   else
-    write_result FAILED PASSED "an executed product oracle failed; inspect xcresult/log for the first failure"
+    write_result FAILED "$runner_status" "an executed product oracle failed; inspect xcresult/log for the first failure"
   fi
   printf 'quality_result=%s\n' "$result_file"
 }
@@ -111,13 +112,15 @@ PY
 run_impact_contracts
 
 core_ui_scopes="PushGo-iOSUITests/PushGo_iOSUITests/testQualitySessionUsesAppOwnedStoreAndReachesFunctionalEmptyState,PushGo-iOSUITests/PushGo_iOSUITests/testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageWorkflowLoadsSecondPageAndPersistsReadActions,PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail,PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testSlowMessageLoadBecomesVisibleBeforeDataCompletes,PushGo-iOSUITests/PushGo_iOSUITests/testSlowMessageRefreshKeepsAccurateContentVisibleUntilCompletion,PushGo-iOSUITests/PushGo_iOSUITests/testMessageRefreshPersistsNewProviderResultAndOpensItsRealDetail,PushGo-iOSUITests/PushGo_iOSUITests/testMessageRefreshFailureKeepsSnapshotAndRetryRecoversPersistedResult,PushGo-iOSUITests/PushGo_iOSUITests/testMessageLoadFailureShowsRetryAndRecoversToRealDataState"
+accessibility_ui_scope="PushGo-iOSUITests/PushGo_iOSUITests/testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation"
 nightly_ui_scopes="$core_ui_scopes,PushGo-iOSUITests/PushGo_iOSUITests/testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen,PushGo-iOSUITests/PushGo_iOSUITests/testEventClosePersistsAndOngoingFilterReflectsRealProjection,PushGo-iOSUITests/PushGo_iOSUITests/testImportedThingFixtureCanOpenThingDetail,PushGo-iOSUITests/PushGo_iOSUITests/testChannelCreateRenameAndBothUnsubscribeOutcomesPersist,PushGo-iOSUITests/PushGo_iOSUITests/testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testGatewayLocalCommitFailureRollsBackBeforeRetryCommits,PushGo-iOSUITests/PushGo_iOSUITests/testSettingsDecryptionRejectsInvalidKeyPersistsAndClearsValidKey,PushGo-iOSUITests/PushGo_iOSUITests/testDecryptionProtectedStoreFailureDoesNotConfigureBeforeRetry,PushGo-iOSUITests/PushGo_iOSUITests/testEncryptedMessageRecoversAfterConfiguringKeyAndSurvivesRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testCorruptEncryptedMessageFailsSafelyAndSurvivesRelaunch"
 
 run_core() {
-  selected_claims+=("Apple Core/Store/integration suite")
+  selected_claims+=("Apple Core/Store/integration suite and localization completeness")
   "$repo_root/scripts/quality_doctor.sh"
+  python3 "$repo_root/scripts/verify_apple_localizations.py"
   swift test --package-path "$repo_root"
-  claims+=("Apple Core/Store/integration suite")
+  claims+=("Apple Core/Store/integration suite and localization completeness")
 }
 
 run_performance() {
@@ -129,6 +132,16 @@ run_performance() {
     --filter RuntimeQualityLargeScaleTests \
     2>&1 | tee "$performance_log"
   claims+=("Apple 100k Store plus 10k Watch/concurrency correctness and provisional host regression ceilings")
+}
+
+run_accessibility_localization() {
+  selected_claims+=("iOS zh-Hans accessibility5 real message-detail and channel-creation journey")
+  python3 "$repo_root/scripts/verify_apple_localizations.py"
+  QUALITY_CONTENT_SIZE="accessibility-extra-extra-extra-large" \
+    TEST_SCOPES="$accessibility_ui_scope" \
+    MAX_RETRIES="${MAX_RETRIES:-1}" \
+    QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
+  claims+=("iOS zh-Hans accessibility5 real message-detail and channel-creation journey")
 }
 
 case "$lane" in
@@ -146,6 +159,9 @@ case "$lane" in
   performance)
     run_performance
     ;;
+  accessibility)
+    run_accessibility_localization
+    ;;
   pr)
     run_core
     selected_claims+=("iOS core message empty/content/pagination/read/search/delete/slow-load/slow-refresh/new-result/refresh-recovery/error-retry journeys")
@@ -161,6 +177,7 @@ case "$lane" in
       MAX_RETRIES="${MAX_RETRIES:-1}" \
       QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
     claims+=("iOS core message journeys plus navigation/Event/Thing/Channel/Settings persistence representatives")
+    run_accessibility_localization
     ;;
   release)
     run_core
@@ -169,6 +186,7 @@ case "$lane" in
       MAX_RETRIES="${MAX_RETRIES:-1}" \
       QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
     claims+=("iOS release-lane representative journeys")
+    run_accessibility_localization
     selected_claims+=("iOS Release build and Quality Runtime isolation")
     xcodebuild \
       -project "$repo_root/pushgo.xcodeproj" \

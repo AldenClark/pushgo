@@ -121,7 +121,7 @@
       "capabilities": ["accessibility-localization", "message-media", "notification-sound"],
       "minimum_evidence": ["format/parser/component correctness", "representative UI task", "nightly accessibility/localization review"],
       "lane": "nightly",
-      "known_evidence_gaps": ["physical VoiceOver, large text, media lifecycle, and notification sound system evidence are incomplete."]
+      "known_evidence_gaps": ["iOS zh-Hans accessibility5 message-detail/channel-create task and production localization completeness are covered. Physical VoiceOver, macOS/watchOS large-text tasks, media lifecycle, and notification sound system evidence remain incomplete."]
     },
     {
       "id": "update-distribution-contract",

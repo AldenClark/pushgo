@@ -5,6 +5,7 @@ struct ChannelManagementScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(PendingLocalDeletionController.self) private var pendingLocalDeletionController
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var pendingRemoval: ChannelSubscription?
     @State private var isRemoving = false
     @State private var pendingRename: ChannelSubscription?
@@ -26,6 +27,10 @@ struct ChannelManagementScreen: View {
 
     private var channelEntrySheetHeight: CGFloat {
         channelEntryErrorMessage == nil ? 348 : 408
+    }
+
+    private var channelEntrySheetDetents: Set<PresentationDetent> {
+        dynamicTypeSize.isAccessibilitySize ? [.large] : [.height(channelEntrySheetHeight)]
     }
 
     var body: some View {
@@ -386,43 +391,45 @@ struct ChannelManagementScreen: View {
     }
 
     private var channelEntrySheet: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Picker("", selection: $channelEntryMode) {
-                Text(localizationManager.localized("create_channel"))
-                    .tag(ChannelEntryMode.create)
-                Text(localizationManager.localized("subscribe_channel"))
-                    .tag(ChannelEntryMode.subscribe)
-            }
-            .pickerStyle(.segmented)
-            .accessibilityIdentifier("select.channels.entry.mode")
-            .disabled(isChannelEntrySubmitting)
-
-            if let channelEntryErrorMessage {
-                AppInlineFeedbackBanner(
-                    message: channelEntryErrorMessage,
-                    tone: .danger,
-                    accessibilityID: "feedback.channels.entry"
-                ) {
-                    self.channelEntryErrorMessage = nil
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Picker("", selection: $channelEntryMode) {
+                    Text(localizationManager.localized("create_channel"))
+                        .tag(ChannelEntryMode.create)
+                    Text(localizationManager.localized("subscribe_channel"))
+                        .tag(ChannelEntryMode.subscribe)
                 }
-                .transition(.opacity)
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("select.channels.entry.mode")
+                .disabled(isChannelEntrySubmitting)
+
+                if let channelEntryErrorMessage {
+                    AppInlineFeedbackBanner(
+                        message: channelEntryErrorMessage,
+                        tone: .danger,
+                        accessibilityID: "feedback.channels.entry"
+                    ) {
+                        self.channelEntryErrorMessage = nil
+                    }
+                    .transition(.opacity)
+                }
+
+                channelEntryFields
+
+                channelEntryActionButtons
             }
-
-            channelEntryFields
-
-            channelEntryActionButtons
+            .padding(.horizontal, 16)
+            .padding(.top, 22)
+            .padding(.bottom, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 22)
-        .padding(.bottom, 14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: channelEntrySheetHeight, alignment: .topLeading)
+        .scrollDismissesKeyboard(.interactively)
+        .accessibilityIdentifier("sheet.channels.entry")
         .transaction { transaction in
             transaction.animation = nil
         }
         .animation(nil, value: channelEntryMode)
-        .ignoresSafeArea(.keyboard, edges: .bottom)
-        .presentationDetents([.height(channelEntrySheetHeight)])
+        .presentationDetents(channelEntrySheetDetents)
         .presentationDragIndicator(.visible)
         .onChange(of: channelEntryMode) { _, _ in
             channelEntryErrorMessage = nil
@@ -652,6 +659,11 @@ private struct ChannelSecureTextField: UIViewRepresentable {
             action: #selector(Coordinator.textDidChange(_:)),
             for: .editingChanged
         )
+        textField.addTarget(
+            context.coordinator,
+            action: #selector(Coordinator.beginEditing(_:)),
+            for: .touchDown
+        )
         return textField
     }
 
@@ -676,6 +688,22 @@ private struct ChannelSecureTextField: UIViewRepresentable {
 
         @objc func textDidChange(_ sender: UITextField) {
             parent.text = sender.text ?? ""
+        }
+
+        @objc func beginEditing(_ sender: UITextField) {
+            // Moving from the adjacent SwiftUI TextField into this UIKit-backed
+            // secure field can otherwise leave the former responder active
+            // while the keyboard is already visible. SwiftUI can finish its
+            // own focus update after this touchDown callback, so arbitrate on
+            // the next main-loop turn. A real first tap must transfer
+            // ownership; requiring a second tap would be a product interaction
+            // defect, not something the UI test should hide.
+            DispatchQueue.main.async { [weak sender] in
+                guard let sender, sender.window != nil, sender.isEnabled else { return }
+                if !sender.isFirstResponder {
+                    sender.becomeFirstResponder()
+                }
+            }
         }
 
         func textFieldShouldReturn(_ textField: UITextField) -> Bool {
