@@ -19,6 +19,7 @@
 | keep（已迁移） | `testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen` | 单次真实会话点击四个主入口及 Settings，并核对各目标页；替代 Runtime 导航矩阵进入 Nightly/Release。 |
 | keep（已迁移） | `testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail` | 输入错误查询证明排除集合，再输入目标查询并打开准确正文；替代“App 没崩”Oracle。 |
 | keep（已迁移） | `testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch` | 从真实详情删除，验证行立即隐藏、Undo 可操作、重启后 canonical 对象仍在。 |
+| keep（新增目的级证据） | `testQualityMessageDeleteWithoutUndoPermanentlyRemovesOnlyTargetAcrossRelaunch` | 从准确目标详情删除但不撤销，等待生产 5 秒 deadline 自行提交；要求目标永久消失、无关控制消息字段准确，并在完整 App relaunch 后保持该差异。 |
 | keep（已迁移） | `testImportedEventFixtureCanOpenEventDetail`、`testImportedThingFixtureCanOpenThingDetail` | 已改为 App-owned 内置 fixture，走真实消息摄入/投影并点击 Tab、列表行、详情字段；不以 response/events 文件作最终 Oracle。 |
 | keep（已迁移） | `testEventClosePersistsAndOngoingFilterReflectsRealProjection` | 从真实 Event 行进入详情并确认关闭；关闭载荷经正式通知解析与 canonical projection 更新，验证状态变为 closed、仅进行中筛选排除该事件、重启后 closed 仍保留且关闭动作不再出现。Runtime marker 仅用于启动归因，不作为产品 Oracle。 |
 | keep（已迁移） | `testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch` | 从真实 Channels→Settings 入口操作 Event 开关，验证 Tab 真实减少/恢复、恢复后可打开准确 Event 页面，并在关闭和恢复后分别 relaunch 核对持久化；替代 Runtime command/state 用例。 |
@@ -78,6 +79,7 @@
 - `testQualityMessageWorkflowLoadsSecondPageAndPersistsReadActions`
 - `testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail`
 - `testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch`
+- `testQualityMessageDeleteWithoutUndoPermanentlyRemovesOnlyTargetAcrossRelaunch`
 - `testSlowMessageLoadBecomesVisibleBeforeDataCompletes`
 - `testSlowMessageRefreshKeepsAccurateContentVisibleUntilCompletion`
 - `testMessageRefreshPersistsNewProviderResultAndOpensItsRealDetail`

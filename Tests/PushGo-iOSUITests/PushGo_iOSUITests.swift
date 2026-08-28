@@ -472,6 +472,95 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
+    func testQualityMessageDeleteWithoutUndoPermanentlyRemovesOnlyTargetAcrossRelaunch() {
+        let sessionID = "ios-delete-commit-\(UUID().uuidString.lowercased())"
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "channels.standard"
+        )
+
+        launch(context.app)
+
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        let targetTitle = context.app.staticTexts["Quality Delete History Message"]
+        let controlTitle = context.app.staticTexts["Quality Keep History Message"]
+        XCTAssertTrue(targetTitle.waitForExistence(timeout: 8))
+        XCTAssertTrue(controlTitle.exists, "The unrelated control message must exist before deletion")
+        targetTitle.tap()
+        assertElementExists("sheet.message.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000002."
+            ].exists,
+            "The delete action must start from the exact target detail"
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.message.delete"),
+            timeout: 8
+        )
+
+        let targetRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c002"
+        )
+        XCTAssertTrue(targetRow.waitForNonExistence(timeout: 2))
+        let pendingDeletion = element(in: context.app, identifier: "state.pending_deletion")
+        XCTAssertTrue(pendingDeletion.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            element(in: context.app, identifier: "action.pending_deletion.undo").isHittable,
+            "The test must observe a real undo opportunity before deliberately letting it expire"
+        )
+        XCTAssertTrue(
+            pendingDeletion.waitForNonExistence(timeout: 15),
+            "The real undo deadline did not commit and clear the pending deletion"
+        )
+        XCTAssertFalse(targetTitle.exists, "The committed target must stay absent")
+        XCTAssertTrue(
+            controlTitle.waitForExistence(timeout: 5),
+            "Committing one deletion must not remove an unrelated message"
+        )
+        controlTitle.tap()
+        assertElementExists("sheet.message.detail", in: context.app, timeout: 5)
+        XCTAssertTrue(
+            context.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000001."
+            ].exists,
+            "The control message must retain its exact canonical content"
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.message.close"),
+            timeout: 5
+        )
+        context.app.terminate()
+
+        let relaunched = configuredLaunchContext()
+        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "channels.standard"
+        )
+        launch(relaunched.app)
+        assertQualityRuntimeReady(in: relaunched.app, timeout: 15)
+        XCTAssertFalse(
+            element(
+                in: relaunched.app,
+                identifier: "message.row.00000000-0000-0000-0000-00000000c002"
+            ).exists,
+            "A committed deletion must not revive when the App rebuilds its canonical list"
+        )
+        XCTAssertFalse(relaunched.app.staticTexts["Quality Delete History Message"].exists)
+        let relaunchedControl = relaunched.app.staticTexts["Quality Keep History Message"]
+        XCTAssertTrue(relaunchedControl.waitForExistence(timeout: 8))
+        relaunchedControl.tap()
+        assertElementExists("sheet.message.detail", in: relaunched.app, timeout: 5)
+        XCTAssertTrue(
+            relaunched.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000001."
+            ].exists,
+            "The unrelated canonical message must remain accurate after relaunch"
+        )
+    }
+
     func testSlowMessageLoadBecomesVisibleBeforeDataCompletes() {
         let context = configuredLaunchContext()
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
