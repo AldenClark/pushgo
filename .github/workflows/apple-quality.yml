@@ -96,6 +96,8 @@ jobs:
           path: |
             build/quality-results/ios/**/*.xcresult
             build/quality-results/ios/**/*.log
+            build/quality-results/ios-physical-performance/**/*.xcresult
+            build/quality-results/ios-physical-performance/**/*.log
             build/quality-results/watchos/**/*.xcresult
             build/quality-results/watchos/**/*.log
             build/quality-results/*.log

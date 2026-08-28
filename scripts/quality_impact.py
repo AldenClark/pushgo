@@ -136,6 +136,17 @@ def build_plan(files: list[str], manifest: dict[str, Any], source: str) -> dict[
         key=lambda lane: lane_rank[lane],
         default="not-run",
     )
+    selected_lanes = {rule["lane"] for rule in selected}
+    non_infrastructure_lanes = {
+        rule["lane"]
+        for rule in selected
+        if rule["id"] not in {"quality-system", "performance-system"}
+    }
+    if "performance" in selected_lanes and non_infrastructure_lanes:
+        # Performance is intentionally not a functional superset of PR/nightly.
+        # Release executes both families, so a mixed product + performance-system
+        # change must be promoted instead of dropping either evidence family.
+        recommended_lane = "release"
     plan_status = "BLOCKED" if unmapped_product_paths else ("NOT_RUN" if not selected else "READY")
     return {
         "schema_version": 1,

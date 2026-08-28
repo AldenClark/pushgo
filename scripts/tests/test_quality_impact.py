@@ -61,6 +61,33 @@ class QualityImpactPlanTests(unittest.TestCase):
         self.assertEqual("pr", plan["recommended_lane"])
         self.assertIn("quality-system-trustworthiness", plan["impacted_capabilities"])
 
+    def test_performance_test_change_selects_performance_lane(self):
+        plan = self.plan("Tests/PushGo-iOSUITests/PushGo_iOSPerformanceTests.swift")
+
+        self.assertEqual("READY", plan["plan_status"])
+        self.assertEqual("performance", plan["recommended_lane"])
+        self.assertIn("performance-evidence-trustworthiness", plan["impacted_capabilities"])
+        self.assertIn(
+            "iOS prepared 1k Store launch-to-accurate-content purpose metric",
+            plan["minimum_evidence"],
+        )
+
+    def test_physical_performance_runner_is_not_ignored(self):
+        plan = self.plan("scripts/run_ios_physical_performance.sh")
+
+        self.assertEqual("performance", plan["recommended_lane"])
+        self.assertNotIn("scripts/run_ios_physical_performance.sh", plan["ignored_paths"])
+
+    def test_product_and_performance_changes_promote_to_release_superset(self):
+        plan = self.plan(
+            "Shared/Repositories/LocalDataStore.swift",
+            "Tests/PushGo-iOSUITests/PushGo_iOSPerformanceTests.swift",
+        )
+
+        self.assertEqual("release", plan["recommended_lane"])
+        self.assertIn("messages", plan["impacted_capabilities"])
+        self.assertIn("performance-evidence-trustworthiness", plan["impacted_capabilities"])
+
     def test_machine_consumed_appcast_runs_contract_without_full_release_lane(self):
         plan = self.plan("release/appcast.xml")
 

@@ -20,6 +20,8 @@ A product result passes only when the test uses a reachable user entry and verif
 | Nightly+ | Settings server | Invalid input stays in the editor; normalized address persists; gateway-scoped channel data changes immediately and after relaunch |
 | Nightly+ | Settings decryption | Invalid key stays in the editor; configured status changes only after persistence; relaunch retains status; the value is not echoed; blank Save is non-destructive across relaunch; explicit Delete remains absent after relaunch |
 | Nightly+ | Local configuration failures | Candidate validation may succeed while local gateway commit fails: the old gateway survives restart and retry alone commits; protected key persistence failure stays sheet-owned, remains unconfigured after restart, and retry alone configures |
+| Performance | Prepared 1k-message cold launch | Measures full launch-to-exact-content latency, launch responsiveness, CPU, and memory; opens the highest-index row and verifies its exact detail body |
+| Physical performance | Dedicated reference-device cold launch | Release build, ten iterations, device-specific full launch-to-exact-content budget, then exact detail verification; never substitutes a personal device or Simulator |
 
 The Settings decryption journeys separately prove configuration persistence, wrong-material safe failure followed by correction, successful recovery of the same canonical encrypted message, and corrupt-ciphertext safe failure across relaunch. Gateway accepted-mutation sessions isolate unavailable remote/FCM/private-transport side effects; they do not prove a public gateway or real provider.
 
@@ -32,6 +34,18 @@ scripts/quality_test.sh pr
 scripts/quality_test.sh nightly
 scripts/quality_test.sh release
 ```
+
+The performance lane always runs the App-owned Simulator gross-regression gate. A dedicated, pre-seeded reference device is opt-in and must be named explicitly:
+
+```bash
+IOS_PERFORMANCE_DEVICE_ID='<device-udid>' \
+PUSHGO_PHYSICAL_EXPECTED_TITLE='<pre-seeded exact title>' \
+PUSHGO_PHYSICAL_EXPECTED_BODY='<pre-seeded exact body>' \
+PUSHGO_PHYSICAL_MAX_SECONDS='<device-specific budget>' \
+  scripts/quality_test.sh performance
+```
+
+That physical runner proves launch-to-accurate-content only. Frame/hitch traces, APNs delivery, and other real-system claims remain `NOT RUN` until their own evidence is executed.
 
 For a focused journey:
 

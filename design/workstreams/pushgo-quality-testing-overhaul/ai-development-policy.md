@@ -51,8 +51,8 @@ Identifier 只负责稳定定位；readiness 只证明准备完成；Automation 
 - `pr`：所有快速逻辑/集成测试 + 核心用户 UI 旅程；产品变更交付前必跑。
 - `nightly`：代表性模拟器/device，扩展业务旅程、故障恢复、a11y/l10n 与系统 contract。
 - `accessibility`：按需及 Nightly/Release 执行一个真实中文大字体高价值任务，同时跑全部支持语言资源合同；必须证明请求的 locale/font 实际进入产品 UI 并在成功或失败后恢复全局环境。它不冒充物理 VoiceOver/TalkBack。
-- `performance`：每周及性能敏感变更显式触发，执行 100k 生产 Store/Room correctness 与 provisional host/emulator ceiling；不冒充物理 launch/frame SLO。
-- `release`：全量可自动化套件 + Release 隔离/构建 + 真机系统清单。真机证据缺失时不能写成已通过。
+- `performance`：每周及性能敏感变更显式触发，执行 100k 生产 Store/Room correctness；Apple 还执行预置 1k canonical Store 的冷启动→准确首行→匹配详情指标。Simulator/host 只作 provisional gross-regression ceiling；有显式专用设备、sentinel 和批准预算时才执行固定真机 10 次 Release 样本。ETTrace 只在回归后临时归因，不常驻 App。
+- `release`：功能 Nightly 超集 + `performance` + Release 隔离/构建 + 真机系统清单。真机证据缺失时不能写成已通过。性能 Lane 与功能 Lane 同时受影响时必须提升到该共同超集，不能按线性优先级丢掉其中一类。
 
 业务断言失败立即失败；只允许对已识别的 Runner/Simulator 启动故障进行一次隔离重试。重试前后的状态都必须留证。
 
@@ -64,7 +64,7 @@ Identifier 只负责稳定定位；readiness 只证明准备完成；Automation 
 ./scripts/quality_changed.sh
 ```
 
-也可以用 `--changed-file` 做修改前计划，或用 `--base/--head` 对提交范围计划。输出必须包含：受影响用户能力、确定性最低证据、推荐 Lane、已知证据缺口、路径命中和未映射产品路径。Apple 直接执行推荐 Lane；Android 本地执行完整推荐 Lane，CI 则把主机 `pr` 与 `pr-ui/device/nightly/release` 设备阶段拆开，避免重复构建。
+也可以用 `--changed-file` 做修改前计划，或用 `--base/--head` 对提交范围计划。输出必须包含：受影响用户能力、确定性最低证据、推荐 Lane、已知证据缺口、路径命中和未映射产品路径。Apple 直接执行推荐 Lane；独立性能测试/runner 变更选择 `performance`，若同时命中真实产品规则则提升为包含功能与性能证据的 `release`。Android 本地执行完整推荐 Lane，CI 则把主机 `pr` 与 `pr-ui/device/nightly/release` 设备阶段拆开，避免重复构建。
 
 该机制只负责**不可低于的下限**，不负责替 AI 作完整判断。任何产品路径未映射都 `BLOCKED`；共享 Store/Room、Runtime、Ingress、系统消费者和构建边界必须自动升级。即使命中为 `READY`，AI 仍必须沿 caller、状态/数据 owner、错误、配置、生成物和平台消费者追踪，并在现有 Oracle 无法击穿本次风险时新增或强化测试。文档或无关支持文件可以明确产生 `NOT RUN`，不得伪造产品绿色。
 

@@ -13,10 +13,16 @@ claims=()
 selected_claims=()
 not_run=(
   "physical APNs/notification/permission/system-surface evidence"
-  "physical-device launch/frame performance and release ETTrace evidence"
   "physical VoiceOver task-completion evidence"
 )
-if [[ "$lane" != "performance" ]]; then
+physical_performance_requested=0
+not_run+=("physical-device frame/hitch and release trace evidence")
+if [[ ( "$lane" == "performance" || "$lane" == "release" ) && -n "${IOS_PERFORMANCE_DEVICE_ID:-}" ]]; then
+  physical_performance_requested=1
+else
+  not_run+=("physical-device launch-to-accurate-content performance evidence")
+fi
+if [[ "$lane" != "performance" && "$lane" != "release" ]]; then
   not_run+=("opt-in 100k Store plus 10k Watch/concurrency performance evidence")
 fi
 
@@ -115,6 +121,7 @@ core_ui_scopes="PushGo-iOSUITests/PushGo_iOSUITests/testQualitySessionUsesAppOwn
 accessibility_ui_scope="PushGo-iOSUITests/PushGo_iOSUITests/testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation"
 nightly_ui_scopes="$core_ui_scopes,PushGo-iOSUITests/PushGo_iOSUITests/testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen,PushGo-iOSUITests/PushGo_iOSUITests/testEventClosePersistsAndOngoingFilterReflectsRealProjection,PushGo-iOSUITests/PushGo_iOSUITests/testImportedThingFixtureCanOpenThingDetail,PushGo-iOSUITests/PushGo_iOSUITests/testChannelCreateRenameAndBothUnsubscribeOutcomesPersist,PushGo-iOSUITests/PushGo_iOSUITests/testChannelCreateLocalFailureCompensatesRemoteBeforeRetry,PushGo-iOSUITests/PushGo_iOSUITests/testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testGatewayLocalCommitFailureRollsBackBeforeRetryCommits,PushGo-iOSUITests/PushGo_iOSUITests/testSettingsDecryptionRejectsInvalidKeyPersistsAndClearsValidKey,PushGo-iOSUITests/PushGo_iOSUITests/testDecryptionProtectedStoreFailureDoesNotConfigureBeforeRetry,PushGo-iOSUITests/PushGo_iOSUITests/testEncryptedMessageRecoversAfterConfiguringKeyAndSurvivesRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testCorruptEncryptedMessageFailsSafelyAndSurvivesRelaunch"
 watch_ui_scopes="PushGo-watchOSUITests/PushGo_watchOSUITests/testCoreWatchJourneyShowsAccurateObjectsDeletesOneAndPersistsAfterRelaunch,PushGo-watchOSUITests/PushGo_watchOSUITests/testInvalidHermeticScenarioFailsReadinessExplicitly,PushGo-watchOSUITests/PushGo_watchOSUITests/testMessageReadFailureStaysOwnedByMessagesWhileOtherDomainsRemainUsable"
+performance_ui_scope="PushGo-iOSUITests/PushGo_iOSUITests/testPreparedLargeMessageStoreColdLaunchReachesAccurateContent"
 
 run_core() {
   selected_claims+=("Apple Core/Store/integration suite and localization completeness")
@@ -127,12 +134,22 @@ run_core() {
 run_performance() {
   local performance_log="$results_root/apple-performance.log"
   selected_claims+=("Apple 100k Store plus 10k Watch/concurrency correctness and provisional host regression ceilings")
+  selected_claims+=("iOS prepared 1k Store cold-launch-to-accurate-content metrics and purpose oracle")
   "$repo_root/scripts/quality_doctor.sh" --host-only
   PUSHGO_RUNTIME_QUALITY=1 swift test \
     --package-path "$repo_root" \
     --filter RuntimeQualityLargeScaleTests \
     2>&1 | tee "$performance_log"
   claims+=("Apple 100k Store plus 10k Watch/concurrency correctness and provisional host regression ceilings")
+  TEST_SCOPES="$performance_ui_scope" \
+    MAX_RETRIES=0 \
+    QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
+  claims+=("iOS prepared 1k Store cold-launch-to-accurate-content metrics and purpose oracle")
+  if [[ $physical_performance_requested -eq 1 ]]; then
+    selected_claims+=("iOS fixed physical reference-device Release launch-to-accurate-content budget")
+    "$repo_root/scripts/run_ios_physical_performance.sh"
+    claims+=("iOS fixed physical reference-device Release launch-to-accurate-content budget")
+  fi
 }
 
 run_accessibility_localization() {
@@ -197,6 +214,7 @@ case "$lane" in
     claims+=("iOS release-lane representative journeys")
     run_watch_ui
     run_accessibility_localization
+    run_performance
     selected_claims+=("iOS/watchOS Release builds and Quality Runtime isolation")
     xcodebuild \
       -project "$repo_root/pushgo.xcodeproj" \

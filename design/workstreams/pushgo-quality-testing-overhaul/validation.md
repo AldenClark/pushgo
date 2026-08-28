@@ -140,13 +140,19 @@
 99. **只修 FCM→Private、反向仍先提交攻击**：单向修复会让 Private→FCM 继续在 token/注册失败前写启用状态。结果：双向都采用 prepare/register→commit；FCM 准备走正式 provider switch + subscription sync，失败会退回 Private route并恢复 token/device key；同一 UI 旅程按两个方向分别执行拒绝、旧状态、重试、成功和 relaunch，不用一端通过外推另一端。
 100. **错误可见但合并语义让测试找不到攻击**：首轮错误已真实显示在 Material `ListItem` supporting content，Compose 默认合并树却丢失子 Text test tag，等待超时可被误归为产品未反馈。结果：保留首错并检查 unmerged tree，确认准确文本/旧选择都存在；生产 UI 将局部错误放到 selector 容器内独立可访问 owner，默认测试树可观察且视觉归属不越界。没有改用 `useUnmergedTree` 隐藏真实辅助语义问题。
 101. **远端 route 成功、本地 mode/secret 提交分裂攻击**：只覆盖远端拒绝仍漏掉 Room mode 已写、secure token 未清或反向 token/device key 已换而 mode 未提交。结果：一次性 typed fault 放在 mode 写后中点；产品对 Private 方向重新准备 FCM，对 FCM 方向退回 Private，并恢复 token/device key/mode 后才发布错误。UI 要求白名单 dialog 不出现、重启仍旧 route、同入口重试才提交；补偿自身再次失败用更严重准确文案，仍保留为未执行故障组合而不消耗日常预算。
+102. **Store 指标冒充用户数据已及时可读攻击**：100k query 绿色不证明 App 冷启动后及时显示准确数据。结果：新增预置 1k canonical Store 的真实 iOS 冷启动→准确最高索引首行→匹配详情旅程，同时采集 launch/clock/CPU/memory；准备耗时不混入读取测量，准确内容仍是最终 Oracle。
+103. **`waitForExistence(5)` 冒充 5 秒冷启动攻击**：XCUIApplication `launch()` 返回后才开始元素 timeout，会漏掉 launch 内部等待。结果：测试端从调用 launch 前用 ContinuousClock 独立计时到准确行出现，并对完整区间施加 8s Simulator 粗退化上限；XCTest metrics 作为第二套记录，不靠 timeout 文案自证。
+104. **外部 state/测量框架假失败攻击**：首轮在 App-owned session 中读取 Runner 外部 state 得到 nil；次轮只启用 manuallyStart 却调用 stopMeasuring，产品 5 次均显示准确行但框架最终抛异常。结果：删除跨 sandbox Oracle，改用 atomic fixture 的最高索引行与匹配正文；使用成对 manuallyStart/manuallyStop。两次失败保留为测试系统校准证据，未重跑到绿或降低业务断言。
+105. **新增性能 runner 被影响选择器静默忽略攻击**：未跟踪的新脚本不在已有 glob 中，性能 UI 又混在通用测试大文件里，工作树计划只推荐 PR。结果：性能 UI 拆为独立编译源，manifest 增加具名 Performance 能力与 runner/重型测试路径，选择器负控从 17 条增至 20 条；最终工作树准确推荐 `performance`，runner 不再出现在 ignored paths。
+106. **性能与功能 Lane 线性取最大导致二选一攻击**：Performance 并不是 Nightly 功能集的超集；简单排序会在两类同时变化时漏掉其中一类。结果：混合产品+性能变更明确提升到 Release，共同超集实际调用功能、Watch/a11y、Performance 与 Release build；负控用 Store+性能测试路径要求 `release`。
+107. **跑了真机启动就冒充帧/trace 已覆盖攻击**：原 `not_run` 把 launch/frame/trace 合为一项，启用真机启动 runner 后会整体消失。结果：启动到准确内容与 frame/hitch/release trace 分成独立 claim；后者在没有专属采集时始终 `NOT RUN`，CI 同时上传独立真机 log/xcresult，不能因启动绿色扩张证据边界。
 
 ## 归因分析
 
 | 过去症状 | 根因 | 结构修正 | 失败分类 |
 | --- | --- | --- | --- |
 | 偶发读不到数据库/fixture | Runner 与 App 跨 sandbox 共享绝对路径，生命周期不统一 | App-owned session Store/DB、内置 fixture、唯一 session ID、teardown | 准备失败=`BLOCKED`，不得等成 UI timeout |
-| 数据加载慢未预警 | 没有用户可见 slow 状态与阶段预算，测试只看最后 screen/count | 产品状态机 + slow fault + UI Oracle；后续真机建立基线 | 超预算=`FAILED`，设备不可用=`BLOCKED` |
+| 数据加载慢未预警 | 没有用户可见 slow 状态与目的级预算，测试只看最后 screen/count 或 Store query | 产品 slow 状态 + fault UI Oracle；预置 1k Store 的冷启动→准确首行→匹配详情 XCTest 指标；固定真机 10 次入口 | Simulator 粗上限或真机预算超出=`FAILED`；显式设备不可用=`BLOCKED`；未提供真机合同=`NOT RUN` |
 | UI 数量多但漏真实功能 | 测试按页面/控件存在组织，未按用户目的和数据血缘组织 | 能力矩阵 + 入口/动作/终点/反例合同 | 覆盖索引不等于通过 |
 | 绿灯不稳定 | 并行、固定等待、共享 DB、外部依赖和无边界重试混合 | 串行 UI、条件等待、唯一 DB、分 lane、一次分类重试 | `FAILED/FLAKY/BLOCKED/NOT RUN` 分栏 |
 | 删除后 UI 仍显示对象 | 待删除数据正确，但 SwiftUI 嵌套观察未使 List 结构重建；可访问性父标识覆盖子动作 | 直接观察控制器、作用域身份重建、独立状态/动作语义，并跨 Apple 列表推广 | 业务失败=`FAILED`，不得延长等待或仅断言撤销条 |
@@ -181,7 +187,7 @@
 
 - macOS 系统自动化认证解除后，先跑消息 empty/standard/slow/retry 四条，不先迁移全部旧脚本。
 - 真实 APNs/FCM/权限/后台/升级只有在具备签名、账号、设备和隔离环境后进入 Release；缺条件即 `BLOCKED`。
-- 性能预算需在固定参考物理设备建立至少 10 次基线和 p50/p95，再设置回归阈值；当前只完成性能状态的可证伪性。
+- 固定参考物理设备 runner 已实现，但仍需在专用设备完成至少 10 次 Release 基线并审定 p50/p95 与产品 SLO；当前只有 Simulator 粗退化证据，物理结果仍 `NOT RUN`。
 - Simulator/emulator 的中文大字体代表任务不能替代物理 VoiceOver/TalkBack、焦点顺序和真实设备文字裁切；这些仍需按第 33 节代表环境执行，不能从本轮 1/1 外推。
 - 两周观察期关注：Runner 启动失败率、业务失败率、p95、flake、无证据重试次数和每 lane 时长。基础设施修复连续两次不增加产品证据时，停止继续打磨并重新归因。
 - 当前红蓝复核由同一执行上下文完成，存在 `common-mode-risk`；未获得独立审查代理授权前，不把本轮校准描述为独立第三方验证。

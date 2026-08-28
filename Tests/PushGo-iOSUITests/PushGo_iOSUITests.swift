@@ -85,7 +85,7 @@ final class PushGo_iOSUITests: XCTestCase {
         let error: String?
     }
 
-    private struct LaunchContext {
+    struct LaunchContext {
         let app: XCUIApplication
         let runtimeRoot: URL
         let responseURL: URL
@@ -2627,7 +2627,7 @@ final class PushGo_iOSUITests: XCTestCase {
         }
     }
 
-    private func configuredLaunchContext(
+    func configuredLaunchContext(
         runtimeRoot: URL? = nil,
         startupFixturePath: String? = nil,
         requestName: String? = nil,
@@ -2691,7 +2691,7 @@ final class PushGo_iOSUITests: XCTestCase {
             .appendingPathComponent("PushGo-iOSUITests-\(UUID().uuidString)", isDirectory: true)
     }
 
-    private func qualitySessionPayload(
+    func qualitySessionPayload(
         sessionID: String,
         fixture: String,
         messageLoadDelayMilliseconds: Int? = nil,
@@ -2731,7 +2731,7 @@ final class PushGo_iOSUITests: XCTestCase {
         return data.base64EncodedString()
     }
 
-    private func launch(_ app: XCUIApplication) {
+    func launch(_ app: XCUIApplication) {
         let qualitySessionKey = "PUSHGO_QUALITY_SESSION_BASE64"
         let qualitySessionArgument = "-\(qualitySessionKey)"
         var launchArguments = app.launchArguments
@@ -2772,7 +2772,7 @@ final class PushGo_iOSUITests: XCTestCase {
         }
     }
 
-    private func tapWhenHittable(
+    func tapWhenHittable(
         _ element: XCUIElement,
         timeout: TimeInterval,
         message: String = "Expected control to become hittable",
@@ -2915,7 +2915,7 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTFail("Expected visible screen \(screenIdentifier), current state: \(stateText)", file: file, line: line)
     }
 
-    private func element(in app: XCUIApplication, identifier: String) -> XCUIElement {
+    func element(in app: XCUIApplication, identifier: String) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: identifier).firstMatch
     }
 
@@ -2985,7 +2985,7 @@ final class PushGo_iOSUITests: XCTestCase {
         field.typeText(text)
     }
 
-    private func assertElementExists(
+    func assertElementExists(
         _ identifier: String,
         in app: XCUIApplication,
         timeout: TimeInterval = 8,
@@ -2996,7 +2996,7 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(target.waitForExistence(timeout: timeout), "Missing element: \(identifier)", file: file, line: line)
     }
 
-    private func assertQualityRuntimeReady(
+    func assertQualityRuntimeReady(
         in app: XCUIApplication,
         timeout: TimeInterval,
         file: StaticString = #filePath,

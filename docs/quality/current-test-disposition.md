@@ -108,11 +108,11 @@ Quality session 不再只隔离 GRDB：server config、decryption material metad
 
 ## 变更影响门禁
 
-`config/quality-impact.json` 把当前产品源码分配到 Messages、Entity、Channel/Settings、Ingress、系统表面、Watch、App shell、共享 UI/媒体和 Release 等具名能力。`scripts/quality_changed.sh` 先执行选择器负控，再运行不低于推荐值的真实 Lane；新产品路径未映射时直接 `BLOCKED`。这只是确定性下限，不能替代对 caller、Store、错误分支和平台消费者的语义追踪。
+`config/quality-impact.json` 把当前产品源码分配到 Messages、Entity、Channel/Settings、Ingress、系统表面、Watch、App shell、共享 UI/媒体、Performance 和 Release 等具名能力。`scripts/quality_changed.sh` 先执行选择器负控，再运行不低于推荐值的真实 Lane；独立性能测试/runner 变更选择 `performance`，与产品规则同时变化则提升到同时执行功能和性能的 `release`。新产品路径未映射时直接 `BLOCKED`。这只是确定性下限，不能替代对 caller、Store、错误分支和平台消费者的语义追踪。
 
 计划中的 `required_checks` 是必须实际执行并写入收据的补充证据：Appcast/App Store metadata 使用快速语义契约，不启动完整 Release；Fastlane/构建/隐私/回滚变更强制执行发布静态契约并保持 Release Lane。两端各 120 次历史回放已校准旧路径漏选；无效或未知计划直接 `BLOCKED`，不回退为默认绿色。
 
-四个 100k/Watch/concurrency 重型用例已从函数内提前 return 改为框架条件禁用；日常输出必须显示 skipped，并在结果 `not_run` 中列出。`scripts/quality_test.sh performance` 会用 doctor 的 `--host-only` 模式只检查真实所需的 Swift/Package 环境，显式设置 `PUSHGO_RUNTIME_QUALITY=1`，只运行 `RuntimeQualityLargeScaleTests`，保存逐阶段耗时、RSS 与主线程 stall 日志，并把实际执行范围写入独立收据；无关 Simulator 状态不会阻断宿主测试。该 Lane 的阈值是当前宿主机上的 provisional regression ceiling，只防明显倒退；真机启动、帧耗时和 Release ETTrace 仍为 `NOT_RUN`，不得由它代替。
+四个 100k/Watch/concurrency 重型用例已从函数内提前 return 改为框架条件禁用；日常输出必须显示 skipped，并在结果 `not_run` 中列出。`scripts/quality_test.sh performance` 先用 doctor 的 `--host-only` 模式执行 `RuntimeQualityLargeScaleTests`，再在专用 Simulator 执行独立文件 `PushGo_iOSPerformanceTests.swift` 中的 `testPreparedLargeMessageStoreColdLaunchReachesAccurateContent`：数据准备在测量区间外，5 次正式样本采集 launch/clock/CPU/memory，测试端完整启动到准确首行不得超过 8s，最后必须打开相同 persisted body。该 8s 只防 Simulator 明显退化。显式提供参考设备 ID、准确 sentinel 与设备预算时，同一 Lane 继续调用 `scripts/run_ios_physical_performance.sh`，在 Release 配置固定真机执行 10 次；缺条件保持 `NOT_RUN`，不得回落到个人真机或 Simulator。Release 是功能与性能共同超集。ETTrace 仅在指标失败后临时接入做归因，不作为生产或常驻测试依赖。
 
 ## macOS 窗口生命周期验证与攻击记录
 

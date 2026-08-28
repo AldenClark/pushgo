@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "platform": "apple",
-  "lane_order": ["not-run", "pr", "nightly", "release"],
+  "lane_order": ["not-run", "pr", "nightly", "performance", "release"],
   "product_paths": [
     "Shared/**",
     "Apps/**",
@@ -35,6 +35,15 @@
       "lane": "pr",
       "known_evidence_gaps": ["A changed test outside curated lanes may need an explicit focused invocation."],
       "escalation_reasons": ["Test infrastructure changes require one representative product journey; syntax alone is insufficient."]
+    },
+    {
+      "id": "performance-system",
+      "paths": ["Tests/PushGo-iOSUITests/PushGo_iOSPerformanceTests.swift", "Tests/PushGoAppleCoreTests/MessagePerformanceArchitectureGuardrailTests.swift", "Tests/PushGoAppleCoreTests/RuntimeQualityLargeScaleTests.swift", "scripts/run_ios_physical_performance.sh"],
+      "capabilities": ["performance-evidence-trustworthiness"],
+      "minimum_evidence": ["Apple 100k Store/10k Watch correctness and provisional host ceilings", "iOS prepared 1k Store launch-to-accurate-content purpose metric", "fixed physical reference-device evidence when its explicit contract is available"],
+      "lane": "performance",
+      "known_evidence_gaps": ["Simulator and host evidence do not prove physical frame/hitch, APNs, background, or release trace behavior."],
+      "escalation_reasons": ["Performance test changes can silently weaken budgets, measured intervals, fixture scale, or accurate-content oracles."]
     },
     {
       "id": "quality-runtime-release-isolation",
