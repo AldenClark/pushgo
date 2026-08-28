@@ -15,7 +15,7 @@ export QUALITY_RUNNER_ISSUE_FILE="$runner_issue_file"
 claims=()
 selected_claims=()
 not_run=(
-  "physical APNs network delivery, permission denial, notification actions, process-death, and other system-surface evidence"
+  "physical APNs network delivery, permission denial, direct notification mark-read, process-death, and other system-surface evidence"
   "physical VoiceOver task-completion evidence"
 )
 physical_performance_requested=0
@@ -184,10 +184,14 @@ run_watch_ui() {
 }
 
 run_system_notification_journey() {
-  selected_claims+=("iOS Simulator system notification permission/delivery/tap/detail/read/relaunch journey")
+  local delete_action_scope="PushGo-iOSUITests/PushGo_iOSSystemNotificationTests/testSystemNotificationDeleteActionRemovesOnlyTargetAndPersists"
+  selected_claims+=("iOS Simulator system notification permission/delivery/tap/detail/read plus destructive delete/control/relaunch journeys")
   MAX_RETRIES=0 \
     QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_system_notification_test.sh"
-  claims+=("iOS Simulator system notification permission/delivery/tap/detail/read/relaunch journey")
+  SYSTEM_NOTIFICATION_TEST_SCOPE="$delete_action_scope" \
+    MAX_RETRIES=0 \
+    QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_system_notification_test.sh"
+  claims+=("iOS Simulator system notification permission/delivery/tap/detail/read plus destructive delete/control/relaunch journeys")
 }
 
 case "$lane" in

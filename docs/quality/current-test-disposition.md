@@ -32,7 +32,7 @@
 | rewrite | `testFixtureSeedEntityRecordsPublishesProjectionCounts`、`testFixtureSeedSubscriptionsPublishesImportState` | 改为真实 Event/Thing/Channel 内容与后续操作；内部 count 只诊断。 |
 | delete（已被更强旅程替代） | `testSettingsPageVisibilityCommandCanHideEventPage`、`testSettingsPageVisibilityCommandCanRoundTripEventPage` | `testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch` 已覆盖真实入口、动作、准确页面和双向 relaunch；旧 command/state 不再进入常规 lane。 |
 | rewrite（通知打开已被更强旅程替代） | `testEntityOpenPublishesEntityStateAndProjectionCounts`、`testMessageOpenPublishesMessageDetailState`、`testNotificationOpenPublishesMessageDetailState` | Entity/Message 仍需真实入口替换；通知打开已由 `PushGo_iOSSystemNotificationTests.testSystemNotificationTapOpensAccurateReadDetailAndPersists` 走真实授权、SpringBoard 投递/点击、准确详情、已读及 relaunch 接管，旧 Runtime command 只保留诊断且不能声明系统路由通过。 |
-| rewrite | `testNotificationMarkReadCommandUpdatesUnreadState`、`testNotificationDeleteCommandUpdatesCounts` | 通过真实通知动作；对账通知、Store、列表、badge 和 relaunch。 |
+| rewrite（Delete 已被更强旅程替代，mark-read 待补） | `testNotificationMarkReadCommandUpdatesUnreadState`、`testNotificationDeleteCommandUpdatesCounts` | Delete 已由真实 SpringBoard destructive action 对账目标 canonical、控制消息和 relaunch；直接 mark-read action 仍需真实通知动作，并对账通知、Store、列表、badge 和 relaunch。 |
 | rewrite | `testGatewaySetServerCommandUpdatesConfigurationState` | 通过 Settings 编辑保存，并在 contract 层证明后续请求到新 endpoint。 |
 | delete | `testBaselineAutomationStateHasNoRuntimeErrors` | Runtime state 无错误不能证明任何用户能力；错误归因转入 readiness/attachment。 |
 | rewrite | `testWatchResyncReceiverCommandPublishesReceiverState` | 移入 Watch integration/physical lane，验证真实 generation/revision/ACK 收敛。 |
@@ -100,6 +100,7 @@
 - `testCorruptEncryptedMessageFailsSafelyAndSurvivesRelaunch`
 - `testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation`
 - `PushGo_iOSSystemNotificationTests.testSystemNotificationTapOpensAccurateReadDetailAndPersists`
+- `PushGo_iOSSystemNotificationTests.testSystemNotificationDeleteActionRemovesOnlyTargetAndPersists`
 - `testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow`（macOS controlled runner）
 - `testCoreWatchJourneyShowsAccurateObjectsDeletesOneAndPersistsAfterRelaunch`
 - `testInvalidHermeticScenarioFailsReadinessExplicitly`
@@ -107,11 +108,11 @@
 
 消息前十条与高频 Channel 远端拒绝条目进入 PR 核心集，其中 workflow 用 52 条数据跨越真实 page size 50，并验证单条/全部已读、relaunch 与未读筛选。刷新旅程分别证明慢态与上次准确快照共存、Provider 刷新载荷经过规范化摄入后出现在列表和真实详情并在 relaunch 后保留，以及首次失败可见、旧快照保留、同一正式刷新动作重试后恢复；不把直接修改 ViewModel 集合或检查数据库文件当结果。其余真实导航、Entity、Channel 与 Settings 进入 Nightly/Release。Channel 创建补偿必须覆盖凭据/DB 中点失败、本地回滚、远端撤销、正式重载、重试和 relaunch；Server 同样既覆盖候选远端拒绝，也覆盖远端成功后的本地提交中点失败，且 rollback 自身失败不得静默。Decryption 必须覆盖存储失败后重启仍未配置、错误 Key 不产生明文、纠正恢复，以及损坏认证密文安全失败。Release 使用显式高价值清单，不让旧 Runtime/state 绿色覆盖新旅程失败。
 
-系统通知纵切独立成文件和 runner，只在 Nightly/Release 以及自身或通知相关产品代码变更时执行，避免普通 UI 测试改动无差别升级；开发者/AI 可用 `scripts/quality_test.sh system-notification` 做定向归因并生成双状态收据，但它不能替代影响计划要求的 Nightly/Release。宿主 readiness 文件只协调“App 已后台、可以注入”，不读取或写入产品数据库，也不参与产品通过判定；每轮由测试生成唯一 message id、标题和正文并通过原子 readiness contract 交给投递端，防止旧通知命中本轮 Oracle。最终 Oracle 是 SpringBoard 的准确通知、真实 `UNNotificationResponse` 路由、详情字段、canonical 列表以及重启后的已读持久化。Simulator `simctl push` 证明系统边界但不等价于真实 APNs 网络；通知中心清理也不能用 App 前台时“SpringBoard 文本不可见”冒充，因此两者继续明确为 `NOT_RUN`。
+系统通知纵切独立成文件和 runner，只在 Nightly/Release 以及自身或通知相关产品代码变更时执行，避免普通 UI 测试改动无差别升级；开发者/AI 可用 `scripts/quality_test.sh system-notification` 做定向归因并生成双状态收据，但它不能替代影响计划要求的 Nightly/Release。宿主 readiness 文件只协调“App 已后台、可以注入”，不读取或写入产品数据库，也不参与产品通过判定；每轮由测试生成唯一 message id、标题和正文并通过原子 readiness contract 交给投递端，防止旧通知命中本轮 Oracle。默认 lane 分别用干净安装运行两条目的旅程：其一以 SpringBoard 准确通知、真实 `UNNotificationResponse` 路由、详情字段、canonical 列表及重启后的已读持久化为 Oracle；其二长按真实通知、要求生产 category 暴露 destructive Delete，并以目标 canonical 消失、无关控制消息及正文不变、重启不复活为 Oracle。Simulator `simctl push` 证明系统边界但不等价于真实 APNs 网络；通知中心清理也不能用 App 前台时“SpringBoard 文本不可见”冒充，因此两者继续明确为 `NOT RUN`。
 
-readiness 之前的 App-owned session、系统授权操作、后台切换和 Runner 临时目录写入统一标记为 `QUALITY_PRECONDITION`；失败时产品状态为 `NOT_RUN`、测试系统为 `BLOCKED`。readiness 之后的 SpringBoard 字段、点击路由、详情、已读、唯一 canonical 行和 relaunch 数据才是产品 Oracle，失败记 `FAILED`，防止准备问题与真实产品回归互相污染。
+readiness 之前的 App-owned session、系统授权操作、后台切换和 Runner 临时目录写入统一标记为 `QUALITY_PRECONDITION`；失败时产品状态为 `NOT_RUN`、测试系统为 `BLOCKED`。readiness 之后的 SpringBoard 字段、点击/动作路由、详情、已读或删除结果、无关控制对象、唯一 canonical 行和 relaunch 数据才是产品 Oracle，失败记 `FAILED`，防止准备问题与真实产品回归互相污染。
 
-该纵切的负控仅把注入正文改为错误值，标题和路由保持不变；测试在 SpringBoard 精确正文断言处失败并被 runner 归为产品 Oracle `FAILED`。恢复正确正文后必须再次全程通过，防止“有任意通知/能拉起 App”这种形式判定冒充内容与路由正确。
+该纵切已有两类负控：把注入正文改错时，点击旅程在 SpringBoard 精确正文断言处失败；把生产 Delete action 故意接到 mark-read handler 时，删除旅程在 canonical 目标仍存在处失败。两者均被 runner 归为产品 Oracle `FAILED`，恢复生产字节后必须再次全程通过，防止“有任意通知/按钮能点/通知 UI 消失”这种形式判定冒充内容、路由或持久删除正确。
 
 Quality session 不再只隔离 GRDB：server config、decryption material metadata 与手动编码偏好由 App 自己的 session `config` 目录持有，同 session relaunch 可读、不同 session 不共享，生产 Keychain/gateway token/fallback 不读不写。配置文件损坏或权限错误必须阻断 readiness，不能被默认值伪装成成功。首次完整 Release 的 2/18 失败正是该隔离缺口的负控证据；结构修复后定向 3/3 与完整 18/18 均通过，原失败结果包继续保留。
 

@@ -10,7 +10,7 @@ derived_data_path="${DERIVED_DATA_PATH:-$repo_root/.deriveddata-ui-tests}"
 results_root="${RESULTS_ROOT:-$repo_root/build/quality-results/ios-system-notification}"
 runner_status_file="${QUALITY_RUNNER_STATUS_FILE:-}"
 runner_issue_file="${QUALITY_RUNNER_ISSUE_FILE:-}"
-test_scope="PushGo-iOSUITests/PushGo_iOSSystemNotificationTests/testSystemNotificationTapOpensAccurateReadDetailAndPersists"
+test_scope="${SYSTEM_NOTIFICATION_TEST_SCOPE:-PushGo-iOSUITests/PushGo_iOSSystemNotificationTests/testSystemNotificationTapOpensAccurateReadDetailAndPersists}"
 readiness_filename="pushgo-system-notification-ready"
 
 set_runner_status() {
@@ -150,6 +150,7 @@ payload = {
         "alert": {"title": contract["title"], "body": contract["body"]},
         "sound": "default",
         "badge": 1,
+        "category": "PUSHGO_DEFAULT",
     },
     "entity_type": "message",
     "entity_id": contract["message_id"],
