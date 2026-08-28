@@ -89,8 +89,9 @@
 - `testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch`
 - `testSettingsDecryptionRejectsInvalidKeyPersistsAndClearsValidKey`
 - `testEncryptedMessageRecoversAfterConfiguringKeyAndSurvivesRelaunch`
+- `testCorruptEncryptedMessageFailsSafelyAndSurvivesRelaunch`
 
-前十条进入 PR 核心集，其中 workflow 用 52 条数据跨越真实 page size 50，并验证单条/全部已读、relaunch 与未读筛选。刷新旅程分别证明慢态与上次准确快照共存、Provider 刷新载荷经过规范化摄入后出现在列表和真实详情并在 relaunch 后保留，以及首次失败可见、旧快照保留、同一正式刷新动作重试后恢复；不把直接修改 ViewModel 集合或检查数据库文件当结果。真实导航、Event 关闭/筛选/relaunch、Thing 三类关系、Channel 创建/改名/两类退订/多次 relaunch、Settings 页面可见性、server 候选注册失败不提交→重试成功→数据换域/持久化、decryption 配置生命周期及真实密文恢复旅程进入 Nightly/Release。Server 用例必须同时断言 Sheet 错误 owner、宿主无重复反馈、候选失败时旧配置仍权威、成功后才换域并 relaunch；`ProviderRouteControllerTests` 证明 injected session 实际被使用、候选不复用旧网关 device key 且 prepare 不改本地状态。错 Key/坏密文和本地 commit/rollback 写失败仍是独立 P0。Release 已改为显式高价值清单，不再默认执行所有遗留 UI 用例；旧 Runtime command/state 用例不得以绿色覆盖新用例失败，已有更强证据的弱重复从常规 lane 移除。
+前十条进入 PR 核心集，其中 workflow 用 52 条数据跨越真实 page size 50，并验证单条/全部已读、relaunch 与未读筛选。刷新旅程分别证明慢态与上次准确快照共存、Provider 刷新载荷经过规范化摄入后出现在列表和真实详情并在 relaunch 后保留，以及首次失败可见、旧快照保留、同一正式刷新动作重试后恢复；不把直接修改 ViewModel 集合或检查数据库文件当结果。真实导航、Event 关闭/筛选/relaunch、Thing 三类关系、Channel 创建/改名/两类退订/多次 relaunch、Settings 页面可见性、server 候选注册失败不提交→重试成功→数据换域/持久化、decryption 配置生命周期及真实密文恢复旅程进入 Nightly/Release。Server 用例必须同时断言 Sheet 错误 owner、宿主无重复反馈、候选失败时旧配置仍权威、成功后才换域并 relaunch；`ProviderRouteControllerTests` 证明 injected session 实际被使用、候选不复用旧网关 device key 且 prepare 不改本地状态。Decryption 还必须证明错误 Key 不产生明文、纠正后同一消息可恢复，以及损坏认证密文在正确 Key 下仍安全失败并跨 relaunch 保留；本地 commit/rollback 与受保护存储写失败仍是独立 P0。Release 已改为显式高价值清单，不再默认执行所有遗留 UI 用例；旧 Runtime command/state 用例不得以绿色覆盖新用例失败，已有更强证据的弱重复从常规 lane 移除。
 
 Quality session 不再只隔离 GRDB：server config、decryption material metadata 与手动编码偏好由 App 自己的 session `config` 目录持有，同 session relaunch 可读、不同 session 不共享，生产 Keychain/gateway token/fallback 不读不写。配置文件损坏或权限错误必须阻断 readiness，不能被默认值伪装成成功。首次完整 Release 的 2/18 失败正是该隔离缺口的负控证据；结构修复后定向 3/3 与完整 18/18 均通过，原失败结果包继续保留。
 

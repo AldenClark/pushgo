@@ -20,7 +20,7 @@ A product result passes only when the test uses a reachable user entry and verif
 | Nightly+ | Settings server | Invalid input stays in the editor; normalized address persists; gateway-scoped channel data changes immediately and after relaunch |
 | Nightly+ | Settings decryption | Invalid key stays in the editor; configured status changes only after persistence; relaunch retains status; the value is not echoed; blank Save is non-destructive across relaunch; explicit Delete remains absent after relaunch |
 
-The Settings decryption journey proves key configuration persistence, not successful recovery of a representative encrypted message. The latter remains a separate P0 gap. Gateway accepted-mutation sessions isolate unavailable remote/FCM/private-transport side effects; they do not prove remote rejection, compensation, or a real provider.
+The Settings decryption journeys separately prove configuration persistence, wrong-material safe failure followed by correction, successful recovery of the same canonical encrypted message, and corrupt-ciphertext safe failure across relaunch. Gateway accepted-mutation sessions isolate unavailable remote/FCM/private-transport side effects; they do not prove a public gateway or real provider.
 
 ## Lanes
 

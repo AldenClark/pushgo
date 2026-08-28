@@ -109,6 +109,9 @@
 68. **可注入网络客户端被 shared session 绕过攻击**：Apple `ChannelSubscriptionService(session:)` 表面可测试，但多个 API 硬编码 `URLSession.shared`，isolated contract 无法观察真实调用。结果：所有实例 API 统一使用注入 session；候选契约若再次绕过会直接因无 handler 失败。该修正是测试接入点，不把 mock 网络通过冒充公网可用。
 69. **Sheet 下滑动作冒充稳定取消攻击**：滚动表单会吞掉应用级 swipe，测试无法确定是交互失败还是业务状态错误。结果：Server Sheet 增加用户可见、可访问的标准取消按钮，自动化通过同一真实控件退出并核对错误不泄漏与旧配置仍权威；不通过重试等待偶然手势成功。
 70. **字段值等于 placeholder 的输入攻击**：XCUI 同时返回相同的 value/placeholder 时，旧助手误判字段为空并把新地址追加到旧地址，制造无效业务输入。结果：公共替换助手对任何非空 value 均先全选清空；该负控在零重试网关旅程中真实暴露，并由同一旅程最终 1/1 证明。
+71. **合法长度错误 Key 冒充恢复成功攻击**：只验证 validator 接受和 configured 状态时，错误材料也会显示保存成功。结果：同一正式恢复链先要求原 fallback、identity、已读/时间和 ciphertext 不变且 `decryptFailed`，禁止出现目标明文；用户再从真实入口纠正，只有准确标题/正文和 `decryptOk` 跨 relaunch 才通过。
+72. **损坏密文与错误 Key 混为一个 Happy Path 攻击**：只有可纠正错误 Key 无法证明不可恢复载荷会安全停止。结果：fixture 先由正式 AES-GCM 生成 envelope，再翻转认证覆盖的数据并走正式 ingress；正确 Key 下仍必须保留安全原文、显示失败、禁止目标明文并跨 relaunch 保持，不直接写失败状态。
+73. **目标模拟器消失后误跑个人真机攻击**：Android 首次安装前发现 `emulator-5554` 不存在，doctor 随后可见个人真机。结果：该次归为 pre-run 测试环境中断，不在真机执行；显式启动隔离 API 37 emulator、确认 boot completed 和唯一 serial 后才跑 2/2。自动恢复不能扩大到未经授权设备状态。
 
 ## 归因分析
 

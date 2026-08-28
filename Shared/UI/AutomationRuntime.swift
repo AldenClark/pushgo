@@ -3591,7 +3591,7 @@ final class PushGoAutomationRuntime {
             messages = [qualityFixtureMessage(index: 0)]
             entityRecords = []
             channelSubscriptions = []
-        case .messagesEncryptedValid:
+        case .messagesEncryptedValid, .messagesEncryptedCorrupt:
             // This fixture is inserted through the production notification ingress
             // below so the initial missing-key state cannot be fabricated as a row.
             messages = []
@@ -3874,14 +3874,19 @@ final class PushGoAutomationRuntime {
         environment: AppEnvironment,
     ) async throws {
         var importedMessageCount = bundle.messages.count
-        if PushGoAutomationContext.qualitySession?.fixture == .messagesEncryptedValid {
+        if let encryptedFixture = PushGoAutomationContext.qualitySession?.fixture,
+           encryptedFixture == .messagesEncryptedValid || encryptedFixture == .messagesEncryptedCorrupt
+        {
             environment.markQualityRuntimeReadiness("seeding.encrypted_message")
+            let isCorrupt = encryptedFixture == .messagesEncryptedCorrupt
             let outcome = await environment.persistRemotePayloadIfNeeded(
-                try qualityEncryptedRemotePayload(),
-                requestIdentifier: "quality-encrypted-delivery"
+                try qualityEncryptedRemotePayload(corruptCiphertext: isCorrupt),
+                requestIdentifier: isCorrupt
+                    ? "quality-corrupt-encrypted-delivery"
+                    : "quality-encrypted-delivery"
             )
             guard case .persistedMain = outcome else {
-                throw PushGoAutomationError.invalidArgument("messages.encrypted.valid ingress outcome")
+                throw PushGoAutomationError.invalidArgument("\(encryptedFixture.rawValue) ingress outcome")
             }
             importedMessageCount += 1
             environment.markQualityRuntimeReadiness("seeding.encrypted_message.saved")
@@ -3927,7 +3932,9 @@ final class PushGoAutomationRuntime {
         )
     }
 
-    private func qualityEncryptedRemotePayload() throws -> [AnyHashable: Any] {
+    private func qualityEncryptedRemotePayload(
+        corruptCiphertext: Bool = false
+    ) throws -> [AnyHashable: Any] {
         let keyData = Data("QualityKey123456".utf8)
         let nonceData = Data((0..<12).map(UInt8.init))
         let plaintext: [String: Any] = [
@@ -3943,11 +3950,18 @@ final class PushGoAutomationRuntime {
         var envelope = sealedBox.ciphertext
         envelope.append(sealedBox.tag)
         envelope.append(nonceData)
+        if corruptCiphertext, !envelope.isEmpty {
+            envelope[envelope.startIndex] ^= 0x01
+        }
         return [
             "entity_type": "message",
-            "message_id": "quality-encrypted-message",
-            "delivery_id": "quality-encrypted-delivery",
-            "title": "Encrypted Quality Message",
+            "message_id": corruptCiphertext
+                ? "quality-corrupt-encrypted-message"
+                : "quality-encrypted-message",
+            "delivery_id": corruptCiphertext
+                ? "quality-corrupt-encrypted-delivery"
+                : "quality-encrypted-delivery",
+            "title": corruptCiphertext ? "Corrupt Encrypted Message" : "Encrypted Quality Message",
             "body": "Configure decryption to read this message.",
             "ciphertext": envelope.base64EncodedString(),
             "sent_at": "2026-01-15T08:00:00Z",

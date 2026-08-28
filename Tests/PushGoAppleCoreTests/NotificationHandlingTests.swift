@@ -90,6 +90,27 @@ struct NotificationHandlingTests {
             #expect(before?.body == "Configure decryption to read this message.")
             #expect(before?.decryptionState == .notConfigured)
 
+            let failedReport = try await NotificationPersistenceCoordinator.recoverEncryptedMessages(
+                using: ServerConfig.NotificationKeyMaterial(
+                    algorithm: .aesGcm,
+                    keyData: Data(repeating: 0xA5, count: 16),
+                    ivBase64: nil,
+                    updatedAt: Date()
+                ),
+                dataStore: store
+            )
+            let failed = try await store.loadMessage(id: originalID)
+
+            #expect(failedReport == .init(examinedCount: 1, updatedCount: 1, decryptedCount: 0))
+            #expect(failed?.id == originalID)
+            #expect(failed?.messageId == original.messageId)
+            #expect(failed?.isRead == true)
+            #expect(failed?.receivedAt == originalDate)
+            #expect(failed?.title == original.title)
+            #expect(failed?.body == original.body)
+            #expect(failed?.decryptionState == .decryptFailed)
+            #expect(failed?.rawPayload["ciphertext"]?.value as? String == envelope.base64EncodedString())
+
             let report = try await NotificationPersistenceCoordinator.recoverEncryptedMessages(
                 using: ServerConfig.NotificationKeyMaterial(
                     algorithm: .aesGcm,

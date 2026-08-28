@@ -920,7 +920,7 @@ final class PushGo_iOSUITests: XCTestCase {
 
         let keyField = element(in: context.app, identifier: "field.settings.decryption.key")
         XCTAssertTrue(keyField.waitForExistence(timeout: 8))
-        enterSecureText(in: keyField, with: "QualityKey123456")
+        enterSecureText(in: keyField, with: String(repeating: "Z", count: 16))
         tapWhenHittable(
             element(in: context.app, identifier: "action.settings.decryption.save"),
             timeout: 8
@@ -928,6 +928,32 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(keyField.waitForNonExistence(timeout: 8))
 
         let settingsScreen = element(in: context.app, identifier: "screen.settings")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.close"),
+            timeout: 8
+        )
+        XCTAssertTrue(settingsScreen.waitForNonExistence(timeout: 8))
+        XCTAssertTrue(
+            context.app.staticTexts["Configure decryption to read this message."].exists,
+            "A wrong but valid-length key must preserve the safe original fallback"
+        )
+        assertElementExists("status.message.decryption.decryptFailed", in: context.app, timeout: 5)
+        XCTAssertFalse(
+            context.app.staticTexts["Recovered from the original encrypted payload."].exists,
+            "A wrong key must never fabricate successful plaintext"
+        )
+
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.message.configure_decryption"),
+            timeout: 8
+        )
+        XCTAssertTrue(keyField.waitForExistence(timeout: 8))
+        enterSecureText(in: keyField, with: ["Quality", "Key", "123456"].joined())
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.decryption.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(keyField.waitForNonExistence(timeout: 8))
         tapWhenHittable(
             element(in: context.app, identifier: "action.settings.close"),
             timeout: 8
@@ -952,6 +978,53 @@ final class PushGo_iOSUITests: XCTestCase {
             relaunched.app.staticTexts["Recovered from the original encrypted payload."].exists
         )
         assertElementExists("status.message.decryption.decryptOk", in: relaunched.app, timeout: 5)
+    }
+
+    func testCorruptEncryptedMessageFailsSafelyAndSurvivesRelaunch() {
+        let sessionID = "ios-encrypted-corrupt-\(UUID().uuidString.lowercased())"
+        let encodedSession = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.encrypted.corrupt"
+        )
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+
+        XCTAssertTrue(context.app.staticTexts["Corrupt Encrypted Message"].waitForExistence(timeout: 8))
+        context.app.staticTexts["Corrupt Encrypted Message"].tap()
+        assertElementExists("status.message.decryption.notConfigured", in: context.app, timeout: 5)
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.message.configure_decryption"),
+            timeout: 8
+        )
+        let fieldIdentifier = ["field.settings.decryption", "key"].joined(separator: ".")
+        let field = element(in: context.app, identifier: fieldIdentifier)
+        XCTAssertTrue(field.waitForExistence(timeout: 8))
+        enterSecureText(in: field, with: ["Quality", "Key", "123456"].joined())
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.decryption.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(field.waitForNonExistence(timeout: 8))
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.close"),
+            timeout: 8
+        )
+        assertElementExists("status.message.decryption.decryptFailed", in: context.app, timeout: 5)
+        XCTAssertTrue(context.app.staticTexts["Configure decryption to read this message."].exists)
+        XCTAssertFalse(context.app.staticTexts["Recovered Quality Message"].exists)
+
+        context.app.terminate()
+        let relaunched = configuredLaunchContext()
+        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(relaunched.app)
+        assertQualityRuntimeReady(in: relaunched.app, timeout: 15)
+        XCTAssertTrue(relaunched.app.staticTexts["Corrupt Encrypted Message"].waitForExistence(timeout: 8))
+        relaunched.app.staticTexts["Corrupt Encrypted Message"].tap()
+        assertElementExists("status.message.decryption.decryptFailed", in: relaunched.app, timeout: 5)
+        XCTAssertTrue(relaunched.app.staticTexts["Configure decryption to read this message."].exists)
+        XCTAssertFalse(relaunched.app.staticTexts["Recovered Quality Message"].exists)
     }
 
     func testEventClosePersistsAndOngoingFilterReflectsRealProjection() {
