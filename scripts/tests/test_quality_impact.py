@@ -78,6 +78,21 @@ class QualityImpactPlanTests(unittest.TestCase):
         self.assertEqual("performance", plan["recommended_lane"])
         self.assertNotIn("scripts/run_ios_physical_performance.sh", plan["ignored_paths"])
 
+    def test_system_notification_journey_change_runs_its_real_nightly_evidence(self):
+        for path in (
+            "Tests/PushGo-iOSUITests/PushGo_iOSSystemNotificationTests.swift",
+            "scripts/run_ios_system_notification_test.sh",
+        ):
+            with self.subTest(path=path):
+                plan = self.plan(path)
+                self.assertEqual("READY", plan["plan_status"])
+                self.assertEqual("nightly", plan["recommended_lane"])
+                self.assertIn("notification-system-delivery", plan["impacted_capabilities"])
+                self.assertIn(
+                    "iOS Simulator real permission/delivery/tap/detail/read/relaunch system-notification journey",
+                    plan["minimum_evidence"],
+                )
+
     def test_product_and_performance_changes_promote_to_release_superset(self):
         plan = self.plan(
             "Shared/Repositories/LocalDataStore.swift",
@@ -116,6 +131,17 @@ class QualityImpactPlanTests(unittest.TestCase):
 
         self.assertEqual("nightly", plan["recommended_lane"])
         self.assertIn("spotlight-user-activity", plan["impacted_capabilities"])
+
+    def test_ios_app_delegate_change_selects_notification_system_evidence(self):
+        plan = self.plan("Apps/PushGo-iOS/App/PushGoAppDelegate.swift")
+
+        self.assertEqual("READY", plan["plan_status"])
+        self.assertEqual("nightly", plan["recommended_lane"])
+        self.assertIn("notification-route-actions", plan["impacted_capabilities"])
+        self.assertIn(
+            "iOS Simulator real system-notification journey for iOS/shared route changes",
+            plan["minimum_evidence"],
+        )
 
     def test_system_settings_component_from_history_is_mapped_to_real_consumers(self):
         plan = self.plan("Shared/UI/SystemIntegrationSettingsGroup.swift")

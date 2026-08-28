@@ -46,6 +46,15 @@
       "escalation_reasons": ["Performance test changes can silently weaken budgets, measured intervals, fixture scale, or accurate-content oracles."]
     },
     {
+      "id": "ios-system-notification-journey",
+      "paths": ["Tests/PushGo-iOSUITests/PushGo_iOSSystemNotificationTests.swift", "scripts/run_ios_system_notification_test.sh"],
+      "capabilities": ["notification-permission", "notification-system-delivery", "notification-route-actions", "message-read-persistence"],
+      "minimum_evidence": ["iOS Simulator real permission/delivery/tap/detail/read/relaunch system-notification journey"],
+      "lane": "nightly",
+      "known_evidence_gaps": ["Real APNs network delivery, permission denial, notification actions, terminated-process cold start, macOS, and physical-device behavior remain NOT RUN."],
+      "escalation_reasons": ["The system-notification harness can silently bypass SpringBoard, weaken exact payload checks, or stop proving durable product state."]
+    },
+    {
       "id": "quality-runtime-release-isolation",
       "paths": ["Shared/UI/AutomationRuntime.swift", "Apps/*/App/AppEnvironment.swift", "Apps/*/App/AppContext.swift", "Apps/PushGo-watchOS/AppEnvironment.swift", "Apps/PushGo-watchOS/WatchQualityRuntime.swift"],
       "capabilities": ["app-owned-quality-runtime", "release-runtime-isolation", "app-launch"],
@@ -90,11 +99,11 @@
     },
     {
       "id": "ingress-notification-background",
-      "paths": ["Shared/Application/Notification*.swift", "Shared/Application/ProviderRouteController.swift", "Shared/Services/BadgeManager.swift", "Shared/Services/DurableIngressJournal.swift", "Shared/Services/Notification*.swift", "Shared/Services/Provider*.swift", "Shared/Services/PushRegistrationService.swift", "Shared/Utilities/AnyCodable.swift", "Shared/Utilities/Notification*.swift", "Shared/Utilities/PushGoNotificationNames.swift", "Shared/Utilities/PushRegistrationSemantics.swift", "Shared/Utilities/UserInfoSanitizer.swift", "Extensions/PushGoNSE-*/**"],
+      "paths": ["Shared/Application/Notification*.swift", "Shared/Application/ProviderRouteController.swift", "Shared/Services/BadgeManager.swift", "Shared/Services/DurableIngressJournal.swift", "Shared/Services/Notification*.swift", "Shared/Services/Provider*.swift", "Shared/Services/PushRegistrationService.swift", "Shared/Utilities/AnyCodable.swift", "Shared/Utilities/Notification*.swift", "Shared/Utilities/PushGoNotificationNames.swift", "Shared/Utilities/PushRegistrationSemantics.swift", "Shared/Utilities/UserInfoSanitizer.swift", "Apps/PushGo-iOS/App/PushGoAppDelegate.swift", "Apps/PushGo-macOS/App/PushGoAppDelegate.swift", "Extensions/PushGoNSE-*/**"],
       "capabilities": ["ingress-ack", "notification-route-actions", "background-recovery"],
-      "minimum_evidence": ["ingress/ACK/idempotency/recovery integration suite", "notification routing contract", "representative App UI terminal state"],
+      "minimum_evidence": ["ingress/ACK/idempotency/recovery integration suite", "notification routing contract", "iOS Simulator real system-notification journey for iOS/shared route changes", "representative App UI terminal state"],
       "lane": "nightly",
-      "known_evidence_gaps": ["real APNs, notification center actions, permissions, and physical background execution remain NOT RUN."],
+      "known_evidence_gaps": ["Real APNs network delivery, notification center actions, permission denial/recovery, terminated-process cold start, and physical background execution remain NOT RUN."],
       "escalation_reasons": ["Ingress changes cross extension, durable Store, notification, ACK, and App consumers."]
     },
     {

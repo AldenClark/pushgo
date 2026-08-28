@@ -12,7 +12,7 @@ rm -f "$runner_status_file"
 claims=()
 selected_claims=()
 not_run=(
-  "physical APNs/notification/permission/system-surface evidence"
+  "physical APNs network delivery, permission denial, notification actions, process-death, and other system-surface evidence"
   "physical VoiceOver task-completion evidence"
 )
 physical_performance_requested=0
@@ -169,7 +169,17 @@ run_watch_ui() {
   claims+=("watchOS App-owned Messages/Event/Thing journey and explicit readiness failure")
 }
 
+run_system_notification_journey() {
+  selected_claims+=("iOS Simulator system notification permission/delivery/tap/detail/read/relaunch journey")
+  MAX_RETRIES=0 \
+    QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_system_notification_test.sh"
+  claims+=("iOS Simulator system notification permission/delivery/tap/detail/read/relaunch journey")
+}
+
 case "$lane" in
+  system-notification)
+    run_system_notification_journey
+    ;;
   focused)
     focused_scopes="${TEST_SCOPES:-${TEST_SCOPE:-}}"
     [[ -n "$focused_scopes" ]] || {
@@ -202,6 +212,7 @@ case "$lane" in
       MAX_RETRIES="${MAX_RETRIES:-1}" \
       QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
     claims+=("iOS core message journeys plus navigation/Event/Thing/Channel/Settings persistence representatives")
+    run_system_notification_journey
     run_watch_ui
     run_accessibility_localization
     ;;
@@ -212,6 +223,7 @@ case "$lane" in
       MAX_RETRIES="${MAX_RETRIES:-1}" \
       QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
     claims+=("iOS release-lane representative journeys")
+    run_system_notification_journey
     run_watch_ui
     run_accessibility_localization
     run_performance
