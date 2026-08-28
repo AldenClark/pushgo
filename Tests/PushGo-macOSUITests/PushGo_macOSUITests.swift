@@ -225,6 +225,109 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
+    func testSlowMessageRefreshKeepsAccurateContentVisibleUntilCompletion() {
+        let sessionID = "macos-refresh-slow-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            messageRefreshDelayMilliseconds: 2_500
+        )
+        launchQuality(context, sessionID: sessionID)
+
+        let originalRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertTrue(originalRow.waitForExistence(timeout: 8))
+        let refresh = element(in: context.app, identifier: "action.messages.refresh")
+        XCTAssertTrue(refresh.waitForExistence(timeout: 5) && refresh.isHittable)
+        refresh.click()
+
+        XCTAssertTrue(originalRow.exists, "Refresh must not blank the last accurate snapshot.")
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.refresh.slow")
+                .waitForExistence(timeout: 2),
+            "A slow refresh must become visible before the provider operation completes."
+        )
+        XCTAssertTrue(originalRow.exists, "Slow feedback must coexist with accurate existing data.")
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.refresh.slow")
+                .waitForNonExistence(timeout: 5),
+            "Slow feedback must clear when refresh completes."
+        )
+        XCTAssertTrue(originalRow.exists, "Successful refresh must finish on accurate content.")
+    }
+
+    @MainActor
+    func testMessageRefreshFailureKeepsSnapshotAndRetryPersistsAccurateResult() {
+        let sessionID = "macos-refresh-recovery-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            messageRefreshScenario: "fail_once_then_new_message"
+        )
+        launchQuality(context, sessionID: sessionID)
+
+        let originalRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertTrue(originalRow.waitForExistence(timeout: 8))
+        let refresh = element(in: context.app, identifier: "action.messages.refresh")
+        XCTAssertTrue(refresh.waitForExistence(timeout: 5) && refresh.isHittable)
+        refresh.click()
+
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.refresh.failed")
+                .waitForExistence(timeout: 5),
+            "The provider refresh failure must be visible on the Messages owner."
+        )
+        XCTAssertTrue(originalRow.exists, "A failed refresh must retain the last accurate snapshot.")
+        XCTAssertTrue(refresh.isHittable, "The same real Refresh control must remain usable for retry.")
+        refresh.click()
+
+        let refreshedRow = context.app.buttons
+            .matching(NSPredicate(format: "label CONTAINS %@", "P2 Refresh Result"))
+            .firstMatch
+        XCTAssertTrue(
+            refreshedRow.waitForExistence(timeout: 8),
+            "The successful retry did not render the newly persisted provider result."
+        )
+        XCTAssertTrue(originalRow.exists, "Retry must not replace an unrelated canonical message.")
+        XCTAssertTrue(
+            (refreshedRow.value as? String)?.contains(
+                "Persisted through the provider refresh ingress path."
+            ) == true,
+            "The refreshed row did not expose the accurate persisted body."
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.refresh.failed")
+                .waitForNonExistence(timeout: 5)
+        )
+        refreshedRow.click()
+        XCTAssertTrue(
+            context.app.staticTexts["Persisted through the provider refresh ingress path."]
+                .waitForExistence(timeout: 5),
+            "The refreshed row did not open its accurate real detail."
+        )
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            messageRefreshScenario: "fail_once_then_new_message"
+        )
+        launchQuality(relaunched, sessionID: sessionID)
+        XCTAssertTrue(
+            relaunched.app.buttons
+                .matching(NSPredicate(format: "label CONTAINS %@", "P2 Refresh Result"))
+                .firstMatch
+                .waitForExistence(timeout: 8),
+            "The provider refresh result did not survive a real process relaunch."
+        )
+    }
+
+    @MainActor
     func testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow() {
         let sessionID = "macos-window-lifecycle-\(UUID().uuidString.lowercased())"
         let context = configuredQualityApp(sessionID: sessionID, fixture: "empty.clean")
@@ -1184,7 +1287,9 @@ final class PushGo_macOSUITests: XCTestCase {
         sessionID: String,
         fixture: String,
         messageLoadDelayMilliseconds: Int? = nil,
-        failMessageLoad: Bool = false
+        messageRefreshDelayMilliseconds: Int? = nil,
+        failMessageLoad: Bool = false,
+        messageRefreshScenario: String? = nil
     ) -> LaunchContext {
         let app = XCUIApplication()
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
@@ -1196,7 +1301,9 @@ final class PushGo_macOSUITests: XCTestCase {
                 sessionID: sessionID,
                 fixture: fixture,
                 messageLoadDelayMilliseconds: messageLoadDelayMilliseconds,
-                failMessageLoad: failMessageLoad
+                messageRefreshDelayMilliseconds: messageRefreshDelayMilliseconds,
+                failMessageLoad: failMessageLoad,
+                messageRefreshScenario: messageRefreshScenario
             ),
             for: "PUSHGO_QUALITY_SESSION_BASE64",
             in: app
@@ -1240,7 +1347,9 @@ final class PushGo_macOSUITests: XCTestCase {
         sessionID: String,
         fixture: String,
         messageLoadDelayMilliseconds: Int? = nil,
-        failMessageLoad: Bool = false
+        messageRefreshDelayMilliseconds: Int? = nil,
+        failMessageLoad: Bool = false,
+        messageRefreshScenario: String? = nil
     ) -> String {
         var faults: [String: Any] = [
             "fail_message_load": failMessageLoad,
@@ -1248,12 +1357,18 @@ final class PushGo_macOSUITests: XCTestCase {
         if let messageLoadDelayMilliseconds {
             faults["message_load_delay_ms"] = messageLoadDelayMilliseconds
         }
-        let payload: [String: Any] = [
+        if let messageRefreshDelayMilliseconds {
+            faults["message_refresh_delay_ms"] = messageRefreshDelayMilliseconds
+        }
+        var payload: [String: Any] = [
             "schema_version": 1,
             "session_id": sessionID,
             "fixture": fixture,
             "faults": faults,
         ]
+        if let messageRefreshScenario {
+            payload["message_refresh_scenario"] = messageRefreshScenario
+        }
         let data = try! JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
         return data.base64EncodedString()
     }

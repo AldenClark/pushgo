@@ -184,10 +184,10 @@ run_watch_ui() {
 }
 
 run_macos_ui() {
-  selected_claims+=("macOS App-owned message empty/standard/slow/failure-retry, primary navigation, Settings feedback, and close/status-item/reopen journeys")
+  selected_claims+=("macOS App-owned message empty/standard/initial-and-refresh slow/failure-retry/persistence, primary navigation, Settings feedback, and close/status-item/reopen journeys")
   MAX_RETRIES=0 \
     QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_macos_ui_tests.sh"
-  claims+=("macOS App-owned message empty/standard/slow/failure-retry, primary navigation, Settings feedback, and close/status-item/reopen journeys")
+  claims+=("macOS App-owned message empty/standard/initial-and-refresh slow/failure-retry/persistence, primary navigation, Settings feedback, and close/status-item/reopen journeys")
 }
 
 run_system_notification_journey() {

@@ -157,6 +157,7 @@
 114. **macOS 授权恢复就宣称 UI 能力通过攻击**：Runner 可进入测试后，五条聚合首次真实暴露 Message→Event 导航的 AppKit 约束循环崩溃；说明“能启动”只关闭准备阻塞，不是产品 Oracle。对象优先对照也崩溃，宽度、标题、空态和 identity 单变量均未修复，最终移除“固定列却使用可调 `HSplitView`”的矛盾结构后，完整往返导航与五条聚合才通过。
 115. **页面 identifier 覆盖后代仍把存在当覆盖攻击**：macOS 把 identifier 挂到整个页面根节点后，空态和行的业务标识被同一页面标识覆盖，测试只能看到 screen 存在。结果：Message/Event/Thing 页面级标识改为独立不参与布局的语义 marker；功能空态、导航目标和真实后代控件分别断言，identifier 只定位 owner，不作最终用户结果。
 116. **崩溃提示污染下一轮攻击**：产品崩溃后系统 `Problem Reporter` 留在最前方，后续点击可能命中提示窗并制造无关失败。结果：macOS Runner 在 build/test 前与所有退出路径后按精确系统进程关闭提示；不重试业务测试，首个崩溃 xcresult 仍保留作产品失败证据。
+117. **刷新动作存在但用户不知道慢/错攻击**：macOS 原实现只有隐蔽 `.refreshable`，丢弃 Provider outcome，旧数据保留会让失败看起来像成功。结果：增加真实可访问 Refresh 按钮、1 秒慢态、Messages owner 失败态和同入口重试；Oracle 同时要求旧准确行不消失、重试产生准确新详情并跨进程保留。临时移除 slow marker 后 focused 负控精确失败于预警缺失，结果包 `build/quality-results/macos-ui-negative/run-20260829-000229.xcresult`，恢复后 focused 2/2 通过。
 
 ## 归因分析
 
@@ -204,7 +205,7 @@
 
 ## 残余风险与进入条件
 
-- macOS 系统自动化认证已解除，当前 App-owned 核心集已加入准确 standard 数据/relaunch、首次 slow 预警和失败 Retry 恢复；下一批按价值推进 refresh slow/recovery、Event/Thing 详情和 Gateway commit，不迁移低价值旧脚本。
+- macOS 系统自动化认证已解除，当前 App-owned 核心集已加入准确 standard 数据/relaunch、首次及刷新 slow 预警、失败保留准确快照、Retry 新结果和 relaunch；下一批按价值推进 Event/Thing 详情和 Gateway commit，不迁移低价值旧脚本。
 - 真实 APNs/FCM/权限/后台/升级只有在具备签名、账号、设备和隔离环境后进入 Release；缺条件即 `BLOCKED`。
 - 固定参考物理设备 runner 已实现，但仍需在专用设备完成至少 10 次 Release 基线并审定 p50/p95 与产品 SLO；当前只有 Simulator 粗退化证据，物理结果仍 `NOT RUN`。
 - Android 的 emulator Macrobenchmark dry-run 与 Baseline Profile 已完成，但 API 37 Perfetto 帧切片解析仍为工具链 `BLOCKED`；真机 runner 必须显式非个人设备和 owner 预算，未提供时保持 `NOT RUN`，不得用 emulator P95 替代。

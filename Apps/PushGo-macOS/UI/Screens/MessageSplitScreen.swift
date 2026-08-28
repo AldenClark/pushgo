@@ -17,6 +17,9 @@ struct MessageSplitScreen: View {
     @State private var searchFieldText: String = ""
     @State private var isFilterPopoverPresented = false
     @State private var isHistoryCleanupPresented = false
+    @State private var isPullRefreshing = false
+    @State private var isPullRefreshSlow = false
+    @State private var didPullRefreshFail = false
 
     private let fixedListWidth: CGFloat = 300
 
@@ -123,6 +126,11 @@ struct MessageSplitScreen: View {
                 }
             )
             .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
+            .overlay(alignment: .top) {
+                messageRefreshFeedback
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+            }
             .refreshable {
                 await handleProviderIngressPullRefresh()
             }
@@ -190,8 +198,63 @@ struct MessageSplitScreen: View {
 
     @MainActor
     private func handleProviderIngressPullRefresh() async {
-        _ = await environment.syncProviderIngress(reason: "messages_pull_to_refresh")
+        guard !isPullRefreshing else { return }
+        isPullRefreshing = true
+        isPullRefreshSlow = false
+        let slowStateTask = Task { @MainActor in
+            try await Task.sleep(for: .seconds(1))
+            try Task.checkCancellation()
+            isPullRefreshSlow = true
+        }
+        defer {
+            slowStateTask.cancel()
+            isPullRefreshSlow = false
+            isPullRefreshing = false
+        }
+#if DEBUG
+        if let delay = PushGoAutomationContext.qualitySession?.faults.messageRefreshDelayMilliseconds,
+           delay > 0 {
+            do {
+                try await Task.sleep(for: .milliseconds(delay))
+            } catch {
+                return
+            }
+        }
+#endif
+        let outcome = await environment.syncProviderIngressOutcome(reason: "messages_pull_to_refresh")
+        if case .failed = outcome {
+            didPullRefreshFail = true
+        } else {
+            didPullRefreshFail = false
+        }
         await refreshVisibleMessageData()
+    }
+
+    @ViewBuilder
+    private var messageRefreshFeedback: some View {
+        if didPullRefreshFail {
+            Label(
+                localizationManager.localized("message_refresh_failed"),
+                systemImage: "exclamationmark.triangle.fill"
+            )
+            .font(.callout.weight(.semibold))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("state.messages.refresh.failed")
+        } else if isPullRefreshSlow {
+            Label(
+                localizationManager.localized("message_ingress_processing_slow"),
+                systemImage: "arrow.clockwise"
+            )
+            .font(.callout.weight(.semibold))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(.regularMaterial, in: Capsule())
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("state.messages.refresh.slow")
+        }
     }
 
     @MainActor
@@ -423,6 +486,20 @@ struct MessageSplitScreen: View {
     @ToolbarContentBuilder
     private var messageListToolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
+            Button {
+                Task { await handleProviderIngressPullRefresh() }
+            } label: {
+                if isPullRefreshing {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
+            .help(localizationManager.localized("refresh"))
+            .accessibilityLabel(localizationManager.localized("refresh"))
+            .accessibilityIdentifier("action.messages.refresh")
+            .disabled(isPullRefreshing)
             if !searchViewModel.hasSearched && messageListViewModel.hasUnreadMessagesInCurrentScope {
                 Button {
                     Task { await markAllCurrentScopeMessagesAsRead() }

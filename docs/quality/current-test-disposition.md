@@ -135,11 +135,12 @@ Quality session 不再只隔离 GRDB：server config、decryption material metad
 - 实施：`MacMainWindowPresenter` 强持有唯一主窗口、设置 `isReleasedWhenClosed = false`、按固定 identifier 接管丢失 capture 的窗口，并在聚焦前显式 deminiaturize。AppDelegate 的状态栏按钮增加稳定、可访问的产品级 identifier；UI 用例最终仍看唯一窗口和同一 Store 功能态，不以 identifier 本身作为通过终点。
 - 负控：临时删除 `makeKeyAndOrderFront` 后，关闭恢复测试在 `window.isVisible` 精确失败，最小化测试在调用次数精确失败；恢复实现后 3/3 通过，证明 Oracle 对“找到了窗口但没有真正显示”敏感。
 - 集成攻击：首次 `build-for-testing` 发现新文件只进入 SwiftPM、未进入 Xcode macOS Sources phase；组件测试绿色不能掩盖产品未集成。补齐工程 membership 后 macOS App + UI target 构建通过。
-- 测试系统归因：历史授权失败发生在测试方法进入前，因此当时正确记录为 `BLOCKED/NOT RUN`。授权恢复后，受控签名 Runner 的关闭→状态栏→唯一窗口→同一 App-owned 功能空态旅程 1/1 通过；最初五条核心旅程聚合 5/5 的结果包为 `build/quality-results/macos-ui/macos-app-owned-core-five-20260828-235000.xcresult`，扩展后的八条正式核心旅程聚合 8/8、零重试，结果包为 `build/quality-results/macos-ui/run-20260828-235625.xcresult`。
+- 测试系统归因：历史授权失败发生在测试方法进入前，因此当时正确记录为 `BLOCKED/NOT RUN`。授权恢复后，受控签名 Runner 的关闭→状态栏→唯一窗口→同一 App-owned 功能空态旅程 1/1 通过；最终十条正式核心旅程聚合 10/10、零重试，结果包为 `build/quality-results/macos-ui/run-20260829-000410.xcresult`。
 - 崩溃归因：主导航首次真实执行发现 Message `HSplitView` 切换到 Event/Thing `HSplitView` 会在 AppKit `SplitViewChildController` 约束更新循环中崩溃。固定 300pt 列本就不提供用户可调语义，故三个页面统一改为 `HStack + Divider`；对象优先和完整往返导航均通过。页面级 identifier 另改为独立 1×1 语义标记，避免覆盖后代业务元素。
-- Runner 卫生：正式 `scripts/run_macos_ui_tests.sh` 零重试、默认只跑八条高价值旅程，并在每轮前后关闭系统 `Problem Reporter`，防止历史崩溃窗口遮挡下一条测试。方法进入前失败归 `BLOCKED`，已执行 Oracle 失败归产品 `FAILED`。
+- Runner 卫生：正式 `scripts/run_macos_ui_tests.sh` 零重试、默认只跑十条高价值旅程，并在每轮前后关闭系统 `Problem Reporter`，防止历史崩溃窗口遮挡下一条测试。方法进入前失败归 `BLOCKED`，已执行 Oracle 失败归产品 `FAILED`。
 - 数据加载纵向样板：App-owned standard 数据验证真实行的准确 title/body 语义、真实详情和进程重启持久化；8 秒受控延迟必须先显示 slow 提示再进入准确空态；首次失败必须显示真实错误并由可点击 Retry 恢复。初版标准数据 Oracle 错把 VoiceOver 合并行当作 `staticTexts`，首轮精确失败后改为校验真实行的 label/value，详情根 identifier 也拆为独立 marker，避免吞掉详情内容。
-- 同上下文红蓝审查：实现、归因与审查仍由同一上下文完成，保留 `common-mode-risk`；当前证据只关闭这八条旅程，不扩张到 macOS refresh slow/recovery、Event/Thing 详情、可见性持久化、Gateway commit、通知、性能或可访问性。
+- 刷新产品缺口：macOS 原 `.refreshable` 无显式入口且丢弃 Provider outcome，旧数据继续显示会掩盖慢/错。现增加真实 Refresh 工具栏按钮、慢态和 Messages-owned 失败态；失败保留原准确行，同入口 Retry 写入并打开准确新详情，relaunch 后仍存在。临时移除 slow marker 的负控在预警 Oracle 精确失败，恢复后 focused 2/2。
+- 同上下文红蓝审查：实现、归因与审查仍由同一上下文完成，保留 `common-mode-risk`；当前证据只关闭这十条旅程，不扩张到 macOS Event/Thing 详情、可见性持久化、Gateway commit、通知、性能或可访问性。
 
 ## watchOS 真实 UI 迁移、归因与攻击记录
 
