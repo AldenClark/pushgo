@@ -131,6 +131,11 @@
 90. **Compose 输入动作完成冒充表单状态已提交攻击**：Android 大字体旅程曾直接连续 `performTextInput` 与 submit，失败时只等待最终频道行，无法判断字段状态、按钮状态还是业务 mutation。一次最终回归因此在行等待处可信失败。结果：提交前逐字段核对真实文本、要求 submit enabled；提交后等待“准确频道行或 Sheet-owned 业务错误”二选一，再显式拒绝错误并核对行内容。增强后的同一旅程 1/1 通过，归因为测试同步与诊断 Oracle 不充分，不把前次失败改称产品 bug，也不靠盲目重跑求绿。
 91. **字段名叫密码但实际明文攻击**：Android Channel 创建/订阅字段使用普通 `OutlinedTextField`，功能旅程仍可成功，因此只看最终频道行永远不会发现凭据裸露。结果：两处生产字段均采用 `PasswordVisualTransformation` 与 `KeyboardType.Password`；标准频道旅程和中文大字体旅程均要求 Compose `Password` semantics 后才输入，最终 accepted mutation 仍通过。字段存在、label 正确和创建成功都不能替代隐私语义。
 92. **Focused 入口只支持 JVM 导致设备用例调用失败攻击**：给现有 `focused` Lane 传 instrumented class 会被 Gradle `--tests` 当 JVM 类并报 “No tests found”，开发者只能记住原始 Gradle 参数或误以为已测。结果：Lane 增加显式 `ANDROID_TEST_CLASS`，复用 doctor 选择的唯一 emulator 并生成 focused 双状态收据；`TEST_FILTER` 继续只用于 JVM。新入口实际执行完整频道旅程 1/1 通过，第一次误调用保留为测试系统失败。
+93. **只看 Sheet 有错误但不证明失败无副作用攻击**：远端拒绝后表单留在原处仍可能已经写入本地订阅；本地写失败后列表没刷新也可能暂时看不见脏行。结果：两端要求 Sheet owner 唯一、输入保留，随后主动取消并离开/重新进入 Channels 走正式 Store 重载，准确新频道行仍不存在；再从同一真实入口重填重试并跨 relaunch 核对。错误文案或元素存在均不能替代状态终点。
+94. **远端成功、本地失败后双端状态分裂攻击**：旧创建链先完成远端 subscribe，再写本地凭据/订阅，任一写失败都直接抛错，远端 route 留存；Android 还先写 Room 再写安全凭据，可能留下无凭据的活跃行。结果：只有 create 请求且响应明确 `created=true` 才证明本次拥有新 route，本地 commit 失败后必须远端 unsubscribe；Apple 在本地凭据列表已写/GRDB 未写中点恢复原列表，Android 先写可恢复凭据、在 Room 前故障并恢复旧凭据。测试替身若仍保留 active route，第二次 create 必须以冲突失败，所以同进程重试成功是补偿反证。
+95. **把创建补偿盲目推广到既有频道订阅攻击**：仅凭请求未带 channelId 仍可能得到 `created=false` 的既有频道，普通 subscribe 响应也不说明远端关系是本次新建还是此前已存在；本地失败后一律 unsubscribe 可能破坏合法既有订阅。结果：自动远端补偿严格限定“create 请求且 `created=true`”；其余情况保持显式协议缺口，需服务端幂等/ownership token 或状态查询后才能安全实现，不以“代码复用更整齐”为由制造数据损失。
+96. **测试替身错误码与产品合同漂移攻击**：Android 首轮用宽泛 `AUTH` 表示频道密码不匹配，产品按合同正确提示检查 Gateway token，测试却误判产品文案；修正错误码后，第二轮又因把 Compose 默认 matcher 当普通子串而在实际完整正确文本上失败。两次均保留为 `FAILED_TEST_SYSTEM`；最终替身使用真实 `password_mismatch/CONFLICT`，Oracle 改为完整用户提示精确匹配，不继续调 matcher 或靠重跑求绿。
+97. **设备测试运行时崩溃被误记产品失败攻击**：增强输入保留 Oracle 后，两条新增 Channel 用例均已通过，但同批既有正常旅程在 AndroidX Compose 绘制阶段抛出 `SnapshotStateObserver` 多线程访问异常；旧 Lane 仅按 Gradle 非零统一写成 product `FAILED` / test-system `PASSED`。结果：只解析本轮新生成的 XML，且全部 failure 都命中该明确运行时签名时，才记录 product `NOT_RUN` / test-system `FAILED`；混有任何产品断言仍按产品失败处理，不隐藏真实 bug，也不把同批局部通过提升为完整 claim。
 
 ## 归因分析
 
@@ -144,7 +149,7 @@
 | AI 只补形式测试或漏跑跨层证据 | 缺少可执行的变更→能力→最低证据合同，或把静态路径匹配误当完整语义分析 | 版本化 impact manifest + 本地/CI 选择器 + 未映射阻断 + AGENTS/AI policy；路径结果只作下限，继续追 caller/数据/平台消费者 | 文档/文件检查不能替代功能 Oracle；未知产品路径=`BLOCKED` |
 | Settings 用例无法操作或误报 | 父级语义合并、滚动标识挂错容器、动态 UI identifier 不稳定 | 语义标识贴近实际可操作/滚动节点；最终 Oracle 使用入口集合变化、真实点击、准确目标页和 relaunch | 准备/语义错误=`BLOCKED/FAILED_TEST_SYSTEM`；真实状态或目的错误=`FAILED` |
 | Thing 显示旧对象或返回丢失 | head 更新没有比较逻辑时间；嵌套 modal 同时持有返回；AndroidView 内容不进入 Compose Oracle | canonical head 新旧裁决负控；单顶层 Sheet + 父级页签状态；真实字段文本语义 | 数据/导航结果错误=`FAILED`；输入注入或语义树不可判定=`FAILED_TEST_SYSTEM` |
-| Channel 重启后数据恢复或 readiness 误失败 | 准备生命周期与实时业务行数耦合；每次进程启动重复播种同一 fixture | session/fixture 初始化记录与 live Store 分离；只在初始化全成功后记录，旅程以频道行、准确历史和重启为终点 | 标记不可读/不匹配=`FAILED_TEST_SYSTEM`；产品结果错误=`FAILED`；远端拒绝/补偿=`NOT RUN` |
+| Channel 重启后数据恢复或 readiness 误失败 | 准备生命周期与实时业务行数耦合；每次进程启动重复播种同一 fixture | session/fixture 初始化记录与 live Store 分离；只在初始化全成功后记录，旅程以频道行、准确历史和重启为终点 | 标记不可读/不匹配=`FAILED_TEST_SYSTEM`；产品结果错误=`FAILED`；创建远端拒绝/补偿已由后续纵向旅程覆盖，既有频道订阅协议仍=`NOT RUN` |
 | Settings 看似保存但重启丢失或仍显示旧数据 | UI 在异步保存前 dismiss、底层吞错、Oracle 只看成功提示/地址文本 | 保存错误向 UI 传播；成功后才 dismiss/更新状态；server 追加 gateway 数据换域与 relaunch，decryption 追加状态、不回显与 relaunch | invalid/持久化/换域错误=`FAILED`；注入边界不可用=`NOT RUN`；外部同步/真机 secure store=`BLOCKED/NOT RUN` |
 | Sheet 错误越界或 Gateway 失败后旧配置已被覆盖 | 全局错误状态被宿主与 Sheet 同时消费；只断言最终成功，未覆盖 prepare/commit 中间态；draft 与 saved 值混用 | 错误 owner 分区并做排他断言；候选 device/route prepare 零本地 mutation，成功后才 commit；失败后关闭重开仍为旧值；device identity 按 Gateway 隔离 | owner 重复、失败后值/数据域变化=`FAILED`；注入 seam 绕过/不可观察=`FAILED_TEST_SYSTEM`；真实公网未运行=`NOT RUN` |
 | Decryption 能配置但不能删除 | 为避免回显，空输入语义是保留现值；持久层清除能力没有真实 UI 入口 | 显式 destructive Delete → 正式清除路径 → UI 状态 → relaunch，并保留写入/不回显 Oracle | 删除后仍 configured 或重启复活=`FAILED`；直接改存储不计 UI 证据 |
@@ -157,11 +162,12 @@
 | iOS 准备长期停在 seeding | 使用非专用 Simulator clone，环境身份不满足受控代表设备合同 | doctor 选择专用设备；首次环境失败与后续产品通过分别保留 | 受控设备不可用/准备不完成=`BLOCKED/FAILED_TEST_SYSTEM`；不得归为产品通过或失败 |
 | 中文或大字体 Lane 绿色但实际仍是英文/标准字号 | Runner 只相信 launch argument/命令返回；App 生命周期没有采用平台 locale；测试不核对真实环境 | 平台设置回读 + App 内 DynamicTypeSize/Activity Configuration 双证明；失败路径 finally 恢复 | 未应用/未恢复=`BLOCKED/FAILED_TEST_SYSTEM`；真实任务内容/动作错误=`FAILED` |
 | 资源齐全但大字体表单不可操作 | 静态资源合同与元素存在性都无法发现重叠、遮挡和错误命中 | 代表性中文大字体真实读取+写入任务；断言准确详情、真实输入、accepted mutation 和最终频道行 | 资源缺失=`FAILED`；控件不可达/写入错误=`FAILED`；物理辅助任务仍=`NOT RUN` |
+| Channel 创建失败后出现远端/本地残留 | 远端 subscribe 与本地凭据/数据库提交没有补偿边界；旧 UI 只看 Sheet 错误或当下列表 | 创建 owner 状态机；本地多存储回滚；远端 unsubscribe 补偿；正式重载无脏行；同进程重试与 relaunch | 远端拒绝/补偿/重载终点错误=`FAILED`；替身错误码或 matcher 错误=`FAILED_TEST_SYSTEM`；真实公网仍=`NOT RUN` |
 
 ## 双向覆盖反查
 
 - 源码→测试：消息 Store/Repository、Paging/VM、列表状态、Retry、fixture ingestion、Release resolver、Runner/teardown、CI lane 和生产本地化资源均有对应低层或纵向证据；两端全部已跟踪产品路径均至少命中一个具名能力规则，当前未映射为 0。大字体相关 Sheet 改动同时命中标准字号频道回归与 Accessibility Lane。
-- 测试→产品：新核心用例均能追到真实 App UI、Store/Paging/Projection 或 Release resolver；加密恢复明确追到 parser→canonical failed state→真实详情/Settings→reparse→同一 canonical/派生列表→relaunch；本地化大字体旅程追到平台配置→实际 View/Activity 环境→真实消息详情→频道 Controller/Store→最终频道行，没有以孤立 helper、资源文件或环境命令自证。
+- 测试→产品：新核心用例均能追到真实 App UI、Store/Paging/Projection 或 Release resolver；加密恢复明确追到 parser→canonical failed state→真实详情/Settings→reparse→同一 canonical/派生列表→relaunch；Channel 失败旅程追到真实 Sheet→远端 contract→本地多存储中点→本地回滚/远端补偿→页面正式重载→重试/relaunch；本地化大字体旅程追到平台配置→实际 View/Activity 环境→真实消息详情→频道 Controller/Store→最终频道行，没有以孤立 helper、资源文件或环境命令自证。
 - 变更→最低证据：Message UI 命中准确内容/搜索/删除/relaunch，Store/Room 命中跨能力数据与 UI，Runtime 命中 Release 隔离，通知/系统消费者提升 Nightly/Release；未知 Screen 阻断，文档明确 `NOT_RUN`。
 - 平台消费者：通知、后台、Widget、Spotlight、Watch、真机权限/FCM/APNs 已列入能力矩阵和 Release 清单，未被模拟器结果冒充。
 - 低价值边缘：不可达导出 helper、未挂载 MenuBar 内容、100k 日常执行、全语言全设备故障组合明确延期或删除候选，避免挤占核心预算。

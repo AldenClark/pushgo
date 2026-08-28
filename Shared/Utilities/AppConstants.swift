@@ -67,6 +67,8 @@ enum PushGoQualityEventCloseScenario: String, Codable, Sendable {
 enum PushGoQualityChannelMutationScenario: String, Codable, Sendable {
     case none
     case accepted
+    case rejectOnceThenAccepted = "reject_once_then_accepted"
+    case requireCreateCompensation = "require_create_compensation"
 }
 
 struct PushGoQualityFaults: Codable, Equatable, Sendable {
@@ -76,6 +78,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
     let failGatewaySwitchValidationOnce: Bool
     let failGatewaySwitchCommitOnce: Bool
     let failNotificationMaterialPersistenceOnce: Bool
+    let failChannelSubscriptionPersistenceOnce: Bool
 
     init(
         messageLoadDelayMilliseconds: Int? = nil,
@@ -83,7 +86,8 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         failMessageLoad: Bool = false,
         failGatewaySwitchValidationOnce: Bool = false,
         failGatewaySwitchCommitOnce: Bool = false,
-        failNotificationMaterialPersistenceOnce: Bool = false
+        failNotificationMaterialPersistenceOnce: Bool = false,
+        failChannelSubscriptionPersistenceOnce: Bool = false
     ) {
         self.messageLoadDelayMilliseconds = messageLoadDelayMilliseconds
         self.messageRefreshDelayMilliseconds = messageRefreshDelayMilliseconds
@@ -91,6 +95,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         self.failGatewaySwitchValidationOnce = failGatewaySwitchValidationOnce
         self.failGatewaySwitchCommitOnce = failGatewaySwitchCommitOnce
         self.failNotificationMaterialPersistenceOnce = failNotificationMaterialPersistenceOnce
+        self.failChannelSubscriptionPersistenceOnce = failChannelSubscriptionPersistenceOnce
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -100,6 +105,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         case failGatewaySwitchValidationOnce = "fail_gateway_switch_validation_once"
         case failGatewaySwitchCommitOnce = "fail_gateway_switch_commit_once"
         case failNotificationMaterialPersistenceOnce = "fail_notification_material_persistence_once"
+        case failChannelSubscriptionPersistenceOnce = "fail_channel_subscription_persistence_once"
     }
 
     init(from decoder: Decoder) throws {
@@ -124,6 +130,10 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         failNotificationMaterialPersistenceOnce = try container.decodeIfPresent(
             Bool.self,
             forKey: .failNotificationMaterialPersistenceOnce
+        ) ?? false
+        failChannelSubscriptionPersistenceOnce = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .failChannelSubscriptionPersistenceOnce
         ) ?? false
     }
 }

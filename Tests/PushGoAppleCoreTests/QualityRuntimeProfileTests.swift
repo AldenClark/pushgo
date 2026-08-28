@@ -14,6 +14,7 @@ struct QualityRuntimeProfileTests {
                 "fail_gateway_switch_validation_once": true,
                 "fail_gateway_switch_commit_once": true,
                 "fail_notification_material_persistence_once": true,
+                "fail_channel_subscription_persistence_once": true,
             ]
         )
 
@@ -28,6 +29,7 @@ struct QualityRuntimeProfileTests {
         #expect(descriptor.faults.failGatewaySwitchValidationOnce)
         #expect(descriptor.faults.failGatewaySwitchCommitOnce)
         #expect(descriptor.faults.failNotificationMaterialPersistenceOnce)
+        #expect(descriptor.faults.failChannelSubscriptionPersistenceOnce)
         #expect(descriptor.messageRefreshScenario == .none)
         #expect(descriptor.eventCloseScenario == .none)
         #expect(descriptor.channelMutationScenario == .none)
@@ -71,6 +73,29 @@ struct QualityRuntimeProfileTests {
 
         #expect(descriptor.fixture == .channelsStandard)
         #expect(descriptor.channelMutationScenario == .accepted)
+    }
+
+    @Test("decodes channel rejection and compensation scenarios")
+    func decodesChannelFailureScenarios() throws {
+        let rejected = try encodedSession(
+            sessionID: "channel-rejected-result",
+            fixture: "channels.standard",
+            channelMutationScenario: "reject_once_then_accepted"
+        )
+        let compensated = try encodedSession(
+            sessionID: "channel-compensation-result",
+            fixture: "channels.standard",
+            channelMutationScenario: "require_create_compensation"
+        )
+
+        #expect(
+            try PushGoAutomationContext.decodeQualitySession(rejected).channelMutationScenario
+                == .rejectOnceThenAccepted
+        )
+        #expect(
+            try PushGoAutomationContext.decodeQualitySession(compensated).channelMutationScenario
+                == .requireCreateCompensation
+        )
     }
 
     @Test("rejects path traversal instead of treating a host path as a session")

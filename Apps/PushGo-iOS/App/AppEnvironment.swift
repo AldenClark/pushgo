@@ -160,7 +160,10 @@ final class AppEnvironment {
     var channelSubscriptions: [ChannelSubscription] { channelSyncController.channelSubscriptions }
     private var isQualityChannelMutationSession: Bool {
 #if DEBUG
-        PushGoAutomationContext.qualitySession?.channelMutationScenario == .accepted
+        guard let scenario = PushGoAutomationContext.qualitySession?.channelMutationScenario else {
+            return false
+        }
+        return scenario != .none
 #else
         false
 #endif
@@ -352,10 +355,12 @@ final class AppEnvironment {
 
     private static func makeQualityChannelMutationRoundTrip() -> (any ChannelMutationRoundTrip)? {
 #if DEBUG
-        guard PushGoAutomationContext.qualitySession?.channelMutationScenario == .accepted else {
+        guard let scenario = PushGoAutomationContext.qualitySession?.channelMutationScenario,
+              scenario != .none
+        else {
             return nil
         }
-        return AcceptedQualityChannelMutationRoundTrip()
+        return QualityChannelMutationRoundTrip(scenario: scenario)
 #else
         return nil
 #endif
@@ -2264,7 +2269,15 @@ final class AppEnvironment {
 
 }
 
-private struct AcceptedQualityChannelMutationRoundTrip: ChannelMutationRoundTrip {
+private final class QualityChannelMutationRoundTrip: ChannelMutationRoundTrip {
+    private let scenario: PushGoQualityChannelMutationScenario
+    private var subscribeAttempts = 0
+    private var activeCreatedChannelIDs = Set<String>()
+
+    init(scenario: PushGoQualityChannelMutationScenario) {
+        self.scenario = scenario
+    }
+
     func subscribe(
         channelId: String?,
         channelName: String?,
@@ -2277,7 +2290,28 @@ private struct AcceptedQualityChannelMutationRoundTrip: ChannelMutationRoundTrip
                 message: "A channel credential is required."
             )
         }
+        subscribeAttempts += 1
+        if scenario == .rejectOnceThenAccepted, subscribeAttempts == 1 {
+            throw AppError.typedLocal(
+                code: "password_mismatch",
+                category: .conflict,
+                message: "Channel password is incorrect. Check the password and retry."
+            )
+        }
         let resolvedID = channelId ?? "01H00000000000000000000003"
+        if scenario == .requireCreateCompensation,
+           channelId == nil,
+           activeCreatedChannelIDs.contains(resolvedID)
+        {
+            throw AppError.typedLocal(
+                code: "channel_compensation_missing",
+                category: .conflict,
+                message: "The previous channel creation was not compensated."
+            )
+        }
+        if channelId == nil {
+            activeCreatedChannelIDs.insert(resolvedID)
+        }
         let resolvedName = channelName?.trimmingCharacters(in: .whitespacesAndNewlines)
         return ChannelSubscriptionService.SubscribePayload(
             channelId: resolvedID,
@@ -2313,6 +2347,7 @@ private struct AcceptedQualityChannelMutationRoundTrip: ChannelMutationRoundTrip
                 message: "A channel identifier is required."
             )
         }
+        activeCreatedChannelIDs.remove(channelId)
     }
 }
 

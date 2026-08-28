@@ -348,13 +348,33 @@ final class ChannelSubscriptionController {
         }
 
         let displayName = payload.channelName.isEmpty ? payload.channelId : payload.channelName
-        _ = try await dataStore.upsertChannelSubscription(
-            gateway: gatewayKey,
-            channelId: payload.channelId,
-            displayName: displayName,
-            password: validatedPassword,
-            lastSyncedAt: Date()
-        )
+        do {
+            await dataStore.armQualityChannelSubscriptionPersistenceFailure()
+            _ = try await dataStore.upsertChannelSubscription(
+                gateway: gatewayKey,
+                channelId: payload.channelId,
+                displayName: displayName,
+                password: validatedPassword,
+                lastSyncedAt: Date()
+            )
+        } catch {
+            let localError = error
+            // A create attempt owns its newly established remote route. Existing-channel
+            // subscribe does not reveal whether the route predated this attempt, so blindly
+            // unsubscribing that path could destroy a valid subscription.
+            if channelId == nil, payload.created {
+                do {
+                    _ = try await performRemoteUnsubscribe(config: config, channelId: payload.channelId)
+                } catch {
+                    throw AppError.localStore(
+                        "channel creation local commit failed and remote compensation failed; "
+                            + "local=\(localError.localizedDescription); "
+                            + "compensation=\(error.localizedDescription)"
+                    )
+                }
+            }
+            throw localError
+        }
         await channelSyncController.refreshChannelSubscriptions()
         return payload
     }

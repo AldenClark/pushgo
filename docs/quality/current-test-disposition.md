@@ -86,6 +86,8 @@
 - `testEventClosePersistsAndOngoingFilterReflectsRealProjection`
 - `testImportedThingFixtureCanOpenThingDetail`
 - `testChannelCreateRenameAndBothUnsubscribeOutcomesPersist`
+- `testChannelRemoteRejectionStaysInSheetAndRetryPersists`
+- `testChannelCreateLocalFailureCompensatesRemoteBeforeRetry`
 - `testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch`
 - `testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch`
 - `testGatewayLocalCommitFailureRollsBackBeforeRetryCommits`
@@ -95,7 +97,7 @@
 - `testCorruptEncryptedMessageFailsSafelyAndSurvivesRelaunch`
 - `testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation`
 
-前十条进入 PR 核心集，其中 workflow 用 52 条数据跨越真实 page size 50，并验证单条/全部已读、relaunch 与未读筛选。刷新旅程分别证明慢态与上次准确快照共存、Provider 刷新载荷经过规范化摄入后出现在列表和真实详情并在 relaunch 后保留，以及首次失败可见、旧快照保留、同一正式刷新动作重试后恢复；不把直接修改 ViewModel 集合或检查数据库文件当结果。真实导航、Entity、Channel 与 Settings 进入 Nightly/Release。Server 既覆盖候选远端拒绝，也覆盖远端成功后的本地提交中点失败：后者必须回滚、重启仍旧值且重试才提交；rollback 自身失败不得静默。Decryption 必须覆盖存储失败后重启仍未配置、错误 Key 不产生明文、纠正恢复，以及损坏认证密文安全失败。Release 使用显式高价值清单，不让旧 Runtime/state 绿色覆盖新旅程失败。
+消息前十条与高频 Channel 远端拒绝条目进入 PR 核心集，其中 workflow 用 52 条数据跨越真实 page size 50，并验证单条/全部已读、relaunch 与未读筛选。刷新旅程分别证明慢态与上次准确快照共存、Provider 刷新载荷经过规范化摄入后出现在列表和真实详情并在 relaunch 后保留，以及首次失败可见、旧快照保留、同一正式刷新动作重试后恢复；不把直接修改 ViewModel 集合或检查数据库文件当结果。其余真实导航、Entity、Channel 与 Settings 进入 Nightly/Release。Channel 创建补偿必须覆盖凭据/DB 中点失败、本地回滚、远端撤销、正式重载、重试和 relaunch；Server 同样既覆盖候选远端拒绝，也覆盖远端成功后的本地提交中点失败，且 rollback 自身失败不得静默。Decryption 必须覆盖存储失败后重启仍未配置、错误 Key 不产生明文、纠正恢复，以及损坏认证密文安全失败。Release 使用显式高价值清单，不让旧 Runtime/state 绿色覆盖新旅程失败。
 
 Quality session 不再只隔离 GRDB：server config、decryption material metadata 与手动编码偏好由 App 自己的 session `config` 目录持有，同 session relaunch 可读、不同 session 不共享，生产 Keychain/gateway token/fallback 不读不写。配置文件损坏或权限错误必须阻断 readiness，不能被默认值伪装成成功。首次完整 Release 的 2/18 失败正是该隔离缺口的负控证据；结构修复后定向 3/3 与完整 18/18 均通过，原失败结果包继续保留。
 

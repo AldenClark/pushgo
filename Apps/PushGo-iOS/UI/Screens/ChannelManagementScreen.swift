@@ -374,20 +374,31 @@ struct ChannelManagementScreen: View {
     }
 
     private var channelEntryActionButtons: some View {
-        AppActionButton(
-            variant: .primary,
-            isLoading: isChannelEntrySubmitting
-        ) {
-            Task { await submitChannelEntryFromSheet() }
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: channelEntryMode == .create ? "plus.circle.fill" : "dot.radiowaves.left.and.right")
-                Text(channelEntryConfirmTitle)
-                    .fontWeight(.semibold)
+        HStack(spacing: 12) {
+            AppActionButton(
+                title: localizationManager.localized("cancel"),
+                variant: .secondary
+            ) {
+                dismissChannelEntrySheet()
             }
+            .disabled(isChannelEntrySubmitting)
+            .accessibilityIdentifier("action.channels.entry.cancel")
+
+            AppActionButton(
+                variant: .primary,
+                isLoading: isChannelEntrySubmitting
+            ) {
+                Task { await submitChannelEntryFromSheet() }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: channelEntryMode == .create ? "plus.circle.fill" : "dot.radiowaves.left.and.right")
+                    Text(channelEntryConfirmTitle)
+                        .fontWeight(.semibold)
+                }
+            }
+            .disabled(!canSubmitChannelEntry)
+            .accessibilityIdentifier("action.channels.entry.submit")
         }
-        .disabled(!canSubmitChannelEntry)
-        .accessibilityIdentifier("action.channels.entry.submit")
     }
 
     private var channelEntrySheet: some View {

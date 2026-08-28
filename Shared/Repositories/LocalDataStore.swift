@@ -449,6 +449,8 @@ actor LocalDataStore {
     private let deviceKeyStore = ProviderDeviceKeyStore()
     private let canonicalDerivedWorkRetryDelay: TimeInterval
     private var remainingQualityNotificationMaterialPersistenceFailures: Int
+    private var pendingQualityChannelSubscriptionPersistenceFailure: Bool
+    private var remainingQualityChannelSubscriptionPersistenceFailures: Int
     private var derivedWorkDrainTask: Task<Bool, Never>?
     private var derivedWorkDrainRequested = false
     private var derivedWorkRetryWakeTask: Task<Void, Never>?
@@ -488,6 +490,9 @@ actor LocalDataStore {
         self.canonicalLiveActivityHandler = canonicalLiveActivityHandler
         remainingQualityNotificationMaterialPersistenceFailures =
             PushGoAutomationContext.qualitySession?.faults.failNotificationMaterialPersistenceOnce == true ? 1 : 0
+        pendingQualityChannelSubscriptionPersistenceFailure =
+            PushGoAutomationContext.qualitySession?.faults.failChannelSubscriptionPersistenceOnce == true
+        remainingQualityChannelSubscriptionPersistenceFailures = 0
         Self.writeStorageProbe(
             fileManager: fileManager,
             appGroupIdentifier: appGroupIdentifier,
@@ -1161,6 +1166,14 @@ actor LocalDataStore {
         return resolved
     }
 
+    func armQualityChannelSubscriptionPersistenceFailure() {
+#if DEBUG
+        guard pendingQualityChannelSubscriptionPersistenceFailure else { return }
+        pendingQualityChannelSubscriptionPersistenceFailure = false
+        remainingQualityChannelSubscriptionPersistenceFailures = 1
+#endif
+    }
+
     func upsertChannelSubscription(
         gateway: String,
         channelId: String,
@@ -1173,6 +1186,7 @@ actor LocalDataStore {
         var items = try channelSubscriptionStore.loadSubscriptions(
             gatewayKey: trimmedGateway
         )
+        let originalItems = items
         let now = Date()
         let trimmedChannelId = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedChannelId.isEmpty else {
@@ -1202,21 +1216,42 @@ actor LocalDataStore {
             items.append(updated)
         }
 
-        try channelSubscriptionStore.saveSubscriptions(
-            gatewayKey: trimmedGateway,
-            subscriptions: items
-        )
-        if let backend {
-            try await backend.upsertChannelSubscription(
-                gateway: trimmedGateway,
-                channelId: trimmedChannelId,
-                displayName: resolvedName,
-                password: trimmedPassword,
-                lastSyncedAt: lastSyncedAt,
-                updatedAt: now,
-                isDeleted: false,
-                deletedAt: nil
+        do {
+            try channelSubscriptionStore.saveSubscriptions(
+                gatewayKey: trimmedGateway,
+                subscriptions: items
             )
+            if remainingQualityChannelSubscriptionPersistenceFailures > 0 {
+                remainingQualityChannelSubscriptionPersistenceFailures -= 1
+                throw AppError.localStore("Injected channel subscription persistence failure")
+            }
+            if let backend {
+                try await backend.upsertChannelSubscription(
+                    gateway: trimmedGateway,
+                    channelId: trimmedChannelId,
+                    displayName: resolvedName,
+                    password: trimmedPassword,
+                    lastSyncedAt: lastSyncedAt,
+                    updatedAt: now,
+                    isDeleted: false,
+                    deletedAt: nil
+                )
+            }
+        } catch {
+            let commitError = error
+            do {
+                try channelSubscriptionStore.saveSubscriptions(
+                    gatewayKey: trimmedGateway,
+                    subscriptions: originalItems
+                )
+            } catch {
+                throw AppError.localStore(
+                    "channel subscription commit failed and local rollback failed; "
+                        + "commit=\(commitError.localizedDescription); "
+                        + "rollback=\(error.localizedDescription)"
+                )
+            }
+            throw commitError
         }
         return ChannelSubscription(
             gateway: trimmedGateway,
