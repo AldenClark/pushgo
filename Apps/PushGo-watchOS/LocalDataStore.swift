@@ -99,6 +99,9 @@ actor LocalDataStore {
     private let defaults: UserDefaults
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+#if DEBUG
+    private var qualityWatchMessageLoadFailureEnabled = false
+#endif
 
     private static let settingsKey = "io.ethan.pushgo.watch.local-settings.v1"
     private static let trackedGatewaysKey = "io.ethan.pushgo.watch.tracked-gateways.v1"
@@ -477,9 +480,20 @@ actor LocalDataStore {
     }
 
     func loadWatchLightMessages() async throws -> [WatchLightMessage] {
+#if DEBUG
+        if qualityWatchMessageLoadFailureEnabled {
+            throw AppError.localStore("Injected watch message read failure.")
+        }
+#endif
         let sqliteStore = try requireSQLiteStore()
         return try sqliteStore.loadWatchLightMessages()
     }
+
+#if DEBUG
+    func enableQualityWatchMessageLoadFailure() {
+        qualityWatchMessageLoadFailureEnabled = true
+    }
+#endif
 
     func loadWatchLightMessage(messageId: String) async throws -> WatchLightMessage? {
         let sqliteStore = try requireSQLiteStore()

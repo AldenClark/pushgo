@@ -12,7 +12,13 @@ struct WatchThingListScreen: View {
         NavigationStack(path: $navigationPath) {
             List {
                 Section {
-                    if viewModel.things.isEmpty {
+                    if let error = viewModel.thingError {
+                        WatchEntityLoadErrorState(
+                            message: error.errorDescription ?? error.localizedDescription,
+                            retry: reload
+                        )
+                        .accessibilityIdentifier("state.things.error")
+                    } else if viewModel.things.isEmpty {
                         WatchEntityEmptyState(
                             icon: "cpu",
                             text: localizationManager.localized("things_empty_title")
@@ -69,6 +75,12 @@ struct WatchThingListScreen: View {
                 )
             }
 #endif
+        }
+    }
+
+    private func reload() {
+        Task { @MainActor in
+            await viewModel.reload()
         }
     }
 

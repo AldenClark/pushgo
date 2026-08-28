@@ -133,6 +133,26 @@ struct WatchEntityEmptyState: View {
     }
 }
 
+struct WatchEntityLoadErrorState: View {
+    let message: String
+    let retry: () -> Void
+
+    var body: some View {
+        VStack(spacing: WatchEntityVisualTokens.sectionSpacing) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.title3)
+                .foregroundStyle(Color.appStateDangerForeground)
+            Text(message)
+                .font(.footnote)
+                .foregroundStyle(Color.appTextSecondary)
+                .multilineTextAlignment(.center)
+            Button(LocalizationManager.shared.localized("retry"), action: retry)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.vertical, WatchEntityVisualTokens.rowVerticalPadding + 6)
+    }
+}
+
 struct WatchEntityMissingState: View {
     var body: some View {
         VStack(spacing: 6) {

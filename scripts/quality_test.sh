@@ -114,6 +114,7 @@ run_impact_contracts
 core_ui_scopes="PushGo-iOSUITests/PushGo_iOSUITests/testQualitySessionUsesAppOwnedStoreAndReachesFunctionalEmptyState,PushGo-iOSUITests/PushGo_iOSUITests/testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageWorkflowLoadsSecondPageAndPersistsReadActions,PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail,PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testSlowMessageLoadBecomesVisibleBeforeDataCompletes,PushGo-iOSUITests/PushGo_iOSUITests/testSlowMessageRefreshKeepsAccurateContentVisibleUntilCompletion,PushGo-iOSUITests/PushGo_iOSUITests/testMessageRefreshPersistsNewProviderResultAndOpensItsRealDetail,PushGo-iOSUITests/PushGo_iOSUITests/testMessageRefreshFailureKeepsSnapshotAndRetryRecoversPersistedResult,PushGo-iOSUITests/PushGo_iOSUITests/testMessageLoadFailureShowsRetryAndRecoversToRealDataState,PushGo-iOSUITests/PushGo_iOSUITests/testChannelRemoteRejectionStaysInSheetAndRetryPersists"
 accessibility_ui_scope="PushGo-iOSUITests/PushGo_iOSUITests/testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation"
 nightly_ui_scopes="$core_ui_scopes,PushGo-iOSUITests/PushGo_iOSUITests/testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen,PushGo-iOSUITests/PushGo_iOSUITests/testEventClosePersistsAndOngoingFilterReflectsRealProjection,PushGo-iOSUITests/PushGo_iOSUITests/testImportedThingFixtureCanOpenThingDetail,PushGo-iOSUITests/PushGo_iOSUITests/testChannelCreateRenameAndBothUnsubscribeOutcomesPersist,PushGo-iOSUITests/PushGo_iOSUITests/testChannelCreateLocalFailureCompensatesRemoteBeforeRetry,PushGo-iOSUITests/PushGo_iOSUITests/testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testGatewayLocalCommitFailureRollsBackBeforeRetryCommits,PushGo-iOSUITests/PushGo_iOSUITests/testSettingsDecryptionRejectsInvalidKeyPersistsAndClearsValidKey,PushGo-iOSUITests/PushGo_iOSUITests/testDecryptionProtectedStoreFailureDoesNotConfigureBeforeRetry,PushGo-iOSUITests/PushGo_iOSUITests/testEncryptedMessageRecoversAfterConfiguringKeyAndSurvivesRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testCorruptEncryptedMessageFailsSafelyAndSurvivesRelaunch"
+watch_ui_scopes="PushGo-watchOSUITests/PushGo_watchOSUITests/testCoreWatchJourneyShowsAccurateObjectsDeletesOneAndPersistsAfterRelaunch,PushGo-watchOSUITests/PushGo_watchOSUITests/testInvalidHermeticScenarioFailsReadinessExplicitly,PushGo-watchOSUITests/PushGo_watchOSUITests/testMessageReadFailureStaysOwnedByMessagesWhileOtherDomainsRemainUsable"
 
 run_core() {
   selected_claims+=("Apple Core/Store/integration suite and localization completeness")
@@ -142,6 +143,13 @@ run_accessibility_localization() {
     MAX_RETRIES="${MAX_RETRIES:-1}" \
     QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
   claims+=("iOS zh-Hans accessibility5 real message-detail and channel-creation journey")
+}
+
+run_watch_ui() {
+  selected_claims+=("watchOS App-owned Messages/Event/Thing journey and explicit readiness failure")
+  TEST_SCOPES="$watch_ui_scopes" \
+    QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_watchos_ui_tests.sh"
+  claims+=("watchOS App-owned Messages/Event/Thing journey and explicit readiness failure")
 }
 
 case "$lane" in
@@ -177,6 +185,7 @@ case "$lane" in
       MAX_RETRIES="${MAX_RETRIES:-1}" \
       QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
     claims+=("iOS core message journeys plus navigation/Event/Thing/Channel/Settings persistence representatives")
+    run_watch_ui
     run_accessibility_localization
     ;;
   release)
@@ -186,8 +195,9 @@ case "$lane" in
       MAX_RETRIES="${MAX_RETRIES:-1}" \
       QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
     claims+=("iOS release-lane representative journeys")
+    run_watch_ui
     run_accessibility_localization
-    selected_claims+=("iOS Release build and Quality Runtime isolation")
+    selected_claims+=("iOS/watchOS Release builds and Quality Runtime isolation")
     xcodebuild \
       -project "$repo_root/pushgo.xcodeproj" \
       -scheme PushGo-iOS \
@@ -197,7 +207,17 @@ case "$lane" in
       -disableAutomaticPackageResolution \
       -skipPackageUpdates \
       build
-    claims+=("iOS Release build and Quality Runtime isolation")
+    xcodebuild \
+      -project "$repo_root/pushgo.xcodeproj" \
+      -scheme PushGo-watchOS \
+      -configuration Release \
+      -destination 'generic/platform=watchOS Simulator' \
+      -onlyUsePackageVersionsFromResolvedFile \
+      -disableAutomaticPackageResolution \
+      -skipPackageUpdates \
+      CODE_SIGNING_ALLOWED=NO \
+      build
+    claims+=("iOS/watchOS Release builds and Quality Runtime isolation")
     ;;
   *)
     echo "status=BLOCKED"

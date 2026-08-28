@@ -11,7 +11,13 @@ struct WatchEventListScreen: View {
     var body: some View {
         NavigationStack(path: $navigationPath) {
             List {
-                if viewModel.events.isEmpty {
+                if let error = viewModel.eventError {
+                    WatchEntityLoadErrorState(
+                        message: error.errorDescription ?? error.localizedDescription,
+                        retry: reload
+                    )
+                    .accessibilityIdentifier("state.events.error")
+                } else if viewModel.events.isEmpty {
                     WatchEntityEmptyState(
                         icon: "waveform.path.ecg",
                         text: localizationManager.localized("events_empty_title")
@@ -67,6 +73,12 @@ struct WatchEventListScreen: View {
                 )
             }
 #endif
+        }
+    }
+
+    private func reload() {
+        Task { @MainActor in
+            await viewModel.reload()
         }
     }
 

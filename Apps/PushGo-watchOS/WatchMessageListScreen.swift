@@ -12,7 +12,13 @@ struct WatchMessageListScreen: View {
         NavigationStack(path: $navigationPath) {
             List {
                 Section {
-                    if viewModel.messages.isEmpty {
+                    if let error = viewModel.messageError {
+                        WatchEntityLoadErrorState(
+                            message: error.errorDescription ?? error.localizedDescription,
+                            retry: reload
+                        )
+                        .accessibilityIdentifier("state.messages.error")
+                    } else if viewModel.messages.isEmpty {
                         emptyState
                     } else {
                         ForEach(viewModel.messages) { message in
@@ -39,7 +45,12 @@ struct WatchMessageListScreen: View {
                     openPendingMessageIfNeeded()
                 }
             }
-            .onChange(of: viewModel.messages) { _, _ in
+            .onChange(of: viewModel.messages) { _, messages in
+                if let openedMessageID = navigationPath.last,
+                   !messages.contains(where: { $0.messageId == openedMessageID })
+                {
+                    navigationPath.removeAll()
+                }
                 openPendingMessageIfNeeded()
             }
             .onChange(of: environment.pendingMessageToOpen) { _, _ in
@@ -61,6 +72,12 @@ struct WatchMessageListScreen: View {
                 )
             }
 #endif
+        }
+    }
+
+    private func reload() {
+        Task { @MainActor in
+            await viewModel.reload()
         }
     }
 

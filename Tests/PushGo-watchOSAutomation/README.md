@@ -2,8 +2,9 @@
 
 ## Scope
 
-watchOS currently has no dedicated XCUITest target in this project.  
-This matrix uses the built-in `WatchAutomation` command/response/state/event file protocol as an executable smoke suite on the watch simulator.
+This is the legacy diagnostic matrix for the built-in `WatchAutomation` command/response/state/event protocol. Its internal state and artifact checks do **not** count as user-function evidence and its retries must not be used to turn a product failure green.
+
+The authoritative representative UI regression target is `Tests/PushGo-watchOSUITests`, launched by `scripts/run_watchos_ui_tests.sh`. It uses App-owned hermetic scenarios and ends on visible product fields, real delete controls, automatic navigation recovery, and relaunch persistence. Keep this legacy suite only for protocol diagnosis and large-fixture support until its remaining useful cases are migrated.
 
 ## Coverage Matrix
 
@@ -43,9 +44,9 @@ Apple automation 环境默认设置 `PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCE
 RUNTIME_QUALITY_ONLY=1 RUNTIME_QUALITY_CASE=1 RUNTIME_QUALITY_SCALE=10000 RESPONSE_TIMEOUT_SECONDS=180 CASE_RETRY_COUNT=1 /Users/ethan/Repo/PushGo/pushgo/Tests/PushGo-watchOSAutomation/watchos_automation_smoke.sh
 ```
 
-## Pass Criteria
+## Diagnostic Pass Criteria
 
-- All smoke cases complete successfully.
+- All smoke cases complete successfully; this does not imply the corresponding UI capability passed.
 - Each case emits non-empty `automation-events.jsonl`.
 - `ok=true` cases must keep `runtime_error_count == 0` and avoid `local_store_mode=unavailable`.
 - `entity.open` cases must emit a matching `entity.opened(entity_id=target)` event in response artifacts.

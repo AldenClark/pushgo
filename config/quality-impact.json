@@ -29,7 +29,7 @@
   "rules": [
     {
       "id": "quality-system",
-      "paths": ["AGENTS.md", "Tests/**", "scripts/tests/**", "scripts/quality_*.py", "scripts/quality_*.sh", "scripts/run_ios_ui_tests.sh", ".github/workflows/apple-quality.yml", "config/quality-impact.json"],
+      "paths": ["AGENTS.md", "Tests/**", "scripts/tests/**", "scripts/quality_*.py", "scripts/quality_*.sh", "scripts/run_ios_ui_tests.sh", "scripts/run_watchos_ui_tests.sh", ".github/workflows/apple-quality.yml", "config/quality-impact.json"],
       "capabilities": ["quality-system-trustworthiness"],
       "minimum_evidence": ["quality selector unit/negative controls", "Apple PR representative lane"],
       "lane": "pr",
@@ -38,9 +38,9 @@
     },
     {
       "id": "quality-runtime-release-isolation",
-      "paths": ["Shared/UI/AutomationRuntime.swift", "Apps/*/App/AppEnvironment.swift", "Apps/*/App/AppContext.swift"],
+      "paths": ["Shared/UI/AutomationRuntime.swift", "Apps/*/App/AppEnvironment.swift", "Apps/*/App/AppContext.swift", "Apps/PushGo-watchOS/AppEnvironment.swift", "Apps/PushGo-watchOS/WatchQualityRuntime.swift"],
       "capabilities": ["app-owned-quality-runtime", "release-runtime-isolation", "app-launch"],
-      "minimum_evidence": ["QualityRuntime profile tests", "one App-owned iOS UI journey", "Release isolation build/negative control"],
+      "minimum_evidence": ["QualityRuntime profile tests", "one App-owned UI journey for each changed runtime", "iOS/watchOS Release isolation builds and negative controls"],
       "lane": "release",
       "escalation_reasons": ["Composition-root or Runtime changes cross storage and Release boundaries."]
     },
@@ -101,9 +101,9 @@
       "id": "watch",
       "paths": ["Apps/PushGo-watchOS/**", "Shared/Models/WatchLightModels.swift", "Shared/Utilities/WatchLightQuantizer.swift", "Apps/PushGo-iOS/App/Watch*.swift", "Extensions/PushGoNSE-watchOS/**", "Extensions/PushGoWidgets/*Watch*.swift"],
       "capabilities": ["watch-messages-events-things", "watch-receiver-complication"],
-      "minimum_evidence": ["Watch model/connectivity/quantizer tests", "watchOS simulator UI lane"],
+      "minimum_evidence": ["Watch model/connectivity/quantizer tests", "App-owned watchOS simulator UI journey with visible fields, delete cancellation/commit, and relaunch persistence", "message Store failure remains owned by Messages while Event/Thing tasks stay usable"],
       "lane": "nightly",
-      "known_evidence_gaps": ["watchOS P0 UI and physical receiver/complication evidence are incomplete."],
+      "known_evidence_gaps": ["watchOS Messages/Event/Thing representative P0 UI and message-delete persistence are covered; mark-read mirror ACK, images/decryption, Receiver Health, physical notification route/receiver/complication, VoiceOver, and size matrix remain incomplete."],
       "escalation_reasons": ["Watch is a separate Store/UI/system consumer and is promoted when shared contracts change."]
     },
     {

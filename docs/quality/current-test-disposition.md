@@ -98,6 +98,9 @@
 - `testCorruptEncryptedMessageFailsSafelyAndSurvivesRelaunch`
 - `testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation`
 - `testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow`（macOS controlled runner）
+- `testCoreWatchJourneyShowsAccurateObjectsDeletesOneAndPersistsAfterRelaunch`
+- `testInvalidHermeticScenarioFailsReadinessExplicitly`
+- `testMessageReadFailureStaysOwnedByMessagesWhileOtherDomainsRemainUsable`
 
 消息前十条与高频 Channel 远端拒绝条目进入 PR 核心集，其中 workflow 用 52 条数据跨越真实 page size 50，并验证单条/全部已读、relaunch 与未读筛选。刷新旅程分别证明慢态与上次准确快照共存、Provider 刷新载荷经过规范化摄入后出现在列表和真实详情并在 relaunch 后保留，以及首次失败可见、旧快照保留、同一正式刷新动作重试后恢复；不把直接修改 ViewModel 集合或检查数据库文件当结果。其余真实导航、Entity、Channel 与 Settings 进入 Nightly/Release。Channel 创建补偿必须覆盖凭据/DB 中点失败、本地回滚、远端撤销、正式重载、重试和 relaunch；Server 同样既覆盖候选远端拒绝，也覆盖远端成功后的本地提交中点失败，且 rollback 自身失败不得静默。Decryption 必须覆盖存储失败后重启仍未配置、错误 Key 不产生明文、纠正恢复，以及损坏认证密文安全失败。Release 使用显式高价值清单，不让旧 Runtime/state 绿色覆盖新旅程失败。
 
@@ -119,3 +122,13 @@ Quality session 不再只隔离 GRDB：server config、decryption material metad
 - 集成攻击：首次 `build-for-testing` 发现新文件只进入 SwiftPM、未进入 Xcode macOS Sources phase；组件测试绿色不能掩盖产品未集成。补齐工程 membership 后 macOS App + UI target 构建通过。
 - 测试系统归因：未签名诊断构建的 Runner 曾停在 `_dyld_start` 且 Xcode 等待 worker materialize；用工程默认 Apple Development 签名重建后，Runner 立即给出精确系统错误：`Failed to initialize for UI testing`，underlying `System authentication is running / 认证已取消`。测试方法仍未进入，因此记录为测试系统 BLOCKED、产品 physical UI NOT RUN，不重试到绿。
 - 同上下文红蓝审查：实现、负控与审查由同一上下文完成，存在 `common-mode-risk`；在独立 reviewer 或 controlled macOS runner 可用前，不把组件证据扩张为状态栏物理入口已通过。
+
+## watchOS 真实 UI 迁移、归因与攻击记录
+
+- 迁移边界：旧 `PushGo-watchOSAutomation` 只保留为内部协议和重型 fixture 诊断，不再用 command/response/state 文件、绝对宿主路径或 case 重试声明 UI 功能通过。新 `PushGo-watchOSUITests` 由 App 根据 profile/scenario/session 自行准备隔离 Store，Runner 不写 App 容器。
+- 目的级 Oracle：同一真实会话核对两条 Message 的准确标题/正文/严重度，打开详情并分别验证取消与确认删除；确认后必须自动离开已删除详情，重启后删除仍成立。随后通过真实 Tab 手势核对 Event 与 Thing 的列表/详情、状态、正文和属性键值。测试 ID 仅负责可靠定位，不作为最终通过条件。
+- readiness 与归属负控：不支持的 App-owned scenario 必须在 UI 明确显示启动失败和准确原因，不允许回退为空列表或生产数据。另用 Store 层消息读取故障证明错误只停留在 Messages，Event/Thing 仍能打开准确对象；Runner/Simulator 无法启动归为 `BLOCKED`，已进入但用户结果错误归为 `FAILED`。
+- 产品归因：首次真实旅程先发现删除写入成功后仍滞留在已经不存在的详情页；修复为目标从 Store 消失后清理导航路径。随后发现 Thing 属性只展示原始 JSON、用户无法辨认字段；改为正式解析后的 key/value 行。三类列表此前也会把 Store 错误误报为空态，现统一显示错误与真实 Retry。
+- 负控证据：修复前的真实运行分别在“删除后应返回列表”和 `region=eu-west` 可见字段处精确失败；滚动可见性问题只增加有界手势，没有给断言加重试或降低字段要求。错误归属反向审查又先让严格但偏题的内部故障文案 Oracle 失败，随后保留“错误可见、Retry 可操作、其他域任务准确”的目的级判定。最终代表套件 3/3 通过；最终 Lane 结果以本轮新结果包为准。
+- Release 隔离：Hermetic runtime 全部受 `#if DEBUG` 限制；影响规则将 watch runtime/AppEnvironment 提升到 Release，Release Lane 同时构建 iOS 与 watchOS，防止调试测试入口污染正式产物。
+- 同上下文红蓝审查：实现、失败归因、修复与本轮审查由同一上下文完成，仍有 `common-mode-risk`；因此只声明代表性 Messages/Event/Thing 链路，绝不外推 mark-read mirror ACK、图片/解密、Receiver Health、物理通知/complication、VoiceOver 或字号矩阵已经通过。

@@ -7,20 +7,17 @@ struct WatchRootView: View {
     @State private var selection: MainTab = .messages
 
     var body: some View {
-        TabView(selection: $selection) {
-            WatchMessageListScreen(viewModel: viewModel)
-                .tag(MainTab.messages)
-
-            WatchEventListScreen(viewModel: viewModel)
-                .tag(MainTab.events)
-
-            WatchThingListScreen(viewModel: viewModel)
-                .tag(MainTab.things)
-
-            WatchReceiverHealthScreen()
-                .tag(MainTab.health)
+        Group {
+#if DEBUG
+            if let startupFailureMessage = environment.startupFailureMessage {
+                WatchStartupFailureView(message: startupFailureMessage)
+            } else {
+                watchTabs
+            }
+#else
+            watchTabs
+#endif
         }
-        .tabViewStyle(.page(indexDisplayMode: .automatic))
         .onAppear {
             environment.updateActiveTab(selection)
             Task { @MainActor in
@@ -59,6 +56,23 @@ struct WatchRootView: View {
 #endif
     }
 
+    private var watchTabs: some View {
+        TabView(selection: $selection) {
+            WatchMessageListScreen(viewModel: viewModel)
+                .tag(MainTab.messages)
+
+            WatchEventListScreen(viewModel: viewModel)
+                .tag(MainTab.events)
+
+            WatchThingListScreen(viewModel: viewModel)
+                .tag(MainTab.things)
+
+            WatchReceiverHealthScreen()
+                .tag(MainTab.health)
+        }
+        .tabViewStyle(.page(indexDisplayMode: .automatic))
+    }
+
     private func syncSelectionWithPendingTarget() {
         if environment.pendingMessageToOpen != nil {
             selection = .messages
@@ -70,6 +84,29 @@ struct WatchRootView: View {
     }
 
 }
+
+#if DEBUG
+private struct WatchStartupFailureView: View {
+    let message: String
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(Color.appStateDangerForeground)
+                Text("Unable to prepare app data")
+                    .font(.headline)
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(Color.appTextSecondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding()
+        }
+        .accessibilityIdentifier("state.startup.failure")
+    }
+}
+#endif
 
 #Preview {
     WatchRootView()

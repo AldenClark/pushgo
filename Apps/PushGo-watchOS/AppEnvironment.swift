@@ -49,6 +49,9 @@ final class AppEnvironment {
     private(set) var unreadMessageCount: Int = 0
     private(set) var messageStoreRevision: UUID = UUID()
     private(set) var toastMessage: ToastMessage?
+#if DEBUG
+    private(set) var startupFailureMessage: String?
+#endif
     private(set) var shouldPresentNotificationPermissionAlert: Bool = false
     var pendingMessageToOpen: String?
     var pendingEventToOpen: String?
@@ -183,6 +186,16 @@ final class AppEnvironment {
     }
 
     private func performBootstrap() async {
+#if DEBUG
+        if WatchQualityRuntime.isHermeticRequested {
+            do {
+                try await WatchQualityRuntime.prepareIfRequested(environment: self)
+            } catch {
+                startupFailureMessage = error.localizedDescription
+            }
+            return
+        }
+#endif
         WatchSessionBridge.shared.activateIfNeeded()
         await loadPersistedState()
         _ = await mergeNotificationIngressInbox(

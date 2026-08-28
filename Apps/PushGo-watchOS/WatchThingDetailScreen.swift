@@ -40,9 +40,18 @@ struct WatchThingDetailScreen: View {
                 }
 
                 Section(localizationManager.localized("attributes")) {
-                    if let attrsJSON = thing.attrsJSON, !attrsJSON.isEmpty {
-                        Text(attrsJSON)
-                            .font(.system(.caption2, design: .monospaced))
+                    let attributes = parseWatchEntityAttributes(from: thing.attrsJSON)
+                    if !attributes.isEmpty {
+                        ForEach(attributes) { attribute in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(attribute.displayLabel)
+                                    .font(.caption2)
+                                    .foregroundStyle(Color.appTextSecondary)
+                                Text(attribute.value)
+                                    .font(.footnote)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     } else {
                         Text(localizationManager.localized("no_attributes"))
                             .font(.footnote)
