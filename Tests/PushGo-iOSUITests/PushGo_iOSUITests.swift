@@ -183,7 +183,9 @@ final class PushGo_iOSUITests: XCTestCase {
         }
     }
 
-    func testLaunchesIntoMessageList() {
+    // Non-discoverable migration diagnostic. It must not be restored to a test until its
+    // command/state oracle is replaced by an independent user-purpose outcome.
+    func legacyDiagnosticLaunchesIntoMessageList() {
         let context = configuredLaunchContext()
         launch(context.app)
 
@@ -591,7 +593,7 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertFalse(element(in: context.app, identifier: "state.messages.load_failed").exists)
     }
 
-    func testAutomationRequestCanOpenChannelsScreen() {
+    func legacyDiagnosticAutomationRequestCanOpenChannelsScreen() {
         let context = configuredLaunchContext(
             requestName: "nav.switch_tab",
             args: ["tab": "channels"]
@@ -602,7 +604,7 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(element(in: context.app, identifier: "screen.channels").waitForExistence(timeout: 8))
     }
 
-    func testNavSwitchTabMatrixCoversPrimaryScreens() {
+    func legacyDiagnosticNavSwitchTabMatrixCoversPrimaryScreens() {
         let routeMatrix: [(tab: String, screen: String)] = [
             ("messages", "screen.messages.list"),
             ("events", "screen.events.list"),
@@ -1634,7 +1636,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
-    func testPushSettingsCanOpenDecryptionScreen() {
+    func legacyDiagnosticPushSettingsCanOpenDecryptionScreen() {
         let context = configuredLaunchContext(
             requestName: "settings.open_decryption"
         )
@@ -1644,7 +1646,7 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: 12, matching: { $0.ok }))
     }
 
-    func testInvalidServerAddressShowsInlineFeedbackInsteadOfToast() {
+    func legacyDiagnosticInvalidServerAddressShowsInlineFeedbackInsteadOfToast() {
         let context = configuredLaunchContext(
             requestName: "nav.switch_tab",
             args: ["tab": "settings"]
@@ -1669,7 +1671,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
-    func testFixtureSeedMessagesRefreshesMessageList() {
+    func legacyDiagnosticFixtureSeedMessagesRefreshesMessageList() {
         let context = configuredLaunchContext(
             requestName: "fixture.seed_messages",
             args: ["path": messageSeedFixturePath]
@@ -1709,7 +1711,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
-    func testSubmittingPopulatedSearchResultsKeepsAppRunning() {
+    func legacyDiagnosticSubmittingPopulatedSearchResultsKeepsAppRunning() {
         let context = configuredLaunchContext(
             requestName: "fixture.seed_messages",
             args: ["path": messageSeedFixturePath]
@@ -1758,7 +1760,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
-    func testFixtureSeedEntityRecordsPublishesProjectionCounts() {
+    func legacyDiagnosticFixtureSeedEntityRecordsPublishesProjectionCounts() {
         let context = configuredLaunchContext(
             requestName: "fixture.seed_entity_records",
             args: ["path": entityRecordFixturePath]
@@ -1793,7 +1795,7 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: 12, matching: { $0.ok }))
     }
 
-    func testFixtureSeedSubscriptionsPublishesImportState() {
+    func legacyDiagnosticFixtureSeedSubscriptionsPublishesImportState() {
         let context = configuredLaunchContext(
             requestName: "fixture.seed_subscriptions",
             args: ["path": subscriptionFixturePath]
@@ -1828,7 +1830,7 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: 12, matching: { $0.ok }))
     }
 
-    func testEntityOpenPublishesEntityStateAndProjectionCounts() {
+    func legacyDiagnosticEntityOpenPublishesEntityStateAndProjectionCounts() {
         let eventContext = configuredLaunchContext(
             startupFixturePath: eventFixturePath,
             requestName: "entity.open",
@@ -1890,7 +1892,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
-    func testMessageOpenPublishesMessageDetailState() {
+    func legacyDiagnosticMessageOpenPublishesMessageDetailState() {
         let context = configuredLaunchContext(
             startupFixturePath: messageSeedFixturePath,
             requestName: "message.open",
@@ -1925,7 +1927,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
-    func testNotificationOpenPublishesMessageDetailState() {
+    func legacyDiagnosticNotificationOpenPublishesMessageDetailState() {
         let context = configuredLaunchContext(
             startupFixturePath: messageSeedFixturePath,
             requestName: "notification.open",
@@ -1947,7 +1949,7 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertNotNil(waitForAutomationResponse(at: context.responseURL, timeout: 12, matching: { $0.ok }))
     }
 
-    func testNotificationMarkReadCommandUpdatesUnreadState() {
+    func legacyDiagnosticNotificationMarkReadCommandUpdatesUnreadState() {
         let context = configuredLaunchContext(
             startupFixturePath: messageSeedFixturePath,
             requestName: "notification.mark_read",
@@ -1982,7 +1984,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
-    func testNotificationDeleteCommandUpdatesCounts() {
+    func legacyDiagnosticNotificationDeleteCommandUpdatesCounts() {
         let context = configuredLaunchContext(
             startupFixturePath: messageSeedFixturePath,
             requestName: "notification.delete",
@@ -2017,7 +2019,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
-    func testGatewaySetServerCommandUpdatesConfigurationState() {
+    func legacyDiagnosticGatewaySetServerCommandUpdatesConfigurationState() {
         let context = configuredLaunchContext(
             requestName: "gateway.set_server",
             args: [
@@ -2054,7 +2056,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
-    func testBaselineAutomationStateHasNoRuntimeErrors() {
+    func legacyDiagnosticBaselineAutomationStateHasNoRuntimeErrors() {
         let context = configuredLaunchContext()
         launch(context.app)
 
@@ -2068,7 +2070,7 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertEqual(state?.localStoreMode, "persistent")
     }
 
-    func testWatchResyncReceiverCommandPublishesReceiverState() {
+    func legacyDiagnosticWatchResyncReceiverCommandPublishesReceiverState() {
         let context = configuredLaunchContext(
             requestName: "watch.resync_receiver"
         )
@@ -2083,7 +2085,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
-    func testSettingsSetDecryptionKeyRejectsInvalidLength() {
+    func legacyDiagnosticSettingsSetDecryptionKeyRejectsInvalidLength() {
         let context = configuredLaunchContext(
             requestName: "settings.set_decryption_key",
             args: ["key": "abcd", "encoding": "plain"]
@@ -2099,7 +2101,7 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(response?.error?.contains("key") == true)
     }
 
-    func testSettingsSetDecryptionKeyAcceptsBase64Key() {
+    func legacyDiagnosticSettingsSetDecryptionKeyAcceptsBase64Key() {
         let context = configuredLaunchContext(
             requestName: "settings.set_decryption_key",
             args: ["key": "MDEyMzQ1Njc4OWFiY2RlZg==", "encoding": "base64"]
@@ -2130,7 +2132,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
-    func testRuntimeQualityLargeFixtureLaunchAndListReadiness() throws {
+    func legacyDiagnosticRuntimeQualityLargeFixtureLaunchAndListReadiness() throws {
         try XCTSkipUnless(
             runtimeQualityUIEnabled(),
             "Set PUSHGO_RUNTIME_QUALITY_UI=1 to run large UI runtime quality validation."
@@ -2492,7 +2494,7 @@ final class PushGo_iOSUITests: XCTestCase {
         thingDetailContext.app.terminate()
     }
 
-    func testRuntimeQualityReservedMarkdownFixturesStayBelowGatewayBodyLimit() {
+    func legacyDiagnosticRuntimeQualityReservedMarkdownFixturesStayBelowGatewayBodyLimit() {
         let gatewayBodyLimitBytes = 32 * 1024
         let markdownSafetyCapBytes = 27 * 1024
         let fixtures: [(name: String, body: String)] = [
@@ -2517,7 +2519,7 @@ final class PushGo_iOSUITests: XCTestCase {
         }
     }
 
-    func testCaptureLocalizedPrimaryScreens() throws {
+    func legacyDiagnosticCaptureLocalizedPrimaryScreens() throws {
         let envOutputRootPath = ProcessInfo.processInfo.environment["PUSHGO_IOS_UI_SCREENSHOT_DIR"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let outputRoot: URL
         if envOutputRootPath.isEmpty {

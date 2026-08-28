@@ -183,6 +183,8 @@
 | 用格式完整度给 AI 自动打分 | 字段齐全或关键词相似被当作语义正确，一个严重漏测被平均分掩盖 | 机器只验证确定性下限；语义逐任务与真实 diff/行为对照，按目的、Oracle、Lane、执行边界报告，不聚合单一分数 | 缺字段阻断语料；语义结论必须人工/隔离 AI 复核，不能从 JSON 结构推导产品通过 |
 | 已知 flake 名义吞掉新产品失败 | Runner 用宽泛 timeout/AssertionError allowlist，Apple 多入口各有一份字符串，或 Android 批次同时有已知 runtime 签名和真实产品断言时仍归为 test-system | 版本化 active issue 注册表；移除 `RequestDenied` 等宽匹配；Android 要求当前 XML 每个 failure 都命中；Apple 三个 Runner 共用分类器且只在首个产品动作前归因；收据绑定 issue ID | 未登记/过期/混合产品 failure=`FAILED`；只有纯已知系统问题才 `FLAKY/BLOCKED/FAILED_TEST_SYSTEM`，绝不生成产品假绿 |
 | Flake 永久续命或无限重试 | 没有 owner/到期/退出条件，失败后反复重跑直至绿 | owner、opened/last-seen、14 天内到期、0/1 次重试、50 次连续稳定退出；Lane 启动和日常 selector 单测共同校验 | 到期/`MAX_RETRIES>1`/无替代证据 quarantine=`BLOCKED`；恢复后 product 可过但 test-system 仍 `FLAKY` + ID |
+| Curated Lane 不选旧测试就假装已退役 | 默认/全量发现仍可执行 command/state/path、synthetic Store、ViewModel proxy 或截图 diagnostic，用绿色数量污染认知并继续产生维护成本 | Apple 40 个旧方法退出 XCTest 发现，三个无调用方 shell runner 删除；Android 两个伪 UI 类和五文件 synthetic cluster 删除；强替代按 App-owned UI、真实 Room/transport/performance 归属 | 非发现 legacy body 不计覆盖；macOS/Watch 未替代能力继续 `NOT RUN`；Android 编译/单测和 Apple UI bundle 必须在删除后通过 |
+| xcodebuild 枚举退出 0 就当测试清单有效 | macOS UI Runner 初始化失败时，xcodebuild 仍返回 0，但枚举 JSON 的 `errors` 明确包含系统认证失败且没有方法级列表 | 同时解析枚举 artifact 的 `errors` 与方法 identifiers；编译、枚举、执行三种证据分开报告 | JSON 有 errors 或没有方法级结果=`BLOCKED/NOT RUN`；不能用 exit 0、target 名或 bundle 存在冒充测试已枚举/执行 |
 
 ## 双向覆盖反查
 

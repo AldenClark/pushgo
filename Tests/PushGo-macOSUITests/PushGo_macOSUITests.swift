@@ -102,7 +102,9 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testLaunchesIntoMessageList() {
+    // Non-discoverable migration diagnostic. It must not be restored to a test until its
+    // command/state oracle is replaced by an independent user-purpose outcome.
+    func legacyDiagnosticLaunchesIntoMessageList() {
         let context = configuredApp()
         launch(context)
 
@@ -206,7 +208,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testAutomationRequestCanOpenChannelsScreen() {
+    func legacyDiagnosticAutomationRequestCanOpenChannelsScreen() {
         let context = configuredApp(
             requestName: "nav.switch_tab",
             args: ["tab": "channels"]
@@ -218,7 +220,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testImportedEventFixtureCanOpenEventDetailFromStartupRequest() {
+    func legacyDiagnosticImportedEventFixtureCanOpenEventDetailFromStartupRequest() {
         let context = configuredApp(
             startupFixturePath: eventFixturePath,
             requestName: "entity.open",
@@ -248,7 +250,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testImportedThingFixtureCanOpenThingDetailFromStartupRequest() {
+    func legacyDiagnosticImportedThingFixtureCanOpenThingDetailFromStartupRequest() {
         let context = configuredApp(
             startupFixturePath: thingFixturePath,
             requestName: "entity.open",
@@ -292,7 +294,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testSettingsScreenControlMatrixShowsCriticalGroups() {
+    func legacyDiagnosticSettingsScreenControlMatrixShowsCriticalGroups() {
         let context = configuredApp()
         launch(context)
 
@@ -328,7 +330,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testSettingsPageVisibilityCommandCanHideEventPage() {
+    func legacyDiagnosticSettingsPageVisibilityCommandCanHideEventPage() {
         let context = configuredApp(
             requestName: "settings.set_page_visibility",
             args: ["page": "events", "enabled": "false"]
@@ -360,7 +362,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testSettingsPageVisibilityCommandCanRoundTripEventPage() {
+    func legacyDiagnosticSettingsPageVisibilityCommandCanRoundTripEventPage() {
         let sharedRuntimeRoot = makeRuntimeRoot()
         let hideContext = configuredApp(
             runtimeRoot: sharedRuntimeRoot,
@@ -436,7 +438,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testFixtureSeedEntityRecordsPublishesProjectionCounts() {
+    func legacyDiagnosticFixtureSeedEntityRecordsPublishesProjectionCounts() {
         let context = configuredApp(
             requestName: "fixture.seed_entity_records",
             args: ["path": entityRecordFixturePath]
@@ -477,7 +479,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testFixtureSeedSubscriptionsPublishesImportState() {
+    func legacyDiagnosticFixtureSeedSubscriptionsPublishesImportState() {
         let context = configuredApp(
             requestName: "fixture.seed_subscriptions",
             args: ["path": subscriptionFixturePath]
@@ -518,7 +520,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testEntityOpenPublishesEntityStateAndProjectionCounts() {
+    func legacyDiagnosticEntityOpenPublishesEntityStateAndProjectionCounts() {
         let eventContext = configuredApp(
             startupFixturePath: eventFixturePath,
             requestName: "entity.open",
@@ -589,7 +591,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testMessageOpenPublishesMessageDetailState() {
+    func legacyDiagnosticMessageOpenPublishesMessageDetailState() {
         let context = configuredApp(
             startupFixturePath: messageSeedFixturePath,
             requestName: "message.open",
@@ -625,7 +627,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testNotificationOpenPublishesMessageDetailState() {
+    func legacyDiagnosticNotificationOpenPublishesMessageDetailState() {
         let context = configuredApp(
             startupFixturePath: messageSeedFixturePath,
             requestName: "notification.open",
@@ -655,7 +657,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testNotificationMarkReadCommandUpdatesUnreadState() {
+    func legacyDiagnosticNotificationMarkReadCommandUpdatesUnreadState() {
         let context = configuredApp(
             startupFixturePath: messageSeedFixturePath,
             requestName: "notification.mark_read",
@@ -691,7 +693,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testNotificationDeleteCommandUpdatesCounts() {
+    func legacyDiagnosticNotificationDeleteCommandUpdatesCounts() {
         let context = configuredApp(
             startupFixturePath: messageSeedFixturePath,
             requestName: "notification.delete",
@@ -727,7 +729,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testGatewaySetServerCommandUpdatesConfigurationState() {
+    func legacyDiagnosticGatewaySetServerCommandUpdatesConfigurationState() {
         let context = configuredApp(
             requestName: "gateway.set_server",
             args: [
@@ -765,7 +767,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testBaselineAutomationStateHasNoRuntimeErrors() {
+    func legacyDiagnosticBaselineAutomationStateHasNoRuntimeErrors() {
         let context = configuredApp()
         launch(context)
 
@@ -784,7 +786,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testRuntimeQualityLargeFixtureLaunchAndListReadiness() throws {
+    func legacyDiagnosticRuntimeQualityLargeFixtureLaunchAndListReadiness() throws {
         try XCTSkipUnless(
             runtimeQualityUIEnabled(),
             "Set PUSHGO_RUNTIME_QUALITY_UI=1 to run large UI runtime quality validation."
@@ -992,7 +994,7 @@ final class PushGo_macOSUITests: XCTestCase {
         detailContext.app.terminate()
     }
 
-    func testRuntimeQualityReservedMarkdownFixturesStayBelowGatewayBodyLimit() {
+    func legacyDiagnosticRuntimeQualityReservedMarkdownFixturesStayBelowGatewayBodyLimit() {
         let gatewayBodyLimitBytes = 32 * 1024
         let markdownSafetyCapBytes = 27 * 1024
         let fixtures: [(name: String, body: String)] = [

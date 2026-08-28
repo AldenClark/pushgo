@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This target contains two generations of tests. Curated lanes execute only the high-value App-owned journeys listed below. Legacy Runtime command/state tests remain temporarily for migration diagnostics and must not be used to claim product coverage.
+Curated lanes execute only the high-value App-owned journeys listed below. The 22 legacy Runtime command/state or screenshot-diagnostic bodies have been renamed `legacyDiagnostic...`, so XCTest no longer discovers or executes them; they remain temporarily only to support incremental helper removal and must not be used to claim product coverage. The old host-path automation shell runners have been deleted.
 
 A product result passes only when the test uses a reachable user entry and verifies accurate visible data, a real action result, persisted/relaunch state, or an independently meaningful system/data endpoint. Screen identifiers, fixture markers, response files, Runtime state, launch success, and sheet existence are supporting diagnostics only.
 

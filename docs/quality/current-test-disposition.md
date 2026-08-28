@@ -69,7 +69,7 @@
 4. 大量测试最终只检查 `visibleScreen/count/ok/event`；即使 UI 字段错误、列表慢或动作未持久化也可能通过。
 5. 性能测试由 Runtime 自报区间且与 UI 正确性混合，必须拆分。
 
-完成迁移前，上述测试即使绿色，也只能证明其当前窄 Oracle，不能证明第 25 节对应能力整体通过。
+2026-08-28 起，iOS 22 个、macOS 18 个上述旧方法（含截图 diagnostic）已统一改名为 `legacyDiagnostic...`，不再被 XCTest 发现或计入任何 Lane；三套无现行调用方的 host-path Apple/macOS/watchOS automation shell runner 与旧 runtime gap 文档已删除。保留的 legacy body 只用于后续逐步删除其共用 helper，不是可执行测试或覆盖证据。iOS 已有强替代的能力由下列 App-owned 旅程接管；macOS/Watch 尚无强替代的部分继续记为明确缺口，不能因为旧方法仍可编译而声称通过。
 
 ## 本轮新增高价值纵向用例
 
@@ -136,7 +136,7 @@ Quality session 不再只隔离 GRDB：server config、decryption material metad
 
 ## watchOS 真实 UI 迁移、归因与攻击记录
 
-- 迁移边界：旧 `PushGo-watchOSAutomation` 只保留为内部协议和重型 fixture 诊断，不再用 command/response/state 文件、绝对宿主路径或 case 重试声明 UI 功能通过。新 `PushGo-watchOSUITests` 由 App 根据 profile/scenario/session 自行准备隔离 Store，Runner 不写 App 容器。
+- 迁移边界：旧 `PushGo-watchOSAutomation` 已删除；新 `PushGo-watchOSUITests` 由 App 根据 profile/scenario/session 自行准备隔离 Store，Runner 不写 App 容器。历史报告里的旧脚本命令仅是归档证据，不再可执行，也不能声明当前 UI 功能通过。
 - 目的级 Oracle：同一真实会话核对两条 Message 的准确标题/正文/严重度，打开详情并分别验证取消与确认删除；确认后必须自动离开已删除详情，重启后删除仍成立。随后通过真实 Tab 手势核对 Event 与 Thing 的列表/详情、状态、正文和属性键值。测试 ID 仅负责可靠定位，不作为最终通过条件。
 - readiness 与归属负控：不支持的 App-owned scenario 必须在 UI 明确显示启动失败和准确原因，不允许回退为空列表或生产数据。另用 Store 层消息读取故障证明错误只停留在 Messages，Event/Thing 仍能打开准确对象；Runner/Simulator 无法启动归为 `BLOCKED`，已进入但用户结果错误归为 `FAILED`。
 - 产品归因：首次真实旅程先发现删除写入成功后仍滞留在已经不存在的详情页；修复为目标从 Store 消失后清理导航路径。随后发现 Thing 属性只展示原始 JSON、用户无法辨认字段；改为正式解析后的 key/value 行。三类列表此前也会把 Store 错误误报为空态，现统一显示错误与真实 Retry。
