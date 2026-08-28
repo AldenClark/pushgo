@@ -49,14 +49,14 @@
       "id": "ios-system-notification-journey",
       "paths": ["Tests/PushGo-iOSUITests/PushGo_iOSSystemNotificationTests.swift", "scripts/run_ios_system_notification_test.sh"],
       "capabilities": ["notification-permission", "notification-system-delivery", "notification-route-actions", "message-read-persistence"],
-      "minimum_evidence": ["iOS Simulator real permission/delivery/tap/detail/read/relaunch journey plus direct Mark as read and destructive Delete actions with durable canonical oracles"],
+      "minimum_evidence": ["iOS Simulator real permission/delivery/hot-and-terminated-process tap/detail/read/relaunch journeys plus direct Mark as read and destructive Delete actions with durable canonical oracles"],
       "lane": "nightly",
-      "known_evidence_gaps": ["Real APNs network delivery, permission denial, terminated-process cold start, macOS, copy-action product semantics, and physical-device behavior remain NOT RUN."],
+      "known_evidence_gaps": ["Real APNs network delivery, permission denial, macOS, copy-action product semantics, and physical-device cold-start behavior remain NOT RUN."],
       "escalation_reasons": ["The system-notification harness can silently bypass SpringBoard, weaken exact payload checks, or stop proving durable product state."]
     },
     {
       "id": "quality-runtime-release-isolation",
-      "paths": ["Shared/UI/AutomationRuntime.swift", "Apps/*/App/AppEnvironment.swift", "Apps/*/App/AppContext.swift", "Apps/PushGo-watchOS/AppEnvironment.swift", "Apps/PushGo-watchOS/WatchQualityRuntime.swift"],
+      "paths": ["Shared/UI/AutomationRuntime.swift", "Shared/Utilities/AppConstants.swift", "Apps/*/App/AppEnvironment.swift", "Apps/*/App/AppContext.swift", "Apps/PushGo-watchOS/AppEnvironment.swift", "Apps/PushGo-watchOS/WatchQualityRuntime.swift"],
       "capabilities": ["app-owned-quality-runtime", "release-runtime-isolation", "app-launch"],
       "minimum_evidence": ["QualityRuntime profile tests", "one App-owned UI journey for each changed runtime", "iOS/watchOS Release isolation builds and negative controls"],
       "lane": "release",
@@ -112,7 +112,7 @@
       "capabilities": ["ingress-ack", "notification-route-actions", "background-recovery"],
       "minimum_evidence": ["ingress/ACK/idempotency/recovery integration suite", "notification routing contract", "iOS Simulator real system-notification journey for iOS/shared route changes", "representative App UI terminal state"],
       "lane": "nightly",
-      "known_evidence_gaps": ["Real APNs network delivery, notification center actions, permission denial/recovery, terminated-process cold start, and physical background execution remain NOT RUN."],
+      "known_evidence_gaps": ["Real APNs network delivery, notification center cleanup, permission denial/recovery, physical terminated-process cold start, and physical background execution remain NOT RUN."],
       "escalation_reasons": ["Ingress changes cross extension, durable Store, notification, ACK, and App consumers."]
     },
     {

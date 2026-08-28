@@ -153,6 +153,8 @@
 111. **清理失败覆盖首个产品失败攻击**：普通 `finally` 直接抛 cleanup error 会抹掉真实内容/预算断言，归因被倒置。结果：统一 fixture scope 保留 primary failure，并把 cleanup failure 作为 suppressed evidence；只有产品已通过而清理失败时才由清理错误成为主失败。
 112. **为了 UIAutomator 全局暴露动态资源 ID 攻击**：全局启用 `testTagsAsResourceId` 会让正式 App 的消息、频道等动态标识进入可观察 View ID。结果：根页面与独立 Sheet window 只在 `QUALITY_SESSION_CONTROL_ENABLED` 的 benchmark/profile 变体建立 resource-ID 语义边界；正式 Release 常量关闭，隔离 verifier 同时确认控制 Provider/Activity 不可达且实现未入 dex。
 
+113. **终止进程冷启动只验证 App 被拉起攻击**：系统点击可以启动生产 profile 或错误 Store，主页/详情存在仍会形式绿色。结果：session lease 由 App 自己持有且仅 Debug、五分钟到期、显式清除；Oracle 要求 quality readiness、精确标题/正文、唯一 canonical、已读及普通 relaunch。负控丢弃 lease 后系统仍成功拉起 App，但在 quality readiness 精确失败，不能落入生产数据后继续判绿。
+
 ## 归因分析
 
 | 过去症状 | 根因 | 结构修正 | 失败分类 |

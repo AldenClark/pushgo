@@ -203,13 +203,117 @@ struct QualityRuntimeProfileTests {
         #endif
     }
 
+    @Test("cold-launch lease is app-owned, bounded, and explicitly cleared")
+    func coldLaunchLeaseIsBoundedAndClearable() throws {
+        let fileManager = FileManager.default
+        let base = fileManager.temporaryDirectory
+            .appendingPathComponent("pushgo-cold-launch-lease-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fileManager.removeItem(at: base) }
+        let encoded = try encodedSession(
+            sessionID: "cold-launch-once",
+            fixture: "empty.clean",
+            allowsSystemColdLaunch: true
+        )
+        let now = Date(timeIntervalSince1970: 1_787_918_400)
+
+        try PushGoAutomationContext.writeQualityColdLaunchLease(
+            encodedSession: encoded,
+            baseURL: base,
+            expiresAt: now.addingTimeInterval(60),
+            fileManager: fileManager
+        )
+
+        #expect(
+            PushGoAutomationContext.loadQualityColdLaunchLease(
+                baseURL: base,
+                now: now,
+                fileManager: fileManager
+            ) == encoded
+        )
+        #expect(
+            PushGoAutomationContext.loadQualityColdLaunchLease(
+                baseURL: base,
+                now: now,
+                fileManager: fileManager
+            ) == encoded
+        )
+        PushGoAutomationContext.clearQualityColdLaunchLease(
+            baseURL: base,
+            fileManager: fileManager
+        )
+        #expect(
+            PushGoAutomationContext.loadQualityColdLaunchLease(
+                baseURL: base,
+                now: now,
+                fileManager: fileManager
+            ) == nil
+        )
+    }
+
+    @Test("expired cold-launch lease cannot reactivate a quality session")
+    func expiredColdLaunchLeaseIsRejected() throws {
+        let fileManager = FileManager.default
+        let base = fileManager.temporaryDirectory
+            .appendingPathComponent("pushgo-expired-cold-launch-lease-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fileManager.removeItem(at: base) }
+        let encoded = try encodedSession(
+            sessionID: "cold-launch-expired",
+            fixture: "empty.clean",
+            allowsSystemColdLaunch: true
+        )
+        let now = Date(timeIntervalSince1970: 1_787_918_400)
+        try PushGoAutomationContext.writeQualityColdLaunchLease(
+            encodedSession: encoded,
+            baseURL: base,
+            expiresAt: now.addingTimeInterval(-1),
+            fileManager: fileManager
+        )
+
+        #expect(
+            PushGoAutomationContext.loadQualityColdLaunchLease(
+                baseURL: base,
+                now: now,
+                fileManager: fileManager
+            ) == nil
+        )
+        #expect(
+            PushGoAutomationContext.loadQualityColdLaunchLease(
+                baseURL: base,
+                now: now,
+                fileManager: fileManager
+            ) == nil
+        )
+    }
+
+    @Test("cold-launch lease rejects a session without explicit opt-in")
+    func coldLaunchLeaseRequiresExplicitOptIn() throws {
+        let fileManager = FileManager.default
+        let base = fileManager.temporaryDirectory
+            .appendingPathComponent("pushgo-cold-launch-opt-in-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fileManager.removeItem(at: base) }
+        let encoded = try encodedSession(
+            sessionID: "cold-launch-disabled",
+            fixture: "empty.clean"
+        )
+
+        #expect(throws: PushGoQualitySessionError.systemColdLaunchNotAllowed) {
+            try PushGoAutomationContext.writeQualityColdLaunchLease(
+                encodedSession: encoded,
+                baseURL: base,
+                expiresAt: Date().addingTimeInterval(60),
+                fileManager: fileManager
+            )
+        }
+    }
+
     private func encodedSession(
         sessionID: String,
         fixture: String,
         faults: [String: Any]? = nil,
         messageRefreshScenario: String? = nil,
         eventCloseScenario: String? = nil,
-        channelMutationScenario: String? = nil
+        channelMutationScenario: String? = nil,
+        allowsSystemColdLaunch: Bool = false
     ) throws -> String {
         var payload: [String: Any] = [
             "schema_version": 1,
@@ -228,6 +332,7 @@ struct QualityRuntimeProfileTests {
         if let channelMutationScenario {
             payload["channel_mutation_scenario"] = channelMutationScenario
         }
+        payload["allows_system_cold_launch"] = allowsSystemColdLaunch
         return try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
             .base64EncodedString()
     }

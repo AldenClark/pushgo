@@ -94,6 +94,84 @@ final class PushGo_iOSSystemNotificationTests: XCTestCase {
         )
     }
 
+    func testSystemNotificationTapColdLaunchesAccurateReadDetailAndPersists() throws {
+        let runID = UUID().uuidString.lowercased()
+        let title = "Quality iOS cold notification route \(runID.prefix(8))"
+        let body = "Exact iOS cold notification route body \(runID)."
+        let messageID = "quality-ios-cold-system-route-message-\(runID)"
+        let app = configuredApp(sessionID: runID, allowsSystemColdLaunch: true)
+        launch(app)
+        assertQualityRuntimeReady(in: app, timeout: 15)
+
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        authorizeNotificationsIfNeeded(in: springboard)
+        background(app)
+        let readinessURL = try publishReadiness(title: title, body: body, messageID: messageID)
+        defer { try? FileManager.default.removeItem(at: readinessURL) }
+
+        let notificationTitle = springboard.staticTexts[title]
+        XCTAssertTrue(
+            notificationTitle.waitForExistence(timeout: 30),
+            "The cold-launch payload never became a real SpringBoard notification"
+        )
+        XCTAssertTrue(
+            springboard.staticTexts[body].waitForExistence(timeout: 5),
+            "SpringBoard did not expose the exact cold-launch payload body"
+        )
+
+        app.terminate()
+        XCTAssertEqual(
+            app.state,
+            .notRunning,
+            "QUALITY_PRECONDITION: PushGo was still running before the cold notification tap"
+        )
+        XCTAssertTrue(
+            notificationTitle.waitForExistence(timeout: 5),
+            "The delivered notification disappeared when PushGo terminated"
+        )
+        notificationTitle.tap()
+
+        let foregrounded = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "state == %d", XCUIApplication.State.runningForeground.rawValue),
+            object: app
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [foregrounded], timeout: 10),
+            .completed,
+            "The system notification did not cold-launch PushGo"
+        )
+        assertQualityRuntimeReady(in: app, timeout: 15)
+        let detail = element(in: app, identifier: "sheet.message.detail")
+        XCTAssertTrue(detail.waitForExistence(timeout: 10), "The cold-routed exact detail did not open")
+        XCTAssertTrue(detail.staticTexts[title].waitForExistence(timeout: 5))
+        XCTAssertTrue(detail.staticTexts[body].waitForExistence(timeout: 5))
+        tapWhenHittable(
+            element(in: app, identifier: "action.message.close"),
+            timeout: 8,
+            message: "The cold-routed detail must be dismissible"
+        )
+        XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            app.staticTexts.matching(NSPredicate(format: "label == %@", title)).count,
+            1,
+            "The cold system route produced duplicate canonical rows"
+        )
+        XCTAssertFalse(
+            element(in: app, identifier: "action.messages.mark_all_read").waitForExistence(timeout: 3),
+            "The cold system route did not persist the read outcome"
+        )
+
+        app.terminate()
+        app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: runID,
+            fixture: "empty.clean",
+            allowsSystemColdLaunch: false
+        )
+        launch(app)
+        assertQualityRuntimeReady(in: app, timeout: 15)
+        assertAccurateReadMessage(title: title, body: body, in: app)
+    }
+
     func testSystemNotificationDeleteActionRemovesOnlyTargetAndPersists() throws {
         let runID = UUID().uuidString.lowercased()
         let title = "Quality iOS notification delete \(runID.prefix(8))"
@@ -206,7 +284,11 @@ final class PushGo_iOSSystemNotificationTests: XCTestCase {
         assertAccurateReadMessage(title: title, body: body, in: app)
     }
 
-    private func configuredApp(sessionID: String, fixture: String = "empty.clean") -> XCUIApplication {
+    private func configuredApp(
+        sessionID: String,
+        fixture: String = "empty.clean",
+        allowsSystemColdLaunch: Bool = false
+    ) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
             "-ApplePersistenceIgnoreState", "YES",
@@ -219,17 +301,23 @@ final class PushGo_iOSSystemNotificationTests: XCTestCase {
         app.launchEnvironment["PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS"] = "0"
         app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
-            fixture: fixture
+            fixture: fixture,
+            allowsSystemColdLaunch: allowsSystemColdLaunch
         )
         return app
     }
 
-    private func qualitySessionPayload(sessionID: String, fixture: String) -> String {
+    private func qualitySessionPayload(
+        sessionID: String,
+        fixture: String,
+        allowsSystemColdLaunch: Bool
+    ) -> String {
         let payload: [String: Any] = [
             "schema_version": 1,
             "session_id": "ios-system-notification-\(sessionID)",
             "fixture": fixture,
             "faults": [:],
+            "allows_system_cold_launch": allowsSystemColdLaunch,
         ]
         let data = try! JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
         return data.base64EncodedString()

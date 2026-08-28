@@ -15,7 +15,7 @@ export QUALITY_RUNNER_ISSUE_FILE="$runner_issue_file"
 claims=()
 selected_claims=()
 not_run=(
-  "physical APNs network delivery, permission denial, physical-device notification-action parity, process-death, and other system-surface evidence"
+  "physical APNs network delivery, permission denial, physical-device notification-action/process-death parity, and other system-surface evidence"
   "physical VoiceOver task-completion evidence"
 )
 physical_performance_requested=0
@@ -184,10 +184,15 @@ run_watch_ui() {
 }
 
 run_system_notification_journey() {
+  local cold_launch_scope="PushGo-iOSUITests/PushGo_iOSSystemNotificationTests/testSystemNotificationTapColdLaunchesAccurateReadDetailAndPersists"
   local delete_action_scope="PushGo-iOSUITests/PushGo_iOSSystemNotificationTests/testSystemNotificationDeleteActionRemovesOnlyTargetAndPersists"
   local mark_read_action_scope="PushGo-iOSUITests/PushGo_iOSSystemNotificationTests/testSystemNotificationMarkReadActionPersistsAccurateReadTarget"
-  selected_claims+=("iOS Simulator system notification permission/delivery/tap/detail/read plus direct mark-read and destructive delete/control/relaunch journeys")
+  selected_claims+=("iOS Simulator system notification permission/delivery/hot-and-terminated-process tap/detail/read plus direct mark-read and destructive delete/control/relaunch journeys")
   MAX_RETRIES=0 \
+    QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_system_notification_test.sh"
+  SYSTEM_NOTIFICATION_TEST_SCOPE="$cold_launch_scope" \
+    PRESERVE_SYSTEM_NOTIFICATION_INSTALL=1 \
+    MAX_RETRIES=0 \
     QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_system_notification_test.sh"
   SYSTEM_NOTIFICATION_TEST_SCOPE="$delete_action_scope" \
     PRESERVE_SYSTEM_NOTIFICATION_INSTALL=1 \
@@ -197,7 +202,7 @@ run_system_notification_journey() {
     PRESERVE_SYSTEM_NOTIFICATION_INSTALL=1 \
     MAX_RETRIES=0 \
     QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_system_notification_test.sh"
-  claims+=("iOS Simulator system notification permission/delivery/tap/detail/read plus direct mark-read and destructive delete/control/relaunch journeys")
+  claims+=("iOS Simulator system notification permission/delivery/hot-and-terminated-process tap/detail/read plus direct mark-read and destructive delete/control/relaunch journeys")
 }
 
 case "$lane" in

@@ -148,6 +148,7 @@ struct PushGoQualitySessionDescriptor: Codable, Equatable, Sendable {
     let messageRefreshScenario: PushGoQualityMessageRefreshScenario
     let eventCloseScenario: PushGoQualityEventCloseScenario
     let channelMutationScenario: PushGoQualityChannelMutationScenario
+    let allowsSystemColdLaunch: Bool
 
     init(
         schemaVersion: Int = currentSchemaVersion,
@@ -156,7 +157,8 @@ struct PushGoQualitySessionDescriptor: Codable, Equatable, Sendable {
         faults: PushGoQualityFaults = PushGoQualityFaults(),
         messageRefreshScenario: PushGoQualityMessageRefreshScenario = .none,
         eventCloseScenario: PushGoQualityEventCloseScenario = .none,
-        channelMutationScenario: PushGoQualityChannelMutationScenario = .none
+        channelMutationScenario: PushGoQualityChannelMutationScenario = .none,
+        allowsSystemColdLaunch: Bool = false
     ) {
         self.schemaVersion = schemaVersion
         self.sessionID = sessionID
@@ -165,6 +167,7 @@ struct PushGoQualitySessionDescriptor: Codable, Equatable, Sendable {
         self.messageRefreshScenario = messageRefreshScenario
         self.eventCloseScenario = eventCloseScenario
         self.channelMutationScenario = channelMutationScenario
+        self.allowsSystemColdLaunch = allowsSystemColdLaunch
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -175,6 +178,7 @@ struct PushGoQualitySessionDescriptor: Codable, Equatable, Sendable {
         case messageRefreshScenario = "message_refresh_scenario"
         case eventCloseScenario = "event_close_scenario"
         case channelMutationScenario = "channel_mutation_scenario"
+        case allowsSystemColdLaunch = "allows_system_cold_launch"
     }
 
     init(from decoder: Decoder) throws {
@@ -196,6 +200,10 @@ struct PushGoQualitySessionDescriptor: Codable, Equatable, Sendable {
             PushGoQualityChannelMutationScenario.self,
             forKey: .channelMutationScenario
         ) ?? .none
+        allowsSystemColdLaunch = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .allowsSystemColdLaunch
+        ) ?? false
     }
 }
 
@@ -211,6 +219,7 @@ enum PushGoQualitySessionError: Error, Equatable, LocalizedError {
     case invalidSessionID
     case invalidMessageLoadDelay(Int)
     case invalidMessageRefreshDelay(Int)
+    case systemColdLaunchNotAllowed
 
     var errorDescription: String? {
         switch self {
@@ -226,7 +235,23 @@ enum PushGoQualitySessionError: Error, Equatable, LocalizedError {
             return "Message load delay must be between 0 and 30000 ms: \(delay)."
         case let .invalidMessageRefreshDelay(delay):
             return "Message refresh delay must be between 0 and 30000 ms: \(delay)."
+        case .systemColdLaunchNotAllowed:
+            return "Quality session did not explicitly allow a system cold launch."
         }
+    }
+}
+
+private struct PushGoQualityColdLaunchLease: Codable {
+    static let currentSchemaVersion = 1
+
+    let schemaVersion: Int
+    let encodedSession: String
+    let expiresAt: Date
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case encodedSession = "encoded_session"
+        case expiresAt = "expires_at"
     }
 }
 
@@ -240,6 +265,14 @@ enum PushGoAutomationContext {
     private static let gatewayTokenEnv = "PUSHGO_AUTOMATION_GATEWAY_TOKEN"
     private static let forceForegroundAppEnv = "PUSHGO_AUTOMATION_FORCE_FOREGROUND_APP"
     private static let allowCrossAppDataAccessEnv = "PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS"
+    private static let qualityColdLaunchLeaseLifetime: TimeInterval = 5 * 60
+
+    private struct ProcessQualitySessionResolution {
+        let encodedSession: String?
+        let inputStatus: String
+    }
+
+    private static let processQualitySessionResolution = resolveProcessQualitySession()
 
     #if DEBUG
     // Unit tests run concurrently in one process. A task-local override keeps
@@ -263,7 +296,9 @@ enum PushGoAutomationContext {
     }
 
     static var runtimeProfile: PushGoRuntimeProfile {
-        resolveRuntimeProfile(encodedQualitySession: normalizedString(for: qualitySessionEnv))
+        resolveRuntimeProfile(
+            encodedQualitySession: processQualitySessionResolution.encodedSession
+        )
     }
 
     static var qualitySession: PushGoQualitySessionDescriptor? {
@@ -272,8 +307,7 @@ enum PushGoAutomationContext {
     }
 
     static var qualitySessionInputStatus: String {
-        guard let encoded = normalizedString(for: qualitySessionEnv) else { return "missing" }
-        return (try? decodeQualitySession(encoded)) == nil ? "invalid" : "valid"
+        processQualitySessionResolution.inputStatus
     }
 
     static var qualitySessionRootURL: URL? {
@@ -406,6 +440,58 @@ enum PushGoAutomationContext {
         #endif
     }
 
+    static func writeQualityColdLaunchLease(
+        encodedSession: String,
+        baseURL: URL,
+        expiresAt: Date,
+        fileManager: FileManager = .default
+    ) throws {
+        let descriptor = try decodeQualitySession(encodedSession)
+        guard descriptor.allowsSystemColdLaunch else {
+            throw PushGoQualitySessionError.systemColdLaunchNotAllowed
+        }
+        let handoff = PushGoQualityColdLaunchLease(
+            schemaVersion: PushGoQualityColdLaunchLease.currentSchemaVersion,
+            encodedSession: encodedSession,
+            expiresAt: expiresAt
+        )
+        let targetURL = qualityColdLaunchLeaseURL(baseURL: baseURL)
+        try fileManager.createDirectory(
+            at: targetURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try JSONEncoder().encode(handoff).write(to: targetURL, options: .atomic)
+    }
+
+    static func loadQualityColdLaunchLease(
+        baseURL: URL,
+        now: Date,
+        fileManager: FileManager = .default
+    ) -> String? {
+        let targetURL = qualityColdLaunchLeaseURL(baseURL: baseURL)
+        guard let data = try? Data(contentsOf: targetURL) else { return nil }
+        guard let handoff = try? JSONDecoder().decode(
+            PushGoQualityColdLaunchLease.self,
+            from: data
+        ),
+              handoff.schemaVersion == PushGoQualityColdLaunchLease.currentSchemaVersion,
+              handoff.expiresAt > now,
+              let descriptor = try? decodeQualitySession(handoff.encodedSession),
+              descriptor.allowsSystemColdLaunch
+        else {
+            try? fileManager.removeItem(at: targetURL)
+            return nil
+        }
+        return handoff.encodedSession
+    }
+
+    static func clearQualityColdLaunchLease(
+        baseURL: URL,
+        fileManager: FileManager = .default
+    ) {
+        try? fileManager.removeItem(at: qualityColdLaunchLeaseURL(baseURL: baseURL))
+    }
+
     static var keychainDirectoryURL: URL? {
         storageRootURL?.appendingPathComponent("keychain", isDirectory: true)
     }
@@ -500,6 +586,75 @@ enum PushGoAutomationContext {
             return sandboxURL
         }
         return URL(fileURLWithPath: raw, isDirectory: true)
+    }
+
+    private static func resolveProcessQualitySession() -> ProcessQualitySessionResolution {
+        #if DEBUG
+        let explicitSession = normalizedString(for: qualitySessionEnv)
+        let baseURL = FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first
+        if let explicitSession {
+            guard let descriptor = try? decodeQualitySession(explicitSession) else {
+                return ProcessQualitySessionResolution(
+                    encodedSession: nil,
+                    inputStatus: "invalid"
+                )
+            }
+            if let baseURL {
+                if descriptor.allowsSystemColdLaunch {
+                    do {
+                        try writeQualityColdLaunchLease(
+                            encodedSession: explicitSession,
+                            baseURL: baseURL,
+                            expiresAt: Date().addingTimeInterval(qualityColdLaunchLeaseLifetime)
+                        )
+                    } catch {
+                        return ProcessQualitySessionResolution(
+                            encodedSession: nil,
+                            inputStatus: "invalid"
+                        )
+                    }
+                } else {
+                    clearQualityColdLaunchLease(baseURL: baseURL)
+                }
+            } else if descriptor.allowsSystemColdLaunch {
+                return ProcessQualitySessionResolution(
+                    encodedSession: nil,
+                    inputStatus: "invalid"
+                )
+            }
+            return ProcessQualitySessionResolution(
+                encodedSession: explicitSession,
+                inputStatus: "valid"
+            )
+        }
+        guard let baseURL,
+              let handedOffSession = loadQualityColdLaunchLease(
+                  baseURL: baseURL,
+                  now: Date()
+              )
+        else {
+            return ProcessQualitySessionResolution(
+                encodedSession: nil,
+                inputStatus: "missing"
+            )
+        }
+        return ProcessQualitySessionResolution(
+            encodedSession: handedOffSession,
+            inputStatus: "valid"
+        )
+        #else
+        return ProcessQualitySessionResolution(encodedSession: nil, inputStatus: "missing")
+        #endif
+    }
+
+    private static func qualityColdLaunchLeaseURL(baseURL: URL) -> URL {
+        baseURL
+            .appendingPathComponent("PushGoQuality", isDirectory: true)
+            .appendingPathComponent("Control", isDirectory: true)
+            .appendingPathComponent("cold-launch-lease.json", isDirectory: false)
     }
 
     private static func sandboxTempStorageURL(from raw: String) -> URL? {

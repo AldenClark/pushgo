@@ -89,9 +89,16 @@ class QualityImpactPlanTests(unittest.TestCase):
                 self.assertEqual("nightly", plan["recommended_lane"])
                 self.assertIn("notification-system-delivery", plan["impacted_capabilities"])
                 self.assertIn(
-                    "iOS Simulator real permission/delivery/tap/detail/read/relaunch journey plus direct Mark as read and destructive Delete actions with durable canonical oracles",
+                    "iOS Simulator real permission/delivery/hot-and-terminated-process tap/detail/read/relaunch journeys plus direct Mark as read and destructive Delete actions with durable canonical oracles",
                     plan["minimum_evidence"],
                 )
+
+    def test_app_owned_cold_launch_lease_requires_release_isolation(self):
+        plan = self.plan("Shared/Utilities/AppConstants.swift")
+
+        self.assertEqual("release", plan["recommended_lane"])
+        self.assertIn("app-owned-quality-runtime", plan["impacted_capabilities"])
+        self.assertIn("release-runtime-isolation", plan["impacted_capabilities"])
 
     def test_product_and_performance_changes_promote_to_release_superset(self):
         plan = self.plan(
