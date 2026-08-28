@@ -4,9 +4,9 @@
 
 | 平台/真实入口 | 用户目的 | 关键状态/分支 | 数据/系统终点 | 最低证据 | Lane/当前状态 | 主要 owner |
 | --- | --- | --- | --- | --- | --- | --- |
-| I/M/W App launch | 进入可操作 App | Empty/Content/slow/error/migration | App-owned Store、首屏、导航 | Store + UI + launch metric | P0；iOS empty/content/slow/error 已有，M/W 与 migration UI 待补 | `AppEnvironment`、`LocalDataStore`、Root UI |
+| I/M/W App launch | 进入可操作 App | Empty/Content/slow/error/migration | App-owned Store、session 配置、首屏、导航 | Store + UI + launch metric | P0；iOS empty/content/slow/error 已有；quality DB 与 server/key metadata 均由 App-owned session 隔离，坏配置读取阻断 readiness；M/W 与 migration UI 待补 | `AppEnvironment`、`LocalDataStore`、Root UI |
 | I/M Messages | 浏览和刷新消息 | first/page/refresh/slow/error | summary query、revision、列表行 | Store + VM + UI | P0；iOS 首次 slow/error/retry、跨 50 条页界、主动刷新慢态/旧快照、新结果持久化及失败后恢复已有；真实性能待补 | Message Store/VM/List |
-| I/M Messages row/detail | 阅读准确对象 | read/unread/missing/decrypt/media | detail、read state、badge | Core + UI + relaunch | P0；iOS 准确字段/详情、单条/全部已读、未读筛选与 relaunch 已有；媒体/decrypt 待补 | Message Detail/Store |
+| I/M Messages row/detail | 阅读准确对象 | read/unread/missing/decrypt/media | detail、read state、badge | Core + UI + relaunch | P0；iOS 准确字段/详情、单条/全部已读、未读筛选与 relaunch 已有；合法 Key 的原消息恢复、准确明文和 relaunch 已有；媒体及错 Key/坏密文恢复待补 | Message Detail/Store |
 | I/M Search | 找到且只找到目标消息 | latest query/empty/error/rebuild | search index、结果集合、详情 | property + Store + UI | P0；错误查询排除、目标集合与真实详情 UI 已有；index error/rebuild 仍在低层 | Search VM/Store/UI |
 | I/M Filters/cleanup | 限定范围并清理历史 | channel/tag/unread/cutoff/cancel/failure | Message/Event/Thing、stats/index | Store boundary + UI | P0/P1；未读筛选空态与恢复全部已有，channel/tag/cleanup UI 待补 | List/Store/Cleanup |
 | I/M Delete/Undo | 删除或撤销且重启一致 | pending/undo/claim/failure/reopen | canonical rows、通知、派生表面 | coordinator + Store + UI | P0；iOS 删除→隐藏→Undo→relaunch 已有，macOS/过期提交/通知对账待补 | Pending deletion |
@@ -14,7 +14,7 @@
 | I/M Things | 浏览对象和三个真实页签 | active/filter/missing/deep link | head、Events/Messages/Updates | Store + router + UI | P0；iOS 内置摄入→准确概览→三页签→三类关联详情→返回原页签→relaunch 已实现；筛选/深链/删除待补 | Thing Store/VM/UI |
 | I/M Channels | 创建、订阅、改名、退订 | invalid/auth/failure/keep/delete/undo | 远端订阅、凭据、历史 | contract + Store + UI | P0；两端创建→改名→relaunch、保留历史退订与删除历史延迟提交→relaunch 已实现；远端拒绝/补偿 UI 与订阅既有频道待补 | Channel controller/UI |
 | I/M Settings server | 修改真实 Gateway | invalid/cancel/failure/default | secure token、后续 endpoint、gateway-scoped data | unit + contract + UI + relaunch | P0；iOS 真实入口已覆盖 invalid、标准化保存、频道数据立即换域及 relaunch；macOS 和保存/同步故障注入待补 | Settings VM/Environment |
-| I/M Settings decryption | 配置 Key 并恢复消息 | encoding/invalid/missing/wrong/clear | 受保护材料、明文状态 | validator + protected Store + UI + relaunch | P0；iOS 真实入口已覆盖 invalid、成功状态、不回显、空白 Save 无损保留、显式 Delete 清除及各自 relaunch；真实加密消息恢复和存储故障注入待补 | Settings/Decryptor |
+| I/M Settings decryption | 配置 Key 并恢复消息 | encoding/invalid/missing/wrong/clear | 受保护材料、原密文、同一 canonical 消息、明文状态 | validator + protected Store + Core + UI + relaunch | P0；iOS 真实入口已覆盖 invalid、成功状态、不回显、空白 Save 无损保留、显式 Delete 清除及各自 relaunch；`messages.encrypted.valid` 已证明 missing-key→真实设置→同一消息准确明文→relaunch，身份/已读/时间及原密文保留；错 Key/坏密文 UI 和存储写失败注入待补 | Settings/Decryptor |
 | I/M Settings visibility | 控制主页面入口 | hide/show/relaunch/legal selection | settings Store、Tab/Sidebar | controller + UI + relaunch | P0；iOS 已从真实 Settings 控件关闭/恢复 Event 入口并两次 relaunch 核对，macOS 待补 | Visibility controller/UI |
 | I/M Notification sound | 配置真实声音行为 | priority/mode/preview/import/failure | audio session、文件、notification | unit + platform + UI | P1；系统证据缺口 | Sound settings/presenter |
 | I/M Notification route/actions | 从通知完成目标动作 | cold/hot/missing/read/delete/copy | Store、通知中心、badge、route | integration + physical UI | P0 Release；NOT RUN | AppDelegate/Notification controllers |

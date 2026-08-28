@@ -34,6 +34,7 @@
 | Settings 页面可见性 | Channels→Settings，关闭/恢复 Event，再分别重启 | 真实 Toggle/FilterChip → visibility controller/repository → persisted setting → root navigation | 关闭后入口少一个且重启仍隐藏；恢复后可打开准确 Event 页且再次重启仍可达 | 直接写 preference、只看开关 selected、只数标识或 Runtime state 均不能通过 |
 | Settings server | Channels→Settings→Server，先提交 invalid 再保存新地址 | 真实字段 → URL validator/normalizer → Settings VM → Keychain/Room + secure token store → gateway-scoped channel query → relaunch read | invalid 不 dismiss 且 inline feedback；保存后旧 gateway 频道消失；标准化地址跨 relaunch 保留 | 只看 toast/sheet dismiss/configured 标志、直接写设置或继续显示旧 gateway 数据均失败 |
 | Settings decryption | Channels→Settings→Decryption，先提交 invalid，再保存合成 key、空白保存并显式删除 | 真实输入字段 → validator → Settings VM → protected material + metadata → relaunch read/delete | invalid 不 dismiss；持久化成功后状态变化；重启状态保留且不回显；空白保存不误删既有材料；显式删除后重启仍未配置 | 异常被吞仍报成功、async 校验前关闭、只看 Runtime state、回显输入、空白保存造成数据丢失或显式删除后复活均失败；真实消息解密另行证明 |
+| 加密消息恢复 | 打开缺 Key 的准确消息→详情配置入口→保存合法 Key→再次打开并重启 | 合成密文 → 正式 Notification parser → canonical Store → 真实详情/Settings → 同一 parser 重解析 → canonical/派生列表 → relaunch | 初始占位准确；最终标题/正文精确；状态成功；local id/message id/已读/接收时间/原密文保留；relaunch 仍为明文 | configured/sheet dismiss/文件存在不能通过；Key 编码选择与输入不一致、只更新列表未更新详情、生成新消息、丢原密文或重启回退均失败 |
 | Release 隔离 | 向 Release 注入合法会话 | launch env → runtime resolver | Quality Runtime 不激活 | Debug-only 条件移除会使负控失败 |
 
 ## 红队攻击结果（设计防线与已实现防线分开理解）
@@ -95,6 +96,13 @@
 55. **通用控件补丁落错页面攻击**：首次为 Apple 添加 Delete 时，宽泛的 `AppActionButton` 匹配把控件插入 Server editor，Decryption 旅程在真实点击处可信失败；若只做编译或控件存在检查会漏掉。结果：删除错误集成，改用解密表单独有 loading owner 定位，再以真实入口和清除/relaunch Oracle 1/1 通过。AI 修改共享 UI 时必须核对最终渲染 owner，不能把成功应用补丁当集成完成。
 56. **空白保存误删受保护配置攻击**：Apple 增加显式 Delete 后，普通 Save 的空输入仍沿用旧清除语义；因为秘密值按设计不回显，用户只打开编辑器再保存就会无意删除既有配置。结果：生命周期旅程新增“空白 Save 后 configured 状态与 relaunch 均保持”负控，产品将保留与删除分成显式意图；首次回归还暴露成功 owner 未驱动 sheet 离场，补齐正式成功状态后同一旅程 1/1 通过。删除能力不能以牺牲默认无损语义换取。
 57. **同文案跨页面全局命中攻击**：Android device 全量首次在四个消息详情断言上各命中列表行与详情的两个相同正文节点，产品数据正确但测试系统误报。结果：保留首次 4 个 `FAILED_TEST_SYSTEM` 归因，把 Oracle 限定到真实详情 owner `field.message.detail.body` 并仍核对准确正文；focused 11/11 和完整 device 17 条 App 旅程 + 18 条数据边界随后通过。禁止用“任意可见同文案”替代目标页面 owner，也不因定位修复放宽内容断言。
+58. **configured 标记冒充实际解密攻击**：只保存合法长度 Key 并观察“已配置”，即使既有密文永远不重解析仍会绿色。结果：两端新增 `messages.encrypted.valid`，先证明准确占位，再从消息详情走真实设置，最终比较精确明文、同一对象的数据不变量和 relaunch；合法 Key 才能把该旅程变绿。
+59. **Key 文本与编码选择错配攻击**：Apple 首版用例在默认 Plaintext 下输入 Base64 文本；文本长度恰好也是合法 AES 长度，保存成功但实际是另一把 Key。结果：分类为测试系统语义错误，不把产品恢复判失败；夹具改为可直接输入的 16 字节合成 Plaintext，UI 选择、输入和加密材料一致后才产生有效证据。测试准备必须表达用户选择的同一语义，不能只保证“validator 接受”。
+60. **规范库已更新但详情短缓存仍显示旧数据攻击**：Android 首轮恢复后列表出现准确新标题，重新打开详情仍在 15 秒缓存内显示旧占位正文。结果：可信产品失败；详情每次打开都从 Room 校验 canonical 行，修复后同一 focused UI 1/1 和整个 Settings 类 4/4 通过。性能优化不得让刚完成的用户动作短暂返回错误数据。
+61. **质量会话共享受保护偏好攻击**：Android 原 Quality Runtime 只隔离 Room，Keystore 加密值和 settings cache 仍使用生产级共享 preference 文件，前序用例可污染后续 key/gateway 状态。结果：每个 session 新增独立 secure/settings preference 名称，仍使用真实 Android Keystore 加密；teardown/runner 完成时在释放 Container 后准确删除。生产偏好不读不写，测试不再依赖预清理整个 App 数据。
+62. **Apple 数据库隔离但 Keychain 仍共享攻击**：Apple 首轮 Release 的 18 条旅程有 2 条可信失败：新 decryption session 启动时已显示 configured，server 保存后旧 gateway 频道未换域。结果包证明 16/18 通过且测试系统正常；根因是 quality session 只隔离 GRDB，仍读取前序用例写入的生产 Keychain/server fallback。修复为 App-owned session `config` 目录持久化 server/key metadata，质量模式不读写生产 Keychain、gateway token 或共享 fallback；同 session relaunch 保留，不同 session 从空基线开始。定向 3/3 与最终 Release 18/18 通过，未放松任一用户目的 Oracle。
+63. **配置读取失败被“没有配置”吞掉攻击**：即使 session 文件后端隔离，`try?` 仍可能把权限或坏 JSON 伪装为 nil，再自动写入默认 server，形成准备假绿。结果：质量模式改为传播读取/解码错误，让 readiness 失败并归入测试系统；Core 负控写入坏 JSON，必须抛出 `DecodingError`。生产兼容 fallback 保持原语义，测试错误不再静默降级。
+64. **已连接真机静默扩大 Lane 攻击**：Android doctor 原先取 `adb devices` 第一行且 Gradle 未绑定 serial；设备顺序变化后，Release 的 51 条数据测试同时跑到模拟器和个人真机，增加时长、改变 API 并扩大状态影响。结果：doctor 默认稳定优先 emulator，显式 `ANDROID_SERIAL` 可选择真机；Lane 必须解析 doctor 结果并把唯一 serial 传给 Gradle。双设备在线时最小负控只在 emulator 运行 1/1，最终 Release 也仅在 API 37 emulator 完成 18 条 UI + 52 条数据测试，真机系统能力仍须显式 Lane。
 
 ## 归因分析
 
@@ -112,13 +120,17 @@
 | Settings 看似保存但重启丢失或仍显示旧数据 | UI 在异步保存前 dismiss、底层吞错、Oracle 只看成功提示/地址文本 | 保存错误向 UI 传播；成功后才 dismiss/更新状态；server 追加 gateway 数据换域与 relaunch，decryption 追加状态、不回显与 relaunch | invalid/持久化/换域错误=`FAILED`；注入边界不可用=`NOT RUN`；外部同步/真机 secure store=`BLOCKED/NOT RUN` |
 | Decryption 能配置但不能删除 | 为避免回显，空输入语义是保留现值；持久层清除能力没有真实 UI 入口 | 显式 destructive Delete → 正式清除路径 → UI 状态 → relaunch，并保留写入/不回显 Oracle | 删除后仍 configured 或重启复活=`FAILED`；直接改存储不计 UI 证据 |
 | Decryption 空白保存导致配置丢失 | 不回显字段无法区分“用户没有输入新值”与“请求清除”，旧 Save 又隐式承担删除 | 普通空白 Save 明确保留；只有显式 destructive Delete 清除；两条路径都核对 UI 状态与 relaunch | 空白 Save 后丢失=`FAILED`；Delete 后复活=`FAILED`；只看提示不计证据 |
+| Key 已保存但原消息不恢复或显示旧正文 | 配置生命周期与消息重解析断开，或详情短缓存未感知 canonical 更新 | 保存后用原始密文和正式 parser 重解析同一对象；更新 canonical/派生数据；详情打开从 Store 校验；精确明文与 relaunch Oracle | 明文/身份/原密文/重启错误=`FAILED`；输入编码语义错配=`FAILED_TEST_SYSTEM` |
+| 新 session 初始已配置、server 换域无效 | 只隔离业务数据库，Apple Keychain/fallback 或 Android secure preferences/settings cache 仍跨 session 共享 | 所有质量配置由 App-owned session backend 持有；生产受保护存储不读不写；同 session relaunch 保留、跨 session 隔离 | 跨 session 污染=`FAILED_TEST_SYSTEM`；隔离后真实保存/换域错误=`FAILED` |
+| 配置损坏或权限错误却自动使用默认值 | 质量模式用 `try?` 把读取错误折叠为“没有配置” | 质量路径传播读取/解码错误并阻断 readiness；坏 JSON 负控必须失败 | 准备/权限/解码=`BLOCKED/FAILED_TEST_SYSTEM`；不得写默认值变绿 |
+| Android Lane 偶发跑到多个设备 | doctor 选第一行且 Gradle 未绑定已选 serial | emulator-first 确定选择、显式 serial override、Lane 单目标传递、双设备在线负控 | 指定设备不可用=`BLOCKED`；静默扩容=`FAILED_TEST_SYSTEM` |
 | 消息详情正确却出现双节点失败 | 列表行和详情同时包含同一正文，测试用全局文本选择器而没有声明真实 owner | 以详情字段稳定语义限定唯一 owner，并在 owner 内断言准确正文 | 多 owner/不可唯一归因=`FAILED_TEST_SYSTEM`；owner 唯一但内容错误=`FAILED` |
 | iOS 准备长期停在 seeding | 使用非专用 Simulator clone，环境身份不满足受控代表设备合同 | doctor 选择专用设备；首次环境失败与后续产品通过分别保留 | 受控设备不可用/准备不完成=`BLOCKED/FAILED_TEST_SYSTEM`；不得归为产品通过或失败 |
 
 ## 双向覆盖反查
 
 - 源码→测试：消息 Store/Repository、Paging/VM、列表状态、Retry、fixture ingestion、Release resolver、Runner/teardown、CI lane 均有对应低层或纵向证据；两端全部已跟踪产品路径均至少命中一个具名能力规则，当前未映射为 0。
-- 测试→产品：新核心用例均能追到真实 App UI、Store/Paging/Projection 或 Release resolver；没有以孤立 helper 自证。
+- 测试→产品：新核心用例均能追到真实 App UI、Store/Paging/Projection 或 Release resolver；加密恢复明确追到 parser→canonical failed state→真实详情/Settings→reparse→同一 canonical/派生列表→relaunch，没有以孤立 helper 自证。
 - 变更→最低证据：Message UI 命中准确内容/搜索/删除/relaunch，Store/Room 命中跨能力数据与 UI，Runtime 命中 Release 隔离，通知/系统消费者提升 Nightly/Release；未知 Screen 阻断，文档明确 `NOT_RUN`。
 - 平台消费者：通知、后台、Widget、Spotlight、Watch、真机权限/FCM/APNs 已列入能力矩阵和 Release 清单，未被模拟器结果冒充。
 - 低价值边缘：不可达导出 helper、未挂载 MenuBar 内容、100k 日常执行、全语言全设备故障组合明确延期或删除候选，避免挤占核心预算。

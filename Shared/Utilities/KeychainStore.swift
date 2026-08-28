@@ -573,10 +573,16 @@ struct LocalKeychainConfigStore {
 
     private let keychain: KeychainStore
     private let legacyKeychain: KeychainStore?
+    private let qualityStorageDirectory: URL?
+    private let fileManager: FileManager
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
-    init() {
+    init(
+        fileManager: FileManager = .default,
+        qualityStorageDirectory: URL? = PushGoAutomationContext.qualitySessionRootURL?
+            .appendingPathComponent("config", isDirectory: true)
+    ) {
         let sharedAccessGroup = KeychainStore.accessGroup(matchingSuffix: Self.accessGroupSuffix)
         keychain = KeychainStore(
             service: Self.service,
@@ -591,6 +597,8 @@ struct LocalKeychainConfigStore {
                 synchronizable: false,
                 usesDataProtectionKeychain: false
             )
+        self.qualityStorageDirectory = qualityStorageDirectory
+        self.fileManager = fileManager
         encoder = JSONEncoder()
         decoder = JSONDecoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -598,27 +606,30 @@ struct LocalKeychainConfigStore {
     }
 
     func loadServerConfig() throws -> ServerConfig? {
-        guard let data = try readSharedOrLegacy(account: Self.serverConfigAccount) else {
+        guard let data = try read(account: Self.serverConfigAccount) else {
             return nil
         }
         let config = try decoder.decode(ServerConfig.self, from: data).normalized()
-        _ = ProviderGatewayTokenStore().save(token: config.token, baseURL: config.baseURL)
+        if qualityStorageDirectory == nil {
+            _ = ProviderGatewayTokenStore().save(token: config.token, baseURL: config.baseURL)
+        }
         return config
     }
 
     func saveServerConfig(_ config: ServerConfig?) throws {
         guard let config else {
-            try keychain.delete(account: Self.serverConfigAccount)
-            try? legacyKeychain?.delete(account: Self.serverConfigAccount)
+            try delete(account: Self.serverConfigAccount)
             return
         }
         let data = try encoder.encode(config)
-        try keychain.write(account: Self.serverConfigAccount, data: data)
-        _ = ProviderGatewayTokenStore().save(token: config.token, baseURL: config.baseURL)
+        try write(account: Self.serverConfigAccount, data: data)
+        if qualityStorageDirectory == nil {
+            _ = ProviderGatewayTokenStore().save(token: config.token, baseURL: config.baseURL)
+        }
     }
 
     func loadManualKeyPreferences() throws -> ManualKeyPreferences {
-        guard let data = try readSharedOrLegacy(account: Self.manualKeyPrefsAccount) else {
+        guard let data = try read(account: Self.manualKeyPrefsAccount) else {
             return ManualKeyPreferences(encoding: nil)
         }
         return try decoder.decode(ManualKeyPreferences.self, from: data)
@@ -627,12 +638,44 @@ struct LocalKeychainConfigStore {
     func saveManualKeyPreferences(_ preferences: ManualKeyPreferences) throws {
         let hasValue = preferences.encoding != nil
         guard hasValue else {
-            try keychain.delete(account: Self.manualKeyPrefsAccount)
-            try? legacyKeychain?.delete(account: Self.manualKeyPrefsAccount)
+            try delete(account: Self.manualKeyPrefsAccount)
             return
         }
         let data = try encoder.encode(preferences)
-        try keychain.write(account: Self.manualKeyPrefsAccount, data: data)
+        try write(account: Self.manualKeyPrefsAccount, data: data)
+    }
+
+    private func read(account: String) throws -> Data? {
+        guard let qualityStorageDirectory else {
+            return try readSharedOrLegacy(account: account)
+        }
+        let url = qualityStorageDirectory.appendingPathComponent(account + ".json", isDirectory: false)
+        guard fileManager.fileExists(atPath: url.path) else { return nil }
+        return try Data(contentsOf: url)
+    }
+
+    private func write(account: String, data: Data) throws {
+        guard let qualityStorageDirectory else {
+            try keychain.write(account: account, data: data)
+            return
+        }
+        try fileManager.createDirectory(
+            at: qualityStorageDirectory,
+            withIntermediateDirectories: true
+        )
+        let url = qualityStorageDirectory.appendingPathComponent(account + ".json", isDirectory: false)
+        try data.write(to: url, options: .atomic)
+    }
+
+    private func delete(account: String) throws {
+        guard let qualityStorageDirectory else {
+            try keychain.delete(account: account)
+            try? legacyKeychain?.delete(account: account)
+            return
+        }
+        let url = qualityStorageDirectory.appendingPathComponent(account + ".json", isDirectory: false)
+        guard fileManager.fileExists(atPath: url.path) else { return }
+        try fileManager.removeItem(at: url)
     }
 
     private func readSharedOrLegacy(account: String) throws -> Data? {

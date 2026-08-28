@@ -85,4 +85,60 @@ struct KeychainStoreTests {
             #expect(ProviderGatewayTokenStore().load(baseURL: baseURL) == "stored-config-token")
         }
     }
+
+    @Test("quality config is app-owned, session-scoped, persistent, and clearable")
+    func qualityConfigUsesSessionDirectoryInsteadOfSharedKeychain() throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory
+            .appendingPathComponent("pushgo-quality-config-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fileManager.removeItem(at: root) }
+
+        let firstSessionDirectory = root.appendingPathComponent("first", isDirectory: true)
+        let secondSessionDirectory = root.appendingPathComponent("second", isDirectory: true)
+        let firstStore = LocalKeychainConfigStore(
+            fileManager: fileManager,
+            qualityStorageDirectory: firstSessionDirectory
+        )
+        let secondStore = LocalKeychainConfigStore(
+            fileManager: fileManager,
+            qualityStorageDirectory: secondSessionDirectory
+        )
+        let config = ServerConfig(
+            baseURL: try #require(URL(string: "https://quality-session.invalid/api")),
+            token: "synthetic-session-token",
+            notificationKeyMaterial: .init(
+                algorithm: .aesGcm,
+                keyData: Data("QualityKey123456".utf8),
+                ivBase64: nil,
+                updatedAt: Date()
+            )
+        )
+
+        try firstStore.saveServerConfig(config)
+        try firstStore.saveManualKeyPreferences(.init(encoding: "plaintext"))
+
+        let relaunchedStore = LocalKeychainConfigStore(
+            fileManager: fileManager,
+            qualityStorageDirectory: firstSessionDirectory
+        )
+        #expect(try relaunchedStore.loadServerConfig()?.baseURL == config.normalized().baseURL)
+        #expect(try relaunchedStore.loadServerConfig()?.notificationKeyMaterial?.keyData == Data("QualityKey123456".utf8))
+        #expect(try relaunchedStore.loadManualKeyPreferences().encoding == "plaintext")
+        #expect(try secondStore.loadServerConfig() == nil)
+        #expect(try secondStore.loadManualKeyPreferences().encoding == nil)
+
+        try fileManager.createDirectory(at: secondSessionDirectory, withIntermediateDirectories: true)
+        try Data("not-json".utf8).write(
+            to: secondSessionDirectory.appendingPathComponent("server.config.json"),
+            options: .atomic
+        )
+        #expect(throws: DecodingError.self) {
+            _ = try secondStore.loadServerConfig()
+        }
+
+        try firstStore.saveServerConfig(nil)
+        try firstStore.saveManualKeyPreferences(.init(encoding: nil))
+        #expect(try relaunchedStore.loadServerConfig() == nil)
+        #expect(try relaunchedStore.loadManualKeyPreferences().encoding == nil)
+    }
 }

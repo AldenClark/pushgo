@@ -1490,6 +1490,13 @@ final class AppEnvironment {
         config.notificationKeyMaterial = material
         config.updatedAt = Date()
         try await updateServerConfig(config)
+        let recovery = try await NotificationPersistenceCoordinator.recoverEncryptedMessages(
+            using: material,
+            dataStore: dataStore
+        )
+        if recovery.updatedCount > 0 {
+            await refreshMessageCountsAndNotify()
+        }
     }
 
     var currentNotificationMaterial: ServerConfig.NotificationKeyMaterial? {

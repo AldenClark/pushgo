@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import SwiftUI
 
@@ -3590,6 +3591,12 @@ final class PushGoAutomationRuntime {
             messages = [qualityFixtureMessage(index: 0)]
             entityRecords = []
             channelSubscriptions = []
+        case .messagesEncryptedValid:
+            // This fixture is inserted through the production notification ingress
+            // below so the initial missing-key state cannot be fabricated as a row.
+            messages = []
+            entityRecords = []
+            channelSubscriptions = []
         case .messagesWorkflow:
             messages = (0..<52).map(qualityWorkflowFixtureMessage)
             entityRecords = []
@@ -3866,6 +3873,19 @@ final class PushGoAutomationRuntime {
         sourcePath: String?,
         environment: AppEnvironment,
     ) async throws {
+        var importedMessageCount = bundle.messages.count
+        if PushGoAutomationContext.qualitySession?.fixture == .messagesEncryptedValid {
+            environment.markQualityRuntimeReadiness("seeding.encrypted_message")
+            let outcome = await environment.persistRemotePayloadIfNeeded(
+                try qualityEncryptedRemotePayload(),
+                requestIdentifier: "quality-encrypted-delivery"
+            )
+            guard case .persistedMain = outcome else {
+                throw PushGoAutomationError.invalidArgument("messages.encrypted.valid ingress outcome")
+            }
+            importedMessageCount += 1
+            environment.markQualityRuntimeReadiness("seeding.encrypted_message.saved")
+        }
         if !bundle.messages.isEmpty {
             environment.markQualityRuntimeReadiness("seeding.messages")
             for message in bundle.messages.map({ $0.toPushMessage() }) {
@@ -3901,10 +3921,37 @@ final class PushGoAutomationRuntime {
         environment.markQualityRuntimeReadiness("seeding.complete")
         recordFixtureImport(
             path: sourcePath,
-            messageCount: bundle.messages.count,
+            messageCount: importedMessageCount,
             entityRecordCount: bundle.entityRecords.count,
             subscriptionCount: bundle.channelSubscriptions.count
         )
+    }
+
+    private func qualityEncryptedRemotePayload() throws -> [AnyHashable: Any] {
+        let keyData = Data("QualityKey123456".utf8)
+        let nonceData = Data((0..<12).map(UInt8.init))
+        let plaintext: [String: Any] = [
+            "title": "Recovered Quality Message",
+            "body": "Recovered from the original encrypted payload.",
+        ]
+        let plaintextData = try JSONSerialization.data(withJSONObject: plaintext, options: [.sortedKeys])
+        let sealedBox = try AES.GCM.seal(
+            plaintextData,
+            using: SymmetricKey(data: keyData),
+            nonce: AES.GCM.Nonce(data: nonceData)
+        )
+        var envelope = sealedBox.ciphertext
+        envelope.append(sealedBox.tag)
+        envelope.append(nonceData)
+        return [
+            "entity_type": "message",
+            "message_id": "quality-encrypted-message",
+            "delivery_id": "quality-encrypted-delivery",
+            "title": "Encrypted Quality Message",
+            "body": "Configure decryption to read this message.",
+            "ciphertext": envelope.base64EncodedString(),
+            "sent_at": "2026-01-15T08:00:00Z",
+        ]
     }
 
     private func applyFixtureSubscriptions(

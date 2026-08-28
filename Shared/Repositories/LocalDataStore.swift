@@ -1027,6 +1027,9 @@ actor LocalDataStore {
     }
 
     func loadServerConfig() async throws -> ServerConfig? {
+        if PushGoAutomationContext.qualitySession != nil {
+            return try localConfigStore.loadServerConfig()?.normalized()
+        }
         if let config = try? localConfigStore.loadServerConfig()?.normalized() {
             Self.saveWakeupIngressServerConfigDefaults(
                 config,
@@ -1040,10 +1043,12 @@ actor LocalDataStore {
     func saveServerConfig(_ config: ServerConfig?) async throws {
         let normalized = config?.normalized()
         try localConfigStore.saveServerConfig(normalized)
-        Self.saveWakeupIngressServerConfigDefaults(
-            normalized,
-            suiteName: appGroupIdentifier
-        )
+        if PushGoAutomationContext.qualitySession == nil {
+            Self.saveWakeupIngressServerConfigDefaults(
+                normalized,
+                suiteName: appGroupIdentifier
+            )
+        }
     }
 
     private func normalizeGatewayKey(_ gateway: String) -> String {

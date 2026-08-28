@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Testing
 import UserNotifications
@@ -46,6 +47,72 @@ private func makeTestProviderPullContext(
 }
 
 struct NotificationHandlingTests {
+    @Test
+    func validKeyRecoveryReparsesCanonicalMessageAndPreservesIdentity() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let keyData = Data("QualityKey123456".utf8)
+            let nonceData = Data((0..<12).map(UInt8.init))
+            let plaintext = try JSONSerialization.data(withJSONObject: [
+                "title": "Recovered Quality Message",
+                "body": "Recovered from the original encrypted payload.",
+            ])
+            let sealedBox = try AES.GCM.seal(
+                plaintext,
+                using: SymmetricKey(data: keyData),
+                nonce: AES.GCM.Nonce(data: nonceData)
+            )
+            var envelope = sealedBox.ciphertext
+            envelope.append(sealedBox.tag)
+            envelope.append(nonceData)
+            let originalID = UUID()
+            let originalDate = Date(timeIntervalSince1970: 1_768_464_000)
+            let original = PushMessage(
+                id: originalID,
+                messageId: "quality-encrypted-message",
+                title: "Encrypted Quality Message",
+                body: "Configure decryption to read this message.",
+                isRead: true,
+                receivedAt: originalDate,
+                rawPayload: [
+                    "entity_type": AnyCodable("message"),
+                    "message_id": AnyCodable("quality-encrypted-message"),
+                    "delivery_id": AnyCodable("quality-encrypted-delivery"),
+                    "title": AnyCodable("Encrypted Quality Message"),
+                    "body": AnyCodable("Configure decryption to read this message."),
+                    "ciphertext": AnyCodable(envelope.base64EncodedString()),
+                    "decryption_state": AnyCodable("notConfigured"),
+                ],
+                status: .normal,
+                decryptionState: .notConfigured
+            )
+            try await store.saveMessage(original)
+            let before = try await store.loadMessage(id: originalID)
+            #expect(before?.body == "Configure decryption to read this message.")
+            #expect(before?.decryptionState == .notConfigured)
+
+            let report = try await NotificationPersistenceCoordinator.recoverEncryptedMessages(
+                using: ServerConfig.NotificationKeyMaterial(
+                    algorithm: .aesGcm,
+                    keyData: keyData,
+                    ivBase64: nil,
+                    updatedAt: Date()
+                ),
+                dataStore: store
+            )
+            let recovered = try await store.loadMessage(id: originalID)
+
+            #expect(report == .init(examinedCount: 1, updatedCount: 1, decryptedCount: 1))
+            #expect(recovered?.id == originalID)
+            #expect(recovered?.messageId == original.messageId)
+            #expect(recovered?.isRead == true)
+            #expect(recovered?.receivedAt == originalDate)
+            #expect(recovered?.title == "Recovered Quality Message")
+            #expect(recovered?.body == "Recovered from the original encrypted payload.")
+            #expect(recovered?.decryptionState == .decryptOk)
+            #expect(recovered?.rawPayload["ciphertext"]?.value as? String == envelope.base64EncodedString())
+        }
+    }
+
     @Test
     func skipPersistenceRecognizesTruthyFlagVariants() {
         #expect(NotificationHandling.shouldSkipPersistence(for: ["_skip_persist": "true"]))

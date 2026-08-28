@@ -6,6 +6,8 @@ import Observation
 struct SettingsView: View {
     private let embedInNavigationContainer: Bool
     private let openDecryptionOnAppear: Bool
+    private let showsCloseButton: Bool
+    @Environment(\.dismiss) private var dismiss
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openURL) private var openURL
@@ -13,9 +15,14 @@ struct SettingsView: View {
     @State private var viewModel = SettingsViewModel()
     @State private var activeSheet: SettingsSheet?
 
-    init(embedInNavigationContainer: Bool = true, openDecryptionOnAppear: Bool = false) {
+    init(
+        embedInNavigationContainer: Bool = true,
+        openDecryptionOnAppear: Bool = false,
+        showsCloseButton: Bool = false
+    ) {
         self.embedInNavigationContainer = embedInNavigationContainer
         self.openDecryptionOnAppear = openDecryptionOnAppear
+        self.showsCloseButton = showsCloseButton
     }
 
     var body: some View {
@@ -89,6 +96,16 @@ struct SettingsView: View {
         if embedInNavigationContainer {
             navigationContainer {
                 settingsScaffold
+                    .toolbar {
+                        if showsCloseButton {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button(localizationManager.localized("close")) {
+                                    dismiss()
+                                }
+                                .accessibilityIdentifier("action.settings.close")
+                            }
+                        }
+                    }
             }
         } else {
             settingsScaffold

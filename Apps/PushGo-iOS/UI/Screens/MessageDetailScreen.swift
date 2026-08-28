@@ -7,6 +7,7 @@ struct MessageDetailScreen: View {
     @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @State private var viewModel: MessageDetailViewModel
     @State private var isShowingRuntimeAlert = false
+    @State private var isShowingDecryptionSettings = false
     @State private var previewingImage: ImagePreview?
     @State private var didLoad: Bool = false
     private let onCommitDelete: (@MainActor () async throws -> Void)?
@@ -81,6 +82,17 @@ struct MessageDetailScreen: View {
                 title: Text(viewModel.alertMessage ?? ""),
                 dismissButton: .default(Text(localizationManager.localized("ok")))
             )
+        }
+        .sheet(isPresented: $isShowingDecryptionSettings) {
+            SettingsView(
+                embedInNavigationContainer: true,
+                openDecryptionOnAppear: true,
+                showsCloseButton: true
+            )
+                .toastOverlay(environment: environment, showsPendingDeletionBar: false)
+        }
+        .onChange(of: environment.messageStoreRevision) { _, _ in
+            viewModel.refresh()
         }
         .pushgoImagePreviewOverlay(previewItem: $previewingImage, imageURL: \.url)
         .userActivity(
@@ -177,6 +189,7 @@ struct MessageDetailScreen: View {
                         messageImagesSection(imageURLs: messageImageURLs)
                     }
                     criticalSeverityHint(for: messageSeverity)
+                    decryptionRecoveryAction(for: message)
                     MarkdownRenderer(
                         text: resolvedBody.rawText,
                         font: .body,
@@ -224,6 +237,20 @@ struct MessageDetailScreen: View {
             } else {
                 Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func decryptionRecoveryAction(for message: PushMessage) -> some View {
+        if let state = message.decryptionState, state != .decryptOk {
+            Button {
+                isShowingDecryptionSettings = true
+            } label: {
+                Label(localizationManager.localized("message_decryption"), systemImage: "key.fill")
+            }
+            .buttonStyle(.bordered)
+            .appButtonHeight()
+            .accessibilityIdentifier("action.message.configure_decryption")
         }
     }
 
@@ -438,6 +465,9 @@ struct MessageDetailScreen: View {
                 )
                 .foregroundStyle(badgeContent.tone.foreground)
                 .labelStyle(.titleAndIcon)
+                .accessibilityIdentifier(
+                    "status.message.decryption.\(message.decryptionState?.rawValue ?? "encrypted")"
+                )
         } else {
             EmptyView()
         }
