@@ -61,6 +61,66 @@ struct QualityRuntimeProfileTests {
         #expect(descriptor.eventCloseScenario == .acceptedAndDelivered)
     }
 
+    @Test("event close quality boundary becomes one production-shaped delivered payload")
+    func buildsEventCloseDelivery() throws {
+        let boundary: [String: Any] = [
+            "channel_id": "quality-channel",
+            "event_id": "quality-event-active",
+            "op_id": "quality-close-operation",
+            "status": "closed",
+            "message": "closed by the user",
+            "severity": "normal",
+            "attrs": ["owner": "qa"],
+        ]
+
+        let delivery = try #require(
+            PushGoQualityEventCloseDelivery.make(
+                boundaryPayload: boundary,
+                endpointPath: "/event/close",
+                scenario: .acceptedAndDelivered
+            )
+        )
+
+        #expect(delivery.requestIdentifier == "quality-event-close-quality-event-active")
+        #expect(delivery.payload["entity_type"] as? String == "event")
+        #expect(delivery.payload["entity_id"] as? String == "quality-event-active")
+        #expect(delivery.payload["event_state"] as? String == "closed")
+        #expect(delivery.payload["projection_destination"] as? String == "event_head")
+        #expect(delivery.payload["delivery_id"] as? String == "quality-event-close-quality-event-active")
+        #expect(delivery.payload["received_at"] as? String == "2026-01-15T08:03:00Z")
+        #expect(delivery.payload["channel_id"] as? String == "quality-channel")
+        #expect(delivery.payload["op_id"] as? String == "quality-close-operation")
+        #expect(delivery.payload["message"] as? String == "closed by the user")
+        #expect(boundary["entity_type"] == nil, "The immutable boundary input must not be rewritten in place.")
+    }
+
+    @Test("event close quality boundary rejects inactive or unrelated calls")
+    func rejectsUnrelatedEventCloseDelivery() {
+        let boundary: [String: Any] = ["event_id": "quality-event-active"]
+
+        #expect(
+            PushGoQualityEventCloseDelivery.make(
+                boundaryPayload: boundary,
+                endpointPath: "/event/close",
+                scenario: .none
+            ) == nil
+        )
+        #expect(
+            PushGoQualityEventCloseDelivery.make(
+                boundaryPayload: boundary,
+                endpointPath: "/channel/create",
+                scenario: .acceptedAndDelivered
+            ) == nil
+        )
+        #expect(
+            PushGoQualityEventCloseDelivery.make(
+                boundaryPayload: [:],
+                endpointPath: "/event/close",
+                scenario: .acceptedAndDelivered
+            ) == nil
+        )
+    }
+
     @Test("decodes the typed channel mutation round trip")
     func decodesChannelMutationScenario() throws {
         let encoded = try encodedSession(

@@ -64,6 +64,42 @@ enum PushGoQualityEventCloseScenario: String, Codable, Sendable {
     case acceptedAndDelivered = "accepted_and_delivered"
 }
 
+#if DEBUG
+struct PushGoQualityEventCloseDelivery {
+    let payload: [AnyHashable: Any]
+    let requestIdentifier: String
+
+    static func make(
+        boundaryPayload: [String: Any],
+        endpointPath: String,
+        scenario: PushGoQualityEventCloseScenario
+    ) -> PushGoQualityEventCloseDelivery? {
+        guard scenario == .acceptedAndDelivered,
+              endpointPath.hasSuffix("/event/close"),
+              let eventID = boundaryPayload["event_id"] as? String,
+              !eventID.isEmpty
+        else {
+            return nil
+        }
+
+        var delivered = boundaryPayload.reduce(into: [AnyHashable: Any]()) { result, item in
+            result[item.key] = item.value
+        }
+        delivered["entity_type"] = "event"
+        delivered["entity_id"] = eventID
+        delivered["event_state"] = "closed"
+        delivered["projection_destination"] = "event_head"
+        delivered["delivery_id"] = "quality-event-close-\(eventID)"
+        delivered["received_at"] = "2026-01-15T08:03:00Z"
+
+        return PushGoQualityEventCloseDelivery(
+            payload: delivered,
+            requestIdentifier: "quality-event-close-\(eventID)"
+        )
+    }
+}
+#endif
+
 enum PushGoQualityChannelMutationScenario: String, Codable, Sendable {
     case none
     case accepted

@@ -2225,27 +2225,18 @@ final class AppEnvironment {
         payload: [String: Any],
         endpointPath: String
     ) async throws -> Bool {
-        guard PushGoAutomationContext.qualitySession?.eventCloseScenario == .acceptedAndDelivered,
-              endpointPath.hasSuffix("/event/close"),
-              let eventID = payload["event_id"] as? String,
-              !eventID.isEmpty
+        guard let delivery = PushGoQualityEventCloseDelivery.make(
+            boundaryPayload: payload,
+            endpointPath: endpointPath,
+            scenario: PushGoAutomationContext.qualitySession?.eventCloseScenario ?? .none
+        )
         else {
             return false
         }
 
-        var delivered = payload.reduce(into: [AnyHashable: Any]()) { result, item in
-            result[item.key] = item.value
-        }
-        delivered["entity_type"] = "event"
-        delivered["entity_id"] = eventID
-        delivered["event_state"] = "closed"
-        delivered["projection_destination"] = "event_head"
-        delivered["delivery_id"] = "quality-event-close-\(eventID)"
-        delivered["received_at"] = "2026-01-15T08:03:00Z"
-
         let outcome = await persistRemotePayloadIfNeeded(
-            delivered,
-            requestIdentifier: "quality-event-close-\(eventID)"
+            delivery.payload,
+            requestIdentifier: delivery.requestIdentifier
         )
         switch outcome {
         case .persistedMain, .duplicate:
