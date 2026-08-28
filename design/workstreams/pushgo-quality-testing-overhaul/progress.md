@@ -14,7 +14,7 @@
 | WP3 Messages | `PARTIAL` | 空态、标准字段/详情/relaunch、跨 50 条页界、单条/全部已读、未读筛选往返与重启持久化、搜索代表例、删除 Undo、首次慢/错恢复、慢刷新旧快照、新结果持久化与失败恢复 | channel/tag 筛选、删除不撤销、历史清理、Markdown/media/decrypt 以及 10k UI/性能未完成 |
 | WP4 Entity/Channel/Settings/watch UI | `PARTIAL` | Apple/Android Event/Thing/Channel 高价值纵向旅程；Sheet error owner 分区；Channel 创建覆盖真实密码拒绝、输入保留与重试，以及远端成功后本地凭据/DB 中点失败→本地回滚+远端补偿→正式重载无脏行→重试/relaunch；两端 Gateway 覆盖 invalid、候选拒绝不提交、fresh identity、候选远端成功后本地 commit 中点失败→回滚→重启旧值→重试提交；两端 decryption 覆盖生命周期、受保护写失败→重启未配置→重试、错误 Key 纠正、合法恢复、坏密文安全失败及 relaunch；Android FCM/Private selector 覆盖双向 prepare 拒绝保持旧 route、本地 mode/secret commit 中点失败补偿/回滚、重试与 relaunch | Event slow/error/duplicate close；Thing 筛选/深链/删除；Channel 订阅既有频道及其既有远端关系补偿协议；rollback 自身再次失败的 UI、macOS Settings UI、声音；watch P0 UI 未完成；真实外部 FCM/Private delivery 仍属 WP5 |
 | WP5 Ingress/系统能力 | `PARTIAL` | 两端 ACK/去重/迁移等低层证据较强 | 当前可模拟的通知路由、后台恢复、macOS Window/Status Item、Apple 系统表面仍缺；真实 APNs/FCM/private/权限/安装需外部环境 |
-| WP6 性能/a11y/l10n | `PARTIAL` | 两端慢状态可证伪；独立 opt-in Performance Lane 已执行 Apple 100k Store/upgrade、Watch/并发与 Android 真实 Room 100k correctness + provisional host/emulator ceilings；两端生产本地化资源完整性/占位符合同已进入 PR；独立 Accessibility Lane 在实际 zh-Hans/zh-CN 与最大/1.5 倍字体环境完成真实消息详情和频道创建任务，并验证环境恢复 | Macrobenchmark/Baseline Profile、Apple 真机 launch/frame ETTrace、固定参考物理设备 10 次 p50/p95、物理 VoiceOver/TalkBack 任务、macOS/watchOS 辅助任务及风险代表的其他尺寸/语言尚未完成；不构造全笛卡尔积 |
+| WP6 性能/a11y/l10n | `PARTIAL` | 两端慢状态可证伪；独立 opt-in Performance Lane 已执行 Apple 100k Store/upgrade、Watch/并发与准确 1k 冷启动详情，Android 已执行真实 Room 100k、Release-like Macrobenchmark 准确 1k 启动/详情目的 dry-run、过滤后的 Baseline/Startup Profile 与 Release 隔离；两端生产本地化资源完整性/占位符合同已进入 PR；独立 Accessibility Lane 在实际 zh-Hans/zh-CN 与最大/1.5 倍字体环境完成真实消息详情和频道创建任务，并验证环境恢复 | 两端固定参考物理设备 10 次 p50/p95、Android 真机 frame/trace、Apple 真机 launch/frame ETTrace、物理 VoiceOver/TalkBack 任务、macOS/watchOS 辅助任务及风险代表的其他尺寸/语言尚未完成；不构造全笛卡尔积 |
 | WP7 CI/AI/治理 | `PARTIAL` | lane wrapper、双状态结果、CI、AGENTS/AI policy 已建立；两仓库已实现变更→能力→最低证据合同、未知产品路径阻断、全产品树审计、120+120 次历史产品变更回放校准、补充语义契约与 PR 自动 Lane 选择 | flake owner、两周观察、历史 AI 任务“是否补对测试”的任务级评估和旧 Runtime 退役尚未完成；确定性路径映射只提供下限，不能替代语义影响分析 |
 
 ## 已交付
@@ -45,6 +45,8 @@
 - 2026-08-28 性能体系切片：两仓库新增不进入日常 PR 的显式 `performance` Lane，并接入每周独立 cron 和 `workflow_dispatch`；普通 daily Nightly 仍执行功能风险集，不重复启动重型性能任务。结构化收据只声称实际执行的数据层范围，并继续把真机 launch/frame/Macrobenchmark/ETTrace 记为 `not_run`。Apple `RuntimeQualityLargeScaleTests` 10/10 在 132.850s 完成：100k upgrade 61.709s、100k core 60.048s、100k batch write 41.631s、search count 10.670s、最大主线程 stall 10.045ms、RSS 约 613MB；10k Watch 与并发写也满足既有 provisional host ceilings。Android 先以负控确认两个旧 JVM 100k 用例未 opt-in 时在 XML 中各为 skipped，而不是打印 skip 后假 PASSED；首次误纳入 synthetic 内存 Store 后在 search OOM，归因收据为 product `NOT_RUN` / test-system `FAILED`，不增大堆求绿。收敛后的 Lane 仅在 `emulator-5554` 执行真实 Room 100k：bulk write 143.612s、first page 92ms、five pages 414ms、FTS count 10ms、search page 417ms（provisional ceiling 2s）、reopen first page 89ms，正确性/投影/重开 1/1 通过。Apple/Android 收据分别为 `build/quality-results/apple-performance-summary.json`、`build/quality-results/android-performance-summary.json`。
 
 - 2026-08-28 Apple 用户目的性能增量：旧 Lane 只有 Store/host 指标，无法回答“用户是否及时看到准确数据”。新增 App-owned `messages.large` 先在测量外原子持久化 1,000 条，再用同 session 冷启动；5 次正式样本同时采集 XCTest launch/clock/CPU/memory，逐次要求最高索引准确首行出现，测试端完整端到端设置 8s Simulator 粗退化上限，结束后还必须打开并核对对应正文。最终工作树完整 Performance Lane 为 Store/Watch/并发 10/10、UI 1/1：正式 clock 平均 4.214s、首帧可响应平均 2.659s、absolute physical memory 约 48.9MB；测试端含一次 warm-up 为 4.85–6.26s，结果包 `build/quality-results/ios/run-1-20260828-163349.xcresult`。前两轮分别因错误读取跨 sandbox state 文件、XCTest 手动 start/stop 配置不成对而失败，均修测试系统而未放松产品 Oracle。性能 UI 已拆入独立文件并接入影响选择器；选择器 20/20 负控证明性能修改选择 Performance、产品+性能修改提升 Release。`scripts/run_ios_physical_performance.sh` 已补固定参考真机 Release 10 次入口，必须显式设备 ID、准确 sentinel 与正预算；本机无专用参考设备，故物理启动、frame/hitch/trace 证据仍为 `NOT_RUN`。依赖审查决定不把 ETTrace 常驻生产图：持续门禁使用 Apple 内建 XCTest 指标，只有回归后才临时链接 ETTrace 做 focused、symbolicated 归因并移除。
+
+- 2026-08-28 Android 用户目的性能增量：新增独立 `macrobenchmark` 模块、隔离 `.benchmark` applicationId、App-owned 1,000 条真实 Room fixture、准确 sentinel 列表→详情 Sheet→匹配正文 Oracle、`ReportDrawnWhen`、Baseline/Startup Profile 与固定真机 runner。受控 API 37 emulator 上完整 `performance` Lane 通过真实 Room 100k、两个 Macrobenchmark 目的 dry-run、Release R8/Lint/打包和隔离契约；随后两条 Profile 生成旅程 2/2 通过，最终保留 3,125 条 baseline 与 2,797 条 startup 规则，编译后 `baseline.prof` 12,205 bytes。红队先让旧 API 28 结果暴露 10 轮中后 8 轮无帧的假绿，JSON 后置判定现要求每轮有 `frameDurationCpuMs` 与正 `frameCount`；又发现仅按包名前缀会把 fixture/automation 控制代码混入 Profile，收紧生成器和 verifier 后先对旧文件做负控失败，再重新采集而非手工删规则。fixture 会话初始化竞态、清理错误覆盖首因、生产 Release 暴露动态 test tag resource ID 也已修复并回归。33 个脚本/契约测试、影响全树审计、Workflow YAML 和 Release 隔离均通过；提交为 Android `e6bfc1a`。API 37 标准 `FrameTimingMetric` Perfetto 切片解析与旧 API 28 fixture 兼容性分别保持 `BLOCKED`；没有显式非个人真机和 owner 预算，故真机启动/详情/frame P95 仍为 `NOT RUN`，未使用已连接个人手机。
 
 - 2026-08-28 本地提交/受保护写失败切片：两端新增确定性、一次性、仅 Debug quality session 可启用的 typed faults。Gateway fault 位于候选远端 prepare 成功、候选地址已持久化、device identity 尚未激活的真实提交中点；要求回滚后杀进程仍读旧值，关闭 fault 后同一 session 从真实入口重试才提交。Key fault 位于受保护材料持久化边界；要求 Sheet owner、宿主无重复错误、杀进程仍未配置、重试才配置。Apple UI 2/2 零重试通过（`build/quality-results/ios/run-1-20260828-111750.xcresult`），完整 Core 402/402、macOS Debug 与 iOS Release 构建通过；Android 新用例 2/2、完整 Settings 类 7/7、unit 与 Release 构建通过。Android 生产 `AndroidKeystoreSecretStore` 同时从静默吞掉 encrypt/SharedPreferences 失败改为抛错并确认同步 commit，notification secret→Room metadata 增加补偿，Gateway 多存储回滚失败会聚合上报；Apple Gateway rollback 从 `try?` 升级为显式复合错误。
 
@@ -98,14 +100,14 @@
 
 1. 变更影响下限已实施并完成首轮历史校准：两端路径合同、选择器、补充语义契约、负控、全树审计、120+120 次回放、本地入口与 PR/main CI 门禁均已落地；
 2. 下一阶段仍需用历史 AI 任务评估“是否补对 Oracle”，并以连续两周真实变更校准漏选、过度升级、时长和 flake；当前历史样本 0 `BLOCKED` 不能推断未来语义无遗漏；
-3. Messages、Entity/Channel/Settings 当前高价值切片及错 Key/坏密文、本地 commit/受保护写失败、Channel 远端密码拒绝与创建补偿已完成；性能与 a11y/l10n 已建立首个独立 Lane 和真实代表任务。下一步推进当前可达的系统/后台/平台表面合同与 macOS/watchOS 高价值缺口，并准备真机性能和 VoiceOver/TalkBack 采集合同，不扩张设备×语言×状态×故障的低价值笛卡尔积；
+3. Messages、Entity/Channel/Settings 当前高价值切片及错 Key/坏密文、本地 commit/受保护写失败、Channel 远端密码拒绝与创建补偿已完成；性能与 a11y/l10n 已建立独立 Lane、真实代表任务及两端用户目的启动证据，Android 还已生成并验证 Profile。下一步推进当前可达的系统/后台/平台表面合同与 macOS/watchOS 高价值缺口，并在具备专用设备时执行真机性能和 VoiceOver/TalkBack 合同，不扩张设备×语言×状态×故障的低价值笛卡尔积；
 4. 旧 Runtime command/state 测试只在更强旅程接管相同风险后退役；数据层 provisional 性能绿色与真机 launch/frame/system 证据分开，后者继续单列 `NOT_RUN/BLOCKED`，不得借模拟器绿色结案。
 
 ## 需要 Release/外部环境的明确证据
 
 - 真实 APNs/FCM、通知中心动作、权限、Doze/后台、安装升级、签名、Widget/Spotlight/Intent/Live Activity、Watch 与物理可访问性任务。
 - macOS UI 执行在系统认证授权前为 `BLOCKED`。
-- Android Macrobenchmark 模块与两端物理设备性能基线尚未建立；现有 100k 数据层 Lane 和慢加载用例只证明 correctness 与 provisional regression ceiling，不声称真实设备启动/帧预算已通过。
+- Android Macrobenchmark/Baseline Profile 模块已经建立并在受控 emulator 证明机制、准确内容和 Release 隔离；两端物理设备性能基线仍未执行，模拟器 dry-run、100k 数据层和慢加载用例都不声称真实设备启动/帧预算已通过。
 - 100k 数据量只在显式 opt-in `performance` Lane 执行，不进入日常回归；synthetic 替身指标不作为通过 claim。
 
 这些项目不得被模拟器绿色覆盖；它们需要真实平台或发布环境，必须在 Release 证据清单中独立报告。但 WP3–WP6 中仍可在本地/模拟器完成的功能缺口不能混入此清单。其余极端设备×语言×状态组合按风险等价采样，不构造全笛卡尔积。若某边缘用例不能对应高影响失败、历史事故或独有技术风险，则不实现或不进入常规 lane。

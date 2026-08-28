@@ -146,6 +146,11 @@
 105. **新增性能 runner 被影响选择器静默忽略攻击**：未跟踪的新脚本不在已有 glob 中，性能 UI 又混在通用测试大文件里，工作树计划只推荐 PR。结果：性能 UI 拆为独立编译源，manifest 增加具名 Performance 能力与 runner/重型测试路径，选择器负控从 17 条增至 20 条；最终工作树准确推荐 `performance`，runner 不再出现在 ignored paths。
 106. **性能与功能 Lane 线性取最大导致二选一攻击**：Performance 并不是 Nightly 功能集的超集；简单排序会在两类同时变化时漏掉其中一类。结果：混合产品+性能变更明确提升到 Release，共同超集实际调用功能、Watch/a11y、Performance 与 Release build；负控用 Store+性能测试路径要求 `release`。
 107. **跑了真机启动就冒充帧/trace 已覆盖攻击**：原 `not_run` 把 launch/frame/trace 合为一项，启用真机启动 runner 后会整体消失。结果：启动到准确内容与 frame/hitch/release trace 分成独立 claim；后者在没有专属采集时始终 `NOT RUN`，CI 同时上传独立真机 log/xcresult，不能因启动绿色扩张证据边界。
+108. **包名前缀正确冒充 Profile 有价值攻击**：首轮 Android Profile verifier 只要求规则以 `io.ethan.pushgo` 开头，因此 fixture Provider、QualityRuntime 和 automation stub 也能形式上通过。结果：生成器与 verifier 同时排除 `testing/automation` 控制路径；旧 Profile 先被新 verifier 负控拒绝，再从两条真实用户旅程重新生成。最终 3,125/2,797 条规则保留启动、Room、列表、详情关键路径且不含控制规则，禁止手工删行制造绿色。
+109. **Macrobenchmark 有 P95 冒充每轮都测到帧攻击**：旧 API 28 JSON 虽带 P95，但 10 轮详情中后 8 轮没有帧，原因是页面没有回到列表仍可产出形式结果。结果：每轮 setup 杀进程并重新到达准确行；后置判定要求 `repeatIterations` 对齐、每轮 `frameDurationCpuMs.runs` 非空、每轮 `frameCount > 0`。缺帧为测试系统 `BLOCKED`，有效指标超预算才是产品 `FAILED`。
+110. **同进程第二场景会话竞态攻击**：Profile 两场景首轮第二条在 Provider 准备时变回 production profile，暴露 `Application.onCreate` 读取持久会话与 shell Provider call 的时序竞争。结果：先持久化 app-owned session，再配置进程内 profile，使两种执行顺序都收敛到同一 session；数据目录按待建立 session 显式删除，后续 Profile 2/2 与 Macrobenchmark 2/2 重复通过。
+111. **清理失败覆盖首个产品失败攻击**：普通 `finally` 直接抛 cleanup error 会抹掉真实内容/预算断言，归因被倒置。结果：统一 fixture scope 保留 primary failure，并把 cleanup failure 作为 suppressed evidence；只有产品已通过而清理失败时才由清理错误成为主失败。
+112. **为了 UIAutomator 全局暴露动态资源 ID 攻击**：全局启用 `testTagsAsResourceId` 会让正式 App 的消息、频道等动态标识进入可观察 View ID。结果：根页面与独立 Sheet window 只在 `QUALITY_SESSION_CONTROL_ENABLED` 的 benchmark/profile 变体建立 resource-ID 语义边界；正式 Release 常量关闭，隔离 verifier 同时确认控制 Provider/Activity 不可达且实现未入 dex。
 
 ## 归因分析
 
@@ -188,6 +193,7 @@
 - macOS 系统自动化认证解除后，先跑消息 empty/standard/slow/retry 四条，不先迁移全部旧脚本。
 - 真实 APNs/FCM/权限/后台/升级只有在具备签名、账号、设备和隔离环境后进入 Release；缺条件即 `BLOCKED`。
 - 固定参考物理设备 runner 已实现，但仍需在专用设备完成至少 10 次 Release 基线并审定 p50/p95 与产品 SLO；当前只有 Simulator 粗退化证据，物理结果仍 `NOT RUN`。
+- Android 的 emulator Macrobenchmark dry-run 与 Baseline Profile 已完成，但 API 37 Perfetto 帧切片解析仍为工具链 `BLOCKED`；真机 runner 必须显式非个人设备和 owner 预算，未提供时保持 `NOT RUN`，不得用 emulator P95 替代。
 - Simulator/emulator 的中文大字体代表任务不能替代物理 VoiceOver/TalkBack、焦点顺序和真实设备文字裁切；这些仍需按第 33 节代表环境执行，不能从本轮 1/1 外推。
 - 两周观察期关注：Runner 启动失败率、业务失败率、p95、flake、无证据重试次数和每 lane 时长。基础设施修复连续两次不增加产品证据时，停止继续打磨并重新归因。
 - 当前红蓝复核由同一执行上下文完成，存在 `common-mode-risk`；未获得独立审查代理授权前，不把本轮校准描述为独立第三方验证。
