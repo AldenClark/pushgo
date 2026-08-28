@@ -185,6 +185,8 @@
 | Flake 永久续命或无限重试 | 没有 owner/到期/退出条件，失败后反复重跑直至绿 | owner、opened/last-seen、14 天内到期、0/1 次重试、50 次连续稳定退出；Lane 启动和日常 selector 单测共同校验 | 到期/`MAX_RETRIES>1`/无替代证据 quarantine=`BLOCKED`；恢复后 product 可过但 test-system 仍 `FLAKY` + ID |
 | Curated Lane 不选旧测试就假装已退役 | 默认/全量发现仍可执行 command/state/path、synthetic Store、ViewModel proxy 或截图 diagnostic，用绿色数量污染认知并继续产生维护成本 | Apple 40 个旧方法退出 XCTest 发现，三个无调用方 shell runner 删除；Android 两个伪 UI 类和五文件 synthetic cluster 删除；强替代按 App-owned UI、真实 Room/transport/performance 归属 | 非发现 legacy body 不计覆盖；macOS/Watch 未替代能力继续 `NOT RUN`；Android 编译/单测和 Apple UI bundle 必须在删除后通过 |
 | xcodebuild 枚举退出 0 就当测试清单有效 | macOS UI Runner 初始化失败时，xcodebuild 仍返回 0，但枚举 JSON 的 `errors` 明确包含系统认证失败且没有方法级列表 | 同时解析枚举 artifact 的 `errors` 与方法 identifiers；编译、枚举、执行三种证据分开报告 | JSON 有 errors 或没有方法级结果=`BLOCKED/NOT RUN`；不能用 exit 0、target 名或 bundle 存在冒充测试已枚举/执行 |
+| 50 次窄启动外推关闭所有平台 flake | focused 空态 50/50 能证明启动可靠，却未触发 Android 多旅程 aggregate drawing 或 macOS 授权边界 | iOS 历史 Runner issue 与 focused XCTest-process relaunch scope 一致后关闭并删重试；Android 报告把 startup 与 Compose aggregate 两个退出字段分开，后者固定 false | 50/50 只提升对应 WP1 受控入口；Android Compose、macOS、真机和两周观察继续 active/BLOCKED/NOT RUN |
+| Raw Instrument 日志只要含已知签名就吞产品失败 | Android focused campaign 不产 Gradle XML；同一日志若同时有 SnapshotStateObserver 与真实 AssertionError，简单 substring 会误归 test-system | 独立 raw-log 分类器先枚举 assertion message；任一非 `QUALITY_PRECONDITION` 断言优先 product `FAILED`，只有纯精确签名才给 flake/precondition ID | 混合已知签名+准确频道行断言负控必须 `PRODUCT_FAILED` 且 issue ID 为空 |
 
 ## 双向覆盖反查
 

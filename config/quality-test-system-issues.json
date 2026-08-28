@@ -5,7 +5,7 @@
     {
       "id": "apple-simulator-xctest-runner-launch",
       "kind": "flake",
-      "status": "active",
+      "status": "resolved",
       "owner": "apple-quality-runtime",
       "opened_on": "2026-08-28",
       "last_seen_on": "2026-08-28",
@@ -19,11 +19,12 @@
         "Failed to initialize for UI testing",
         "System authentication is running"
       ],
-      "allowed_retries": 1,
+      "allowed_retries": 0,
       "quarantined": false,
-      "rationale": "Only a runner or Simulator launch failure before product execution may receive one isolated reboot retry.",
+      "rationale": "The former one-reboot compatibility retry was removed after 50 consecutive dedicated iOS Simulator XCTest-process relaunches reached the App-owned functional empty state without this classification.",
       "exit_criteria": "Remove the retry after 50 consecutive dedicated Apple Simulator launches without this classification, or replace it with an upstream-fixed Xcode/runtime version contract.",
-      "evidence": ["build/quality-results/ios/run-1-20260828-044956.xcresult", "scripts/run_ios_ui_tests.sh", "scripts/run_ios_system_notification_test.sh", "scripts/run_watchos_ui_tests.sh"]
+      "evidence": ["build/quality-results/ios/run-1-20260828-044956.xcresult", "docs/quality/evidence/startup-reliability-2026-08-28.json", "scripts/run_ios_startup_reliability.sh"],
+      "resolved_on": "2026-08-28"
     },
     {
       "id": "apple-quality-precondition",

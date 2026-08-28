@@ -171,7 +171,7 @@ run_accessibility_localization() {
   python3 "$repo_root/scripts/verify_apple_localizations.py"
   QUALITY_CONTENT_SIZE="accessibility-extra-extra-extra-large" \
     TEST_SCOPES="$accessibility_ui_scope" \
-    MAX_RETRIES="${MAX_RETRIES:-1}" \
+    MAX_RETRIES="${MAX_RETRIES:-0}" \
     QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
   claims+=("iOS zh-Hans accessibility5 real message-detail and channel-creation journey")
 }
@@ -215,7 +215,7 @@ case "$lane" in
     run_core
     selected_claims+=("iOS core message journeys plus Channel remote-rejection ownership/retry")
     TEST_SCOPES="${TEST_SCOPES:-$core_ui_scopes}" \
-      MAX_RETRIES="${MAX_RETRIES:-1}" \
+      MAX_RETRIES="${MAX_RETRIES:-0}" \
       QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
     claims+=("iOS core message journeys plus Channel remote-rejection ownership/retry")
     ;;
@@ -223,7 +223,7 @@ case "$lane" in
     run_core
     selected_claims+=("iOS core message journeys plus navigation/Event/Thing/Channel/Settings persistence representatives")
     TEST_SCOPES="${TEST_SCOPES:-$nightly_ui_scopes}" \
-      MAX_RETRIES="${MAX_RETRIES:-1}" \
+      MAX_RETRIES="${MAX_RETRIES:-0}" \
       QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
     claims+=("iOS core message journeys plus navigation/Event/Thing/Channel/Settings persistence representatives")
     run_system_notification_journey
@@ -234,7 +234,7 @@ case "$lane" in
     run_core
     selected_claims+=("iOS release-lane representative journeys")
     TEST_SCOPES="${TEST_SCOPES:-$nightly_ui_scopes}" \
-      MAX_RETRIES="${MAX_RETRIES:-1}" \
+      MAX_RETRIES="${MAX_RETRIES:-0}" \
       QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
     claims+=("iOS release-lane representative journeys")
     run_system_notification_journey

@@ -6,20 +6,18 @@ project_path="${PROJECT_PATH:-$repo_root/pushgo.xcodeproj}"
 scheme="${SCHEME:-PushGo-iOS}"
 app_bundle_identifier="${APP_BUNDLE_IDENTIFIER:-io.ethan.pushgo}"
 test_scopes="${TEST_SCOPES:-${TEST_SCOPE:-}}"
-max_retries="${MAX_RETRIES:-1}"
+max_retries="${MAX_RETRIES:-0}"
 derived_data_path="${DERIVED_DATA_PATH:-$repo_root/.deriveddata-ui-tests}"
 results_root="${RESULTS_ROOT:-$repo_root/build/quality-results/ios}"
 runner_status_file="${QUALITY_RUNNER_STATUS_FILE:-}"
 runner_issue_file="${QUALITY_RUNNER_ISSUE_FILE:-}"
 
-if [[ ! "$max_retries" =~ ^[0-9]+$ ]] || (( max_retries > 1 )); then
+if [[ ! "$max_retries" =~ ^[0-9]+$ ]] || (( max_retries != 0 )); then
   echo "status=BLOCKED"
-  echo "reason=ios_ui_max_retries_must_be_zero_or_one:$max_retries"
+  echo "reason=ios_ui_retries_are_disabled:$max_retries"
   exit 2
 fi
-python3 "$repo_root/scripts/quality_test_system_issues.py" \
-  --check \
-  --require-id apple-simulator-xctest-runner-launch
+python3 "$repo_root/scripts/quality_test_system_issues.py" --check
 
 if [[ -n "$runner_status_file" && ! -f "$runner_status_file" ]]; then
   mkdir -p "$(dirname "$runner_status_file")"
@@ -180,6 +178,38 @@ until [[ $attempt -gt $((max_retries + 1)) ]]; do
     rm -f "$log_file"
     attempt=$((attempt + 1))
     continue
+  fi
+
+  # An App-owned readiness failure happens inside XCTest, so the generic
+  # "no Test Case has started" runner-flake guard intentionally cannot see it.
+  # It is a zero-retry precondition boundary, never a product assertion and
+  # never a route to a green result.
+  if classification="$(python3 "$repo_root/scripts/quality_test_system_issues.py" --match-file "$log_file")" \
+    && printf '%s\n' "$classification" | grep -q 'classification_issue_ids=.*apple-quality-precondition'; then
+    printf '%s\n' "$classification"
+    issue_ids="$(printf '%s\n' "$classification" | sed -n 's/^classification_issue_ids=//p')"
+    if [[ -n "$runner_issue_file" && -n "$issue_ids" ]]; then
+      printf '%s\n' "$issue_ids" | tr ',' '\n' >> "$runner_issue_file"
+    fi
+    if [[ -n "$runner_status_file" ]]; then
+      printf 'BLOCKED\n' > "$runner_status_file"
+    fi
+    echo "status=BLOCKED"
+    echo "reason=app_owned_quality_precondition_failed"
+    echo "log=$log_file"
+    echo "result_bundle=$result_bundle"
+    exit 2
+  fi
+
+  if ! grep -q "Test Case '-\\[" "$log_file"; then
+    if [[ -n "$runner_status_file" ]]; then
+      printf 'BLOCKED\n' > "$runner_status_file"
+    fi
+    echo "status=BLOCKED"
+    echo "reason=unclassified_runner_failure_before_product_action"
+    echo "log=$log_file"
+    echo "result_bundle=$result_bundle"
+    exit 2
   fi
 
   echo "status=FAILED"

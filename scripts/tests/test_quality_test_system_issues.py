@@ -32,6 +32,8 @@ class QualityTestSystemIssueTests(unittest.TestCase):
 
     def test_expired_active_flake_is_rejected(self):
         registry = copy.deepcopy(self.registry)
+        registry["issues"][0]["status"] = "active"
+        registry["issues"][0].pop("resolved_on", None)
         registry["issues"][0]["expires_on"] = "2026-08-27"
 
         with self.assertRaisesRegex(ValueError, "expired"):
@@ -39,6 +41,8 @@ class QualityTestSystemIssueTests(unittest.TestCase):
 
     def test_active_flake_cannot_be_renewed_beyond_fourteen_days(self):
         registry = copy.deepcopy(self.registry)
+        registry["issues"][0]["status"] = "active"
+        registry["issues"][0].pop("resolved_on", None)
         registry["issues"][0]["expires_on"] = "2026-09-12"
 
         with self.assertRaisesRegex(ValueError, "exceeds 14 days"):
@@ -51,7 +55,7 @@ class QualityTestSystemIssueTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "replacement_evidence"):
             ISSUES.validate_registry(registry, date(2026, 8, 28))
 
-    def test_only_exact_registered_signature_matches(self):
+    def test_resolved_runner_signature_no_longer_matches(self):
         matched = ISSUES.active_matches(
             self.registry,
             "Failed to launch app with identifier: io.example.xctrunner",
@@ -63,10 +67,10 @@ class QualityTestSystemIssueTests(unittest.TestCase):
             retryable_only=True,
         )
 
-        self.assertEqual(["apple-simulator-xctest-runner-launch"], [issue["id"] for issue in matched])
+        self.assertEqual([], matched)
         self.assertEqual([], unrelated)
 
-    def test_watch_runner_and_quality_precondition_have_owned_attribution(self):
+    def test_only_active_quality_precondition_has_owned_attribution(self):
         watch = ISSUES.active_matches(
             self.registry,
             "Failed to initialize for UI testing because the runner was unavailable",
@@ -76,10 +80,7 @@ class QualityTestSystemIssueTests(unittest.TestCase):
             "QUALITY_PRECONDITION: app-owned fixture was not ready",
         )
 
-        self.assertEqual(
-            ["apple-simulator-xctest-runner-launch"],
-            [issue["id"] for issue in watch],
-        )
+        self.assertEqual([], watch)
         self.assertEqual(
             ["apple-quality-precondition"],
             [issue["id"] for issue in precondition],
@@ -113,11 +114,51 @@ class QualityTestSystemIssueTests(unittest.TestCase):
         self.assertNotEqual(0, process.returncode)
         self.assertNotIn("Traceback", process.stdout)
 
-    def test_ios_runner_rejects_more_than_one_retry_before_using_simulator(self):
+    def test_quality_precondition_inside_test_is_zero_retry_blocking_attribution(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "precondition.log"
+            log.write_text(
+                "Test Case '-[PushGoUITests testPurpose]' started.\n"
+                "QUALITY_PRECONDITION: app-owned fixture was not ready\n",
+                encoding="utf-8",
+            )
+            classified = subprocess.run(
+                [
+                    "python3",
+                    str(REPO / "scripts/quality_test_system_issues.py"),
+                    "--match-file",
+                    str(log),
+                ],
+                cwd=REPO,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+            )
+            retryable = subprocess.run(
+                [
+                    "python3",
+                    str(REPO / "scripts/quality_test_system_issues.py"),
+                    "--match-file",
+                    str(log),
+                    "--retryable-only",
+                ],
+                cwd=REPO,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=False,
+            )
+
+        self.assertEqual(0, classified.returncode)
+        self.assertIn("apple-quality-precondition", classified.stdout)
+        self.assertNotEqual(0, retryable.returncode)
+
+    def test_ios_runner_rejects_any_retry_before_using_simulator(self):
         process = subprocess.run(
             [str(REPO / "scripts/run_ios_ui_tests.sh")],
             cwd=REPO,
-            env={"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "MAX_RETRIES": "2"},
+            env={"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "MAX_RETRIES": "1"},
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -125,7 +166,22 @@ class QualityTestSystemIssueTests(unittest.TestCase):
         )
 
         self.assertEqual(2, process.returncode)
-        self.assertIn("ios_ui_max_retries_must_be_zero_or_one:2", process.stdout)
+        self.assertIn("ios_ui_retries_are_disabled:1", process.stdout)
+
+    def test_startup_reliability_rejects_invalid_iterations_before_doctor(self):
+        process = subprocess.run(
+            [str(REPO / "scripts/run_ios_startup_reliability.sh")],
+            cwd=REPO,
+            env={"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "ITERATIONS": "0"},
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+
+        self.assertEqual(2, process.returncode)
+        self.assertIn("iterations_must_be_between_1_and_100:0", process.stdout)
+        self.assertNotIn("simulator_id=", process.stdout)
 
 
 if __name__ == "__main__":

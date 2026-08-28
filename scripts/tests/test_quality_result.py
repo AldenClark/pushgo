@@ -35,7 +35,7 @@ class QualityResultTests(unittest.TestCase):
             payload = json.loads(output.read_text(encoding="utf-8")) if output.exists() else None
             return process, payload
 
-    def test_receipt_records_deduplicated_test_system_issue_ids(self):
+    def test_blocked_receipt_records_deduplicated_active_precondition_ids(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "result.json"
             subprocess.run(
@@ -51,11 +51,11 @@ class QualityResultTests(unittest.TestCase):
                     "--product-status",
                     "NOT_RUN",
                     "--test-system-status",
-                    "FLAKY",
+                    "BLOCKED",
                     "--test-system-issue-id",
-                    "apple-simulator-xctest-runner-launch",
+                    "apple-quality-precondition",
                     "--test-system-issue-id",
-                    "apple-simulator-xctest-runner-launch",
+                    "apple-quality-precondition",
                 ],
                 cwd=REPO,
                 check=True,
@@ -63,7 +63,7 @@ class QualityResultTests(unittest.TestCase):
 
             receipt = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(
-                ["apple-simulator-xctest-runner-launch"],
+                ["apple-quality-precondition"],
                 receipt["test_system_issue_ids"],
             )
 
@@ -92,6 +92,18 @@ class QualityResultTests(unittest.TestCase):
             "FAILED",
             "--test-system-issue-id",
             "unknown-issue",
+        )
+
+        self.assertNotEqual(0, process.returncode)
+        self.assertIsNone(receipt)
+        self.assertIn("unknown or inactive", process.stdout)
+
+    def test_resolved_flake_issue_id_is_rejected(self):
+        process, receipt = self.run_result(
+            "--test-system-status",
+            "FLAKY",
+            "--test-system-issue-id",
+            "apple-simulator-xctest-runner-launch",
         )
 
         self.assertNotEqual(0, process.returncode)

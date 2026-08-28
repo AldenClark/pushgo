@@ -49,12 +49,24 @@ def main() -> None:
         registry_path = Path(__file__).resolve().parent.parent / "config/quality-test-system-issues.json"
         registry = json.loads(registry_path.read_text(encoding="utf-8"))
         quality_test_system_issues.validate_registry(registry, date.today())
-        active_ids = {
-            issue["id"] for issue in registry.get("issues", []) if issue.get("status") == "active"
+        active_issues = {
+            issue["id"]: issue
+            for issue in registry.get("issues", [])
+            if issue.get("status") == "active"
         }
+        active_ids = set(active_issues)
         unknown_ids = sorted(set(issue_ids) - active_ids)
         if unknown_ids:
             raise SystemExit(f"unknown or inactive test-system issue ids: {','.join(unknown_ids)}")
+        if args.test_system_status == "FLAKY":
+            non_flake_ids = sorted(
+                issue_id for issue_id in issue_ids if active_issues[issue_id].get("kind") != "flake"
+            )
+            if non_flake_ids:
+                raise SystemExit(
+                    "FLAKY test-system status requires active flake issue ids: "
+                    + ",".join(non_flake_ids)
+                )
     incomplete_selected_claims = [
         claim for claim in args.selected_claim if claim not in args.claim
     ]

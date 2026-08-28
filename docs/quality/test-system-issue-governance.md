@@ -17,12 +17,13 @@
 
 | ID | 类型 | Owner | 重试 | 到期/性质 | 允许影响的范围 |
 | --- | --- | --- | --- | --- | --- |
-| `apple-simulator-xctest-runner-launch` | flake | `apple-quality-runtime` | iOS UI 最多 1 次；系统通知/watchOS 0 次 | 2026-09-11 | 第一个产品动作前，iOS/watchOS XCTest runner 或 Simulator 启动失败；只有通用 iOS UI Runner 可隔离重启后重跑同一 build |
 | `apple-quality-precondition` | precondition | `apple-quality-runtime` | 0 | 永久归因边界 | 明确带 `QUALITY_PRECONDITION`、且发生在产品证据开始前的 session/Simulator/fixture/permission/readiness 准备失败 |
 | `android-compose-snapshot-observer-runtime` | flake | `android-ui-quality-runtime` | 0 | 2026-09-11 | 当前批次 XML 的每个失败都为 AndroidX Compose `SnapshotStateObserver` 多线程运行时签名 |
 | `android-quality-precondition` | precondition | `android-quality-runtime` | 0 | 永久归因边界 | 明确带 `QUALITY_PRECONDITION`、且发生在产品证据开始前的权限/session/device/fixture 准备失败 |
 
 owner 是组件责任边界，不是无人负责的标签。Apple owner 负责专用 Simulator、Xcode runner 和 50 次启动退出证据；Android UI owner 负责 Compose runtime 版本/受控 emulator 与设备类稳定性；Android Runtime owner 负责把具体前置失败修在授权、App-owned session 或 readiness 源头。
+
+`apple-simulator-xctest-runner-launch` 已于 2026-08-28 依据 `build/quality-results/ios-startup-reliability/20260828-205055/summary.json` 的 50/50、零 issue ID 结果 resolved；iOS 通用 Runner 的默认/允许重试均为 0。新的 Test Case 前未知 Runner 故障直接 `BLOCKED`，必须形成新根因证据，不能复用已关闭 ID。
 
 ## 状态转换
 
@@ -76,14 +77,20 @@ python3 scripts/quality_test_system_issues.py --check \
 # 仅用于归因：给定日志必须命中 active、可重试项；无匹配返回非零
 python3 scripts/quality_test_system_issues.py \
   --match-file /path/to/current-run.log --retryable-only
+
+# 50 次 App-owned 功能启动可靠性（opt-in，不进入每次 PR）
+scripts/run_ios_startup_reliability.sh
+../pushgo-android/scripts/run_android_startup_reliability.sh
 ```
 
-Android XML 分类器只读取本轮开始时间后的报告；陈旧 XML 不参与。若所有 current failure 匹配，它输出 `classification_issue_ids=...`，Lane 把 ID 写入收据。Apple 的通用 iOS UI、系统通知和 watchOS Runner 均从同一注册表读取签名并把 ID 交给 Lane，不再各自维护硬编码 allowlist；只有通用 iOS UI Runner读取登记的允许重试数，另外两个入口始终 0 重试。
+启动 campaign 的 Oracle、阈值、归因和“Android focused startup 不能关闭 Compose aggregate flake”的边界见 `docs/quality/startup-reliability.md`。
+
+Android XML 分类器只读取本轮开始时间后的报告；陈旧 XML 不参与。若所有 current failure 匹配，它输出 `classification_issue_ids=...`，Lane 把 ID 写入收据。Apple 的通用 iOS UI、系统通知和 watchOS Runner 均从同一注册表读取当前 active 签名，不再各自维护硬编码 allowlist；当前所有 Apple 入口均为 0 重试。
 
 ## 已验证的红蓝攻击
 
 - active flake 过期：注册表和 Lane 启动失败；
-- `MAX_RETRIES=2`：iOS Runner 在接触 Simulator 前 `BLOCKED`；
+- 任意 `MAX_RETRIES>0`：iOS Runner 在接触 Simulator 前 `BLOCKED`；
 - 未登记产品断言：不匹配任何 issue；
 - 已出现 `Test Case` 的 Apple 混合日志即使包含 Runner 签名也不再归为测试系统；
 - watchOS Runner 与 Apple `QUALITY_PRECONDITION`：分别命中共享 Apple runner issue 与 0 重试 precondition；三个 Apple 入口没有独立字符串白名单；

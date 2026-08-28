@@ -33,6 +33,9 @@ Run the repository wrappers so environment readiness, result classification, evi
 scripts/quality_test.sh pr
 scripts/quality_test.sh nightly
 scripts/quality_test.sh release
+
+# Opt-in: 50 fresh App-owned functional launches, never a routine PR cost
+scripts/run_ios_startup_reliability.sh
 ```
 
 The performance lane always runs the App-owned Simulator gross-regression gate. A dedicated, pre-seeded reference device is opt-in and must be named explicitly:
@@ -59,7 +62,7 @@ TEST_SCOPES='PushGo-iOSUITests/PushGo_iOSUITests/testSettingsServerUsesRealContr
 ## Result rules
 
 - Business assertion failures are never retried.
-- One bounded retry is allowed only for a classified pre-action Simulator/runner failure; the test-system result remains `FLAKY`.
+- Product and preparation failures are never retried. The former pre-action Simulator compatibility retry was removed after a clean 50/50 App-owned startup campaign; a new failure before any Test Case is now `BLOCKED` for fresh attribution, not retried into green.
 - Missing readiness, invalid session control, or unavailable infrastructure is `BLOCKED`, not a timed-out product failure.
 - Opt-in scale/performance tests absent from a run are `NOT RUN`, never counted as passed.
 - Simulator evidence does not prove APNs, physical accessibility, background delivery, signing, install/upgrade, or other real-system behavior.
