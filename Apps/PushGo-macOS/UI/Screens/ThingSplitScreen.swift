@@ -34,8 +34,9 @@ struct ThingSplitScreen: View {
     }
 
     private var splitView: some View {
-        HSplitView {
+        HStack(spacing: 0) {
             thingListPane
+            Divider()
             thingDetailPane
         }
         .id(pendingLocalDeletionController.effectiveScope)

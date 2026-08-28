@@ -21,8 +21,9 @@ struct MessageSplitScreen: View {
     private let fixedListWidth: CGFloat = 300
 
     var body: some View {
-        HSplitView {
+        HStack(spacing: 0) {
             messageListPane
+            Divider()
             messageDetailPane
         }
         .id(pendingLocalDeletionController.effectiveScope)

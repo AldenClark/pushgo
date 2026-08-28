@@ -60,7 +60,7 @@
 | delete | `testBaselineAutomationStateHasNoRuntimeErrors` | 无独立用户结果；Runtime 错误转为测试系统状态。 |
 | move | `testRuntimeQualityLargeFixtureLaunchAndListReadiness` | 拆 Store/performance/UI，删除 state/response 自证和 artifact 静默退出。 |
 | move | `testRuntimeQualityReservedMarkdownFixturesStayBelowGatewayBodyLimit` | 移到 Core fixture/parser 合同。 |
-| keep（新增目的级证据） | `testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow` | 从真实主窗口关闭按钮进入，要求进程继续运行、App 自有状态栏入口仍可达、恢复后仅一个窗口，且同一 App-owned session 的功能空态仍准确；签名 Runner 因系统认证进行中而无法初始化 UI testing，当前仅证明已编译，physical UI 状态为 BLOCKED/NOT RUN。 |
+| keep（新增目的级证据） | `testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow` | 从真实主窗口关闭按钮进入，要求进程继续运行、App 自有状态栏入口仍可达、恢复后仅一个窗口，且同一 App-owned session 的功能空态仍准确；授权恢复后已在受控本机签名 Runner 真实通过。 |
 
 ## 已确认的首要缺陷模式
 
@@ -135,8 +135,10 @@ Quality session 不再只隔离 GRDB：server config、decryption material metad
 - 实施：`MacMainWindowPresenter` 强持有唯一主窗口、设置 `isReleasedWhenClosed = false`、按固定 identifier 接管丢失 capture 的窗口，并在聚焦前显式 deminiaturize。AppDelegate 的状态栏按钮增加稳定、可访问的产品级 identifier；UI 用例最终仍看唯一窗口和同一 Store 功能态，不以 identifier 本身作为通过终点。
 - 负控：临时删除 `makeKeyAndOrderFront` 后，关闭恢复测试在 `window.isVisible` 精确失败，最小化测试在调用次数精确失败；恢复实现后 3/3 通过，证明 Oracle 对“找到了窗口但没有真正显示”敏感。
 - 集成攻击：首次 `build-for-testing` 发现新文件只进入 SwiftPM、未进入 Xcode macOS Sources phase；组件测试绿色不能掩盖产品未集成。补齐工程 membership 后 macOS App + UI target 构建通过。
-- 测试系统归因：未签名诊断构建的 Runner 曾停在 `_dyld_start` 且 Xcode 等待 worker materialize；用工程默认 Apple Development 签名重建后，Runner 立即给出精确系统错误：`Failed to initialize for UI testing`，underlying `System authentication is running / 认证已取消`。测试方法仍未进入，因此记录为测试系统 BLOCKED、产品 physical UI NOT RUN，不重试到绿。
-- 同上下文红蓝审查：实现、负控与审查由同一上下文完成，存在 `common-mode-risk`；在独立 reviewer 或 controlled macOS runner 可用前，不把组件证据扩张为状态栏物理入口已通过。
+- 测试系统归因：历史授权失败发生在测试方法进入前，因此当时正确记录为 `BLOCKED/NOT RUN`。授权恢复后，受控签名 Runner 的关闭→状态栏→唯一窗口→同一 App-owned 功能空态旅程 1/1 通过；当前五条核心旅程聚合 5/5 通过，结果包为 `build/quality-results/macos-ui/macos-app-owned-core-five-20260828-235000.xcresult`。
+- 崩溃归因：主导航首次真实执行发现 Message `HSplitView` 切换到 Event/Thing `HSplitView` 会在 AppKit `SplitViewChildController` 约束更新循环中崩溃。固定 300pt 列本就不提供用户可调语义，故三个页面统一改为 `HStack + Divider`；对象优先和完整往返导航均通过。页面级 identifier 另改为独立 1×1 语义标记，避免覆盖后代业务元素。
+- Runner 卫生：正式 `scripts/run_macos_ui_tests.sh` 零重试、默认只跑五条高价值旅程，并在每轮前后关闭系统 `Problem Reporter`，防止历史崩溃窗口遮挡下一条测试。方法进入前失败归 `BLOCKED`，已执行 Oracle 失败归产品 `FAILED`。
+- 同上下文红蓝审查：实现、归因与审查仍由同一上下文完成，保留 `common-mode-risk`；当前证据只关闭这五条旅程，不扩张到 macOS Event/Thing 详情、可见性持久化、Gateway commit、通知、性能或可访问性。
 
 ## watchOS 真实 UI 迁移、归因与攻击记录
 

@@ -183,6 +183,13 @@ run_watch_ui() {
   claims+=("watchOS App-owned Messages/Event/Thing journey and explicit readiness failure")
 }
 
+run_macos_ui() {
+  selected_claims+=("macOS App-owned empty state, primary navigation, Settings feedback, and close/status-item/reopen journeys")
+  MAX_RETRIES=0 \
+    QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_macos_ui_tests.sh"
+  claims+=("macOS App-owned empty state, primary navigation, Settings feedback, and close/status-item/reopen journeys")
+}
+
 run_system_notification_journey() {
   local cold_launch_scope="PushGo-iOSUITests/PushGo_iOSSystemNotificationTests/testSystemNotificationTapColdLaunchesAccurateReadDetailAndPersists"
   local delete_action_scope="PushGo-iOSUITests/PushGo_iOSSystemNotificationTests/testSystemNotificationDeleteActionRemovesOnlyTargetAndPersists"
@@ -226,6 +233,9 @@ case "$lane" in
   accessibility)
     run_accessibility_localization
     ;;
+  macos)
+    run_macos_ui
+    ;;
   pr)
     run_core
     selected_claims+=("iOS core message journeys plus Channel remote-rejection ownership/retry")
@@ -244,6 +254,7 @@ case "$lane" in
     run_system_notification_journey
     run_watch_ui
     run_accessibility_localization
+    run_macos_ui
     ;;
   release)
     run_core
@@ -255,6 +266,7 @@ case "$lane" in
     run_system_notification_journey
     run_watch_ui
     run_accessibility_localization
+    run_macos_ui
     run_performance
     selected_claims+=("iOS/watchOS Release builds and Quality Runtime isolation")
     xcodebuild \

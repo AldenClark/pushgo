@@ -56,7 +56,13 @@ struct MessageListScreen: View {
             try? await Task.sleep(for: .milliseconds(180))
             viewModel.enableChannelSummaries()
         }
-        .accessibilityIdentifier("screen.messages.list")
+        .overlay(alignment: .topLeading) {
+            Text("Messages screen")
+                .font(.system(size: 1))
+                .foregroundStyle(.clear)
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("screen.messages.list")
+        }
         return baseView
     }
 

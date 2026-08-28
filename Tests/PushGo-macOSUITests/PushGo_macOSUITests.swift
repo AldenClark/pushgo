@@ -113,25 +113,10 @@ final class PushGo_macOSUITests: XCTestCase {
 
     @MainActor
     func testQualitySessionUsesAppOwnedStoreAndReachesFunctionalEmptyState() {
-        let context = configuredApp()
         let sessionID = "macos-empty-\(UUID().uuidString.lowercased())"
-        setAutomationValue(
-            qualitySessionPayload(sessionID: sessionID, fixture: "empty.clean"),
-            for: "PUSHGO_QUALITY_SESSION_BASE64",
-            in: context.app
-        )
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "empty.clean")
+        launchQuality(context, sessionID: sessionID)
 
-        launch(context)
-
-        XCTAssertTrue(
-            element(in: context.app, identifier: "quality-runtime.ready")
-                .waitForExistence(timeout: 15),
-            "App-owned quality session did not become ready"
-        )
-        XCTAssertEqual(
-            element(in: context.app, identifier: "quality-runtime.ready").value as? String,
-            sessionID
-        )
         XCTAssertTrue(element(in: context.app, identifier: "screen.messages.list").exists)
         XCTAssertTrue(
             element(in: context.app, identifier: "state.messages.empty")
@@ -141,19 +126,15 @@ final class PushGo_macOSUITests: XCTestCase {
 
     @MainActor
     func testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow() {
-        let context = configuredApp()
         let sessionID = "macos-window-lifecycle-\(UUID().uuidString.lowercased())"
-        setAutomationValue(
-            qualitySessionPayload(sessionID: sessionID, fixture: "empty.clean"),
-            for: "PUSHGO_QUALITY_SESSION_BASE64",
-            in: context.app
-        )
-        launch(context)
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "empty.clean")
+        launchQuality(context, sessionID: sessionID)
 
-        let ready = element(in: context.app, identifier: "quality-runtime.ready")
-        XCTAssertTrue(ready.waitForExistence(timeout: 15))
-        XCTAssertEqual(ready.value as? String, sessionID)
-        XCTAssertTrue(element(in: context.app, identifier: "state.messages.empty").exists)
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.empty")
+                .waitForExistence(timeout: 5),
+            "The App-owned empty state did not become visible after runtime readiness."
+        )
 
         let mainWindow = context.app.windows.firstMatch
         XCTAssertTrue(mainWindow.exists)
@@ -181,7 +162,11 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertTrue(context.app.windows.firstMatch.waitForExistence(timeout: 10))
         XCTAssertEqual(context.app.windows.count, 1, "Reopening must restore the unique main window.")
         XCTAssertTrue(element(in: context.app, identifier: "screen.messages.list").exists)
-        XCTAssertTrue(element(in: context.app, identifier: "state.messages.empty").exists)
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.empty")
+                .waitForExistence(timeout: 5),
+            "The restored window did not recover the functional empty state."
+        )
         XCTAssertEqual(
             element(in: context.app, identifier: "quality-runtime.ready").value as? String,
             sessionID,
@@ -191,19 +176,20 @@ final class PushGo_macOSUITests: XCTestCase {
 
     @MainActor
     func testSidebarNavigationCoversPrimaryScreens() {
-        let context = configuredApp()
-        launch(context)
+        let sessionID = "macos-navigation-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "empty.clean")
+        launchQuality(context, sessionID: sessionID)
 
         let routeMatrix: [(sidebar: String, screen: String)] = [
-            ("events", "screen.events.list"),
             ("things", "screen.things.list"),
+            ("events", "screen.events.list"),
             ("channels", "screen.channels"),
             ("settings", "screen.settings"),
             ("messages", "screen.messages.list"),
         ]
         for route in routeMatrix {
             openSidebarTab(route.sidebar, in: context.app)
-            assertVisibleScreen(route.screen, in: context, timeout: 12)
+            assertVisibleScreenThroughUI(route.screen, in: context.app, timeout: 12)
         }
     }
 
@@ -281,16 +267,17 @@ final class PushGo_macOSUITests: XCTestCase {
 
     @MainActor
     func testSettingsSidebarCanOpenDecryptionOverlay() {
-        let context = configuredApp()
-        launch(context)
+        let sessionID = "macos-decryption-overlay-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "empty.clean")
+        launchQuality(context, sessionID: sessionID)
 
         openSidebarTab("settings", in: context.app)
-        assertVisibleScreen("screen.settings", in: context)
+        assertVisibleScreenThroughUI("screen.settings", in: context.app)
 
         let decryptionButton = element(in: context.app, identifier: "action.settings.open_decryption")
         XCTAssertTrue(decryptionButton.waitForExistence(timeout: 10))
         decryptionButton.click()
-        assertVisibleScreen("screen.settings.decryption", in: context)
+        assertVisibleScreenThroughUI("screen.settings.decryption", in: context.app)
     }
 
     @MainActor
@@ -307,11 +294,12 @@ final class PushGo_macOSUITests: XCTestCase {
 
     @MainActor
     func testInvalidServerAddressShowsInlineFeedbackInsteadOfToast() {
-        let context = configuredApp()
-        launch(context)
+        let sessionID = "macos-invalid-server-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "empty.clean")
+        launchQuality(context, sessionID: sessionID)
 
         openSidebarTab("settings", in: context.app)
-        assertVisibleScreen("screen.settings", in: context)
+        assertVisibleScreenThroughUI("screen.settings", in: context.app)
         element(in: context.app, identifier: "action.settings.server_management").click()
 
         let addressField = element(in: context.app, identifier: "field.settings.server.address")
@@ -1091,6 +1079,30 @@ final class PushGo_macOSUITests: XCTestCase {
         )
     }
 
+    @MainActor
+    private func configuredQualityApp(sessionID: String, fixture: String) -> LaunchContext {
+        let app = XCUIApplication()
+        app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
+        setAutomationValue("1", for: "PUSHGO_AUTOMATION_SKIP_PUSH_AUTHORIZATION", in: app)
+        setAutomationValue("0", for: "PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS", in: app)
+        setAutomationValue("1", for: "PUSHGO_AUTOMATION_FORCE_FOREGROUND_APP", in: app)
+        setAutomationValue(
+            qualitySessionPayload(sessionID: sessionID, fixture: fixture),
+            for: "PUSHGO_QUALITY_SESSION_BASE64",
+            in: app
+        )
+        let diagnosticRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PushGo-macOS-quality-\(sessionID)", isDirectory: true)
+        return LaunchContext(
+            app: app,
+            runtimeRoot: diagnosticRoot,
+            responseURL: diagnosticRoot.appendingPathComponent("unused-response.json"),
+            stateURL: diagnosticRoot.appendingPathComponent("unused-state.json"),
+            eventsURL: diagnosticRoot.appendingPathComponent("unused-events.jsonl"),
+            traceURL: diagnosticRoot.appendingPathComponent("unused-trace.json")
+        )
+    }
+
     private func makeRuntimeRoot() -> URL {
         let fileManager = FileManager.default
         let sharedBase = fileManager.temporaryDirectory
@@ -1157,6 +1169,21 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
+    private func launchQuality(_ context: LaunchContext, sessionID: String) {
+        launch(context)
+        let ready = element(in: context.app, identifier: "quality-runtime.ready")
+        XCTAssertTrue(
+            ready.waitForExistence(timeout: 15),
+            "QUALITY_PRECONDITION: App-owned quality session did not become ready."
+        )
+        XCTAssertEqual(
+            ready.value as? String,
+            sessionID,
+            "QUALITY_PRECONDITION: App launched with the wrong quality session."
+        )
+    }
+
+    @MainActor
     private func dismissSystemPrivacyDialogsIfNeeded(in app: XCUIApplication) {
         for title in crossAppPromptDismissButtons {
             let appButton = app.buttons[title]
@@ -1208,6 +1235,22 @@ final class PushGo_macOSUITests: XCTestCase {
         }
         let stateText = (try? String(contentsOf: context.stateURL, encoding: .utf8)) ?? "<missing state>"
         XCTFail("Expected visible screen \(screenIdentifier), current state: \(stateText)", file: file, line: line)
+    }
+
+    @MainActor
+    private func assertVisibleScreenThroughUI(
+        _ screenIdentifier: String,
+        in app: XCUIApplication,
+        timeout: TimeInterval = 10,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertTrue(
+            element(in: app, identifier: screenIdentifier).waitForExistence(timeout: timeout),
+            "Expected the real UI screen \(screenIdentifier).",
+            file: file,
+            line: line
+        )
     }
 
     @MainActor

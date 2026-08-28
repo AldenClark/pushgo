@@ -68,7 +68,7 @@
       "capabilities": ["app-launch", "messages", "events", "things", "channels", "ingress-recovery"],
       "minimum_evidence": ["Swift Store/recovery suite", "old-store reopen/migration evidence", "representative iOS UI content/relaunch journeys"],
       "lane": "nightly",
-      "known_evidence_gaps": ["iOS controlled App-owned startup reliability is proven 50/50; macOS migration/startup UI remains blocked by local automation authorization and physical-device startup is not inferred."],
+      "known_evidence_gaps": ["iOS controlled App-owned startup reliability is proven 50/50; macOS App-owned readiness and five core journeys execute on the controlled local runner, but a repeated macOS startup campaign and physical-device startup evidence are not inferred."],
       "escalation_reasons": ["The canonical Store is a shared state/data owner with cross-capability consumers."]
     },
     {
@@ -103,7 +103,7 @@
       "capabilities": ["channels", "gateway-settings", "decryption-settings", "page-visibility"],
       "minimum_evidence": ["channel/settings validation and injectable gateway service contract tests", "real Channel local-validation/remote-rejection/sheet-error ownership/create-compensation/reload/retry/rename/keep-history/delete-history/relaunch journey", "real Settings page-visibility control and accurate destination journey", "real server invalid/candidate-registration-failure/no-commit/retry/normalize/data-scope/relaunch journey", "real decryption invalid/status/no-echo/clear/relaunch journey"],
       "lane": "nightly",
-      "known_evidence_gaps": ["Channel accepted mutation, remote password rejection, and remote compensation for an explicit created=true result after local persistence failure have real-control journeys, as do page visibility, gateway validation rejection, local commit failure with successful rollback/restart/retry, server scoping, decryption lifecycle, protected-write failure, wrong-key correction, valid recovery, and corrupt-ciphertext safe failure. Candidate registration uses a fresh gateway-scoped identity without prepare mutation. Created=false/existing-channel ownership and idempotency, rollback-storage failure UI, macOS Settings UI, and notification-sound system behavior remain missing."],
+      "known_evidence_gaps": ["Channel accepted mutation, remote password rejection, and remote compensation for an explicit created=true result after local persistence failure have real-control journeys, as do page visibility, gateway validation rejection, local commit failure with successful rollback/restart/retry, server scoping, decryption lifecycle, protected-write failure, wrong-key correction, valid recovery, and corrupt-ciphertext safe failure. Candidate registration uses a fresh gateway-scoped identity without prepare mutation. macOS now covers real Settings entry, decryption-overlay reachability, and inline invalid-server ownership; Gateway validation/commit/relaunch and decryption mutation remain missing there. Created=false/existing-channel ownership and idempotency, rollback-storage failure UI, and notification-sound system behavior also remain missing."],
       "escalation_reasons": ["Credentials and remote/local reconciliation require failure and recovery evidence."]
     },
     {
@@ -139,7 +139,7 @@
       "capabilities": ["app-launch", "primary-navigation", "mac-window-status-item"],
       "minimum_evidence": ["navigation/window state tests", "real control navigation UI journey", "macOS open/close/reopen UI evidence when available"],
       "lane": "nightly",
-      "known_evidence_gaps": ["The real close/status-item/reopen journey is implemented but macOS UI execution remains BLOCKED locally by automation authorization; physical status-item reachability is therefore NOT RUN until a controlled runner executes it."],
+      "known_evidence_gaps": ["The App-owned close/status-item/reopen and primary-navigation journeys execute on the controlled local macOS runner; close-during-real-ingress, notification actions, Event/Thing detail, Gateway commit, page-visibility relaunch, accessibility, and performance remain incomplete."],
       "escalation_reasons": ["Composition and window changes affect reachability of every downstream capability."]
     },
     {

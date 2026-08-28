@@ -30,7 +30,13 @@ struct ThingListScreen: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityIdentifier("screen.things.list")
+        .overlay(alignment: .topLeading) {
+            Text("Things screen")
+                .font(.system(size: 1))
+                .foregroundStyle(.clear)
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("screen.things.list")
+        }
     }
 
     private var thingList: some View {

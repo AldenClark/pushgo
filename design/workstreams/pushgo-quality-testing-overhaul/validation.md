@@ -154,6 +154,9 @@
 112. **为了 UIAutomator 全局暴露动态资源 ID 攻击**：全局启用 `testTagsAsResourceId` 会让正式 App 的消息、频道等动态标识进入可观察 View ID。结果：根页面与独立 Sheet window 只在 `QUALITY_SESSION_CONTROL_ENABLED` 的 benchmark/profile 变体建立 resource-ID 语义边界；正式 Release 常量关闭，隔离 verifier 同时确认控制 Provider/Activity 不可达且实现未入 dex。
 
 113. **终止进程冷启动只验证 App 被拉起攻击**：系统点击可以启动生产 profile 或错误 Store，主页/详情存在仍会形式绿色。结果：session lease 由 App 自己持有且仅 Debug、五分钟到期、显式清除；Oracle 要求 quality readiness、精确标题/正文、唯一 canonical、已读及普通 relaunch。负控丢弃 lease 后系统仍成功拉起 App，但在 quality readiness 精确失败，不能落入生产数据后继续判绿。
+114. **macOS 授权恢复就宣称 UI 能力通过攻击**：Runner 可进入测试后，五条聚合首次真实暴露 Message→Event 导航的 AppKit 约束循环崩溃；说明“能启动”只关闭准备阻塞，不是产品 Oracle。对象优先对照也崩溃，宽度、标题、空态和 identity 单变量均未修复，最终移除“固定列却使用可调 `HSplitView`”的矛盾结构后，完整往返导航与五条聚合才通过。
+115. **页面 identifier 覆盖后代仍把存在当覆盖攻击**：macOS 把 identifier 挂到整个页面根节点后，空态和行的业务标识被同一页面标识覆盖，测试只能看到 screen 存在。结果：Message/Event/Thing 页面级标识改为独立不参与布局的语义 marker；功能空态、导航目标和真实后代控件分别断言，identifier 只定位 owner，不作最终用户结果。
+116. **崩溃提示污染下一轮攻击**：产品崩溃后系统 `Problem Reporter` 留在最前方，后续点击可能命中提示窗并制造无关失败。结果：macOS Runner 在 build/test 前与所有退出路径后按精确系统进程关闭提示；不重试业务测试，首个崩溃 xcresult 仍保留作产品失败证据。
 
 ## 归因分析
 
@@ -201,7 +204,7 @@
 
 ## 残余风险与进入条件
 
-- macOS 系统自动化认证解除后，先跑消息 empty/standard/slow/retry 四条，不先迁移全部旧脚本。
+- macOS 系统自动化认证已解除，当前五条 App-owned 核心旅程 5/5 通过；下一批按价值推进 standard/slow/retry、Event/Thing 详情和 Gateway commit，不迁移低价值旧脚本。
 - 真实 APNs/FCM/权限/后台/升级只有在具备签名、账号、设备和隔离环境后进入 Release；缺条件即 `BLOCKED`。
 - 固定参考物理设备 runner 已实现，但仍需在专用设备完成至少 10 次 Release 基线并审定 p50/p95 与产品 SLO；当前只有 Simulator 粗退化证据，物理结果仍 `NOT RUN`。
 - Android 的 emulator Macrobenchmark dry-run 与 Baseline Profile 已完成，但 API 37 Perfetto 帧切片解析仍为工具链 `BLOCKED`；真机 runner 必须显式非个人设备和 owner 预算，未提供时保持 `NOT RUN`，不得用 emulator P95 替代。
