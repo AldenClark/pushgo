@@ -59,6 +59,7 @@
 | delete | `testBaselineAutomationStateHasNoRuntimeErrors` | 无独立用户结果；Runtime 错误转为测试系统状态。 |
 | move | `testRuntimeQualityLargeFixtureLaunchAndListReadiness` | 拆 Store/performance/UI，删除 state/response 自证和 artifact 静默退出。 |
 | move | `testRuntimeQualityReservedMarkdownFixturesStayBelowGatewayBodyLimit` | 移到 Core fixture/parser 合同。 |
+| keep（新增目的级证据） | `testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow` | 从真实主窗口关闭按钮进入，要求进程继续运行、App 自有状态栏入口仍可达、恢复后仅一个窗口，且同一 App-owned session 的功能空态仍准确；签名 Runner 因系统认证进行中而无法初始化 UI testing，当前仅证明已编译，physical UI 状态为 BLOCKED/NOT RUN。 |
 
 ## 已确认的首要缺陷模式
 
@@ -96,6 +97,7 @@
 - `testEncryptedMessageRecoversAfterConfiguringKeyAndSurvivesRelaunch`
 - `testCorruptEncryptedMessageFailsSafelyAndSurvivesRelaunch`
 - `testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation`
+- `testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow`（macOS controlled runner）
 
 消息前十条与高频 Channel 远端拒绝条目进入 PR 核心集，其中 workflow 用 52 条数据跨越真实 page size 50，并验证单条/全部已读、relaunch 与未读筛选。刷新旅程分别证明慢态与上次准确快照共存、Provider 刷新载荷经过规范化摄入后出现在列表和真实详情并在 relaunch 后保留，以及首次失败可见、旧快照保留、同一正式刷新动作重试后恢复；不把直接修改 ViewModel 集合或检查数据库文件当结果。其余真实导航、Entity、Channel 与 Settings 进入 Nightly/Release。Channel 创建补偿必须覆盖凭据/DB 中点失败、本地回滚、远端撤销、正式重载、重试和 relaunch；Server 同样既覆盖候选远端拒绝，也覆盖远端成功后的本地提交中点失败，且 rollback 自身失败不得静默。Decryption 必须覆盖存储失败后重启仍未配置、错误 Key 不产生明文、纠正恢复，以及损坏认证密文安全失败。Release 使用显式高价值清单，不让旧 Runtime/state 绿色覆盖新旅程失败。
 
@@ -108,3 +110,12 @@ Quality session 不再只隔离 GRDB：server config、decryption material metad
 计划中的 `required_checks` 是必须实际执行并写入收据的补充证据：Appcast/App Store metadata 使用快速语义契约，不启动完整 Release；Fastlane/构建/隐私/回滚变更强制执行发布静态契约并保持 Release Lane。两端各 120 次历史回放已校准旧路径漏选；无效或未知计划直接 `BLOCKED`，不回退为默认绿色。
 
 四个 100k/Watch/concurrency 重型用例已从函数内提前 return 改为框架条件禁用；日常输出必须显示 skipped，并在结果 `not_run` 中列出。`scripts/quality_test.sh performance` 会用 doctor 的 `--host-only` 模式只检查真实所需的 Swift/Package 环境，显式设置 `PUSHGO_RUNTIME_QUALITY=1`，只运行 `RuntimeQualityLargeScaleTests`，保存逐阶段耗时、RSS 与主线程 stall 日志，并把实际执行范围写入独立收据；无关 Simulator 状态不会阻断宿主测试。该 Lane 的阈值是当前宿主机上的 provisional regression ceiling，只防明显倒退；真机启动、帧耗时和 Release ETTrace 仍为 `NOT_RUN`，不得由它代替。
+
+## macOS 窗口生命周期验证与攻击记录
+
+- 根因归因：状态栏左键与菜单动作都只调用 `showMainWindow()`；旧实现仅持有弱引用并查找现存窗口，既没有保证 close 后窗口仍被保留，也没有在最小化时显式恢复，因此“关闭/最小化”与“窗口不存在”被错误地当作同一状态。
+- 实施：`MacMainWindowPresenter` 强持有唯一主窗口、设置 `isReleasedWhenClosed = false`、按固定 identifier 接管丢失 capture 的窗口，并在聚焦前显式 deminiaturize。AppDelegate 的状态栏按钮增加稳定、可访问的产品级 identifier；UI 用例最终仍看唯一窗口和同一 Store 功能态，不以 identifier 本身作为通过终点。
+- 负控：临时删除 `makeKeyAndOrderFront` 后，关闭恢复测试在 `window.isVisible` 精确失败，最小化测试在调用次数精确失败；恢复实现后 3/3 通过，证明 Oracle 对“找到了窗口但没有真正显示”敏感。
+- 集成攻击：首次 `build-for-testing` 发现新文件只进入 SwiftPM、未进入 Xcode macOS Sources phase；组件测试绿色不能掩盖产品未集成。补齐工程 membership 后 macOS App + UI target 构建通过。
+- 测试系统归因：未签名诊断构建的 Runner 曾停在 `_dyld_start` 且 Xcode 等待 worker materialize；用工程默认 Apple Development 签名重建后，Runner 立即给出精确系统错误：`Failed to initialize for UI testing`，underlying `System authentication is running / 认证已取消`。测试方法仍未进入，因此记录为测试系统 BLOCKED、产品 physical UI NOT RUN，不重试到绿。
+- 同上下文红蓝审查：实现、负控与审查由同一上下文完成，存在 `common-mode-risk`；在独立 reviewer 或 controlled macOS runner 可用前，不把组件证据扩张为状态栏物理入口已通过。

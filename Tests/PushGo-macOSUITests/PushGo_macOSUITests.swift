@@ -138,6 +138,56 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
+    func testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow() {
+        let context = configuredApp()
+        let sessionID = "macos-window-lifecycle-\(UUID().uuidString.lowercased())"
+        setAutomationValue(
+            qualitySessionPayload(sessionID: sessionID, fixture: "empty.clean"),
+            for: "PUSHGO_QUALITY_SESSION_BASE64",
+            in: context.app
+        )
+        launch(context)
+
+        let ready = element(in: context.app, identifier: "quality-runtime.ready")
+        XCTAssertTrue(ready.waitForExistence(timeout: 15))
+        XCTAssertEqual(ready.value as? String, sessionID)
+        XCTAssertTrue(element(in: context.app, identifier: "state.messages.empty").exists)
+
+        let mainWindow = context.app.windows.firstMatch
+        XCTAssertTrue(mainWindow.exists)
+        let closeButton = mainWindow.buttons[XCUIIdentifierCloseWindow]
+        XCTAssertTrue(closeButton.waitForExistence(timeout: 5))
+        closeButton.click()
+
+        XCTAssertTrue(
+            waitForElementToDisappear(mainWindow, timeout: 8),
+            "Closing the main window must hide it without terminating the status-item app."
+        )
+        XCTAssertNotEqual(
+            context.app.state,
+            .notRunning,
+            "Closing the singleton window must not terminate the status-item app."
+        )
+
+        let statusItem = pushGoStatusItem(in: context.app)
+        XCTAssertTrue(
+            statusItem.waitForExistence(timeout: 8),
+            "The app-owned status item must remain reachable after the main window closes."
+        )
+        statusItem.click()
+
+        XCTAssertTrue(context.app.windows.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertEqual(context.app.windows.count, 1, "Reopening must restore the unique main window.")
+        XCTAssertTrue(element(in: context.app, identifier: "screen.messages.list").exists)
+        XCTAssertTrue(element(in: context.app, identifier: "state.messages.empty").exists)
+        XCTAssertEqual(
+            element(in: context.app, identifier: "quality-runtime.ready").value as? String,
+            sessionID,
+            "The restored window must still show the same App-owned session and Store state."
+        )
+    }
+
+    @MainActor
     func testSidebarNavigationCoversPrimaryScreens() {
         let context = configuredApp()
         launch(context)
@@ -1050,6 +1100,16 @@ final class PushGo_macOSUITests: XCTestCase {
         }
         return sharedBase
             .appendingPathComponent("PushGo-macOSUITests-\(UUID().uuidString)", isDirectory: true)
+    }
+
+    @MainActor
+    private func pushGoStatusItem(in app: XCUIApplication) -> XCUIElement {
+        let appOwnedItem = app.descendants(matching: .any)["status-item.pushgo"]
+        if appOwnedItem.exists {
+            return appOwnedItem
+        }
+        return XCUIApplication(bundleIdentifier: "com.apple.systemuiserver")
+            .descendants(matching: .any)["status-item.pushgo"]
     }
 
     private func qualitySessionPayload(sessionID: String, fixture: String) -> String {

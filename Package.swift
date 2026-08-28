@@ -56,6 +56,7 @@ let package = Package(
                 "Application/FeedbackPresentationPolicy.swift",
                 "Application/LocalStoreRecoveryController.swift",
                 "Application/LocalStoreRecoveryState.swift",
+                "Application/MacMainWindowPresenter.swift",
                 "Application/MainTab.swift",
                 "Application/PendingLocalDeletionController.swift",
                 "Application/ProviderRouteController.swift",

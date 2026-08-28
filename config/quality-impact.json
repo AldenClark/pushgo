@@ -108,11 +108,11 @@
     },
     {
       "id": "app-shell-window-navigation",
-      "paths": ["Shared/Application/AppNavigationState.swift", "Shared/Application/MainTab.swift", "Shared/Application/FeedbackPresentationPolicy.swift", "Shared/Models/AppError.swift", "Shared/UI/RootView.swift", "Shared/Utilities/AppConstants.swift", "Apps/PushGo-iOS/ContentView.swift", "Apps/PushGo-iOS/pushgoApp.swift", "Apps/PushGo-iOS/App/**", "Apps/PushGo-iOS/UI/Screens/MainTabContainerView.swift", "Apps/PushGo-macOS/ContentView.swift", "Apps/PushGo-macOS/pushgomacApp.swift", "Apps/PushGo-macOS/App/**", "Apps/PushGo-macOS/MainWindowController.swift", "Apps/PushGo-macOS/MacMenuBarContentView.swift", "Apps/PushGo-macOS/UI/Screens/MainTabContainerView.swift", "Apps/PushGo-macOS/UI/ViewModels/**"],
+      "paths": ["Shared/Application/AppNavigationState.swift", "Shared/Application/MainTab.swift", "Shared/Application/FeedbackPresentationPolicy.swift", "Shared/Application/MacMainWindowPresenter.swift", "Shared/Models/AppError.swift", "Shared/UI/RootView.swift", "Shared/Utilities/AppConstants.swift", "Apps/PushGo-iOS/ContentView.swift", "Apps/PushGo-iOS/pushgoApp.swift", "Apps/PushGo-iOS/App/**", "Apps/PushGo-iOS/UI/Screens/MainTabContainerView.swift", "Apps/PushGo-macOS/ContentView.swift", "Apps/PushGo-macOS/pushgomacApp.swift", "Apps/PushGo-macOS/App/**", "Apps/PushGo-macOS/MainWindowController.swift", "Apps/PushGo-macOS/MacMenuBarContentView.swift", "Apps/PushGo-macOS/UI/Screens/MainTabContainerView.swift", "Apps/PushGo-macOS/UI/ViewModels/**"],
       "capabilities": ["app-launch", "primary-navigation", "mac-window-status-item"],
       "minimum_evidence": ["navigation/window state tests", "real control navigation UI journey", "macOS open/close/reopen UI evidence when available"],
       "lane": "nightly",
-      "known_evidence_gaps": ["macOS UI execution remains BLOCKED by automation authorization; status-item reachability is unresolved."],
+      "known_evidence_gaps": ["The real close/status-item/reopen journey is implemented but macOS UI execution remains BLOCKED locally by automation authorization; physical status-item reachability is therefore NOT RUN until a controlled runner executes it."],
       "escalation_reasons": ["Composition and window changes affect reachability of every downstream capability."]
     },
     {

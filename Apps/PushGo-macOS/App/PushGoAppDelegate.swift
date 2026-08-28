@@ -302,6 +302,8 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificati
         button.action = #selector(handleStatusItemClick(_:))
         button.target = self
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        button.setAccessibilityIdentifier("status-item.pushgo")
+        button.setAccessibilityLabel(LocalizationProvider.localized("pushgo_app_name"))
         statusItem = item
     }
 

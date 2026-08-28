@@ -5,12 +5,15 @@ import SwiftUI
 final class MainWindowController {
     static let shared = MainWindowController()
 
-    private(set) weak var mainWindow: NSWindow?
+    private let presenter = MacMainWindowPresenter()
     private var preventAccessoryUntil: Date?
     private let chromeConfiguredWindows = NSHashTable<NSWindow>.weakObjects()
 
-    private let mainWindowIdentifier = NSUserInterfaceItemIdentifier("PushGoMainWindow")
     private let fixedSidebarWidth: CGFloat = 220
+
+    var mainWindow: NSWindow? {
+        presenter.capturedWindow
+    }
 
     var shouldPreventAccessory: Bool {
         guard let preventAccessoryUntil else { return false }
@@ -18,10 +21,13 @@ final class MainWindowController {
     }
 
     func captureMainWindow(_ window: NSWindow) {
-        if mainWindow !== window {
-            mainWindow = window
-            window.identifier = mainWindowIdentifier
+        if presenter.capturedWindow !== window {
+            presenter.capture(window)
             window.contentMinSize = NSSize(width: 1100, height: 640)
+        } else if window.isReleasedWhenClosed {
+            // Keep this invariant even if SwiftUI or another owner reconfigures
+            // the window after the first capture.
+            presenter.capture(window)
         }
         configureWindowChromeIfNeeded(window)
         lockSidebarSplitItemsIfNeeded(in: window)
@@ -35,21 +41,13 @@ final class MainWindowController {
         NSApp.activate(ignoringOtherApps: true)
     }
     func focusMainWindowIfExists() -> Bool {
-        guard let window = resolveMainWindow() else { return false }
+        guard let window = presenter.focusExistingWindow(from: NSApp.windows) else { return false }
         captureMainWindow(window)
-        window.makeKeyAndOrderFront(nil)
         return true
     }
     func showMainWindow() {
         prepareForShowingMainWindow()
         _ = focusMainWindowIfExists()
-    }
-
-    private func resolveMainWindow() -> NSWindow? {
-        if let mainWindow {
-            return mainWindow
-        }
-        return NSApp.windows.first(where: { $0.identifier == mainWindowIdentifier })
     }
 
     private func configureWindowChromeIfNeeded(_ window: NSWindow) {
