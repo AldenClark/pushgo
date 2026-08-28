@@ -138,7 +138,10 @@ struct SettingsView: View {
         @Bindable var bindableEnvironment = environment
         let rowInsets = EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)
         List {
-            if let errorMessage = viewModel.errorMessage {
+            // A form error belongs to the presented editor. Keeping the same
+            // banner alive in the host list makes one failure look like two
+            // unrelated failures when a medium-height sheet is visible.
+            if activeSheet == nil, let errorMessage = viewModel.errorMessage {
                 AppInlineFeedbackBanner(
                     message: errorMessage,
                     tone: .danger,

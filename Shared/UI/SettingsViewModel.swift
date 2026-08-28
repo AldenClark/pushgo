@@ -53,11 +53,23 @@ final class SettingsViewModel {
     var isRequestingMacOSNotificationSoundDirectoryAccess: Bool = false
 #endif
     var error: AppError?
+    private(set) var serverError: AppError?
+    private(set) var manualKeyError: AppError?
     var successMessage: String?
 
     var errorMessage: String? {
         guard let error else { return nil }
         return error.errorDescription ?? localizationManager.localized("operation_failed")
+    }
+
+    var serverErrorMessage: String? {
+        guard let serverError else { return nil }
+        return serverError.errorDescription ?? localizationManager.localized("operation_failed")
+    }
+
+    var manualKeyErrorMessage: String? {
+        guard let manualKeyError else { return nil }
+        return manualKeyError.errorDescription ?? localizationManager.localized("operation_failed")
     }
 
     private let environment: AppEnvironment
@@ -269,6 +281,16 @@ final class SettingsViewModel {
 
     func clearError() {
         error = nil
+        serverError = nil
+        manualKeyError = nil
+    }
+
+    func clearServerError() {
+        serverError = nil
+    }
+
+    func clearManualKeyError() {
+        manualKeyError = nil
     }
 
     var hasImportedNotificationSounds: Bool {
@@ -599,10 +621,10 @@ final class SettingsViewModel {
     }
 
     func saveServerConfig() async {
-        error = nil
+        serverError = nil
         let trimmedAddress = gatewayInput.address.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedAddress.isEmpty else {
-            error = .typedLocal(
+            serverError = .typedLocal(
                 code: "server_address_required",
                 category: .validation,
                 message: localizationManager.localized("server_address_required"),
@@ -611,7 +633,7 @@ final class SettingsViewModel {
             return
         }
         guard let url = validatedServerURL(from: trimmedAddress) else {
-            error = .invalidURL
+            serverError = .invalidURL
             return
         }
 
@@ -644,14 +666,16 @@ final class SettingsViewModel {
         defer { isSavingServerConfig = false }
 
         do {
-            try await environment.updateServerConfig(newConfig)
+            // A candidate gateway is not configuration until remote device
+            // registration and provider-route setup have both succeeded.
+            try await environment.validateAndUpdateServerConfig(newConfig)
             try await environment.syncSubscriptionsIfNeeded()
             successMessage = localizationManager.localized("server_configuration_saved")
             shouldDismissServerManagement = true
         } catch let appError as AppError {
-            self.error = appError
+            serverError = appError
         } catch let underlying {
-            self.error = AppError.wrap(
+            serverError = AppError.wrap(
                 underlying,
                 fallbackMessage: localizationManager.localized("operation_failed"),
                 code: "server_config_save_failed"
@@ -689,7 +713,7 @@ final class SettingsViewModel {
     }
 
     func saveManualKeyConfig(clearExisting: Bool = false) async {
-        error = nil
+        manualKeyError = nil
         let trimmedKey = manualKeyInput.key.trimmingCharacters(in: .whitespacesAndNewlines)
         let encoding = manualKeyInput.encoding
         if trimmedKey.isEmpty {
@@ -726,7 +750,7 @@ final class SettingsViewModel {
                 encoding: encoding,
             )
         } catch let validation as ManualNotificationKeyValidationError {
-            self.error = AppError.wrap(
+            manualKeyError = AppError.wrap(
                 validation,
                 fallbackMessage: localizationManager
                     .localized("the_decryption_configuration_is_not_in_the_correct_format_please_check_your_input"),
@@ -735,7 +759,7 @@ final class SettingsViewModel {
             )
             return
         } catch {
-            self.error = AppError.wrap(
+            manualKeyError = AppError.wrap(
                 error,
                 fallbackMessage: localizationManager
                     .localized("key_format_verification_failed_please_try_again"),
@@ -768,9 +792,9 @@ final class SettingsViewModel {
             try await environment.updateNotificationMaterial(material)
             return true
         } catch let appError as AppError {
-            self.error = appError
+            manualKeyError = appError
         } catch let underlying {
-            self.error = AppError.wrap(
+            manualKeyError = AppError.wrap(
                 underlying,
                 fallbackMessage: localizationManager.localized("operation_failed"),
                 code: "manual_notification_key_save_failed"

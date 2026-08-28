@@ -9,7 +9,10 @@ struct QualityRuntimeProfileTests {
         let encoded = try encodedSession(
             sessionID: "ios-pr-123_retry-1",
             fixture: "messages.standard",
-            faults: ["message_refresh_delay_ms": 2_500]
+            faults: [
+                "message_refresh_delay_ms": 2_500,
+                "fail_gateway_switch_validation_once": true,
+            ]
         )
 
         let descriptor = try PushGoAutomationContext.decodeQualitySession(encoded)
@@ -20,6 +23,7 @@ struct QualityRuntimeProfileTests {
         #expect(descriptor.faults.messageLoadDelayMilliseconds == nil)
         #expect(descriptor.faults.messageRefreshDelayMilliseconds == 2_500)
         #expect(descriptor.faults.failMessageLoad == false)
+        #expect(descriptor.faults.failGatewaySwitchValidationOnce)
         #expect(descriptor.messageRefreshScenario == .none)
         #expect(descriptor.eventCloseScenario == .none)
         #expect(descriptor.channelMutationScenario == .none)

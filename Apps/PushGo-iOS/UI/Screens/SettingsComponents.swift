@@ -36,11 +36,21 @@ struct ManualKeySettingsSheet: View {
 struct ServerManagementSheet: View {
     @Bindable var viewModel: SettingsViewModel
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         navigationContainer {
             ServerManagementContentView(viewModel: viewModel)
                 .navigationTitle(localizationManager.localized("server_management"))
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(localizationManager.localized("cancel")) {
+                            viewModel.clearServerError()
+                            dismiss()
+                        }
+                        .accessibilityIdentifier("action.settings.server.cancel")
+                    }
+                }
         }
     }
 }
@@ -77,13 +87,13 @@ private struct ServerManagementContentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            if let errorMessage = viewModel.errorMessage {
+            if let errorMessage = viewModel.serverErrorMessage {
                 AppInlineFeedbackBanner(
                     message: errorMessage,
                     tone: .danger,
                     accessibilityID: "feedback.settings.server"
                 ) {
-                    viewModel.clearError()
+                    viewModel.clearServerError()
                 }
             }
 
@@ -229,13 +239,13 @@ private struct ManualKeySettingsContentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            if let errorMessage = viewModel.errorMessage {
+            if let errorMessage = viewModel.manualKeyErrorMessage {
                 AppInlineFeedbackBanner(
                     message: errorMessage,
                     tone: .danger,
                     accessibilityID: "feedback.settings.decryption"
                 ) {
-                    viewModel.clearError()
+                    viewModel.clearManualKeyError()
                 }
             }
 

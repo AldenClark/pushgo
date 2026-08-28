@@ -633,6 +633,7 @@ final class PushGo_iOSUITests: XCTestCase {
         let encodedSession = qualitySessionPayload(
             sessionID: sessionID,
             fixture: "channels.standard",
+            failGatewaySwitchValidationOnce: true,
             channelMutationScenario: "accepted"
         )
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
@@ -646,8 +647,13 @@ final class PushGo_iOSUITests: XCTestCase {
             "The original gateway-scoped fixture must exist before the server change"
         )
         openSettingsFromChannels(in: context.app)
+        let serverManagementAction = element(
+            in: context.app,
+            identifier: "action.settings.server_management"
+        )
+        let originalGatewayLabel = serverManagementAction.label
         tapWhenHittable(
-            element(in: context.app, identifier: "action.settings.server_management"),
+            serverManagementAction,
             timeout: 8
         )
 
@@ -663,6 +669,10 @@ final class PushGo_iOSUITests: XCTestCase {
                 .waitForExistence(timeout: 5),
             "An invalid address must remain in the editor with actionable inline feedback"
         )
+        XCTAssertFalse(
+            element(in: context.app, identifier: "feedback.settings.root").exists,
+            "A server editor failure belongs to the sheet and must not also appear on the host page"
+        )
         XCTAssertTrue(addressField.exists, "Invalid input must not dismiss the server editor")
 
         let normalizedAddress = "https://quality-settings.invalid/api"
@@ -672,7 +682,57 @@ final class PushGo_iOSUITests: XCTestCase {
             timeout: 8
         )
         XCTAssertTrue(
-            addressField.waitForNonExistence(timeout: 10),
+            element(in: context.app, identifier: "feedback.settings.server")
+                .waitForExistence(timeout: 8),
+            "A candidate gateway registration failure must stay in the editor"
+        )
+        XCTAssertFalse(
+            element(in: context.app, identifier: "feedback.settings.root").exists,
+            "Candidate registration failure must not leak into the host Settings page"
+        )
+        XCTAssertTrue(addressField.exists, "A rejected candidate gateway must not dismiss the editor")
+        XCTAssertTrue(
+            element(in: context.app, identifier: "action.settings.server_management")
+                .label == originalGatewayLabel,
+            "The old gateway must remain active until candidate registration succeeds"
+        )
+
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server.cancel"),
+            timeout: 8
+        )
+        XCTAssertTrue(
+            addressField.waitForNonExistence(timeout: 8),
+            "Dismissing a rejected gateway editor must return to the host Settings page"
+        )
+        XCTAssertFalse(
+            element(in: context.app, identifier: "feedback.settings.root").exists,
+            "A dismissed sheet-owned error must never reappear on the host Settings page"
+        )
+        XCTAssertEqual(
+            element(in: context.app, identifier: "action.settings.server_management").label,
+            originalGatewayLabel,
+            "Dismissing a rejected candidate must leave the saved gateway unchanged"
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server_management"),
+            timeout: 8
+        )
+        let retryAddressField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(retryAddressField.waitForExistence(timeout: 8))
+        XCTAssertNotEqual(
+            retryAddressField.value as? String,
+            normalizedAddress,
+            "Reopening after rejection must restore the saved gateway, not the rejected draft"
+        )
+        replaceText(in: retryAddressField, with: "\(normalizedAddress)/")
+
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(
+            retryAddressField.waitForNonExistence(timeout: 10),
             "A successfully persisted server address must close the editor"
         )
         leaveSettings(in: context.app)
@@ -2271,12 +2331,14 @@ final class PushGo_iOSUITests: XCTestCase {
         messageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         failMessageLoad: Bool = false,
+        failGatewaySwitchValidationOnce: Bool = false,
         messageRefreshScenario: String? = nil,
         eventCloseScenario: String? = nil,
         channelMutationScenario: String? = nil
     ) -> String {
         var faults: [String: Any] = [
             "fail_message_load": failMessageLoad,
+            "fail_gateway_switch_validation_once": failGatewaySwitchValidationOnce,
         ]
         if let messageLoadDelayMilliseconds {
             faults["message_load_delay_ms"] = messageLoadDelayMilliseconds
@@ -2488,8 +2550,11 @@ final class PushGo_iOSUITests: XCTestCase {
     private func replaceText(in field: XCUIElement, with text: String) {
         field.tap()
         let existing = (field.value as? String) ?? ""
-        let placeholder = field.placeholderValue ?? ""
-        let hasEnteredText = !existing.isEmpty && existing != placeholder
+        // XCUI can report an actual field value that happens to equal its
+        // placeholder. Treat every non-empty value as replaceable; selecting
+        // and deleting a placeholder-only empty field is harmless, while
+        // skipping this step appends input to real persisted content.
+        let hasEnteredText = !existing.isEmpty
         if hasEnteredText {
             field.typeKey("a", modifierFlags: .command)
             field.typeKey(XCUIKeyboardKey.delete.rawValue, modifierFlags: [])

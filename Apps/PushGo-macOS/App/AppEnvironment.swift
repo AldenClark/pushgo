@@ -438,6 +438,57 @@ final class AppEnvironment {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let normalized = config?.normalized()
         try await dataStore.saveServerConfig(normalized)
+        await activatePersistedServerConfig(
+            normalized,
+            previousConfig: previousConfig,
+            previousDeviceKey: previousDeviceKey
+        )
+    }
+
+    /// Gateway replacement is a prepare/commit transition. The candidate must
+    /// issue a fresh device identity and accept the current APNs route before
+    /// any locally active gateway state is changed.
+    func validateAndUpdateServerConfig(_ config: ServerConfig) async throws {
+        let normalized = config.normalized()
+        let previousConfig = serverConfig
+        if gatewayIdentity(previousConfig) == gatewayIdentity(normalized) {
+            try await updateServerConfig(normalized)
+            return
+        }
+        let previousDeviceKey = await dataStore.cachedDeviceKey(
+            for: platformIdentifier(),
+            channelType: "apns"
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let providerToken = try await pushRegistrationService.awaitToken()
+        let preparedDeviceKey = try await providerRouteController.prepareProviderRoute(
+            config: normalized,
+            providerToken: providerToken,
+            reuseExistingDeviceKey: false
+        )
+
+        try await dataStore.saveServerConfig(normalized)
+        do {
+            try await providerRouteController.persistProviderDeviceKey(
+                preparedDeviceKey,
+                source: "provider.device_key.gateway_switch"
+            )
+        } catch {
+            try? await dataStore.saveServerConfig(previousConfig)
+            throw error
+        }
+        await activatePersistedServerConfig(
+            normalized,
+            previousConfig: previousConfig,
+            previousDeviceKey: previousDeviceKey
+        )
+    }
+
+    private func activatePersistedServerConfig(
+        _ normalized: ServerConfig?,
+        previousConfig: ServerConfig?,
+        previousDeviceKey: String?
+    ) async {
         serverConfig = normalized
         await refreshChannelSubscriptions()
         await syncPrivateChannelState()
@@ -446,6 +497,13 @@ final class AppEnvironment {
             previousDeviceKey: previousDeviceKey,
             nextConfig: normalized
         )
+    }
+
+    private func gatewayIdentity(_ config: ServerConfig?) -> String {
+        guard let config else { return "" }
+        let normalized = config.normalized()
+        let token = normalized.token?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return "\(normalized.baseURL.absoluteString)|\(token)"
     }
 
     func replaceMessages(_ newMessages: [PushMessage]) async {

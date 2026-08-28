@@ -72,21 +72,25 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
     let messageLoadDelayMilliseconds: Int?
     let messageRefreshDelayMilliseconds: Int?
     let failMessageLoad: Bool
+    let failGatewaySwitchValidationOnce: Bool
 
     init(
         messageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
-        failMessageLoad: Bool = false
+        failMessageLoad: Bool = false,
+        failGatewaySwitchValidationOnce: Bool = false
     ) {
         self.messageLoadDelayMilliseconds = messageLoadDelayMilliseconds
         self.messageRefreshDelayMilliseconds = messageRefreshDelayMilliseconds
         self.failMessageLoad = failMessageLoad
+        self.failGatewaySwitchValidationOnce = failGatewaySwitchValidationOnce
     }
 
     private enum CodingKeys: String, CodingKey {
         case messageLoadDelayMilliseconds = "message_load_delay_ms"
         case messageRefreshDelayMilliseconds = "message_refresh_delay_ms"
         case failMessageLoad = "fail_message_load"
+        case failGatewaySwitchValidationOnce = "fail_gateway_switch_validation_once"
     }
 
     init(from decoder: Decoder) throws {
@@ -100,6 +104,10 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
             forKey: .messageRefreshDelayMilliseconds
         )
         failMessageLoad = try container.decodeIfPresent(Bool.self, forKey: .failMessageLoad) ?? false
+        failGatewaySwitchValidationOnce = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .failGatewaySwitchValidationOnce
+        ) ?? false
     }
 }
 

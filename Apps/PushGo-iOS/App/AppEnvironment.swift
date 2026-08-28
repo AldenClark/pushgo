@@ -111,6 +111,10 @@ final class AppEnvironment {
     @ObservationIgnored private var pendingDeletionBackgroundTask: Task<Void, Never>?
     @ObservationIgnored private var pendingDeletionBackgroundTaskID: UIBackgroundTaskIdentifier = .invalid
     @ObservationIgnored private var pendingDeletionBackgroundDrainID: UUID?
+#if DEBUG
+    @ObservationIgnored private var remainingQualityGatewaySwitchValidationFailures =
+        PushGoAutomationContext.qualitySession?.faults.failGatewaySwitchValidationOnce == true ? 1 : 0
+#endif
 
     private var toastDismissTask: Task<Void, Never>?
 
@@ -519,6 +523,55 @@ final class AppEnvironment {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let normalized = config?.normalized()
         try await dataStore.saveServerConfig(normalized)
+        await activatePersistedServerConfig(
+            normalized,
+            previousConfig: previousConfig,
+            previousDeviceKey: previousDeviceKey
+        )
+    }
+
+    /// A user-initiated gateway switch is a prepare/commit operation. The
+    /// candidate must accept device registration and the active APNs route
+    /// before it can replace the current local identity or trigger cleanup.
+    func validateAndUpdateServerConfig(_ config: ServerConfig) async throws {
+        let normalized = config.normalized()
+        let previousConfig = serverConfig
+        if gatewayIdentity(previousConfig) == gatewayIdentity(normalized) {
+            try await updateServerConfig(normalized)
+            return
+        }
+        let previousDeviceKey = await dataStore.cachedDeviceKey(
+            for: platformIdentifier(),
+            channelType: "apns"
+        )?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let preparedDeviceKey = try await prepareCandidateGateway(normalized)
+
+        try await dataStore.saveServerConfig(normalized)
+        do {
+            try await providerRouteController.persistProviderDeviceKey(
+                preparedDeviceKey,
+                source: "provider.device_key.gateway_switch"
+            )
+        } catch {
+            // Keep the old gateway authoritative if the local half of the
+            // candidate commit cannot complete. Remote candidate registration
+            // is safe to repeat and is not used until a later successful save.
+            try? await dataStore.saveServerConfig(previousConfig)
+            throw error
+        }
+        await activatePersistedServerConfig(
+            normalized,
+            previousConfig: previousConfig,
+            previousDeviceKey: previousDeviceKey
+        )
+    }
+
+    private func activatePersistedServerConfig(
+        _ normalized: ServerConfig?,
+        previousConfig: ServerConfig?,
+        previousDeviceKey: String?
+    ) async {
         serverConfig = normalized
         await refreshChannelSubscriptions(syncWatch: false)
         if isQualityChannelMutationSession {
@@ -530,6 +583,44 @@ final class AppEnvironment {
             previousDeviceKey: previousDeviceKey,
             nextConfig: normalized
         )
+    }
+
+    private func prepareCandidateGateway(_ config: ServerConfig) async throws -> String {
+#if DEBUG
+        if PushGoAutomationContext.qualitySession != nil {
+            if remainingQualityGatewaySwitchValidationFailures > 0 {
+                remainingQualityGatewaySwitchValidationFailures -= 1
+                throw AppError.typedLocal(
+                    code: "quality_gateway_registration_rejected",
+                    category: .network,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "quality candidate gateway rejected device registration"
+                )
+            }
+            guard isQualityChannelMutationSession else {
+                throw AppError.typedLocal(
+                    code: "quality_gateway_validation_unconfigured",
+                    category: .internalError,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "quality gateway switch requires an explicit accepted round trip"
+                )
+            }
+            return "quality-gateway-device"
+        }
+#endif
+        let providerToken = try await pushRegistrationService.awaitToken()
+        return try await providerRouteController.prepareProviderRoute(
+            config: config,
+            providerToken: providerToken,
+            reuseExistingDeviceKey: false
+        )
+    }
+
+    private func gatewayIdentity(_ config: ServerConfig?) -> String {
+        guard let config else { return "" }
+        let normalized = config.normalized()
+        let token = normalized.token?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return "\(normalized.baseURL.absoluteString)|\(token)"
     }
 
     func replaceMessages(_ newMessages: [PushMessage]) async {

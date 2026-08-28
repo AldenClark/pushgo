@@ -448,13 +448,13 @@ private struct ServerManagementContentView: View {
                     .font(.title3.weight(.semibold))
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                if let errorMessage = viewModel.errorMessage {
+                if let errorMessage = viewModel.serverErrorMessage {
                     AppInlineFeedbackBanner(
                         message: errorMessage,
                         tone: .danger,
                         accessibilityID: "feedback.settings.server"
                     ) {
-                        viewModel.clearError()
+                        viewModel.clearServerError()
                     }
                 }
 
@@ -607,13 +607,13 @@ private struct ManualKeySettingsContentView: View {
                 Text(localizationManager.localized("message_decryption"))
                     .font(.title3.weight(.semibold))
                     .frame(maxWidth: .infinity, alignment: .leading)
-                if let errorMessage = viewModel.errorMessage {
+                if let errorMessage = viewModel.manualKeyErrorMessage {
                     AppInlineFeedbackBanner(
                         message: errorMessage,
                         tone: .danger,
                         accessibilityID: "feedback.settings.decryption"
                     ) {
-                        viewModel.clearError()
+                        viewModel.clearManualKeyError()
                     }
                 }
                 keyEncodingPicker

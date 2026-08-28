@@ -390,7 +390,7 @@ struct ChannelSubscriptionService {
         request.timeoutInterval = AppConstants.deviceRegistrationTimeout
         Self.applyGatewayHeaders(&request, token: token)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         return try decodePayload(ExistsPayload.self, data: data, response: response)
     }
 
@@ -419,7 +419,7 @@ struct ChannelSubscriptionService {
                 platform: platform
             )
         )
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         let payload = try decodePayload(DeviceRegisterPayload.self, data: data, response: response)
         return DeviceRegisterPayload(deviceKey: try requireResolvedDeviceKey(payload.deviceKey))
     }
@@ -453,7 +453,7 @@ struct ChannelSubscriptionService {
                 providerToken: providerToken
             )
         )
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         let payload = try decodePayload(DeviceChannelPayload.self, data: data, response: response)
         return DeviceChannelPayload(
             deviceKey: try requireResolvedDeviceKey(payload.deviceKey),
@@ -513,7 +513,7 @@ struct ChannelSubscriptionService {
                 channelType: channelType
             )
         )
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         _ = try decodePayload(EmptyPayload.self, data: data, response: response)
     }
 
@@ -542,7 +542,7 @@ struct ChannelSubscriptionService {
                 providerToken: providerToken
             )
         )
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         _ = try decodePayload(EmptyPayload.self, data: data, response: response)
     }
 
@@ -765,7 +765,7 @@ struct ChannelSubscriptionService {
             password: password
         )
         request.httpBody = try JSONEncoder().encode(body)
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         return try decodePayload(SubscribePayload.self, data: data, response: response)
     }
 
@@ -795,7 +795,7 @@ struct ChannelSubscriptionService {
             channelId: channelId
         )
         request.httpBody = try JSONEncoder().encode(body)
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         let payload = try decodePayload(UnsubscribePayload.self, data: data, response: response)
         return payload.removed
     }
@@ -825,7 +825,7 @@ struct ChannelSubscriptionService {
         let body = RenameRequest(channelId: channelId, channelName: channelName, password: password)
         request.httpBody = try JSONEncoder().encode(body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         return try decodePayload(RenamePayload.self, data: data, response: response)
     }
 
@@ -852,7 +852,7 @@ struct ChannelSubscriptionService {
         request.httpBody = try JSONEncoder().encode(
             SyncRequest(deviceKey: deviceKey, channels: channels)
         )
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         return try decodePayload(SyncPayload.self, data: data, response: response)
     }
 

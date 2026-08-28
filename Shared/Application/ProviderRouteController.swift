@@ -130,42 +130,11 @@ final class ProviderRouteController {
                     detail: "provider route context released"
                 )
             }
-            let cachedApnsKey = await self.dataStore.cachedDeviceKey(
-                for: self.platform,
-                channelType: self.channelType
-            )?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let registered = try await self.channelSubscriptionService.registerDevice(
-                baseURL: config.baseURL,
-                token: config.token,
-                platform: self.platform,
-                existingDeviceKey: cachedApnsKey?.isEmpty == false ? cachedApnsKey : nil
+            let resolvedDeviceKey = try await self.prepareProviderRoute(
+                config: config,
+                providerToken: normalizedProviderToken,
+                reuseExistingDeviceKey: true
             )
-            let bootstrapDeviceKey = registered.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !bootstrapDeviceKey.isEmpty else {
-                throw AppError.typedLocal(
-                    code: "gateway_response_missing_device_key",
-                    category: .internalError,
-                    message: self.localizationManager.localized("operation_failed"),
-                    detail: "gateway response missing device_key"
-                )
-            }
-            let route = try await self.channelSubscriptionService.upsertDeviceChannel(
-                baseURL: config.baseURL,
-                token: config.token,
-                deviceKey: bootstrapDeviceKey,
-                platform: self.platform,
-                channelType: self.channelType,
-                providerToken: normalizedProviderToken
-            )
-            let resolvedDeviceKey = route.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !resolvedDeviceKey.isEmpty else {
-                throw AppError.typedLocal(
-                    code: "gateway_response_missing_device_key",
-                    category: .internalError,
-                    message: self.localizationManager.localized("operation_failed"),
-                    detail: "gateway response missing device_key"
-                )
-            }
             try await self.persistProviderDeviceKey(
                 resolvedDeviceKey,
                 source: "provider.device_key.route"
@@ -187,6 +156,49 @@ final class ProviderRouteController {
         lastProviderRouteDeviceKey = resolvedDeviceKey
         lastProviderRouteResolvedAt = Date()
         return resolvedDeviceKey
+    }
+
+    /// Proves that a candidate gateway can register this device and accept the
+    /// active provider route without changing any local gateway identity. The
+    /// caller owns the later local commit and compensation boundary.
+    func prepareProviderRoute(
+        config: ServerConfig,
+        providerToken: String,
+        reuseExistingDeviceKey: Bool
+    ) async throws -> String {
+        let normalizedProviderToken = providerToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedProviderToken.isEmpty else {
+            throw AppError.typedLocal(
+                code: "provider_token_missing",
+                category: .validation,
+                message: localizationManager.localized("operation_failed"),
+                detail: "provider token missing"
+            )
+        }
+        let cachedDeviceKey: String? = if reuseExistingDeviceKey {
+            await dataStore.cachedDeviceKey(
+                for: platform,
+                channelType: channelType
+            )?.trimmingCharacters(in: .whitespacesAndNewlines)
+        } else {
+            nil
+        }
+        let registered = try await channelSubscriptionService.registerDevice(
+            baseURL: config.baseURL,
+            token: config.token,
+            platform: platform,
+            existingDeviceKey: cachedDeviceKey?.isEmpty == false ? cachedDeviceKey : nil
+        )
+        let bootstrapDeviceKey = try requireResolvedDeviceKey(registered.deviceKey)
+        let route = try await channelSubscriptionService.upsertDeviceChannel(
+            baseURL: config.baseURL,
+            token: config.token,
+            deviceKey: bootstrapDeviceKey,
+            platform: platform,
+            channelType: channelType,
+            providerToken: normalizedProviderToken
+        )
+        return try requireResolvedDeviceKey(route.deviceKey)
     }
 
     func persistProviderDeviceKey(_ deviceKey: String, source: String) async throws {
@@ -255,6 +267,19 @@ final class ProviderRouteController {
                 detail: "provider_device_key_save_failed"
             )
         }
+    }
+
+    private func requireResolvedDeviceKey(_ rawValue: String) throws -> String {
+        let resolved = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !resolved.isEmpty else {
+            throw AppError.typedLocal(
+                code: "gateway_response_missing_device_key",
+                category: .internalError,
+                message: localizationManager.localized("operation_failed"),
+                detail: "gateway response missing device_key"
+            )
+        }
+        return resolved
     }
 
     private static func deviceKeySaveErrorDescription(

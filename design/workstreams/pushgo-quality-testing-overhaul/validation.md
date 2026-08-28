@@ -103,6 +103,12 @@
 62. **Apple 数据库隔离但 Keychain 仍共享攻击**：Apple 首轮 Release 的 18 条旅程有 2 条可信失败：新 decryption session 启动时已显示 configured，server 保存后旧 gateway 频道未换域。结果包证明 16/18 通过且测试系统正常；根因是 quality session 只隔离 GRDB，仍读取前序用例写入的生产 Keychain/server fallback。修复为 App-owned session `config` 目录持久化 server/key metadata，质量模式不读写生产 Keychain、gateway token 或共享 fallback；同 session relaunch 保留，不同 session 从空基线开始。定向 3/3 与最终 Release 18/18 通过，未放松任一用户目的 Oracle。
 63. **配置读取失败被“没有配置”吞掉攻击**：即使 session 文件后端隔离，`try?` 仍可能把权限或坏 JSON 伪装为 nil，再自动写入默认 server，形成准备假绿。结果：质量模式改为传播读取/解码错误，让 readiness 失败并归入测试系统；Core 负控写入坏 JSON，必须抛出 `DecodingError`。生产兼容 fallback 保持原语义，测试错误不再静默降级。
 64. **已连接真机静默扩大 Lane 攻击**：Android doctor 原先取 `adb devices` 第一行且 Gradle 未绑定 serial；设备顺序变化后，Release 的 51 条数据测试同时跑到模拟器和个人真机，增加时长、改变 API 并扩大状态影响。结果：doctor 默认稳定优先 emulator，显式 `ANDROID_SERIAL` 可选择真机；Lane 必须解析 doctor 结果并把唯一 serial 传给 Gradle。双设备在线时最小负控只在 emulator 运行 1/1，最终 Release 也仅在 API 37 emulator 完成 18 条 UI + 52 条数据测试，真机系统能力仍须显式 Lane。
+65. **Sheet 错误在宿主重复显示攻击**：只断言 Sheet 内存在错误时，绑定同一全局错误的宿主 banner 也能同时出现而测试仍绿；仅在 Sheet 显示期间隐藏宿主 banner，关闭后又会重新泄漏。结果：Oracle 改为排他 owner；Apple 根/Server/Decryption 错误状态真实分区，并验证失败后取消 Sheet 仍无宿主反馈；Android Channel entry 使用独立错误状态且输入变化清除。频道表单本地 invalid 还必须在 token/远端副作用前返回，不能只修展示。
+66. **候选 Gateway 先保存再验证攻击**：旧旅程只看最终地址、数据换域和 relaunch，无法区分“先覆盖旧配置，再同步成功”。结果：类型化一次失败插在候选注册边界；首次 Save 必须留在 Sheet、宿主与重开编辑器均为旧 Gateway，第二次相同用户动作完成注册后才换域并 relaunch。测试首轮真实抓到 Android 宿主行展示 draft，分离 saved/draft 后通过。
+67. **旧 Gateway device key 注入候选注册攻击**：prepare 顺序正确但把旧服务端签发的 identity 发给新 Gateway，可能错误续用/拒绝。结果：候选 register 显式不带 device key，正常同 Gateway route refresh 才允许复用；Apple Core 捕获 request body、register→route 顺序及 prepare 后本地旧 key 不变。
+68. **可注入网络客户端被 shared session 绕过攻击**：Apple `ChannelSubscriptionService(session:)` 表面可测试，但多个 API 硬编码 `URLSession.shared`，isolated contract 无法观察真实调用。结果：所有实例 API 统一使用注入 session；候选契约若再次绕过会直接因无 handler 失败。该修正是测试接入点，不把 mock 网络通过冒充公网可用。
+69. **Sheet 下滑动作冒充稳定取消攻击**：滚动表单会吞掉应用级 swipe，测试无法确定是交互失败还是业务状态错误。结果：Server Sheet 增加用户可见、可访问的标准取消按钮，自动化通过同一真实控件退出并核对错误不泄漏与旧配置仍权威；不通过重试等待偶然手势成功。
+70. **字段值等于 placeholder 的输入攻击**：XCUI 同时返回相同的 value/placeholder 时，旧助手误判字段为空并把新地址追加到旧地址，制造无效业务输入。结果：公共替换助手对任何非空 value 均先全选清空；该负控在零重试网关旅程中真实暴露，并由同一旅程最终 1/1 证明。
 
 ## 归因分析
 
@@ -118,6 +124,7 @@
 | Thing 显示旧对象或返回丢失 | head 更新没有比较逻辑时间；嵌套 modal 同时持有返回；AndroidView 内容不进入 Compose Oracle | canonical head 新旧裁决负控；单顶层 Sheet + 父级页签状态；真实字段文本语义 | 数据/导航结果错误=`FAILED`；输入注入或语义树不可判定=`FAILED_TEST_SYSTEM` |
 | Channel 重启后数据恢复或 readiness 误失败 | 准备生命周期与实时业务行数耦合；每次进程启动重复播种同一 fixture | session/fixture 初始化记录与 live Store 分离；只在初始化全成功后记录，旅程以频道行、准确历史和重启为终点 | 标记不可读/不匹配=`FAILED_TEST_SYSTEM`；产品结果错误=`FAILED`；远端拒绝/补偿=`NOT RUN` |
 | Settings 看似保存但重启丢失或仍显示旧数据 | UI 在异步保存前 dismiss、底层吞错、Oracle 只看成功提示/地址文本 | 保存错误向 UI 传播；成功后才 dismiss/更新状态；server 追加 gateway 数据换域与 relaunch，decryption 追加状态、不回显与 relaunch | invalid/持久化/换域错误=`FAILED`；注入边界不可用=`NOT RUN`；外部同步/真机 secure store=`BLOCKED/NOT RUN` |
+| Sheet 错误越界或 Gateway 失败后旧配置已被覆盖 | 全局错误状态被宿主与 Sheet 同时消费；只断言最终成功，未覆盖 prepare/commit 中间态；draft 与 saved 值混用 | 错误 owner 分区并做排他断言；候选 device/route prepare 零本地 mutation，成功后才 commit；失败后关闭重开仍为旧值；device identity 按 Gateway 隔离 | owner 重复、失败后值/数据域变化=`FAILED`；注入 seam 绕过/不可观察=`FAILED_TEST_SYSTEM`；真实公网未运行=`NOT RUN` |
 | Decryption 能配置但不能删除 | 为避免回显，空输入语义是保留现值；持久层清除能力没有真实 UI 入口 | 显式 destructive Delete → 正式清除路径 → UI 状态 → relaunch，并保留写入/不回显 Oracle | 删除后仍 configured 或重启复活=`FAILED`；直接改存储不计 UI 证据 |
 | Decryption 空白保存导致配置丢失 | 不回显字段无法区分“用户没有输入新值”与“请求清除”，旧 Save 又隐式承担删除 | 普通空白 Save 明确保留；只有显式 destructive Delete 清除；两条路径都核对 UI 状态与 relaunch | 空白 Save 后丢失=`FAILED`；Delete 后复活=`FAILED`；只看提示不计证据 |
 | Key 已保存但原消息不恢复或显示旧正文 | 配置生命周期与消息重解析断开，或详情短缓存未感知 canonical 更新 | 保存后用原始密文和正式 parser 重解析同一对象；更新 canonical/派生数据；详情打开从 Store 校验；精确明文与 relaunch Oracle | 明文/身份/原密文/重启错误=`FAILED`；输入编码语义错配=`FAILED_TEST_SYSTEM` |
