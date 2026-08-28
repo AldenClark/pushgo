@@ -34,7 +34,7 @@ Operational validation not run and not required for publication:
 
 - physical-device NSE expiration, protected-data, force-quit/relaunch, BGAppRefresh denial/expiration;
 - signed archive/upload, physical-device delivery, App Store review/release, cross-system production, and canary telemetry;
-- Historical note: macOS UI XCTest was blocked before test startup by an active LocalAuthentication session. Authorization was restored on 2026-08-28; the App-owned five-journey aggregate now executes 5/5, while durable-ingress-specific close-during-ingress evidence remains pending.
+- Historical note: macOS UI XCTest was blocked before test startup by an active LocalAuthentication session. Authorization was restored on 2026-08-28; the App-owned core aggregate now includes eight journeys, while durable-ingress-specific close-during-ingress evidence remains pending.
 
 Constraints:
 

@@ -54,7 +54,13 @@ struct MessageDetailScreen: View {
                     .toolbar { toolbarContent }
             }
         }
-        .accessibilityIdentifier("screen.message.detail")
+        .overlay(alignment: .topLeading) {
+            Text("Message detail screen")
+                .font(.system(size: 1))
+                .foregroundStyle(.clear)
+                .frame(width: 1, height: 1)
+                .accessibilityIdentifier("screen.message.detail")
+        }
         .onAppear {
             guard !didLoad else { return }
             didLoad = true

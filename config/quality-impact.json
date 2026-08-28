@@ -68,7 +68,7 @@
       "capabilities": ["app-launch", "messages", "events", "things", "channels", "ingress-recovery"],
       "minimum_evidence": ["Swift Store/recovery suite", "old-store reopen/migration evidence", "representative iOS UI content/relaunch journeys"],
       "lane": "nightly",
-      "known_evidence_gaps": ["iOS controlled App-owned startup reliability is proven 50/50; macOS App-owned readiness and five core journeys execute on the controlled local runner, but a repeated macOS startup campaign and physical-device startup evidence are not inferred."],
+      "known_evidence_gaps": ["iOS controlled App-owned startup reliability is proven 50/50; macOS App-owned readiness and eight core journeys execute on the controlled local runner, but a repeated macOS startup campaign and physical-device startup evidence are not inferred."],
       "escalation_reasons": ["The canonical Store is a shared state/data owner with cross-capability consumers."]
     },
     {

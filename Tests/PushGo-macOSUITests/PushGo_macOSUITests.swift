@@ -125,6 +125,106 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
+    func testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch() {
+        let sessionID = "macos-standard-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        launchQuality(context, sessionID: sessionID)
+
+        let row = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertTrue(
+            row.waitForExistence(timeout: 8),
+            "The real message list did not render the canonical stored row."
+        )
+        XCTAssertTrue(
+            row.label.contains("P2 Split Seed Message"),
+            "The accessible row label did not expose the canonical title."
+        )
+        XCTAssertTrue(
+            (row.value as? String)?.contains("Seeded from fixture.seed_messages for UI validation.") == true,
+            "The accessible row value did not expose the canonical body."
+        )
+        row.click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "screen.message.detail")
+                .waitForExistence(timeout: 8),
+            "Selecting the canonical row did not open its real detail pane."
+        )
+        XCTAssertTrue(context.app.staticTexts["P2 Split Seed Message"].exists)
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."].exists
+        )
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        launchQuality(relaunched, sessionID: sessionID)
+        let relaunchedRow = element(
+            in: relaunched.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertTrue(
+            relaunchedRow.waitForExistence(timeout: 8)
+                && relaunchedRow.label.contains("P2 Split Seed Message"),
+            "The canonical message did not survive a real process relaunch."
+        )
+        XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.empty").exists)
+    }
+
+    @MainActor
+    func testSlowMessageLoadWarnsBeforeDataCompletes() {
+        let sessionID = "macos-slow-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "empty.clean",
+            messageLoadDelayMilliseconds: 8_000
+        )
+        launch(context)
+
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.loading.slow")
+                .waitForExistence(timeout: 4),
+            "A deliberately slow load must warn the user before completion."
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.empty")
+                .waitForExistence(timeout: 10),
+            "The delayed load did not complete into its accurate functional state."
+        )
+        XCTAssertFalse(element(in: context.app, identifier: "state.messages.load_failed").exists)
+    }
+
+    @MainActor
+    func testMessageLoadFailureRetryRecoversToFunctionalState() {
+        let sessionID = "macos-retry-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "empty.clean",
+            failMessageLoad: true
+        )
+        launch(context)
+
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.load_failed")
+                .waitForExistence(timeout: 5),
+            "The first controlled load failure must be visible to the user."
+        )
+        let retry = element(in: context.app, identifier: "action.messages.retry")
+        XCTAssertTrue(
+            retry.isHittable,
+            "Retry must be a usable control, not a diagnostic marker."
+        )
+        retry.click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.empty")
+                .waitForExistence(timeout: 5),
+            "Retry did not recover to the accurate functional empty state."
+        )
+        XCTAssertFalse(element(in: context.app, identifier: "state.messages.load_failed").exists)
+    }
+
+    @MainActor
     func testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow() {
         let sessionID = "macos-window-lifecycle-\(UUID().uuidString.lowercased())"
         let context = configuredQualityApp(sessionID: sessionID, fixture: "empty.clean")
@@ -1080,14 +1180,24 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    private func configuredQualityApp(sessionID: String, fixture: String) -> LaunchContext {
+    private func configuredQualityApp(
+        sessionID: String,
+        fixture: String,
+        messageLoadDelayMilliseconds: Int? = nil,
+        failMessageLoad: Bool = false
+    ) -> LaunchContext {
         let app = XCUIApplication()
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
         setAutomationValue("1", for: "PUSHGO_AUTOMATION_SKIP_PUSH_AUTHORIZATION", in: app)
         setAutomationValue("0", for: "PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS", in: app)
         setAutomationValue("1", for: "PUSHGO_AUTOMATION_FORCE_FOREGROUND_APP", in: app)
         setAutomationValue(
-            qualitySessionPayload(sessionID: sessionID, fixture: fixture),
+            qualitySessionPayload(
+                sessionID: sessionID,
+                fixture: fixture,
+                messageLoadDelayMilliseconds: messageLoadDelayMilliseconds,
+                failMessageLoad: failMessageLoad
+            ),
             for: "PUSHGO_QUALITY_SESSION_BASE64",
             in: app
         )
@@ -1126,14 +1236,23 @@ final class PushGo_macOSUITests: XCTestCase {
             .descendants(matching: .any)["status-item.pushgo"]
     }
 
-    private func qualitySessionPayload(sessionID: String, fixture: String) -> String {
+    private func qualitySessionPayload(
+        sessionID: String,
+        fixture: String,
+        messageLoadDelayMilliseconds: Int? = nil,
+        failMessageLoad: Bool = false
+    ) -> String {
+        var faults: [String: Any] = [
+            "fail_message_load": failMessageLoad,
+        ]
+        if let messageLoadDelayMilliseconds {
+            faults["message_load_delay_ms"] = messageLoadDelayMilliseconds
+        }
         let payload: [String: Any] = [
             "schema_version": 1,
             "session_id": sessionID,
             "fixture": fixture,
-            "faults": [
-                "fail_message_load": false,
-            ],
+            "faults": faults,
         ]
         let data = try! JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
         return data.base64EncodedString()

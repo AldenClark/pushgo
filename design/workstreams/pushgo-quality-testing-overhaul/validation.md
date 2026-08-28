@@ -204,7 +204,7 @@
 
 ## 残余风险与进入条件
 
-- macOS 系统自动化认证已解除，当前五条 App-owned 核心旅程 5/5 通过；下一批按价值推进 standard/slow/retry、Event/Thing 详情和 Gateway commit，不迁移低价值旧脚本。
+- macOS 系统自动化认证已解除，当前 App-owned 核心集已加入准确 standard 数据/relaunch、首次 slow 预警和失败 Retry 恢复；下一批按价值推进 refresh slow/recovery、Event/Thing 详情和 Gateway commit，不迁移低价值旧脚本。
 - 真实 APNs/FCM/权限/后台/升级只有在具备签名、账号、设备和隔离环境后进入 Release；缺条件即 `BLOCKED`。
 - 固定参考物理设备 runner 已实现，但仍需在专用设备完成至少 10 次 Release 基线并审定 p50/p95 与产品 SLO；当前只有 Simulator 粗退化证据，物理结果仍 `NOT RUN`。
 - Android 的 emulator Macrobenchmark dry-run 与 Baseline Profile 已完成，但 API 37 Perfetto 帧切片解析仍为工具链 `BLOCKED`；真机 runner 必须显式非个人设备和 owner 预算，未提供时保持 `NOT RUN`，不得用 emulator P95 替代。
