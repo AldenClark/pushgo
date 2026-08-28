@@ -29,7 +29,7 @@
   "rules": [
     {
       "id": "quality-system",
-      "paths": ["AGENTS.md", "Tests/**", "scripts/tests/**", "scripts/quality_*.py", "scripts/quality_*.sh", "scripts/run_ios_ui_tests.sh", "scripts/run_watchos_ui_tests.sh", ".github/workflows/apple-quality.yml", "config/quality-impact.json"],
+      "paths": ["AGENTS.md", "Tests/**", "scripts/tests/**", "scripts/quality_*.py", "scripts/quality_*.sh", "scripts/run_ios_ui_tests.sh", "scripts/run_watchos_ui_tests.sh", ".github/workflows/apple-quality.yml", "config/quality-impact.json", "config/quality-ai-task-history.json"],
       "capabilities": ["quality-system-trustworthiness"],
       "minimum_evidence": ["quality selector unit/negative controls", "Apple PR representative lane"],
       "lane": "pr",
@@ -70,6 +70,15 @@
       "lane": "nightly",
       "known_evidence_gaps": ["macOS migration UI and 50-run startup reliability are not yet proven."],
       "escalation_reasons": ["The canonical Store is a shared state/data owner with cross-capability consumers."]
+    },
+    {
+      "id": "notification-ingress-semantic-regression",
+      "paths": ["Tests/PushGoAppleCoreTests/NotificationHandlingTests.swift"],
+      "capabilities": ["decryption-settings", "messages", "ingress-ack"],
+      "minimum_evidence": ["encrypted notification success/failure/ACK semantics and canonical message persistence"],
+      "lane": "nightly",
+      "known_evidence_gaps": ["Core tests prove semantic handling, not real APNs transport or SpringBoard presentation."],
+      "escalation_reasons": ["A changed ingress test must retain exact plaintext/error/ACK/store outcomes, not merely execute without crashing."]
     },
     {
       "id": "messages-search-delete",
@@ -135,7 +144,7 @@
     },
     {
       "id": "shared-ui-media-accessibility-localization",
-      "paths": ["Shared/UI/AppFormControls.swift", "Shared/UI/KeyboardDismiss.swift", "Shared/UI/LiquidGlassEffect.swift", "Shared/UI/NotificationSoundEditorView.swift", "Shared/UI/PlatformColor.swift", "Shared/UI/PushGoMarkdownView.swift", "Shared/UI/RemoteImageView.swift", "Shared/UI/ToastView.swift", "Shared/Models/NotificationSoundSettings.swift", "Shared/Services/NotificationSound*.swift", "Shared/Utilities/Localization*.swift", "Shared/Utilities/PushGoMarkdownCore.swift", "Shared/Utilities/SharedImageCache.swift", "Shared/Utilities/NotificationSound*.swift", "Resources/**"],
+      "paths": ["Shared/UI/AppFormControls.swift", "Shared/UI/KeyboardDismiss.swift", "Shared/UI/LiquidGlassEffect.swift", "Shared/UI/NotificationSoundEditorView.swift", "Shared/UI/PlatformColor.swift", "Shared/UI/PushGoMarkdownView.swift", "Shared/UI/RemoteImageView.swift", "Shared/UI/RootView.swift", "Shared/UI/ToastView.swift", "Shared/Models/NotificationSoundSettings.swift", "Shared/Services/NotificationSound*.swift", "Shared/Utilities/Localization*.swift", "Shared/Utilities/PushGoMarkdownCore.swift", "Shared/Utilities/SharedImageCache.swift", "Shared/Utilities/NotificationSound*.swift", "Resources/**"],
       "capabilities": ["accessibility-localization", "message-media", "notification-sound"],
       "minimum_evidence": ["format/parser/component correctness", "representative UI task", "nightly accessibility/localization review"],
       "lane": "nightly",

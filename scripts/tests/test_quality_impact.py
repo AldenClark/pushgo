@@ -149,6 +149,22 @@ class QualityImpactPlanTests(unittest.TestCase):
         self.assertEqual("nightly", plan["recommended_lane"])
         self.assertIn("controls-intents-shortcuts", plan["impacted_capabilities"])
 
+    def test_root_view_change_keeps_accessibility_localization_evidence(self):
+        plan = self.plan("Shared/UI/RootView.swift")
+
+        self.assertEqual("nightly", plan["recommended_lane"])
+        self.assertIn("accessibility-localization", plan["impacted_capabilities"])
+
+    def test_notification_semantic_test_change_keeps_ingress_outcomes(self):
+        plan = self.plan("Tests/PushGoAppleCoreTests/NotificationHandlingTests.swift")
+
+        self.assertEqual("nightly", plan["recommended_lane"])
+        self.assertTrue(
+            {"decryption-settings", "messages", "ingress-ack"}.issubset(
+                plan["impacted_capabilities"]
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

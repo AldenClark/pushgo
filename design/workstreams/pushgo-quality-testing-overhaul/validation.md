@@ -179,6 +179,8 @@
 | 资源齐全但大字体表单不可操作 | 静态资源合同与元素存在性都无法发现重叠、遮挡和错误命中 | 代表性中文大字体真实读取+写入任务；断言准确详情、真实输入、accepted mutation 和最终频道行 | 资源缺失=`FAILED`；控件不可达/写入错误=`FAILED`；物理辅助任务仍=`NOT RUN` |
 | Channel 创建失败后出现远端/本地残留 | 远端 subscribe 与本地凭据/数据库提交没有补偿边界；旧 UI 只看 Sheet 错误或当下列表 | 创建 owner 状态机；本地多存储回滚；远端 unsubscribe 补偿；正式重载无脏行；同进程重试与 relaunch | 远端拒绝/补偿/重载终点错误=`FAILED`；替身错误码或 matcher 错误=`FAILED_TEST_SYSTEM`；真实公网仍=`NOT RUN` |
 | Android Transport selector 失败后仍覆盖旧 route | 旧低层测试不调用真实 commit；双向 prepare、Room mode、secure token/device key、远端 route 与 runtime/service 没有统一状态边界 | 双向 prepare/register→commit→apply；失败补偿/本地回滚；selector-owned 排他反馈；真实控制、重试、relaunch 与负控 | 旧选择/token/route、dialog 或重启错误=`FAILED`；Compose owner/语义不可观察=`FAILED_TEST_SYSTEM`；真实 FCM/Private 公网=`NOT RUN` |
+| 历史路径回放绿色但 AI 仍补错测试 | commit 文件均被某条规则命中，却只选择 Runtime/Release 或控件存在检查，没有携带解密、消息、ACK、a11y 等用户目的 | 两端各 10 条真实任务语料；最低能力/Lane/共同变更回放；每条记录入口、动作、精确终点、恢复、持久化、负控和拒绝的弱 Oracle；生成 base-commit blind packets | 自动结果仅 `READY_FOR_RECORDED_SEMANTIC_REVIEW`；漏能力/Lane/共同变更=`FAILED`；独立语义审查未执行前保留 common-mode risk |
+| 用格式完整度给 AI 自动打分 | 字段齐全或关键词相似被当作语义正确，一个严重漏测被平均分掩盖 | 机器只验证确定性下限；语义逐任务与真实 diff/行为对照，按目的、Oracle、Lane、执行边界报告，不聚合单一分数 | 缺字段阻断语料；语义结论必须人工/隔离 AI 复核，不能从 JSON 结构推导产品通过 |
 
 ## 双向覆盖反查
 

@@ -70,6 +70,24 @@ Identifier 只负责稳定定位；readiness 只证明准备完成；Automation 
 
 计划可能附带 `required_checks`。它们用于把 Feed/Appcast/schema/release 等“不是 App UI 源码、但会改变用户结果”的契约接入对应 Lane，必须进入结构化 selected/executed claims。禁止只在 manifest 写证据名称却不执行，也禁止因为一份轻量元数据变化无差别启动完整设备矩阵；检查强度由用户后果和真实消费者决定。
 
+## 历史真实任务盲测
+
+路径全树审计和 commit 路径回放只能发现“文件有没有被映射”，不能回答 AI 有没有理解用户目的、有没有选择会被真实错误击穿的 Oracle。两仓库因此各维护 `config/quality-ai-task-history.json` 和 `scripts/quality_ai_history.py`：
+
+1. 样本必须来自真实提交，最低 10 条，优先历史事故、高频写操作、错误成功态、数据恢复、系统入口、性能和可访问性；不得为了容易通过而只选小改动。
+2. 自动回放只校验 commit 身份、原始 changed paths、最低 Lane、必需能力以及产品代码与测试共同变更。它的成功状态是 `READY_FOR_RECORDED_SEMANTIC_REVIEW`，绝不是产品 `PASSED` 或 AI 分数。
+3. 每条样本必须记录真实入口、用户动作、精确可观察终点、错误/恢复、持久化或系统边界、可信负控、被拒绝的弱 Oracle 和证据位置。机器只校验字段完整，语义正确性必须重新挑战 diff 与产品行为。
+4. 月度或选择规则发生实质变化时生成 blind packets。用工具把 base commit 导出为不含 `.git` 历史的快照；评估者只能看到该快照和基于真实任务归一化的需求，不得看到目标 commit、预期能力或既有答案。保留第一次影响分析与测试方案，再与记录的语义审查逐项比较。
+5. 比较结果按任务报告：`目的正确/漏目的`、`Oracle 可证伪/形式断言`、`Lane 足够/不足/过度`、`真实执行/NOT RUN/BLOCKED`。不得把不同严重度压成单个通过率；一个 P0 错误成功态漏测不能被九个简单任务抵消。
+6. 发现漏选时先判断是路径规则缺口、能力矩阵缺口、AI 语义推理缺口、测试接入点缺口还是产品不可测。只修最小根因；不要把所有路径升级 Release，也不要为低价值边缘组合扩大语料。
+
+日常 `scripts/quality_changed.sh` 会通过脚本单元测试自动重放当前语料的确定性合同。显式审计命令如下，详细流程和当前基线见 `docs/quality/ai-historical-task-evaluation.md`：
+
+```bash
+python3 scripts/quality_ai_history.py --check \
+  --blind-output build/quality-results/ai-history-blind.json
+```
+
 ## AI 交付报告模板
 
 交付时必须回答：改了哪个用户目的；新增/强化了什么可信 Oracle；跑了哪些 lane 和新鲜结果；哪些系统能力仍是 `BLOCKED/NOT RUN`；是否更新能力矩阵；是否存在因价值较低而明确延期的场景。禁止用“测试文件存在”“编译通过”替代功能结论。
