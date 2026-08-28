@@ -13,8 +13,11 @@ claims=()
 selected_claims=()
 not_run=(
   "physical APNs/notification/permission/system-surface evidence"
-  "opt-in 100k Store/watch/concurrency performance evidence"
+  "physical-device launch/frame performance and release ETTrace evidence"
 )
+if [[ "$lane" != "performance" ]]; then
+  not_run+=("opt-in 100k Store plus 10k Watch/concurrency performance evidence")
+fi
 
 write_result() {
   local product_status="$1"
@@ -117,6 +120,17 @@ run_core() {
   claims+=("Apple Core/Store/integration suite")
 }
 
+run_performance() {
+  local performance_log="$results_root/apple-performance.log"
+  selected_claims+=("Apple 100k Store plus 10k Watch/concurrency correctness and provisional host regression ceilings")
+  "$repo_root/scripts/quality_doctor.sh" --host-only
+  PUSHGO_RUNTIME_QUALITY=1 swift test \
+    --package-path "$repo_root" \
+    --filter RuntimeQualityLargeScaleTests \
+    2>&1 | tee "$performance_log"
+  claims+=("Apple 100k Store plus 10k Watch/concurrency correctness and provisional host regression ceilings")
+}
+
 case "$lane" in
   focused)
     focused_scopes="${TEST_SCOPES:-${TEST_SCOPE:-}}"
@@ -128,6 +142,9 @@ case "$lane" in
     selected_claims+=("focused iOS UI: $focused_scopes")
     QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
     claims+=("focused iOS UI: $focused_scopes")
+    ;;
+  performance)
+    run_performance
     ;;
   pr)
     run_core

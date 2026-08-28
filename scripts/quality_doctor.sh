@@ -4,11 +4,31 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 project_path="$repo_root/pushgo.xcodeproj"
 scheme="${PUSHGO_QUALITY_SCHEME:-PushGo-iOS}"
+host_only=false
+
+if [[ "${1:-}" == "--host-only" ]]; then
+  host_only=true
+elif [[ $# -gt 0 ]]; then
+  printf 'status=BLOCKED\nreason=unsupported_doctor_argument:%s\n' "$1"
+  exit 2
+fi
 
 fail() {
   printf 'status=BLOCKED\nreason=%s\n' "$1"
   exit 2
 }
+
+command -v swift >/dev/null 2>&1 || fail "swift_not_found"
+[[ -f "$repo_root/Package.swift" ]] || fail "swift_package_missing"
+
+if [[ "$host_only" == true ]]; then
+  printf 'status=READY\n'
+  printf 'platform=apple\n'
+  printf 'execution_target=host\n'
+  printf 'storage_contract=app-owned-temporary-store\n'
+  printf 'release_runtime=not_applicable\n'
+  exit 0
+fi
 
 command -v xcodebuild >/dev/null 2>&1 || fail "xcodebuild_not_found"
 command -v xcrun >/dev/null 2>&1 || fail "xcrun_not_found"

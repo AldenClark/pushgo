@@ -14,7 +14,7 @@
 | WP3 Messages | `PARTIAL` | 空态、标准字段/详情/relaunch、跨 50 条页界、单条/全部已读、未读筛选往返与重启持久化、搜索代表例、删除 Undo、首次慢/错恢复、慢刷新旧快照、新结果持久化与失败恢复 | channel/tag 筛选、删除不撤销、历史清理、Markdown/media/decrypt 以及 10k UI/性能未完成 |
 | WP4 Entity/Channel/Settings/watch UI | `PARTIAL` | Apple/Android Event/Thing/Channel 高价值纵向旅程；Sheet error owner 分区；两端 Gateway 覆盖 invalid、候选拒绝不提交、fresh identity、候选远端成功后本地 commit 中点失败→回滚→重启旧值→重试提交；两端 decryption 覆盖生命周期、受保护写失败→重启未配置→重试、错误 Key 纠正、合法恢复、坏密文安全失败及 relaunch | Event slow/error/duplicate close；Thing 筛选/深链/删除；Channel 订阅既有频道及远端拒绝/补偿；rollback 存储本身失败的 UI、macOS Settings UI、声音/transport；watch P0 UI 未完成 |
 | WP5 Ingress/系统能力 | `PARTIAL` | 两端 ACK/去重/迁移等低层证据较强 | 当前可模拟的通知路由、后台恢复、macOS Window/Status Item、Apple 系统表面仍缺；真实 APNs/FCM/private/权限/安装需外部环境 |
-| WP6 性能/a11y/l10n | `NOT STARTED/PARTIAL ASSETS` | Android 部分 semantics、两端慢状态可证伪 | Macrobenchmark/Baseline Profile、Apple XCTMetric、参考设备/SLO 样本、物理辅助任务、多语言/尺寸矩阵未完成 |
+| WP6 性能/a11y/l10n | `PARTIAL` | 两端慢状态可证伪；独立 opt-in Performance Lane 已执行 Apple 100k Store/upgrade、Watch/并发与 Android 真实 Room 100k correctness + provisional host/emulator ceilings；Android 部分 semantics 已有 | Macrobenchmark/Baseline Profile、Apple 真机 launch/frame ETTrace、固定参考物理设备 10 次 p50/p95、物理辅助任务、多语言/尺寸矩阵未完成 |
 | WP7 CI/AI/治理 | `PARTIAL` | lane wrapper、双状态结果、CI、AGENTS/AI policy 已建立；两仓库已实现变更→能力→最低证据合同、未知产品路径阻断、全产品树审计、120+120 次历史产品变更回放校准、补充语义契约与 PR 自动 Lane 选择 | flake owner、两周观察、历史 AI 任务“是否补对测试”的任务级评估和旧 Runtime 退役尚未完成；确定性路径映射只提供下限，不能替代语义影响分析 |
 
 ## 已交付
@@ -38,6 +38,8 @@
 
 ## 新鲜证据
 
+- 2026-08-28 性能体系切片：两仓库新增不进入日常 PR 的显式 `performance` Lane，并接入每周独立 cron 和 `workflow_dispatch`；普通 daily Nightly 仍执行功能风险集，不重复启动重型性能任务。结构化收据只声称实际执行的数据层范围，并继续把真机 launch/frame/Macrobenchmark/ETTrace 记为 `not_run`。Apple `RuntimeQualityLargeScaleTests` 10/10 在 132.850s 完成：100k upgrade 61.709s、100k core 60.048s、100k batch write 41.631s、search count 10.670s、最大主线程 stall 10.045ms、RSS 约 613MB；10k Watch 与并发写也满足既有 provisional host ceilings。Android 先以负控确认两个旧 JVM 100k 用例未 opt-in 时在 XML 中各为 skipped，而不是打印 skip 后假 PASSED；首次误纳入 synthetic 内存 Store 后在 search OOM，归因收据为 product `NOT_RUN` / test-system `FAILED`，不增大堆求绿。收敛后的 Lane 仅在 `emulator-5554` 执行真实 Room 100k：bulk write 143.612s、first page 92ms、five pages 414ms、FTS count 10ms、search page 417ms（provisional ceiling 2s）、reopen first page 89ms，正确性/投影/重开 1/1 通过。Apple/Android 收据分别为 `build/quality-results/apple-performance-summary.json`、`build/quality-results/android-performance-summary.json`。
+
 - 2026-08-28 本地提交/受保护写失败切片：两端新增确定性、一次性、仅 Debug quality session 可启用的 typed faults。Gateway fault 位于候选远端 prepare 成功、候选地址已持久化、device identity 尚未激活的真实提交中点；要求回滚后杀进程仍读旧值，关闭 fault 后同一 session 从真实入口重试才提交。Key fault 位于受保护材料持久化边界；要求 Sheet owner、宿主无重复错误、杀进程仍未配置、重试才配置。Apple UI 2/2 零重试通过（`build/quality-results/ios/run-1-20260828-111750.xcresult`），完整 Core 402/402、macOS Debug 与 iOS Release 构建通过；Android 新用例 2/2、完整 Settings 类 7/7、unit 与 Release 构建通过。Android 生产 `AndroidKeystoreSecretStore` 同时从静默吞掉 encrypt/SharedPreferences 失败改为抛错并确认同步 commit，notification secret→Room metadata 增加补偿，Gateway 多存储回滚失败会聚合上报；Apple Gateway rollback 从 `try?` 升级为显式复合错误。
 
 - 2026-08-28 Decryption 失败/恢复切片：两端 `messages.encrypted.valid` 不再只走顺向成功，先用合法长度错误材料触发正式 recovery，要求原 fallback、canonical identity 与 ciphertext 保留且状态为 failed，再由用户从同一真实入口纠正并恢复准确明文；新增 `messages.encrypted.corrupt` 从正式 ingress 生成有效 envelope 后翻转认证数据，正确材料仍必须安全失败且 relaunch 不伪造明文。Apple Core 1/1、iOS UI 2/2 零重试通过（`build/quality-results/ios/run-1-20260828-105903.xcresult`）；Android UI 2/2 在 API 37 emulator 通过。Android 首次执行在安装前因目标 emulator 消失而未运行，doctor 一度识别到个人真机但未在其上执行，显式恢复隔离 emulator 后再运行；新断言首次还纠正了“保存后仍停留详情”的错误导航假设，没有放松用户结果 Oracle。
@@ -55,7 +57,7 @@
 - Apple iOS Event 关闭 focused 1/1 PASSED（`run-1-20260828-040321.xcresult`，无业务断言重试）；Android 同等 Event 旅程 1/1 PASSED。两端均从真实详情确认关闭，让关闭结果经过生产解析/持久化/投影链，验证 closed 状态、仅进行中筛选排除以及 relaunch 后状态保留；不以内部 count、marker 或测试直接改表作为终点。
 - Apple iOS Settings 页面可见性最终 focused 回归 1/1 PASSED（`run-1-20260828-042701.xcresult`，无业务断言重试）；Android 同等旅程 1/1 PASSED。两端均从真实 Channels→Settings 入口关闭 Event 页面、退出并核对入口消失，activity/process relaunch 后仍隐藏；随后用同一控件恢复、打开准确 Event 页面并再次 relaunch 核对。测试没有直接写 preference，也不以控件存在或内部 state 为终点；Apple 两个 Runtime command/state 弱重复已实际删除。
 - Settings server/decryption 生命周期字节：Apple server+decryption 组合 2/2 PASSED（`test_sim_2026-08-27T23-02-28-923Z_pid98521_18f05a61.xcresult`），显式 Delete 与无损空白 Save（含空白 Save 后独立 relaunch）最终 1/1 PASSED（`run-1-20260828-082345.xcresult`）；Android 初始生命周期类 3/3 PASSED。两端均从真实 Channels→Settings 控件输入，invalid 留在编辑器并显示 inline feedback；server 成功后核对标准化地址、旧 gateway 频道立即不可见且 relaunch 后准确地址保留；decryption 成功后核对 configured 状态、relaunch 保留、不回显，并通过真实 destructive Delete 核对清除后 relaunch 仍未配置；Apple 额外证明普通空白 Save 不会误删未回显的既有配置。Apple 实跑修复了持久化异常被吞掉仍显示成功、测试 teardown 不终止 App、sheet 尚未离场即做生命周期断言、XCUI 文本替换追加、空白 Save 数据丢失和成功状态未驱动 sheet 离场等缺陷。Android 首次清除 Oracle 可信失败并暴露“用户没有可达删除动作”，两端最终统一为显式删除动作。
-- 合法 Key 的真实消息恢复已补齐两端对等证据：合成密文均先经正式 Notification parser 以 `NOT_CONFIGURED/notConfigured` 进入 App-owned canonical Store；用户从真实消息详情打开设置、保存匹配编码的 Key 后，原消息显示准确标题与正文并在 relaunch 后保持。Apple Core 1/1 与 iOS focused 1/1 PASSED，最终结果包 `build/quality-results/ios/run-1-20260828-085454.xcresult`；Android repository/parser/recovery focused 1/1、UI focused 1/1 及整个 `QualitySettingsJourneyInstrumentedTest` 4/4 PASSED。两端 Core 证据同时保留本地身份、已读、接收时间和原密文。Android 首轮 UI 在列表已更新后详情仍显示旧占位文本，可信暴露 15 秒详情缓存一致性 bug；修复为每次打开从 Room 校验后同用例通过。受保护存储/Room 写失败、错 Key/坏密文和生产远端同步失败仍是独立 P0，不能由本合法 Key 证据覆盖。
+- 合法 Key 的真实消息恢复已补齐两端对等证据：合成密文均先经正式 Notification parser 以 `NOT_CONFIGURED/notConfigured` 进入 App-owned canonical Store；用户从真实消息详情打开设置、保存匹配编码的 Key 后，原消息显示准确标题与正文并在 relaunch 后保持。Apple Core 1/1 与 iOS focused 1/1 PASSED，最终结果包 `build/quality-results/ios/run-1-20260828-085454.xcresult`；Android repository/parser/recovery focused 1/1、UI focused 1/1 及整个 `QualitySettingsJourneyInstrumentedTest` 4/4 PASSED。两端 Core 证据同时保留本地身份、已读、接收时间和原密文。Android 首轮 UI 在列表已更新后详情仍显示旧占位文本，可信暴露 15 秒详情缓存一致性 bug；修复为每次打开从 Room 校验后同用例通过。后续切片已进一步覆盖受保护存储/Room 写失败、错误 Key 纠正和坏密文安全失败；生产远端同步失败仍是独立外部证据。
 - Apple 最终 Release 顺序回归首次得到 16/18，两个产品 Oracle 失败而 test-system 保持 `PASSED`：decryption 新 session 已继承前序 Key，server 保存到与前序相同地址后没有触发数据换域。未重跑掩盖；归因到 quality DB 虽隔离但 Keychain/shared fallback 仍跨 session。配置 backend 已迁到 App-owned session 目录，质量模式不读写生产 Keychain/gateway token/fallback；坏 JSON/权限错误不再被 `try?` 吞成默认值。定向 server/decryption/recovery 3/3 后，最终 `build/quality-results/ios/run-1-20260828-093057.xcresult` 为 18/18、0 skipped、无业务重试；`apple-release-summary.json` selected/executed 5/5 且 product/test-system 双 `PASSED`。macOS Debug 共享代码构建也 PASSED。物理 APNs/系统表面和 opt-in 100k 仍在 `not_run`。
 - Android 最终 Release 在 API 37 emulator 完成 18 条 App UI/功能旅程与 52 条迁移/删除/ACK/transport 数据测试；100k 用例由框架明确 skipped，Release/R8/Lint 构建 PASSED，`android-release-summary.json` selected/executed 完整且双状态 `PASSED`。首轮审计发现 Gradle 在设备顺序变化后把 51 条数据测试同时扩散到 emulator 与已连接真机；已改为 doctor emulator-first、显式 `ANDROID_SERIAL` override，并把唯一 serial 传给每次 Gradle device invocation。双设备在线的最小负控只在 emulator 运行 1/1，最终 Release 也只出现 `Medium_Phone`，避免日常 Lane 静默扩大成本或状态范围。
 - Android 完整 device 首轮在四个消息详情正文断言处因列表行与详情共享同一文本而出现双节点误报；这不是产品内容错误，也没有通过重跑掩盖。Oracle 已限定到真实详情字段 owner 并保留准确正文断言，随后 `QualityMessageJourneyInstrumentedTest` 11/11 与完整 device 17 条 App 旅程 + 18 条数据边界通过；首次失败按 `FAILED_TEST_SYSTEM` 进入归因，后续通过不能抹除它。
@@ -86,14 +88,14 @@
 
 1. 变更影响下限已实施并完成首轮历史校准：两端路径合同、选择器、补充语义契约、负控、全树审计、120+120 次回放、本地入口与 PR/main CI 门禁均已落地；
 2. 下一阶段仍需用历史 AI 任务评估“是否补对 Oracle”，并以连续两周真实变更校准漏选、过度升级、时长和 flake；当前历史样本 0 `BLOCKED` 不能推断未来语义无遗漏；
-3. Messages 分页/已读链、慢刷新旧快照、新结果持久化与失败恢复、两端 Event close/filter/relaunch、Thing 三类关联打开/返回/relaunch、Channel create/rename/双退订、Settings 页面可见性、server 数据换域/持久化、decryption key 生命周期和合法 Key 恢复原消息已完成；下一步推进错 Key/坏密文与高价值保存失败边界，然后进入性能/a11y，不扩张 Entity/Channel 边缘组合；
-4. 旧 Runtime command/state 测试只在更强旅程接管相同风险后退役；性能、真机与系统证据继续单列 `NOT_RUN/BLOCKED`，不得借模拟器绿色结案。
+3. Messages、Entity/Channel/Settings 当前高价值切片及错 Key/坏密文、本地 commit/受保护写失败已完成；性能已建立首个真实数据层独立 Lane。下一步推进可在模拟器完成的 a11y/l10n 代表任务，并准备真机性能采集合同，不扩张 Entity/Channel 或设备×语言的低价值笛卡尔积；
+4. 旧 Runtime command/state 测试只在更强旅程接管相同风险后退役；数据层 provisional 性能绿色与真机 launch/frame/system 证据分开，后者继续单列 `NOT_RUN/BLOCKED`，不得借模拟器绿色结案。
 
 ## 需要 Release/外部环境的明确证据
 
 - 真实 APNs/FCM、通知中心动作、权限、Doze/后台、安装升级、签名、Widget/Spotlight/Intent/Live Activity、Watch 与物理可访问性任务。
 - macOS UI 执行在系统认证授权前为 `BLOCKED`。
-- Android Macrobenchmark 模块和物理设备性能基线尚未建立；当前慢加载用例证明状态与 Oracle，不声称真实设备性能预算已通过。
-- 100k 数据量只在 opt-in 性能 lane 执行，不进入日常回归。
+- Android Macrobenchmark 模块与两端物理设备性能基线尚未建立；现有 100k 数据层 Lane 和慢加载用例只证明 correctness 与 provisional regression ceiling，不声称真实设备启动/帧预算已通过。
+- 100k 数据量只在显式 opt-in `performance` Lane 执行，不进入日常回归；synthetic 替身指标不作为通过 claim。
 
 这些项目不得被模拟器绿色覆盖；它们需要真实平台或发布环境，必须在 Release 证据清单中独立报告。但 WP3–WP6 中仍可在本地/模拟器完成的功能缺口不能混入此清单。其余极端设备×语言×状态组合按风险等价采样，不构造全笛卡尔积。若某边缘用例不能对应高影响失败、历史事故或独有技术风险，则不实现或不进入常规 lane。

@@ -103,4 +103,4 @@ Quality session 不再只隔离 GRDB：server config、decryption material metad
 
 计划中的 `required_checks` 是必须实际执行并写入收据的补充证据：Appcast/App Store metadata 使用快速语义契约，不启动完整 Release；Fastlane/构建/隐私/回滚变更强制执行发布静态契约并保持 Release Lane。两端各 120 次历史回放已校准旧路径漏选；无效或未知计划直接 `BLOCKED`，不回退为默认绿色。
 
-四个 100k/Watch/concurrency 重型用例已从函数内提前 return 改为框架条件禁用；日常输出必须显示 skipped，并在结果 `not_run` 中列出。只有设置 `PUSHGO_RUNTIME_QUALITY=1` 的受控性能 Lane 才能声称这些证据执行过。
+四个 100k/Watch/concurrency 重型用例已从函数内提前 return 改为框架条件禁用；日常输出必须显示 skipped，并在结果 `not_run` 中列出。`scripts/quality_test.sh performance` 会用 doctor 的 `--host-only` 模式只检查真实所需的 Swift/Package 环境，显式设置 `PUSHGO_RUNTIME_QUALITY=1`，只运行 `RuntimeQualityLargeScaleTests`，保存逐阶段耗时、RSS 与主线程 stall 日志，并把实际执行范围写入独立收据；无关 Simulator 状态不会阻断宿主测试。该 Lane 的阈值是当前宿主机上的 provisional regression ceiling，只防明显倒退；真机启动、帧耗时和 Release ETTrace 仍为 `NOT_RUN`，不得由它代替。

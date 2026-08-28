@@ -5,8 +5,8 @@
 | 平台/真实入口 | 用户目的 | 关键状态/分支 | 数据/系统终点 | 最低证据 | Lane/当前状态 | 主要 owner |
 | --- | --- | --- | --- | --- | --- | --- |
 | I/M/W App launch | 进入可操作 App | Empty/Content/slow/error/migration | App-owned Store、session 配置、首屏、导航 | Store + UI + launch metric | P0；iOS empty/content/slow/error 已有；quality DB 与 server/key metadata 均由 App-owned session 隔离，坏配置读取阻断 readiness；M/W 与 migration UI 待补 | `AppEnvironment`、`LocalDataStore`、Root UI |
-| I/M Messages | 浏览和刷新消息 | first/page/refresh/slow/error | summary query、revision、列表行 | Store + VM + UI | P0；iOS 首次 slow/error/retry、跨 50 条页界、主动刷新慢态/旧快照、新结果持久化及失败后恢复已有；真实性能待补 | Message Store/VM/List |
-| I/M Messages row/detail | 阅读准确对象 | read/unread/missing/decrypt/media | detail、read state、badge | Core + UI + relaunch | P0；iOS 准确字段/详情、单条/全部已读、未读筛选与 relaunch 已有；合法 Key 的原消息恢复、准确明文和 relaunch 已有；媒体及错 Key/坏密文恢复待补 | Message Detail/Store |
+| I/M Messages | 浏览和刷新消息 | first/page/refresh/slow/error | summary query、revision、列表行 | Store + VM + UI | P0；iOS 首次 slow/error/retry、跨 50 条页界、主动刷新慢态/旧快照、新结果持久化及失败后恢复已有；100k Store provisional baseline 已有，UI/真机性能待补 | Message Store/VM/List |
+| I/M Messages row/detail | 阅读准确对象 | read/unread/missing/decrypt/media | detail、read state、badge | Core + UI + relaunch | P0；iOS 准确字段/详情、单条/全部已读、未读筛选与 relaunch 已有；合法 Key、错误 Key 纠正和坏密文安全失败均以原 canonical 消息及 relaunch 闭环；媒体待补 | Message Detail/Store |
 | I/M Search | 找到且只找到目标消息 | latest query/empty/error/rebuild | search index、结果集合、详情 | property + Store + UI | P0；错误查询排除、目标集合与真实详情 UI 已有；index error/rebuild 仍在低层 | Search VM/Store/UI |
 | I/M Filters/cleanup | 限定范围并清理历史 | channel/tag/unread/cutoff/cancel/failure | Message/Event/Thing、stats/index | Store boundary + UI | P0/P1；未读筛选空态与恢复全部已有，channel/tag/cleanup UI 待补 | List/Store/Cleanup |
 | I/M Delete/Undo | 删除或撤销且重启一致 | pending/undo/claim/failure/reopen | canonical rows、通知、派生表面 | coordinator + Store + UI | P0；iOS 删除→隐藏→Undo→relaunch 已有，macOS/过期提交/通知对账待补 | Pending deletion |
@@ -28,6 +28,7 @@
 | W Messages/Events/Things | 在 Watch 浏览、已读、删除 | mirror/standalone/error/image/decrypt | Watch Store、pending action、ACK | integration + watch UI | P0/P1；UI/physical 缺口 | watch AppEnvironment/UI |
 | W Receiver/complication | 独立接收并显示未读 | generation/reset/auth failure/stale | provision、snapshot、timeline | integration + physical | P1；NOT RUN | Watch bridge/receiver/widget |
 | I/M Update distribution | 用户收到可验证、可安装且文案正确的更新 | stable/beta/build/signature/notes/URL | Sparkle Appcast、App Store metadata、版本化 notes | semantic contract + Release install | P0 Release；元数据契约已进 PR，真实安装仍 NOT RUN | release scripts/metadata |
+| I/M/W Performance | 在规模增长后仍及时得到准确结果 | 10k/100k、upgrade/rebuild、search/page/filter、并发、stall/memory | canonical Store、索引、Watch snapshot、trace/frame | correctness + host regression ceiling + physical trace | P1；独立 `performance` Lane 已实跑 100k Store/upgrade、10k Watch/并发并核对正确性、耗时、RSS 与 stall；仅为宿主机 provisional ceiling，真机 launch/frame/ETTrace 仍 NOT RUN | Store/index/Watch bridge/App launch |
 | I/M Export candidate | 导出消息文件 | reachable/cancel/failure/large | JSON/file consumer | product reachability review | 删除候选；不投入本轮预算 | Settings export helpers |
 | M MenuBar content candidate | 在菜单栏浏览未读 | mounted/loading/empty/error | MenuBar VM/Store | source reachability review | 删除候选；不投入本轮预算 | `MacMenuBarContentView` |
 

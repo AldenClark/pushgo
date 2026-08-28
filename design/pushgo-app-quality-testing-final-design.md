@@ -1703,14 +1703,15 @@ macrobenchmark/src/main/java/io/ethan/pushgo/benchmark/
 
 ## 28. 执行命令与 CI Profile
 
-两个仓库分别新增：
+两个仓库统一通过一个可验证入口执行：
 
 ```text
-scripts/quality/doctor.sh
-scripts/quality/focused.sh [filter/changed paths]
-scripts/quality/pr.sh
-scripts/quality/nightly.sh
-scripts/quality/release.sh
+scripts/quality_doctor.sh
+scripts/quality_test.sh focused
+scripts/quality_test.sh pr
+scripts/quality_test.sh nightly
+scripts/quality_test.sh performance
+scripts/quality_test.sh release
 ```
 
 `doctor` 只检查工具链、设备、可安装性、磁盘、账号变量和目标构建，不能给产品打 `PASSED`。
@@ -1719,7 +1720,8 @@ scripts/quality/release.sh
 | --- | --- | --- |
 | Focused | 受影响 compile + Pure/VM/Store + 最多一条核心 UI | 约 3 分钟 |
 | PR | Apple Core、Android JVM、iOS/macOS/Android 核心 P0 UI、fatal Store/slow-load 负控、Release isolation、影响补充 | 约 15–20 分钟，分片后校准 |
-| Nightly | iOS/macOS/watch simulator UI、Android min/main/latest、后台恢复、系统表面 contract、10k UI、100k Store、fault、migration、a11y、sandbox | 约 90–120 分钟 |
+| Nightly | iOS/macOS/watch simulator UI、Android min/main/latest、后台恢复、系统表面 contract、10k UI、fault、migration、a11y、sandbox | 约 90–120 分钟 |
+| Performance | 每周或性能敏感变更显式触发；100k 生产 Store/Room correctness + provisional host/emulator ceiling，独立保存指标；不进入普通 PR | 当前约 3 分钟产品执行，随固定参考设备补充而校准 |
 | Release | 最新有效 Nightly P0 证据 + Nightly 必要集 + Release-like 性能 + 第 33 节代表物理设备/窗口 + real APNs/FCM/private + Widget/Intent/通知动作 + 升级安装 | 约 120–180 分钟，按设备池校准 |
 
 watchOS 的 P0 UI 至少进入 Nightly；若变更直接触及 watch 共享模型、同步、路由或 UI，则通过影响分析提升到 PR。任何 P0 只要最近一次应执行结果为 `FAILED/FLAKY/BLOCKED/NOT RUN`，Release 汇总不得显示为通过；证据有效期由构建身份和相关路径变化共同决定，不能沿用不相干的旧绿色。

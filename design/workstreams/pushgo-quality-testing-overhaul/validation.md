@@ -115,6 +115,10 @@
 74. **远端 prepare 成功冒充 Gateway 已可提交攻击**：只测候选注册拒绝无法发现本地多存储提交中途失败。结果：fault 放在 candidate config/Room address 已写、device identity/secure state 尚未激活的中点；测试要求 Sheet 错误、宿主旧值、杀进程后旧值、关闭 fault 后真实重试才提交。
 75. **受保护存储静默失败攻击**：Android 旧实现把加密失败和异步 preferences 写失败当作 Unit 成功，configured UI 可能是假绿。结果：encrypt/commit/delete/clear 失败均抛出，key secret 与 Room metadata 做补偿；两端 fault 后都必须重启仍未配置且同入口重试才通过。
 76. **rollback 的 `try?`/`runCatching` 吞错攻击**：commit 失败后的补偿若再次失败，会留下跨存储 split-brain。结果：Apple 抛 `gateway_local_commit_rollback_failed` 复合错误；Android 聚合所有 rollback failure 并恢复 candidate ACK owner。当前 UI 已证明 rollback 成功路径，rollback 存储自身再次失败仍保留为显式未跑项，不以本切片冒充。
+77. **Android 打印 skipped 后假通过攻击**：两个 JVM 100k helper 在未 opt-in 时输出 `skipped=true` 后直接 `return`，JUnit XML 却记录为 PASSED。结果：改用 `Assume.assumeTrue`；负控实际生成 `tests=1 skipped=1 failures=0` 的两份 XML。常规 Lane 不再把没执行的 100k 算绿，显式 Performance Lane 才能产生 executed claim。
+78. **替身规模测试冒充生产性能攻击**：首次 Performance Lane 同时运行 JVM 内存假 Store 与生产 Room；前者在 100k search OOM，既不能说明真实 App Room 慢，也不值得靠调大测试堆维护。结果：保留该失败证据并从 Lane claim 删除 synthetic helper；Android 性能通过条件收敛为真实 Room 的写入、分页、FTS、筛选、投影、重开正确性与 provisional emulator search ceiling。模拟器数字仍不能冒充 Macrobenchmark/物理 TTID、帧和功耗。
+79. **只有手动性能命令、长期无人执行攻击**：脚本存在且本地通过，但 CI 只调度 Nightly/Release，几周后 100k 资产可静默腐化。结果：两仓库增加独立每周 cron 与手动 `performance` 选项，日志和结构化收据进入 artifact；Android 定时任务不再额外重复 fast JVM job，定时 Nightly/Performance 也不会因 main ref 的通用 cancel 规则互相取消。Performance 保持不进入普通 PR，避免以治理为名消耗日常反馈预算。
+80. **宿主性能被无关模拟器阻断攻击**：Apple 100k Store suite 只需 Swift Package，却复用要求 iOS Simulator 的 UI doctor；设备损坏会把可执行的宿主证据错误归为 BLOCKED。结果：doctor 新增 fail-closed 的 `--host-only`，只验证 Swift 和 `Package.swift`，未知参数仍阻断；UI Lane 保持原 Simulator/scheme 检查，不能用 host 模式绕过设备准备。
 
 ## 归因分析
 

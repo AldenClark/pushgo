@@ -67,7 +67,7 @@
 
 ### WP7 治理收口
 
-- Focused/PR/Nightly/Release 脚本和 CI；
+- Focused/PR/Nightly/Release 反馈 Lane，以及显式 opt-in 的 Performance 脚本和 CI/人工调度入口；
 - AI 增量测试规则；
 - 删除或降级旧 Runtime 产品操作；
 - 连续两周与最终双向覆盖审查。
