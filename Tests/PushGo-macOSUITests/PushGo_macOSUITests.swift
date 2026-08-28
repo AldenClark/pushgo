@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 
 final class PushGo_macOSUITests: XCTestCase {
@@ -91,14 +92,61 @@ final class PushGo_macOSUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        try closeProblemReporter(waitForDelayedAppearance: false)
     }
 
     override func tearDownWithError() throws {
+        var cleanupError: Error?
+        do {
+            try closeProblemReporter(waitForDelayedAppearance: true)
+        } catch {
+            cleanupError = error
+        }
         let fileManager = FileManager.default
         for runtimeRoot in runtimeRoots {
             try? fileManager.removeItem(at: runtimeRoot)
         }
         runtimeRoots.removeAll()
+        if let cleanupError {
+            throw cleanupError
+        }
+    }
+
+    private func closeProblemReporter(waitForDelayedAppearance: Bool) throws {
+        let deadline = Date().addingTimeInterval(waitForDelayedAppearance ? 0.35 : 0)
+        repeat {
+            let reporters = NSWorkspace.shared.runningApplications.filter {
+                $0.bundleIdentifier == "com.apple.ProblemReporter" && !$0.isTerminated
+            }
+            if !reporters.isEmpty {
+                for reporter in reporters {
+                    _ = reporter.terminate()
+                }
+                Thread.sleep(forTimeInterval: 0.1)
+                for reporter in reporters where !reporter.isTerminated {
+                    _ = reporter.forceTerminate()
+                }
+                Thread.sleep(forTimeInterval: 0.1)
+            }
+            let remaining = NSWorkspace.shared.runningApplications.filter {
+                $0.bundleIdentifier == "com.apple.ProblemReporter" && !$0.isTerminated
+            }
+            if !remaining.isEmpty && Date() >= deadline {
+                throw NSError(
+                    domain: "macos_problem_reporter_cleanup_failed",
+                    code: 1,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "macos_problem_reporter_cleanup_failed: system crash dialog would obstruct the next UI journey"
+                    ]
+                )
+            }
+            if Date() < deadline {
+                Thread.sleep(forTimeInterval: 0.05)
+            } else {
+                break
+            }
+        } while true
     }
 
     @MainActor

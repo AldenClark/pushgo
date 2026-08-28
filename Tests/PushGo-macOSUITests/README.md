@@ -19,7 +19,7 @@ The 18 host-path/command/state methods are named `legacyDiagnostic...` and no lo
 
 ## Run
 
-Use the zero-retry repository runner. It closes stale macOS `Problem Reporter` dialogs before and after execution so a prior crash cannot cover the next UI journey:
+Use the zero-retry repository runner. It first proves that the interactive console is unlocked, then holds a scoped `caffeinate` assertion so a long lane cannot idle back to the login screen. XCTest closes the exact macOS system `Problem Reporter` application in every journey's setup and teardown; the outer runner also closes the exact process before/after the batch and on interruption/exit. It terminates only stale test-built PushGo/Runner processes at the batch boundary, preventing an interrupted prior run's background App from blocking activation. Therefore an App crash cannot leave its system dialog above the next journey without paying the instability cost of relaunching the UI-test Runner for every method. A crashed journey remains `FAILED`; closing the system dialog is test-environment cleanup, never a retry or a route to green. A locked console or a dialog that cannot be closed is explicitly `BLOCKED` instead of becoming a misleading product failure:
 
 ```bash
 ./scripts/run_macos_ui_tests.sh

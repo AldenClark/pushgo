@@ -9,6 +9,10 @@ max_retries="${MAX_RETRIES:-0}"
 derived_data_path="${DERIVED_DATA_PATH:-$repo_root/build/.deriveddata-macos-ui}"
 results_root="${RESULTS_ROOT:-$repo_root/build/quality-results/macos-ui}"
 runner_status_file="${QUALITY_RUNNER_STATUS_FILE:-}"
+problem_reporter_cleaner="$repo_root/scripts/close_macos_problem_reporter.sh"
+test_app_executable="$derived_data_path/Build/Products/Debug/PushGo.app/Contents/MacOS/PushGo"
+test_runner_executable="$derived_data_path/Build/Products/Debug/PushGo-macOSUITests-Runner.app/Contents/MacOS/PushGo-macOSUITests-Runner"
+caffeinate_pid=""
 
 if [[ ! "$max_retries" =~ ^[0-9]+$ ]] || (( max_retries != 0 )); then
   echo "status=BLOCKED"
@@ -29,22 +33,49 @@ default_scopes=(
   "PushGo-macOSUITests/PushGo_macOSUITests/testInvalidServerAddressShowsInlineFeedbackInsteadOfToast"
 )
 
-close_problem_reporter() {
-  local reporter_pid
-  while IFS= read -r reporter_pid; do
-    [[ -z "$reporter_pid" ]] || kill "$reporter_pid" >/dev/null 2>&1 || true
-  done < <(pgrep -f '/System/Library/CoreServices/Problem Reporter.app/Contents/MacOS/Problem Reporter' || true)
+close_stale_test_processes() {
+  local process_pattern
+  for process_pattern in "^$test_app_executable($| )" "^$test_runner_executable($| )"; do
+    pkill -TERM -f "$process_pattern" >/dev/null 2>&1 || true
+  done
+  sleep 0.1
+  for process_pattern in "^$test_app_executable($| )" "^$test_runner_executable($| )"; do
+    pkill -KILL -f "$process_pattern" >/dev/null 2>&1 || true
+  done
 }
 
 finish() {
   local command_status=$?
   trap - EXIT INT TERM
-  close_problem_reporter
+  if [[ -n "$caffeinate_pid" ]]; then
+    kill "$caffeinate_pid" >/dev/null 2>&1 || true
+  fi
+  close_stale_test_processes
+  "$problem_reporter_cleaner" || true
   exit "$command_status"
 }
 trap finish EXIT INT TERM
 
-close_problem_reporter
+if [[ -n "$runner_status_file" ]]; then
+  mkdir -p "$(dirname "$runner_status_file")"
+fi
+
+console_locked="$(/usr/sbin/ioreg -n Root -d1 | awk -F'= ' '/"IOConsoleLocked"/ { print $2 }')"
+if [[ "$console_locked" != "No" ]]; then
+  [[ -z "$runner_status_file" ]] || printf 'BLOCKED\n' > "$runner_status_file"
+  echo "status=BLOCKED"
+  echo "reason=macos_console_must_be_unlocked:$console_locked"
+  exit 2
+fi
+
+# Keep a long UI lane from reaching the login screen after a successful
+# preflight. This changes only idle-sleep behavior for the lifetime of this
+# runner and is always released by the exit trap.
+/usr/bin/caffeinate -dimsu -w $$ &
+caffeinate_pid=$!
+
+"$problem_reporter_cleaner"
+close_stale_test_processes
 mkdir -p "$results_root"
 
 common_args=(
@@ -71,7 +102,6 @@ for scope in "${scope_list[@]}"; do
 done
 
 if [[ -n "$runner_status_file" ]]; then
-  mkdir -p "$(dirname "$runner_status_file")"
   printf 'PASSED\n' > "$runner_status_file"
 fi
 
@@ -80,17 +110,28 @@ xcodebuild "${common_args[@]}" build-for-testing
 
 result_bundle="$results_root/run-$(date +%Y%m%d-%H%M%S).xcresult"
 log_file="$(mktemp -t pushgo-macos-ui.XXXXXX.log)"
+"$problem_reporter_cleaner"
 echo "==> macOS App-owned UI journeys (zero retry)"
 set +e
 xcodebuild "${common_args[@]}" -resultBundlePath "$result_bundle" test-without-building 2>&1 | tee "$log_file"
 status=${PIPESTATUS[0]}
 set -e
+"$problem_reporter_cleaner"
 
 if [[ $status -eq 0 ]]; then
   rm -f "$log_file"
   echo "status=PASSED"
   echo "result_bundle=$result_bundle"
   exit 0
+fi
+
+if grep -q "macos_problem_reporter_cleanup_failed" "$log_file"; then
+  [[ -z "$runner_status_file" ]] || printf 'BLOCKED\n' > "$runner_status_file"
+  echo "status=BLOCKED"
+  echo "reason=macos_problem_reporter_cleanup_failed"
+  echo "log=$log_file"
+  echo "result_bundle=$result_bundle"
+  exit 2
 fi
 
 if ! grep -q "Test Case '-\\[" "$log_file"; then
