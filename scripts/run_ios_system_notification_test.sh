@@ -9,12 +9,32 @@ runner_bundle_identifier="${UI_TEST_RUNNER_BUNDLE_IDENTIFIER:-io.ethan.pushgo.ui
 derived_data_path="${DERIVED_DATA_PATH:-$repo_root/.deriveddata-ui-tests}"
 results_root="${RESULTS_ROOT:-$repo_root/build/quality-results/ios-system-notification}"
 runner_status_file="${QUALITY_RUNNER_STATUS_FILE:-}"
+runner_issue_file="${QUALITY_RUNNER_ISSUE_FILE:-}"
 test_scope="PushGo-iOSUITests/PushGo_iOSSystemNotificationTests/testSystemNotificationTapOpensAccurateReadDetailAndPersists"
 readiness_filename="pushgo-system-notification-ready"
 
 set_runner_status() {
   [[ -z "$runner_status_file" ]] || printf '%s\n' "$1" >"$runner_status_file"
 }
+
+record_classification() {
+  local classification="$1"
+  local issue_ids
+  printf '%s\n' "$classification"
+  issue_ids="$(printf '%s\n' "$classification" | sed -n 's/^classification_issue_ids=//p')"
+  if [[ -n "$runner_issue_file" && -n "$issue_ids" ]]; then
+    printf '%s\n' "$issue_ids" | tr ',' '\n' >>"$runner_issue_file"
+  fi
+}
+
+classify_test_system_log() {
+  local log_file="$1"
+  local classification
+  classification="$(python3 "$repo_root/scripts/quality_test_system_issues.py" --match-file "$log_file")" || return 1
+  record_classification "$classification"
+}
+
+python3 "$repo_root/scripts/quality_test_system_issues.py" --check >/dev/null
 
 doctor_output="$("$repo_root/scripts/quality_doctor.sh")"
 printf '%s\n' "$doctor_output"
@@ -82,19 +102,12 @@ while (( SECONDS < deadline )); do
     set -e
     trap - EXIT
     tail -80 "$log_file" || true
-    if rg -q "QUALITY_PRECONDITION" "$log_file"; then
+    if classify_test_system_log "$log_file"; then
       set_runner_status BLOCKED
       echo "status=BLOCKED"
-      echo "reason=quality_precondition_failed_before_notification_readiness"
+      echo "reason=registered_test_system_failure_before_notification_readiness"
       echo "log=$log_file"
       echo "result_bundle=$result_bundle"
-      exit 2
-    fi
-    if rg -q "Failed to launch app with identifier: .*xctrunner|RequestDenied|timed out waiting for simulator|Unable to boot the Simulator" "$log_file"; then
-      set_runner_status BLOCKED
-      echo "status=BLOCKED"
-      echo "reason=transient_runner_failed_before_notification_readiness"
-      echo "log=$log_file"
       exit 2
     fi
     echo "status=FAILED"

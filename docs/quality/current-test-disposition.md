@@ -119,6 +119,10 @@ Quality session 不再只隔离 GRDB：server config、decryption material metad
 
 计划中的 `required_checks` 是必须实际执行并写入收据的补充证据：Appcast/App Store metadata 使用快速语义契约，不启动完整 Release；Fastlane/构建/隐私/回滚变更强制执行发布静态契约并保持 Release Lane。两端各 120 次历史回放已校准旧路径漏选；无效或未知计划直接 `BLOCKED`，不回退为默认绿色。
 
+## Test-system/flake 处置
+
+`config/quality-test-system-issues.json` 取代 runner 内不可审计的“已知失败”口头清单。Apple 的通用 iOS UI、系统通知和 watchOS 三个入口统一使用 `apple-simulator-xctest-runner-launch`；只有通用 iOS UI 可在第一个产品动作前做一次隔离恢复，另外两个入口不重试。App-owned 准备失败另由 0 重试的 `apple-quality-precondition` 归因。签名、owner、到期日和退出条件均由 `quality_test_system_issues.py` 校验。任何产品断言、未知/过期签名或第二次重试直接失败/阻断。发生恢复时产品结果可继续完成，但收据 test-system 必须是 `FLAKY` 并带 active issue ID，不能回写 `PASSED`。完整规则见 `docs/quality/test-system-issue-governance.md`。
+
 四个 100k/Watch/concurrency 重型用例已从函数内提前 return 改为框架条件禁用；日常输出必须显示 skipped，并在结果 `not_run` 中列出。`scripts/quality_test.sh performance` 先用 doctor 的 `--host-only` 模式执行 `RuntimeQualityLargeScaleTests`，再在专用 Simulator 执行独立文件 `PushGo_iOSPerformanceTests.swift` 中的 `testPreparedLargeMessageStoreColdLaunchReachesAccurateContent`：数据准备在测量区间外，5 次正式样本采集 launch/clock/CPU/memory，测试端完整启动到准确首行不得超过 8s，最后必须打开相同 persisted body。该 8s 只防 Simulator 明显退化。显式提供参考设备 ID、准确 sentinel 与设备预算时，同一 Lane 继续调用 `scripts/run_ios_physical_performance.sh`，在 Release 配置固定真机执行 10 次；缺条件保持 `NOT_RUN`，不得回落到个人真机或 Simulator。Release 是功能与性能共同超集。ETTrace 仅在指标失败后临时接入做归因，不作为生产或常驻测试依赖。
 
 ## macOS 窗口生命周期验证与攻击记录

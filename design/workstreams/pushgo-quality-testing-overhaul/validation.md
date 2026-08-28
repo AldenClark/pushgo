@@ -181,6 +181,8 @@
 | Android Transport selector 失败后仍覆盖旧 route | 旧低层测试不调用真实 commit；双向 prepare、Room mode、secure token/device key、远端 route 与 runtime/service 没有统一状态边界 | 双向 prepare/register→commit→apply；失败补偿/本地回滚；selector-owned 排他反馈；真实控制、重试、relaunch 与负控 | 旧选择/token/route、dialog 或重启错误=`FAILED`；Compose owner/语义不可观察=`FAILED_TEST_SYSTEM`；真实 FCM/Private 公网=`NOT RUN` |
 | 历史路径回放绿色但 AI 仍补错测试 | commit 文件均被某条规则命中，却只选择 Runtime/Release 或控件存在检查，没有携带解密、消息、ACK、a11y 等用户目的 | 两端各 10 条真实任务语料；最低能力/Lane/共同变更回放；每条记录入口、动作、精确终点、恢复、持久化、负控和拒绝的弱 Oracle；生成 base-commit blind packets | 自动结果仅 `READY_FOR_RECORDED_SEMANTIC_REVIEW`；漏能力/Lane/共同变更=`FAILED`；独立语义审查未执行前保留 common-mode risk |
 | 用格式完整度给 AI 自动打分 | 字段齐全或关键词相似被当作语义正确，一个严重漏测被平均分掩盖 | 机器只验证确定性下限；语义逐任务与真实 diff/行为对照，按目的、Oracle、Lane、执行边界报告，不聚合单一分数 | 缺字段阻断语料；语义结论必须人工/隔离 AI 复核，不能从 JSON 结构推导产品通过 |
+| 已知 flake 名义吞掉新产品失败 | Runner 用宽泛 timeout/AssertionError allowlist，Apple 多入口各有一份字符串，或 Android 批次同时有已知 runtime 签名和真实产品断言时仍归为 test-system | 版本化 active issue 注册表；移除 `RequestDenied` 等宽匹配；Android 要求当前 XML 每个 failure 都命中；Apple 三个 Runner 共用分类器且只在首个产品动作前归因；收据绑定 issue ID | 未登记/过期/混合产品 failure=`FAILED`；只有纯已知系统问题才 `FLAKY/BLOCKED/FAILED_TEST_SYSTEM`，绝不生成产品假绿 |
+| Flake 永久续命或无限重试 | 没有 owner/到期/退出条件，失败后反复重跑直至绿 | owner、opened/last-seen、14 天内到期、0/1 次重试、50 次连续稳定退出；Lane 启动和日常 selector 单测共同校验 | 到期/`MAX_RETRIES>1`/无替代证据 quarantine=`BLOCKED`；恢复后 product 可过但 test-system 仍 `FLAKY` + ID |
 
 ## 双向覆盖反查
 

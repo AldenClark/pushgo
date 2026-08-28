@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "platform": "apple",
+  "issues": [
+    {
+      "id": "apple-simulator-xctest-runner-launch",
+      "kind": "flake",
+      "status": "active",
+      "owner": "apple-quality-runtime",
+      "opened_on": "2026-08-28",
+      "last_seen_on": "2026-08-28",
+      "expires_on": "2026-09-11",
+      "scope": ["iOS or watchOS Simulator XCTest runner launch before the first product action"],
+      "signatures": [
+        "Failed to launch app with identifier: .*xctrunner",
+        "Application launch for .* did not return a process handle",
+        "timed out waiting for simulator",
+        "Unable to boot the Simulator",
+        "Failed to initialize for UI testing",
+        "System authentication is running"
+      ],
+      "allowed_retries": 1,
+      "quarantined": false,
+      "rationale": "Only a runner or Simulator launch failure before product execution may receive one isolated reboot retry.",
+      "exit_criteria": "Remove the retry after 50 consecutive dedicated Apple Simulator launches without this classification, or replace it with an upstream-fixed Xcode/runtime version contract.",
+      "evidence": ["build/quality-results/ios/run-1-20260828-044956.xcresult", "scripts/run_ios_ui_tests.sh", "scripts/run_ios_system_notification_test.sh", "scripts/run_watchos_ui_tests.sh"]
+    },
+    {
+      "id": "apple-quality-precondition",
+      "kind": "precondition",
+      "status": "active",
+      "owner": "apple-quality-runtime",
+      "opened_on": "2026-08-28",
+      "last_seen_on": "2026-08-28",
+      "scope": ["Explicit QUALITY_PRECONDITION failures before product evidence begins"],
+      "signatures": ["QUALITY_PRECONDITION"],
+      "allowed_retries": 0,
+      "quarantined": false,
+      "rationale": "This is a permanent attribution boundary, not a waiver: session, Simulator, fixture, permission, or readiness preparation must stop before product actions and cannot become product green.",
+      "exit_criteria": "Keep the category while App-owned preparation exists; fix each concrete precondition failure at its source and never retry it as a product assertion.",
+      "evidence": ["Tests/PushGo-iOSUITests/QualityRuntimeSupport.swift", "scripts/run_ios_system_notification_test.sh"]
+    }
+  ]
+}

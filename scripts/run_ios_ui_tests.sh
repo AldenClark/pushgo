@@ -10,6 +10,16 @@ max_retries="${MAX_RETRIES:-1}"
 derived_data_path="${DERIVED_DATA_PATH:-$repo_root/.deriveddata-ui-tests}"
 results_root="${RESULTS_ROOT:-$repo_root/build/quality-results/ios}"
 runner_status_file="${QUALITY_RUNNER_STATUS_FILE:-}"
+runner_issue_file="${QUALITY_RUNNER_ISSUE_FILE:-}"
+
+if [[ ! "$max_retries" =~ ^[0-9]+$ ]] || (( max_retries > 1 )); then
+  echo "status=BLOCKED"
+  echo "reason=ios_ui_max_retries_must_be_zero_or_one:$max_retries"
+  exit 2
+fi
+python3 "$repo_root/scripts/quality_test_system_issues.py" \
+  --check \
+  --require-id apple-simulator-xctest-runner-launch
 
 if [[ -n "$runner_status_file" && ! -f "$runner_status_file" ]]; then
   mkdir -p "$(dirname "$runner_status_file")"
@@ -125,13 +135,6 @@ run_test_once() {
   return "$status"
 }
 
-is_transient_runner_failure() {
-  local logfile="$1"
-  rg -q \
-    "Failed to launch app with identifier: .*xctrunner|Failed to launch app with identifier: .*No such process|Application launch for .* did not return a process handle|RequestDenied|timed out waiting for simulator|Unable to boot the Simulator" \
-    "$logfile"
-}
-
 attempt=1
 until [[ $attempt -gt $((max_retries + 1)) ]]; do
   log_file="$(mktemp -t pushgo-ui-tests.XXXXXX.log)"
@@ -145,8 +148,18 @@ until [[ $attempt -gt $((max_retries + 1)) ]]; do
     exit 0
   fi
 
-  if is_transient_runner_failure "$log_file"; then
-    echo "classification=BLOCKED_TRANSIENT_RUNNER"
+  if classification="$(python3 "$repo_root/scripts/quality_test_system_issues.py" --match-file "$log_file" --reject-if-matches "Test Case '-\\[" --retryable-only)"; then
+    printf '%s\n' "$classification"
+    issue_ids="$(printf '%s\n' "$classification" | sed -n 's/^classification_issue_ids=//p')"
+    allowed_retries="$(printf '%s\n' "$classification" | sed -n 's/^allowed_retries=//p')"
+    [[ "$allowed_retries" =~ ^[0-9]+$ ]] && (( max_retries <= allowed_retries )) || {
+      echo "status=BLOCKED"
+      echo "reason=runner_retry_exceeds_registered_allowance:$max_retries:$allowed_retries"
+      exit 2
+    }
+    if [[ -n "$runner_issue_file" && -n "$issue_ids" ]]; then
+      printf '%s\n' "$issue_ids" | tr ',' '\n' >> "$runner_issue_file"
+    fi
     if [[ -n "$runner_status_file" ]]; then
       if [[ $attempt -le $max_retries ]]; then
         printf 'FLAKY\n' > "$runner_status_file"

@@ -9,6 +9,7 @@ test_scopes="${TEST_SCOPES:-${TEST_SCOPE:-}}"
 derived_data_path="${DERIVED_DATA_PATH:-$repo_root/.deriveddata-watch-ui-tests}"
 results_root="${RESULTS_ROOT:-$repo_root/build/quality-results/watchos}"
 runner_status_file="${QUALITY_RUNNER_STATUS_FILE:-}"
+runner_issue_file="${QUALITY_RUNNER_ISSUE_FILE:-}"
 
 if [[ -n "$runner_status_file" && ! -f "$runner_status_file" ]]; then
   mkdir -p "$(dirname "$runner_status_file")"
@@ -25,10 +26,21 @@ block() {
   exit 2
 }
 
+record_classification() {
+  local classification="$1"
+  local issue_ids
+  printf '%s\n' "$classification"
+  issue_ids="$(printf '%s\n' "$classification" | sed -n 's/^classification_issue_ids=//p')"
+  if [[ -n "$runner_issue_file" && -n "$issue_ids" ]]; then
+    printf '%s\n' "$issue_ids" | tr ',' '\n' >>"$runner_issue_file"
+  fi
+}
+
 command -v xcodebuild >/dev/null 2>&1 || block "xcodebuild_not_found"
 command -v xcrun >/dev/null 2>&1 || block "xcrun_not_found"
 command -v python3 >/dev/null 2>&1 || block "python3_not_found"
 command -v rg >/dev/null 2>&1 || block "rg_not_found"
+python3 "$repo_root/scripts/quality_test_system_issues.py" --check >/dev/null || block "invalid_or_expired_apple_test_system_issue_registry"
 if ! xcodebuild -project "$project_path" -list 2>/dev/null | rg -q "^[[:space:]]+$scheme$"; then
   block "watchos_scheme_not_found:$scheme"
 fi
@@ -107,13 +119,24 @@ if [[ $status -eq 0 ]]; then
   exit 0
 fi
 
-if ! rg -q "Test Case '-\\[" "$log_file" || \
-   rg -q "Failed to launch app with identifier: .*xctrunner|Failed to initialize for UI testing|RequestDenied|Unable to boot the Simulator|timed out waiting for simulator|System authentication is running" "$log_file"; then
+if classification="$(python3 "$repo_root/scripts/quality_test_system_issues.py" --match-file "$log_file" --reject-if-matches "Test Case '-\\[")"; then
+  record_classification "$classification"
   if [[ -n "$runner_status_file" ]]; then
     printf 'BLOCKED\n' > "$runner_status_file"
   fi
   echo "status=BLOCKED"
-  echo "reason=watchos_ui_runner_failed"
+  echo "reason=registered_watchos_test_system_failure"
+  echo "log=$log_file"
+  echo "result_bundle=$result_bundle"
+  exit 2
+fi
+
+if ! rg -q "Test Case '-\\[" "$log_file"; then
+  if [[ -n "$runner_status_file" ]]; then
+    printf 'BLOCKED\n' > "$runner_status_file"
+  fi
+  echo "status=BLOCKED"
+  echo "reason=unclassified_watchos_runner_failure_before_product_execution"
   echo "log=$log_file"
   echo "result_bundle=$result_bundle"
   exit 2

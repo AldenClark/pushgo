@@ -72,6 +72,7 @@
 - Focused/PR/Nightly/Accessibility/Release 反馈 Lane，以及显式 opt-in 的 Performance 脚本和 CI/人工调度入口；
 - AI 增量测试规则；
 - 两端真实历史任务语料、确定性选择回放和隔离 blind packet 评估；
+- 具名 owner、精确签名、到期门禁和收据 issue ID 的 flake/test-system 治理；
 - 删除或降级旧 Runtime 产品操作；
 - 连续两周与最终双向覆盖审查。
 

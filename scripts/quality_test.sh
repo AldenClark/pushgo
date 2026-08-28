@@ -6,8 +6,11 @@ lane="${1:-pr}"
 results_root="$repo_root/build/quality-results"
 result_file="$results_root/apple-$lane-summary.json"
 runner_status_file="$results_root/apple-$lane-runner-status.txt"
+runner_issue_file="$results_root/apple-$lane-runner-issues.txt"
 mkdir -p "$results_root"
 rm -f "$runner_status_file"
+rm -f "$runner_issue_file"
+export QUALITY_RUNNER_ISSUE_FILE="$runner_issue_file"
 
 claims=()
 selected_claims=()
@@ -41,6 +44,11 @@ write_result() {
   for item in "${selected_claims[@]}"; do args+=(--selected-claim "$item"); done
   for item in "${claims[@]}"; do args+=(--claim "$item"); done
   for item in "${not_run[@]}"; do args+=(--not-run "$item"); done
+  if [[ -f "$runner_issue_file" ]]; then
+    while IFS= read -r item; do
+      [[ -z "$item" ]] || args+=(--test-system-issue-id "$item")
+    done < <(sort -u "$runner_issue_file")
+  fi
   [[ -z "$reason" ]] || args+=(--reason "$reason")
   python3 "$repo_root/scripts/quality_result.py" "${args[@]}"
 }
@@ -59,6 +67,12 @@ on_exit() {
   printf 'quality_result=%s\n' "$result_file"
 }
 trap on_exit EXIT
+
+if ! python3 "$repo_root/scripts/quality_test_system_issues.py" --check; then
+  echo "status=BLOCKED"
+  echo "reason=invalid_or_expired_apple_test_system_issue_registry"
+  exit 2
+fi
 
 run_impact_contracts() {
   local plan_path="${QUALITY_IMPACT_PLAN:-}"

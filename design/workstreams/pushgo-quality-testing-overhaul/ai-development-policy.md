@@ -56,6 +56,18 @@ Identifier 只负责稳定定位；readiness 只证明准备完成；Automation 
 
 业务断言失败立即失败；只允许对已识别的 Runner/Simulator 启动故障进行一次隔离重试。重试前后的状态都必须留证。
 
+## 测试系统问题与 Flake 治理
+
+两仓库的 `config/quality-test-system-issues.json` 是唯一已知异常注册表。每条 active flake 必须有稳定 ID、组件 owner、精确日志签名、首次/最近发生日期、最多一次重试、两周内到期日、证据和可判定退出条件；precondition 是永久归因边界，可以无到期日，但重试必须为 0。执行规则如下：
+
+1. `quality_test_system_issues.py --check` 在 Lane 开始前验证注册表；active flake 到期立即 `BLOCKED`，不能自动续期。
+2. Runner 只能按注册表签名分类。Apple 的 iOS UI、系统通知、watchOS Runner 共用登记；只有通用 iOS UI 在日志尚未出现 `Test Case` 时可对启动故障重启一次，系统通知/watchOS 不重试，`MAX_RETRIES > 1` 直接阻断。Android 只有当前批次 XML 中**每一个**失败都匹配 active test-system issue 时才归为产品 `NOT_RUN` / test-system `FAILED`；混入一个产品断言仍是产品 `FAILED`。
+3. 收据的 `test_system_issue_ids` 必须引用 active 登记项；`FLAKY` 没有 ID 或 `PASSED` 携带 issue ID 都非法。恢复后产品可 `PASSED`，但 test-system 必须保持 `FLAKY`。
+4. Quarantine 默认禁止。确需隔离时必须有替代证据、owner、到期日且不能把被隔离能力写入 executed claim；P0 错误成功态、数据损坏和不可逆动作不得以 quarantine 维持绿色。
+5. 每次真实发生更新 `last_seen_on` 与证据；到期前 owner 必须选择修复并 resolved、用 50 次连续稳定证据删除兼容重试，或携带新根因证据显式续期。不得仅改日期求绿。
+
+操作与当前登记见 `docs/quality/test-system-issue-governance.md`。
+
 ## 可执行变更影响下限
 
 两仓库分别维护 `config/quality-impact.json`、`scripts/quality_impact.py` 和 `scripts/quality_changed.sh`。本地 AI/开发者完成编辑后直接运行：
