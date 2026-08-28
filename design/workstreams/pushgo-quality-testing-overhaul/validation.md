@@ -136,6 +136,10 @@
 95. **把创建补偿盲目推广到既有频道订阅攻击**：仅凭请求未带 channelId 仍可能得到 `created=false` 的既有频道，普通 subscribe 响应也不说明远端关系是本次新建还是此前已存在；本地失败后一律 unsubscribe 可能破坏合法既有订阅。结果：自动远端补偿严格限定“create 请求且 `created=true`”；其余情况保持显式协议缺口，需服务端幂等/ownership token 或状态查询后才能安全实现，不以“代码复用更整齐”为由制造数据损失。
 96. **测试替身错误码与产品合同漂移攻击**：Android 首轮用宽泛 `AUTH` 表示频道密码不匹配，产品按合同正确提示检查 Gateway token，测试却误判产品文案；修正错误码后，第二轮又因把 Compose 默认 matcher 当普通子串而在实际完整正确文本上失败。两次均保留为 `FAILED_TEST_SYSTEM`；最终替身使用真实 `password_mismatch/CONFLICT`，Oracle 改为完整用户提示精确匹配，不继续调 matcher 或靠重跑求绿。
 97. **设备测试运行时崩溃被误记产品失败攻击**：增强输入保留 Oracle 后，两条新增 Channel 用例均已通过，但同批既有正常旅程在 AndroidX Compose 绘制阶段抛出 `SnapshotStateObserver` 多线程访问异常；旧 Lane 仅按 Gradle 非零统一写成 product `FAILED` / test-system `PASSED`。结果：只解析本轮新生成的 XML，且全部 failure 都命中该明确运行时签名时，才记录 product `NOT_RUN` / test-system `FAILED`；混有任何产品断言仍按产品失败处理，不隐藏真实 bug，也不把同批局部通过提升为完整 claim。
+98. **低层“失败不提交”模型冒充真实 selector 攻击**：旧 Android transport 测试在失败分支根本不调用真实 ViewModel commit，因此即使生产代码 catch 后继续覆盖旧 route 也会绿色。结果：新旅程从真实 Settings segmented control 触发同一 ViewModel；typed boundary 第一次拒绝、第二次接受，第一次必须保持旧选择/secure token/后续 dialog，第二次才提交并跨 relaunch。临时删除失败分支 `return` 的负控立即在 FCM 选择状态断言处失败，证明 Oracle 对原缺陷敏感。
+99. **只修 FCM→Private、反向仍先提交攻击**：单向修复会让 Private→FCM 继续在 token/注册失败前写启用状态。结果：双向都采用 prepare/register→commit；FCM 准备走正式 provider switch + subscription sync，失败会退回 Private route并恢复 token/device key；同一 UI 旅程按两个方向分别执行拒绝、旧状态、重试、成功和 relaunch，不用一端通过外推另一端。
+100. **错误可见但合并语义让测试找不到攻击**：首轮错误已真实显示在 Material `ListItem` supporting content，Compose 默认合并树却丢失子 Text test tag，等待超时可被误归为产品未反馈。结果：保留首错并检查 unmerged tree，确认准确文本/旧选择都存在；生产 UI 将局部错误放到 selector 容器内独立可访问 owner，默认测试树可观察且视觉归属不越界。没有改用 `useUnmergedTree` 隐藏真实辅助语义问题。
+101. **远端 route 成功、本地 mode/secret 提交分裂攻击**：只覆盖远端拒绝仍漏掉 Room mode 已写、secure token 未清或反向 token/device key 已换而 mode 未提交。结果：一次性 typed fault 放在 mode 写后中点；产品对 Private 方向重新准备 FCM，对 FCM 方向退回 Private，并恢复 token/device key/mode 后才发布错误。UI 要求白名单 dialog 不出现、重启仍旧 route、同入口重试才提交；补偿自身再次失败用更严重准确文案，仍保留为未执行故障组合而不消耗日常预算。
 
 ## 归因分析
 
@@ -163,11 +167,12 @@
 | 中文或大字体 Lane 绿色但实际仍是英文/标准字号 | Runner 只相信 launch argument/命令返回；App 生命周期没有采用平台 locale；测试不核对真实环境 | 平台设置回读 + App 内 DynamicTypeSize/Activity Configuration 双证明；失败路径 finally 恢复 | 未应用/未恢复=`BLOCKED/FAILED_TEST_SYSTEM`；真实任务内容/动作错误=`FAILED` |
 | 资源齐全但大字体表单不可操作 | 静态资源合同与元素存在性都无法发现重叠、遮挡和错误命中 | 代表性中文大字体真实读取+写入任务；断言准确详情、真实输入、accepted mutation 和最终频道行 | 资源缺失=`FAILED`；控件不可达/写入错误=`FAILED`；物理辅助任务仍=`NOT RUN` |
 | Channel 创建失败后出现远端/本地残留 | 远端 subscribe 与本地凭据/数据库提交没有补偿边界；旧 UI 只看 Sheet 错误或当下列表 | 创建 owner 状态机；本地多存储回滚；远端 unsubscribe 补偿；正式重载无脏行；同进程重试与 relaunch | 远端拒绝/补偿/重载终点错误=`FAILED`；替身错误码或 matcher 错误=`FAILED_TEST_SYSTEM`；真实公网仍=`NOT RUN` |
+| Android Transport selector 失败后仍覆盖旧 route | 旧低层测试不调用真实 commit；双向 prepare、Room mode、secure token/device key、远端 route 与 runtime/service 没有统一状态边界 | 双向 prepare/register→commit→apply；失败补偿/本地回滚；selector-owned 排他反馈；真实控制、重试、relaunch 与负控 | 旧选择/token/route、dialog 或重启错误=`FAILED`；Compose owner/语义不可观察=`FAILED_TEST_SYSTEM`；真实 FCM/Private 公网=`NOT RUN` |
 
 ## 双向覆盖反查
 
 - 源码→测试：消息 Store/Repository、Paging/VM、列表状态、Retry、fixture ingestion、Release resolver、Runner/teardown、CI lane 和生产本地化资源均有对应低层或纵向证据；两端全部已跟踪产品路径均至少命中一个具名能力规则，当前未映射为 0。大字体相关 Sheet 改动同时命中标准字号频道回归与 Accessibility Lane。
-- 测试→产品：新核心用例均能追到真实 App UI、Store/Paging/Projection 或 Release resolver；加密恢复明确追到 parser→canonical failed state→真实详情/Settings→reparse→同一 canonical/派生列表→relaunch；Channel 失败旅程追到真实 Sheet→远端 contract→本地多存储中点→本地回滚/远端补偿→页面正式重载→重试/relaunch；本地化大字体旅程追到平台配置→实际 View/Activity 环境→真实消息详情→频道 Controller/Store→最终频道行，没有以孤立 helper、资源文件或环境命令自证。
+- 测试→产品：新核心用例均能追到真实 App UI、Store/Paging/Projection 或 Release resolver；加密恢复明确追到 parser→canonical failed state→真实详情/Settings→reparse→同一 canonical/派生列表→relaunch；Channel 失败旅程追到真实 Sheet→远端 contract→本地多存储中点→本地回滚/远端补偿→页面正式重载→重试/relaunch；Android transport 追到真实 segmented control→ViewModel→Gateway route/token boundary→Room mode/secure token/device key→runtime/service→dialog/relaunch，且临时恢复旧错误行为会真实失败；本地化大字体旅程追到平台配置→实际 View/Activity 环境→真实消息详情→频道 Controller/Store→最终频道行，没有以孤立 helper、资源文件或环境命令自证。
 - 变更→最低证据：Message UI 命中准确内容/搜索/删除/relaunch，Store/Room 命中跨能力数据与 UI，Runtime 命中 Release 隔离，通知/系统消费者提升 Nightly/Release；未知 Screen 阻断，文档明确 `NOT_RUN`。
 - 平台消费者：通知、后台、Widget、Spotlight、Watch、真机权限/FCM/APNs 已列入能力矩阵和 Release 清单，未被模拟器结果冒充。
 - 低价值边缘：不可达导出 helper、未挂载 MenuBar 内容、100k 日常执行、全语言全设备故障组合明确延期或删除候选，避免挤占核心预算。
