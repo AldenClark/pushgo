@@ -11,11 +11,19 @@ results_root="${RESULTS_ROOT:-$repo_root/build/quality-results/ios-system-notifi
 runner_status_file="${QUALITY_RUNNER_STATUS_FILE:-}"
 runner_issue_file="${QUALITY_RUNNER_ISSUE_FILE:-}"
 test_scope="${SYSTEM_NOTIFICATION_TEST_SCOPE:-PushGo-iOSUITests/PushGo_iOSSystemNotificationTests/testSystemNotificationTapOpensAccurateReadDetailAndPersists}"
+preserve_install="${PRESERVE_SYSTEM_NOTIFICATION_INSTALL:-0}"
 readiness_filename="pushgo-system-notification-ready"
 
 set_runner_status() {
   [[ -z "$runner_status_file" ]] || printf '%s\n' "$1" >"$runner_status_file"
 }
+
+if [[ "$preserve_install" != "0" && "$preserve_install" != "1" ]]; then
+  set_runner_status BLOCKED
+  echo "status=BLOCKED"
+  echo "reason=invalid_preserve_system_notification_install"
+  exit 2
+fi
 
 record_classification() {
   local classification="$1"
@@ -69,11 +77,19 @@ common_args=(
 echo "==> build-for-testing system notification journey"
 xcodebuild "${common_args[@]}" build-for-testing
 
-# A clean install makes the OS authorization state deterministic. The product requests permission
-# through its normal launch path, and the UI test accepts the real system prompt when XCTest has
-# not already handled it. No notification database or preference is mutated by the harness.
-xcrun simctl uninstall "$target" "$app_bundle_identifier" >/dev/null 2>&1 || true
-xcrun simctl uninstall "$target" "$runner_bundle_identifier" >/dev/null 2>&1 || true
+# The first journey uses a clean install and the product's real permission request. Follow-up
+# action journeys may preserve that proven authorization while still using unique App-owned
+# sessions and payloads. Repeated rapid uninstall/authorization cycles are a SpringBoard
+# preparation hazard and do not add product evidence once authorization has been proved.
+if [[ "$preserve_install" == "0" ]]; then
+  xcrun simctl uninstall "$target" "$app_bundle_identifier" >/dev/null 2>&1 || true
+  xcrun simctl uninstall "$target" "$runner_bundle_identifier" >/dev/null 2>&1 || true
+elif ! xcrun simctl get_app_container "$target" "$app_bundle_identifier" app >/dev/null 2>&1; then
+  set_runner_status BLOCKED
+  echo "status=BLOCKED"
+  echo "reason=preserved_notification_authorization_requires_installed_app"
+  exit 2
+fi
 
 run_id="$(date +%Y%m%d-%H%M%S)"
 log_file="$results_root/system-notification-$run_id.log"

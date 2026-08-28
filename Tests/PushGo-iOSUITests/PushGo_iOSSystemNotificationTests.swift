@@ -138,16 +138,7 @@ final class PushGo_iOSSystemNotificationTests: XCTestCase {
             "The handled notification remained visible after its Delete action"
         )
 
-        app.activate()
-        let foregrounded = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "state == %d", XCUIApplication.State.runningForeground.rawValue),
-            object: app
-        )
-        XCTAssertEqual(
-            XCTWaiter.wait(for: [foregrounded], timeout: 10),
-            .completed,
-            "PushGo did not foreground after the background notification action completed"
-        )
+        activateAndAwaitForeground(app)
         assertQualityRuntimeReady(in: app, timeout: 15)
         assertControlMessage(
             title: controlTitle,
@@ -165,6 +156,54 @@ final class PushGo_iOSSystemNotificationTests: XCTestCase {
             targetTitle: title,
             in: app
         )
+    }
+
+    func testSystemNotificationMarkReadActionPersistsAccurateReadTarget() throws {
+        let runID = UUID().uuidString.lowercased()
+        let title = "Quality iOS notification mark read \(runID.prefix(8))"
+        let body = "Exact iOS notification mark-read body \(runID)."
+        let messageID = "quality-ios-system-mark-read-message-\(runID)"
+        let app = configuredApp(sessionID: runID)
+        launch(app)
+        assertQualityRuntimeReady(in: app, timeout: 15)
+
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        authorizeNotificationsIfNeeded(in: springboard)
+        background(app)
+        let readinessURL = try publishReadiness(title: title, body: body, messageID: messageID)
+        defer { try? FileManager.default.removeItem(at: readinessURL) }
+
+        let notificationTitle = springboard.staticTexts[title]
+        XCTAssertTrue(
+            notificationTitle.waitForExistence(timeout: 30),
+            "The mark-read payload never became a real SpringBoard notification"
+        )
+        XCTAssertTrue(
+            springboard.staticTexts[body].waitForExistence(timeout: 5),
+            "SpringBoard did not expose the exact mark-read payload body"
+        )
+        notificationTitle.press(forDuration: 1)
+        let markReadAction = springboard.buttons
+            .matching(NSPredicate(format: "label IN %@", ["Mark as read", "标记已读", "標記已讀"]))
+            .firstMatch
+        XCTAssertTrue(
+            markReadAction.waitForExistence(timeout: 8),
+            "The production notification category did not expose its Mark as read action"
+        )
+        markReadAction.tap()
+        XCTAssertTrue(
+            notificationTitle.waitForNonExistence(timeout: 8),
+            "The handled notification remained visible after its Mark as read action"
+        )
+
+        activateAndAwaitForeground(app)
+        assertQualityRuntimeReady(in: app, timeout: 15)
+        assertAccurateReadMessage(title: title, body: body, in: app)
+
+        app.terminate()
+        launch(app)
+        assertQualityRuntimeReady(in: app, timeout: 15)
+        assertAccurateReadMessage(title: title, body: body, in: app)
     }
 
     private func configuredApp(sessionID: String, fixture: String = "empty.clean") -> XCUIApplication {
@@ -231,6 +270,19 @@ final class PushGo_iOSSystemNotificationTests: XCTestCase {
         )
     }
 
+    private func activateAndAwaitForeground(_ app: XCUIApplication) {
+        app.activate()
+        let foregrounded = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "state == %d", XCUIApplication.State.runningForeground.rawValue),
+            object: app
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [foregrounded], timeout: 10),
+            .completed,
+            "PushGo did not foreground after the background notification action completed"
+        )
+    }
+
     private func publishReadiness(title: String, body: String, messageID: String) throws -> URL {
         let readinessURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent("pushgo-system-notification-ready", isDirectory: false)
@@ -253,16 +305,19 @@ final class PushGo_iOSSystemNotificationTests: XCTestCase {
         targetTitle: String,
         in app: XCUIApplication
     ) {
+        let controlMessage = app.staticTexts[title]
+        let controlExists = controlMessage.waitForExistence(timeout: 10)
         XCTAssertTrue(
-            app.staticTexts[title].waitForExistence(timeout: 10),
+            controlExists,
             "The unrelated control message must remain after notification deletion"
         )
+        guard controlExists else { return }
         XCTAssertFalse(
             app.staticTexts.matching(NSPredicate(format: "label == %@", targetTitle)).firstMatch.exists,
             "The notification Delete action did not remove its canonical target"
         )
         tapWhenHittable(
-            app.staticTexts[title],
+            controlMessage,
             timeout: 8,
             message: "The unrelated control message must remain actionable"
         )
@@ -276,6 +331,36 @@ final class PushGo_iOSSystemNotificationTests: XCTestCase {
             element(in: app, identifier: "action.message.close"),
             timeout: 8,
             message: "The control detail must remain dismissible"
+        )
+    }
+
+    private func assertAccurateReadMessage(title: String, body: String, in app: XCUIApplication) {
+        let targetMessage = app.staticTexts[title]
+        let targetExists = targetMessage.waitForExistence(timeout: 10)
+        XCTAssertTrue(
+            targetExists,
+            "The Mark as read action lost its canonical target"
+        )
+        guard targetExists else { return }
+        XCTAssertFalse(
+            element(in: app, identifier: "action.messages.mark_all_read").waitForExistence(timeout: 3),
+            "The notification action did not persist the target's read state"
+        )
+        tapWhenHittable(
+            targetMessage,
+            timeout: 8,
+            message: "The marked-read canonical message must remain actionable"
+        )
+        let detail = element(in: app, identifier: "sheet.message.detail")
+        XCTAssertTrue(detail.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            detail.staticTexts[body].waitForExistence(timeout: 5),
+            "The Mark as read action changed or routed to the wrong canonical body"
+        )
+        tapWhenHittable(
+            element(in: app, identifier: "action.message.close"),
+            timeout: 8,
+            message: "The marked-read detail must remain dismissible"
         )
     }
 

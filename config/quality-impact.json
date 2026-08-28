@@ -49,9 +49,9 @@
       "id": "ios-system-notification-journey",
       "paths": ["Tests/PushGo-iOSUITests/PushGo_iOSSystemNotificationTests.swift", "scripts/run_ios_system_notification_test.sh"],
       "capabilities": ["notification-permission", "notification-system-delivery", "notification-route-actions", "message-read-persistence"],
-      "minimum_evidence": ["iOS Simulator real permission/delivery/tap/detail/read/relaunch journey plus destructive Delete action with an unrelated canonical control"],
+      "minimum_evidence": ["iOS Simulator real permission/delivery/tap/detail/read/relaunch journey plus direct Mark as read and destructive Delete actions with durable canonical oracles"],
       "lane": "nightly",
-      "known_evidence_gaps": ["Real APNs network delivery, permission denial, direct mark-read action, terminated-process cold start, macOS, and physical-device behavior remain NOT RUN."],
+      "known_evidence_gaps": ["Real APNs network delivery, permission denial, terminated-process cold start, macOS, copy-action product semantics, and physical-device behavior remain NOT RUN."],
       "escalation_reasons": ["The system-notification harness can silently bypass SpringBoard, weaken exact payload checks, or stop proving durable product state."]
     },
     {

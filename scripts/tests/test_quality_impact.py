@@ -89,7 +89,7 @@ class QualityImpactPlanTests(unittest.TestCase):
                 self.assertEqual("nightly", plan["recommended_lane"])
                 self.assertIn("notification-system-delivery", plan["impacted_capabilities"])
                 self.assertIn(
-                    "iOS Simulator real permission/delivery/tap/detail/read/relaunch journey plus destructive Delete action with an unrelated canonical control",
+                    "iOS Simulator real permission/delivery/tap/detail/read/relaunch journey plus direct Mark as read and destructive Delete actions with durable canonical oracles",
                     plan["minimum_evidence"],
                 )
 
