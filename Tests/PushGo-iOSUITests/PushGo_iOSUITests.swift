@@ -171,6 +171,12 @@ final class PushGo_iOSUITests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
+        MainActor.assumeIsolated {
+            let app = XCUIApplication()
+            if app.state != .notRunning {
+                app.terminate()
+            }
+        }
         let fileManager = FileManager.default
         for runtimeRoot in PushGoIOSUITestRuntimeRoots.consumeAll() {
             try? fileManager.removeItem(at: runtimeRoot)
@@ -621,6 +627,214 @@ final class PushGo_iOSUITests: XCTestCase {
         assertEventTabVisibility(true, in: context.app, openWhenVisible: true)
     }
 
+    func testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch() {
+        let context = configuredLaunchContext()
+        let sessionID = "ios-settings-server-\(UUID().uuidString.lowercased())"
+        let encodedSession = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            channelMutationScenario: "accepted"
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
+        XCTAssertTrue(
+            element(in: context.app, identifier: "channel.row.01H00000000000000000000001")
+                .waitForExistence(timeout: 8),
+            "The original gateway-scoped fixture must exist before the server change"
+        )
+        openSettingsFromChannels(in: context.app)
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server_management"),
+            timeout: 8
+        )
+
+        let addressField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(addressField.waitForExistence(timeout: 8))
+        replaceText(in: addressField, with: "not a valid url")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "feedback.settings.server")
+                .waitForExistence(timeout: 5),
+            "An invalid address must remain in the editor with actionable inline feedback"
+        )
+        XCTAssertTrue(addressField.exists, "Invalid input must not dismiss the server editor")
+
+        let normalizedAddress = "https://quality-settings.invalid/api"
+        replaceText(in: addressField, with: "\(normalizedAddress)/")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(
+            addressField.waitForNonExistence(timeout: 10),
+            "A successfully persisted server address must close the editor"
+        )
+        leaveSettings(in: context.app)
+        XCTAssertTrue(
+            element(in: context.app, identifier: "channel.row.01H00000000000000000000001")
+                .waitForNonExistence(timeout: 8),
+            "Changing servers must immediately scope channel data to the new gateway"
+        )
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        openSettingsFromChannels(in: context.app)
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server_management"),
+            timeout: 8
+        )
+        let restoredAddressField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(restoredAddressField.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            restoredAddressField.value as? String,
+            normalizedAddress,
+            "The normalized server address must survive a full app relaunch"
+        )
+    }
+
+    func testSettingsDecryptionRejectsInvalidKeyPersistsAndClearsValidKey() {
+        let context = configuredLaunchContext()
+        let sessionID = "ios-settings-decryption-\(UUID().uuidString.lowercased())"
+        let encodedSession = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            channelMutationScenario: "accepted"
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        openSettingsFromChannels(in: context.app)
+        let initialDecryptionAction = scrollToHittableElement(
+            identifier: "action.settings.open_decryption",
+            in: context.app
+        )
+        let initialStatusLabel = initialDecryptionAction.label
+        tapWhenHittable(initialDecryptionAction, timeout: 8)
+
+        let keyField = element(in: context.app, identifier: "field.settings.decryption.key")
+        XCTAssertTrue(keyField.waitForExistence(timeout: 8))
+        enterSecureText(in: keyField, with: "short")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.decryption.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "feedback.settings.decryption")
+                .waitForExistence(timeout: 5),
+            "An invalid key must remain visible as inline validation feedback"
+        )
+        XCTAssertTrue(keyField.exists, "Invalid key input must not leave the decryption editor")
+
+        let validKey = String(repeating: "k", count: 32)
+        enterSecureText(in: keyField, with: validKey)
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.decryption.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(
+            keyField.waitForNonExistence(timeout: 8),
+            "A valid key must dismiss the editor only after persistence succeeds"
+        )
+        let configuredDecryptionAction = scrollToHittableElement(
+            identifier: "action.settings.open_decryption",
+            in: context.app
+        )
+        XCTAssertTrue(configuredDecryptionAction.waitForExistence(timeout: 8))
+        let configuredStatusLabel = configuredDecryptionAction.label
+        XCTAssertNotEqual(
+            configuredStatusLabel,
+            initialStatusLabel,
+            "The user-visible decryption status must change after persistence"
+        )
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        ensureSettingsVisible(in: context.app)
+        let restoredDecryptionAction = scrollToHittableElement(
+            identifier: "action.settings.open_decryption",
+            in: context.app
+        )
+        XCTAssertEqual(
+            restoredDecryptionAction.label,
+            configuredStatusLabel,
+            "The configured status must survive a full app relaunch"
+        )
+        tapWhenHittable(restoredDecryptionAction, timeout: 8)
+        let restoredKeyField = element(in: context.app, identifier: "field.settings.decryption.key")
+        XCTAssertTrue(restoredKeyField.waitForExistence(timeout: 5))
+        XCTAssertNotEqual(
+            restoredKeyField.value as? String,
+            validKey,
+            "The persisted secret must never be echoed back into the UI"
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.decryption.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(restoredKeyField.waitForNonExistence(timeout: 8))
+        let preservedAction = scrollToHittableElement(
+            identifier: "action.settings.open_decryption",
+            in: context.app
+        )
+        XCTAssertEqual(preservedAction.label, configuredStatusLabel)
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        ensureSettingsVisible(in: context.app)
+        let relaunchedPreservedAction = scrollToHittableElement(
+            identifier: "action.settings.open_decryption",
+            in: context.app
+        )
+        XCTAssertEqual(
+            relaunchedPreservedAction.label,
+            configuredStatusLabel,
+            "A blank save must not remove the non-echoed configuration after relaunch"
+        )
+        tapWhenHittable(relaunchedPreservedAction, timeout: 8)
+        let clearAction = element(in: context.app, identifier: "action.settings.decryption.clear")
+        tapWhenHittable(clearAction, timeout: 8)
+        XCTAssertTrue(
+            clearAction.waitForNonExistence(timeout: 8),
+            "Clearing must finish before the editor closes"
+        )
+        let clearedDecryptionAction = scrollToHittableElement(
+            identifier: "action.settings.open_decryption",
+            in: context.app
+        )
+        XCTAssertEqual(
+            clearedDecryptionAction.label,
+            initialStatusLabel,
+            "Clearing must restore the not-configured state"
+        )
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        ensureSettingsVisible(in: context.app)
+        let relaunchedClearedAction = scrollToHittableElement(
+            identifier: "action.settings.open_decryption",
+            in: context.app
+        )
+        XCTAssertEqual(
+            relaunchedClearedAction.label,
+            initialStatusLabel,
+            "The cleared configuration must remain absent after relaunch"
+        )
+    }
+
     func testEventClosePersistsAndOngoingFilterReflectsRealProjection() {
         let context = configuredLaunchContext()
         let sessionID = "ios-event-close-\(UUID().uuidString.lowercased())"
@@ -799,7 +1013,7 @@ final class PushGo_iOSUITests: XCTestCase {
         assertQualityRuntimeReady(in: context.app, timeout: 15)
 
         tapWhenHittable(
-            element(in: context.app, identifier: "tab.channels"),
+            channelsTab(in: context.app),
             timeout: 8,
             message: "Channels must be reachable"
         )
@@ -859,7 +1073,7 @@ final class PushGo_iOSUITests: XCTestCase {
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
         launch(context.app)
         assertQualityRuntimeReady(in: context.app, timeout: 15)
-        tapWhenHittable(element(in: context.app, identifier: "tab.channels"), timeout: 8)
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
         XCTAssertTrue(context.app.staticTexts["Quality Renamed Channel"].waitForExistence(timeout: 8))
 
         let keepRow = element(
@@ -887,12 +1101,12 @@ final class PushGo_iOSUITests: XCTestCase {
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
         launch(context.app)
         assertQualityRuntimeReady(in: context.app, timeout: 15)
-        tapWhenHittable(element(in: context.app, identifier: "tab.channels"), timeout: 8)
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
         XCTAssertFalse(keepRow.exists)
         tapWhenHittable(element(in: context.app, identifier: "tab.messages"), timeout: 8)
         XCTAssertTrue(context.app.staticTexts["Quality Keep History Message"].waitForExistence(timeout: 8))
 
-        tapWhenHittable(element(in: context.app, identifier: "tab.channels"), timeout: 8)
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
         let deleteRow = element(
             in: context.app,
             identifier: "channel.row.01H00000000000000000000002"
@@ -923,7 +1137,7 @@ final class PushGo_iOSUITests: XCTestCase {
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
         launch(context.app)
         assertQualityRuntimeReady(in: context.app, timeout: 15)
-        tapWhenHittable(element(in: context.app, identifier: "tab.channels"), timeout: 8)
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
         createdRow = element(
             in: context.app,
             identifier: "channel.row.01H00000000000000000000003"
@@ -1936,6 +2150,7 @@ final class PushGo_iOSUITests: XCTestCase {
         launchArguments: [String] = []
     ) -> LaunchContext {
         let app = XCUIApplication()
+        app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
         app.launchArguments += launchArguments
         let resolvedRuntimeRoot = runtimeRoot ?? makeRuntimeRoot()
         try? FileManager.default.createDirectory(at: resolvedRuntimeRoot, withIntermediateDirectories: true)
@@ -2081,17 +2296,54 @@ final class PushGo_iOSUITests: XCTestCase {
         element.tap()
     }
 
+    private func channelsTab(in app: XCUIApplication) -> XCUIElement {
+        let identified = element(in: app, identifier: "tab.channels")
+        if identified.waitForExistence(timeout: 2) {
+            return identified
+        }
+        let tabBar = app.tabBars.firstMatch
+        guard tabBar.waitForExistence(timeout: 8), tabBar.buttons.count > 0 else {
+            return identified
+        }
+        // Channels is the only mandatory destination and is always the final
+        // tab, even when optional data pages are hidden.
+        return tabBar.buttons.element(boundBy: tabBar.buttons.count - 1)
+    }
+
     private func openSettingsFromChannels(in app: XCUIApplication) {
-        let channels = element(in: app, identifier: "tab.channels")
+        let channels = channelsTab(in: app)
         tapWhenHittable(channels, timeout: 8, message: "Channels must remain reachable")
         let settings = element(in: app, identifier: "action.channels.settings")
         tapWhenHittable(settings, timeout: 8, message: "Settings must open through the real Channels action")
         assertElementExists("screen.settings", in: app, timeout: 8)
     }
 
+    private func ensureSettingsVisible(in app: XCUIApplication) {
+        let settingsScreen = element(in: app, identifier: "screen.settings")
+        if settingsScreen.waitForExistence(timeout: 1) {
+            return
+        }
+        let settingsAction = element(in: app, identifier: "action.channels.settings")
+        let actionable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND hittable == true"),
+            object: settingsAction
+        )
+        if XCTWaiter.wait(for: [actionable], timeout: 2) == .completed {
+            settingsAction.tap()
+            assertElementExists("screen.settings", in: app, timeout: 8)
+            return
+        }
+        openSettingsFromChannels(in: app)
+    }
+
     private func leaveSettings(in app: XCUIApplication) {
+        let settingsScreen = element(in: app, identifier: "screen.settings")
         let back = app.navigationBars.buttons.firstMatch
         tapWhenHittable(back, timeout: 8, message: "Settings must provide a real back navigation action")
+        XCTAssertTrue(
+            settingsScreen.waitForNonExistence(timeout: 8),
+            "Settings must finish dismissing before the next lifecycle assertion"
+        )
         assertElementExists("screen.channels", in: app, timeout: 8)
     }
 
@@ -2181,11 +2433,17 @@ final class PushGo_iOSUITests: XCTestCase {
         let hasEnteredText = !existing.isEmpty && existing != placeholder
         if hasEnteredText {
             field.typeKey("a", modifierFlags: .command)
+            field.typeKey(XCUIKeyboardKey.delete.rawValue, modifierFlags: [])
+            // If selection was not honored by the current software keyboard,
+            // move to the end and apply a bounded fallback clear. XCUI may
+            // expose only the first whitespace-delimited token as `value`.
+            field.typeKey(XCUIKeyboardKey.rightArrow.rawValue, modifierFlags: .command)
+            field.typeText(
+                String(repeating: XCUIKeyboardKey.delete.rawValue, count: 256)
+            )
         }
         if !text.isEmpty {
             field.typeText(text)
-        } else if hasEnteredText {
-            field.typeText(XCUIKeyboardKey.delete.rawValue)
         }
     }
 

@@ -914,7 +914,7 @@ final class AppEnvironment {
         channelListFeedbackMessage = nil
     }
 
-    func updateNotificationMaterial(_ material: ServerConfig.NotificationKeyMaterial) async {
+    func updateNotificationMaterial(_ material: ServerConfig.NotificationKeyMaterial) async throws {
         var config = serverConfig ?? (Self.makeDefaultServerConfig() ?? ServerConfig(
             id: UUID(),
             name: "Local Device",
@@ -925,14 +925,7 @@ final class AppEnvironment {
         ))
         config.notificationKeyMaterial = material
         config.updatedAt = Date()
-        do {
-            try await updateServerConfig(config)
-        } catch {
-            showToast(message: localizationManager.localized(
-                "failed_to_save_server_configuration_placeholder",
-                userFacingErrorMessage(error),
-            ))
-        }
+        try await updateServerConfig(config)
     }
 
     var currentNotificationMaterial: ServerConfig.NotificationKeyMaterial? {

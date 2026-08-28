@@ -1,62 +1,53 @@
-# PushGo iOS Automation Matrix
+# PushGo iOS UI quality suite
 
-## Scope
+## Purpose
 
-This suite validates iOS startup automation, deep-page navigation, tab routing, and settings mutation commands.
+This target contains two generations of tests. Curated lanes execute only the high-value App-owned journeys listed below. Legacy Runtime command/state tests remain temporarily for migration diagnostics and must not be used to claim product coverage.
 
-## UI Coverage Matrix
+A product result passes only when the test uses a reachable user entry and verifies accurate visible data, a real action result, persisted/relaunch state, or an independently meaningful system/data endpoint. Screen identifiers, fixture markers, response files, Runtime state, launch success, and sheet existence are supporting diagnostics only.
 
-| Test | Coverage |
-| --- | --- |
-| `testLaunchesIntoMessageList` | cold launch baseline (`screen.messages.list`) |
-| `testAutomationRequestCanOpenChannelsScreen` | startup command `nav.switch_tab` + channels page markers |
-| `testNavSwitchTabMatrixCoversPrimaryScreens` | command-routed tab matrix: messages/events/things/channels |
-| `testImportedEventFixtureCanOpenEventDetail` | fixture import + event detail deep page |
-| `testImportedThingFixtureCanOpenThingDetail` | fixture import + thing detail deep page |
-| `testPushSettingsCanOpenDecryptionScreen` | settings decryption overlay command flow |
-| `testFixtureSeedMessagesRefreshesMessageList` | 消息写入后列表刷新链路（`fixture.seed_messages`） |
-| `testFixtureSeedEntityRecordsPublishesProjectionCounts` | 实体投影视图写入链路（`fixture.seed_entity_records`） |
-| `testFixtureSeedSubscriptionsPublishesImportState` | 频道订阅写入链路（`fixture.seed_subscriptions`）与 import bookkeeping 状态 |
-| `testSettingsPageVisibilityCommandCanHideEventPage` | settings mutation boundary (`event_page_enabled=false`) |
-| `testSettingsPageVisibilityCommandCanRoundTripEventPage` | settings开关前后态正确性（false -> true） |
-| `testSettingsSetDecryptionKeyRejectsInvalidLength` | invalid decryption key boundary (`ok=false`, `invalid key`) |
-| `testSettingsSetDecryptionKeyAcceptsBase64Key` | decryption key success path (`notification_key_configured=true`, `notification_key_encoding=base64`) |
-| `testEntityOpenPublishesEntityStateAndProjectionCounts` | entity.open正确性：状态命中detail页 + `entity.opened`事件包含目标`entity_id` |
-| `testMessageOpenPublishesMessageDetailState` | message.open 路由到消息详情并发布 opened message state |
-| `testNotificationOpenPublishesMessageDetailState` | notification.open 路由到消息详情 |
-| `testNotificationMarkReadCommandUpdatesUnreadState` | `notification.mark_read` 更新未读计数与动作事件 |
-| `testNotificationDeleteCommandUpdatesCounts` | `notification.delete` 删除消息并发布动作事件 |
-| `testGatewaySetServerCommandUpdatesConfigurationState` | `gateway.set_server` 更新 server config 与 settings.changed 事件 |
-| `testBaselineAutomationStateHasNoRuntimeErrors` | 启动基线正确性（`runtime_error_count == 0`） |
-| `testWatchResyncReceiverCommandPublishesReceiverState` | `watch.resync_receiver` 使用 `watch_receiver_state`，不再把 receiver 状态当作 mirror/standalone 用户模式 |
+## Curated journeys
 
-## Run Command
+| Lane | Journey | Product oracle |
+| --- | --- | --- |
+| PR+ | Empty/content/workflow messages | Functional empty state; accurate list/detail; page-size boundary; read state; filters; relaunch |
+| PR+ | Search/delete/undo | Exclusion and exact-result sets; accurate detail; immediate suppression; undo; relaunch |
+| PR+ | Slow/error/refresh | User-visible slow/error states; accurate snapshot retained; provider result persisted; real Retry recovery |
+| Nightly+ | Primary navigation | Real controls reach the unique Messages, Events, Things, Channels, and Settings destinations |
+| Nightly+ | Event/Thing | Production ingestion/projection; accurate detail and relations; close/filter/back/relaunch outcomes |
+| Nightly+ | Channel | Create, rename, keep-history unsubscribe, delete-history unsubscribe, and relaunch through production UI/Store paths |
+| Nightly+ | Settings visibility | Real Event page control changes navigation, reaches the accurate destination, and survives both relaunch directions |
+| Nightly+ | Settings server | Invalid input stays in the editor; normalized address persists; gateway-scoped channel data changes immediately and after relaunch |
+| Nightly+ | Settings decryption | Invalid key stays in the editor; configured status changes only after persistence; relaunch retains status; the value is not echoed; blank Save is non-destructive across relaunch; explicit Delete remains absent after relaunch |
+
+The Settings decryption journey proves key configuration persistence, not successful recovery of a representative encrypted message. The latter remains a separate P0 gap. Gateway accepted-mutation sessions isolate unavailable remote/FCM/private-transport side effects; they do not prove remote rejection, compensation, or a real provider.
+
+## Lanes
+
+Run the repository wrappers so environment readiness, result classification, evidence capture, and curated scope remain consistent:
 
 ```bash
-xcodebuild -project /Users/ethan/Repo/PushGo/pushgo/pushgo.xcodeproj \
-  -scheme PushGo-iOS \
-  -destination 'platform=iOS Simulator,name=iPhone Air,OS=26.2' \
-  -derivedDataPath /tmp/pushgo-ios-uitests-complete \
-  ARCHS=arm64 \
-  ONLY_ACTIVE_ARCH=YES \
-  EXCLUDED_ARCHS__EFFECTIVE_PLATFORM_SUFFIX_iphonesimulator=x86_64 \
-  EXCLUDED_ARCHS__EFFECTIVE_PLATFORM_SUFFIX_watchsimulator=x86_64 \
-  CODE_SIGNING_ALLOWED=NO \
-  CODE_SIGNING_REQUIRED=NO \
-  CODE_SIGN_IDENTITY= \
-  test -only-testing:PushGo-iOSUITests
+scripts/quality_test.sh pr
+scripts/quality_test.sh nightly
+scripts/quality_test.sh release
 ```
 
-Serial full Apple pipeline entry:
+For a focused journey:
 
 ```bash
-/Users/ethan/Repo/PushGo/pushgo/Tests/PushGo-AppleAutomation/run_apple_automation_serial.sh
+TEST_SCOPES='PushGo-iOSUITests/PushGo_iOSUITests/testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch' \
+  scripts/quality_test.sh focused
 ```
 
-## Pass Criteria
+`scripts/quality_changed.sh` derives the deterministic minimum lane from `config/quality-impact.json`. That plan is a lower bound, not a coverage score.
 
-- `PushGo-iOSUITests`: all tests pass with zero failures.
-- No manual interaction required during run.
-- Command response/state + `events.jsonl` + UI identifiers all satisfy assertions (not only page reachability).
+## Result rules
 
-UI test launches set `PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS=0` to keep unattended runs clear of pasteboard-related cross-app prompts.
+- Business assertion failures are never retried.
+- One bounded retry is allowed only for a classified pre-action Simulator/runner failure; the test-system result remains `FLAKY`.
+- Missing readiness, invalid session control, or unavailable infrastructure is `BLOCKED`, not a timed-out product failure.
+- Opt-in scale/performance tests absent from a run are `NOT RUN`, never counted as passed.
+- Simulator evidence does not prove APNs, physical accessibility, background delivery, signing, install/upgrade, or other real-system behavior.
+- UI launches use an App-owned session Store and built-in synthetic fixtures. Tests do not ask the App to read a host database or host fixture path.
+
+The migration disposition and remaining weak tests are tracked in `docs/quality/current-test-disposition.md`; capability truth and residual gaps are tracked in `docs/quality/capability-coverage.md` and the quality-overhaul workstream.

@@ -688,11 +688,17 @@ final class SettingsViewModel {
         }
     }
 
-    func saveManualKeyConfig() async {
+    func saveManualKeyConfig(clearExisting: Bool = false) async {
         error = nil
         let trimmedKey = manualKeyInput.key.trimmingCharacters(in: .whitespacesAndNewlines)
         let encoding = manualKeyInput.encoding
         if trimmedKey.isEmpty {
+            if manualKeyInput.hasConfiguredKey && !clearExisting {
+                successMessage = localizationManager.localized("decryption_configuration_saved")
+                manualKeyInput.isSecretVisible = false
+                manualKeyInput.isExpanded = false
+                return
+            }
             isSaving = true
             defer { isSaving = false }
             let material = ServerConfig.NotificationKeyMaterial(
@@ -701,7 +707,7 @@ final class SettingsViewModel {
                 ivBase64: nil,
                 updatedAt: Date(),
             )
-            await environment.updateNotificationMaterial(material)
+            guard await persistNotificationMaterial(material) else { return }
             successMessage = localizationManager.localized("decryption_configuration_saved")
             notificationKeyMaterial = material
             var input = manualKeyInput
@@ -746,13 +752,31 @@ final class SettingsViewModel {
             ivBase64: nil,
             updatedAt: Date(),
         )
-        await environment.updateNotificationMaterial(material)
+        guard await persistNotificationMaterial(material) else { return }
         successMessage = localizationManager.localized("decryption_configuration_saved")
         notificationKeyMaterial = material
         manualKeyInput.key = ""
         manualKeyInput.hasConfiguredKey = true
         manualKeyInput.isSecretVisible = false
         manualKeyInput.isExpanded = false
+    }
+
+    private func persistNotificationMaterial(
+        _ material: ServerConfig.NotificationKeyMaterial
+    ) async -> Bool {
+        do {
+            try await environment.updateNotificationMaterial(material)
+            return true
+        } catch let appError as AppError {
+            self.error = appError
+        } catch let underlying {
+            self.error = AppError.wrap(
+                underlying,
+                fallbackMessage: localizationManager.localized("operation_failed"),
+                code: "manual_notification_key_save_failed"
+            )
+        }
+        return false
     }
 
     func clearAllMessages() async {

@@ -639,6 +639,19 @@ private struct ManualKeySettingsContentView: View {
                     }
                     .disabled(viewModel.isSaving)
 
+                    if viewModel.manualKeyInput.hasConfiguredKey {
+                        AppActionButton(
+                            title: localizationManager.localized("delete"),
+                            variant: .plain,
+                            role: .destructive,
+                            fullWidth: false
+                        ) {
+                            Task { await viewModel.saveManualKeyConfig(clearExisting: true) }
+                        }
+                        .disabled(viewModel.isSaving || !viewModel.manualKeyInput.key.isEmpty)
+                        .accessibilityIdentifier("action.settings.decryption.clear")
+                    }
+
                     AppActionButton(
                         text: Text(localizationManager.localized("save_configuration"))
                             .font(.headline),

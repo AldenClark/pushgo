@@ -3295,7 +3295,7 @@ final class PushGoAutomationRuntime {
             updatedAt: Date()
         )
         await environment.dataStore.saveManualKeyPreferences(encoding: encoding.rawValue)
-        await environment.updateNotificationMaterial(material)
+        try await environment.updateNotificationMaterial(material)
     }
 
     private func normalizedNotificationKeyData(

@@ -22,8 +22,8 @@
 | keep（已迁移） | `testImportedEventFixtureCanOpenEventDetail`、`testImportedThingFixtureCanOpenThingDetail` | 已改为 App-owned 内置 fixture，走真实消息摄入/投影并点击 Tab、列表行、详情字段；不以 response/events 文件作最终 Oracle。 |
 | keep（已迁移） | `testEventClosePersistsAndOngoingFilterReflectsRealProjection` | 从真实 Event 行进入详情并确认关闭；关闭载荷经正式通知解析与 canonical projection 更新，验证状态变为 closed、仅进行中筛选排除该事件、重启后 closed 仍保留且关闭动作不再出现。Runtime marker 仅用于启动归因，不作为产品 Oracle。 |
 | keep（已迁移） | `testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch` | 从真实 Channels→Settings 入口操作 Event 开关，验证 Tab 真实减少/恢复、恢复后可打开准确 Event 页面，并在关闭和恢复后分别 relaunch 核对持久化；替代 Runtime command/state 用例。 |
-| keep/rewrite-launcher | `testPushSettingsCanOpenDecryptionScreen` | 保留真实页面结果，改成用户点击 Settings 与解密入口；不由 Runtime command 打开。 |
-| keep/rewrite-launcher | `testInvalidServerAddressShowsInlineFeedbackInsteadOfToast` | 已验证真实输入和错误呈现；仅替换 Runtime 导航/宿主路径，继续验证旧配置未生效。 |
+| delete（已被更强旅程替代） | `testPushSettingsCanOpenDecryptionScreen` | 新解密旅程从真实 Channels→Settings 入口操作 invalid/valid key，核对成功状态、不回显、清除和两种 relaunch；仅打开页面不再进入常规 lane。 |
+| delete（已被更强旅程替代） | `testInvalidServerAddressShowsInlineFeedbackInsteadOfToast` | 新 server 旅程同时覆盖 invalid 不 dismiss、标准化保存、数据换域和 relaunch；只验证错误呈现的弱重复已移出常规 lane。 |
 | rewrite；由新核心旅程替代 | `testFixtureSeedMessagesRefreshesMessageList` | `testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch` 已证明准确行/详情/relaunch；旧 seed count/state 用例应在后续删除。 |
 | rewrite | `testSubmittingPopulatedSearchResultsKeepsAppRunning` | “App 仍运行”过弱；改为目标集合、排除集合、最新 query 和打开准确详情。 |
 | rewrite | `testFixtureSeedEntityRecordsPublishesProjectionCounts`、`testFixtureSeedSubscriptionsPublishesImportState` | 改为真实 Event/Thing/Channel 内容与后续操作；内部 count 只诊断。 |
@@ -33,7 +33,7 @@
 | rewrite | `testGatewaySetServerCommandUpdatesConfigurationState` | 通过 Settings 编辑保存，并在 contract 层证明后续请求到新 endpoint。 |
 | delete | `testBaselineAutomationStateHasNoRuntimeErrors` | Runtime state 无错误不能证明任何用户能力；错误归因转入 readiness/attachment。 |
 | rewrite | `testWatchResyncReceiverCommandPublishesReceiverState` | 移入 Watch integration/physical lane，验证真实 generation/revision/ACK 收敛。 |
-| keep/rewrite-launcher | `testSettingsSetDecryptionKeyRejectsInvalidLength`、`testSettingsSetDecryptionKeyAcceptsBase64Key` | 保留输入边界和恢复结果；用真实 Settings 操作，成功后验证消息解密与 relaunch。 |
+| delete（持久化部分已被更强旅程替代） | `testSettingsSetDecryptionKeyRejectsInvalidLength`、`testSettingsSetDecryptionKeyAcceptsBase64Key` | 新真实 Settings 旅程接管 invalid、持久化、状态与不回显；实际加密消息恢复仍需独立 P0 旅程，不能由旧 Runtime command/state 冒充。 |
 | move | `testRuntimeQualityLargeFixtureLaunchAndListReadiness` | 拆为 Store correctness、XCTMetric 和少量 10k UI；不能由 Runtime 自报性能。 |
 | move | `testRuntimeQualityReservedMarkdownFixturesStayBelowGatewayBodyLimit` | 属于 fixture/parser 合同，移到 Core Test。 |
 | diagnostic | `testCaptureLocalizedPrimaryScreens` | 保留人工视觉素材生成；差异需评审，不能自动更新后通过。 |
@@ -85,8 +85,10 @@
 - `testImportedThingFixtureCanOpenThingDetail`
 - `testChannelCreateRenameAndBothUnsubscribeOutcomesPersist`
 - `testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch`
+- `testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch`
+- `testSettingsDecryptionRejectsInvalidKeyPersistsAndClearsValidKey`
 
-前十条进入 PR 核心集，其中 workflow 用 52 条数据跨越真实 page size 50，并验证单条/全部已读、relaunch 与未读筛选。刷新旅程分别证明慢态与上次准确快照共存、Provider 刷新载荷经过规范化摄入后出现在列表和真实详情并在 relaunch 后保留，以及首次失败可见、旧快照保留、同一正式刷新动作重试后恢复；不把直接修改 ViewModel 集合或检查数据库文件当结果。真实导航、Event 关闭/筛选/relaunch、Thing 三类关系、Channel 创建/改名/两类退订/多次 relaunch、Settings 页面可见性和配置失败等代表性旅程进入 Nightly/Release。Channel 只替换外部 Gateway mutation 边界，UI、Controller、Store、延迟删除与重启均走生产路径；accepted 场景不冒充远端拒绝/补偿证据。Release 已改为显式高价值清单，不再默认执行所有遗留 UI 用例；旧 Runtime command/state 用例不得以绿色覆盖新用例失败，已有更强证据的弱重复从常规 lane 移除。
+前十条进入 PR 核心集，其中 workflow 用 52 条数据跨越真实 page size 50，并验证单条/全部已读、relaunch 与未读筛选。刷新旅程分别证明慢态与上次准确快照共存、Provider 刷新载荷经过规范化摄入后出现在列表和真实详情并在 relaunch 后保留，以及首次失败可见、旧快照保留、同一正式刷新动作重试后恢复；不把直接修改 ViewModel 集合或检查数据库文件当结果。真实导航、Event 关闭/筛选/relaunch、Thing 三类关系、Channel 创建/改名/两类退订/多次 relaunch、Settings 页面可见性、server 数据换域/持久化和 decryption 配置/无损空白 Save/显式清除旅程进入 Nightly/Release。Channel 和 server 旅程只替换外部 Gateway accepted 边界，UI、ViewModel、受保护存储、频道作用域与重启均走生产路径；accepted 场景不冒充远端拒绝/补偿证据，configured 状态也不冒充实际消息已解密。Release 已改为显式高价值清单，不再默认执行所有遗留 UI 用例；旧 Runtime command/state 用例不得以绿色覆盖新用例失败，已有更强证据的弱重复从常规 lane 移除。
 
 ## 变更影响门禁
 

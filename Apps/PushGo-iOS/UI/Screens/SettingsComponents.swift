@@ -249,6 +249,17 @@ private struct ManualKeySettingsContentView: View {
                 .foregroundStyle(Color.appTextSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            if viewModel.manualKeyInput.hasConfiguredKey {
+                AppActionButton(
+                    title: localizationManager.localized("delete"),
+                    variant: .plain,
+                    role: .destructive
+                ) {
+                    Task { await viewModel.saveManualKeyConfig(clearExisting: true) }
+                }
+                .disabled(viewModel.isSaving || !viewModel.manualKeyInput.key.isEmpty)
+                .accessibilityIdentifier("action.settings.decryption.clear")
+            }
             AppActionButton(
                 text: Text(localizationManager.localized("save_configuration"))
                     .font(.headline),

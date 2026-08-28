@@ -2,7 +2,7 @@
 
 ## 验证结论
 
-方案目标仍正确，但 2026-08-28 的实现复核发现此前“只剩真机/外部证据”的结论不成立。readiness、identifier、fixture、版本、文件和报告只能准备或归因；当前已证明 Runtime/环境底座、Messages 核心样板，以及两端 Event/Thing/Channel accepted-mutation 的首批准确用户旅程，WP3–WP6 的可达产品能力仍有显著缺口。真实系统能力继续按 `BLOCKED/NOT RUN` 独立呈现，局部 lane 绿色不得提升为整体完成。
+方案目标仍正确，但 2026-08-28 的实现复核发现此前“只剩真机/外部证据”的结论不成立。readiness、identifier、fixture、版本、文件和报告只能准备或归因；当前已证明 Runtime/环境底座、Messages 核心样板，以及两端 Event/Thing/Channel accepted-mutation、Settings 页面可见性、server 数据换域/持久化和 decryption key 安全持久化的首批准确用户旅程，WP3–WP6 的可达产品能力仍有显著缺口。真实系统能力继续按 `BLOCKED/NOT RUN` 独立呈现，局部 lane 绿色不得提升为整体完成。
 
 ## 完成声明对抗复核
 
@@ -32,6 +32,8 @@
 | Thing 关联对象 | 从准确 Thing 切 Events/Messages/Updates，逐个打开详情、返回并重启 | 多条乱序 fixture → canonical Thing head/relations → 三页签 → 关联详情 | 当前 head 不回退；三个集合及详情数据准确；返回保留原 Thing/页签；重启后仍可打开同一 Event | 旧尾快照覆盖新 head、只断言页签壳、关联串页、返回关闭父页或重启丢关系均失败 |
 | Channel 创建/改名/退订 | 从真实 Channel 页创建、改名，分别选择保留历史与删除历史并多次重启 | 类型化 Gateway accepted 边界 → 生产 Controller/Repository → 凭据/订阅 Store → 延迟删除事务 → 消息查询/UI | 新频道和改名跨重启保留；保留历史只移除订阅；删除历史同时移除订阅与准确频道消息，重启不回种 | 只看响应成功、直接改表、把实时 count 当 readiness、重启重复播种或把 accepted 冒充拒绝/补偿证据均失败 |
 | Settings 页面可见性 | Channels→Settings，关闭/恢复 Event，再分别重启 | 真实 Toggle/FilterChip → visibility controller/repository → persisted setting → root navigation | 关闭后入口少一个且重启仍隐藏；恢复后可打开准确 Event 页且再次重启仍可达 | 直接写 preference、只看开关 selected、只数标识或 Runtime state 均不能通过 |
+| Settings server | Channels→Settings→Server，先提交 invalid 再保存新地址 | 真实字段 → URL validator/normalizer → Settings VM → Keychain/Room + secure token store → gateway-scoped channel query → relaunch read | invalid 不 dismiss 且 inline feedback；保存后旧 gateway 频道消失；标准化地址跨 relaunch 保留 | 只看 toast/sheet dismiss/configured 标志、直接写设置或继续显示旧 gateway 数据均失败 |
+| Settings decryption | Channels→Settings→Decryption，先提交 invalid，再保存合成 key、空白保存并显式删除 | 真实输入字段 → validator → Settings VM → protected material + metadata → relaunch read/delete | invalid 不 dismiss；持久化成功后状态变化；重启状态保留且不回显；空白保存不误删既有材料；显式删除后重启仍未配置 | 异常被吞仍报成功、async 校验前关闭、只看 Runtime state、回显输入、空白保存造成数据丢失或显式删除后复活均失败；真实消息解密另行证明 |
 | Release 隔离 | 向 Release 注入合法会话 | launch env → runtime resolver | Quality Runtime 不激活 | Debug-only 条件移除会使负控失败 |
 
 ## 红队攻击结果（设计防线与已实现防线分开理解）
@@ -85,6 +87,14 @@
 47. **弹窗容器冒充内容攻击**：Material Sheet 外壳的 test tag 存在，但正文处于独立语义子树，限定外壳后仍无法证明内容。结果：壳只证明呈现状态，标题/正文/更新内容分别在真实内容节点判定；不再把容器存在汇总为功能正确。
 48. **实时行数冒充准备状态攻击**：Channel 旅程合法删除消息后，readiness 仍要求 fixture 初始 count，导致业务正确却被准备层判失败；若重启为满足 count 而重新播种，又会掩盖持久化缺陷。结果：两端使用会话级 fixture 初始化记录，只在全部播种/投影检查成功后提交；实时行数归还给 UI/Store 产品 Oracle，初始化记录不能单独判产品通过。
 49. **安全输入自动化边界攻击**：iOS 27 的 XCUITest 对 SwiftUI/UIKit secure entry 只提交首字符，创建频道在到达 Controller 前失败。结果：生产仍使用 masked UIKit secure text entry；仅 DEBUG Quality Session 对合成凭据关闭输入遮罩，并用长度语义证明完整输入后继续走同一绑定、校验、Controller 与 Store。该适配只解决输入系统可测性，不绕过业务路径，也不输出凭据内容。
+50. **Settings 保存形式成功攻击**：Apple `updateNotificationMaterial` 原先吞掉 Keychain/Store 错误，调用方仍更新 configured 状态并显示成功；Android decryption sheet 在异步校验/持久化前先关闭。结果：Apple 错误改为向 Settings VM 传播，只有保存成功才更新状态；Android 只有 `onSuccess` 回调才 dismiss，invalid/异常留在原表单并显示 inline feedback。两端真实 UI 回归覆盖 invalid 与 relaunch；可注入的存储写失败仍是下一 P0 缺口。
+51. **server 地址保存但数据未换域攻击**：只核对地址文本会漏掉频道仍使用旧 Gateway 的功能错误。结果：两端 server 旅程在保存后退出 Settings，要求旧 gateway-scoped channel 立即消失，再 relaunch 核对标准化地址；Quality seam 仅隔离不可控远端/FCM/private transport，地址持久化、ViewModel、频道查询和重启读取走生产路径。
+52. **生命周期/文本注入误归因攻击**：Apple teardown 未终止 App、sheet 未完全离场就重启、XCUI 只暴露首个空白 token 导致 replace helper 追加文本，均会让产品正确却误报。结果：teardown 显式终止、离场等待 Settings 真正消失、文本清理采用 select/delete 加有界后备；这类失败归为测试系统，不通过放松 server/decryption 产品 Oracle 解决。
+53. **配置写入有入口但删除无入口攻击**：Android 持久层支持清除，空输入却被正确解释为“不覆盖未回显值”，导致用户实际上无法删除配置；原测试只覆盖写入，因此长期漏检。扩展后的生命周期 Oracle 可信失败；产品新增明确 destructive Delete，走同一 ViewModel/持久化/成功回调，清除后立即显示未配置且 relaunch 不复活。Apple 同样改为明确 Delete，未用直接改表或内部状态替代。
+54. **任意已启动 Simulator 冒充代表环境攻击**：iOS 首次直接选用另一个已启动的 Aegir clone，fixture 在业务动作前停于 `seeding.messages`；附件无产品断言失败。结果：保留该测试环境失败，重新执行 repository doctor 并绑定专用代表设备后同一产品字节 1/1 通过；设备身份、doctor 结论和结果包共同进入证据，不能用后续通过改写首次失败。
+55. **通用控件补丁落错页面攻击**：首次为 Apple 添加 Delete 时，宽泛的 `AppActionButton` 匹配把控件插入 Server editor，Decryption 旅程在真实点击处可信失败；若只做编译或控件存在检查会漏掉。结果：删除错误集成，改用解密表单独有 loading owner 定位，再以真实入口和清除/relaunch Oracle 1/1 通过。AI 修改共享 UI 时必须核对最终渲染 owner，不能把成功应用补丁当集成完成。
+56. **空白保存误删受保护配置攻击**：Apple 增加显式 Delete 后，普通 Save 的空输入仍沿用旧清除语义；因为秘密值按设计不回显，用户只打开编辑器再保存就会无意删除既有配置。结果：生命周期旅程新增“空白 Save 后 configured 状态与 relaunch 均保持”负控，产品将保留与删除分成显式意图；首次回归还暴露成功 owner 未驱动 sheet 离场，补齐正式成功状态后同一旅程 1/1 通过。删除能力不能以牺牲默认无损语义换取。
+57. **同文案跨页面全局命中攻击**：Android device 全量首次在四个消息详情断言上各命中列表行与详情的两个相同正文节点，产品数据正确但测试系统误报。结果：保留首次 4 个 `FAILED_TEST_SYSTEM` 归因，把 Oracle 限定到真实详情 owner `field.message.detail.body` 并仍核对准确正文；focused 11/11 和完整 device 17 条 App 旅程 + 18 条数据边界随后通过。禁止用“任意可见同文案”替代目标页面 owner，也不因定位修复放宽内容断言。
 
 ## 归因分析
 
@@ -99,6 +109,11 @@
 | Settings 用例无法操作或误报 | 父级语义合并、滚动标识挂错容器、动态 UI identifier 不稳定 | 语义标识贴近实际可操作/滚动节点；最终 Oracle 使用入口集合变化、真实点击、准确目标页和 relaunch | 准备/语义错误=`BLOCKED/FAILED_TEST_SYSTEM`；真实状态或目的错误=`FAILED` |
 | Thing 显示旧对象或返回丢失 | head 更新没有比较逻辑时间；嵌套 modal 同时持有返回；AndroidView 内容不进入 Compose Oracle | canonical head 新旧裁决负控；单顶层 Sheet + 父级页签状态；真实字段文本语义 | 数据/导航结果错误=`FAILED`；输入注入或语义树不可判定=`FAILED_TEST_SYSTEM` |
 | Channel 重启后数据恢复或 readiness 误失败 | 准备生命周期与实时业务行数耦合；每次进程启动重复播种同一 fixture | session/fixture 初始化记录与 live Store 分离；只在初始化全成功后记录，旅程以频道行、准确历史和重启为终点 | 标记不可读/不匹配=`FAILED_TEST_SYSTEM`；产品结果错误=`FAILED`；远端拒绝/补偿=`NOT RUN` |
+| Settings 看似保存但重启丢失或仍显示旧数据 | UI 在异步保存前 dismiss、底层吞错、Oracle 只看成功提示/地址文本 | 保存错误向 UI 传播；成功后才 dismiss/更新状态；server 追加 gateway 数据换域与 relaunch，decryption 追加状态、不回显与 relaunch | invalid/持久化/换域错误=`FAILED`；注入边界不可用=`NOT RUN`；外部同步/真机 secure store=`BLOCKED/NOT RUN` |
+| Decryption 能配置但不能删除 | 为避免回显，空输入语义是保留现值；持久层清除能力没有真实 UI 入口 | 显式 destructive Delete → 正式清除路径 → UI 状态 → relaunch，并保留写入/不回显 Oracle | 删除后仍 configured 或重启复活=`FAILED`；直接改存储不计 UI 证据 |
+| Decryption 空白保存导致配置丢失 | 不回显字段无法区分“用户没有输入新值”与“请求清除”，旧 Save 又隐式承担删除 | 普通空白 Save 明确保留；只有显式 destructive Delete 清除；两条路径都核对 UI 状态与 relaunch | 空白 Save 后丢失=`FAILED`；Delete 后复活=`FAILED`；只看提示不计证据 |
+| 消息详情正确却出现双节点失败 | 列表行和详情同时包含同一正文，测试用全局文本选择器而没有声明真实 owner | 以详情字段稳定语义限定唯一 owner，并在 owner 内断言准确正文 | 多 owner/不可唯一归因=`FAILED_TEST_SYSTEM`；owner 唯一但内容错误=`FAILED` |
+| iOS 准备长期停在 seeding | 使用非专用 Simulator clone，环境身份不满足受控代表设备合同 | doctor 选择专用设备；首次环境失败与后续产品通过分别保留 | 受控设备不可用/准备不完成=`BLOCKED/FAILED_TEST_SYSTEM`；不得归为产品通过或失败 |
 
 ## 双向覆盖反查
 

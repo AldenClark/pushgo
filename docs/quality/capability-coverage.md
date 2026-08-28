@@ -13,8 +13,8 @@
 | I/M Events | 浏览、筛选、关闭事件 | ongoing/closed/slow/error/duplicate | event head/timeline、Thing 关联 | Store + contract + UI | P0；iOS 内置摄入→列表→详情→确认关闭→投影更新→仅进行中筛选排除→relaunch 后 closed 持久化已实现；slow/error/duplicate close 待补 | Entity Store/VM/UI |
 | I/M Things | 浏览对象和三个真实页签 | active/filter/missing/deep link | head、Events/Messages/Updates | Store + router + UI | P0；iOS 内置摄入→准确概览→三页签→三类关联详情→返回原页签→relaunch 已实现；筛选/深链/删除待补 | Thing Store/VM/UI |
 | I/M Channels | 创建、订阅、改名、退订 | invalid/auth/failure/keep/delete/undo | 远端订阅、凭据、历史 | contract + Store + UI | P0；两端创建→改名→relaunch、保留历史退订与删除历史延迟提交→relaunch 已实现；远端拒绝/补偿 UI 与订阅既有频道待补 | Channel controller/UI |
-| I/M Settings server | 修改真实 Gateway | invalid/cancel/failure/default | secure token、后续 endpoint | unit + contract + UI | P0；invalid UI 已有 | Settings VM/Environment |
-| I/M Settings decryption | 配置 Key 并恢复消息 | encoding/invalid/missing/wrong | secure material、明文状态 | validator + Store + UI | P0；需去 Runtime command | Settings/Decryptor |
+| I/M Settings server | 修改真实 Gateway | invalid/cancel/failure/default | secure token、后续 endpoint、gateway-scoped data | unit + contract + UI + relaunch | P0；iOS 真实入口已覆盖 invalid、标准化保存、频道数据立即换域及 relaunch；macOS 和保存/同步故障注入待补 | Settings VM/Environment |
+| I/M Settings decryption | 配置 Key 并恢复消息 | encoding/invalid/missing/wrong/clear | 受保护材料、明文状态 | validator + protected Store + UI + relaunch | P0；iOS 真实入口已覆盖 invalid、成功状态、不回显、空白 Save 无损保留、显式 Delete 清除及各自 relaunch；真实加密消息恢复和存储故障注入待补 | Settings/Decryptor |
 | I/M Settings visibility | 控制主页面入口 | hide/show/relaunch/legal selection | settings Store、Tab/Sidebar | controller + UI + relaunch | P0；iOS 已从真实 Settings 控件关闭/恢复 Event 入口并两次 relaunch 核对，macOS 待补 | Visibility controller/UI |
 | I/M Notification sound | 配置真实声音行为 | priority/mode/preview/import/failure | audio session、文件、notification | unit + platform + UI | P1；系统证据缺口 | Sound settings/presenter |
 | I/M Notification route/actions | 从通知完成目标动作 | cold/hot/missing/read/delete/copy | Store、通知中心、badge、route | integration + physical UI | P0 Release；NOT RUN | AppDelegate/Notification controllers |

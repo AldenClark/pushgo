@@ -521,6 +521,9 @@ final class AppEnvironment {
         try await dataStore.saveServerConfig(normalized)
         serverConfig = normalized
         await refreshChannelSubscriptions(syncWatch: false)
+        if isQualityChannelMutationSession {
+            return
+        }
         requestWatchStandaloneProvisioningSync(immediate: true)
         providerRouteController.schedulePreviousGatewayDeviceCleanup(
             previousConfig: previousConfig,
@@ -1468,10 +1471,14 @@ final class AppEnvironment {
     }
 
     func syncSubscriptionsIfNeeded() async throws {
+        if isQualityChannelMutationSession {
+            await refreshChannelSubscriptions(syncProviderRoute: false)
+            return
+        }
         try await channelSyncController.syncSubscriptionsIfNeeded()
     }
 
-    func updateNotificationMaterial(_ material: ServerConfig.NotificationKeyMaterial) async {
+    func updateNotificationMaterial(_ material: ServerConfig.NotificationKeyMaterial) async throws {
         var config = serverConfig ?? (Self.makeDefaultServerConfig() ?? ServerConfig(
             id: UUID(),
             name: "Local Device",
@@ -1482,14 +1489,7 @@ final class AppEnvironment {
         ))
         config.notificationKeyMaterial = material
         config.updatedAt = Date()
-        do {
-            try await updateServerConfig(config)
-        } catch {
-            showToast(message: localizationManager.localized(
-                "failed_to_save_server_configuration_placeholder",
-                userFacingErrorMessage(error),
-            ))
-        }
+        try await updateServerConfig(config)
     }
 
     var currentNotificationMaterial: ServerConfig.NotificationKeyMaterial? {

@@ -402,7 +402,7 @@ final class AppEnvironment {
 
 
 
-    func updateNotificationMaterial(_ material: ServerConfig.NotificationKeyMaterial) async {
+    func updateNotificationMaterial(_ material: ServerConfig.NotificationKeyMaterial) async throws {
         let persistedConfig = try? await dataStore.loadWatchProvisioningServerConfig()?.normalized()
         var config = persistedConfig ?? serverConfig ?? (Self.makeDefaultServerConfig() ?? ServerConfig(
             id: UUID(),
@@ -414,14 +414,7 @@ final class AppEnvironment {
         ))
         config.notificationKeyMaterial = material
         config.updatedAt = Date()
-        do {
-            try await updateServerConfig(config)
-        } catch {
-            showErrorToast(
-                error,
-                fallbackMessage: localizationManager.localized("failed_to_save_server_configuration")
-            )
-        }
+        try await updateServerConfig(config)
     }
 
     func applyWatchSyncManifestFromPhone(_ manifest: WatchSyncManifest) async {
