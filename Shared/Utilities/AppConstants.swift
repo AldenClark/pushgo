@@ -74,17 +74,23 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
     let messageRefreshDelayMilliseconds: Int?
     let failMessageLoad: Bool
     let failGatewaySwitchValidationOnce: Bool
+    let failGatewaySwitchCommitOnce: Bool
+    let failNotificationMaterialPersistenceOnce: Bool
 
     init(
         messageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         failMessageLoad: Bool = false,
-        failGatewaySwitchValidationOnce: Bool = false
+        failGatewaySwitchValidationOnce: Bool = false,
+        failGatewaySwitchCommitOnce: Bool = false,
+        failNotificationMaterialPersistenceOnce: Bool = false
     ) {
         self.messageLoadDelayMilliseconds = messageLoadDelayMilliseconds
         self.messageRefreshDelayMilliseconds = messageRefreshDelayMilliseconds
         self.failMessageLoad = failMessageLoad
         self.failGatewaySwitchValidationOnce = failGatewaySwitchValidationOnce
+        self.failGatewaySwitchCommitOnce = failGatewaySwitchCommitOnce
+        self.failNotificationMaterialPersistenceOnce = failNotificationMaterialPersistenceOnce
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -92,6 +98,8 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         case messageRefreshDelayMilliseconds = "message_refresh_delay_ms"
         case failMessageLoad = "fail_message_load"
         case failGatewaySwitchValidationOnce = "fail_gateway_switch_validation_once"
+        case failGatewaySwitchCommitOnce = "fail_gateway_switch_commit_once"
+        case failNotificationMaterialPersistenceOnce = "fail_notification_material_persistence_once"
     }
 
     init(from decoder: Decoder) throws {
@@ -108,6 +116,14 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         failGatewaySwitchValidationOnce = try container.decodeIfPresent(
             Bool.self,
             forKey: .failGatewaySwitchValidationOnce
+        ) ?? false
+        failGatewaySwitchCommitOnce = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .failGatewaySwitchCommitOnce
+        ) ?? false
+        failNotificationMaterialPersistenceOnce = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .failNotificationMaterialPersistenceOnce
         ) ?? false
     }
 }

@@ -12,7 +12,7 @@
 | WP1 Runtime/环境 | `PARTIAL` | 两端 App-owned session Store、确定 fixture、readiness、doctor、teardown、Release 隔离；两端 fixture 用会话级初始化记录与实时业务行数分离，重启不重复播种已被用户合法修改的数据；Apple 隔离历史筛选偏好 | 50 次启动 ≥98% 尚未执行；Apple/macOS 与 Android 遗留 Runtime 仍保留绝对路径/内部 state 协议；准备失败 10 秒内的全套证明不完整 |
 | WP2 慢加载样板 | `PARTIAL` | Messages 首次加载 slow/error/retry；主动刷新超过 1 秒出现 slow 且保留上次准确内容；刷新新结果与首次失败后恢复已覆盖 | 里程碑、真实参考设备预算、超预算性能负控未完成 |
 | WP3 Messages | `PARTIAL` | 空态、标准字段/详情/relaunch、跨 50 条页界、单条/全部已读、未读筛选往返与重启持久化、搜索代表例、删除 Undo、首次慢/错恢复、慢刷新旧快照、新结果持久化与失败恢复 | channel/tag 筛选、删除不撤销、历史清理、Markdown/media/decrypt 以及 10k UI/性能未完成 |
-| WP4 Entity/Channel/Settings/watch UI | `PARTIAL` | Apple/Android Event/Thing App-owned 摄入→投影→准确详情；两端 Event 确认关闭→canonical projection→筛选→relaunch；两端 Thing 三个真实关系页签、准确关联对象打开、逐层返回及 relaunch；两端 Channel 创建→改名→重启→保留/删除历史双退订→再次重启；Sheet 业务错误 owner 已按根/Server/Decryption/Channel entry 分区；两端 server 已覆盖 invalid、候选注册失败不提交、重试成功后才换域/relaunch，候选 device identity 不跨 Gateway 复用；decryption 已覆盖生命周期、错误 Key 安全失败后纠正、合法恢复、坏密文安全失败及 relaunch | Event slow/error/duplicate close；Thing 筛选/深链/删除；Channel 订阅既有频道及远端拒绝/补偿；Settings 本地 commit/rollback/受保护存储写失败、声音/transport；watch P0 UI 未完成 |
+| WP4 Entity/Channel/Settings/watch UI | `PARTIAL` | Apple/Android Event/Thing/Channel 高价值纵向旅程；Sheet error owner 分区；两端 Gateway 覆盖 invalid、候选拒绝不提交、fresh identity、候选远端成功后本地 commit 中点失败→回滚→重启旧值→重试提交；两端 decryption 覆盖生命周期、受保护写失败→重启未配置→重试、错误 Key 纠正、合法恢复、坏密文安全失败及 relaunch | Event slow/error/duplicate close；Thing 筛选/深链/删除；Channel 订阅既有频道及远端拒绝/补偿；rollback 存储本身失败的 UI、macOS Settings UI、声音/transport；watch P0 UI 未完成 |
 | WP5 Ingress/系统能力 | `PARTIAL` | 两端 ACK/去重/迁移等低层证据较强 | 当前可模拟的通知路由、后台恢复、macOS Window/Status Item、Apple 系统表面仍缺；真实 APNs/FCM/private/权限/安装需外部环境 |
 | WP6 性能/a11y/l10n | `NOT STARTED/PARTIAL ASSETS` | Android 部分 semantics、两端慢状态可证伪 | Macrobenchmark/Baseline Profile、Apple XCTMetric、参考设备/SLO 样本、物理辅助任务、多语言/尺寸矩阵未完成 |
 | WP7 CI/AI/治理 | `PARTIAL` | lane wrapper、双状态结果、CI、AGENTS/AI policy 已建立；两仓库已实现变更→能力→最低证据合同、未知产品路径阻断、全产品树审计、120+120 次历史产品变更回放校准、补充语义契约与 PR 自动 Lane 选择 | flake owner、两周观察、历史 AI 任务“是否补对测试”的任务级评估和旧 Runtime 退役尚未完成；确定性路径映射只提供下限，不能替代语义影响分析 |
@@ -37,6 +37,8 @@
 - 影响计划现在还能声明 `required_checks`：机器消费的更新 Feed/Appcast 只进入快速语义契约，不为低成本元数据修改启动完整设备/Release；Fastlane、构建、JNI、隐私和回滚边界则在真实 Lane 前强制执行静态发布契约。声明的计划不存在、不是普通文件、JSON 损坏或含未知检查时直接 `BLOCKED`，不能静默降级。
 
 ## 新鲜证据
+
+- 2026-08-28 本地提交/受保护写失败切片：两端新增确定性、一次性、仅 Debug quality session 可启用的 typed faults。Gateway fault 位于候选远端 prepare 成功、候选地址已持久化、device identity 尚未激活的真实提交中点；要求回滚后杀进程仍读旧值，关闭 fault 后同一 session 从真实入口重试才提交。Key fault 位于受保护材料持久化边界；要求 Sheet owner、宿主无重复错误、杀进程仍未配置、重试才配置。Apple UI 2/2 零重试通过（`build/quality-results/ios/run-1-20260828-111750.xcresult`），完整 Core 402/402、macOS Debug 与 iOS Release 构建通过；Android 新用例 2/2、完整 Settings 类 7/7、unit 与 Release 构建通过。Android 生产 `AndroidKeystoreSecretStore` 同时从静默吞掉 encrypt/SharedPreferences 失败改为抛错并确认同步 commit，notification secret→Room metadata 增加补偿，Gateway 多存储回滚失败会聚合上报；Apple Gateway rollback 从 `try?` 升级为显式复合错误。
 
 - 2026-08-28 Decryption 失败/恢复切片：两端 `messages.encrypted.valid` 不再只走顺向成功，先用合法长度错误材料触发正式 recovery，要求原 fallback、canonical identity 与 ciphertext 保留且状态为 failed，再由用户从同一真实入口纠正并恢复准确明文；新增 `messages.encrypted.corrupt` 从正式 ingress 生成有效 envelope 后翻转认证数据，正确材料仍必须安全失败且 relaunch 不伪造明文。Apple Core 1/1、iOS UI 2/2 零重试通过（`build/quality-results/ios/run-1-20260828-105903.xcresult`）；Android UI 2/2 在 API 37 emulator 通过。Android 首次执行在安装前因目标 emulator 消失而未运行，doctor 一度识别到个人真机但未在其上执行，显式恢复隔离 emulator 后再运行；新断言首次还纠正了“保存后仍停留详情”的错误导航假设，没有放松用户结果 Oracle。
 

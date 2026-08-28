@@ -34,6 +34,10 @@ final class AppEnvironment {
     @ObservationIgnored private var scenePhases: [UUID: ScenePhase] = [:]
     @ObservationIgnored private var pendingDeletionActivity: NSObjectProtocol?
     @ObservationIgnored private var pendingDeletionActivityTask: Task<Void, Never>?
+#if DEBUG
+    @ObservationIgnored private var remainingQualityGatewaySwitchCommitFailures =
+        PushGoAutomationContext.qualitySession?.faults.failGatewaySwitchCommitOnce == true ? 1 : 0
+#endif
 
     private var toastDismissTask: Task<Void, Never>?
     private(set) var isMainWindowVisible = true
@@ -469,12 +473,32 @@ final class AppEnvironment {
 
         try await dataStore.saveServerConfig(normalized)
         do {
+#if DEBUG
+            if remainingQualityGatewaySwitchCommitFailures > 0 {
+                remainingQualityGatewaySwitchCommitFailures -= 1
+                throw AppError.typedLocal(
+                    code: "quality_gateway_local_commit_failed",
+                    category: .local,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "quality gateway commit failed after candidate config persistence"
+                )
+            }
+#endif
             try await providerRouteController.persistProviderDeviceKey(
                 preparedDeviceKey,
                 source: "provider.device_key.gateway_switch"
             )
         } catch {
-            try? await dataStore.saveServerConfig(previousConfig)
+            do {
+                try await dataStore.saveServerConfig(previousConfig)
+            } catch let rollbackError {
+                throw AppError.typedLocal(
+                    code: "gateway_local_commit_rollback_failed",
+                    category: .local,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "commit=\(error.localizedDescription); rollback=\(rollbackError.localizedDescription)"
+                )
+            }
             throw error
         }
         await activatePersistedServerConfig(

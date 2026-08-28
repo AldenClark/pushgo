@@ -895,6 +895,147 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
+    func testGatewayLocalCommitFailureRollsBackBeforeRetryCommits() {
+        let context = configuredLaunchContext()
+        let sessionID = "ios-settings-server-commit-\(UUID().uuidString.lowercased())"
+        let failingSession = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            failGatewaySwitchCommitOnce: true,
+            channelMutationScenario: "accepted"
+        )
+        let retrySession = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            channelMutationScenario: "accepted"
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = failingSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        openSettingsFromChannels(in: context.app)
+
+        let serverAction = element(in: context.app, identifier: "action.settings.server_management")
+        let originalGatewayLabel = serverAction.label
+        tapWhenHittable(serverAction, timeout: 8)
+        let addressField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(addressField.waitForExistence(timeout: 8))
+        let normalizedAddress = "https://quality-commit.invalid/api"
+        replaceText(in: addressField, with: "\(normalizedAddress)/")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server.save"),
+            timeout: 8
+        )
+
+        XCTAssertTrue(
+            element(in: context.app, identifier: "feedback.settings.server")
+                .waitForExistence(timeout: 8),
+            "A local commit failure must remain actionable in the server sheet"
+        )
+        XCTAssertTrue(addressField.exists, "A failed local commit must not dismiss the editor")
+        XCTAssertFalse(element(in: context.app, identifier: "feedback.settings.root").exists)
+        XCTAssertEqual(
+            element(in: context.app, identifier: "action.settings.server_management").label,
+            originalGatewayLabel,
+            "The candidate must not become the active gateway after a partial local commit"
+        )
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = retrySession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        openSettingsFromChannels(in: context.app)
+        let restoredServerAction = element(
+            in: context.app,
+            identifier: "action.settings.server_management"
+        )
+        XCTAssertEqual(
+            restoredServerAction.label,
+            originalGatewayLabel,
+            "Rollback must keep the old gateway authoritative after process restart"
+        )
+        tapWhenHittable(restoredServerAction, timeout: 8)
+        let retryField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(retryField.waitForExistence(timeout: 8))
+        replaceText(in: retryField, with: "\(normalizedAddress)/")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(retryField.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(
+            element(in: context.app, identifier: "action.settings.server_management")
+                .label.contains(normalizedAddress),
+            "Only the successful retry may expose the candidate as active"
+        )
+    }
+
+    func testDecryptionProtectedStoreFailureDoesNotConfigureBeforeRetry() {
+        let context = configuredLaunchContext()
+        let sessionID = "ios-settings-key-store-\(UUID().uuidString.lowercased())"
+        let failingSession = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            failNotificationMaterialPersistenceOnce: true
+        )
+        let retrySession = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard"
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = failingSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        openSettingsFromChannels(in: context.app)
+        let initialAction = scrollToHittableElement(
+            identifier: "action.settings.open_decryption",
+            in: context.app
+        )
+        let initialLabel = initialAction.label
+        tapWhenHittable(initialAction, timeout: 8)
+        let keyField = element(in: context.app, identifier: "field.settings.decryption.key")
+        XCTAssertTrue(keyField.waitForExistence(timeout: 8))
+        enterSecureText(in: keyField, with: String(repeating: "p", count: 32))
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.decryption.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "feedback.settings.decryption")
+                .waitForExistence(timeout: 8),
+            "Protected-store failure must be owned by the decryption sheet"
+        )
+        XCTAssertTrue(keyField.exists, "Failed secret persistence must keep the editor open")
+        XCTAssertFalse(element(in: context.app, identifier: "feedback.settings.root").exists)
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = retrySession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        ensureSettingsVisible(in: context.app)
+        let restoredAction = scrollToHittableElement(
+            identifier: "action.settings.open_decryption",
+            in: context.app
+        )
+        XCTAssertEqual(
+            restoredAction.label,
+            initialLabel,
+            "A failed protected write must not appear configured after restart"
+        )
+        tapWhenHittable(restoredAction, timeout: 8)
+        let retryField = element(in: context.app, identifier: "field.settings.decryption.key")
+        XCTAssertTrue(retryField.waitForExistence(timeout: 8))
+        enterSecureText(in: retryField, with: String(repeating: "p", count: 32))
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.decryption.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(retryField.waitForNonExistence(timeout: 8))
+        let configuredAction = scrollToHittableElement(
+            identifier: "action.settings.open_decryption",
+            in: context.app
+        )
+        XCTAssertNotEqual(configuredAction.label, initialLabel)
+    }
+
     func testEncryptedMessageRecoversAfterConfiguringKeyAndSurvivesRelaunch() {
         let sessionID = "ios-encrypted-recovery-\(UUID().uuidString.lowercased())"
         let encodedSession = qualitySessionPayload(
@@ -2405,6 +2546,8 @@ final class PushGo_iOSUITests: XCTestCase {
         messageRefreshDelayMilliseconds: Int? = nil,
         failMessageLoad: Bool = false,
         failGatewaySwitchValidationOnce: Bool = false,
+        failGatewaySwitchCommitOnce: Bool = false,
+        failNotificationMaterialPersistenceOnce: Bool = false,
         messageRefreshScenario: String? = nil,
         eventCloseScenario: String? = nil,
         channelMutationScenario: String? = nil
@@ -2412,6 +2555,8 @@ final class PushGo_iOSUITests: XCTestCase {
         var faults: [String: Any] = [
             "fail_message_load": failMessageLoad,
             "fail_gateway_switch_validation_once": failGatewaySwitchValidationOnce,
+            "fail_gateway_switch_commit_once": failGatewaySwitchCommitOnce,
+            "fail_notification_material_persistence_once": failNotificationMaterialPersistenceOnce,
         ]
         if let messageLoadDelayMilliseconds {
             faults["message_load_delay_ms"] = messageLoadDelayMilliseconds

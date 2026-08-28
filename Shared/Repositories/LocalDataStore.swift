@@ -448,6 +448,7 @@ actor LocalDataStore {
     private let pushTokenStore = PushTokenStore()
     private let deviceKeyStore = ProviderDeviceKeyStore()
     private let canonicalDerivedWorkRetryDelay: TimeInterval
+    private var remainingQualityNotificationMaterialPersistenceFailures: Int
     private var derivedWorkDrainTask: Task<Bool, Never>?
     private var derivedWorkDrainRequested = false
     private var derivedWorkRetryWakeTask: Task<Void, Never>?
@@ -485,6 +486,8 @@ actor LocalDataStore {
         self.spotlightIndexer = spotlightIndexer
         self.canonicalDerivedWorkRetryDelay = max(0.01, canonicalDerivedWorkRetryDelay)
         self.canonicalLiveActivityHandler = canonicalLiveActivityHandler
+        remainingQualityNotificationMaterialPersistenceFailures =
+            PushGoAutomationContext.qualitySession?.faults.failNotificationMaterialPersistenceOnce == true ? 1 : 0
         Self.writeStorageProbe(
             fileManager: fileManager,
             appGroupIdentifier: appGroupIdentifier,
@@ -1042,6 +1045,20 @@ actor LocalDataStore {
 
     func saveServerConfig(_ config: ServerConfig?) async throws {
         let normalized = config?.normalized()
+#if DEBUG
+        if remainingQualityNotificationMaterialPersistenceFailures > 0 {
+            let previousMaterial = try localConfigStore.loadServerConfig()?.notificationKeyMaterial
+            if previousMaterial != normalized?.notificationKeyMaterial {
+                remainingQualityNotificationMaterialPersistenceFailures -= 1
+                throw AppError.typedLocal(
+                    code: "quality_notification_material_persistence_failed",
+                    category: .local,
+                    message: LocalizationProvider.localized("operation_failed"),
+                    detail: "quality protected notification material write failed before commit"
+                )
+            }
+        }
+#endif
         try localConfigStore.saveServerConfig(normalized)
         if PushGoAutomationContext.qualitySession == nil {
             Self.saveWakeupIngressServerConfigDefaults(

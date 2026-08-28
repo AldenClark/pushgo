@@ -112,6 +112,9 @@
 71. **合法长度错误 Key 冒充恢复成功攻击**：只验证 validator 接受和 configured 状态时，错误材料也会显示保存成功。结果：同一正式恢复链先要求原 fallback、identity、已读/时间和 ciphertext 不变且 `decryptFailed`，禁止出现目标明文；用户再从真实入口纠正，只有准确标题/正文和 `decryptOk` 跨 relaunch 才通过。
 72. **损坏密文与错误 Key 混为一个 Happy Path 攻击**：只有可纠正错误 Key 无法证明不可恢复载荷会安全停止。结果：fixture 先由正式 AES-GCM 生成 envelope，再翻转认证覆盖的数据并走正式 ingress；正确 Key 下仍必须保留安全原文、显示失败、禁止目标明文并跨 relaunch 保持，不直接写失败状态。
 73. **目标模拟器消失后误跑个人真机攻击**：Android 首次安装前发现 `emulator-5554` 不存在，doctor 随后可见个人真机。结果：该次归为 pre-run 测试环境中断，不在真机执行；显式启动隔离 API 37 emulator、确认 boot completed 和唯一 serial 后才跑 2/2。自动恢复不能扩大到未经授权设备状态。
+74. **远端 prepare 成功冒充 Gateway 已可提交攻击**：只测候选注册拒绝无法发现本地多存储提交中途失败。结果：fault 放在 candidate config/Room address 已写、device identity/secure state 尚未激活的中点；测试要求 Sheet 错误、宿主旧值、杀进程后旧值、关闭 fault 后真实重试才提交。
+75. **受保护存储静默失败攻击**：Android 旧实现把加密失败和异步 preferences 写失败当作 Unit 成功，configured UI 可能是假绿。结果：encrypt/commit/delete/clear 失败均抛出，key secret 与 Room metadata 做补偿；两端 fault 后都必须重启仍未配置且同入口重试才通过。
+76. **rollback 的 `try?`/`runCatching` 吞错攻击**：commit 失败后的补偿若再次失败，会留下跨存储 split-brain。结果：Apple 抛 `gateway_local_commit_rollback_failed` 复合错误；Android 聚合所有 rollback failure 并恢复 candidate ACK owner。当前 UI 已证明 rollback 成功路径，rollback 存储自身再次失败仍保留为显式未跑项，不以本切片冒充。
 
 ## 归因分析
 

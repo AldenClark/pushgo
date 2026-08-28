@@ -12,6 +12,8 @@ struct QualityRuntimeProfileTests {
             faults: [
                 "message_refresh_delay_ms": 2_500,
                 "fail_gateway_switch_validation_once": true,
+                "fail_gateway_switch_commit_once": true,
+                "fail_notification_material_persistence_once": true,
             ]
         )
 
@@ -24,6 +26,8 @@ struct QualityRuntimeProfileTests {
         #expect(descriptor.faults.messageRefreshDelayMilliseconds == 2_500)
         #expect(descriptor.faults.failMessageLoad == false)
         #expect(descriptor.faults.failGatewaySwitchValidationOnce)
+        #expect(descriptor.faults.failGatewaySwitchCommitOnce)
+        #expect(descriptor.faults.failNotificationMaterialPersistenceOnce)
         #expect(descriptor.messageRefreshScenario == .none)
         #expect(descriptor.eventCloseScenario == .none)
         #expect(descriptor.channelMutationScenario == .none)

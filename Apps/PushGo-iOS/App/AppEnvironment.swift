@@ -114,6 +114,8 @@ final class AppEnvironment {
 #if DEBUG
     @ObservationIgnored private var remainingQualityGatewaySwitchValidationFailures =
         PushGoAutomationContext.qualitySession?.faults.failGatewaySwitchValidationOnce == true ? 1 : 0
+    @ObservationIgnored private var remainingQualityGatewaySwitchCommitFailures =
+        PushGoAutomationContext.qualitySession?.faults.failGatewaySwitchCommitOnce == true ? 1 : 0
 #endif
 
     private var toastDismissTask: Task<Void, Never>?
@@ -549,6 +551,17 @@ final class AppEnvironment {
 
         try await dataStore.saveServerConfig(normalized)
         do {
+#if DEBUG
+            if remainingQualityGatewaySwitchCommitFailures > 0 {
+                remainingQualityGatewaySwitchCommitFailures -= 1
+                throw AppError.typedLocal(
+                    code: "quality_gateway_local_commit_failed",
+                    category: .local,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "quality gateway commit failed after candidate config persistence"
+                )
+            }
+#endif
             try await providerRouteController.persistProviderDeviceKey(
                 preparedDeviceKey,
                 source: "provider.device_key.gateway_switch"
@@ -557,7 +570,16 @@ final class AppEnvironment {
             // Keep the old gateway authoritative if the local half of the
             // candidate commit cannot complete. Remote candidate registration
             // is safe to repeat and is not used until a later successful save.
-            try? await dataStore.saveServerConfig(previousConfig)
+            do {
+                try await dataStore.saveServerConfig(previousConfig)
+            } catch let rollbackError {
+                throw AppError.typedLocal(
+                    code: "gateway_local_commit_rollback_failed",
+                    category: .local,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "commit=\(error.localizedDescription); rollback=\(rollbackError.localizedDescription)"
+                )
+            }
             throw error
         }
         await activatePersistedServerConfig(
