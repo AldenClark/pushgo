@@ -29,6 +29,8 @@ default_scopes=(
   "PushGo-macOSUITests/PushGo_macOSUITests/testMessageRefreshFailureKeepsSnapshotAndRetryPersistsAccurateResult"
   "PushGo-macOSUITests/PushGo_macOSUITests/testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow"
   "PushGo-macOSUITests/PushGo_macOSUITests/testSidebarNavigationCoversPrimaryScreens"
+  "PushGo-macOSUITests/PushGo_macOSUITests/testEventDetailCloseAndRelaunchPreserveAccurateProjection"
+  "PushGo-macOSUITests/PushGo_macOSUITests/testThingRelationsOpenAccurateDetailsAndSurviveRelaunch"
   "PushGo-macOSUITests/PushGo_macOSUITests/testSettingsSidebarCanOpenDecryptionOverlay"
   "PushGo-macOSUITests/PushGo_macOSUITests/testInvalidServerAddressShowsInlineFeedbackInsteadOfToast"
 )

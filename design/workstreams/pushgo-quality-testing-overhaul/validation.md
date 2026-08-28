@@ -158,6 +158,8 @@
 115. **页面 identifier 覆盖后代仍把存在当覆盖攻击**：macOS 把 identifier 挂到整个页面根节点后，空态和行的业务标识被同一页面标识覆盖，测试只能看到 screen 存在。结果：Message/Event/Thing 页面级标识改为独立不参与布局的语义 marker；功能空态、导航目标和真实后代控件分别断言，identifier 只定位 owner，不作最终用户结果。
 116. **崩溃提示污染下一轮攻击**：产品崩溃后系统 `Problem Reporter` 留在最前方，后续点击可能命中提示窗并制造无关失败。结果：macOS Runner 在 build/test 前与所有退出路径后按精确系统进程关闭提示；不重试业务测试，首个崩溃 xcresult 仍保留作产品失败证据。
 117. **刷新动作存在但用户不知道慢/错攻击**：macOS 原实现只有隐蔽 `.refreshable`，丢弃 Provider outcome，旧数据保留会让失败看起来像成功。结果：增加真实可访问 Refresh 按钮、1 秒慢态、Messages owner 失败态和同入口重试；Oracle 同时要求旧准确行不消失、重试产生准确新详情并跨进程保留。临时移除 slow marker 后 focused 负控精确失败于预警缺失，结果包 `build/quality-results/macos-ui-negative/run-20260829-000229.xcresult`，恢复后 focused 2/2 通过。
+118. **Event 点击确认就冒充真正关闭攻击**：若关闭边界返回成功但送达 projection 的状态仍为 active，只断言 alert 消失或消息文件存在会假绿。结果：macOS 用例必须等待同一 Event 的 canonical 状态变为 closed、关闭动作消失并跨进程保持；临时将 production-shaped delivery 的 `event_state` 改为 active 后，在准确 closed 终点精确失败（`build/quality-results/macos-ui-event-negative/run-20260829-004716.xcresult`），恢复后 focused 1/1 与默认 12/12 通过。
+119. **Thing 有关系数据但用户打不开或内容错误攻击**：三个并列 Sheet state、窄 Button 命中区和 Event projection 丢弃 canonical body，使 Store/行存在仍无法完成用户目的。结果：一个枚举拥有唯一 Sheet，关系行扩展为完整可点击区域，Event summary 按 profile→显式 event description→canonical body 回退；真实 UI 依次打开 Event/Message/Update、核对准确正文、关闭返回并 relaunch，首轮红结果分别锁定交互和数据显示根因。
 
 ## 归因分析
 
@@ -205,7 +207,7 @@
 
 ## 残余风险与进入条件
 
-- macOS 系统自动化认证已解除，当前 App-owned 核心集已加入准确 standard 数据/relaunch、首次及刷新 slow 预警、失败保留准确快照、Retry 新结果和 relaunch；下一批按价值推进 Event/Thing 详情和 Gateway commit，不迁移低价值旧脚本。
+- macOS 系统自动化认证已解除，当前十二条 App-owned 核心集已加入准确 standard 数据/relaunch、首次及刷新 slow 预警、失败保留准确快照、Retry 新结果和 relaunch、Event 关闭持久化及 Thing 三关系详情；下一批按价值推进 Gateway commit、Event slow/error/duplicate close 与其他高风险缺口，不迁移低价值旧脚本。
 - 真实 APNs/FCM/权限/后台/升级只有在具备签名、账号、设备和隔离环境后进入 Release；缺条件即 `BLOCKED`。
 - 固定参考物理设备 runner 已实现，但仍需在专用设备完成至少 10 次 Release 基线并审定 p50/p95 与产品 SLO；当前只有 Simulator 粗退化证据，物理结果仍 `NOT RUN`。
 - Android 的 emulator Macrobenchmark dry-run 与 Baseline Profile 已完成，但 API 37 Perfetto 帧切片解析仍为工具链 `BLOCKED`；真机 runner 必须显式非个人设备和 owner 预算，未提供时保持 `NOT RUN`，不得用 emulator P95 替代。

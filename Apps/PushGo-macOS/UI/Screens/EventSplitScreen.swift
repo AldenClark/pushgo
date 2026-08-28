@@ -33,7 +33,9 @@ struct EventSplitScreen: View {
             Button(localizationManager.localized("confirm")) {
                 closeSelectedEvent()
             }
+            .accessibilityIdentifier("action.event.close.confirm")
             Button(localizationManager.localized("cancel"), role: .cancel) {}
+                .accessibilityIdentifier("action.event.close.cancel")
         }
 #if DEBUG
         .task(id: automationStateSignature) {
@@ -221,6 +223,7 @@ struct EventSplitScreen: View {
                     Image(systemName: "checkmark.circle")
                 }
                 .help(localizationManager.localized("close"))
+                .accessibilityIdentifier("action.event.close")
             }
 
             Button(role: .destructive) {

@@ -9,7 +9,7 @@
 | 工作包 | 状态 | 已证明 | 尚未完成、不能被现有绿色替代 |
 | --- | --- | --- | --- |
 | WP0 去伪审计 | `VERIFIED` | 两仓库现有 UI/device 测试均有 disposition，弱 Oracle、路径协议、skip/return 和死代码候选已形成基线 | rewrite/move/delete 的实际迁移属于 WP3–WP7，不因 WP0 退出而视为完成 |
-| WP1 Runtime/环境 | `PARTIAL` | 两端 App-owned session Store、确定 fixture、readiness、doctor、teardown、Release 隔离；两端 fixture 用会话级初始化记录与实时业务行数分离；iOS/Android 均已完成 50/50 用户功能空态启动、零重试、无 issue ID；macOS 授权恢复后 App-owned readiness 与十条核心旅程已执行 | macOS 重复启动 campaign、准备失败 10 秒内的全套跨平台证明和连续两周真实变更观察仍不完整 |
+| WP1 Runtime/环境 | `PARTIAL` | 两端 App-owned session Store、确定 fixture、readiness、doctor、teardown、Release 隔离；两端 fixture 用会话级初始化记录与实时业务行数分离；iOS/Android 均已完成 50/50 用户功能空态启动、零重试、无 issue ID；macOS 授权恢复后 App-owned readiness 与十二条核心旅程已执行 | macOS 重复启动 campaign、准备失败 10 秒内的全套跨平台证明和连续两周真实变更观察仍不完整 |
 | WP2 慢加载样板 | `PARTIAL` | Messages 首次加载 slow/error/retry；主动刷新超过 1 秒出现 slow 且保留上次准确内容；刷新新结果与首次失败后恢复已覆盖 | 里程碑、真实参考设备预算、超预算性能负控未完成 |
 | WP3 Messages | `PARTIAL` | 空态、标准字段/详情/relaunch、跨 50 条页界、单条/全部已读、未读筛选往返与重启持久化、搜索代表例、删除 Undo、首次慢/错恢复、慢刷新旧快照、新结果持久化与失败恢复 | channel/tag 筛选、删除不撤销、历史清理、Markdown/media/decrypt 以及 10k UI/性能未完成 |
 | WP4 Entity/Channel/Settings/watch UI | `PARTIAL` | Apple/Android Event/Thing/Channel 高价值纵向旅程；Sheet error owner 分区；Channel 创建覆盖真实密码拒绝、输入保留与重试，以及远端成功后本地凭据/DB 中点失败→本地回滚+远端补偿→正式重载无脏行→重试/relaunch；两端 Gateway 覆盖 invalid、候选拒绝不提交、fresh identity、候选远端成功后本地 commit 中点失败→回滚→重启旧值→重试提交；两端 decryption 覆盖生命周期、受保护写失败→重启未配置→重试、错误 Key 纠正、合法恢复、坏密文安全失败及 relaunch；Android FCM/Private selector 覆盖双向 prepare 拒绝保持旧 route、本地 mode/secret commit 中点失败补偿/回滚、重试与 relaunch | Event slow/error/duplicate close；Thing 筛选/深链/删除；Channel 订阅既有频道及其既有远端关系补偿协议；rollback 自身再次失败的 UI、macOS Settings UI、声音；watch P0 UI 未完成；真实外部 FCM/Private delivery 仍属 WP5 |
@@ -105,7 +105,7 @@
 - Apple Appcast 计划在 `pr` 内真实执行更新分发语义契约后完成 Core/Store/integration 与 iOS 6/6 核心旅程，收据中 selected/executed claim 完整且双状态 `PASSED`；Android update feed 同样在 `pr` 内执行结构语义检查、当前 Feed 的生产 ECDSA 验签及篡改负控，并完成 JVM/编译证据、双状态 `PASSED`。两端 Release 静态契约也各以缩小 focused 产品用例集成验证，selected/executed 无缺口且双状态 `PASSED`。
 - Apple PR 核心选择集现为 10 条；既有 6/6 聚合证据之外，分页/已读、慢刷新、新结果与失败恢复均有 focused 证据，尚未用新增后的完整 10 条重新冒充一次聚合执行。Android 当前刷新切片的 JVM 合同、`androidTest` 编译和 emulator 两条旅程 2/2 PASSED。CI YAML、Shell 和 manifest 需在本切片提交前复验。
 - 首个 Android emulator 在开测前消失，0 tests，分类为 `BLOCKED_TRANSIENT_RUNNER`；仅一次受控恢复后通过，未把首轮伪装成绿色。
-- macOS 自动化授权已恢复；核心旅程已从八条扩展为十条，新增显式 Refresh、慢态保留准确旧快照、失败归属、同入口重试、准确新详情及 relaunch 持久化。十条最终在 `build/quality-results/macos-ui/run-20260829-000410.xcresult` 聚合 10/10、零重试通过；真实导航还发现并修复了 AppKit 分栏约束循环崩溃，未把授权恢复等同于产品自动通过。
+- macOS 自动化授权已恢复；核心旅程已从八条扩展为十二条。除 Refresh 慢/错恢复外，新增 Event 准确详情→确认关闭→canonical closed→动作消失→relaunch，以及 Thing 准确 identity/summary→三类真实关系详情→返回→relaunch。最终在 `build/quality-results/macos-ui-12/run-20260829-005000.xcresult` 聚合 12/12、零重试通过；真实导航先后发现并修复 AppKit 分栏约束循环崩溃、Thing 关系行不可点击/Sheet owner 竞争及 Event canonical body 丢失，未把授权恢复或控件存在等同于产品自动通过。Event 状态变异负控在 `build/quality-results/macos-ui-event-negative/run-20260829-004716.xcresult` 精确失败，恢复后绿色。
 
 ## 已完成切片的本轮证据
 
@@ -123,7 +123,7 @@
 ## 需要 Release/外部环境的明确证据
 
 - 真实 APNs/FCM 网络、通知中心清理/未实现 action、权限拒绝/恢复、真机进程终止冷启动、Doze/后台、安装升级、签名、Widget/Spotlight/Intent/Live Activity、Watch 与物理可访问性任务。
-- macOS 当前十条核心旅程已执行；Event/Thing 详情、页面可见性 relaunch、Gateway commit、通知动作、关闭期间真实摄入、性能和物理可访问性仍是明确缺口。
+- macOS 当前十二条核心旅程已执行；Event slow/error/duplicate close、Thing 筛选/深链/删除、页面可见性 relaunch、Gateway commit、通知动作、关闭期间真实摄入、性能和物理可访问性仍是明确缺口。
 - Android Macrobenchmark/Baseline Profile 模块已经建立并在受控 emulator 证明机制、准确内容和 Release 隔离；两端物理设备性能基线仍未执行，模拟器 dry-run、100k 数据层和慢加载用例都不声称真实设备启动/帧预算已通过。
 - 100k 数据量只在显式 opt-in `performance` Lane 执行，不进入日常回归；synthetic 替身指标不作为通过 claim。
 

@@ -800,6 +800,63 @@ struct NotificationHandlingTests {
     }
 
     @Test
+    func qualityEventCloseDeliveryUpdatesCanonicalProjectionWithoutLosingEventIdentity() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let seededEvent = makeEntityRecord(
+                messageId: "quality-event-active-message",
+                notificationRequestId: "quality-event-active-delivery",
+                title: "P2 Event Active",
+                body: "Event fixture for app-owned UI validation.",
+                rawPayload: [
+                    "entity_type": "event",
+                    "entity_id": "quality-event-active",
+                    "event_id": "quality-event-active",
+                    "event_state": "active",
+                    "projection_destination": "event_head",
+                    "channel_id": "quality-channel",
+                    "severity": "warning",
+                ]
+            )
+            try await store.saveEntityRecords([seededEvent])
+
+            let delivery = try #require(
+                PushGoQualityEventCloseDelivery.make(
+                    boundaryPayload: [
+                        "channel_id": "quality-channel",
+                        "event_id": "quality-event-active",
+                        "op_id": "quality-close-operation",
+                        "status": "closed",
+                        "message": "closed by the user",
+                        "severity": "warning",
+                    ],
+                    endpointPath: "/event/close",
+                    scenario: .acceptedAndDelivered
+                )
+            )
+
+            let outcome = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
+                delivery.payload,
+                requestIdentifier: delivery.requestIdentifier,
+                dataStore: store
+            )
+            guard case .persistedMain = outcome else {
+                Issue.record("The accepted close response must reach the production persistence path.")
+                return
+            }
+
+            let detail = try await store.loadEventProjectionDetail(eventId: "quality-event-active")
+            #expect(detail.head?.eventState == "closed")
+            #expect(detail.head?.title == "P2 Event Active")
+            #expect(detail.head?.eventId == "quality-event-active")
+            #expect(detail.head?.channel == "quality-channel")
+            #expect(detail.messages.contains { message in
+                message.notificationRequestId == delivery.requestIdentifier
+                    && message.eventState == "closed"
+            })
+        }
+    }
+
+    @Test
     func persistRemotePayloadIfNeededAcceptsWideFieldMatrixWithoutFailure() async {
         await withIsolatedLocalDataStore { store, _ in
             var failedCases: [String] = []

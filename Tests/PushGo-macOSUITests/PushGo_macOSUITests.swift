@@ -445,6 +445,166 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
+    func testEventDetailCloseAndRelaunchPreserveAccurateProjection() {
+        let sessionID = "macos-event-close-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "event.standard",
+            eventCloseScenario: "accepted_and_delivered"
+        )
+        launchQuality(context, sessionID: sessionID)
+
+        openSidebarTab("events", in: context.app)
+        let eventRow = element(in: context.app, identifier: "event.row.quality-event-active")
+        XCTAssertTrue(eventRow.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            (eventRow.label.contains("P2 Event Active"))
+                && ((eventRow.value as? String)?.contains("Event fixture for app-owned UI validation.") == true),
+            "The Event row must expose the accurate title and purpose-bearing summary."
+        )
+        eventRow.click()
+        assertVisibleScreenThroughUI("screen.events.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(context.app.staticTexts["P2 Event Active"].waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            context.app.staticTexts["Event fixture for app-owned UI validation."]
+                .waitForExistence(timeout: 5)
+        )
+
+        let closeAction = element(in: context.app, identifier: "action.event.close")
+        XCTAssertTrue(closeAction.waitForExistence(timeout: 5) && closeAction.isHittable)
+        closeAction.click()
+        let confirm = element(in: context.app, identifier: "action.event.close.confirm")
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5) && confirm.isHittable)
+        confirm.click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "field.event.detail.status.closed")
+                .waitForExistence(timeout: 12),
+            "Closing succeeds only when the real projection becomes closed."
+        )
+        XCTAssertTrue(
+            closeAction.waitForNonExistence(timeout: 5),
+            "A closed Event must not continue to offer the close action."
+        )
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "event.standard",
+            eventCloseScenario: "accepted_and_delivered"
+        )
+        launchQuality(relaunched, sessionID: sessionID)
+        openSidebarTab("events", in: relaunched.app)
+        let persistedRow = element(in: relaunched.app, identifier: "event.row.quality-event-active")
+        XCTAssertTrue(persistedRow.waitForExistence(timeout: 8))
+        persistedRow.click()
+        XCTAssertTrue(
+            element(in: relaunched.app, identifier: "field.event.detail.status.closed")
+                .waitForExistence(timeout: 8),
+            "The same Event must remain closed after a real process relaunch."
+        )
+        XCTAssertTrue(relaunched.app.staticTexts["P2 Event Active"].exists)
+    }
+
+    @MainActor
+    func testThingRelationsOpenAccurateDetailsAndSurviveRelaunch() {
+        let sessionID = "macos-thing-relations-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "thing.standard")
+        launchQuality(context, sessionID: sessionID)
+
+        openSidebarTab("things", in: context.app)
+        let thingRow = element(in: context.app, identifier: "thing.row.quality-thing-rich")
+        XCTAssertTrue(thingRow.waitForExistence(timeout: 8))
+        XCTAssertTrue(thingRow.label.contains("P2 Thing Rich"))
+        thingRow.click()
+        assertVisibleScreenThroughUI("screen.things.detail", in: context.app, timeout: 8)
+        let identity = element(in: context.app, identifier: "field.thing.detail.identity")
+        XCTAssertTrue(identity.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            identity.label.contains("P2 Thing Rich")
+                && identity.label.localizedCaseInsensitiveContains("active")
+                && identity.label.localizedCaseInsensitiveContains("quality"),
+            "The Thing identity region must expose the accurate title, lifecycle state, and channel."
+        )
+        let summary = element(in: context.app, identifier: "field.thing.detail.summary")
+        XCTAssertTrue(summary.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            summary.label.contains("Fixture thing summary")
+                || (summary.value as? String)?.contains("Fixture thing summary") == true,
+            "The Thing detail must expose its accurate purpose-bearing summary."
+        )
+
+        let relatedEvent = element(
+            in: context.app,
+            identifier: "thing.related.event.quality-related-event"
+        )
+        XCTAssertTrue(relatedEvent.waitForExistence(timeout: 8) && relatedEvent.isHittable)
+        relatedEvent.click()
+        assertVisibleScreenThroughUI("screen.events.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(context.app.staticTexts["Quality Related Event"].waitForExistence(timeout: 5))
+        let relatedEventSummary = element(in: context.app, identifier: "field.event.detail.summary")
+        XCTAssertTrue(relatedEventSummary.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            relatedEventSummary.label.contains("A deterministic event associated with P2 Thing Rich.")
+                || (relatedEventSummary.value as? String)?
+                    .contains("A deterministic event associated with P2 Thing Rich.") == true,
+            "The related Event must display the canonical notification body as its accurate summary."
+        )
+        element(in: context.app, identifier: "action.thing.related.close").click()
+
+        let messagesTab = element(in: context.app, identifier: "tab.thing.detail.messages")
+        XCTAssertTrue(messagesTab.waitForExistence(timeout: 5) && messagesTab.isHittable)
+        messagesTab.click()
+        let relatedMessage = element(
+            in: context.app,
+            identifier: "thing.related.message.quality-related-message"
+        )
+        XCTAssertTrue(relatedMessage.waitForExistence(timeout: 8) && relatedMessage.isHittable)
+        relatedMessage.click()
+        assertVisibleScreenThroughUI("screen.message.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(context.app.staticTexts["Quality Related Message"].waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            context.app.staticTexts["The linked Thing message opens its canonical detail."]
+                .waitForExistence(timeout: 5)
+        )
+        element(in: context.app, identifier: "action.thing.related.close").click()
+        XCTAssertTrue(relatedMessage.waitForExistence(timeout: 5))
+
+        let updatesTab = element(in: context.app, identifier: "tab.thing.detail.updates")
+        XCTAssertTrue(updatesTab.waitForExistence(timeout: 5) && updatesTab.isHittable)
+        updatesTab.click()
+        let relatedUpdate = element(
+            in: context.app,
+            identifier: "thing.related.update.00000000-0000-0000-0000-00000000a000"
+        )
+        XCTAssertTrue(relatedUpdate.waitForExistence(timeout: 8) && relatedUpdate.isHittable)
+        relatedUpdate.click()
+        assertVisibleScreenThroughUI("screen.thing.update.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Quality Initial Thing Snapshot"].waitForExistence(timeout: 5)
+        )
+        element(in: context.app, identifier: "action.thing.related.close").click()
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(sessionID: sessionID, fixture: "thing.standard")
+        launchQuality(relaunched, sessionID: sessionID)
+        openSidebarTab("things", in: relaunched.app)
+        let persistedThing = element(in: relaunched.app, identifier: "thing.row.quality-thing-rich")
+        XCTAssertTrue(persistedThing.waitForExistence(timeout: 8))
+        persistedThing.click()
+        let persistedSummary = element(in: relaunched.app, identifier: "field.thing.detail.summary")
+        XCTAssertTrue(persistedSummary.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            persistedSummary.label.contains("Fixture thing summary")
+                || (persistedSummary.value as? String)?.contains("Fixture thing summary") == true
+        )
+        XCTAssertTrue(
+            element(in: relaunched.app, identifier: "thing.related.event.quality-related-event")
+                .waitForExistence(timeout: 8),
+            "The accurate Thing relation must survive a real process relaunch."
+        )
+    }
+
+    @MainActor
     func legacyDiagnosticAutomationRequestCanOpenChannelsScreen() {
         let context = configuredApp(
             requestName: "nav.switch_tab",
@@ -1337,7 +1497,8 @@ final class PushGo_macOSUITests: XCTestCase {
         messageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         failMessageLoad: Bool = false,
-        messageRefreshScenario: String? = nil
+        messageRefreshScenario: String? = nil,
+        eventCloseScenario: String? = nil
     ) -> LaunchContext {
         let app = XCUIApplication()
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
@@ -1351,7 +1512,8 @@ final class PushGo_macOSUITests: XCTestCase {
                 messageLoadDelayMilliseconds: messageLoadDelayMilliseconds,
                 messageRefreshDelayMilliseconds: messageRefreshDelayMilliseconds,
                 failMessageLoad: failMessageLoad,
-                messageRefreshScenario: messageRefreshScenario
+                messageRefreshScenario: messageRefreshScenario,
+                eventCloseScenario: eventCloseScenario
             ),
             for: "PUSHGO_QUALITY_SESSION_BASE64",
             in: app
@@ -1397,7 +1559,8 @@ final class PushGo_macOSUITests: XCTestCase {
         messageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         failMessageLoad: Bool = false,
-        messageRefreshScenario: String? = nil
+        messageRefreshScenario: String? = nil,
+        eventCloseScenario: String? = nil
     ) -> String {
         var faults: [String: Any] = [
             "fail_message_load": failMessageLoad,
@@ -1416,6 +1579,9 @@ final class PushGo_macOSUITests: XCTestCase {
         ]
         if let messageRefreshScenario {
             payload["message_refresh_scenario"] = messageRefreshScenario
+        }
+        if let eventCloseScenario {
+            payload["event_close_scenario"] = eventCloseScenario
         }
         let data = try! JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
         return data.base64EncodedString()
