@@ -10,6 +10,7 @@ derived_data_path="${DERIVED_DATA_PATH:-$repo_root/.deriveddata-watch-ui-tests}"
 results_root="${RESULTS_ROOT:-$repo_root/build/quality-results/watchos}"
 runner_status_file="${QUALITY_RUNNER_STATUS_FILE:-}"
 runner_issue_file="${QUALITY_RUNNER_ISSUE_FILE:-}"
+test_execution_timeout_seconds="${WATCH_TEST_EXECUTION_TIMEOUT_SECONDS:-120}"
 
 if [[ -n "$runner_status_file" && ! -f "$runner_status_file" ]]; then
   mkdir -p "$(dirname "$runner_status_file")"
@@ -80,6 +81,9 @@ common_args=(
   -parallel-testing-enabled NO
   -maximum-parallel-testing-workers 1
   -collect-test-diagnostics never
+  -test-timeouts-enabled YES
+  -default-test-execution-time-allowance "$test_execution_timeout_seconds"
+  -maximum-test-execution-time-allowance "$test_execution_timeout_seconds"
 )
 
 run_id="$(date +%Y%m%d-%H%M%S)-$$"

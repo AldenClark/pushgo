@@ -142,6 +142,8 @@ private struct WatchLightMessageRowView: View {
                 if !message.isRead {
                     Image(systemName: "circle.fill")
                         .font(.system(size: 6))
+                        .accessibilityLabel(LocalizedStringKey("unread"))
+                        .accessibilityIdentifier("indicator.message.unread.\(message.messageId)")
                 }
                 Text(watchDateText(message.receivedAt))
                     .font(.caption2)

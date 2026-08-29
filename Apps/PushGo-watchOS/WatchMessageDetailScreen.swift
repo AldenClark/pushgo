@@ -85,6 +85,7 @@ struct WatchMessageDetailScreen: View {
                 }
             }
         }
+        .accessibilityIdentifier("screen.message.detail")
         .navigationTitle(localizationManager.localized("messages"))
         .alert(isPresented: $showDeleteConfirmation) {
             Alert(

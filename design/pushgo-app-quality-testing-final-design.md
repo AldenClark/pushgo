@@ -1497,13 +1497,12 @@ Apple 用 `os_signpost`/XCTMetric；Android 用 trace/Macrobenchmark。里程碑
 | --- | --- | --- | --- |
 | P0 | 冷启动进入 Messages | W UI | 正确 Empty/Content，可通过 Digital Crown 浏览，无永久 Loading |
 | P0 | Messages/Events/Things Tab 切换 | W UI | 每个列表显示目标类型独有内容，选择状态正确 |
-| P0 | Message 列表字段和详情 | W UI | 标题、时间、severity、正文、图片/链接与镜像数据一致 |
-| P0 | Message 标记已读 | W UI + sync | 本地立即变化，mirror action 入队，手机 ACK 后收敛且重启保留 |
-| P0 | Message 删除/确认取消 | W UI + sync | 取消无变化；确认后本地隐藏，action 重放幂等 |
+| P0 | Message 列表字段和详情 | W UI | 标题、时间、severity、正文、图片/链接与独立接收 Store 的 canonical 数据一致 |
+| P0 | Message 标记已读 | W UI + Store | 打开准确未读消息后本地立即变为已读，列表未读标识消失且进程重启后保持 |
+| P0 | Message 删除/确认取消 | W UI + Store | 取消无变化；确认后本地隐藏，进程重启后仍不存在 |
 | P0 | Event 列表/详情 | W UI | 标题、状态、severity、解密状态、更新时间和图片正确 |
 | P0 | Thing 列表/详情 | W UI | 名称、状态、关键属性和图片正确 |
-| P1 | 手机镜像 snapshot 增量刷新 | W integration | generation/revision 前进，消息/实体无丢失重复 |
-| P1 | 镜像 action 发送失败/重试/ACK | W integration | pending action durable，ACK 后删除且不重复应用 |
+| P2 compatibility | 历史镜像状态迁移 | W integration | 仅在产品明确承诺支持旧版本混用时验证；当前手机控制与新安装均强制迁移为 standalone，不进入日常 UI Lane |
 | P1 | 通知冷启动打开 Message/Event/Thing | W physical UI | 打开准确目标；缺失目标进入合法 fallback |
 | P1 | watchOS 通知内容扩展 | W physical/system UI | 标题、正文、severity、图片/缺图状态与 payload 一致；点击后才按目标路由，不能只验证 HostingController 可实例化 |
 | P1 | Receiver Health 正常/等待频道/鉴权失败/恢复 | W UI/contract | 状态、原因和恢复动作与真实 transport 状态一致 |
@@ -2014,7 +2013,7 @@ WP0 必须至少把以下当前源码事实写入覆盖索引，不能被更粗�
 | Channels | 创建/订阅/复制 ID/rename/keep-history unsubscribe/delete-history unsubscribe/Undo/provider-private |
 | Settings | Gateway/token/page visibility/decryption/声音编辑/通知权限/docs/version/iOS Watch/macOS login-update/Android transport-Doze-update |
 | Apple 系统 | 3 类 Widget、watch complication、5 个 Control Widget、当前 App Intents/10 Shortcuts、Spotlight/User Activity、Focus、Live Activity、NSE、Widget push |
-| watchOS | 三列表/三详情/read/delete/image/decrypt/mirror generations/actions/Receiver Health/standalone/notification route/complication |
+| watchOS | 三列表/三详情/read/delete/image/decrypt/standalone provisioning generations/Receiver Health/notification route/complication；历史 mirror 仅在兼容承诺存在时测试 |
 | macOS | Sidebar/split/detail/Updater/Launch at Login/Window close-reopen/Status Item/菜单栏数据错误态 |
 | Android 后台 | FCM、Private foreground service、Boot/Dismiss Receiver、AlertPlayback、ACK/Ingress/PostProcess/Deletion/ImageCleanup/Update Workers、Install Receiver |
 

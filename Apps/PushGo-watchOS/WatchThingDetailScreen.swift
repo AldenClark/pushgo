@@ -64,6 +64,7 @@ struct WatchThingDetailScreen: View {
                 }
             }
         }
+        .accessibilityIdentifier("screen.thing.detail")
         .navigationTitle(thing?.title ?? "")
     }
 }

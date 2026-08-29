@@ -139,7 +139,7 @@
       "capabilities": ["watch-messages-events-things", "watch-receiver-complication"],
       "minimum_evidence": ["Watch model/connectivity/quantizer tests", "App-owned watchOS simulator UI journey with visible fields, delete cancellation/commit, and relaunch persistence", "message Store failure remains owned by Messages while Event/Thing tasks stay usable"],
       "lane": "nightly",
-      "known_evidence_gaps": ["watchOS Messages/Event/Thing representative P0 UI and message-delete persistence are covered; mark-read mirror ACK, images/decryption, Receiver Health, physical notification route/receiver/complication, VoiceOver, and size matrix remain incomplete."],
+      "known_evidence_gaps": ["watchOS Messages/Event/Thing representative P0 UI and message-delete persistence are covered; standalone mark-read persistence has partial focused evidence but needs a clean final journey, while images/decryption, Receiver Health, physical notification route/receiver/complication, VoiceOver, and size matrix remain incomplete. Legacy mirror ACK is tested only when an explicit mixed-version compatibility commitment exists."],
       "escalation_reasons": ["Watch is a separate Store/UI/system consumer and is promoted when shared contracts change."]
     },
     {

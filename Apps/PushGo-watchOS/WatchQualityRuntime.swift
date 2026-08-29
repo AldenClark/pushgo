@@ -64,7 +64,7 @@ enum WatchQualityRuntime {
                 url: nil,
                 severity: "normal",
                 receivedAt: receivedAt.addingTimeInterval(-60),
-                isRead: true,
+                isRead: false,
                 entityType: "message",
                 entityId: nil,
                 notificationRequestId: "quality-watch-request-002"

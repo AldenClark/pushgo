@@ -79,6 +79,7 @@ struct WatchEventDetailScreen: View {
                 }
             }
         }
+        .accessibilityIdentifier("screen.event.detail")
         .navigationTitle(event?.title ?? "")
         .sheet(item: $previewImageItem) { item in
             NavigationStack {

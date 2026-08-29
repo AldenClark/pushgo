@@ -22,8 +22,13 @@ final class PushGo_watchOSUITests: XCTestCase {
         app.launch()
 
         let gatewayMessage = app.staticTexts["Gateway health warning"]
+        let databaseMessage = app.staticTexts["Database recovered"]
+        let databaseUnreadIndicator = app.descendants(matching: .any)[
+            "indicator.message.unread.quality-watch-message-002"
+        ]
         XCTAssertTrue(gatewayMessage.waitForExistence(timeout: 10), startupFailureDescription(in: app))
-        XCTAssertTrue(app.staticTexts["Database recovered"].exists)
+        XCTAssertTrue(databaseMessage.exists)
+        XCTAssertTrue(databaseUnreadIndicator.exists)
 
         gatewayMessage.tap()
         XCTAssertTrue(app.staticTexts["Primary API latency is above budget."].waitForExistence(timeout: 5))
@@ -43,28 +48,37 @@ final class PushGo_watchOSUITests: XCTestCase {
         )
         confirmDeleteButton.tap()
         XCTAssertTrue(waitUntil(timeout: 5) { !gatewayMessage.exists })
-        XCTAssertTrue(app.staticTexts["Database recovered"].waitForExistence(timeout: 5))
+        XCTAssertTrue(databaseMessage.waitForExistence(timeout: 5))
+
+        databaseMessage.tap()
+        XCTAssertTrue(app.staticTexts["Replica lag returned to normal."].waitForExistence(timeout: 5))
+        pressBack(in: app)
+        XCTAssertTrue(databaseMessage.waitForExistence(timeout: 5))
+        XCTAssertTrue(waitUntil(timeout: 5) { !databaseUnreadIndicator.exists })
 
         app.terminate()
         configureHermeticLaunch(app, sessionID: sessionID)
         app.launch()
-        XCTAssertTrue(app.staticTexts["Database recovered"].waitForExistence(timeout: 10), startupFailureDescription(in: app))
+        XCTAssertTrue(databaseMessage.waitForExistence(timeout: 10), startupFailureDescription(in: app))
         XCTAssertFalse(app.staticTexts["Gateway health warning"].exists)
+        XCTAssertFalse(databaseUnreadIndicator.exists)
 
-        app.swipeLeft()
+        XCTAssertTrue(swipeLeft(to: "screen.events.list", in: app))
         let event = app.staticTexts["Payments incident"]
         XCTAssertTrue(event.waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Checkout errors exceeded threshold."].exists)
         event.tap()
-        XCTAssertTrue(app.staticTexts["Checkout errors exceeded threshold."].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["screen.event.detail"].waitForExistence(timeout: 5))
+        XCTAssertTrue(scrollToElement(app.staticTexts["Checkout errors exceeded threshold."], in: app, maximumSwipes: 2))
         XCTAssertTrue(app.staticTexts["ONGOING"].exists)
 
         pressBack(in: app)
-        app.swipeLeft()
+        XCTAssertTrue(swipeLeft(to: "screen.things.list", in: app))
         let thing = app.staticTexts["Checkout API"]
         XCTAssertTrue(thing.waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Degraded in eu-west."].exists)
         thing.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["screen.thing.detail"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Degraded in eu-west."].waitForExistence(timeout: 5))
         XCTAssertTrue(scrollToElement(app.staticTexts["eu-west"], in: app, maximumSwipes: 2))
         XCTAssertTrue(app.staticTexts["region"].exists)
@@ -143,6 +157,25 @@ final class PushGo_watchOSUITests: XCTestCase {
         let backButton = app.navigationBars.buttons.firstMatch
         XCTAssertTrue(backButton.waitForExistence(timeout: 5))
         backButton.tap()
+    }
+
+    private func swipeLeft(
+        to screenIdentifier: String,
+        in app: XCUIApplication,
+        maximumAttempts: Int = 2
+    ) -> Bool {
+        let destination = app.descendants(matching: .any)[screenIdentifier]
+        if destination.exists, destination.isHittable { return true }
+
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5))
+        for _ in 0 ..< maximumAttempts {
+            start.press(forDuration: 0.05, thenDragTo: end)
+            if waitUntil(timeout: 2, condition: { destination.exists && destination.isHittable }) {
+                return true
+            }
+        }
+        return false
     }
 
     private func startupFailureDescription(in app: XCUIApplication) -> String {
