@@ -886,97 +886,70 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testMessageDeleteUndoRestoresAccurateCanonicalContentAcrossRelaunch() {
-        let sessionID = "macos-delete-undo-\(UUID().uuidString.lowercased())"
-        let context = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+    func testMessageDeletionRestoresThenCommitsAccurateCanonicalStateAcrossRelaunch() {
+        let sessionID = "macos-delete-lifecycle-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "channels.standard")
         launchQuality(context, sessionID: sessionID)
 
-        let row = element(
+        let committedRow = element(
             in: context.app,
-            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+            identifier: "message.row.00000000-0000-0000-0000-00000000c002"
         )
-        XCTAssertTrue(row.waitForExistence(timeout: 8))
-        row.click()
+        let restoredRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c001"
+        )
+        XCTAssertTrue(committedRow.waitForExistence(timeout: 8))
+        XCTAssertTrue(restoredRow.exists, "The reversible control message must exist before deletion.")
+
+        restoredRow.click()
         XCTAssertTrue(
-            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
-                .waitForExistence(timeout: 8),
-            "Deletion must begin from the exact canonical message detail."
+            context.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000001."
+            ].waitForExistence(timeout: 8),
+            "The undo path must begin from the exact canonical control detail."
         )
-        let delete = element(in: context.app, identifier: "action.message.delete")
+        var delete = element(in: context.app, identifier: "action.message.delete")
         XCTAssertTrue(delete.waitForExistence(timeout: 8) && delete.isHittable)
         delete.click()
-
         XCTAssertTrue(
-            row.waitForNonExistence(timeout: 2),
-            "Scheduling deletion must immediately suppress the target row."
+            restoredRow.waitForNonExistence(timeout: 2),
+            "Scheduling the reversible deletion must immediately suppress its row."
         )
-        let pending = element(in: context.app, identifier: "state.pending_deletion")
+        var pending = element(in: context.app, identifier: "state.pending_deletion")
         XCTAssertTrue(pending.waitForExistence(timeout: 5))
         let undo = element(in: context.app, identifier: "action.pending_deletion.undo")
         XCTAssertTrue(undo.waitForExistence(timeout: 5) && undo.isHittable)
         undo.click()
-
-        let restoredRow = element(
-            in: context.app,
-            identifier: "message.row.00000000-0000-0000-0000-000000000001"
-        )
         XCTAssertTrue(
             restoredRow.waitForExistence(timeout: 8),
-            "Undo must restore the real row, not merely dismiss the pending-deletion bar."
+            "Undo must restore the real row, not merely dismiss pending-deletion UI."
+        )
+        XCTAssertTrue(
+            pending.waitForNonExistence(timeout: 5),
+            "Undo must clear the production pending-deletion state."
         )
         restoredRow.click()
         XCTAssertTrue(
-            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
-                .waitForExistence(timeout: 8),
-            "Undo must restore the same canonical content."
+            context.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000001."
+            ].waitForExistence(timeout: 8),
+            "Undo must restore the exact canonical control content."
         )
 
-        context.app.terminate()
-        let relaunched = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
-        launchQuality(relaunched, sessionID: sessionID)
-        let persistedRow = element(
-            in: relaunched.app,
-            identifier: "message.row.00000000-0000-0000-0000-000000000001"
-        )
-        XCTAssertTrue(
-            persistedRow.waitForExistence(timeout: 8),
-            "An undone deletion must keep the canonical object across process relaunch."
-        )
-        persistedRow.click()
-        XCTAssertTrue(
-            relaunched.app.staticTexts["Seeded from fixture.seed_messages for UI validation."].exists
-        )
-    }
-
-    @MainActor
-    func testMessageDeleteDeadlineCommitsOnlyTargetAndSurvivesRelaunch() {
-        let sessionID = "macos-delete-commit-\(UUID().uuidString.lowercased())"
-        let context = configuredQualityApp(sessionID: sessionID, fixture: "channels.standard")
-        launchQuality(context, sessionID: sessionID)
-
-        let targetRow = element(
-            in: context.app,
-            identifier: "message.row.00000000-0000-0000-0000-00000000c002"
-        )
-        let controlRow = element(
-            in: context.app,
-            identifier: "message.row.00000000-0000-0000-0000-00000000c001"
-        )
-        XCTAssertTrue(targetRow.waitForExistence(timeout: 8))
-        XCTAssertTrue(controlRow.exists, "The unrelated control must exist before deletion.")
-        targetRow.click()
+        committedRow.click()
         XCTAssertTrue(
             context.app.staticTexts[
                 "Deterministic history owned by 01H00000000000000000000002."
             ].waitForExistence(timeout: 8),
-            "The delete action must begin from the exact target detail."
+            "The committed path must begin from the exact target detail."
         )
-        let delete = element(in: context.app, identifier: "action.message.delete")
+        delete = element(in: context.app, identifier: "action.message.delete")
         XCTAssertTrue(delete.waitForExistence(timeout: 8) && delete.isHittable)
         delete.click()
 
-        XCTAssertTrue(targetRow.waitForNonExistence(timeout: 2))
-        let pending = element(in: context.app, identifier: "state.pending_deletion")
+        XCTAssertTrue(committedRow.waitForNonExistence(timeout: 2))
+        pending = element(in: context.app, identifier: "state.pending_deletion")
         XCTAssertTrue(pending.waitForExistence(timeout: 5))
         XCTAssertTrue(
             element(in: context.app, identifier: "action.pending_deletion.undo").isHittable,
@@ -986,12 +959,12 @@ final class PushGo_macOSUITests: XCTestCase {
             pending.waitForNonExistence(timeout: 15),
             "The production undo deadline did not commit and clear the pending deletion."
         )
-        XCTAssertFalse(targetRow.exists, "The committed target must remain absent.")
+        XCTAssertFalse(committedRow.exists, "The committed target must remain absent.")
         XCTAssertTrue(
-            controlRow.waitForExistence(timeout: 5),
-            "Committing one deletion must preserve the unrelated control message."
+            restoredRow.waitForExistence(timeout: 5),
+            "Committing the target must preserve the previously restored control message."
         )
-        controlRow.click()
+        restoredRow.click()
         XCTAssertTrue(
             context.app.staticTexts[
                 "Deterministic history owned by 01H00000000000000000000001."
@@ -1009,12 +982,15 @@ final class PushGo_macOSUITests: XCTestCase {
             ).exists,
             "A committed deletion must not revive after process relaunch."
         )
-        let persistedControl = element(
+        let persistedRestoredRow = element(
             in: relaunched.app,
             identifier: "message.row.00000000-0000-0000-0000-00000000c001"
         )
-        XCTAssertTrue(persistedControl.waitForExistence(timeout: 8))
-        persistedControl.click()
+        XCTAssertTrue(
+            persistedRestoredRow.waitForExistence(timeout: 8),
+            "The undone canonical message must survive the same process relaunch."
+        )
+        persistedRestoredRow.click()
         XCTAssertTrue(
             relaunched.app.staticTexts[
                 "Deterministic history owned by 01H00000000000000000000001."

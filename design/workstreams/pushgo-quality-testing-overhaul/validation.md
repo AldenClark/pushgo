@@ -229,11 +229,11 @@
 
 ## 残余风险与进入条件
 
-- macOS 系统自动化认证已解除；既有二十一条 App-owned 核心集有零重试 21/21 聚合证据（`build/quality-results/macos-ui-21-final/run-20260829-120340.xcresult`），后续新增能力均保留 focused 证据而不伪称旧聚合覆盖。历史清理新代表链 macOS 1/1、iOS 最终生产字节 1/1；1-day 过度删除变异精确杀死 iOS Oracle。当前 macOS 默认清单包含后续能力共 26 条，尚未重新做 26/26 聚合，因此只声明已运行分项，不把清单存在当全量通过。下一批继续按正向价值优先，不迁移低价值旧脚本。
+- macOS 系统自动化认证已解除；既有二十一条 App-owned 核心集有零重试 21/21 聚合证据（`build/quality-results/macos-ui-21-final/run-20260829-120340.xcresult`），后续新增能力均保留 focused 证据而不伪称旧聚合覆盖。历史清理新代表链 macOS 1/1、iOS 最终生产字节 1/1；1-day 过度删除变异精确杀死 iOS Oracle。当前 macOS 清单经删除生命周期去重后为 25 条，尚未重新做 25/25 聚合，因此只声明已运行分项，不把清单存在当全量通过。下一批继续按正向价值优先，不迁移低价值旧脚本。
 - 真实 APNs/FCM/权限/后台/升级只有在具备签名、账号、设备和隔离环境后进入 Release；缺条件即 `BLOCKED`。
 - 固定参考物理设备 runner 已实现，但仍需在专用设备完成至少 10 次 Release 基线并审定 p50/p95 与产品 SLO；当前只有 Simulator 粗退化证据，物理结果仍 `NOT RUN`。
 - Android 的 emulator Macrobenchmark dry-run 与 Baseline Profile 已完成，但 API 37 Perfetto 帧切片解析仍为工具链 `BLOCKED`；真机 runner 必须显式非个人设备和 owner 预算，未提供时保持 `NOT RUN`，不得用 emulator P95 替代。
 - Simulator/emulator 的中文大字体代表任务不能替代物理 VoiceOver/TalkBack、焦点顺序和真实设备文字裁切；这些仍需按第 33 节代表环境执行，不能从本轮 1/1 外推。
 - 两周观察期关注：Runner 启动失败率、业务失败率、p95、flake、无证据重试次数和每 lane 时长。基础设施修复连续两次不增加产品证据时，停止继续打磨并重新归因。
 - 当前红蓝复核由同一执行上下文完成，存在 `common-mode-risk`；未获得独立审查代理授权前，不把本轮校准描述为独立第三方验证。
-- macOS Lane 成本合同：普通入口=`positive` 16 条，Nightly/Release=`full` 26 条；`risk` 10 条与正向集合互斥且并集必须等于源码全部可发现旅程。该结构只降低日常执行次数，不降低 Full 的覆盖声明。当前只做静态路由/语法/集合合同验证，未为验证分组重新运行 16/26 条业务旅程；历史清理等最近产品字节的 focused 运行证据独立保留，分组脚本本身不冒充产品通过。
+- macOS Lane 成本合同：普通入口=`positive` 16 条，Nightly/Release=`full` 25 条；`risk` 9 条与正向集合互斥且并集必须等于源码全部可发现旅程。Undo 与提交不是简单删测，而是合并为同一条两对象生命周期：当前字节 focused 1/1、39.275 秒、零重试，同时证明恢复、提交、非目标隔离和 relaunch 持久化；相较合并前两条 55.562 秒，设备时间减少约 29%、App 启动由 4 次降到 2 次。静态路由/语法/集合合同另行验证；未为验证分组重新运行 16/25 条业务旅程，分组脚本本身不冒充产品通过。

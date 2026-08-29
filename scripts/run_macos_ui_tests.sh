@@ -29,7 +29,7 @@ positive_scopes=(
   "PushGo-macOSUITests/PushGo_macOSUITests/testMarkdownFixtureRendersMajorStructuresInTheRealDetail"
   "PushGo-macOSUITests/PushGo_macOSUITests/testMessageChannelTagCombinedUngroupedFiltersAndScopedReadPersist"
   "PushGo-macOSUITests/PushGo_macOSUITests/testUnreadBadgeAndChannelLifecyclePersistThroughRealUserActions"
-  "PushGo-macOSUITests/PushGo_macOSUITests/testMessageDeleteDeadlineCommitsOnlyTargetAndSurvivesRelaunch"
+  "PushGo-macOSUITests/PushGo_macOSUITests/testMessageDeletionRestoresThenCommitsAccurateCanonicalStateAcrossRelaunch"
   "PushGo-macOSUITests/PushGo_macOSUITests/testSlowMessageLoadWarnsBeforeDataCompletes"
   "PushGo-macOSUITests/PushGo_macOSUITests/testSlowMessageRefreshKeepsAccurateContentVisibleUntilCompletion"
   "PushGo-macOSUITests/PushGo_macOSUITests/testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow"
@@ -43,7 +43,6 @@ positive_scopes=(
 
 risk_scopes=(
   "PushGo-macOSUITests/PushGo_macOSUITests/testFatalStoreInitializationStopsReadWriteAndRecoversAfterRelaunch"
-  "PushGo-macOSUITests/PushGo_macOSUITests/testMessageDeleteUndoRestoresAccurateCanonicalContentAcrossRelaunch"
   "PushGo-macOSUITests/PushGo_macOSUITests/testMessageLoadFailureRetryRecoversToFunctionalState"
   "PushGo-macOSUITests/PushGo_macOSUITests/testMessageRefreshFailureKeepsSnapshotAndRetryPersistsAccurateResult"
   "PushGo-macOSUITests/PushGo_macOSUITests/testEventCloseFailureKeepsAccurateDetailBlocksDuplicateAndRetryPersists"

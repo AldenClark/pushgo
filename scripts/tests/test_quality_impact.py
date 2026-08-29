@@ -99,9 +99,9 @@ class QualityImpactPlanTests(unittest.TestCase):
         positive = self._macos_scopes(runner_source, "positive_scopes")
         risk = self._macos_scopes(runner_source, "risk_scopes")
 
-        self.assertEqual(26, len(discoverable))
+        self.assertEqual(25, len(discoverable))
         self.assertEqual(16, len(positive))
-        self.assertEqual(10, len(risk))
+        self.assertEqual(9, len(risk))
         self.assertFalse(positive & risk)
         self.assertEqual(
             discoverable,
