@@ -217,6 +217,7 @@
 | macOS 崩溃弹窗清理形式存在但仍遮挡下一轮 | 旧清理只识别 `com.apple.ProblemReporter`，新系统由 `com.apple.UserNotificationCenter` 承载“意外退出”窗口 | 每条旅程 setUp/tearDown 都清理两代 crash-dialog host 并校验无残留；业务动作不通过重试绕开遮挡 | 残留弹窗=`FAILED_TEST_SYSTEM/BLOCKED`；不得把不可点击误归产品或继续下一轮 |
 | 通知声音底层合同绿色但用户无法完成保存 | 只有 resolver/持久化单测；iOS Sheet 没有可靠关闭动作，选择后手势也不能返回，UI 测试若只看 Menu 值会假绿 | 在既有 Settings 正向链选择真实内置声音；关闭动作等待 commit 成功才 dismiss；下一次既有进程重启重开同一编辑器核对准确选择 | 选项不变、无法关闭、保存失败或重启丢失=`FAILED`；实际系统播放/导入/macOS 目录权限仍独立 `NOT RUN` |
 | Android 更新策略单测很多但用户链仍未证明 | 签名、候选与 cooldown 各自有低层测试，却没有 feed→策略→真实 Settings→用户动作→持久化结果的 UI 纵切；直接注入 ViewModel 状态又会绕过核心链 | App-owned session 只注入受控 feed source，保留生产 UpdateManager/策略/Repository/UI；合并进已有页面可见性旅程，准确版本→Remind later→cooldown→relaunch，零新增设备方法 | 准确版本/动作/跨重启状态错误=`FAILED`；Card 子文本语义不唯一=`FAILED_TEST_SYSTEM`，不得改产品或要求全局节点唯一求绿；真实安装交接=`NOT RUN` |
+| 历史清理弹窗完成但范围可能过宽 | UI 只显示“完成”无法证明 cutoff、删除集合与未读刷新正确；为六个范围复制设备测试又会放大预算 | 一条相对当前时间的边界 fixture：45 天目标 + 2 天控制；30 days 真实动作后对账 count、两条准确标题、未读变化和 relaunch。临时把 cutoff 改成 1 天作为过度删除负控 | 计数/目标/控制/未读/重启任一错误=`FAILED`；非滚动容器的测试滚动=`FAILED_TEST_SYSTEM`；其他范围与 DST/cancel/failure 不从代表样本外推 |
 
 ## 双向覆盖反查
 

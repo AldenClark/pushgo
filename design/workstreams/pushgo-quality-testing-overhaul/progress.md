@@ -159,6 +159,7 @@
 - 首个 Android emulator 在开测前消失，0 tests，分类为 `BLOCKED_TRANSIENT_RUNNER`；仅一次受控恢复后通过，未把首轮伪装成绿色。
 - macOS 自动化授权恢复后，真实导航先后发现并修复 AppKit 分栏约束循环崩溃、Thing 关系行不可点击/Sheet owner 竞争、Event canonical body 丢失、Settings 页面可见性父语义覆盖子按钮，以及解密后列表已更新而详情仍读旧 seed/cache，未把授权恢复、控件存在或 configured 标记等同于产品自动通过。当前十八条核心旅程进入默认零重试聚合；Event 状态、Gateway 注册绕过、页面可见性持久化及 wrong-key/corrupt 解密反例均在准确用户终点证伪弱实现。
 - 2026-08-29 Android 更新正向切片没有新建设备方法：在既有页面可见性旅程和同一次 session/启动中增加 typed `AVAILABLE_STABLE` 场景，AppContainer 只替换外部 feed source，后续仍走生产 `UpdateManager`、ABI/版本/通道候选策略、Settings ViewModel/UI 与真实 SettingsRepository。用例要求准确 `9.9.9-quality` 状态、候选卡及 Install/Remind later 动作可达；执行 Remind later 后卡片消失、cooldown 可见，activity relaunch 后仍受抑制，再继续原 Events/Things 可见性闭环。最终 API 37 emulator focused 1/1 PASSED、8 秒、零产品重试；49 条更新/QualityRuntime JVM focused、androidTest 编译、Release APK/R8/Lint Vital 与 70 条影响/脚本合同均 PASSED。早期失败均因 Card/文本在 Compose 语义树中不是唯一 owner，最终删除重复文案断言并以 tagged 状态行和跨重启结果裁决，未修改产品行为求绿。Skip 与 Remind later 共享策略/持久化风险，暂不增加对称 UI 动作；真实下载、签名 APK、权限与系统安装器继续保留 Release/physical `NOT RUN`。
+- 2026-08-29 Android 消息历史清理补入日常正向集但只增加一个代表方法：`messages.cleanup` 在同一 session 中按当前时间生成 45 天旧目标和 2 天新控制，真实 Messages→Filter→Clear history→30 days→Confirm 后要求成功计数 1、旧目标消失、新控制保留、全局未读 2→1，activity relaunch 后不复活。首次 focused 在业务动作前因对非滚动容器调用 `performScrollTo` 失败，删除多余测试动作后 1/1 PASSED（6 秒）；最终生产字节在反事实恢复后再次 1/1 PASSED（7 秒）。把生产 30 天 cutoff 临时错成 1 天时精确失败在成功计数，证明 Oracle 能抓过度删除。日常正向选择集从 12 增至 13，70 条影响/脚本合同及最终 Release APK/R8/Lint Vital 均 PASSED。All/7 days/3 months/6 months/1 year 不做设备对称覆盖，DST/cancel/failure 继续延期。
 
 ## 已完成切片的本轮证据
 
@@ -178,7 +179,7 @@
 1. **当前产品可达的正向 P0/P1**：Android 更新可用→稍后与跨重启状态已完成；下一项优先选择能并入既有主链的媒体查看/分享正向目的或其他真实可达系统路由。Skip 不做对称设备覆盖；安装交接必须有真实签名 APK/隔离设备时进入 Release，而不是用替身冒充。开始前必须先反查生产入口，禁止为设计文档中的候选能力造测试专用功能；
 2. **发布环境高影响正向证据**：真实 APNs/FCM 到准确详情、通知权限恢复、安装升级、专用真机性能与 VoiceOver/TalkBack。缺签名、账号或专用设备时立即保持 `NOT RUN/BLOCKED` 并推进下一项；
 3. **有独有数据/事务风险的高影响反例**：只有 owner 变更或发布里程碑才运行现有补偿、错误成功态、进程死亡和数据损坏用例，不再占当前功能迁移主队列；
-4. **明确延期**：history cleanup 的 DST/cancel/failure 全矩阵、rollback 自身再失败 UI、非法/缺失深链笛卡尔积、多语言×字号×状态全排列、低频媒体失败组合。它们不删除，但在前两级仍有缺口时不投入设备时间。
+4. **明确延期**：history cleanup 已有 30 days 正向范围代表，但 DST/cancel/failure 和其他范围全矩阵继续延期；rollback 自身再失败 UI、非法/缺失深链笛卡尔积、多语言×字号×状态全排列、低频媒体失败组合同样不投入当前设备时间。
 
 每个后续切片默认约束为：零或一个新增 UI 方法、优先零新增 App 启动、一个跨层准确终点、一次必要 relaunch 上限；不能满足时必须说明独有平台/数据前置，否则拆分或下沉。
 
