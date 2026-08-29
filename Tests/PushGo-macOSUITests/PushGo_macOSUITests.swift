@@ -456,7 +456,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testUnreadBadgeKeepsMessagesSidebarTitleReadableAndNavigable() {
+    func testUnreadBadgeAndChannelLifecyclePersistThroughRealUserActions() {
         let sessionID = "macos-sidebar-badge-\(UUID().uuidString.lowercased())"
         let context = configuredQualityApp(
             sessionID: sessionID,
@@ -567,6 +567,126 @@ final class PushGo_macOSUITests: XCTestCase {
             "An accepted existing-channel subscription must enter the canonical Channel list"
         )
 
+        element(in: context.app, identifier: "action.channels.add").click()
+        let createName = element(in: context.app, identifier: "field.channels.create.name")
+        let createPassword = element(in: context.app, identifier: "field.channels.create.password")
+        XCTAssertTrue(createName.waitForExistence(timeout: 8))
+        replaceTextUsingPasteboard(in: createName, with: "Quality Created Channel")
+        XCTAssertTrue(createPassword.waitForExistence(timeout: 5))
+        replaceSecureText(in: createPassword, with: "qualityx")
+        element(in: context.app, identifier: "action.channels.entry.submit").click()
+
+        let createdChannelID = "01H00000000000000000000003"
+        let createdRow = element(
+            in: context.app,
+            identifier: "channel.row.\(createdChannelID)"
+        )
+        XCTAssertTrue(createdRow.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            createdRow.label.contains("Quality Created Channel"),
+            "The created Channel row must expose the exact accepted name."
+        )
+
+        let createdMenu = element(
+            in: context.app,
+            identifier: "action.channel.\(createdChannelID).menu"
+        )
+        XCTAssertTrue(createdMenu.waitForExistence(timeout: 5) && createdMenu.isHittable)
+        createdMenu.click()
+        let renameAction = element(
+            in: context.app,
+            identifier: "action.channel.\(createdChannelID).rename"
+        )
+        XCTAssertTrue(renameAction.waitForExistence(timeout: 5))
+        renameAction.click()
+        let renameField = context.app.sheets.firstMatch.textFields.firstMatch
+        XCTAssertTrue(renameField.waitForExistence(timeout: 5))
+        replaceTextUsingPasteboard(in: renameField, with: "Quality Renamed Channel")
+        renameField.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(
+            waitForLabelContaining("Quality Renamed Channel", in: createdRow, timeout: 8),
+            "The created Channel row must expose the exact accepted rename."
+        )
+
+        let keepChannelID = "01H00000000000000000000001"
+        let keepRow = element(in: context.app, identifier: "channel.row.\(keepChannelID)")
+        XCTAssertTrue(keepRow.waitForExistence(timeout: 8))
+        let keepMenu = element(
+            in: context.app,
+            identifier: "action.channel.\(keepChannelID).menu"
+        )
+        XCTAssertTrue(keepMenu.waitForExistence(timeout: 5) && keepMenu.isHittable)
+        keepMenu.click()
+        let keepUnsubscribe = element(
+            in: context.app,
+            identifier: "action.channel.\(keepChannelID).unsubscribe"
+        )
+        XCTAssertTrue(keepUnsubscribe.waitForExistence(timeout: 5))
+        keepUnsubscribe.click()
+        let keepHistory = element(
+            in: context.app,
+            identifier: "action.channel.unsubscribe.keep_history"
+        )
+        XCTAssertTrue(keepHistory.waitForExistence(timeout: 5))
+        keepHistory.click()
+        XCTAssertTrue(
+            keepRow.waitForNonExistence(timeout: 8),
+            "Keep-history unsubscribe must remove only the subscription row."
+        )
+
+        let deleteChannelID = "01H00000000000000000000002"
+        let deleteRow = element(in: context.app, identifier: "channel.row.\(deleteChannelID)")
+        XCTAssertTrue(deleteRow.waitForExistence(timeout: 8))
+        let deleteMenu = element(
+            in: context.app,
+            identifier: "action.channel.\(deleteChannelID).menu"
+        )
+        XCTAssertTrue(deleteMenu.waitForExistence(timeout: 5) && deleteMenu.isHittable)
+        deleteMenu.click()
+        let deleteUnsubscribe = element(
+            in: context.app,
+            identifier: "action.channel.\(deleteChannelID).unsubscribe"
+        )
+        XCTAssertTrue(deleteUnsubscribe.waitForExistence(timeout: 5))
+        deleteUnsubscribe.click()
+        let deleteHistory = element(
+            in: context.app,
+            identifier: "action.channel.unsubscribe.delete_history"
+        )
+        XCTAssertTrue(deleteHistory.waitForExistence(timeout: 5))
+        deleteHistory.click()
+        XCTAssertTrue(
+            deleteRow.waitForNonExistence(timeout: 8),
+            "Delete-history unsubscribe must immediately suppress the subscription row."
+        )
+        let pendingDeletion = element(in: context.app, identifier: "state.pending_deletion")
+        XCTAssertTrue(pendingDeletion.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            pendingDeletion.waitForNonExistence(timeout: 15),
+            "Delete-history unsubscribe must reach its production commit deadline."
+        )
+
+        openSidebarTab("messages", in: context.app)
+        let keptMessage = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c001"
+        )
+        XCTAssertTrue(keptMessage.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            element(
+                in: context.app,
+                identifier: "message.row.00000000-0000-0000-0000-00000000c002"
+            ).waitForNonExistence(timeout: 5),
+            "Delete-history unsubscribe must remove the target history, not only its Channel row."
+        )
+        keptMessage.click()
+        XCTAssertTrue(
+            context.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000001."
+            ].waitForExistence(timeout: 8),
+            "Keep-history unsubscribe must preserve the accurate canonical message body."
+        )
+
         context.app.terminate()
         let relaunched = configuredQualityApp(
             sessionID: sessionID,
@@ -591,7 +711,29 @@ final class PushGo_macOSUITests: XCTestCase {
             "The existing-channel subscription must survive process relaunch"
         )
 
-        let expectedChannelID = "01H00000000000000000000001"
+        XCTAssertTrue(
+            element(in: relaunched.app, identifier: "channel.row.\(createdChannelID)")
+                .waitForExistence(timeout: 8),
+            "The created Channel must survive process relaunch."
+        )
+        let relaunchedCreatedRow = element(
+            in: relaunched.app,
+            identifier: "channel.row.\(createdChannelID)"
+        )
+        XCTAssertTrue(
+            waitForLabelContaining("Quality Renamed Channel", in: relaunchedCreatedRow, timeout: 8),
+            "The accepted rename must survive process relaunch."
+        )
+        XCTAssertFalse(
+            element(in: relaunched.app, identifier: "channel.row.\(keepChannelID)").exists,
+            "The keep-history subscription must stay removed after relaunch."
+        )
+        XCTAssertFalse(
+            element(in: relaunched.app, identifier: "channel.row.\(deleteChannelID)").exists,
+            "The delete-history subscription must stay removed after relaunch."
+        )
+
+        let expectedChannelID = createdChannelID
         let row = element(in: relaunched.app, identifier: "channel.row.\(expectedChannelID)")
         XCTAssertTrue(row.waitForExistence(timeout: 8))
 
@@ -633,6 +775,27 @@ final class PushGo_macOSUITests: XCTestCase {
             XCTWaiter.wait(for: [copied], timeout: 3),
             .completed,
             "Clicking the real Channel row did not put its exact ID on the system pasteboard"
+        )
+
+        openSidebarTab("messages", in: relaunched.app)
+        let relaunchedKeptMessage = element(
+            in: relaunched.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c001"
+        )
+        XCTAssertTrue(relaunchedKeptMessage.waitForExistence(timeout: 8))
+        relaunchedKeptMessage.click()
+        XCTAssertTrue(
+            relaunched.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000001."
+            ].waitForExistence(timeout: 8),
+            "Keep-history data must retain its accurate body after process relaunch."
+        )
+        XCTAssertTrue(
+            element(
+                in: relaunched.app,
+                identifier: "message.row.00000000-0000-0000-0000-00000000c002"
+            ).waitForNonExistence(timeout: 5),
+            "Committed delete-history data must not reappear after process relaunch."
         )
     }
 
@@ -3131,6 +3294,11 @@ final class PushGo_macOSUITests: XCTestCase {
 
     @MainActor
     private func replaceSecureText(in field: XCUIElement, with text: String) {
+        replaceTextUsingPasteboard(in: field, with: text)
+    }
+
+    @MainActor
+    private func replaceTextUsingPasteboard(in field: XCUIElement, with text: String) {
         let pasteboard = NSPasteboard.general
         let savedItems: [[NSPasteboard.PasteboardType: Data]] = pasteboard.pasteboardItems?.map { item in
             Dictionary(uniqueKeysWithValues: item.types.compactMap { type in
@@ -3817,6 +3985,22 @@ final class PushGo_macOSUITests: XCTestCase {
             RunLoop.current.run(until: Date().addingTimeInterval(0.05))
         }
         return element.exists && element.value as? String == expectedValue
+    }
+
+    @MainActor
+    private func waitForLabelContaining(
+        _ expectedText: String,
+        in element: XCUIElement,
+        timeout: TimeInterval
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if element.exists, element.label.contains(expectedText) {
+                return true
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        return element.exists && element.label.contains(expectedText)
     }
 
     @MainActor

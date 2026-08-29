@@ -75,6 +75,7 @@ struct ChannelManagementView: View {
                 } label: {
                     Text(localizationManager.localized("unsubscribe_and_delete_history"))
                 }
+                .accessibilityIdentifier("action.channel.unsubscribe.delete_history")
                 Button {
                     if let target = pendingRemoval {
                         Task { await removeChannel(target, deleteHistory: false) }
@@ -82,10 +83,12 @@ struct ChannelManagementView: View {
                 } label: {
                     Text(localizationManager.localized("unsubscribe_keep_history"))
                 }
+                .accessibilityIdentifier("action.channel.unsubscribe.keep_history")
                 Button(role: .cancel) {
                 } label: {
                     Text(localizationManager.localized("cancel"))
                 }
+                .accessibilityIdentifier("action.channel.unsubscribe.cancel")
             }
             .alert(
                 localizationManager.localized("rename_channel"),
@@ -101,9 +104,11 @@ struct ChannelManagementView: View {
                     }
                 }
                 .disabled(isRenaming || renameAlias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .accessibilityIdentifier("action.channel.rename.save")
                 Button(localizationManager.localized("cancel"), role: .cancel) {
                     pendingRename = nil
                 }
+                .accessibilityIdentifier("action.channel.rename.cancel")
             }
             .onAppear {
                 Task { @MainActor in
@@ -214,6 +219,7 @@ struct ChannelManagementView: View {
                 } label: {
                     Label(localizationManager.localized("rename_channel"), systemImage: "pencil")
                 }
+                .accessibilityIdentifier("action.channel.\(channelId).rename")
 
                 Button(role: .destructive) {
                     pendingRemoval = subscription
@@ -221,6 +227,7 @@ struct ChannelManagementView: View {
                 } label: {
                     Label(localizationManager.localized("unsubscribe_channel"), systemImage: "trash")
                 }
+                .accessibilityIdentifier("action.channel.\(channelId).unsubscribe")
             } label: {
                 Image(systemName: "ellipsis.circle.fill")
                     .font(.title3.weight(.semibold))
@@ -232,6 +239,7 @@ struct ChannelManagementView: View {
                     )
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("action.channel.\(channelId).menu")
         }
         .padding(.vertical, 14)
         .padding(.horizontal, 14)
