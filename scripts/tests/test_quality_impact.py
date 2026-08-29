@@ -35,6 +35,18 @@ class QualityImpactPlanTests(unittest.TestCase):
         self.assertTrue({"messages", "events", "things", "ingress-recovery"}.issubset(plan["impacted_capabilities"]))
         self.assertTrue(plan["known_evidence_gaps"])
 
+    def test_entity_screen_change_prefers_positive_pr_evidence(self):
+        plan = self.plan("Apps/PushGo-macOS/UI/Screens/ThingSplitScreen.swift")
+
+        self.assertEqual("READY", plan["plan_status"])
+        self.assertEqual("pr", plan["recommended_lane"])
+        self.assertTrue({"events", "things"}.issubset(plan["impacted_capabilities"]))
+
+    def test_entity_state_owner_change_keeps_nightly_evidence(self):
+        plan = self.plan("Shared/UI/EntityScreens.swift")
+
+        self.assertEqual("nightly", plan["recommended_lane"])
+
     def test_runtime_change_requires_release_isolation(self):
         plan = self.plan("Shared/UI/AutomationRuntime.swift")
 

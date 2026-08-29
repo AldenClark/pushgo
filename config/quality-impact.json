@@ -89,13 +89,22 @@
       "known_evidence_gaps": ["representative iOS/macOS local-cached media decode/click/preview, pagination/read, and slow, new-result, and failure-recovery refresh workflows are protected; multi-image, animation, share, cache eviction, and media performance remain incomplete."]
     },
     {
-      "id": "events-things",
-      "paths": ["Shared/Models/EntityProjectionDetail.swift", "Shared/Utilities/ProjectionSemantics.swift", "Shared/UI/Entity*.swift", "Apps/*/UI/Screens/Event*.swift", "Apps/*/UI/Screens/Thing*.swift", "Apps/*/UI/Screens/Entity*.swift"],
+      "id": "events-things-core",
+      "paths": ["Shared/Models/EntityProjectionDetail.swift", "Shared/Utilities/ProjectionSemantics.swift", "Shared/UI/Entity*.swift"],
       "capabilities": ["events", "things"],
       "minimum_evidence": ["projection semantics tests including out-of-order head rejection", "iOS Event close/filter/relaunch and Thing accurate list/detail/three-relation/open/return/relaunch journeys"],
       "lane": "nightly",
-      "known_evidence_gaps": ["Event close slow/error/duplicate-submit recovery is protected on iOS and macOS through accurate detail, owner-scoped feedback, production-shaped canonical persistence, and relaunch. Thing filters/deep links/delete outcomes remain incomplete."],
-      "escalation_reasons": ["Entity projections feed list, detail, Thing relations, notifications, and system surfaces."]
+      "known_evidence_gaps": ["Event close slow/error/duplicate-submit recovery is protected on iOS and macOS. Precise single-Thing delete/control-object/relaunch is protected; deep links, bulk/channel deletion, and tombstones remain incomplete."],
+      "escalation_reasons": ["Entity projection/state owners feed list, detail, Thing relations, notifications, and system surfaces."]
+    },
+    {
+      "id": "events-things-ui",
+      "paths": ["Apps/*/UI/Screens/Event*.swift", "Apps/*/UI/Screens/Thing*.swift", "Apps/*/UI/Screens/Entity*.swift"],
+      "capabilities": ["events", "things"],
+      "minimum_evidence": ["Apple PR broad positive representative set including Event close/filter/relaunch and Thing accurate search/single-delete/control-object/three-relation/relaunch"],
+      "lane": "pr",
+      "known_evidence_gaps": ["Pure screen composition changes do not automatically run fault injection, deep-link, bulk-delete, or tombstone matrices; run the owning focused risk path when the diff actually changes one of those contracts."],
+      "escalation_reasons": ["Pure presentation and stable action-entry changes need real positive UI outcomes, but should not automatically consume every Entity failure-recovery scenario."]
     },
     {
       "id": "channels-settings",
