@@ -3740,7 +3740,10 @@ final class PushGoAutomationRuntime {
             entityRecords = []
             channelSubscriptions = []
         case .messagesWorkflow:
-            messages = (0..<125).map(qualityWorkflowFixtureMessage)
+            // Fifty-two rows cross the production 50-row page boundary while
+            // keeping the device journey focused on pagination and read state.
+            // A larger data-volume matrix belongs to Store/performance tests.
+            messages = (0..<52).map(qualityWorkflowFixtureMessage)
             entityRecords = []
             channelSubscriptions = []
         case .messagesFilters:
@@ -3974,9 +3977,8 @@ final class PushGoAutomationRuntime {
             "title": title,
             "body": body,
             "channel_id": index.isMultiple(of: 2) ? "workflow-alpha" : "workflow-beta",
-            // The original 52-row workflow owns the read-state transition oracle.
-            // Extra rows extend the same journey across three production pages
-            // without inflating its unread badge or creating a second state matrix.
+            // Rows at and above 52 are reserved for larger focused fixtures, so
+            // this two-page UI journey retains the same 39-unread oracle.
             "is_read": index >= 52 || index.isMultiple(of: 4),
             "received_at": ISO8601DateFormatter().string(from: receivedAt),
             "raw_payload": [

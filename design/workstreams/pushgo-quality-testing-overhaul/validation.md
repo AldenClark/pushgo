@@ -227,6 +227,7 @@
 | 通知声音底层合同绿色但用户无法完成保存 | 只有 resolver/持久化单测；iOS Sheet 没有可靠关闭动作，选择后手势也不能返回，UI 测试若只看 Menu 值会假绿 | 在既有 Settings 正向链选择真实内置声音；关闭动作等待 commit 成功才 dismiss；下一次既有进程重启重开同一编辑器核对准确选择 | 选项不变、无法关闭、保存失败或重启丢失=`FAILED`；实际系统播放/导入/macOS 目录权限仍独立 `NOT RUN` |
 | Android 更新策略单测很多但用户链仍未证明 | 签名、候选与 cooldown 各自有低层测试，却没有 feed→策略→真实 Settings→用户动作→持久化结果的 UI 纵切；直接注入 ViewModel 状态又会绕过核心链 | App-owned session 只注入受控 feed source，保留生产 UpdateManager/策略/Repository/UI；合并进已有页面可见性旅程，准确版本→Remind later→cooldown→relaunch，零新增设备方法 | 准确版本/动作/跨重启状态错误=`FAILED`；Card 子文本语义不唯一=`FAILED_TEST_SYSTEM`，不得改产品或要求全局节点唯一求绿；真实安装交接=`NOT RUN` |
 | 历史清理弹窗完成但范围可能过宽 | UI 只显示“完成”无法证明 cutoff、删除集合与未读刷新正确；为六个范围复制设备测试又会放大预算 | 一条相对当前时间的边界 fixture：45 天目标 + 2 天控制；30 days 真实动作后对账 count、两条准确标题、未读变化和 relaunch。临时把 cutoff 改成 1 天作为过度删除负控 | 计数/目标/控制/未读/重启任一错误=`FAILED`；非滚动容器的测试滚动=`FAILED_TEST_SYSTEM`；其他范围与 DST/cancel/failure 不从代表样本外推 |
+| 日常正向 Lane 被数据量与负向分支拖慢 | 跨页 UI 用 125 行/第三页却只需要证明分页；Gateway 成功、格式错误、注册失败和 Sheet owner 混成一条 PR 方法，绿色但设备预算挤掉剩余正向覆盖 | 分页 fixture 缩到恰好跨真实 50 行边界的 52 行，保留第二页和完整 read/badge/relaunch 终点；Gateway PR 只走验证注册成功终点，两个高价值反例保留为 Nightly 具名方法；报告型静态发现固定 `not-run` | 成本合同要求 52 行、PR 方法不含 failure injection/非法地址、Nightly 仍含拒绝旅程；改后 focused 必须在同一 Oracle 下通过并报告前后时长，不能以删断言换速度 |
 
 ## 双向覆盖反查
 
@@ -236,6 +237,8 @@
 - 变更→最低证据：Message UI 命中准确内容/搜索/删除/relaunch，Store/Room 命中跨能力数据与 UI，Runtime 命中 Release 隔离，通知/系统消费者提升 Nightly/Release；未知 Screen 阻断，文档明确 `NOT_RUN`。
 - 平台消费者：通知、后台、Widget、Spotlight、Watch、真机权限/FCM/APNs 已列入能力矩阵和 Release 清单，未被模拟器结果冒充。
 - 低价值边缘：不可达导出 helper、未挂载 MenuBar 内容、100k 日常执行、全语言全设备故障组合明确延期或删除候选，避免挤占核心预算。
+- 稳定入口报告形式覆盖攻击：若只给测试源码增加 `app.buttons["action.x"]` 而没有执行或业务断言，生产/测试交集确实会出现，但报告状态只能是 `REFERENCE_FOUND_SEMANTIC_ORACLE_NOT_PROVEN`，且整个 JSON 不含 `PASSED`；生产未引用与测试侧孤儿分别保留源码位置并进入可达性/动态 owner 审查。注释中的 identifier 和带插值的动态模板不会伪装成稳定生产合同。该报告只帮助发现候选，能力矩阵、真实终点和运行证据仍是裁决者，故不能用数量下降冒充质量提高。
+- 日常成本反查：Apple PR 设备方法仍只有 4 条 iOS + 1 条 macOS，覆盖主导航/五个目的页、准确消息与媒体/搜索/relaunch、跨页 read/badge、Gateway 成功切换，以及 macOS 动态未读 badge 与主侧栏；分页数据从 125→52 不改变生产 `pageSize=50`，因此仍必须触发第二次生产查询。Gateway 的失败注入不再消耗 PR，但专门 Nightly 方法继续断言 malformed/rejected candidate 留在 Sheet、host 无错误、旧 gateway 不被覆盖；Core `candidateGatewayPreparationUsesFreshRemoteIdentityWithoutLocalMutation` 继续裁决先验证/注册后提交的顺序。故成本下降来自重复手势/负向分层，不是删除业务目的。
 
 ## 残余风险与进入条件
 

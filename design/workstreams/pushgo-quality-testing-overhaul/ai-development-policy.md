@@ -13,6 +13,27 @@
 5. **实现并验证**：开发中跑 focused；产品代码完成后跑 PR lane；本地化资源先跑完整性合同，布局/文字缩放/语义变化再跑代表性 `accessibility` 任务；数据/Store 性能进入显式 `performance` lane，系统、真机性能和长时场景进入 nightly/release。不能运行的层级明确记为 `BLOCKED` 或 `NOT RUN`。
 6. **同步知识**：更新能力矩阵、测试处置和 workstream progress。删除被新证据替代的弱测试，避免永久双轨。
 
+UI/交互变更在第 2 步先运行稳定入口双向报告，再做语义裁决：
+
+```bash
+python3 scripts/quality_ui_entrypoints.py \
+  --platform apple \
+  --product-root Apps --product-root Shared \
+  --test-root Tests --test-root scripts \
+  --output /tmp/pushgo-apple-ui-entrypoints.json
+
+python3 scripts/quality_ui_entrypoints.py \
+  --platform android \
+  --base-root ../pushgo-android \
+  --product-root ../pushgo-android/app/src/main \
+  --test-root ../pushgo-android/app/src/androidTest \
+  --test-root ../pushgo-android/app/src/test \
+  --test-root ../pushgo-android/scripts \
+  --output /tmp/pushgo-android-ui-entrypoints.json
+```
+
+报告只发现稳定 `action/screen/tab/toggle/button/row/banner` 字面合同：交集也只表示测试源码出现过引用，不得写成覆盖或产品通过；生产未引用项必须继续核对真实可达性、用户价值、状态/数据 owner 和最低充分终点，可能结论包括补纵切、被更强语义旅程间接覆盖、明确延期或删除死入口；测试侧孤儿必须判断动态生产标识、已删除入口或测试专用诊断。禁止通过给测试加一行无业务断言的 identifier 引用消除报告项，也禁止以数量或百分比评价质量。
+
 ## 风险到最低证据映射
 
 | 变更类型 | 必需证据 | 何时升级 |

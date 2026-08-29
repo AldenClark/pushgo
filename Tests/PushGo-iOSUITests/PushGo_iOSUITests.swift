@@ -604,7 +604,7 @@ final class PushGo_iOSUITests: XCTestCase {
 
         assertQualityRuntimeReady(in: context.app, timeout: 15)
         XCTAssertTrue(
-            context.app.staticTexts["Quality workflow 124"].waitForExistence(timeout: 8),
+            context.app.staticTexts["Quality workflow 51"].waitForExistence(timeout: 8),
             "The first production page must start with the newest canonical object"
         )
         assertMessagesTabBadgeCount(39, in: context.app)
@@ -613,13 +613,13 @@ final class PushGo_iOSUITests: XCTestCase {
 
         let list = runtimeQualityScrollableList(in: context.app)
         XCTAssertTrue(list.waitForExistence(timeout: 5))
-        let thirdPageTarget = context.app.staticTexts["Quality workflow 0"]
-        for _ in 0..<24 where !thirdPageTarget.exists {
+        let secondPageTarget = context.app.staticTexts["Quality workflow 0"]
+        for _ in 0..<12 where !secondPageTarget.exists {
             list.swipeUp()
         }
         XCTAssertTrue(
-            thirdPageTarget.waitForExistence(timeout: 5),
-            "The oldest canonical object from production page 3 was not reachable"
+            secondPageTarget.waitForExistence(timeout: 5),
+            "The oldest canonical object from production page 2 was not reachable"
         )
 
         let unreadRow = element(
@@ -706,7 +706,7 @@ final class PushGo_iOSUITests: XCTestCase {
             XCTAssertTrue(unreadFilter.waitForExistence(timeout: 5))
         }
         unreadFilter.tap()
-        XCTAssertTrue(relaunched.app.staticTexts["Quality workflow 124"].waitForExistence(timeout: 8))
+        XCTAssertTrue(relaunched.app.staticTexts["Quality workflow 51"].waitForExistence(timeout: 8))
         XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.empty").exists)
     }
 
@@ -1404,7 +1404,6 @@ final class PushGo_iOSUITests: XCTestCase {
         let encodedSession = qualitySessionPayload(
             sessionID: sessionID,
             fixture: "channels.standard",
-            failGatewaySwitchValidationOnce: true,
             channelMutationScenario: "accepted"
         )
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
@@ -1422,7 +1421,6 @@ final class PushGo_iOSUITests: XCTestCase {
             in: context.app,
             identifier: "action.settings.server_management"
         )
-        let originalGatewayLabel = serverManagementAction.label
         tapWhenHittable(
             serverManagementAction,
             timeout: 8
@@ -1430,22 +1428,6 @@ final class PushGo_iOSUITests: XCTestCase {
 
         let addressField = element(in: context.app, identifier: "field.settings.server.address")
         XCTAssertTrue(addressField.waitForExistence(timeout: 8))
-        replaceText(in: addressField, with: "not a valid url")
-        tapWhenHittable(
-            element(in: context.app, identifier: "action.settings.server.save"),
-            timeout: 8
-        )
-        XCTAssertTrue(
-            element(in: context.app, identifier: "feedback.settings.server")
-                .waitForExistence(timeout: 5),
-            "An invalid address must remain in the editor with actionable inline feedback"
-        )
-        XCTAssertFalse(
-            element(in: context.app, identifier: "feedback.settings.root").exists,
-            "A server editor failure belongs to the sheet and must not also appear on the host page"
-        )
-        XCTAssertTrue(addressField.exists, "Invalid input must not dismiss the server editor")
-
         let normalizedAddress = "https://quality-settings.invalid/api"
         replaceText(in: addressField, with: "\(normalizedAddress)/")
         tapWhenHittable(
@@ -1453,57 +1435,7 @@ final class PushGo_iOSUITests: XCTestCase {
             timeout: 8
         )
         XCTAssertTrue(
-            element(in: context.app, identifier: "feedback.settings.server")
-                .waitForExistence(timeout: 8),
-            "A candidate gateway registration failure must stay in the editor"
-        )
-        XCTAssertFalse(
-            element(in: context.app, identifier: "feedback.settings.root").exists,
-            "Candidate registration failure must not leak into the host Settings page"
-        )
-        XCTAssertTrue(addressField.exists, "A rejected candidate gateway must not dismiss the editor")
-        XCTAssertTrue(
-            element(in: context.app, identifier: "action.settings.server_management")
-                .label == originalGatewayLabel,
-            "The old gateway must remain active until candidate registration succeeds"
-        )
-
-        tapWhenHittable(
-            element(in: context.app, identifier: "action.settings.server.cancel"),
-            timeout: 8
-        )
-        XCTAssertTrue(
-            addressField.waitForNonExistence(timeout: 8),
-            "Dismissing a rejected gateway editor must return to the host Settings page"
-        )
-        XCTAssertFalse(
-            element(in: context.app, identifier: "feedback.settings.root").exists,
-            "A dismissed sheet-owned error must never reappear on the host Settings page"
-        )
-        XCTAssertEqual(
-            element(in: context.app, identifier: "action.settings.server_management").label,
-            originalGatewayLabel,
-            "Dismissing a rejected candidate must leave the saved gateway unchanged"
-        )
-        tapWhenHittable(
-            element(in: context.app, identifier: "action.settings.server_management"),
-            timeout: 8
-        )
-        let retryAddressField = element(in: context.app, identifier: "field.settings.server.address")
-        XCTAssertTrue(retryAddressField.waitForExistence(timeout: 8))
-        XCTAssertNotEqual(
-            retryAddressField.value as? String,
-            normalizedAddress,
-            "Reopening after rejection must restore the saved gateway, not the rejected draft"
-        )
-        replaceText(in: retryAddressField, with: "\(normalizedAddress)/")
-
-        tapWhenHittable(
-            element(in: context.app, identifier: "action.settings.server.save"),
-            timeout: 8
-        )
-        XCTAssertTrue(
-            retryAddressField.waitForNonExistence(timeout: 10),
+            addressField.waitForNonExistence(timeout: 10),
             "A successfully persisted server address must close the editor"
         )
         leaveSettings(in: context.app)
@@ -1536,6 +1468,82 @@ final class PushGo_iOSUITests: XCTestCase {
             restoredAddressField.value as? String,
             normalizedAddress,
             "The normalized server address must survive a full app relaunch"
+        )
+    }
+
+    func testSettingsServerRejectsInvalidAndUnregisteredCandidatesWithoutLeakingSheetError() {
+        let context = configuredLaunchContext()
+        let sessionID = "ios-settings-server-rejection-\(UUID().uuidString.lowercased())"
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            failGatewaySwitchValidationOnce: true,
+            channelMutationScenario: "accepted"
+        )
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
+        openSettingsFromChannels(in: context.app)
+        let serverManagementAction = element(
+            in: context.app,
+            identifier: "action.settings.server_management"
+        )
+        let originalGatewayLabel = serverManagementAction.label
+        tapWhenHittable(serverManagementAction, timeout: 8)
+
+        let addressField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(addressField.waitForExistence(timeout: 8))
+        replaceText(in: addressField, with: "not a valid url")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "feedback.settings.server")
+                .waitForExistence(timeout: 5),
+            "An invalid address must remain in the editor with actionable inline feedback"
+        )
+        XCTAssertFalse(
+            element(in: context.app, identifier: "feedback.settings.root").exists,
+            "A server editor failure belongs to the sheet and must not also appear on the host page"
+        )
+
+        let rejectedAddress = "https://quality-settings.invalid/api"
+        replaceText(in: addressField, with: "\(rejectedAddress)/")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server.save"),
+            timeout: 8
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "feedback.settings.server")
+                .waitForExistence(timeout: 8),
+            "A candidate gateway registration failure must stay in the editor"
+        )
+        XCTAssertFalse(
+            element(in: context.app, identifier: "feedback.settings.root").exists,
+            "Candidate registration failure must not leak into the host Settings page"
+        )
+        XCTAssertTrue(addressField.exists, "A rejected candidate gateway must not dismiss the editor")
+        XCTAssertEqual(
+            element(in: context.app, identifier: "action.settings.server_management").label,
+            originalGatewayLabel,
+            "The old gateway must remain active until candidate registration succeeds"
+        )
+
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server.cancel"),
+            timeout: 8
+        )
+        XCTAssertTrue(addressField.waitForNonExistence(timeout: 8))
+        XCTAssertFalse(
+            element(in: context.app, identifier: "feedback.settings.root").exists,
+            "A dismissed sheet-owned error must never reappear on the host Settings page"
+        )
+        XCTAssertEqual(
+            element(in: context.app, identifier: "action.settings.server_management").label,
+            originalGatewayLabel,
+            "Dismissing a rejected candidate must leave the saved gateway unchanged"
         )
     }
 

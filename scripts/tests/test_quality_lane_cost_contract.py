@@ -27,6 +27,9 @@ class QualityLaneCostContractTests(unittest.TestCase):
             self.assertTrue(any(required_fragment in scope for scope in extended_positive), required_fragment)
         for deferred_fragment in ("Failure", "Corrupt", "Slow", "Delete"):
             self.assertFalse(any(deferred_fragment in scope for scope in scopes), deferred_fragment)
+        self.assertTrue(
+            any("RejectsInvalidAndUnregisteredCandidates" in scope for scope in nightly_scopes)
+        )
         self.assertFalse(any("FunctionalEmptyState" in scope for scope in scopes))
         self.assertFalse(any("MessageSearchReturnsOnly" in scope for scope in scopes))
         self.assertEqual(1, test_source.count("messageSearchDelayMilliseconds: 2_000"))
@@ -73,6 +76,30 @@ class QualityLaneCostContractTests(unittest.TestCase):
                 'macos_pr_ui_scope="PushGo-macOSUITests/PushGo_macOSUITests/'
                 'testSidebarNavigationCoversPrimaryScreens"'
             ),
+        )
+
+    def test_pr_message_and_gateway_journeys_keep_positive_oracles_without_negative_cost(self) -> None:
+        runner = (REPO / "scripts/quality_test.sh").read_text()
+        test_source = (REPO / "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift").read_text()
+        runtime = (REPO / "Shared/UI/AutomationRuntime.swift").read_text()
+        positive_gateway = test_source.split(
+            "func testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch()", 1
+        )[1].split(
+            "func testSettingsServerRejectsInvalidAndUnregisteredCandidatesWithoutLeakingSheetError()",
+            1,
+        )[0]
+
+        self.assertIn("messages = (0..<52).map(qualityWorkflowFixtureMessage)", runtime)
+        self.assertNotIn("messages = (0..<125).map(qualityWorkflowFixtureMessage)", runtime)
+        self.assertNotIn("failGatewaySwitchValidationOnce", positive_gateway)
+        self.assertNotIn("not a valid url", positive_gateway)
+        self.assertTrue(
+            any(
+                scope.endswith(
+                    "/testSettingsServerRejectsInvalidAndUnregisteredCandidatesWithoutLeakingSheetError"
+                )
+                for scope in self._scopes(runner, "nightly_negative_ui_scopes")
+            )
         )
 
     def test_real_macos_update_install_is_release_or_focused_only(self) -> None:

@@ -100,6 +100,12 @@ def load_manifest(path: Path) -> dict[str, Any]:
         for key in ("paths", "capabilities", "minimum_evidence"):
             if not isinstance(rule.get(key), list) or not rule[key]:
                 raise ValueError(f"rule {rule_id} requires a non-empty {key} list")
+        if "exclude_paths" in rule:
+            exclusions = rule["exclude_paths"]
+            if not isinstance(exclusions, list) or any(
+                not isinstance(item, str) or not item for item in exclusions
+            ):
+                raise ValueError(f"rule {rule_id} exclude_paths must be a list of non-empty strings")
         if "required_checks" in rule:
             checks = rule["required_checks"]
             if not isinstance(checks, list) or any(not isinstance(item, str) or not item for item in checks):
@@ -119,7 +125,12 @@ def build_plan(files: list[str], manifest: dict[str, Any], source: str) -> dict[
     matched_rules: dict[str, dict[str, Any]] = {}
 
     for path in files:
-        matching = [rule for rule in rules if matches_any(path, rule["paths"])]
+        matching = [
+            rule
+            for rule in rules
+            if matches_any(path, rule["paths"])
+            and not matches_any(path, rule.get("exclude_paths", []))
+        ]
         path_matches[path] = [rule["id"] for rule in matching]
         for rule in matching:
             matched_rules[rule["id"]] = rule
@@ -147,7 +158,11 @@ def build_plan(files: list[str], manifest: dict[str, Any], source: str) -> dict[
         # Release executes both families, so a mixed product + performance-system
         # change must be promoted instead of dropping either evidence family.
         recommended_lane = "release"
-    plan_status = "BLOCKED" if unmapped_product_paths else ("NOT_RUN" if not selected else "READY")
+    plan_status = (
+        "BLOCKED"
+        if unmapped_product_paths
+        else ("NOT_RUN" if recommended_lane == "not-run" else "READY")
+    )
     return {
         "schema_version": 1,
         "platform": manifest["platform"],

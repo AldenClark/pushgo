@@ -74,6 +74,26 @@ class QualityImpactPlanTests(unittest.TestCase):
         self.assertEqual("pr", plan["recommended_lane"])
         self.assertIn("quality-system-trustworthiness", plan["impacted_capabilities"])
 
+    def test_read_only_ui_entrypoint_report_does_not_start_a_product_lane(self):
+        for path in (
+            "scripts/quality_ui_entrypoints.py",
+            "scripts/tests/test_quality_ui_entrypoints.py",
+        ):
+            with self.subTest(path=path):
+                plan = self.plan(path)
+                self.assertEqual("NOT_RUN", plan["plan_status"])
+                self.assertEqual("not-run", plan["recommended_lane"])
+                self.assertEqual(["quality-ui-entrypoint-discovery"], plan["selected_rule_ids"])
+                self.assertIn("quality-gap-discovery", plan["impacted_capabilities"])
+                self.assertNotIn("quality-system-trustworthiness", plan["impacted_capabilities"])
+
+    def test_other_quality_reports_still_require_representative_product_evidence(self):
+        plan = self.plan("scripts/quality_result.py")
+
+        self.assertEqual("READY", plan["plan_status"])
+        self.assertEqual("pr", plan["recommended_lane"])
+        self.assertIn("quality-system-trustworthiness", plan["impacted_capabilities"])
+
     def test_apple_ui_runner_preconditions_are_quality_system_changes(self):
         for path in (
             "scripts/require_unlocked_apple_ui_console.sh",
