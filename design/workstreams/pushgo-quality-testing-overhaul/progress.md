@@ -158,6 +158,7 @@
 - Apple PR 核心选择集现为 12 条；当前最终字节已由 `scripts/quality_test.sh pr` 聚合执行 12/12、零失败、零重试，覆盖分页/已读、慢加载、慢刷新、新结果、失败恢复、永久删除及 Channel Sheet 错误归属/重试，收据 selected/executed 完整且 product/test-system 均为 `PASSED`。Android 当前刷新切片的 JVM 合同、`androidTest` 编译和 emulator 两条旅程 2/2 PASSED。CI YAML、Shell 和 manifest 仍按各自变更影响复验，不以本轮 Apple 本机结果冒充 hosted CI。
 - 首个 Android emulator 在开测前消失，0 tests，分类为 `BLOCKED_TRANSIENT_RUNNER`；仅一次受控恢复后通过，未把首轮伪装成绿色。
 - macOS 自动化授权恢复后，真实导航先后发现并修复 AppKit 分栏约束循环崩溃、Thing 关系行不可点击/Sheet owner 竞争、Event canonical body 丢失、Settings 页面可见性父语义覆盖子按钮，以及解密后列表已更新而详情仍读旧 seed/cache，未把授权恢复、控件存在或 configured 标记等同于产品自动通过。当前十八条核心旅程进入默认零重试聚合；Event 状态、Gateway 注册绕过、页面可见性持久化及 wrong-key/corrupt 解密反例均在准确用户终点证伪弱实现。
+- 2026-08-29 Android 更新正向切片没有新建设备方法：在既有页面可见性旅程和同一次 session/启动中增加 typed `AVAILABLE_STABLE` 场景，AppContainer 只替换外部 feed source，后续仍走生产 `UpdateManager`、ABI/版本/通道候选策略、Settings ViewModel/UI 与真实 SettingsRepository。用例要求准确 `9.9.9-quality` 状态、候选卡及 Install/Remind later 动作可达；执行 Remind later 后卡片消失、cooldown 可见，activity relaunch 后仍受抑制，再继续原 Events/Things 可见性闭环。最终 API 37 emulator focused 1/1 PASSED、8 秒、零产品重试；49 条更新/QualityRuntime JVM focused、androidTest 编译、Release APK/R8/Lint Vital 与 70 条影响/脚本合同均 PASSED。早期失败均因 Card/文本在 Compose 语义树中不是唯一 owner，最终删除重复文案断言并以 tagged 状态行和跨重启结果裁决，未修改产品行为求绿。Skip 与 Remind later 共享策略/持久化风险，暂不增加对称 UI 动作；真实下载、签名 APK、权限与系统安装器继续保留 Release/physical `NOT RUN`。
 
 ## 已完成切片的本轮证据
 
@@ -174,7 +175,7 @@
 
 ### 当前按成本收益排序的剩余队列
 
-1. **当前产品可达的正向 P0/P1**：Android 更新可用→稍后/跳过/安装交接的准确 UI 状态；仍可在既有主链合并的媒体查看/分享正向目的；真实可达的系统路由入口。开始前必须先反查生产入口，禁止为设计文档中的候选能力造测试专用功能；
+1. **当前产品可达的正向 P0/P1**：Android 更新可用→稍后与跨重启状态已完成；下一项优先选择能并入既有主链的媒体查看/分享正向目的或其他真实可达系统路由。Skip 不做对称设备覆盖；安装交接必须有真实签名 APK/隔离设备时进入 Release，而不是用替身冒充。开始前必须先反查生产入口，禁止为设计文档中的候选能力造测试专用功能；
 2. **发布环境高影响正向证据**：真实 APNs/FCM 到准确详情、通知权限恢复、安装升级、专用真机性能与 VoiceOver/TalkBack。缺签名、账号或专用设备时立即保持 `NOT RUN/BLOCKED` 并推进下一项；
 3. **有独有数据/事务风险的高影响反例**：只有 owner 变更或发布里程碑才运行现有补偿、错误成功态、进程死亡和数据损坏用例，不再占当前功能迁移主队列；
 4. **明确延期**：history cleanup 的 DST/cancel/failure 全矩阵、rollback 自身再失败 UI、非法/缺失深链笛卡尔积、多语言×字号×状态全排列、低频媒体失败组合。它们不删除，但在前两级仍有缺口时不投入设备时间。
