@@ -20,6 +20,7 @@ struct MessageSplitScreen: View {
     @State private var isPullRefreshing = false
     @State private var isPullRefreshSlow = false
     @State private var didPullRefreshFail = false
+    @State private var synchronizedMessageRevision: UUID?
 
     private let fixedListWidth: CGFloat = 300
 
@@ -166,7 +167,11 @@ struct MessageSplitScreen: View {
                     useNavigationContainer: false,
                     showsDeleteToolbarAction: false,
                 )
-                .id(displayedMessage.id)
+                // A store revision is part of the detail's data identity. Recreate the
+                // detail only after the selected canonical snapshot has synchronized to
+                // that revision; this prevents an older display seed from masquerading
+                // as current data without coupling the child to an unversioned snapshot.
+                .id("\(displayedMessage.id.uuidString)|\(synchronizedMessageRevision?.uuidString ?? "unsynchronized")")
             } else if let messageId = selection {
                 Color.clear
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -297,19 +302,23 @@ struct MessageSplitScreen: View {
         guard let messageId else {
             await MainActor.run {
                 selectedMessageSnapshot = nil
+                synchronizedMessageRevision = nil
             }
             return
         }
 
+        let revision = environment.messageStoreRevision
         let existingSnapshot = await MainActor.run { selectedMessageSnapshot }
-        if let existingSnapshot, existingSnapshot.id == messageId {
+        if let existingSnapshot,
+           existingSnapshot.id == messageId,
+           synchronizedMessageRevision == revision
+        {
             if markRead {
                 await markMessageReadIfNeeded(existingSnapshot, messageId: messageId)
             }
             return
         }
 
-        let revision = environment.messageStoreRevision
         let loadResult = await MessageDetailSnapshotCache.shared.loadMessage(
             id: messageId,
             revision: revision
@@ -320,6 +329,7 @@ struct MessageSplitScreen: View {
         await MainActor.run {
             guard selection == messageId else { return }
             selectedMessageSnapshot = loaded
+            synchronizedMessageRevision = revision
         }
         if let loaded {
             scheduleDetailImageMetadataPrime(for: loaded)

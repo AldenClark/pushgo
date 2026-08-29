@@ -90,7 +90,7 @@ class QualityImpactPlanTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(15, len(discoverable))
+        self.assertEqual(18, len(discoverable))
         self.assertEqual(
             discoverable,
             selected,

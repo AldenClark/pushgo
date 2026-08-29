@@ -13,7 +13,6 @@ final class MessageDetailViewModel {
     private let messageId: UUID
     private let localizationManager: LocalizationManager
     private let dataStore: LocalDataStore
-    private var seedMessage: PushMessage?
 
     init(
         environment: AppEnvironment? = nil,
@@ -36,7 +35,6 @@ final class MessageDetailViewModel {
         self.hasResolvedMessage = resolvedInitialMessage != nil
         self.localizationManager = localizationManager ?? LocalizationManager.shared
         dataStore = self.environment.dataStore
-        seedMessage = resolvedInitialMessage
         Task { @MainActor in
             await loadMessage()
         }
@@ -121,18 +119,13 @@ final class MessageDetailViewModel {
 
         let revision = environment.messageStoreRevision
         let resolvedMessage: PushMessage?
-        if let seeded = seedMessage {
-            seedMessage = nil
-            resolvedMessage = seeded
-        } else {
-            let result = await MessageDetailSnapshotCache.shared.loadMessage(
-                id: messageId,
-                revision: revision
-            ) { [dataStore, messageId] in
-                try await dataStore.loadMessage(id: messageId)
-            }
-            resolvedMessage = result.message
+        let result = await MessageDetailSnapshotCache.shared.loadMessage(
+            id: messageId,
+            revision: revision
+        ) { [dataStore, messageId] in
+            try await dataStore.loadMessage(id: messageId)
         }
+        resolvedMessage = result.message
 
         if let resolvedMessage {
             message = resolvedMessage

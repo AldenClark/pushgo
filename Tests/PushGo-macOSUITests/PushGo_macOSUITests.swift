@@ -93,7 +93,9 @@ final class PushGo_macOSUITests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
-        try closeProblemReporter(waitForDelayedAppearance: false)
+        // A crash dialog can be posted shortly after the App process exits. Require a
+        // quiet observation window before every journey so it cannot cover the next UI.
+        try closeProblemReporter(waitForDelayedAppearance: true)
     }
 
     override func tearDownWithError() throws {
@@ -683,7 +685,8 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testSettingsSidebarCanOpenDecryptionOverlay() {
+    // Superseded by the purpose-level decryption lifecycle and encrypted-message journeys.
+    func legacyDiagnosticSettingsSidebarCanOpenDecryptionOverlay() {
         let sessionID = "macos-decryption-overlay-\(UUID().uuidString.lowercased())"
         let context = configuredQualityApp(sessionID: sessionID, fixture: "empty.clean")
         launchQuality(context, sessionID: sessionID)
@@ -695,6 +698,265 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertTrue(decryptionButton.waitForExistence(timeout: 10))
         decryptionButton.click()
         assertVisibleScreenThroughUI("screen.settings.decryption", in: context.app)
+    }
+
+    @MainActor
+    func testSettingsDecryptionRejectsInvalidKeyPersistsAndClearsValidKey() {
+        let sessionID = "macos-decryption-life-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        launchQuality(context, sessionID: sessionID)
+
+        openSidebarTab("settings", in: context.app)
+        let initialAction = element(in: context.app, identifier: "action.settings.open_decryption")
+        XCTAssertTrue(initialAction.waitForExistence(timeout: 8) && initialAction.isHittable)
+        let initialLabel = initialAction.label
+        initialAction.click()
+
+        let keyField = element(in: context.app, identifier: "field.settings.decryption.key")
+        XCTAssertTrue(keyField.waitForExistence(timeout: 8))
+        replaceSecureText(in: keyField, with: "short")
+        element(in: context.app, identifier: "action.settings.decryption.save").click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "feedback.settings.decryption")
+                .waitForExistence(timeout: 5),
+            "An invalid key must remain actionable inside the decryption sheet."
+        )
+        XCTAssertTrue(keyField.exists, "Invalid input must not dismiss its owning editor.")
+        XCTAssertFalse(element(in: context.app, identifier: "feedback.settings.root").exists)
+
+        let validKey = String(repeating: "k", count: 32)
+        replaceSecureText(in: keyField, with: validKey)
+        element(in: context.app, identifier: "action.settings.decryption.save").click()
+        XCTAssertTrue(
+            keyField.waitForNonExistence(timeout: 8),
+            "A valid key may dismiss only after protected persistence succeeds."
+        )
+        let configuredAction = element(in: context.app, identifier: "action.settings.open_decryption")
+        XCTAssertTrue(configuredAction.waitForExistence(timeout: 8))
+        let configuredLabel = configuredAction.label
+        XCTAssertNotEqual(configuredLabel, initialLabel)
+
+        context.app.terminate()
+        let restored = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        launchQuality(restored, sessionID: sessionID)
+        openSidebarTab("settings", in: restored.app)
+        let restoredAction = element(in: restored.app, identifier: "action.settings.open_decryption")
+        XCTAssertTrue(restoredAction.waitForExistence(timeout: 8))
+        XCTAssertEqual(restoredAction.label, configuredLabel)
+        restoredAction.click()
+        let restoredField = element(in: restored.app, identifier: "field.settings.decryption.key")
+        XCTAssertTrue(restoredField.waitForExistence(timeout: 8))
+        XCTAssertNotEqual(
+            restoredField.value as? String,
+            validKey,
+            "Persisted secret material must never be echoed back into the UI."
+        )
+        element(in: restored.app, identifier: "action.settings.decryption.save").click()
+        XCTAssertTrue(restoredField.waitForNonExistence(timeout: 8))
+        XCTAssertEqual(
+            element(in: restored.app, identifier: "action.settings.open_decryption").label,
+            configuredLabel,
+            "Blank Save must preserve the already configured material."
+        )
+
+        restored.app.terminate()
+        let beforeClear = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        launchQuality(beforeClear, sessionID: sessionID)
+        openSidebarTab("settings", in: beforeClear.app)
+        let beforeClearAction = element(
+            in: beforeClear.app,
+            identifier: "action.settings.open_decryption"
+        )
+        XCTAssertEqual(beforeClearAction.label, configuredLabel)
+        beforeClearAction.click()
+        let clearAction = element(in: beforeClear.app, identifier: "action.settings.decryption.clear")
+        XCTAssertTrue(clearAction.waitForExistence(timeout: 8) && clearAction.isHittable)
+        clearAction.click()
+        XCTAssertTrue(clearAction.waitForNonExistence(timeout: 8))
+        XCTAssertEqual(
+            element(in: beforeClear.app, identifier: "action.settings.open_decryption").label,
+            initialLabel,
+            "Explicit Delete must restore the visible not-configured state."
+        )
+
+        beforeClear.app.terminate()
+        let cleared = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        launchQuality(cleared, sessionID: sessionID)
+        openSidebarTab("settings", in: cleared.app)
+        XCTAssertEqual(
+            element(in: cleared.app, identifier: "action.settings.open_decryption").label,
+            initialLabel,
+            "Deleted material must remain absent after a full process relaunch."
+        )
+    }
+
+    @MainActor
+    func testDecryptionProtectedStoreFailureDoesNotConfigureBeforeRetry() {
+        let sessionID = "macos-decryption-store-\(UUID().uuidString.lowercased())"
+        let failing = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            failNotificationMaterialPersistenceOnce: true
+        )
+        launchQuality(failing, sessionID: sessionID)
+        openSidebarTab("settings", in: failing.app)
+        let initialAction = element(in: failing.app, identifier: "action.settings.open_decryption")
+        XCTAssertTrue(initialAction.waitForExistence(timeout: 8))
+        let initialLabel = initialAction.label
+        initialAction.click()
+        let field = element(in: failing.app, identifier: "field.settings.decryption.key")
+        XCTAssertTrue(field.waitForExistence(timeout: 8))
+        replaceSecureText(in: field, with: String(repeating: "p", count: 32))
+        element(in: failing.app, identifier: "action.settings.decryption.save").click()
+        XCTAssertTrue(
+            element(in: failing.app, identifier: "feedback.settings.decryption")
+                .waitForExistence(timeout: 8),
+            "Protected-store failure must be owned by the decryption sheet."
+        )
+        XCTAssertTrue(field.exists, "Failed secret persistence must keep the editor open.")
+        XCTAssertFalse(element(in: failing.app, identifier: "feedback.settings.root").exists)
+
+        failing.app.terminate()
+        let retry = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        launchQuality(retry, sessionID: sessionID)
+        openSidebarTab("settings", in: retry.app)
+        let retryAction = element(in: retry.app, identifier: "action.settings.open_decryption")
+        XCTAssertTrue(retryAction.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            retryAction.label,
+            initialLabel,
+            "A failed protected write must remain unconfigured after restart."
+        )
+        retryAction.click()
+        let retryField = element(in: retry.app, identifier: "field.settings.decryption.key")
+        XCTAssertTrue(retryField.waitForExistence(timeout: 8))
+        replaceSecureText(in: retryField, with: String(repeating: "p", count: 32))
+        element(in: retry.app, identifier: "action.settings.decryption.save").click()
+        XCTAssertTrue(retryField.waitForNonExistence(timeout: 8))
+        XCTAssertNotEqual(
+            element(in: retry.app, identifier: "action.settings.open_decryption").label,
+            initialLabel,
+            "Only a successful retry may expose configured state."
+        )
+    }
+
+    @MainActor
+    func testEncryptedMessageWrongKeyThenCorrectKeyRecoversAndSurvivesRelaunch() {
+        let sessionID = "macos-encrypted-recovery-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.encrypted.valid"
+        )
+        launchQuality(context, sessionID: sessionID)
+
+        var encryptedRow = messageRow(containing: "Encrypted Quality Message", in: context.app)
+        XCTAssertTrue(encryptedRow.waitForExistence(timeout: 8))
+        encryptedRow.click()
+        assertVisibleScreenThroughUI("screen.message.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(context.app.staticTexts["Configure decryption to read this message."].exists)
+
+        openSidebarTab("settings", in: context.app)
+        openDecryptionEditor(in: context.app)
+        let wrongKeyField = element(in: context.app, identifier: "field.settings.decryption.key")
+        replaceSecureText(in: wrongKeyField, with: String(repeating: "Z", count: 16))
+        element(in: context.app, identifier: "action.settings.decryption.save").click()
+        XCTAssertTrue(wrongKeyField.waitForNonExistence(timeout: 8))
+
+        openSidebarTab("messages", in: context.app)
+        encryptedRow = messageRow(containing: "Encrypted Quality Message", in: context.app)
+        XCTAssertTrue(encryptedRow.waitForExistence(timeout: 8))
+        XCTAssertFalse(messageRow(containing: "Recovered Quality Message", in: context.app).exists)
+        encryptedRow.click()
+        XCTAssertTrue(
+            context.app.staticTexts["Configure decryption to read this message."].exists,
+            "A wrong but valid-length key must preserve the safe original fallback."
+        )
+        XCTAssertFalse(context.app.staticTexts["Recovered from the original encrypted payload."].exists)
+
+        openSidebarTab("settings", in: context.app)
+        openDecryptionEditor(in: context.app)
+        let correctKeyField = element(in: context.app, identifier: "field.settings.decryption.key")
+        replaceSecureText(in: correctKeyField, with: "QualityKey123456")
+        element(in: context.app, identifier: "action.settings.decryption.save").click()
+        XCTAssertTrue(correctKeyField.waitForNonExistence(timeout: 8))
+
+        openSidebarTab("messages", in: context.app)
+        let recoveredRow = messageRow(containing: "Recovered Quality Message", in: context.app)
+        XCTAssertTrue(
+            recoveredRow.waitForExistence(timeout: 8),
+            "The original canonical message must become readable after saving its matching key."
+        )
+        XCTAssertTrue(
+            (recoveredRow.value as? String)?
+                .contains("Recovered from the original encrypted payload.") == true
+        )
+        XCTAssertFalse(messageRow(containing: "Encrypted Quality Message", in: context.app).exists)
+        recoveredRow.click()
+        XCTAssertTrue(
+            context.app.staticTexts["Recovered from the original encrypted payload."]
+                .waitForExistence(timeout: 8)
+        )
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.encrypted.valid"
+        )
+        launchQuality(relaunched, sessionID: sessionID)
+        let persistedRow = messageRow(containing: "Recovered Quality Message", in: relaunched.app)
+        XCTAssertTrue(persistedRow.waitForExistence(timeout: 8))
+        persistedRow.click()
+        XCTAssertTrue(
+            relaunched.app.staticTexts["Recovered from the original encrypted payload."].exists,
+            "Recovered plaintext must survive a full process relaunch."
+        )
+    }
+
+    @MainActor
+    func testCorruptEncryptedMessageFailsSafelyAndSurvivesRelaunch() {
+        let sessionID = "macos-encrypted-corrupt-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.encrypted.corrupt"
+        )
+        launchQuality(context, sessionID: sessionID)
+
+        var corruptRow = messageRow(containing: "Corrupt Encrypted Message", in: context.app)
+        XCTAssertTrue(corruptRow.waitForExistence(timeout: 8))
+        corruptRow.click()
+        XCTAssertTrue(context.app.staticTexts["Configure decryption to read this message."].exists)
+        openSidebarTab("settings", in: context.app)
+        openDecryptionEditor(in: context.app)
+        let field = element(in: context.app, identifier: "field.settings.decryption.key")
+        replaceSecureText(in: field, with: "QualityKey123456")
+        element(in: context.app, identifier: "action.settings.decryption.save").click()
+        XCTAssertTrue(field.waitForNonExistence(timeout: 8))
+
+        openSidebarTab("messages", in: context.app)
+        corruptRow = messageRow(containing: "Corrupt Encrypted Message", in: context.app)
+        XCTAssertTrue(corruptRow.waitForExistence(timeout: 8))
+        XCTAssertFalse(messageRow(containing: "Recovered Quality Message", in: context.app).exists)
+        corruptRow.click()
+        XCTAssertTrue(
+            context.app.staticTexts["Configure decryption to read this message."].exists,
+            "Authenticated corrupt ciphertext must retain the safe fallback."
+        )
+        XCTAssertFalse(context.app.staticTexts["Recovered from the original encrypted payload."].exists)
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.encrypted.corrupt"
+        )
+        launchQuality(relaunched, sessionID: sessionID)
+        let persistedCorrupt = messageRow(
+            containing: "Corrupt Encrypted Message",
+            in: relaunched.app
+        )
+        XCTAssertTrue(persistedCorrupt.waitForExistence(timeout: 8))
+        persistedCorrupt.click()
+        XCTAssertTrue(relaunched.app.staticTexts["Configure decryption to read this message."].exists)
+        XCTAssertFalse(relaunched.app.staticTexts["Recovered from the original encrypted payload."].exists)
     }
 
     @MainActor
@@ -1757,6 +2019,7 @@ final class PushGo_macOSUITests: XCTestCase {
         failMessageLoad: Bool = false,
         failGatewaySwitchValidationOnce: Bool = false,
         failGatewaySwitchCommitOnce: Bool = false,
+        failNotificationMaterialPersistenceOnce: Bool = false,
         messageRefreshScenario: String? = nil,
         eventCloseScenario: String? = nil,
         channelMutationScenario: String? = nil
@@ -1780,6 +2043,7 @@ final class PushGo_macOSUITests: XCTestCase {
                 failMessageLoad: failMessageLoad,
                 failGatewaySwitchValidationOnce: failGatewaySwitchValidationOnce,
                 failGatewaySwitchCommitOnce: failGatewaySwitchCommitOnce,
+                failNotificationMaterialPersistenceOnce: failNotificationMaterialPersistenceOnce,
                 messageRefreshScenario: messageRefreshScenario,
                 eventCloseScenario: eventCloseScenario,
                 channelMutationScenario: channelMutationScenario
@@ -1830,6 +2094,7 @@ final class PushGo_macOSUITests: XCTestCase {
         failMessageLoad: Bool = false,
         failGatewaySwitchValidationOnce: Bool = false,
         failGatewaySwitchCommitOnce: Bool = false,
+        failNotificationMaterialPersistenceOnce: Bool = false,
         messageRefreshScenario: String? = nil,
         eventCloseScenario: String? = nil,
         channelMutationScenario: String? = nil
@@ -1838,6 +2103,7 @@ final class PushGo_macOSUITests: XCTestCase {
             "fail_message_load": failMessageLoad,
             "fail_gateway_switch_validation_once": failGatewaySwitchValidationOnce,
             "fail_gateway_switch_commit_once": failGatewaySwitchCommitOnce,
+            "fail_notification_material_persistence_once": failNotificationMaterialPersistenceOnce,
         ]
         if let messageLoadDelayMilliseconds {
             faults["message_load_delay_ms"] = messageLoadDelayMilliseconds
@@ -1953,6 +2219,19 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
+    private func openDecryptionEditor(in app: XCUIApplication) {
+        let action = element(in: app, identifier: "action.settings.open_decryption")
+        XCTAssertTrue(action.waitForExistence(timeout: 8) && action.isHittable)
+        action.click()
+        assertVisibleScreenThroughUI("screen.settings.decryption", in: app, timeout: 8)
+    }
+
+    @MainActor
+    private func messageRow(containing title: String, in app: XCUIApplication) -> XCUIElement {
+        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", title)).firstMatch
+    }
+
+    @MainActor
     private func assertVisibleScreen(
         _ screenIdentifier: String,
         in context: LaunchContext,
@@ -2019,6 +2298,35 @@ final class PushGo_macOSUITests: XCTestCase {
         field.click()
         field.typeKey("a", modifierFlags: .command)
         field.typeText(text)
+    }
+
+    @MainActor
+    private func replaceSecureText(in field: XCUIElement, with text: String) {
+        let pasteboard = NSPasteboard.general
+        let savedItems: [[NSPasteboard.PasteboardType: Data]] = pasteboard.pasteboardItems?.map { item in
+            Dictionary(uniqueKeysWithValues: item.types.compactMap { type in
+                item.data(forType: type).map { (type, $0) }
+            })
+        } ?? []
+        defer {
+            pasteboard.clearContents()
+            let restoredItems = savedItems.map { savedRepresentations in
+                let item = NSPasteboardItem()
+                for (type, data) in savedRepresentations {
+                    item.setData(data, forType: type)
+                }
+                return item
+            }
+            if !restoredItems.isEmpty {
+                pasteboard.writeObjects(restoredItems)
+            }
+        }
+
+        pasteboard.clearContents()
+        XCTAssertTrue(pasteboard.setString(text, forType: .string))
+        field.click()
+        field.typeKey("a", modifierFlags: .command)
+        field.typeKey("v", modifierFlags: .command)
     }
 
     @MainActor
