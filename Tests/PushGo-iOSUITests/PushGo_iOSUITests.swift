@@ -594,19 +594,24 @@ final class PushGo_iOSUITests: XCTestCase {
         launch(context.app)
 
         assertQualityRuntimeReady(in: context.app, timeout: 15)
-        XCTAssertTrue(context.app.staticTexts["Quality workflow 51"].waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            context.app.staticTexts["Quality workflow 124"].waitForExistence(timeout: 8),
+            "The first production page must start with the newest canonical object"
+        )
         assertMessagesTabBadgeCount(39, in: context.app)
         let markAll = element(in: context.app, identifier: "action.messages.mark_all_read")
         XCTAssertTrue(markAll.waitForExistence(timeout: 5))
 
         let list = runtimeQualityScrollableList(in: context.app)
         XCTAssertTrue(list.waitForExistence(timeout: 5))
-        let secondPageTarget = context.app.staticTexts["Quality workflow 0"]
-        for _ in 0..<14 where !secondPageTarget.exists {
+        let thirdPageTarget = context.app.staticTexts["Quality workflow 0"]
+        for _ in 0..<24 where !thirdPageTarget.exists {
             list.swipeUp()
-            RunLoop.current.run(until: Date().addingTimeInterval(0.15))
         }
-        XCTAssertTrue(secondPageTarget.waitForExistence(timeout: 5), "The item beyond page 1 was not reachable")
+        XCTAssertTrue(
+            thirdPageTarget.waitForExistence(timeout: 5),
+            "The oldest canonical object from production page 3 was not reachable"
+        )
 
         let unreadRow = element(
             in: context.app,
@@ -631,25 +636,36 @@ final class PushGo_iOSUITests: XCTestCase {
             .completed,
             "Opening the real detail must change the row's accessible read state"
         )
-        let messagesTab = context.app.buttons["tab.messages"]
-        for _ in 0..<14 where !messagesTab.exists {
-            list.swipeDown()
-            RunLoop.current.run(until: Date().addingTimeInterval(0.15))
-        }
-        XCTAssertTrue(markAll.waitForExistence(timeout: 5))
+        context.app.terminate()
+
+        let afterSingleRead = configuredLaunchContext()
+        afterSingleRead.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.workflow"
+        )
+        launch(afterSingleRead.app)
+        assertQualityRuntimeReady(in: afterSingleRead.app, timeout: 15)
         assertMessagesTabBadgeCount(
             38,
-            in: context.app,
-            message: "Reading one real message must decrement the navigation badge exactly once"
+            in: afterSingleRead.app,
+            message: "Reading one real message must persist and decrement the navigation badge exactly once"
         )
-        markAll.tap()
-        XCTAssertTrue(markAll.waitForNonExistence(timeout: 8), "All unread messages were not cleared")
+        let persistentMarkAll = element(
+            in: afterSingleRead.app,
+            identifier: "action.messages.mark_all_read"
+        )
+        XCTAssertTrue(persistentMarkAll.waitForExistence(timeout: 5))
+        persistentMarkAll.tap()
+        XCTAssertTrue(
+            persistentMarkAll.waitForNonExistence(timeout: 8),
+            "All unread messages were not cleared"
+        )
         assertMessagesTabBadgeCount(
             nil,
-            in: context.app,
+            in: afterSingleRead.app,
             message: "Marking all messages read must remove the navigation badge"
         )
-        context.app.terminate()
+        afterSingleRead.app.terminate()
 
         let relaunched = configuredLaunchContext()
         relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
@@ -681,7 +697,7 @@ final class PushGo_iOSUITests: XCTestCase {
             XCTAssertTrue(unreadFilter.waitForExistence(timeout: 5))
         }
         unreadFilter.tap()
-        XCTAssertTrue(relaunched.app.staticTexts["Quality workflow 51"].waitForExistence(timeout: 8))
+        XCTAssertTrue(relaunched.app.staticTexts["Quality workflow 124"].waitForExistence(timeout: 8))
         XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.empty").exists)
     }
 

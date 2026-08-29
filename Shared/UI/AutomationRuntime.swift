@@ -3740,7 +3740,7 @@ final class PushGoAutomationRuntime {
             entityRecords = []
             channelSubscriptions = []
         case .messagesWorkflow:
-            messages = (0..<52).map(qualityWorkflowFixtureMessage)
+            messages = (0..<125).map(qualityWorkflowFixtureMessage)
             entityRecords = []
             channelSubscriptions = []
         case .messagesFilters:
@@ -3974,7 +3974,10 @@ final class PushGoAutomationRuntime {
             "title": title,
             "body": body,
             "channel_id": index.isMultiple(of: 2) ? "workflow-alpha" : "workflow-beta",
-            "is_read": index.isMultiple(of: 4),
+            // The original 52-row workflow owns the read-state transition oracle.
+            // Extra rows extend the same journey across three production pages
+            // without inflating its unread badge or creating a second state matrix.
+            "is_read": index >= 52 || index.isMultiple(of: 4),
             "received_at": ISO8601DateFormatter().string(from: receivedAt),
             "raw_payload": [
                 "entity_type": "message",
