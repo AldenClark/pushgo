@@ -274,12 +274,29 @@ final class PushGo_iOSUITests: XCTestCase {
         let seeded = configuredLaunchContext()
         seeded.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
-            fixture: "messages.standard"
+            fixture: "messages.standard",
+            legacyStore: "messages.v17"
         )
 
         launch(seeded.app)
 
         assertQualityRuntimeReady(in: seeded.app, timeout: 15)
+        let legacyMessage = seeded.app.staticTexts["Legacy Upgrade Message"]
+        XCTAssertTrue(
+            legacyMessage.waitForExistence(timeout: 8),
+            "The production v17-to-current migration must preserve the legacy message in the real list."
+        )
+        legacyMessage.tap()
+        assertElementExists("sheet.message.detail", in: seeded.app, timeout: 8)
+        XCTAssertTrue(
+            seeded.app.staticTexts["Preserved through the production database migration."].exists,
+            "The migrated detail must retain the exact legacy body, not only a row count."
+        )
+        tapWhenHittable(
+            element(in: seeded.app, identifier: "action.message.close"),
+            timeout: 5,
+            message: "A migrated message must remain usable through the real detail flow."
+        )
         XCTAssertTrue(
             seeded.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8),
             "Seeded title was not rendered by the real message list"
@@ -308,7 +325,8 @@ final class PushGo_iOSUITests: XCTestCase {
         relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
             fixture: "messages.standard",
-            messageSearchDelayMilliseconds: 2_000
+            messageSearchDelayMilliseconds: 2_000,
+            legacyStore: "messages.v17"
         )
         launch(relaunched.app)
 
@@ -316,6 +334,10 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(
             relaunched.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8),
             "Canonical message did not survive a process relaunch"
+        )
+        XCTAssertTrue(
+            relaunched.app.staticTexts["Legacy Upgrade Message"].exists,
+            "The migrated canonical message must survive an ordinary process relaunch."
         )
         XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.empty").exists)
 
@@ -3460,6 +3482,7 @@ final class PushGo_iOSUITests: XCTestCase {
         messageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         messageSearchDelayMilliseconds: Int? = nil,
+        legacyStore: String? = nil,
         failMessageLoad: Bool = false,
         failGatewaySwitchValidationOnce: Bool = false,
         failGatewaySwitchCommitOnce: Bool = false,
@@ -3492,6 +3515,7 @@ final class PushGo_iOSUITests: XCTestCase {
             "fixture": fixture,
             "faults": faults,
         ]
+            .merging(legacyStore.map { ["legacy_store": $0] } ?? [:]) { _, new in new }
             .merging(messageRefreshScenario.map { ["message_refresh_scenario": $0] } ?? [:]) { _, new in new }
             .merging(eventCloseScenario.map { ["event_close_scenario": $0] } ?? [:]) { _, new in new }
             .merging(channelMutationScenario.map { ["channel_mutation_scenario": $0] } ?? [:]) { _, new in new }

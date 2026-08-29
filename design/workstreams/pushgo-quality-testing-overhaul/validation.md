@@ -221,6 +221,7 @@
 
 ## 双向覆盖反查
 
+- 数据谱系代表检查（iOS migration）：App-owned v17 `messages` 行（固定 message_id/title/body/unread）→普通 `GRDBStore` 打开执行 v18…v25 migrator→生产 stats/summary/search 派生重建→标准 fixture 经正式持久化写入同库→真实列表显示旧标题→真实详情显示准确旧正文→普通 relaunch 后旧、新对象同时保留。测试 Runner 不接触 DB 路径，readiness/marker 只裁决准备是否完成，不能让业务断言变绿。若旧行丢失、正文变化、迁移打不开、派生查询失败或重启丢失，既有单一正向旅程即失败；macOS/watchOS 不外推。
 - 源码→测试：消息 Store/Repository、Paging/VM、列表状态、Retry、fixture ingestion、Release resolver、Runner/teardown、CI lane 和生产本地化资源均有对应低层或纵向证据；两端全部已跟踪产品路径均至少命中一个具名能力规则，当前未映射为 0。大字体相关 Sheet 改动同时命中标准字号频道回归与 Accessibility Lane。
 - 测试→产品：新核心用例均能追到真实 App UI、Store/Paging/Projection 或 Release resolver；加密恢复明确追到 parser→canonical failed state→真实详情/Settings→reparse→同一 canonical/派生列表→relaunch；Channel 失败旅程追到真实 Sheet→远端 contract→本地多存储中点→本地回滚/远端补偿→页面正式重载→重试/relaunch；Android transport 追到真实 segmented control→ViewModel→Gateway route/token boundary→Room mode/secure token/device key→runtime/service→dialog/relaunch，且临时恢复旧错误行为会真实失败；本地化大字体旅程追到平台配置→实际 View/Activity 环境→真实消息详情→频道 Controller/Store→最终频道行，没有以孤立 helper、资源文件或环境命令自证。
 - 变更→最低证据：Message UI 命中准确内容/搜索/删除/relaunch，Store/Room 命中跨能力数据与 UI，Runtime 命中 Release 隔离，通知/系统消费者提升 Nightly/Release；未知 Screen 阻断，文档明确 `NOT_RUN`。

@@ -50,6 +50,19 @@ struct QualityRuntimeProfileTests {
         #expect(descriptor.messageRefreshScenario == .failOnceThenNewMessage)
     }
 
+    @Test("decodes the typed App-owned legacy store preparation")
+    func decodesLegacyStorePreparation() throws {
+        let encoded = try encodedSession(
+            sessionID: "legacy-store-result",
+            fixture: "messages.standard",
+            legacyStore: "messages.v17"
+        )
+
+        let descriptor = try PushGoAutomationContext.decodeQualitySession(encoded)
+
+        #expect(descriptor.legacyStore == .messagesV17)
+    }
+
     @Test("decodes the typed event close round trip")
     func decodesEventCloseScenario() throws {
         let encoded = try encodedSession(
@@ -395,6 +408,7 @@ struct QualityRuntimeProfileTests {
         messageRefreshScenario: String? = nil,
         eventCloseScenario: String? = nil,
         channelMutationScenario: String? = nil,
+        legacyStore: String? = nil,
         allowsSystemColdLaunch: Bool = false
     ) throws -> String {
         var payload: [String: Any] = [
@@ -413,6 +427,9 @@ struct QualityRuntimeProfileTests {
         }
         if let channelMutationScenario {
             payload["channel_mutation_scenario"] = channelMutationScenario
+        }
+        if let legacyStore {
+            payload["legacy_store"] = legacyStore
         }
         payload["allows_system_cold_launch"] = allowsSystemColdLaunch
         return try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])

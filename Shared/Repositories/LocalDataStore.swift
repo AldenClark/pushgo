@@ -591,6 +591,14 @@ actor LocalDataStore {
                 appGroupIdentifier: appGroupIdentifier
             )
             let storeURL = directory.appendingPathComponent(AppConstants.databaseStoreFilename)
+            #if DEBUG
+            if let legacyStore = PushGoAutomationContext.qualitySession?.legacyStore {
+                try GRDBStore.prepareQualityLegacyStoreIfNeeded(
+                    storeURL: storeURL,
+                    legacyStore: legacyStore
+                )
+            }
+            #endif
             resolvedBackend = try GRDBStore(storeURL: storeURL)
             resolvedStorageState = StorageState(mode: .persistent, reason: nil)
         } catch {
@@ -4237,6 +4245,87 @@ private actor GRDBStore {
         dbQueue = try DatabaseQueue(path: storeURL.path, configuration: configuration)
         try Self.migrator.migrate(dbQueue)
     }
+
+    #if DEBUG
+    /// Builds a single representative old store inside the App-owned quality
+    /// container. The UI runner never receives the database path and never
+    /// reads this store; the next normal `GRDBStore` open must run production
+    /// migrations before any user-visible oracle can pass.
+    static func prepareQualityLegacyStoreIfNeeded(
+        storeURL: URL,
+        legacyStore: PushGoQualityLegacyStore
+    ) throws {
+        guard !FileManager.default.fileExists(atPath: storeURL.path) else { return }
+        guard legacyStore == .messagesV17 else { return }
+
+        let dbQueue = try DatabaseQueue(path: storeURL.path)
+        try migrator.migrate(dbQueue)
+        try dbQueue.write { db in
+            try db.execute(sql: """
+                DROP TRIGGER IF EXISTS messages_stats_after_insert;
+                DROP TRIGGER IF EXISTS messages_stats_after_delete;
+                DROP TRIGGER IF EXISTS messages_stats_after_update;
+                DROP TRIGGER IF EXISTS messages_revision_after_update;
+                DROP TABLE IF EXISTS canonical_derived_work;
+                DROP TABLE IF EXISTS pending_local_deletions;
+                DROP TABLE IF EXISTS message_facet_index;
+                DROP TABLE IF EXISTS message_summary_projection;
+                DROP TABLE IF EXISTS message_derived_state;
+                DROP TABLE IF EXISTS message_channel_stats;
+                DROP TABLE IF EXISTS message_global_stats;
+                DROP TABLE IF EXISTS message_store_revision;
+                DROP INDEX IF EXISTS idx_messages_top_level_read_received;
+                DROP INDEX IF EXISTS idx_messages_top_level_channel_key_read_received;
+                DROP INDEX IF EXISTS idx_messages_top_level_channel_key_received;
+                DROP INDEX IF EXISTS idx_messages_entity_identity;
+                DELETE FROM grdb_migrations
+                WHERE identifier NOT IN (
+                    'v1_grdb_primary_store',
+                    'v2_watch_sync_state_columns',
+                    'v3_watch_provisioning_columns',
+                    'v4_watch_mode_control_state_columns',
+                    'v5_watch_mode_control_readiness_column',
+                    'v6_watch_publication_digest_columns',
+                    'v7_watch_light_notify_columns',
+                    'v7_system_integration_settings_column',
+                    'v8_rebuild_snake_case_schema',
+                    'v9_message_occurred_at_epoch',
+                    'v10_pending_inbound_messages',
+                    'v11_projection_epoch_millis',
+                    'v12_all_epoch_millis',
+                    'v13_watch_light_decryption_state_columns',
+                    'v14_provider_delivery_ack_outbox',
+                    'v15_drop_provider_delivery_ack_outbox',
+                    'v16_entity_projection_heads',
+                    'v17_watch_delivery_records'
+                );
+                """)
+            try db.execute(
+                sql: """
+                    INSERT INTO messages (
+                        id, message_id, title, body, channel, url, is_read, received_at,
+                        raw_payload_json, status, decryption_state, notification_request_id,
+                        delivery_id, operation_id, entity_type, entity_id, event_id, thing_id,
+                        projection_destination, event_state, event_time_epoch, observed_time_epoch,
+                        occurred_at_epoch, is_top_level_message
+                    ) VALUES (?, ?, ?, ?, ?, NULL, 0, ?, ?, 'received', NULL, ?, ?, NULL,
+                              'message', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1);
+                    """,
+                arguments: [
+                    "00000000-0000-0000-0000-000000000017",
+                    "quality-legacy-v17-message",
+                    "Legacy Upgrade Message",
+                    "Preserved through the production database migration.",
+                    "legacy-upgrade-channel",
+                    1_768_464_000.0,
+                    "{\"body\":\"Preserved through the production database migration.\",\"channel\":\"legacy-upgrade-channel\",\"channel_id\":\"legacy-upgrade-channel\",\"message_id\":\"quality-legacy-v17-message\",\"title\":\"Legacy Upgrade Message\"}",
+                    "quality-legacy-v17-notification",
+                    "quality-legacy-v17-delivery",
+                ]
+            )
+        }
+    }
+    #endif
 
     private static func applyJournalModeWALIfPossible(_ db: Database) throws {
         do {
