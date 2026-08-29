@@ -150,6 +150,47 @@ struct NotificationOpenControllerTests {
             #expect(opened.2 == "thing-system-001")
         }
     }
+
+    @Test
+    func latestSystemTargetReplacesEarlierPendingNavigation() async {
+        await withIsolatedLocalDataStore { store, _ in
+            let state = await Task { @MainActor in
+                let controller = NotificationOpenController(
+                    dataStore: store,
+                    localizationManager: LocalizationManager(),
+                    messageStateCoordinatorProvider: { nil },
+                    refreshCountsAndNotify: {},
+                    removeDeliveredNotificationIfNeeded: { _ in },
+                    autoEnableDataPage: { _ in },
+                    showToast: { _ in }
+                )
+                await controller.openSystemTarget(
+                    PushGoSystemOpenTarget(kind: .event, identifier: "event-001", source: .deepLink)!
+                )
+                await controller.openSystemTarget(
+                    PushGoSystemOpenTarget.list(kind: .thing, source: .deepLink)
+                )
+                let listReplacedDetail = (
+                    controller.pendingEventToOpen,
+                    controller.pendingListToOpen
+                )
+                await controller.openSystemTarget(
+                    PushGoSystemOpenTarget(kind: .event, identifier: "event-002", source: .deepLink)!
+                )
+                return (
+                    listReplacedDetail.0,
+                    listReplacedDetail.1,
+                    controller.pendingListToOpen,
+                    controller.pendingEventToOpen
+                )
+            }.value
+
+            #expect(state.0 == nil)
+            #expect(state.1 == .things)
+            #expect(state.2 == nil)
+            #expect(state.3 == "event-002")
+        }
+    }
 }
 
 private func makeStoredMessage(

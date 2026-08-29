@@ -65,6 +65,9 @@ final class NotificationOpenController {
 
     func openSystemTarget(_ target: PushGoSystemOpenTarget) async {
         if target.destination == .list {
+            pendingMessageToOpen = nil
+            pendingEventToOpen = nil
+            pendingThingToOpen = nil
             switch target.kind {
             case .message:
                 pendingListToOpen = .messages
@@ -180,6 +183,7 @@ final class NotificationOpenController {
                 return
             }
             autoEnableDataPage("message")
+            pendingListToOpen = nil
             pendingEventToOpen = nil
             pendingThingToOpen = nil
             pendingMessageToOpen = localMessageID
@@ -201,6 +205,7 @@ final class NotificationOpenController {
         let targetId = target.id
         autoEnableDataPage("message")
 
+        pendingListToOpen = nil
         pendingEventToOpen = nil
         pendingThingToOpen = nil
         pendingMessageToOpen = targetId
@@ -227,6 +232,7 @@ final class NotificationOpenController {
     }
 
     private func handleEntityOpenTarget(_ target: EntityOpenTarget) async {
+        pendingListToOpen = nil
         pendingMessageToOpen = nil
         if target.entityType == "event" {
             autoEnableDataPage("event")

@@ -16,7 +16,7 @@
 | --- | --- | --- |
 | rewrite | `testLaunchesIntoMessageList` | 不能只断言 screen id；改为 Empty/Content/Error 正确状态、可操作和无永久 Loading。 |
 | rewrite | `testAutomationRequestCanOpenChannelsScreen`、`testNavSwitchTabMatrixCoversPrimaryScreens` | 删除 Runtime 直接导航；改为真实 Tab 点击并检查目标页独有内容、选中和返回。 |
-| keep（已迁移） | `testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen` | 单次真实会话点击四个主入口及 Settings，并核对各目标页；替代 Runtime 导航矩阵进入 Nightly/Release。 |
+| keep（已迁移） | `testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen` | 单次真实会话先经已注册 `pushgo://` 外部入口打开准确 Message 及 Event/Thing 列表，再点击四个主入口及 Settings 并核对各目标页；替代 Runtime 导航矩阵进入 PR/Nightly/Release。 |
 | keep（已迁移） | `testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail` | 输入错误查询证明排除集合，再输入目标查询并打开准确正文；替代“App 没崩”Oracle。 |
 | keep（已迁移） | `testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch` | 从真实详情删除，验证行立即隐藏、Undo 可操作、重启后 canonical 对象仍在。 |
 | keep（新增目的级证据） | `testQualityMessageDeleteWithoutUndoPermanentlyRemovesOnlyTargetAcrossRelaunch` | 从准确目标详情删除但不撤销，等待生产 5 秒 deadline 自行提交；要求目标永久消失、无关控制消息字段准确，并在完整 App relaunch 后保持该差异。 |
@@ -46,7 +46,7 @@
 | 处置 | 当前测试 | 原因与替代终点 |
 | --- | --- | --- |
 | rewrite | `testLaunchesIntoMessageList` | 改为正确首屏状态、独有数据和可导航；不能只看 screen id。 |
-| keep/rewrite-oracle | `testSidebarNavigationCoversPrimaryScreens` | 已真实点击 Sidebar；补页面独有内容、选择、键盘/详情一致性。 |
+| keep（已迁移） | `testSidebarNavigationCoversPrimaryScreens` | 同一 App-owned 会话先经 macOS 已注册 `pushgo://` 打开准确 Message 与 Event/Thing 列表，再真实点击 Sidebar 完成五域准确内容；同时保留 unread 标题/badge 的几何、对比度与点击终点。 |
 | rewrite | `testAutomationRequestCanOpenChannelsScreen` | 删除 Runtime 导航，合入真实 Sidebar 旅程。 |
 | rewrite | `testImportedEventFixtureCanOpenEventDetailFromStartupRequest`、`testImportedThingFixtureCanOpenThingDetailFromStartupRequest` | 去宿主 Fixture 绝对路径和静默 return；从真实列表/系统路由打开并核对对象。 |
 | keep | `testSettingsSidebarCanOpenDecryptionOverlay` | 已从真实 Sidebar 和按钮进入；迁移公共 Launcher 后保留。 |
@@ -166,6 +166,7 @@ macOS 标准消息正向方法同时承担最低充分的 migration UI：App 在
 - 集成攻击：首次 `build-for-testing` 发现新文件只进入 SwiftPM、未进入 Xcode macOS Sources phase；组件测试绿色不能掩盖产品未集成。补齐工程 membership 后 macOS App + UI target 构建通过。
 - 测试系统归因：历史授权失败发生在测试方法进入前，因此当时正确记录为 `BLOCKED/NOT RUN`。授权恢复后，受控签名 Runner 的关闭→状态栏→唯一窗口旅程已升级为关闭期间在途 Provider 结果不丢失，并在当前字节 focused 1/1、23.397 秒、零重试通过（`build/quality-results/macos-ui/run-20260829-213145.xcresult`）；既有二十二条正式核心旅程仍由先前零重试 22/22 结果包 `build/quality-results/macos-ui-22-final/run-20260829-130358.xcresult` 证明，后续测试源码变化只使本条受影响证据需要刷新，不虚构整批已重跑。
 - 崩溃归因：主导航首次真实执行发现 Message `HSplitView` 切换到 Event/Thing `HSplitView` 会在 AppKit `SplitViewChildController` 约束更新循环中崩溃。固定 300pt 列本就不提供用户可调语义，故三个页面统一改为 `HStack + Divider`；对象优先和完整往返导航均通过。页面级 identifier 另改为独立 1×1 语义标记，避免覆盖后代业务元素。
+- 系统入口高密度正向切片：Widget、快捷指令、Spotlight/User Activity 最终共用 `PushGoSystemOpenTarget`，因此没有为每个系统表面复制一套设备用例，而是在两端既有主导航旅程内调用真实已注册 `pushgo://`：必须打开 fixture 中准确 Message 正文，再分别落到 Event/Thing 列表，随后继续原五域旅程。首轮 iOS 精确消息通过但 Event 列表失败，归因为系统目标在根视图监听建立前写入、初始选择未消费列表；共享 controller 也未完整清理旧目标。修复为“最新系统目标替代旧目标”并由两端初始导航消费 pending list。恢复后又删除了后半程重复打开同一 Message 详情的低收益步骤，只保留真实 Messages 控件→准确列表/行终点；最终 iOS 1/1、55.144 秒（`build/quality-results/ios/run-1-20260830-050356.xcresult`），macOS 1/1、42.227 秒（`build/quality-results/macos-ui/run-20260830-050516.xcresult`），均零重试，较未去重版本分别再省 5.682 秒与 1.778 秒。macOS 实跑还发现常规 App plist 未注册 scheme、只有 DMG 注册；现两种包均由语义合同要求包含 `pushgo`。这只证明共享外部路由终端，不外推 Siri、Widget 或 Spotlight 系统 UI 已通过。
 - Runner 卫生：正式 `scripts/run_macos_ui_tests.sh` 零重试，25 条可发现旅程全部被静态合同精确分入 16 条 `positive` 与 9 条 `risk`；普通 macOS Lane 只跑前者，Nightly/Release 跑两者并集，防止新增能力被静默漏跑。Apple PR 另只选择一条约 38 秒的 macOS `core.positive` 代表：同一次启动核对 unread 下“消息”标题与 badge 的可读/几何/对比度/点击终点，并打开准确 Message/Event/Thing、Channel 和 Settings；它不把 16 条完整正向集全部变成日常固定成本。删除 Undo 与 deadline 提交不再各付一份 fixture 和 relaunch：同一正向旅程以两个 canonical 对象先证明恢复，再证明提交和非目标不受损，最后一次 relaunch 同时裁决两者；当前字节 1/1、39.275 秒、零重试（`build/quality-results/macos-ui/run-20260830-002045.xcresult`），较原两条当前字节 55.562 秒节省约 29% 且少两次 App 启动。Runner 先通过 `IOConsoleLocked` 证明交互桌面已解锁，并在生命周期持有 `caffeinate` 防止长批次中途空闲锁屏；锁屏直接归测试系统 `BLOCKED`，不再误报产品激活失败。XCTest 在每条旅程的 `setUp/tearDown` 终止本用例启动的 App，并在前后各观察一个安静窗口、关闭 bundle id 精确匹配的系统 `Problem Reporter`；外层 Runner 另在整批开始前、结束后及中断/退出时按系统可执行路径精确清场，且测试期间每 200ms 持续监控延迟出现的新窗口，无法关闭同样归 `BLOCKED`。因此某条崩溃仍保留产品 `FAILED`，但弹窗不会遮挡后续旅程，也无需为每条方法重启一次不稳定的 UI-test Runner；方法进入前失败归 `BLOCKED`，已执行 Oracle 失败归产品 `FAILED`。精确进程清理的独立契约 3/3 通过：精确目标可关闭、无目标无副作用、批次中途新目标可关闭且监控继续存活。
 - Apple 本机交互门禁：`scripts/require_unlocked_apple_ui_console.sh` 现由 macOS、iOS Simulator 与 watchOS Simulator 三个正式 UI Runner 共用；锁屏时三者都在启动构建/模拟器和任何产品动作前退出 2、写入 `BLOCKED`，并分别报告 `macos`、`ios_simulator`、`watchos_simulator` 原因。当前真实锁屏负控三入口均精确命中；共享门禁及三个 Runner 也由影响选择器纳入 `quality-system-trustworthiness` 的 PR 证据，不再被脚本忽略规则归为 `NOT_RUN`。
 - 数据加载纵向样板：App-owned standard 数据验证真实行的准确 title/body 语义、真实详情和进程重启持久化；8 秒受控延迟必须先显示 slow 提示再进入准确空态；首次失败必须显示真实错误并由可点击 Retry 恢复。初版标准数据 Oracle 错把 VoiceOver 合并行当作 `staticTexts`，首轮精确失败后改为校验真实行的 label/value，详情根 identifier 也拆为独立 marker，避免吞掉详情内容。

@@ -1276,7 +1276,7 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    func testSidebarNavigationCoversPrimaryScreens() {
+    func testSidebarNavigationCoversPrimaryScreens() throws {
         let sessionID = "macos-navigation-\(UUID().uuidString.lowercased())"
         let context = configuredQualityApp(sessionID: sessionID, fixture: "core.positive")
         context.app.launchArguments += [
@@ -1310,17 +1310,30 @@ final class PushGo_macOSUITests: XCTestCase {
             "The selected Messages title must remain visibly readable."
         )
 
-        openSidebarTab("messages", in: context.app)
-        let message = element(
-            in: context.app,
-            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        context.app.open(
+            try XCTUnwrap(
+                URL(string: "pushgo://open?kind=message&id=00000000-0000-0000-0000-000000000001")
+            )
         )
-        XCTAssertTrue(message.waitForExistence(timeout: 8))
-        message.click()
         assertVisibleScreenThroughUI("screen.message.detail", in: context.app, timeout: 8)
         XCTAssertTrue(
             context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
-                .waitForExistence(timeout: 5)
+                .waitForExistence(timeout: 5),
+            "The registered macOS URL scheme must resolve the exact canonical Message."
+        )
+        context.app.open(try XCTUnwrap(URL(string: "pushgo://open?kind=event&id=list")))
+        assertVisibleScreenThroughUI("screen.events.list", in: context.app, timeout: 8)
+        context.app.open(try XCTUnwrap(URL(string: "pushgo://open?kind=thing&id=list")))
+        assertVisibleScreenThroughUI("screen.things.list", in: context.app, timeout: 8)
+
+        openSidebarTab("messages", in: context.app)
+        assertVisibleScreenThroughUI("screen.messages.list", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            element(
+                in: context.app,
+                identifier: "message.row.00000000-0000-0000-0000-000000000001"
+            ).waitForExistence(timeout: 8),
+            "The real Messages sidebar entry must return to the canonical list after system routing."
         )
 
         openSidebarTab("events", in: context.app)

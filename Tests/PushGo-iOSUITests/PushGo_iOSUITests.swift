@@ -1138,7 +1138,7 @@ final class PushGo_iOSUITests: XCTestCase {
         }
     }
 
-    func testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen() {
+    func testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen() throws {
         let context = configuredLaunchContext()
         let sessionID = "ios-navigation-\(UUID().uuidString.lowercased())"
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
@@ -1157,19 +1157,32 @@ final class PushGo_iOSUITests: XCTestCase {
         let tabs = context.app.tabBars.buttons
         XCTAssertGreaterThanOrEqual(tabs.count, 4, "The four primary product destinations must be reachable")
 
-        let message = context.app.staticTexts["P2 Split Seed Message"]
-        XCTAssertTrue(message.waitForExistence(timeout: 8))
-        message.tap()
+        context.app.open(
+            try XCTUnwrap(
+                URL(string: "pushgo://open?kind=message&id=00000000-0000-0000-0000-000000000001")
+            )
+        )
         assertElementExists("sheet.message.detail", in: context.app, timeout: 8)
         XCTAssertTrue(
             context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
                 .waitForExistence(timeout: 5),
-            "Messages is usable only when the selected canonical body is accurate."
+            "The real system URL must resolve the exact canonical Message."
         )
         tapWhenHittable(
             element(in: context.app, identifier: "action.message.close"),
             timeout: 5,
-            message: "The real Message detail must return to the primary journey"
+            message: "The system-routed Message detail must return to the App"
+        )
+        context.app.open(try XCTUnwrap(URL(string: "pushgo://open?kind=event&id=list")))
+        assertElementExists("screen.events.list", in: context.app, timeout: 8)
+        context.app.open(try XCTUnwrap(URL(string: "pushgo://open?kind=thing&id=list")))
+        assertElementExists("screen.things.list", in: context.app, timeout: 8)
+
+        tabs.element(boundBy: 0).tap()
+        assertElementExists("screen.messages.list", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8),
+            "The real Messages tab must return to the canonical list after system routing."
         )
 
         tabs.element(boundBy: 1).tap()

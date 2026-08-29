@@ -186,7 +186,7 @@
       "id": "system-surfaces",
       "paths": ["Shared/SystemIntegration/**", "Shared/UI/SystemIntegration*.swift", "Extensions/PushGoWidgets/**"],
       "capabilities": ["widgets", "controls-intents-shortcuts", "spotlight-user-activity", "live-activity-focus"],
-      "minimum_evidence": ["system surface privacy/router/snapshot contracts", "Release real-system checklist"],
+      "minimum_evidence": ["system surface privacy/router/snapshot contracts", "real registered external URL reaches exact Message and Event/Thing lists in the existing iOS and macOS primary positive journeys", "Release real-system checklist"],
       "lane": "nightly",
       "known_evidence_gaps": ["physical Widget/Intent/Shortcut/Spotlight/Focus/Live Activity entry evidence remains NOT RUN."],
       "escalation_reasons": ["System surfaces are independently failing consumers and cannot be inferred from the main App UI."]

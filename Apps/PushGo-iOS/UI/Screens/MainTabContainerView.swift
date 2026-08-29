@@ -38,7 +38,10 @@ struct MainTabContainerView: View {
             .task {
                 guard !didRefreshAuthorizationStatus else { return }
                 didRefreshAuthorizationStatus = true
-                if environment.notificationOpenController.pendingMessageToOpen != nil {
+                if let pendingList = environment.pendingSystemListToOpen {
+                    selection = pendingList
+                    environment.pendingSystemListToOpen = nil
+                } else if environment.notificationOpenController.pendingMessageToOpen != nil {
                     selection = .messages
                 } else if environment.notificationOpenController.pendingThingToOpen != nil {
                     selection = .things
