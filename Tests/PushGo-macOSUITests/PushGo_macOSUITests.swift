@@ -1269,7 +1269,36 @@ final class PushGo_macOSUITests: XCTestCase {
     func testSidebarNavigationCoversPrimaryScreens() {
         let sessionID = "macos-navigation-\(UUID().uuidString.lowercased())"
         let context = configuredQualityApp(sessionID: sessionID, fixture: "core.positive")
+        context.app.launchArguments += [
+            "-AppleLanguages", "(zh-Hans)",
+            "-AppleLocale", "zh_CN",
+        ]
         launchQuality(context, sessionID: sessionID)
+
+        let messagesTitle = context.app.staticTexts["sidebar-messages"]
+        let unreadBadge = context.app.staticTexts["sidebar.messages.unread_badge"]
+        XCTAssertTrue(messagesTitle.waitForExistence(timeout: 8))
+        XCTAssertTrue(unreadBadge.waitForExistence(timeout: 8))
+        XCTAssertEqual(messagesTitle.value as? String, "消息")
+        XCTAssertGreaterThan(
+            Int(unreadBadge.value as? String ?? "") ?? 0,
+            0,
+            "The broad positive fixture must exercise navigation with a real unread count."
+        )
+        XCTAssertGreaterThanOrEqual(
+            messagesTitle.frame.width,
+            24,
+            "The full two-glyph Messages title must remain visible when the unread badge is present."
+        )
+        XCTAssertGreaterThan(
+            unreadBadge.frame.minX,
+            messagesTitle.frame.maxX + 4,
+            "The unread badge must not cover the Messages title."
+        )
+        XCTAssertTrue(
+            hasReadableForegroundContrast(in: messagesTitle.screenshot()),
+            "The selected Messages title must remain visibly readable."
+        )
 
         openSidebarTab("messages", in: context.app)
         let message = element(

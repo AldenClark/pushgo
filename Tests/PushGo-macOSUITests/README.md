@@ -2,7 +2,7 @@
 
 ## Current executable scope
 
-The target now exposes twenty-two XCTest-discoverable, App-owned journeys:
+The target now exposes twenty-five XCTest-discoverable, App-owned journeys:
 
 - App-owned empty-state launch and functional message-list readiness;
 - accurate standard message row/detail data and process-relaunch persistence;
@@ -16,7 +16,7 @@ The target now exposes twenty-two XCTest-discoverable, App-owned journeys:
 - accurate Event row/detail data, confirmed close through the production-shaped delivery path, closed-state persistence, and no repeated close action;
 - Event close failure/retry with visible in-flight feedback, no duplicate action, detail-owned error, unchanged canonical ongoing state after rejection, production-shaped delivery on retry, and relaunch persistence;
 - accurate Thing identity/summary, real Event/Message/Update relation details, working Sheet return, and relaunch persistence;
-- real Sidebar navigation across primary destinations;
+- one-start PR Sidebar navigation across accurate Message, Event, Thing, Channel, and Settings destinations, with the selected Simplified-Chinese Messages title still visibly readable, non-overlapping, and clickable beside a real unread badge;
 - decryption lifecycle through real Settings controls: invalid input stays in its Sheet, valid protected material persists without echo, blank Save preserves it, and explicit Delete survives relaunch;
 - protected-material persistence failure remains owned by the Sheet, does not expose configured state after restart, and only a real retry may configure it;
 - encrypted-message purpose outcomes: a wrong valid-length key preserves the safe fallback, the matching key recovers the exact canonical title/body across relaunch, and corrupt ciphertext remains safely unreadable;
@@ -26,7 +26,7 @@ The target now exposes twenty-two XCTest-discoverable, App-owned journeys:
 - local Gateway commit failure with immediate and process-relaunch rollback, followed by a successful real-control retry;
 - close/status-item/reopen window lifecycle with one functional window.
 
-The 19 host-path/command/state methods are named `legacyDiagnostic...` and no longer use XCTest's `test...` discovery convention. Their green results never counted as product coverage. The twenty-two current journeys use the App-owned quality session and real accessibility UI; they do not read the App database or state files from the host test process. Thing filter/deep-link/delete, notification action/reconciliation, and performance journeys remain explicit gaps until replaced by App-owned user-purpose tests.
+The 19 host-path/command/state methods are named `legacyDiagnostic...` and no longer use XCTest's `test...` discovery convention. Their green results never counted as product coverage. The twenty-five current journeys use the App-owned quality session and real accessibility UI; they do not read the App database or state files from the host test process. Thing filter/deep-link/delete, notification action/reconciliation, and performance journeys remain explicit gaps until replaced by App-owned user-purpose tests.
 
 ## Run
 

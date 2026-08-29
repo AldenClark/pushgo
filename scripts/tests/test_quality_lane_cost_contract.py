@@ -49,6 +49,12 @@ class QualityLaneCostContractTests(unittest.TestCase):
             'claims+=("iOS explicitly selected UI journeys: $requested_scopes")',
             runner,
         )
+        self.assertIn(
+            'macos_pr_ui_scope="PushGo-macOSUITests/PushGo_macOSUITests/testSidebarNavigationCoversPrimaryScreens"',
+            runner,
+        )
+        pr_body = runner.split("  pr)\n", 1)[1].split("    ;;", 1)[0]
+        self.assertEqual(1, pr_body.count('TEST_SCOPES="$macos_pr_ui_scope" run_macos_ui positive'))
 
     def test_real_macos_update_install_is_release_or_focused_only(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()
