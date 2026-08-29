@@ -114,6 +114,13 @@ status=${PIPESTATUS[0]}
 set -e
 
 if [[ $status -eq 0 ]]; then
+  if ! python3 "$repo_root/scripts/verify_apple_test_execution.py" --result-bundle "$result_bundle"; then
+    [[ -z "$runner_status_file" ]] || printf 'FAILED\n' > "$runner_status_file"
+    echo "status=FAILED_TEST_SYSTEM"
+    echo "reason=selected_watchos_ui_scope_executed_zero_tests"
+    echo "result_bundle=$result_bundle"
+    exit 3
+  fi
   echo "status=PASSED"
   echo "log=$log_file"
   echo "result_bundle=$result_bundle"

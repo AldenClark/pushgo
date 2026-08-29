@@ -4,6 +4,9 @@
 
 **体系改造进行中，不能宣称完成。** Runtime/环境底座及 Messages、Entity、Channel、Settings、数据层性能、代表性本地化/大字体任务已有多条高价值纵向证据，但设计第 21.2 节的完成条件尚未满足。WP3–WP6 仍有当前产品可达能力和真实平台证据未迁移。低价值边缘组合不进入日常门禁，但这不能用于延期高频 P0 功能。
 
+- 2026-08-29 未读导航状态转换与零测试假绿切片：在 macOS 动态侧边栏事故已完成“标题+badge 同时可读”的基础上，三端消息旅程继续要求真实读取/all-read 后导航投影与 canonical 状态同步。macOS 当前 focused 1/1 证明中文“消息”+badge=2 的几何/对比度/点击终点，并完成 2→1→消失→进程重启不回（`build/quality-results/macos-ui/run-20260829-140749.xcresult`）；iOS focused 1/1 完成 39→38→消失→重启不回及未读筛选往返（`build/quality-results/ios/run-1-20260829-141719.xcresult`）。Android 首轮把向上跨页后按设计隐藏的 Bottom Navigation 误报为 badge 不同步；判别实验先证明 canonical Room 已为 38，随后测试用真实 swipe-down 恢复导航再核对 39→38→消失→activity relaunch，不留下非因果 Repository 修改，最终 focused 真实执行 1/1 PASSED。期间错误方法名让 Gradle 明确 `Starting 0 tests` 却被旧脚本记为 PASSED，暴露严重假绿；新 fresh-XML 门禁要求执行数大于 0，同一错误 filter 负控现为产品 `NOT_RUN` / test-system `FAILED`、空 `executed_claims`，真实 filter 输出 `executed_test_count=1` 后才可通过。体系结论升级为：动态视觉代表态必须同时证明原目的和装饰，状态型装饰还要覆盖高价值业务转换；所有 selected scope 必须证明实际非零执行。
+- 当前受影响集合也已新鲜复验：Android `pr-ui` 真实执行 28/28、零 skipped/failure，`android-pr-ui-summary.json` 为 product/test-system 双 `PASSED`；Apple `quality_changed.sh` 完成 53 条影响/脚本合同、完整 Core、本地化合同及 iOS 12/12 高价值旅程，`apple-pr-summary.json` 双 `PASSED`，UI 结果包为 `build/quality-results/ios/run-1-20260829-142456.xcresult`。非零执行门禁同时覆盖 Android App device/Macrobenchmark 报告和 Apple iOS/macOS/watchOS/物理性能/系统通知原生 xcresult：macOS 错误方法名负控确认 Xcode 原先会 `Executed 0 tests` 仍退出 0 并报 `PASSED`（`macos-ui-zero-negative/run-20260829-143338.xcresult`），门禁后相同输入退出 3、报告 `FAILED_TEST_SYSTEM`（`macos-ui-zero-guarded/run-20260829-143445.xcresult`）；真实侧边栏方法随后由门禁确认 `executed_test_count=1` 并通过（`macos-ui-nonzero-guard-final/run-20260829-143456.xcresult`），iOS 同一消息状态旅程也在新 Runner 上确认 1/1（`ios-nonzero-guard-final/run-1-20260829-143619.xcresult`）。历史 Macrobenchmark 报告可解析 2 条，未来时间戳负控精确返回 `FAILED_TEST_SYSTEM/no_fresh_android_test_report`，但本轮没有为该脚本收口额外消耗完整性能 Lane 预算。
+
 ## 工作包真实状态（2026-08-28 重新核账）
 
 | 工作包 | 状态 | 已证明 | 尚未完成、不能被现有绿色替代 |

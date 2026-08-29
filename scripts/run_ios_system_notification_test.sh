@@ -210,6 +210,14 @@ if [[ $test_status -ne 0 ]]; then
   exit 1
 fi
 
+if ! python3 "$repo_root/scripts/verify_apple_test_execution.py" --result-bundle "$result_bundle"; then
+  set_runner_status FAILED
+  echo "status=FAILED_TEST_SYSTEM"
+  echo "reason=selected_ios_system_notification_scope_executed_zero_tests"
+  echo "result_bundle=$result_bundle"
+  exit 3
+fi
+
 set_runner_status PASSED
 echo "status=PASSED"
 echo "result_bundle=$result_bundle"

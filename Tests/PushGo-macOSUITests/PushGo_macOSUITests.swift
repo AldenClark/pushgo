@@ -271,6 +271,52 @@ final class PushGo_macOSUITests: XCTestCase {
                 .waitForExistence(timeout: 8),
             "The readable Messages entry must remain a functional navigation target."
         )
+
+        let firstUnread = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c002"
+        )
+        XCTAssertTrue(firstUnread.waitForExistence(timeout: 8))
+        firstUnread.click()
+        XCTAssertTrue(
+            context.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000002."
+            ].waitForExistence(timeout: 8)
+        )
+        XCTAssertEqual(
+            waitForValue("1", in: badge, timeout: 8),
+            true,
+            "Opening one real unread message must decrement the sidebar badge exactly once."
+        )
+
+        let secondUnread = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c001"
+        )
+        XCTAssertTrue(secondUnread.waitForExistence(timeout: 8))
+        secondUnread.click()
+        XCTAssertTrue(
+            context.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000001."
+            ].waitForExistence(timeout: 8)
+        )
+        XCTAssertTrue(
+            badge.waitForNonExistence(timeout: 8),
+            "Reading the final unread message must remove the sidebar badge."
+        )
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(sessionID: sessionID, fixture: "channels.standard")
+        relaunched.app.launchArguments += [
+            "-AppleLanguages", "(zh-Hans)",
+            "-AppleLocale", "zh_CN",
+        ]
+        launchQuality(relaunched, sessionID: sessionID)
+        XCTAssertFalse(
+            relaunched.app.staticTexts["sidebar.messages.unread_badge"]
+                .waitForExistence(timeout: 3),
+            "The cleared sidebar badge must not return after process relaunch."
+        )
     }
 
     @MainActor
@@ -3255,6 +3301,22 @@ final class PushGo_macOSUITests: XCTestCase {
             RunLoop.current.run(until: Date().addingTimeInterval(0.2))
         }
         return identifiers.contains { element(in: app, identifier: $0).exists }
+    }
+
+    @MainActor
+    private func waitForValue(
+        _ expectedValue: String,
+        in element: XCUIElement,
+        timeout: TimeInterval
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if element.exists, element.value as? String == expectedValue {
+                return true
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        return element.exists && element.value as? String == expectedValue
     }
 
     @MainActor

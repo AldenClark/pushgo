@@ -357,6 +357,7 @@ final class PushGo_iOSUITests: XCTestCase {
 
         assertQualityRuntimeReady(in: context.app, timeout: 15)
         XCTAssertTrue(context.app.staticTexts["Quality workflow 51"].waitForExistence(timeout: 8))
+        assertMessagesTabBadgeCount(39, in: context.app)
         let markAll = element(in: context.app, identifier: "action.messages.mark_all_read")
         XCTAssertTrue(markAll.waitForExistence(timeout: 5))
 
@@ -392,10 +393,24 @@ final class PushGo_iOSUITests: XCTestCase {
             .completed,
             "Opening the real detail must change the row's accessible read state"
         )
-
+        let messagesTab = context.app.buttons["tab.messages"]
+        for _ in 0..<14 where !messagesTab.exists {
+            list.swipeDown()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.15))
+        }
         XCTAssertTrue(markAll.waitForExistence(timeout: 5))
+        assertMessagesTabBadgeCount(
+            38,
+            in: context.app,
+            message: "Reading one real message must decrement the navigation badge exactly once"
+        )
         markAll.tap()
         XCTAssertTrue(markAll.waitForNonExistence(timeout: 8), "All unread messages were not cleared")
+        assertMessagesTabBadgeCount(
+            nil,
+            in: context.app,
+            message: "Marking all messages read must remove the navigation badge"
+        )
         context.app.terminate()
 
         let relaunched = configuredLaunchContext()
@@ -409,6 +424,11 @@ final class PushGo_iOSUITests: XCTestCase {
             element(in: relaunched.app, identifier: "action.messages.mark_all_read")
                 .waitForExistence(timeout: 3),
             "Read state was reset when the App relaunched"
+        )
+        assertMessagesTabBadgeCount(
+            nil,
+            in: relaunched.app,
+            message: "The cleared unread badge must not return after process relaunch"
         )
         element(in: relaunched.app, identifier: "action.messages.filter").tap()
         let unreadFilter = element(in: relaunched.app, identifier: "filter.unread_only")
@@ -2993,6 +3013,36 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertEqual(result, .completed, message, file: file, line: line)
         guard result == .completed else { return }
         element.tap()
+    }
+
+    private func assertMessagesTabBadgeCount(
+        _ expectedCount: Int?,
+        in app: XCUIApplication,
+        timeout: TimeInterval = 8,
+        message: String = "The Messages navigation badge did not match canonical unread state",
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let messagesTab = app.buttons["tab.messages"]
+        XCTAssertTrue(
+            messagesTab.waitForExistence(timeout: timeout),
+            "The real Messages tab must exist before its badge can be verified",
+            file: file,
+            line: line
+        )
+        let deadline = Date().addingTimeInterval(timeout)
+        var actualCount = messagesTabBadgeCount(messagesTab)
+        while actualCount != expectedCount, Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+            actualCount = messagesTabBadgeCount(messagesTab)
+        }
+        XCTAssertEqual(actualCount, expectedCount, message, file: file, line: line)
+    }
+
+    private func messagesTabBadgeCount(_ messagesTab: XCUIElement) -> Int? {
+        guard let value = messagesTab.value as? String else { return nil }
+        let digits = value.filter(\.isNumber)
+        return digits.isEmpty ? nil : Int(digits)
     }
 
     private func channelsTab(in app: XCUIApplication) -> XCUIElement {

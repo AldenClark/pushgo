@@ -77,6 +77,12 @@ status=${PIPESTATUS[0]}
 set -e
 
 if [[ $status -eq 0 ]]; then
+  if ! python3 "$repo_root/scripts/verify_apple_test_execution.py" --result-bundle "$result_bundle"; then
+    echo "status=FAILED_TEST_SYSTEM"
+    echo "reason=selected_ios_physical_performance_scope_executed_zero_tests"
+    echo "result_bundle=$result_bundle"
+    exit 3
+  fi
   echo "status=PASSED"
   echo "result_bundle=$result_bundle"
   echo "log=$log_file"

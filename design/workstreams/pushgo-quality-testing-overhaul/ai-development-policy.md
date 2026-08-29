@@ -40,6 +40,8 @@
 
 Identifier 只负责稳定定位；readiness 只证明准备完成；Automation State 只帮助归因。三者均不能代替业务结果。
 
+显式 filter/only-testing 还必须从本轮原生报告证明至少实际执行一条非 skipped 测试；构建成功、Gradle/Xcode 退出 0、只发现 skipped 测试或生成空报告都不能把 selected claim 写入 executed claim。零实际执行统一记为产品 `NOT_RUN`、测试系统 `FAILED`，并用错误方法名/范围及全 skipped 报告作为门禁负控。
+
 ## 价值预算规则
 
 优先级依次为：核心高频旅程、本次和历史事故、数据损坏/丢失、错误成功态、不可恢复操作、发布平台边界。风险等价的输入和设备只选代表例；广输入空间下沉 property/parameterized test。只有存在真实事故、明确兼容合同/安全义务或实现成本极低时，极端边缘场景才进入阻断自动化。

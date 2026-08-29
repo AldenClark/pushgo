@@ -61,6 +61,8 @@ on_exit() {
     write_result PASSED "$runner_status"
   elif [[ $status -eq 2 ]]; then
     write_result NOT_RUN BLOCKED "lane preparation was blocked before product evidence completed"
+  elif [[ $status -eq 3 ]]; then
+    write_result NOT_RUN FAILED "the selected Apple test scope executed zero tests; no product claim was completed"
   else
     write_result FAILED "$runner_status" "an executed product oracle failed; inspect xcresult/log for the first failure"
   fi

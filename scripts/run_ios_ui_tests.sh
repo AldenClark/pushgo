@@ -142,6 +142,13 @@ until [[ $attempt -gt $((max_retries + 1)) ]]; do
   echo "==> test-without-building (attempt ${attempt}/$((max_retries + 1)))"
 
   if run_test_once "$log_file" "$result_bundle"; then
+    if ! python3 "$repo_root/scripts/verify_apple_test_execution.py" --result-bundle "$result_bundle"; then
+      [[ -z "$runner_status_file" ]] || printf 'FAILED\n' > "$runner_status_file"
+      echo "status=FAILED_TEST_SYSTEM"
+      echo "reason=selected_ios_ui_scope_executed_zero_tests"
+      echo "result_bundle=$result_bundle"
+      exit 3
+    fi
     rm -f "$log_file"
     echo "status=PASSED"
     echo "result_bundle=$result_bundle"
