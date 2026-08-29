@@ -13,6 +13,10 @@
 
 注册表与分类脚本属于 `quality-system-trustworthiness`，修改后最低进入 PR 代表证据。两端 `quality_changed.sh` 的单元发现会每日检查到期、未知 ID、隔离替代证据和产品断言负控；每个 `quality_test.sh` 也会在 Lane 开始前再次检查。
 
+两端 Lane 还会在编译或启动设备前执行结果盘预检：Apple 默认要求至少 5 GiB 可用，Android 默认要求至少 3 GiB，并在结果目录完成一次真实写入、flush 与 `fsync`。容量不足或目录不可写直接生成 `product NOT_RUN / test-system BLOCKED`，不消耗设备时间，也不把环境 I/O 失败误写为产品 Oracle 失败；阈值只允许通过 `QUALITY_MIN_FREE_BYTES` 在受控环境显式调整。2026-08-29 的里程碑首轮在约 414 MiB 可用空间下分别出现 Core 临时写入断言和 Android UTP 结果落盘失败，清理可再生历史产物后聚焦 Core 3/3、Apple Core 415/415 与 Android 正向 12/12 均恢复，成为该闸门的根因证据。
+
+`quality_test.sh` 还会在入口把自身完整内容交给新的 Bash 进程执行，运行中不再继续读取仓库文件。这样长时设备批次与同一工作区中的后续 AI 编辑互不干扰；2026-08-29 的 iOS 产品证据已 12/12 封存后，原进程因脚本被并发插入代码而在收据阶段错读 `case` 偏移，该快照边界专门消除此类“产品已跑完、外层收尾才损坏”的无效成本。
+
 ## 当前 active 登记
 
 | ID | 类型 | Owner | 重试 | 到期/性质 | 允许影响的范围 |
@@ -98,5 +102,7 @@ Android XML 分类器只读取本轮开始时间后的报告；陈旧 XML 不参
 - 没有 active ID 的 `FLAKY` 收据：拒绝生成；
 - `PASSED` 携带 issue ID、未知/已 resolved ID：拒绝生成；
 - quarantine 无替代证据：schema 校验失败。
+- 可写目录且容量满足：盘预检 READY；不可能容量阈值：在任何产品测试前精确 BLOCKED。
+- 启动后修改仓库中的 Lane 脚本：运行进程继续执行入口时捕获的完整快照，不混读新旧字节。
 
 这套治理解决“谁负责、何时到期、为何允许归因、收据如何追踪”，但不代替连续两周观察。当前 WP7 仍为 `PARTIAL`，直到 active flake 被真实关闭或按新证据短期续期、观察窗口完成且旧 Runtime 弱证据退役。

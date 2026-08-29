@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ "${PUSHGO_APPLE_QUALITY_SCRIPT_SNAPSHOT:-0}" != "1" ]]; then
+  script_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+  export PUSHGO_APPLE_QUALITY_SCRIPT_SNAPSHOT=1
+  export PUSHGO_APPLE_QUALITY_REPO_ROOT="$(cd "$(dirname "$script_path")/.." && pwd)"
+  exec /bin/bash -s -- "$@" < "$script_path"
+fi
+
+repo_root="${PUSHGO_APPLE_QUALITY_REPO_ROOT:?missing quality script repository root}"
 lane="${1:-pr}"
 results_root="$repo_root/build/quality-results"
 result_file="$results_root/apple-$lane-summary.json"
@@ -41,8 +48,8 @@ write_result() {
     --test-system-status "$test_system_status"
   )
   local item
-  for item in "${selected_claims[@]}"; do args+=(--selected-claim "$item"); done
-  for item in "${claims[@]}"; do args+=(--claim "$item"); done
+  for item in "${selected_claims[@]-}"; do [[ -z "$item" ]] || args+=(--selected-claim "$item"); done
+  for item in "${claims[@]-}"; do [[ -z "$item" ]] || args+=(--claim "$item"); done
   for item in "${not_run[@]}"; do args+=(--not-run "$item"); done
   if [[ -f "$runner_issue_file" ]]; then
     while IFS= read -r item; do
@@ -73,6 +80,12 @@ trap on_exit EXIT
 if ! python3 "$repo_root/scripts/quality_test_system_issues.py" --check; then
   echo "status=BLOCKED"
   echo "reason=invalid_or_expired_apple_test_system_issue_registry"
+  exit 2
+fi
+
+if ! python3 "$repo_root/scripts/quality_disk_preflight.py" \
+  --path "$results_root" \
+  --minimum-free-bytes "${QUALITY_MIN_FREE_BYTES:-5368709120}"; then
   exit 2
 fi
 
