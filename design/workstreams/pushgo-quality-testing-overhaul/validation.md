@@ -241,6 +241,7 @@
 - 低价值边缘：不可达导出 helper、未挂载 MenuBar 内容、100k 日常执行、全语言全设备故障组合明确延期或删除候选，避免挤占核心预算。
 - 稳定入口报告形式覆盖攻击：若只给测试源码增加 `app.buttons["action.x"]` 而没有执行或业务断言，生产/测试交集确实会出现，但报告状态只能是 `REFERENCE_FOUND_SEMANTIC_ORACLE_NOT_PROVEN`，且整个 JSON 不含 `PASSED`；生产未引用与测试侧孤儿分别保留源码位置并进入可达性/动态 owner 审查。注释中的 identifier 和带插值的动态模板不会伪装成稳定生产合同。该报告只帮助发现候选，能力矩阵、真实终点和运行证据仍是裁决者，故不能用数量下降冒充质量提高。
 - 日常成本反查：Apple PR 设备方法仍只有 4 条 iOS + 1 条 macOS，覆盖主导航/五个目的页、准确消息与媒体/搜索/relaunch、跨页 read/badge、Gateway 成功切换，以及 macOS 动态未读 badge 与主侧栏；分页数据从 125→52 不改变生产 `pageSize=50`，因此仍必须触发第二次生产查询。Gateway 的失败注入不再消耗 PR，但专门 Nightly 方法继续断言 malformed/rejected candidate 留在 Sheet、host 无错误、旧 gateway 不被覆盖；Core `candidateGatewayPreparationUsesFreshRemoteIdentityWithoutLocalMutation` 继续裁决先验证/注册后提交的顺序。故成本下降来自重复手势/负向分层，不是删除业务目的。
+- **“为了完整正向信心必须顺带支付风险矩阵”攻击**：旧入口只有 4 条 PR 或包含 13 条正向+15 条风险的 Nightly，开发者若想确认所有主要正向目的，只能多付故障注入成本，最终容易放弃全量正向或先跑低价值负向。蓝方新增 `ios-positive`，只调用共享 `run_ios_positive`，静态合同禁止其引用风险集合并锁定零重试；当前真实执行 13/13、789.524 秒通过，收据 selected/executed 只有一项“完整 App-owned 正向旅程”，风险与物理系统缺口不得被外推。红方成本反查逐条看耗时和独有终点：长旅程只有在同时杀死多个 P0/P1 缺陷时保留，单字段组合、对称启动、失败注入和系统边缘态不得回流。残余 `common-mode-risk`：Lane、合同、价值判定和本轮审查来自同一上下文；需要用后续真实变更的漏选率/发现缺陷数/分钟持续校准，而不是把 13/13 当永久最优。
 
 ## 残余风险与进入条件
 

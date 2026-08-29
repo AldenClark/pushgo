@@ -124,7 +124,7 @@ Quality session 不再只隔离 GRDB：server config、decryption material metad
 
 `config/quality-impact.json` 把当前产品源码分配到 Messages、Entity、Channel/Settings、Ingress、系统表面、Watch、App shell、共享 UI/媒体、Performance 和 Release 等具名能力。`scripts/quality_changed.sh` 先执行选择器负控，再运行不低于推荐值的真实 Lane；独立性能测试/runner 变更选择 `performance`，与产品规则同时变化则提升到同时执行功能和性能的 `release`。新产品路径未映射时直接 `BLOCKED`。这只是确定性下限，不能替代对 caller、Store、错误分支和平台消费者的语义追踪。
 
-PR 的固定设备预算现只投向 4 条最高密度正向链：`core.positive` 跨域核心旅程、标准消息 migration/media/search/relaunch、分页/已读持久化、Gateway 候选注册→切换→换域→relaunch。`core.positive` 不是空页面矩阵：同一个 App-owned Store 通过正式摄入提供 Message、Event、Thing 和 Channel，iOS 一次启动核对准确 Message 详情、Event 详情并完成真实关闭、Thing 准确对象、Channel 准确订阅与 Settings；macOS 一次启动继续打开 Message/Event/Thing 准确详情、Channel 行和 Settings。最终当前字节分别为 iOS 40.085 秒、macOS 35.756 秒、均 1/1 且零重试。其余 9 条正向生命周期组成 `extended_positive_ui_scopes`，继续保护历史清理、Markdown、筛选、刷新、Event relaunch/filter、Thing 三关系/删除/relaunch、Channel 全生命周期、页面显隐和解密恢复；它们在 Nightly/Release 或 owner 变更 focused 执行，未被删除，也不从跨域 Smoke 外推。最近 13 条旧 PR 业务方法按同版本证据约 800 秒；在把明确 P0 的 125 条三页分页纳入后，新 4 条约 294 秒，预计仍减少约 63%。Nightly/Release 明确先完成 13 条正向并记录 claim，再启动故障、损坏和补偿集；正向失败会由 `set -e` 阻止继续浪费负向预算。静态合同锁定 4/13 分层、scope 唯一可发现和正向先于负向。
+PR 的固定设备预算现只投向 4 条最高密度正向链：`core.positive` 跨域核心旅程、标准消息 migration/media/search/relaunch、分页/已读持久化、Gateway 候选注册→切换→换域→relaunch。`core.positive` 不是空页面矩阵：同一个 App-owned Store 通过正式摄入提供 Message、Event、Thing 和 Channel，iOS 一次启动核对准确 Message 详情、Event 详情并完成真实关闭、Thing 准确对象、Channel 准确订阅与 Settings；macOS 一次启动继续打开 Message/Event/Thing 准确详情、Channel 行和 Settings。最终当前字节分别为 iOS 40.085 秒、macOS 35.756 秒、均 1/1 且零重试。其余 9 条正向生命周期组成 `extended_positive_ui_scopes`，继续保护历史清理、Markdown、筛选、刷新、Event relaunch/filter、Thing 三关系/删除/relaunch、Channel 全生命周期、页面显隐和解密恢复；它们在里程碑正向聚合或 owner 变更 focused 执行，未被删除，也不从跨域 Smoke 外推。正式 `scripts/quality_test.sh ios-positive` 只执行 13 条 App-owned 正向旅程、强制零业务重试并生成独立六态收据；当前字节 13/13、789.524 秒通过（`build/quality-results/ios/run-1-20260830-074151.xcresult`），15 条风险/故障 scope 未被选择。Nightly/Release 仍先完成同一 13 条正向并记录 claim，再启动故障、损坏和补偿集；正向失败会由 `set -e` 阻止继续浪费负向预算。静态合同锁定 4/13 分层、`ios-positive` 不得引用风险集合、scope 唯一可发现和正向先于负向。
 
 macOS Runner 不再把正向与故障旅程无差别作为普通默认：`positive` 集为 16 条，优先覆盖首次使用、准确内容/Markdown、筛选/清理、频道生命周期、删除 Undo→恢复→再次删除→提交的完整正向生命周期、慢加载/慢刷新预警、窗口恢复、主导航、Event/Thing、Settings/Decryption 正常生命周期和 Gateway 正常切换；`risk` 集为 9 条，承载 Store 初始化失败、加载/刷新/Event 失败、受保护写失败、错钥匙/坏密文、非法地址和 Gateway 本地提交补偿。独立 `macos` Lane 默认只跑 `positive`，Nightly/Release 明确跑 `full=positive+risk`。静态合同要求两集合互斥、16/9 成本固定且并集精确等于全部 25 条可发现旅程，因此提速不能靠静默漏测。
 
@@ -134,7 +134,7 @@ macOS 标准消息正向方法同时承担最低充分的 migration UI：App 在
 
 ## 设备测试价值/成本审计与止损
 
-当前设备预算先证明“用户能否完成主要目的”，而不是先穷举所有失败姿势。日常开发默认只跑影响选择得到的 focused + 必要低层；Apple PR 固定为 iOS 4 条高密度核心正向，完整 iOS 13 条正向、Android 完整正向和 macOS 16 条正向进入 Nightly/Release或对应 owner focused。四条 PR 不是把全部深度压成 Smoke：跨域核心负责广泛可用性，另三条分别承担迁移/媒体/搜索、分页/已读持久化和高风险 Gateway 事务；Event/Thing/Channel/Settings 的深层生命周期仍由扩展集保留。空态、搜索等能被同 fixture 同启动证明的结果已经合并；六个清理档位、重复的单字段组合和对称第三次启动不复制成设备用例。
+当前设备预算先证明“用户能否完成主要目的”，而不是先穷举所有失败姿势。日常开发默认只跑影响选择得到的 focused + 必要低层；Apple PR 固定为 iOS 4 条高密度核心正向；需要完整产品正向信心但不需要故障注入时，使用 iOS 13 条 `ios-positive`、Android 完整正向和 macOS 16 条 `macos`；只有 Nightly/Release 或对应风险 owner 变更才追加风险集合。四条 PR 不是把全部深度压成 Smoke：跨域核心负责广泛可用性，另三条分别承担迁移/媒体/搜索、分页/已读持久化和高风险 Gateway 事务；Event/Thing/Channel/Settings 的深层生命周期仍由扩展集保留。空态、搜索等能被同 fixture 同启动证明的结果已经合并；六个清理档位、重复的单字段组合和对称第三次启动不复制成设备用例。
 
 用例进入日常正向集合需同时满足三点：它保护尚未由其他旅程证明的真实用户目的；最终 Oracle 是准确功能/数据/持久化结果而非文件、版本或控件存在；它不能以更低层合同或并入现有旅程的方式同等证明。新增能力默认先尝试复用已有 fixture、同一进程和既有 relaunch；若只是增加一个元素存在断言、重复相同存储机制、或只验证测试接入点，拒绝进入设备 Lane。测试 ID 只负责定位，不计作覆盖收益。
 

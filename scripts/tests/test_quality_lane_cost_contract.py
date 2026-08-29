@@ -39,6 +39,12 @@ class QualityLaneCostContractTests(unittest.TestCase):
         )
         self.assertIn('positive_ui_scopes="$pr_ui_scopes,$extended_positive_ui_scopes"', runner)
         self.assertIn('nightly_ui_scopes="$positive_ui_scopes,$nightly_negative_ui_scopes"', runner)
+        ios_positive_body = runner.split("  ios-positive)\n", 1)[1].split("    ;;", 1)[0]
+        self.assertEqual(1, ios_positive_body.count("run_ios_positive"))
+        self.assertNotIn("nightly_negative_ui_scopes", ios_positive_body)
+        positive_function = runner.split("run_ios_positive() {", 1)[1].split("\n}", 1)[0]
+        self.assertIn('TEST_SCOPES="$positive_ui_scopes"', positive_function)
+        self.assertIn("MAX_RETRIES=0", positive_function)
         self.assertLess(
             runner.index('TEST_SCOPES="$positive_ui_scopes"'),
             runner.index('TEST_SCOPES="$nightly_negative_ui_scopes"'),
