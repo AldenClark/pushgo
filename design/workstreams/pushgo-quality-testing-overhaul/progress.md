@@ -209,7 +209,7 @@
 
 ### 当前按成本收益排序的剩余队列
 
-1. **当前产品可达的正向 P0/P1**：Android 更新可用→稍后与跨重启状态、Apple 两端媒体查看→可消费文件→系统分享面板已完成；下一项仅选择能并入既有主链的其他真实可达系统路由。Skip 不做对称设备覆盖；安装交接必须有真实签名 APK/隔离设备时进入 Release，而不是用替身冒充。开始前必须先反查生产入口，禁止为设计文档中的候选能力造测试专用功能；
+1. **当前产品可达的正向 P0/P1**：Android 更新可用→稍后与跨重启状态、Apple 两端媒体查看→可消费文件→系统分享面板、iOS Settings→Safari 官方文档域名均已完成；后续仍只选择能并入既有主链、且具有独有用户终点的真实系统路由。Skip 不做对称设备覆盖；文档 page×locale 不做设备矩阵；安装交接必须有真实签名 APK/隔离设备时进入 Release，而不是用替身冒充。开始前必须先反查生产入口，禁止为设计文档中的候选能力造测试专用功能；
 2. **发布环境高影响正向证据**：真实 APNs/FCM 到准确详情、通知权限恢复、安装升级、专用真机性能与 VoiceOver/TalkBack。缺签名、账号或专用设备时立即保持 `NOT RUN/BLOCKED` 并推进下一项；
 3. **有独有数据/事务风险的高影响反例**：只有 owner 变更或发布里程碑才运行现有补偿、错误成功态、进程死亡和数据损坏用例，不再占当前功能迁移主队列；
 4. **明确延期**：history cleanup 已有 30 days 正向范围代表，但 DST/cancel/failure 和其他范围全矩阵继续延期；rollback 自身再失败 UI、非法/缺失深链笛卡尔积、多语言×字号×状态全排列、低频媒体失败组合同样不投入当前设备时间。
@@ -228,3 +228,5 @@
 - 2026-08-29 Apple 历史清理正向代表切片：新增共享 `messages.cleanup` App-owned fixture，仅包含相对当前时间 45 天的删除目标和 2 天的保留控制；共享 Range/Confirm/Done 使用稳定生产可访问性标识，iOS/macOS 各一条短旅程从真实筛选入口选择 30 days，要求旧行消失、控制行保留、未读 badge 2→1 且进程重启后差异持久。最终生产字节 iOS 1/1（45.456s，`build/quality-results/ios/run-1-20260829-232733.xcresult`）、macOS 1/1（36.157s，`build/quality-results/macos-ui/run-20260829-232429.xcresult`），均零 retry。临时把 30-day cutoff 改为 1 天时 iOS 精确失败于 2 天控制消息消失，恢复为 30 天后重新通过；首次运行还发现父级状态标识吞掉确认按钮的测试接入点缺陷，删除该低价值父标识后通过。日常 PR 只增加 iOS 这一条代表链（12→13）；macOS 放入其 Nightly/Release 默认集，不为 6 个范围、cancel/failure/DST 复制 UI 测试。脚本/影响合同 66/66 通过；全路径选择器因共享 Runtime/UI 变化保守推荐 `release`，本切片按当前“正向优先、控制预算”要求只执行两端 focused 与必要编译，Release 聚合明确 `NOT RUN`，留待里程碑汇总而不重复所有负向、通知、Watch 与性能波次。
 
 - 2026-08-29 macOS Lane 成本治理：将 26 条可发现旅程显式拆成 16 条 `positive` 与 10 条 `risk`。普通 `scripts/quality_test.sh macos` 只执行正向集合；Nightly/Release 显式使用 `full`，不会把风险用例删除或假装覆盖。正向集合保留首次使用、准确内容、筛选/清理、频道、真实删除、慢态预警、窗口/导航、Event/Thing、Settings/Decryption 和 Gateway 正常切换；故障初始化、Undo、各种失败恢复、坏密文与提交补偿移入风险集。合同要求 16/10 互斥且并集等于全部 26 条，并禁止 Fatal/Failure/Corrupt/WrongKey/Undo/InvalidServer/LocalCommitFailure 类回流普通集合；完整脚本/影响合同 66/66 通过。该调整减少普通 macOS 波次约 38% 的方法启动数，同时保留 Full 的完整发现性。
+
+- 2026-08-30 正向系统路由成本审计：没有新增 UI 方法、fixture、PushGo 启动或测试专用产品入口；在已有 iOS 主导航旅程尾部复用已到达的 Settings 页面，点击生产 Getting Started 控件，要求真实 Safari 前台且系统可访问性树出现 `pushgo.dev`。精确 Getting Started path 及全部 page×locale 映射仍由快速 `PushGoDocumentationTests` 裁决，设备层只抽一个代表性 handoff。最终当前字节 focused 1/1、59.749 秒、零重试，结果包 `build/quality-results/ios/run-1-20260830-052754.xcresult`。首次运行真实拉起 Safari，但误把页面标题 TextField 当地址值而失败；归因为系统 UI Oracle 选择错误，改用域名可访问性谓词后通过，没有修改产品求绿。红蓝反查：Settings action 不存在/不可点、未切到 Safari、打开非 `pushgo.dev` 均会失败；精确 path 错误由低层合同失败；它不证明 macOS handoff、公网页面内容/SLA 或离线恢复。此前 macOS Cmd-Space 与 iOS SpringBoard swipe-down 两次 Spotlight 判别运行都在产品结果前找不到系统 SearchField，分别保留 `run-20260830-052001.xcresult` 与 `run-1-20260830-052332.xcresult` 为 `BLOCKED_TEST_SYSTEM/NOT RUN`，停止 bundle×手势×等待猜测并转向可执行正向链。该切片以一条约 60 秒设备旅程同时保护外部 route、五个主目的页和浏览器 handoff，是当前比新建文档/语言/平台矩阵更低成本、更广覆盖的方案；同上下文审计仍有 common-mode risk，未冒充独立评审。

@@ -1238,6 +1238,32 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(settings.isHittable)
         settings.tap()
         assertElementExists("screen.settings", in: context.app, timeout: 8)
+
+        let gettingStarted = scrollToHittableElement(
+            identifier: "action.settings.open_getting_started_docs",
+            in: context.app
+        )
+        tapWhenHittable(
+            gettingStarted,
+            timeout: 8,
+            message: "The real Settings documentation action must remain usable"
+        )
+        let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
+        XCTAssertTrue(
+            safari.wait(for: .runningForeground, timeout: 10),
+            "The documentation action must hand off to the real system browser."
+        )
+        let browserAddress = safari.descendants(matching: .any).matching(
+            NSPredicate(
+                format: "label CONTAINS[c] %@ OR value CONTAINS[c] %@",
+                "pushgo.dev",
+                "pushgo.dev"
+            )
+        ).firstMatch
+        XCTAssertTrue(
+            browserAddress.waitForExistence(timeout: 8),
+            "Safari must expose the official pushgo.dev destination selected by Settings."
+        )
     }
 
     func testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch() {
