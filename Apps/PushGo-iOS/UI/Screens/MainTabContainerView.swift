@@ -146,7 +146,7 @@ struct MainTabContainerView: View {
         case .things:
             await entityViewModel.reloadThings()
         case .channels:
-            break
+            await messageListViewModel.refreshChannelSummaries()
         }
         ensureSelectionIsVisible()
     }
@@ -217,7 +217,10 @@ struct MainTabContainerView: View {
                 .tag(MainTab.things)
             }
 
-            ChannelManagementScreen()
+            ChannelManagementScreen(
+                channelSummaries: messageListViewModel.channelSummaries,
+                channelSummariesLoadState: messageListViewModel.channelSummariesLoadState
+            )
                 .tabItem {
                     Label(LocalizationManager.localizedSync("channels"), systemImage: "dot.radiowaves.left.and.right")
                         .accessibilityIdentifier("tab.channels")

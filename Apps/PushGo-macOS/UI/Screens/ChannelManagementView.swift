@@ -22,6 +22,8 @@ struct ChannelManagementView: View {
     @State private var subscribeChannelPassword = ""
     @State private var isSubscribeSubmitting = false
     @State private var channelEntryErrorMessage: String?
+    let channelSummaries: [MessageChannelSummary]
+    let channelSummariesLoadState: MessageChannelSummariesLoadState
 
     var body: some View {
         navigationContainer {
@@ -203,6 +205,19 @@ struct ChannelManagementView: View {
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                         }
+
+                        Text(
+                            localizedMessageChannelActivityText(
+                                identifier: channelId,
+                                summaries: channelSummaries,
+                                loadState: channelSummariesLoadState,
+                                localizationManager: localizationManager
+                            )
+                        )
+                        .font(.caption)
+                        .foregroundStyle(Color.appTextSecondary)
+                        .lineLimit(2)
+                        .accessibilityIdentifier("channel.stats.\(channelId)")
                     }
 
                     Spacer(minLength: 12)

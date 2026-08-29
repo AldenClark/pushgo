@@ -541,6 +541,22 @@ final class PushGo_macOSUITests: XCTestCase {
         )
 
         openSidebarTab("channels", in: context.app)
+        let keepActivity = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000001"
+        )
+        XCTAssertTrue(keepActivity.waitForExistence(timeout: 8))
+        XCTAssertTrue(keepActivity.label.contains("1 条消息"))
+        XCTAssertTrue(keepActivity.label.contains("0 条未读"))
+        let keepLatestDate = ISO8601DateFormatter().date(from: "2026-01-15T08:01:00Z")!
+        let keepLatestText = keepLatestDate.formatted(
+            Date.FormatStyle(date: .abbreviated, time: .shortened)
+                .locale(Locale(identifier: "zh_Hans_CN"))
+        )
+        XCTAssertTrue(
+            keepActivity.label.contains(keepLatestText),
+            "Reading messages must update the Channel row while retaining its latest canonical time."
+        )
         element(in: context.app, identifier: "action.channels.add").click()
         let entryMode = element(in: context.app, identifier: "select.channels.entry.mode")
         XCTAssertTrue(entryMode.waitForExistence(timeout: 8))

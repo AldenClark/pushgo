@@ -1988,6 +1988,22 @@ final class PushGo_iOSUITests: XCTestCase {
             timeout: 8,
             message: "Channels must be reachable"
         )
+        let keepActivity = element(
+            in: context.app,
+            identifier: "channel.stats.01H00000000000000000000001"
+        )
+        XCTAssertTrue(keepActivity.waitForExistence(timeout: 8))
+        XCTAssertTrue(keepActivity.label.contains("1 messages"))
+        XCTAssertTrue(keepActivity.label.contains("1 unread"))
+        let keepLatestDate = ISO8601DateFormatter().date(from: "2026-01-15T08:01:00Z")!
+        let keepLatestText = keepLatestDate.formatted(
+            Date.FormatStyle(date: .abbreviated, time: .shortened)
+                .locale(Locale(identifier: "en_US"))
+        )
+        XCTAssertTrue(
+            keepActivity.label.contains(keepLatestText),
+            "The Channel row must expose the latest canonical message time, not only its subscription."
+        )
         let subscribedChannelID = "01H00000000000000000000004"
         tapWhenHittable(
             element(in: context.app, identifier: "action.channels.add"),

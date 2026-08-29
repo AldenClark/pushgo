@@ -1756,6 +1756,46 @@
         }
       }
     },
+    "channel_stats_empty" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No messages" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "暂无消息" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "暫無訊息" } }
+      }
+    },
+    "channel_stats_loading" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Loading activity…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在加载动态…" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "正在載入動態…" } }
+      }
+    },
+    "channel_stats_no_recent" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No recent message" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "暂无最近消息" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "暫無最近訊息" } }
+      }
+    },
+    "channel_stats_summary" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%1$d messages · %2$d unread · Latest %3$@" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "%1$d 条消息 · %2$d 条未读 · 最近 %3$@" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "%1$d 則訊息 · %2$d 則未讀 · 最近 %3$@" } }
+      }
+    },
+    "channel_stats_unavailable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Activity unavailable" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "动态暂不可用" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "動態暫不可用" } }
+      }
+    },
     "current_number_messages" : {
       "extractionState" : "manual",
       "localizations" : {

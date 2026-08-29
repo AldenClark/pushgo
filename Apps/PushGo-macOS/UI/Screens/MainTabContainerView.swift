@@ -45,6 +45,10 @@ struct MainTabContainerView: View {
                 }
                 ensureSidebarSelectionIsVisible()
             }
+            .task(id: activeTab) {
+                guard activeTab == .channels else { return }
+                await messageListViewModel.refreshChannelSummaries()
+            }
             .task {
                 for await _ in NotificationCenter.default.notifications(named: .pushgoOpenSettingsFromMenuBar) {
                     sidebarSelection = .settings
@@ -263,7 +267,10 @@ struct MainTabContainerView: View {
                 }
             )
         case .channels:
-            ChannelManagementView()
+            ChannelManagementView(
+                channelSummaries: messageListViewModel.channelSummaries,
+                channelSummariesLoadState: messageListViewModel.channelSummariesLoadState
+            )
         case .settings:
             SettingsView()
         }

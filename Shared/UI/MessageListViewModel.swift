@@ -57,6 +57,38 @@ struct MessageChannelSummary: Identifiable, Hashable {
     var hasUnread: Bool { unreadCount > 0 }
 }
 
+enum MessageChannelSummariesLoadState: Equatable {
+    case idle
+    case loading
+    case loaded
+    case failed
+}
+
+@MainActor
+func localizedMessageChannelActivityText(
+    identifier: String,
+    summaries: [MessageChannelSummary],
+    loadState: MessageChannelSummariesLoadState,
+    localizationManager: LocalizationManager
+) -> String {
+    guard loadState == .loaded else {
+        return loadState == .failed
+            ? localizationManager.localized("channel_stats_unavailable")
+            : localizationManager.localized("channel_stats_loading")
+    }
+    guard let summary = summaries.first(where: { $0.id == "channel-\(identifier)" }) else {
+        return localizationManager.localized("channel_stats_empty")
+    }
+    let latest = summary.latestReceivedAt?.formatted(date: .abbreviated, time: .shortened)
+        ?? localizationManager.localized("channel_stats_no_recent")
+    return localizationManager.localized(
+        "channel_stats_summary",
+        summary.totalCount,
+        summary.unreadCount,
+        latest
+    )
+}
+
 @MainActor
 @Observable
 final class MessageListViewModel {
@@ -86,6 +118,7 @@ final class MessageListViewModel {
     private(set) var selectedChannels: Set<MessageChannelKey> = []
     private(set) var selectedTags: Set<String> = []
     private(set) var channelSummaries: [MessageChannelSummary] = []
+    private(set) var channelSummariesLoadState: MessageChannelSummariesLoadState = .idle
     private(set) var tagSummaries: [MessageTagCount] = []
     private(set) var hasLoadedOnce: Bool = false
     private(set) var loadState: MessageListLoadState = .idle
@@ -172,8 +205,16 @@ final class MessageListViewModel {
         guard shouldLoadChannelSummaries == false else { return }
         shouldLoadChannelSummaries = true
         Task { @MainActor in
-            await refreshCountsAndChannels()
+            await refreshChannelSummaries()
         }
+    }
+
+    func refreshChannelSummaries() async {
+        shouldLoadChannelSummaries = true
+        if channelSummariesLoadState != .loaded {
+            channelSummariesLoadState = .loading
+        }
+        await refreshCountsAndChannels()
     }
 
     func setFilter(_ filter: MessageFilter) {
@@ -701,6 +742,7 @@ final class MessageListViewModel {
                 if shouldLoadChannelSummaries {
                     let rawChannels = try await dataStore.messageChannelCounts()
                     channelSummaries = buildChannelSummaries(from: rawChannels)
+                    channelSummariesLoadState = .loaded
                     tagSummaries = try await dataStore.messageTagCounts()
                     let knownKeys = Set(channelSummaries.map(\.key))
                     selectedChannels = selectedChannels.intersection(knownKeys)
@@ -713,6 +755,9 @@ final class MessageListViewModel {
             } catch {
                 await refreshCounts()
                 channelSummaries = []
+                if shouldLoadChannelSummaries {
+                    channelSummariesLoadState = .failed
+                }
                 tagSummaries = []
             }
         } while pendingCountsAndChannels

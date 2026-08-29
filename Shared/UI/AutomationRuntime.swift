@@ -3673,13 +3673,17 @@ final class PushGoAutomationRuntime {
                     id: "00000000-0000-0000-0000-00000000c001",
                     messageID: "quality-channel-keep-message",
                     title: "Quality Keep History Message",
-                    channelID: "01H00000000000000000000001"
+                    channelID: "01H00000000000000000000001",
+                    isRead: false,
+                    receivedAt: "2026-01-15T08:01:00Z"
                 ),
                 qualityChannelFixtureMessage(
                     id: "00000000-0000-0000-0000-00000000c002",
                     messageID: "quality-channel-delete-message",
                     title: "Quality Delete History Message",
-                    channelID: "01H00000000000000000000002"
+                    channelID: "01H00000000000000000000002",
+                    isRead: false,
+                    receivedAt: "2026-01-15T09:02:00Z"
                 ),
             ]
             entityRecords = []
@@ -3839,7 +3843,9 @@ final class PushGoAutomationRuntime {
         id: String,
         messageID: String,
         title: String,
-        channelID: String
+        channelID: String,
+        isRead: Bool,
+        receivedAt: String
     ) -> [String: Any] {
         let body = "Deterministic history owned by \(channelID)."
         return [
@@ -3848,8 +3854,8 @@ final class PushGoAutomationRuntime {
             "title": title,
             "body": body,
             "channel_id": channelID,
-            "is_read": false,
-            "received_at": "2026-01-15T08:00:00Z",
+            "is_read": isRead,
+            "received_at": receivedAt,
             "raw_payload": [
                 "entity_type": "message",
                 "message_id": messageID,
