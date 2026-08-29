@@ -12,16 +12,19 @@ class QualityLaneCostContractTests(unittest.TestCase):
         test_source = (REPO / "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift").read_text()
         discovered = set(re.findall(r"func (test[A-Za-z0-9_]+)\s*\(", test_source))
         scopes = self._scopes(runner, "pr_ui_scopes")
+        extended_positive = self._scopes(runner, "extended_positive_ui_scopes")
         nightly_scopes = self._scopes(runner, "nightly_negative_ui_scopes")
 
         self.assertEqual(len(scopes), len(set(scopes)))
-        self.assertEqual(13, len(scopes))
-        self.assertEqual(len(scopes + nightly_scopes), len(set(scopes + nightly_scopes)))
-        self.assertFalse(
-            [scope for scope in scopes + nightly_scopes if scope.rsplit("/", 1)[-1] not in discovered]
-        )
-        for required_fragment in ("Messages", "PrimaryNavigation", "EventClosePersists", "Thing", "Channel", "Settings"):
+        self.assertLessEqual(len(scopes), 4)
+        self.assertEqual(13, len(scopes + extended_positive))
+        all_curated = scopes + extended_positive + nightly_scopes
+        self.assertEqual(len(all_curated), len(set(all_curated)))
+        self.assertFalse([scope for scope in all_curated if scope.rsplit("/", 1)[-1] not in discovered])
+        for required_fragment in ("PrimaryNavigation", "StandardMessages", "MessageWorkflow", "SettingsServer"):
             self.assertTrue(any(required_fragment in scope for scope in scopes), required_fragment)
+        for required_fragment in ("EventClosePersists", "Thing", "Channel", "PageVisibility"):
+            self.assertTrue(any(required_fragment in scope for scope in extended_positive), required_fragment)
         for deferred_fragment in ("Failure", "Corrupt", "Slow", "Delete"):
             self.assertFalse(any(deferred_fragment in scope for scope in scopes), deferred_fragment)
         self.assertFalse(any("FunctionalEmptyState" in scope for scope in scopes))
@@ -31,7 +34,21 @@ class QualityLaneCostContractTests(unittest.TestCase):
             1,
             test_source.count('assertElementExists("state.messages.search.loading"'),
         )
-        self.assertIn('nightly_ui_scopes="$pr_ui_scopes,$nightly_negative_ui_scopes"', runner)
+        self.assertIn('positive_ui_scopes="$pr_ui_scopes,$extended_positive_ui_scopes"', runner)
+        self.assertIn('nightly_ui_scopes="$positive_ui_scopes,$nightly_negative_ui_scopes"', runner)
+        self.assertLess(
+            runner.index('TEST_SCOPES="$positive_ui_scopes"'),
+            runner.index('TEST_SCOPES="$nightly_negative_ui_scopes"'),
+            "Nightly/Release must finish positive journeys before fault injection.",
+        )
+        self.assertIn(
+            'selected_claims+=("iOS explicitly selected UI journeys: $requested_scopes")',
+            runner,
+        )
+        self.assertIn(
+            'claims+=("iOS explicitly selected UI journeys: $requested_scopes")',
+            runner,
+        )
 
     def test_real_macos_update_install_is_release_or_focused_only(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()

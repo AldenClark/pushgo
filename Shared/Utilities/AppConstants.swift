@@ -43,6 +43,7 @@ enum PushGoAnimatedImageRuntime {
 
 enum PushGoQualityFixture: String, Codable, CaseIterable, Sendable {
     case emptyClean = "empty.clean"
+    case corePositive = "core.positive"
     case messagesStandard = "messages.standard"
     case messagesEncryptedValid = "messages.encrypted.valid"
     case messagesEncryptedCorrupt = "messages.encrypted.corrupt"

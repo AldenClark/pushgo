@@ -1197,7 +1197,9 @@ final class PushGoAutomationRuntime {
                 return
             }
             let bundle = try loadStartupFixtureBundle()
-            if PushGoAutomationContext.qualitySession?.fixture == .messagesStandard {
+            if let fixture = PushGoAutomationContext.qualitySession?.fixture,
+               fixture == .messagesStandard || fixture == .corePositive
+            {
                 try await prepareQualityStandardMessageImage()
             }
             try await applyFixtureBundle(
@@ -3667,6 +3669,36 @@ final class PushGoAutomationRuntime {
             messages = []
             entityRecords = []
             channelSubscriptions = []
+        case .corePositive:
+            // One dense, purpose-level fixture feeds each primary product domain
+            // through the same production-shaped ingestion path used by its focused
+            // lifecycle test. It is intentionally shallow: the PR smoke proves that
+            // users can find and open accurate objects, while mutations and faults
+            // remain impact-selected or Release evidence.
+            messages = [
+                qualityFixtureMessage(index: 0, includesMedia: true),
+                qualityEventFixture(),
+                qualityThingInitialFixture(),
+                qualityThingFixture(),
+                qualityThingDistractorFixture(),
+                qualityThingRelatedEventFixture(),
+                qualityThingRelatedMessageFixture(),
+                qualityChannelFixtureMessage(
+                    id: "00000000-0000-0000-0000-00000000c001",
+                    messageID: "quality-channel-keep-message",
+                    title: "Quality Keep History Message",
+                    channelID: "01H00000000000000000000001",
+                    isRead: false,
+                    receivedAt: "2026-01-15T08:01:00Z"
+                ),
+            ]
+            entityRecords = []
+            channelSubscriptions = [
+                qualityChannelFixtureSubscription(
+                    channelID: "01H00000000000000000000001",
+                    displayName: "Quality Keep History"
+                ),
+            ]
         case .channelsStandard:
             messages = [
                 qualityChannelFixtureMessage(

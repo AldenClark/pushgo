@@ -1118,7 +1118,8 @@ final class PushGo_iOSUITests: XCTestCase {
         let sessionID = "ios-navigation-\(UUID().uuidString.lowercased())"
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
-            fixture: "empty.clean"
+            fixture: "core.positive",
+            eventCloseScenario: "accepted_and_delivered"
         )
         launch(context.app)
 
@@ -1128,16 +1129,71 @@ final class PushGo_iOSUITests: XCTestCase {
             sessionID
         )
         assertElementExists("screen.messages.list", in: context.app, timeout: 8)
-        assertElementExists("state.messages.empty", in: context.app, timeout: 5)
         let tabs = context.app.tabBars.buttons
         XCTAssertGreaterThanOrEqual(tabs.count, 4, "The four primary product destinations must be reachable")
 
+        let message = context.app.staticTexts["P2 Split Seed Message"]
+        XCTAssertTrue(message.waitForExistence(timeout: 8))
+        message.tap()
+        assertElementExists("sheet.message.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 5),
+            "Messages is usable only when the selected canonical body is accurate."
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.message.close"),
+            timeout: 5,
+            message: "The real Message detail must return to the primary journey"
+        )
+
         tabs.element(boundBy: 1).tap()
         assertElementExists("screen.events.list", in: context.app, timeout: 8)
+        let event = element(in: context.app, identifier: "event.row.quality-event-active")
+        tapWhenHittable(event, timeout: 8, message: "The canonical Event row must open")
+        let eventSheet = element(in: context.app, identifier: "sheet.event.detail")
+        XCTAssertTrue(eventSheet.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            context.app.staticTexts["Event fixture for app-owned UI validation."]
+                .waitForExistence(timeout: 5),
+            "Events is usable only when its canonical purpose-bearing summary is accurate."
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.event.close"),
+            timeout: 5,
+            message: "The Event close action must remain usable in the positive core journey"
+        )
+        tapWhenHittable(
+            context.app.alerts.buttons.element(boundBy: 1),
+            timeout: 5,
+            message: "The real Event confirmation must complete the positive state change"
+        )
+        XCTAssertTrue(
+            eventSheet.waitForNonExistence(timeout: 12),
+            "The Event sheet must close only after the canonical projection accepts the change."
+        )
+
         tabs.element(boundBy: 2).tap()
         assertElementExists("screen.things.list", in: context.app, timeout: 8)
+        let thing = element(in: context.app, identifier: "thing.row.quality-thing-rich")
+        XCTAssertTrue(thing.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            thing.label.contains("P2 Thing Rich")
+                || context.app.staticTexts["P2 Thing Rich"].exists,
+            "Things must render the exact canonical object; deep relations remain impact-selected."
+        )
+
         tabs.element(boundBy: 3).tap()
         assertElementExists("screen.channels", in: context.app, timeout: 8)
+        let channel = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000001"
+        )
+        XCTAssertTrue(channel.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            context.app.staticTexts["Quality Keep History"].exists || channel.label.contains("Quality Keep History"),
+            "Channels must render the exact canonical subscription, not merely an empty screen."
+        )
 
         let settings = element(in: context.app, identifier: "action.channels.settings")
         XCTAssertTrue(settings.waitForExistence(timeout: 5))

@@ -1722,8 +1722,8 @@ scripts/quality_test.sh release
 | Profile | 必须执行 | 目标反馈 |
 | --- | --- | --- |
 | Focused | 受影响 compile + Pure/VM/Store + 最多一条核心 UI | 约 3 分钟 |
-| PR | Apple Core、Android JVM、iOS/macOS/Android 核心 P0 UI、fatal Store/slow-load 负控、Release isolation、影响补充 | 约 15–20 分钟，分片后校准 |
-| Nightly | iOS/macOS/watch simulator UI、Android min/main/latest、后台恢复、系统表面 contract、10k UI、fault、migration、a11y、sandbox | 约 90–120 分钟 |
+| PR | 快速 Core/JVM/Store 合同 + 每端低成本跨域正向核心 + 历史高风险纵切 + 影响分析追加的 owner-focused；Apple 固定 iOS UI 为 4 条，不默认执行故障注入、系统表面或全 Settings | 约 5–15 分钟，按平台并行校准 |
+| Nightly | 先完成 iOS/macOS/watch/Android 的完整高价值正向集合，再运行 fault/migration/a11y/后台与系统表面 contract；正向失败即停止后续风险批次 | 约 60–120 分钟 |
 | Accessibility | 支持语言资源完整性 + 一个实际中文最大/大字体核心任务；复核产品实际 locale/font，并恢复平台设置；物理 VoiceOver/TalkBack 另报 | 约 1–3 分钟，按需和 Nightly/Release 执行 |
 | Performance | 每周或性能敏感变更显式触发；100k 生产 Store/Room correctness + provisional host/emulator ceiling，独立保存指标；不进入普通 PR | 当前约 3 分钟产品执行，随固定参考设备补充而校准 |
 | Release | 最新有效 Nightly P0 证据 + Nightly 必要集 + Release-like 性能 + 第 33 节代表物理设备/窗口 + real APNs/FCM/private + Widget/Intent/通知动作 + 升级安装 | 约 120–180 分钟，按设备池校准 |

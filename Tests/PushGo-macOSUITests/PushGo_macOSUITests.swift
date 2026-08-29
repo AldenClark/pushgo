@@ -1268,20 +1268,52 @@ final class PushGo_macOSUITests: XCTestCase {
     @MainActor
     func testSidebarNavigationCoversPrimaryScreens() {
         let sessionID = "macos-navigation-\(UUID().uuidString.lowercased())"
-        let context = configuredQualityApp(sessionID: sessionID, fixture: "empty.clean")
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "core.positive")
         launchQuality(context, sessionID: sessionID)
 
-        let routeMatrix: [(sidebar: String, screen: String)] = [
-            ("things", "screen.things.list"),
-            ("events", "screen.events.list"),
-            ("channels", "screen.channels"),
-            ("settings", "screen.settings"),
-            ("messages", "screen.messages.list"),
-        ]
-        for route in routeMatrix {
-            openSidebarTab(route.sidebar, in: context.app)
-            assertVisibleScreenThroughUI(route.screen, in: context.app, timeout: 12)
-        }
+        openSidebarTab("messages", in: context.app)
+        let message = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertTrue(message.waitForExistence(timeout: 8))
+        message.click()
+        assertVisibleScreenThroughUI("screen.message.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 5)
+        )
+
+        openSidebarTab("events", in: context.app)
+        assertVisibleScreenThroughUI("screen.events.list", in: context.app, timeout: 8)
+        let event = element(in: context.app, identifier: "event.row.quality-event-active")
+        XCTAssertTrue(event.waitForExistence(timeout: 8))
+        event.click()
+        assertVisibleScreenThroughUI("screen.events.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Event fixture for app-owned UI validation."]
+                .waitForExistence(timeout: 5)
+        )
+
+        openSidebarTab("things", in: context.app)
+        assertVisibleScreenThroughUI("screen.things.list", in: context.app, timeout: 8)
+        let thing = element(in: context.app, identifier: "thing.row.quality-thing-rich")
+        XCTAssertTrue(thing.waitForExistence(timeout: 8))
+        thing.click()
+        assertVisibleScreenThroughUI("screen.things.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(context.app.staticTexts["Fixture thing summary"].waitForExistence(timeout: 5))
+
+        openSidebarTab("channels", in: context.app)
+        assertVisibleScreenThroughUI("screen.channels", in: context.app, timeout: 8)
+        let channel = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000001"
+        )
+        XCTAssertTrue(channel.waitForExistence(timeout: 8))
+        XCTAssertTrue(channel.label.contains("Quality Keep History"))
+
+        openSidebarTab("settings", in: context.app)
+        assertVisibleScreenThroughUI("screen.settings", in: context.app, timeout: 8)
     }
 
     @MainActor

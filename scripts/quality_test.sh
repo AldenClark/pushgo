@@ -152,10 +152,12 @@ run_impact_contracts
 # PR spends device minutes on one broad positive representative per user-purpose
 # family. Failure injection, deadline behavior, corruption, and compensation stay
 # in Nightly/Release or run focused when their owning production code changes.
-pr_ui_scopes="PushGo-iOSUITests/PushGo_iOSUITests/testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testHistoryCleanupRemovesOnlyOldMessagesAndPersistsAcrossRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testMarkdownFixtureRendersMajorStructuresInTheRealDetail,PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageWorkflowLoadsSecondPageAndPersistsReadActions,PushGo-iOSUITests/PushGo_iOSUITests/testMessageChannelTagCombinedUngroupedFiltersAndScopedReadPersist,PushGo-iOSUITests/PushGo_iOSUITests/testMessageRefreshPersistsNewProviderResultAndOpensItsRealDetail,PushGo-iOSUITests/PushGo_iOSUITests/testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen,PushGo-iOSUITests/PushGo_iOSUITests/testEventClosePersistsAndOngoingFilterReflectsRealProjection,PushGo-iOSUITests/PushGo_iOSUITests/testImportedThingFixtureCanOpenThingDetail,PushGo-iOSUITests/PushGo_iOSUITests/testChannelCreateRenameAndBothUnsubscribeOutcomesPersist,PushGo-iOSUITests/PushGo_iOSUITests/testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testEncryptedMessageRecoversAfterConfiguringKeyAndSurvivesRelaunch"
+pr_ui_scopes="PushGo-iOSUITests/PushGo_iOSUITests/testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen,PushGo-iOSUITests/PushGo_iOSUITests/testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageWorkflowLoadsSecondPageAndPersistsReadActions,PushGo-iOSUITests/PushGo_iOSUITests/testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch"
+extended_positive_ui_scopes="PushGo-iOSUITests/PushGo_iOSUITests/testHistoryCleanupRemovesOnlyOldMessagesAndPersistsAcrossRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testMarkdownFixtureRendersMajorStructuresInTheRealDetail,PushGo-iOSUITests/PushGo_iOSUITests/testMessageChannelTagCombinedUngroupedFiltersAndScopedReadPersist,PushGo-iOSUITests/PushGo_iOSUITests/testMessageRefreshPersistsNewProviderResultAndOpensItsRealDetail,PushGo-iOSUITests/PushGo_iOSUITests/testEventClosePersistsAndOngoingFilterReflectsRealProjection,PushGo-iOSUITests/PushGo_iOSUITests/testImportedThingFixtureCanOpenThingDetail,PushGo-iOSUITests/PushGo_iOSUITests/testChannelCreateRenameAndBothUnsubscribeOutcomesPersist,PushGo-iOSUITests/PushGo_iOSUITests/testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testEncryptedMessageRecoversAfterConfiguringKeyAndSurvivesRelaunch"
+positive_ui_scopes="$pr_ui_scopes,$extended_positive_ui_scopes"
 nightly_negative_ui_scopes="PushGo-iOSUITests/PushGo_iOSUITests/testFatalStoreInitializationStopsReadWriteAndRecoversAfterRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageDeleteWithoutUndoPermanentlyRemovesOnlyTargetAcrossRelaunch,PushGo-iOSUITests/PushGo_iOSUITests/testSlowMessageLoadBecomesVisibleBeforeDataCompletes,PushGo-iOSUITests/PushGo_iOSUITests/testSlowMessageRefreshKeepsAccurateContentVisibleUntilCompletion,PushGo-iOSUITests/PushGo_iOSUITests/testMessageRefreshFailureKeepsSnapshotAndRetryRecoversPersistedResult,PushGo-iOSUITests/PushGo_iOSUITests/testMessageLoadFailureShowsRetryAndRecoversToRealDataState,PushGo-iOSUITests/PushGo_iOSUITests/testEventCloseFailureKeepsAccurateDetailBlocksDuplicateAndRetryPersists,PushGo-iOSUITests/PushGo_iOSUITests/testChannelRemoteRejectionStaysInSheetAndRetryPersists,PushGo-iOSUITests/PushGo_iOSUITests/testChannelCreateLocalFailureCompensatesRemoteBeforeRetry,PushGo-iOSUITests/PushGo_iOSUITests/testGatewayLocalCommitFailureRollsBackBeforeRetryCommits,PushGo-iOSUITests/PushGo_iOSUITests/testSettingsDecryptionRejectsInvalidKeyPersistsAndClearsValidKey,PushGo-iOSUITests/PushGo_iOSUITests/testDecryptionProtectedStoreFailureDoesNotConfigureBeforeRetry,PushGo-iOSUITests/PushGo_iOSUITests/testCorruptEncryptedMessageFailsSafelyAndSurvivesRelaunch"
 accessibility_ui_scope="PushGo-iOSUITests/PushGo_iOSUITests/testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation"
-nightly_ui_scopes="$pr_ui_scopes,$nightly_negative_ui_scopes"
+nightly_ui_scopes="$positive_ui_scopes,$nightly_negative_ui_scopes"
 watch_ui_scopes="PushGo-watchOSUITests/PushGo_watchOSUITests/testCoreWatchJourneyShowsAccurateObjectsDeletesOneAndPersistsAfterRelaunch,PushGo-watchOSUITests/PushGo_watchOSUITests/testInvalidHermeticScenarioFailsReadinessExplicitly,PushGo-watchOSUITests/PushGo_watchOSUITests/testMessageReadFailureStaysOwnedByMessagesWhileOtherDomainsRemainUsable"
 performance_ui_scope="PushGo-iOSUITests/PushGo_iOSUITests/testPreparedLargeMessageStoreColdLaunchReachesAccurateContent"
 
@@ -226,6 +228,30 @@ run_macos_update_install() {
   claims+=("macOS real Sparkle signed update install and relaunch journey")
 }
 
+run_ios_positive_then_risk() {
+  local requested_scopes="${TEST_SCOPES:-${TEST_SCOPE:-}}"
+  if [[ -n "$requested_scopes" ]]; then
+    selected_claims+=("iOS explicitly selected UI journeys: $requested_scopes")
+    TEST_SCOPES="$requested_scopes" \
+      MAX_RETRIES="${MAX_RETRIES:-0}" \
+      QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
+    claims+=("iOS explicitly selected UI journeys: $requested_scopes")
+    return
+  fi
+
+  selected_claims+=("iOS complete positive App-owned journeys before fault injection")
+  TEST_SCOPES="$positive_ui_scopes" \
+    MAX_RETRIES=0 \
+    QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
+  claims+=("iOS complete positive App-owned journeys before fault injection")
+
+  selected_claims+=("iOS impact-worthy failure, corruption, and compensation journeys")
+  TEST_SCOPES="$nightly_negative_ui_scopes" \
+    MAX_RETRIES=0 \
+    QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
+  claims+=("iOS impact-worthy failure, corruption, and compensation journeys")
+}
+
 run_system_notification_journey() {
   local cold_launch_scope="PushGo-iOSUITests/PushGo_iOSSystemNotificationTests/testSystemNotificationTapColdLaunchesAccurateReadDetailAndPersists"
   local delete_action_scope="PushGo-iOSUITests/PushGo_iOSSystemNotificationTests/testSystemNotificationDeleteActionRemovesOnlyTargetAndPersists"
@@ -285,11 +311,7 @@ case "$lane" in
     ;;
   nightly)
     run_core
-    selected_claims+=("iOS core message journeys plus navigation/Event/Thing/Channel/Settings persistence representatives")
-    TEST_SCOPES="${TEST_SCOPES:-$nightly_ui_scopes}" \
-      MAX_RETRIES="${MAX_RETRIES:-0}" \
-      QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
-    claims+=("iOS core message journeys plus navigation/Event/Thing/Channel/Settings persistence representatives")
+    run_ios_positive_then_risk
     run_system_notification_journey
     run_watch_ui
     run_accessibility_localization
@@ -297,11 +319,7 @@ case "$lane" in
     ;;
   release)
     run_core
-    selected_claims+=("iOS release-lane representative journeys")
-    TEST_SCOPES="${TEST_SCOPES:-$nightly_ui_scopes}" \
-      MAX_RETRIES="${MAX_RETRIES:-0}" \
-      QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
-    claims+=("iOS release-lane representative journeys")
+    run_ios_positive_then_risk
     run_system_notification_journey
     run_watch_ui
     run_accessibility_localization

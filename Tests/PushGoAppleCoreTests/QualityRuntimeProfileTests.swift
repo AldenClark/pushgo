@@ -37,6 +37,18 @@ struct QualityRuntimeProfileTests {
         #expect(descriptor.channelMutationScenario == .none)
     }
 
+    @Test("decodes the dense positive core fixture used by the low-cost PR journey")
+    func decodesCorePositiveFixture() throws {
+        let encoded = try encodedSession(
+            sessionID: "core-positive",
+            fixture: "core.positive"
+        )
+
+        let descriptor = try PushGoAutomationContext.decodeQualitySession(encoded)
+
+        #expect(descriptor.fixture == .corePositive)
+    }
+
     @Test("decodes the typed provider refresh scenario")
     func decodesMessageRefreshScenario() throws {
         let encoded = try encodedSession(
