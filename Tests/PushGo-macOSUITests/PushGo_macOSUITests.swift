@@ -181,6 +181,65 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
+    func testFatalStoreInitializationStopsReadWriteAndRecoversAfterRelaunch() {
+        let sessionID = "macos-store-fatal-\(UUID().uuidString.lowercased())"
+        let failing = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            failLocalStoreInitialization: true
+        )
+        failing.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        failing.app.launch()
+        failing.app.activate()
+        dismissSystemPrivacyDialogsIfNeeded(in: failing.app)
+
+        XCTAssertTrue(failing.app.windows.firstMatch.waitForExistence(timeout: 12))
+        XCTAssertTrue(
+            failing.app.staticTexts[
+                "Local storage is unavailable. The app may be unable to load or save messages."
+            ].waitForExistence(timeout: 8),
+            "A fatal Store open failure must be shown as unavailable, not as an empty message list."
+        )
+        XCTAssertTrue(
+            failing.app.staticTexts.matching(
+                NSPredicate(
+                    format: "value CONTAINS %@ OR label CONTAINS %@",
+                    "Quality-injected local persistent storage initialization failure.",
+                    "Quality-injected local persistent storage initialization failure."
+                )
+            ).firstMatch.exists,
+            "The recovery surface must retain the causal Store failure for diagnosis."
+        )
+        XCTAssertTrue(element(in: failing.app, identifier: "state.storage.unavailable").exists)
+        XCTAssertFalse(element(in: failing.app, identifier: "screen.messages.list").exists)
+        XCTAssertFalse(element(in: failing.app, identifier: "state.messages.empty").exists)
+        XCTAssertFalse(element(in: failing.app, identifier: "quality-runtime.ready").exists)
+        let exit = failing.app.sheets.firstMatch.buttons["Exit App"]
+        XCTAssertTrue(exit.waitForExistence(timeout: 5) && exit.isHittable)
+        exit.click()
+        let terminated = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "state == %d", XCUIApplication.State.notRunning.rawValue),
+            object: failing.app
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [terminated], timeout: 5),
+            .completed,
+            "The storage recovery Exit action must actually terminate the App."
+        )
+
+        let recovered = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        recovered.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        launchQuality(recovered, sessionID: sessionID)
+        XCTAssertTrue(
+            element(
+                in: recovered.app,
+                identifier: "message.row.00000000-0000-0000-0000-000000000001"
+            ).waitForExistence(timeout: 8)
+        )
+        XCTAssertFalse(element(in: recovered.app, identifier: "action.storage.exit").exists)
+    }
+
+    @MainActor
     func testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch() {
         let sessionID = "macos-standard-\(UUID().uuidString.lowercased())"
         let context = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
@@ -248,7 +307,11 @@ final class PushGo_macOSUITests: XCTestCase {
             "The representative sidebar state must exercise the real zh-Hans title."
         )
         XCTAssertEqual(badge.value as? String, "2", "The fixture must exercise a real unread badge.")
-        XCTAssertGreaterThanOrEqual(title.frame.width, 18, "The Messages title was compressed away.")
+        XCTAssertGreaterThanOrEqual(
+            title.frame.width,
+            24,
+            "The full two-glyph Chinese Messages title was compressed or truncated."
+        )
         XCTAssertGreaterThan(
             badge.frame.minX,
             title.frame.maxX + 4,
@@ -2315,6 +2378,7 @@ final class PushGo_macOSUITests: XCTestCase {
     private func configuredQualityApp(
         sessionID: String,
         fixture: String,
+        failLocalStoreInitialization: Bool = false,
         messageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         failMessageLoad: Bool = false,
@@ -2339,6 +2403,7 @@ final class PushGo_macOSUITests: XCTestCase {
             qualitySessionPayload(
                 sessionID: sessionID,
                 fixture: fixture,
+                failLocalStoreInitialization: failLocalStoreInitialization,
                 messageLoadDelayMilliseconds: messageLoadDelayMilliseconds,
                 messageRefreshDelayMilliseconds: messageRefreshDelayMilliseconds,
                 failMessageLoad: failMessageLoad,
@@ -2390,6 +2455,7 @@ final class PushGo_macOSUITests: XCTestCase {
     private func qualitySessionPayload(
         sessionID: String,
         fixture: String,
+        failLocalStoreInitialization: Bool = false,
         messageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         failMessageLoad: Bool = false,
@@ -2401,6 +2467,7 @@ final class PushGo_macOSUITests: XCTestCase {
         channelMutationScenario: String? = nil
     ) -> String {
         var faults: [String: Any] = [
+            "fail_local_store_initialization": failLocalStoreInitialization,
             "fail_message_load": failMessageLoad,
             "fail_gateway_switch_validation_once": failGatewaySwitchValidationOnce,
             "fail_gateway_switch_commit_once": failGatewaySwitchCommitOnce,

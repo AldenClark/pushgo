@@ -106,6 +106,15 @@ if [[ $build_status -ne 0 ]]; then
   exit 1
 fi
 
+watch_app_path="$derived_data_path/Build/Products/Debug-watchsimulator/PushGoWatch.app"
+if ! "$repo_root/scripts/prepare_ios_ui_test_app.sh" \
+  "$target" \
+  "$watch_app_path" \
+  "$app_bundle_identifier"; then
+  [[ -z "$runner_status_file" ]] || printf 'BLOCKED\n' > "$runner_status_file"
+  exit 2
+fi
+
 xcrun simctl terminate "$target" "$app_bundle_identifier" >/dev/null 2>&1 || true
 echo "==> watchOS test-without-building"
 set +e
@@ -134,6 +143,15 @@ if classification="$(python3 "$repo_root/scripts/quality_test_system_issues.py" 
   fi
   echo "status=BLOCKED"
   echo "reason=registered_watchos_test_system_failure"
+  echo "log=$log_file"
+  echo "result_bundle=$result_bundle"
+  exit 2
+fi
+
+if rg -q 'Simulator device failed to launch .*Application info provider .* returned nil' "$log_file"; then
+  [[ -z "$runner_status_file" ]] || printf 'BLOCKED\n' > "$runner_status_file"
+  echo "status=BLOCKED"
+  echo "reason=watchos_app_install_launch_race"
   echo "log=$log_file"
   echo "result_bundle=$result_bundle"
   exit 2

@@ -124,6 +124,7 @@ struct EventListScreen: View {
                     } label: {
                         EventListRow(event: event)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .id(event.id)

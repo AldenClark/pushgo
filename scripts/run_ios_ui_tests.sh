@@ -121,6 +121,12 @@ fi
 echo "==> build-for-testing"
 xcodebuild "${common_args[@]}" build-for-testing
 
+app_bundle="$derived_data_path/Build/Products/Debug-iphonesimulator/PushGo.app"
+if ! "$repo_root/scripts/prepare_ios_ui_test_app.sh" "$target" "$app_bundle" "$app_bundle_identifier"; then
+  [[ -z "$runner_status_file" ]] || printf 'BLOCKED\n' > "$runner_status_file"
+  exit 2
+fi
+
 run_test_once() {
   local logfile="$1"
   local result_bundle="$2"
@@ -205,6 +211,21 @@ until [[ $attempt -gt $((max_retries + 1)) ]]; do
     fi
     echo "status=BLOCKED"
     echo "reason=app_owned_quality_precondition_failed"
+    echo "log=$log_file"
+    echo "result_bundle=$result_bundle"
+    exit 2
+  fi
+
+  # XCTest may have announced a Test Case before its own app-launch operation
+  # fails. This exact Xcode/CoreSimulator failure is still a preparation fault:
+  # no product UI or business action was reachable, so it must not be reported
+  # as a product assertion and must never be retried into green.
+  if grep -q "Application launch for '.*' did not return a process handle nor launch error" "$log_file"; then
+    if [[ -n "$runner_status_file" ]]; then
+      printf 'BLOCKED\n' > "$runner_status_file"
+    fi
+    echo "status=BLOCKED"
+    echo "reason=ios_app_launch_precondition_failed"
     echo "log=$log_file"
     echo "result_bundle=$result_bundle"
     exit 2

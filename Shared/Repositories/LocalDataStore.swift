@@ -570,6 +570,19 @@ actor LocalDataStore {
         fileManager: FileManager,
         appGroupIdentifier: String
     ) -> SharedResources {
+        #if DEBUG
+        if PushGoAutomationContext.qualitySession?.faults.failLocalStoreInitialization == true {
+            return SharedResources(
+                backend: nil,
+                searchIndex: nil,
+                metadataIndex: nil,
+                storageState: StorageState(
+                    mode: .unavailable,
+                    reason: "Quality-injected local persistent storage initialization failure."
+                )
+            )
+        }
+        #endif
         let resolvedBackend: GRDBStore?
         let resolvedStorageState: StorageState
         do {

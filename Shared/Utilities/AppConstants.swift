@@ -109,6 +109,7 @@ enum PushGoQualityChannelMutationScenario: String, Codable, Sendable {
 }
 
 struct PushGoQualityFaults: Codable, Equatable, Sendable {
+    let failLocalStoreInitialization: Bool
     let messageLoadDelayMilliseconds: Int?
     let messageRefreshDelayMilliseconds: Int?
     let failMessageLoad: Bool
@@ -118,6 +119,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
     let failChannelSubscriptionPersistenceOnce: Bool
 
     init(
+        failLocalStoreInitialization: Bool = false,
         messageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         failMessageLoad: Bool = false,
@@ -126,6 +128,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         failNotificationMaterialPersistenceOnce: Bool = false,
         failChannelSubscriptionPersistenceOnce: Bool = false
     ) {
+        self.failLocalStoreInitialization = failLocalStoreInitialization
         self.messageLoadDelayMilliseconds = messageLoadDelayMilliseconds
         self.messageRefreshDelayMilliseconds = messageRefreshDelayMilliseconds
         self.failMessageLoad = failMessageLoad
@@ -136,6 +139,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
+        case failLocalStoreInitialization = "fail_local_store_initialization"
         case messageLoadDelayMilliseconds = "message_load_delay_ms"
         case messageRefreshDelayMilliseconds = "message_refresh_delay_ms"
         case failMessageLoad = "fail_message_load"
@@ -147,6 +151,10 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        failLocalStoreInitialization = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .failLocalStoreInitialization
+        ) ?? false
         messageLoadDelayMilliseconds = try container.decodeIfPresent(
             Int.self,
             forKey: .messageLoadDelayMilliseconds

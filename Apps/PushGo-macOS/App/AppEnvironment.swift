@@ -300,6 +300,11 @@ final class AppEnvironment {
     private func performBootstrap() async {
         beginProviderIngressBootstrapRecovery()
         await loadPersistedState()
+        guard dataStore.storageState.mode == .persistent else {
+            finishProviderIngressBootstrapRecovery()
+            isDeletionRecoveryReady = true
+            return
+        }
         startMessageStoreObservationIfNeeded()
         _ = await mergeNotificationIngressInbox(
             reason: "bootstrap",

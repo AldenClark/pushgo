@@ -35,7 +35,7 @@ private struct DynamicLocaleWrapper<Content: View>: View {
     @State private var sceneID = UUID()
 
     var body: some View {
-        content
+        storageGuardedContent
             .environment(environment)
             .environment(environment.pendingLocalDeletionController)
             .environment(localizationManager)
@@ -84,10 +84,12 @@ private struct DynamicLocaleWrapper<Content: View>: View {
                     Button(localizationManager.localized("rebuild_database_and_exit"), role: .destructive) {
                         environment.rebuildLocalStoreForRecoveryAndTerminate()
                     }
+                    .accessibilityIdentifier("action.storage.rebuild")
                 }
                 Button(localizationManager.localized("exit_app"), role: .destructive) {
                     environment.terminateForLocalStoreFailure()
                 }
+                .accessibilityIdentifier("action.storage.exit")
             } message: { state in
                 Text(state.message)
             }
@@ -107,6 +109,17 @@ private struct DynamicLocaleWrapper<Content: View>: View {
                     "system_notification_permission_is_not_obtained_please_turn_on_notifications_in_the_system_settings_and_try_again"
                 ))
             }
+    }
+
+    @ViewBuilder
+    private var storageGuardedContent: some View {
+        switch environment.dataStore.storageState.mode {
+        case .persistent:
+            content
+        case .unavailable:
+            Color.clear
+                .accessibilityIdentifier("state.storage.unavailable")
+        }
     }
 }
 

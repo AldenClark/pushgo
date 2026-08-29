@@ -121,6 +121,7 @@ struct ThingListScreen: View {
                     } label: {
                         ThingListRow(thing: thing)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .id(thing.id)

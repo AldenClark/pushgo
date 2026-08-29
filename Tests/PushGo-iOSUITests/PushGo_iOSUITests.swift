@@ -212,6 +212,63 @@ final class PushGo_iOSUITests: XCTestCase {
         assertElementExists("state.messages.empty", in: context.app, timeout: 5)
     }
 
+    func testFatalStoreInitializationStopsReadWriteAndRecoversAfterRelaunch() {
+        let sessionID = "ios-store-fatal-\(UUID().uuidString.lowercased())"
+        let failing = configuredLaunchContext(
+            launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        )
+        failing.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            failLocalStoreInitialization: true
+        )
+
+        launch(failing.app)
+
+        XCTAssertTrue(
+            failing.app.staticTexts[
+                "Local storage is unavailable. The app may be unable to load or save messages."
+            ].waitForExistence(timeout: 8),
+            "A fatal Store open failure must be shown as unavailable, not as an empty message list."
+        )
+        XCTAssertTrue(
+            failing.app.staticTexts.matching(
+                NSPredicate(
+                    format: "label CONTAINS %@",
+                    "Quality-injected local persistent storage initialization failure."
+                )
+            ).firstMatch.exists,
+            "The recovery surface must retain the causal Store failure for diagnosis."
+        )
+        XCTAssertTrue(element(in: failing.app, identifier: "state.storage.unavailable").exists)
+        XCTAssertFalse(element(in: failing.app, identifier: "screen.messages.list").exists)
+        XCTAssertFalse(element(in: failing.app, identifier: "state.messages.empty").exists)
+        XCTAssertFalse(element(in: failing.app, identifier: "quality-runtime.ready").exists)
+        let exit = failing.app.alerts.firstMatch.buttons["Exit App"]
+        tapWhenHittable(exit, timeout: 5, message: "Fatal storage recovery must offer a safe exit.")
+        let terminated = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "state == %d", XCUIApplication.State.notRunning.rawValue),
+            object: failing.app
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [terminated], timeout: 5),
+            .completed,
+            "The storage recovery Exit action must actually terminate the App."
+        )
+
+        let recovered = configuredLaunchContext(
+            launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        )
+        recovered.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard"
+        )
+        launch(recovered.app)
+        assertQualityRuntimeReady(in: recovered.app, timeout: 15)
+        XCTAssertTrue(recovered.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8))
+        XCTAssertFalse(element(in: recovered.app, identifier: "action.storage.exit").exists)
+    }
+
     func testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch() {
         let sessionID = "ios-standard-\(UUID().uuidString.lowercased())"
         let seeded = configuredLaunchContext()
@@ -1445,7 +1502,23 @@ final class PushGo_iOSUITests: XCTestCase {
         relaunchedEventsTab.tap()
         let persistedRow = element(in: context.app, identifier: "event.row.quality-event-active")
         XCTAssertTrue(persistedRow.waitForExistence(timeout: 8))
-        persistedRow.tap()
+        let persistedRowActionable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND hittable == true"),
+            object: persistedRow
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [persistedRowActionable], timeout: 8),
+            .completed,
+            "The persisted closed Event row must remain a real navigation target."
+        )
+        // Deliberately touch the visual center, which is blank for the short
+        // closed-state copy. This proves the whole visible row is actionable,
+        // rather than succeeding only when XCTest happens to target its text.
+        persistedRow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "sheet.event.detail").waitForExistence(timeout: 8),
+            "Opening the persisted closed Event must reach its real detail before status is asserted."
+        )
         let persistedStatus = element(in: context.app, identifier: "field.event.detail.status.closed")
         XCTAssertTrue(persistedStatus.waitForExistence(timeout: 8))
         XCTAssertFalse(
@@ -1545,9 +1618,17 @@ final class PushGo_iOSUITests: XCTestCase {
         let thingsTab = element(in: context.app, identifier: "tab.things")
         XCTAssertTrue(thingsTab.waitForExistence(timeout: 8))
         thingsTab.tap()
-        let thingTitle = context.app.staticTexts["P2 Thing Rich"]
-        XCTAssertTrue(thingTitle.waitForExistence(timeout: 8))
-        thingTitle.tap()
+        let thingRow = element(in: context.app, identifier: "thing.row.quality-thing-rich")
+        let thingRowActionable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND hittable == true"),
+            object: thingRow
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [thingRowActionable], timeout: 8),
+            .completed,
+            "The Thing row must expose its full visible width as one navigation target."
+        )
+        thingRow.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(
             element(in: context.app, identifier: "sheet.thing.detail")
                 .waitForExistence(timeout: 10)
@@ -2920,6 +3001,7 @@ final class PushGo_iOSUITests: XCTestCase {
     func qualitySessionPayload(
         sessionID: String,
         fixture: String,
+        failLocalStoreInitialization: Bool = false,
         messageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         failMessageLoad: Bool = false,
@@ -2932,6 +3014,7 @@ final class PushGo_iOSUITests: XCTestCase {
         channelMutationScenario: String? = nil
     ) -> String {
         var faults: [String: Any] = [
+            "fail_local_store_initialization": failLocalStoreInitialization,
             "fail_message_load": failMessageLoad,
             "fail_gateway_switch_validation_once": failGatewaySwitchValidationOnce,
             "fail_gateway_switch_commit_once": failGatewaySwitchCommitOnce,
@@ -2972,30 +3055,29 @@ final class PushGo_iOSUITests: XCTestCase {
         }
         app.launchArguments = launchArguments
         let requiresQualityHandshake = app.launchEnvironment[qualitySessionKey]?.isEmpty == false
-        let launchAttemptLimit = requiresQualityHandshake ? 2 : 1
 
-        for attempt in 1 ... launchAttemptLimit {
-            if app.state != .notRunning {
-                app.terminate()
-                XCTAssertEqual(
-                    app.state,
-                    .notRunning,
-                    "The app must be fully stopped so the next quality session receives fresh launch inputs"
-                )
-            }
-            app.launch()
-            guard requiresQualityHandshake else { return }
-
-            let runtimeHandshake = app.descendants(matching: .any)
-                .matching(NSPredicate(format: "identifier BEGINSWITH %@", "quality-runtime."))
-                .firstMatch
-            if runtimeHandshake.waitForExistence(timeout: 5) {
-                return
-            }
-            if attempt < launchAttemptLimit {
-                app.terminate()
-            }
+        if app.state != .notRunning {
+            app.terminate()
+            XCTAssertEqual(
+                app.state,
+                .notRunning,
+                "The app must be fully stopped so the next quality session receives fresh launch inputs"
+            )
         }
+        app.launch()
+        guard requiresQualityHandshake else { return }
+
+        let runtimeHandshake = app.descendants(matching: .any)
+            .matching(NSPredicate(
+                format: "identifier BEGINSWITH %@ OR identifier == %@",
+                "quality-runtime.",
+                "state.storage.unavailable"
+            ))
+            .firstMatch
+        XCTAssertTrue(
+            runtimeHandshake.waitForExistence(timeout: 5),
+            "QUALITY_PRECONDITION: App-owned runtime handshake did not become observable after one launch."
+        )
     }
 
     func tapWhenHittable(
@@ -3237,6 +3319,22 @@ final class PushGo_iOSUITests: XCTestCase {
         if !existing.isEmpty && existing != placeholder {
             field.typeKey("a", modifierFlags: .command)
             field.typeText(XCUIKeyboardKey.delete.rawValue)
+            // iOS Simulator secure fields can acknowledge Command-A while leaving
+            // the underlying value selected-but-not-deleted. Delete a bounded
+            // maximum credential length as a deterministic fallback, then prove
+            // the field is actually empty before typing the replacement.
+            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 128))
+            let cleared = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "value == %@ OR value == ''", placeholder),
+                object: field
+            )
+            XCTAssertEqual(
+                XCTWaiter.wait(for: [cleared], timeout: 2),
+                .completed,
+                "The secure field must be observably empty before replacement input",
+                file: file,
+                line: line
+            )
         }
         field.typeText(text)
     }

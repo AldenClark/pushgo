@@ -435,6 +435,11 @@ final class AppEnvironment {
 #endif
         beginProviderIngressBootstrapRecovery()
         await loadPersistedState()
+        guard dataStore.storageState.mode == .persistent else {
+            finishProviderIngressBootstrapRecovery()
+            isDeletionRecoveryReady = true
+            return
+        }
 #if DEBUG
         if ingressPerformanceMeasurement?.mode == .measure {
             ingressPerformanceMeasurement?.baselineMessageCount = totalMessageCount

@@ -24,6 +24,7 @@ fi
 
 default_scopes=(
   "PushGo-macOSUITests/PushGo_macOSUITests/testQualitySessionUsesAppOwnedStoreAndReachesFunctionalEmptyState"
+  "PushGo-macOSUITests/PushGo_macOSUITests/testFatalStoreInitializationStopsReadWriteAndRecoversAfterRelaunch"
   "PushGo-macOSUITests/PushGo_macOSUITests/testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch"
   "PushGo-macOSUITests/PushGo_macOSUITests/testUnreadBadgeKeepsMessagesSidebarTitleReadableAndNavigable"
   "PushGo-macOSUITests/PushGo_macOSUITests/testMessageDeleteUndoRestoresAccurateCanonicalContentAcrossRelaunch"
