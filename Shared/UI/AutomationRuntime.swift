@@ -3605,6 +3605,10 @@ final class PushGoAutomationRuntime {
             messages = qualityFilterFixtureMessages()
             entityRecords = []
             channelSubscriptions = []
+        case .messagesMarkdown:
+            messages = [qualityMarkdownFixtureMessage()]
+            entityRecords = []
+            channelSubscriptions = []
         case .messagesLarge:
             messages = (0..<1_000).map(qualityFixtureMessage)
             entityRecords = []
@@ -3654,6 +3658,42 @@ final class PushGoAutomationRuntime {
                 "entity_type": "message",
                 "message_id": stableID,
                 "delivery_id": "quality-delivery-\(stableID)",
+            ],
+            "status": "normal",
+        ]
+    }
+
+    private func qualityMarkdownFixtureMessage() -> [String: Any] {
+        let body = """
+        # Quality Markdown Heading
+
+        - [x] Completed deployment check
+        - Pending operator review
+
+        > Production quote remains visible
+
+        | Service | State |
+        | --- | --- |
+        | Gateway | Healthy |
+
+        `pushgo status` and [Open quality guide](https://example.com/pushgo-quality)
+
+        ```json
+        {"environment":"quality"}
+        ```
+        """
+        return [
+            "id": "00000000-0000-0000-0000-00000000d001",
+            "message_id": "quality-markdown-message",
+            "title": "Quality Markdown Structure",
+            "body": body,
+            "channel_id": "quality-markdown",
+            "is_read": false,
+            "received_at": "2026-01-15T08:00:00Z",
+            "raw_payload": [
+                "entity_type": "message",
+                "message_id": "quality-markdown-message",
+                "delivery_id": "quality-delivery-markdown",
             ],
             "status": "normal",
         ]

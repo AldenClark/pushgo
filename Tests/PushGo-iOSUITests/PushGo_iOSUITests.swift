@@ -312,6 +312,60 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.empty").exists)
     }
 
+    func testMarkdownFixtureRendersMajorStructuresInTheRealDetail() {
+        let sessionID = "ios-markdown-\(UUID().uuidString.lowercased())"
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.markdown"
+        )
+
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        let row = context.app.staticTexts["Quality Markdown Structure"]
+        XCTAssertTrue(row.waitForExistence(timeout: 8))
+        row.tap()
+        assertElementExists("sheet.message.detail", in: context.app, timeout: 8)
+
+        let requiredContent = [
+            "Quality Markdown Heading",
+            "Completed deployment check",
+            "Production quote remains visible",
+            "Gateway",
+            "Healthy",
+            "pushgo status",
+            "{\"environment\":\"quality\"}",
+        ]
+        let renderedElement: (String) -> XCUIElement = { fragment in
+            context.app.descendants(matching: .any).matching(
+                NSPredicate(format: "label CONTAINS %@", fragment)
+            ).firstMatch
+        }
+        for fragment in requiredContent {
+            let rendered = renderedElement(fragment)
+            XCTAssertTrue(
+                rendered.waitForExistence(timeout: 5),
+                "The production Markdown renderer omitted \(fragment)"
+            )
+        }
+        XCTAssertTrue(
+            context.app.links["Open quality guide"].waitForExistence(timeout: 5),
+            "The Markdown link was not exposed as a real link"
+        )
+        XCTAssertFalse(
+            context.app.staticTexts["# Quality Markdown Heading"].exists,
+            "Raw Markdown syntax was shown instead of the rendered heading"
+        )
+        let heading = renderedElement("Quality Markdown Heading")
+        let task = renderedElement("Completed deployment check")
+        let gateway = renderedElement("Gateway")
+        let healthy = renderedElement("Healthy")
+        XCTAssertGreaterThan(heading.frame.height, task.frame.height)
+        XCTAssertNotEqual(gateway.frame, healthy.frame, "The table collapsed into one plain text node")
+        XCTAssertLessThan(abs(gateway.frame.midY - healthy.frame.midY), 6)
+        XCTAssertGreaterThan(healthy.frame.minX, gateway.frame.minX)
+    }
+
     func testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation() {
         let context = configuredLaunchContext(
             launchArguments: [

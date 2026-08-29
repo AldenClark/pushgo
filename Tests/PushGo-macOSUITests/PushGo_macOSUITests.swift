@@ -298,6 +298,62 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
+    func testMarkdownFixtureRendersMajorStructuresInTheRealDetail() {
+        let sessionID = "macos-markdown-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "messages.markdown")
+        launchQuality(context, sessionID: sessionID)
+
+        let row = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000d001"
+        )
+        XCTAssertTrue(row.waitForExistence(timeout: 8))
+        row.click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "screen.message.detail")
+                .waitForExistence(timeout: 8)
+        )
+
+        let requiredContent = [
+            "Quality Markdown Heading",
+            "Completed deployment check",
+            "Production quote remains visible",
+            "Gateway",
+            "Healthy",
+            "pushgo status",
+            "{\"environment\":\"quality\"}",
+        ]
+        let renderedElement: (String) -> XCUIElement = { fragment in
+            context.app.descendants(matching: .any).matching(
+                NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@", fragment, fragment)
+            ).firstMatch
+        }
+        for fragment in requiredContent {
+            let rendered = renderedElement(fragment)
+            XCTAssertTrue(
+                rendered.waitForExistence(timeout: 5),
+                "The production Markdown renderer omitted \(fragment)"
+            )
+        }
+        XCTAssertTrue(
+            context.app.links["Open quality guide"].waitForExistence(timeout: 5),
+            "The Markdown link was not exposed as a real link"
+        )
+        XCTAssertFalse(
+            context.app.staticTexts["# Quality Markdown Heading"].exists,
+            "Raw Markdown syntax was shown instead of the rendered heading"
+        )
+        let heading = renderedElement("Quality Markdown Heading")
+        let task = renderedElement("Completed deployment check")
+        let gateway = renderedElement("Gateway")
+        let healthy = renderedElement("Healthy")
+        XCTAssertGreaterThan(heading.frame.height, task.frame.height)
+        XCTAssertNotEqual(gateway.frame, healthy.frame, "The table collapsed into one plain text node")
+        XCTAssertLessThan(abs(gateway.frame.midY - healthy.frame.midY), 6)
+        XCTAssertGreaterThan(healthy.frame.minX, gateway.frame.minX)
+    }
+
+    @MainActor
     func testMessageChannelTagCombinedUngroupedFiltersAndScopedReadPersist() {
         let sessionID = "macos-message-filters-\(UUID().uuidString.lowercased())"
         let context = configuredQualityApp(sessionID: sessionID, fixture: "messages.filters")
