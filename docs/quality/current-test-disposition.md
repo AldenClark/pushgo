@@ -122,7 +122,7 @@ Quality session 不再只隔离 GRDB：server config、decryption material metad
 
 `config/quality-impact.json` 把当前产品源码分配到 Messages、Entity、Channel/Settings、Ingress、系统表面、Watch、App shell、共享 UI/媒体、Performance 和 Release 等具名能力。`scripts/quality_changed.sh` 先执行选择器负控，再运行不低于推荐值的真实 Lane；独立性能测试/runner 变更选择 `performance`，与产品规则同时变化则提升到同时执行功能和性能的 `release`。新产品路径未映射时直接 `BLOCKED`。这只是确定性下限，不能替代对 caller、Store、错误分支和平台消费者的语义追踪。
 
-PR 的设备预算现固定投向 14 条跨能力正向代表链：App-owned 空态、准确消息/Markdown/分页/筛选/搜索/刷新、主导航、Event、Thing、Channel、页面可见性、Gateway 正常换域和解密恢复。它不再先消耗在慢态、错误恢复、删除 deadline、损坏密文及本地补偿上；这些用例没有删除，而是作为 14 条 Nightly/Release 风险集，或在其 owner 产品代码变更时 focused 执行。静态 Lane 合同会核对正向 scope 唯一、真实可发现、覆盖主要功能族且不混入上述高成本分支。
+PR 的设备预算现固定投向 12 条跨能力正向代表链：空态 Oracle 已并入同 fixture 主导航，消息搜索已并入同 fixture 准确内容/relaunch，从原 14 条减少两次独立 App 启动；其余继续覆盖 Markdown、分页/筛选/刷新、Event、Thing、Channel、页面可见性、Gateway 正常换域和解密恢复。慢态、错误恢复、独立删除 deadline、损坏密文及本地补偿保留在 Nightly/Release 风险集，或在其 owner 产品代码变更时 focused 执行。静态 Lane 合同锁定 12 条、scope 唯一、真实可发现、覆盖主要功能族且不允许两条已合并重复重新进入。
 
 计划中的 `required_checks` 是必须实际执行并写入收据的补充证据：Appcast/App Store metadata 使用快速语义契约，不启动完整 Release；Fastlane/构建/隐私/回滚变更强制执行发布静态契约并保持 Release Lane。两端各 120 次历史回放已校准旧路径漏选；无效或未知计划直接 `BLOCKED`，不回退为默认绿色。
 

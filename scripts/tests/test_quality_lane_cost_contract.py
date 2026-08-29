@@ -15,6 +15,7 @@ class QualityLaneCostContractTests(unittest.TestCase):
         nightly_scopes = self._scopes(runner, "nightly_negative_ui_scopes")
 
         self.assertEqual(len(scopes), len(set(scopes)))
+        self.assertEqual(12, len(scopes))
         self.assertEqual(len(scopes + nightly_scopes), len(set(scopes + nightly_scopes)))
         self.assertFalse(
             [scope for scope in scopes + nightly_scopes if scope.rsplit("/", 1)[-1] not in discovered]
@@ -23,6 +24,8 @@ class QualityLaneCostContractTests(unittest.TestCase):
             self.assertTrue(any(required_fragment in scope for scope in scopes), required_fragment)
         for deferred_fragment in ("Failure", "Corrupt", "Slow", "Delete"):
             self.assertFalse(any(deferred_fragment in scope for scope in scopes), deferred_fragment)
+        self.assertFalse(any("FunctionalEmptyState" in scope for scope in scopes))
+        self.assertFalse(any("MessageSearchReturnsOnly" in scope for scope in scopes))
         self.assertIn('nightly_ui_scopes="$pr_ui_scopes,$nightly_negative_ui_scopes"', runner)
 
     def _scopes(self, source: str, variable: str) -> list[str]:

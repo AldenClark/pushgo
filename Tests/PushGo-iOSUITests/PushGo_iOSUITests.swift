@@ -317,6 +317,28 @@ final class PushGo_iOSUITests: XCTestCase {
             "Canonical message did not survive a process relaunch"
         )
         XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.empty").exists)
+
+        let searchField = runtimeQualitySearchField(in: relaunched.app)
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
+        searchField.tap()
+        searchField.typeText("not-present-in-any-message")
+        assertElementExists("state.messages.search.empty", in: relaunched.app, timeout: 8)
+        XCTAssertFalse(relaunched.app.staticTexts["P2 Split Seed Message"].exists)
+        tapWhenHittable(
+            searchField.buttons.firstMatch,
+            timeout: 5,
+            message: "The native search clear action must reset the known fresh query"
+        )
+        searchField.tap()
+        searchField.typeText("P2 Split")
+        let searchTarget = relaunched.app.staticTexts["P2 Split Seed Message"]
+        XCTAssertTrue(searchTarget.waitForExistence(timeout: 8))
+        XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.search.empty").exists)
+        searchTarget.tap()
+        assertElementExists("sheet.message.detail", in: relaunched.app, timeout: 8)
+        XCTAssertTrue(
+            relaunched.app.staticTexts["Seeded from fixture.seed_messages for UI validation."].exists
+        )
     }
 
     func testMarkdownFixtureRendersMajorStructuresInTheRealDetail() {
@@ -995,14 +1017,20 @@ final class PushGo_iOSUITests: XCTestCase {
 
     func testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen() {
         let context = configuredLaunchContext()
+        let sessionID = "ios-navigation-\(UUID().uuidString.lowercased())"
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
-            sessionID: "ios-navigation-\(UUID().uuidString.lowercased())",
+            sessionID: sessionID,
             fixture: "empty.clean"
         )
         launch(context.app)
 
         assertQualityRuntimeReady(in: context.app, timeout: 15)
+        XCTAssertEqual(
+            element(in: context.app, identifier: "quality-runtime.ready").value as? String,
+            sessionID
+        )
         assertElementExists("screen.messages.list", in: context.app, timeout: 8)
+        assertElementExists("state.messages.empty", in: context.app, timeout: 5)
         let tabs = context.app.tabBars.buttons
         XCTAssertGreaterThanOrEqual(tabs.count, 4, "The four primary product destinations must be reachable")
 
