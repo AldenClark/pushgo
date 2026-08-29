@@ -1,5 +1,6 @@
 import XCTest
 import os
+import UIKit
 
 private enum PushGoIOSUITestRuntimeRoots {
     private static let roots = OSAllocatedUnfairLock<[URL]>(initialState: [])
@@ -275,10 +276,35 @@ final class PushGo_iOSUITests: XCTestCase {
                 .label.contains("dynamic type accessibility5"),
             "The SwiftUI environment must actually apply accessibility5, not merely receive a launch argument"
         )
+        let tabBar = context.app.tabBars.firstMatch
+        XCTAssertTrue(tabBar.waitForExistence(timeout: 8), "The production tab bar must be visible.")
+        let messagesTab = context.app.buttons["tab.messages"]
         XCTAssertTrue(
-            context.app.staticTexts["消息"].firstMatch.waitForExistence(timeout: 8),
-            "The production navigation title must be localized, not merely the test fixture"
+            messagesTab.waitForExistence(timeout: 8) && messagesTab.isHittable,
+            "The real Messages tab title must remain visible and actionable with an unread badge."
         )
+        XCTAssertEqual(
+            messagesTab.label,
+            "消息",
+            "The system tab itself must own the localized Messages title, not a page-title lookalike."
+        )
+        XCTAssertEqual(
+            messagesTab.value as? String,
+            "1项",
+            "The messages.standard fixture must expose its real unread count in the system tab badge."
+        )
+        XCTAssertGreaterThanOrEqual(messagesTab.frame.width, 44, "The Messages tab lost its actionable width.")
+        let messagesTabScreenshot = messagesTab.screenshot()
+        let messagesTabAttachment = XCTAttachment(screenshot: messagesTabScreenshot)
+        messagesTabAttachment.name = "ios-zh-hans-messages-tab-title-with-unread-badge"
+        messagesTabAttachment.lifetime = .keepAlways
+        add(messagesTabAttachment)
+        XCTAssertTrue(
+            hasReadableLowerTitleContrast(in: messagesTabScreenshot),
+            "The lower title region has no readable foreground; the unread badge may have hidden the Messages title."
+        )
+        messagesTab.tap()
+        assertElementExists("screen.messages.list", in: context.app, timeout: 8)
         let messageTitle = context.app.staticTexts["P2 Split Seed Message"]
         tapWhenHittable(messageTitle, timeout: 8, message: "The localized large-font list must open real data")
         assertElementExists("sheet.message.detail", in: context.app, timeout: 8)
@@ -4015,5 +4041,52 @@ final class PushGo_iOSUITests: XCTestCase {
         formatter.formatOptions = [.withInternetDateTime]
         let baseTimestamp = 1_767_225_600
         return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(baseTimestamp - offsetSeconds)))
+    }
+
+    private func hasReadableLowerTitleContrast(in screenshot: XCUIScreenshot) -> Bool {
+        guard let image = screenshot.image.cgImage else { return false }
+        let cropRect = CGRect(
+            x: CGFloat(image.width) * 0.20,
+            y: CGFloat(image.height) * 0.58,
+            width: CGFloat(image.width) * 0.60,
+            height: CGFloat(image.height) * 0.32
+        ).integral
+        guard let crop = image.cropping(to: cropRect), crop.width * crop.height >= 10 else { return false }
+        let bytesPerPixel = 4
+        let bytesPerRow = crop.width * bytesPerPixel
+        var pixels = [UInt8](repeating: 0, count: bytesPerRow * crop.height)
+        let rendered = pixels.withUnsafeMutableBytes { buffer in
+            guard let baseAddress = buffer.baseAddress,
+                  let context = CGContext(
+                      data: baseAddress,
+                      width: crop.width,
+                      height: crop.height,
+                      bitsPerComponent: 8,
+                      bytesPerRow: bytesPerRow,
+                      space: CGColorSpaceCreateDeviceRGB(),
+                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                  )
+            else {
+                return false
+            }
+            context.draw(crop, in: CGRect(x: 0, y: 0, width: crop.width, height: crop.height))
+            return true
+        }
+        guard rendered else { return false }
+        var luminances: [CGFloat] = []
+        luminances.reserveCapacity(crop.width * crop.height)
+        for y in 0 ..< crop.height {
+            for x in 0 ..< crop.width {
+                let offset = y * bytesPerRow + x * bytesPerPixel
+                let red = CGFloat(pixels[offset]) / 255
+                let green = CGFloat(pixels[offset + 1]) / 255
+                let blue = CGFloat(pixels[offset + 2]) / 255
+                luminances.append(0.2126 * red + 0.7152 * green + 0.0722 * blue)
+            }
+        }
+        luminances.sort()
+        let darkSample = luminances[luminances.count / 20]
+        let lightSample = luminances[luminances.count * 19 / 20]
+        return lightSample - darkSample >= 0.25
     }
 }
