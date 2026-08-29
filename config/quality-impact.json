@@ -201,8 +201,26 @@
       "escalation_reasons": ["Watch is a separate Store/UI/system consumer and is promoted when shared contracts change."]
     },
     {
+      "id": "ios-primary-navigation-ui",
+      "paths": ["Apps/PushGo-iOS/UI/Screens/MainTabContainerView.swift"],
+      "capabilities": ["app-launch", "primary-navigation"],
+      "minimum_evidence": ["iOS real primary controls reach accurate Message/Event/Thing/Channel/Settings destinations", "Apple PR broad positive representative set"],
+      "lane": "pr",
+      "known_evidence_gaps": ["Pure iOS primary-navigation presentation changes do not automatically run fatal-startup, background, system-notification, Watch, or macOS window matrices; promote when the diff changes one of those owners."],
+      "escalation_reasons": ["A real iOS navigation journey is required, while unrelated platform failure matrices are not a minimum for a pure MainTab UI change."]
+    },
+    {
+      "id": "macos-primary-navigation-ui",
+      "paths": ["Apps/PushGo-macOS/UI/Screens/MainTabContainerView.swift"],
+      "capabilities": ["app-launch", "primary-navigation"],
+      "minimum_evidence": ["macOS real unread title/badge geometry, contrast, click, and five-domain accurate navigation journey", "Apple PR broad positive representative set"],
+      "lane": "pr",
+      "known_evidence_gaps": ["Pure macOS primary-navigation presentation changes do not automatically run fatal-startup, close/reopen, background-ingress, notification, or window-identity risk matrices; promote when the diff changes one of those owners."],
+      "escalation_reasons": ["A real macOS dynamic sidebar navigation journey is required, while status-item and window lifecycle are not owned by MainTabContainerView."]
+    },
+    {
       "id": "app-shell-window-navigation",
-      "paths": ["Shared/Application/AppNavigationState.swift", "Shared/Application/MainTab.swift", "Shared/Application/FeedbackPresentationPolicy.swift", "Shared/Application/MacMainWindowPresenter.swift", "Shared/Models/AppError.swift", "Shared/UI/RootView.swift", "Shared/Utilities/AppConstants.swift", "Apps/PushGo-iOS/ContentView.swift", "Apps/PushGo-iOS/pushgoApp.swift", "Apps/PushGo-iOS/App/**", "Apps/PushGo-iOS/UI/Screens/MainTabContainerView.swift", "Apps/PushGo-macOS/ContentView.swift", "Apps/PushGo-macOS/pushgomacApp.swift", "Apps/PushGo-macOS/App/**", "Apps/PushGo-macOS/MainWindowController.swift", "Apps/PushGo-macOS/MacMenuBarContentView.swift", "Apps/PushGo-macOS/UI/Screens/MainTabContainerView.swift", "Apps/PushGo-macOS/UI/ViewModels/**"],
+      "paths": ["Shared/Application/AppNavigationState.swift", "Shared/Application/MainTab.swift", "Shared/Application/FeedbackPresentationPolicy.swift", "Shared/Application/MacMainWindowPresenter.swift", "Shared/Models/AppError.swift", "Shared/UI/RootView.swift", "Shared/Utilities/AppConstants.swift", "Apps/PushGo-iOS/ContentView.swift", "Apps/PushGo-iOS/pushgoApp.swift", "Apps/PushGo-iOS/App/**", "Apps/PushGo-macOS/ContentView.swift", "Apps/PushGo-macOS/pushgomacApp.swift", "Apps/PushGo-macOS/App/**", "Apps/PushGo-macOS/MainWindowController.swift", "Apps/PushGo-macOS/MacMenuBarContentView.swift", "Apps/PushGo-macOS/UI/ViewModels/**"],
       "capabilities": ["app-launch", "primary-navigation", "mac-window-status-item"],
       "minimum_evidence": ["navigation/window state tests", "real control navigation UI journey including one applicable high-risk badge/loading/error/disabled state", "macOS open/close/reopen UI evidence when available"],
       "lane": "nightly",

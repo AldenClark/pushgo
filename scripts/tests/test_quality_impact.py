@@ -286,6 +286,30 @@ class QualityImpactPlanTests(unittest.TestCase):
         self.assertIn("protected material", " ".join(plan["escalation_reasons"]))
         self.assertIn("notification-sound", plan["impacted_capabilities"])
 
+    def test_ios_main_tab_ui_uses_pr_navigation_evidence_without_macos_window_risk(self):
+        plan = self.plan("Apps/PushGo-iOS/UI/Screens/MainTabContainerView.swift")
+
+        self.assertEqual("READY", plan["plan_status"])
+        self.assertEqual("pr", plan["recommended_lane"])
+        self.assertEqual(["app-launch", "primary-navigation"], plan["impacted_capabilities"])
+        self.assertNotIn("mac-window-status-item", plan["impacted_capabilities"])
+
+    def test_macos_main_tab_ui_uses_pr_dynamic_sidebar_evidence_without_window_risk(self):
+        plan = self.plan("Apps/PushGo-macOS/UI/Screens/MainTabContainerView.swift")
+
+        self.assertEqual("READY", plan["plan_status"])
+        self.assertEqual("pr", plan["recommended_lane"])
+        self.assertEqual(["app-launch", "primary-navigation"], plan["impacted_capabilities"])
+        self.assertNotIn("mac-window-status-item", plan["impacted_capabilities"])
+        self.assertIn("unread title/badge", " ".join(plan["minimum_evidence"]))
+
+    def test_macos_window_presenter_retains_nightly_window_lifecycle_evidence(self):
+        plan = self.plan("Shared/Application/MacMainWindowPresenter.swift")
+
+        self.assertEqual("nightly", plan["recommended_lane"])
+        self.assertIn("mac-window-status-item", plan["impacted_capabilities"])
+        self.assertIn("close/reopen", " ".join(plan["minimum_evidence"]))
+
     def test_system_settings_component_from_history_is_mapped_to_real_consumers(self):
         plan = self.plan("Shared/UI/SystemIntegrationSettingsGroup.swift")
 

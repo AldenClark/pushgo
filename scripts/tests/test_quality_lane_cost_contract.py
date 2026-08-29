@@ -56,6 +56,25 @@ class QualityLaneCostContractTests(unittest.TestCase):
         pr_body = runner.split("  pr)\n", 1)[1].split("    ;;", 1)[0]
         self.assertEqual(1, pr_body.count('TEST_SCOPES="$macos_pr_ui_scope" run_macos_ui positive'))
 
+    def test_primary_navigation_ui_reuses_existing_cross_platform_pr_oracles(self) -> None:
+        runner = (REPO / "scripts/quality_test.sh").read_text()
+        pr_scopes = self._scopes(runner, "pr_ui_scopes")
+
+        self.assertEqual(
+            1,
+            sum(
+                "testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen" in scope
+                for scope in pr_scopes
+            ),
+        )
+        self.assertEqual(
+            1,
+            runner.count(
+                'macos_pr_ui_scope="PushGo-macOSUITests/PushGo_macOSUITests/'
+                'testSidebarNavigationCoversPrimaryScreens"'
+            ),
+        )
+
     def test_real_macos_update_install_is_release_or_focused_only(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()
         update_runner = (REPO / "scripts/run_macos_update_install_test.sh").read_text()
