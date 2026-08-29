@@ -139,6 +139,8 @@ class QualityLaneCostContractTests(unittest.TestCase):
 
     def test_settings_ui_impact_checks_reuse_minimum_platform_purpose_journeys(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()
+        ios_source = (REPO / "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift").read_text()
+        macos_source = (REPO / "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift").read_text()
 
         self.assertEqual(1, runner.count("apple-ios-settings-positive-extension)"))
         self.assertEqual(1, runner.count("apple-macos-settings-positive)"))
@@ -166,6 +168,24 @@ class QualityLaneCostContractTests(unittest.TestCase):
             "testGatewayLocalCommitFailureRollsBackBeforeRetryCommits",
             runner.split("apple-macos-settings-positive)", 1)[1].split(";;", 1)[0],
         )
+        ios_visibility = ios_source.split(
+            "func testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch()",
+            1,
+        )[1].split("\n    func test", 1)[0]
+        macos_visibility = macos_source.split(
+            "func testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch()",
+            1,
+        )[1].split("\n    @MainActor\n    func ", 1)[0]
+        ios_visibility_oracle = ios_source.split(
+            "private func assertDataTabVisibility(",
+            1,
+        )[1].split("\n    private func ", 1)[0]
+        for body in (ios_visibility, macos_visibility):
+            self.assertIn('"toggle.settings.page.messages"', body)
+        self.assertIn("messagesVisible: false", ios_visibility)
+        self.assertIn("messagesVisible: true", ios_visibility)
+        self.assertIn('"P2 Split Seed Message"', ios_visibility_oracle)
+        self.assertIn('"P2 Split Seed Message"', macos_visibility)
 
     def test_shared_form_impact_uses_one_accessibility_and_one_macos_batch(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()

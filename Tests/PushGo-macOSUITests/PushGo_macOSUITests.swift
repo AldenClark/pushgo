@@ -2065,8 +2065,10 @@ final class PushGo_macOSUITests: XCTestCase {
         context.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         launchQuality(context, sessionID: sessionID)
 
+        let messagesEntry = element(in: context.app, identifier: "sidebar-messages")
         let eventsEntry = element(in: context.app, identifier: "sidebar-events")
         let thingsEntry = element(in: context.app, identifier: "sidebar-things")
+        XCTAssertTrue(messagesEntry.waitForExistence(timeout: 8))
         XCTAssertTrue(eventsEntry.waitForExistence(timeout: 8))
         XCTAssertTrue(thingsEntry.waitForExistence(timeout: 8))
         openSidebarTab("events", in: context.app)
@@ -2105,12 +2107,19 @@ final class PushGo_macOSUITests: XCTestCase {
             "Closing notification-sound settings must reliably return to the Settings page."
         )
 
+        let messageToggle = element(in: context.app, identifier: "toggle.settings.page.messages")
+        XCTAssertTrue(messageToggle.waitForExistence(timeout: 8) && messageToggle.isHittable)
+        messageToggle.click()
         let eventToggle = element(in: context.app, identifier: "toggle.settings.page.events")
         XCTAssertTrue(eventToggle.waitForExistence(timeout: 8) && eventToggle.isHittable)
         eventToggle.click()
         let thingToggle = element(in: context.app, identifier: "toggle.settings.page.things")
         XCTAssertTrue(thingToggle.waitForExistence(timeout: 8) && thingToggle.isHittable)
         thingToggle.click()
+        XCTAssertTrue(
+            messagesEntry.waitForNonExistence(timeout: 8),
+            "Turning off the Messages page must remove its real navigation destination."
+        )
         XCTAssertTrue(
             eventsEntry.waitForNonExistence(timeout: 8),
             "Turning off the Event page must remove its real navigation destination."
@@ -2127,6 +2136,11 @@ final class PushGo_macOSUITests: XCTestCase {
         persistedOff.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         launchQuality(persistedOff, sessionID: sessionID)
         XCTAssertTrue(
+            element(in: persistedOff.app, identifier: "sidebar-messages")
+                .waitForNonExistence(timeout: 8),
+            "The hidden Messages page must remain hidden after a full process relaunch."
+        )
+        XCTAssertTrue(
             element(in: persistedOff.app, identifier: "sidebar-events")
                 .waitForNonExistence(timeout: 8),
             "The hidden Event page must remain hidden after a full process relaunch."
@@ -2137,6 +2151,15 @@ final class PushGo_macOSUITests: XCTestCase {
             "The hidden Thing page must remain hidden after a full process relaunch."
         )
         openSidebarTab("settings", in: persistedOff.app)
+        let persistedOffMessageToggle = element(
+            in: persistedOff.app,
+            identifier: "toggle.settings.page.messages"
+        )
+        XCTAssertTrue(
+            persistedOffMessageToggle.waitForExistence(timeout: 8)
+                && persistedOffMessageToggle.isHittable
+        )
+        persistedOffMessageToggle.click()
         let persistedOffToggle = element(
             in: persistedOff.app,
             identifier: "toggle.settings.page.events"
@@ -2152,6 +2175,32 @@ final class PushGo_macOSUITests: XCTestCase {
         )
         persistedOffThingToggle.click()
 
+        let restoredMessagesEntry = element(in: persistedOff.app, identifier: "sidebar-messages")
+        XCTAssertTrue(
+            restoredMessagesEntry.waitForExistence(timeout: 8),
+            "Turning the Messages page back on must restore a reachable navigation destination."
+        )
+        openSidebarTab("messages", in: persistedOff.app)
+        assertVisibleScreenThroughUI("screen.messages.list", in: persistedOff.app, timeout: 8)
+        let restoredMessageRow = messageRow(
+            containing: "P2 Split Seed Message",
+            in: persistedOff.app
+        )
+        XCTAssertTrue(
+            restoredMessageRow.waitForExistence(timeout: 8)
+                && restoredMessageRow.label.contains("P2 Split Seed Message")
+                && ((restoredMessageRow.value as? String)?.contains(
+                    "Seeded from fixture.seed_messages for UI validation."
+                ) == true),
+            "The restored Messages destination must show the accurate App-owned fixture."
+        )
+        restoredMessageRow.click()
+        assertVisibleScreenThroughUI("screen.message.detail", in: persistedOff.app, timeout: 8)
+        XCTAssertTrue(
+            persistedOff.app.staticTexts[
+                "Seeded from fixture.seed_messages for UI validation."
+            ].waitForExistence(timeout: 8)
+        )
         let restoredEventsEntry = element(in: persistedOff.app, identifier: "sidebar-events")
         XCTAssertTrue(
             restoredEventsEntry.waitForExistence(timeout: 8),
@@ -2173,6 +2222,16 @@ final class PushGo_macOSUITests: XCTestCase {
         let persistedOn = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
         persistedOn.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         launchQuality(persistedOn, sessionID: sessionID)
+        openSidebarTab("messages", in: persistedOn.app)
+        assertVisibleScreenThroughUI("screen.messages.list", in: persistedOn.app, timeout: 8)
+        let persistedMessageRow = messageRow(containing: "P2 Split Seed Message", in: persistedOn.app)
+        XCTAssertTrue(
+            persistedMessageRow.waitForExistence(timeout: 8)
+                && persistedMessageRow.label.contains("P2 Split Seed Message")
+                && ((persistedMessageRow.value as? String)?.contains(
+                    "Seeded from fixture.seed_messages for UI validation."
+                ) == true)
+        )
         openSidebarTab("events", in: persistedOn.app)
         assertVisibleScreenThroughUI("screen.events.list", in: persistedOn.app, timeout: 8)
         XCTAssertTrue(persistedOn.app.staticTexts["No events yet"].waitForExistence(timeout: 8))

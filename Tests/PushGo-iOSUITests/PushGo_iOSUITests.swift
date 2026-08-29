@@ -1277,7 +1277,12 @@ final class PushGo_iOSUITests: XCTestCase {
         context.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         launch(context.app)
         assertQualityRuntimeReady(in: context.app, timeout: 15)
-        assertDataTabVisibility(eventsVisible: true, thingsVisible: true, in: context.app)
+        assertDataTabVisibility(
+            messagesVisible: true,
+            eventsVisible: true,
+            thingsVisible: true,
+            in: context.app
+        )
 
         openSettingsFromChannels(in: context.app)
         let soundSettingsAction = scrollToHittableElement(
@@ -1323,6 +1328,12 @@ final class PushGo_iOSUITests: XCTestCase {
             "Dismissing the sound editor must return to Settings before lifecycle checks."
         )
 
+        let messageToggle = scrollToHittableElement(
+            identifier: "toggle.settings.page.messages",
+            in: context.app
+        )
+        XCTAssertTrue(messageToggle.isHittable)
+        messageToggle.tap()
         let eventToggle = scrollToHittableElement(
             identifier: "toggle.settings.page.events",
             in: context.app
@@ -1336,14 +1347,24 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(thingToggle.isHittable)
         thingToggle.tap()
         leaveSettings(in: context.app)
-        assertDataTabVisibility(eventsVisible: false, thingsVisible: false, in: context.app)
+        assertDataTabVisibility(
+            messagesVisible: false,
+            eventsVisible: false,
+            thingsVisible: false,
+            in: context.app
+        )
         assertElementExists("screen.channels", in: context.app, timeout: 8)
 
         context.app.terminate()
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
         launch(context.app)
         assertQualityRuntimeReady(in: context.app, timeout: 15)
-        assertDataTabVisibility(eventsVisible: false, thingsVisible: false, in: context.app)
+        assertDataTabVisibility(
+            messagesVisible: false,
+            eventsVisible: false,
+            thingsVisible: false,
+            in: context.app
+        )
 
         openSettingsFromChannels(in: context.app)
         let persistedSoundSettingsAction = scrollToHittableElement(
@@ -1377,6 +1398,12 @@ final class PushGo_iOSUITests: XCTestCase {
         )
         XCTAssertTrue(persistedSoundSettingsScreen.waitForNonExistence(timeout: 8))
 
+        let persistedOffMessageToggle = scrollToHittableElement(
+            identifier: "toggle.settings.page.messages",
+            in: context.app
+        )
+        XCTAssertTrue(persistedOffMessageToggle.isHittable)
+        persistedOffMessageToggle.tap()
         let persistedOffToggle = scrollToHittableElement(
             identifier: "toggle.settings.page.events",
             in: context.app
@@ -1391,6 +1418,7 @@ final class PushGo_iOSUITests: XCTestCase {
         persistedOffThingToggle.tap()
         leaveSettings(in: context.app)
         assertDataTabVisibility(
+            messagesVisible: true,
             eventsVisible: true,
             thingsVisible: true,
             in: context.app,
@@ -3892,6 +3920,7 @@ final class PushGo_iOSUITests: XCTestCase {
     }
 
     private func assertDataTabVisibility(
+        messagesVisible: Bool,
         eventsVisible: Bool,
         thingsVisible: Bool,
         in app: XCUIApplication,
@@ -3900,7 +3929,10 @@ final class PushGo_iOSUITests: XCTestCase {
         line: UInt = #line
     ) {
         let buttons = app.tabBars.buttons
-        let expectedCount = 2 + (eventsVisible ? 1 : 0) + (thingsVisible ? 1 : 0)
+        let expectedCount = 1
+            + (messagesVisible ? 1 : 0)
+            + (eventsVisible ? 1 : 0)
+            + (thingsVisible ? 1 : 0)
         let countExpectation = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "count == %d", expectedCount),
             object: buttons
@@ -3908,11 +3940,30 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertEqual(
             XCTWaiter.wait(for: [countExpectation], timeout: 8),
             .completed,
-            "The real navigation destinations must match the saved Events/Things visibility settings",
+            "The real navigation destinations must match the saved Messages/Events/Things visibility settings",
             file: file,
             line: line
         )
-        guard eventsVisible, thingsVisible, openWhenVisible, buttons.count == expectedCount else { return }
+        guard messagesVisible,
+              eventsVisible,
+              thingsVisible,
+              openWhenVisible,
+              buttons.count == expectedCount else { return }
+        let messagesButton = buttons.element(boundBy: 0)
+        tapWhenHittable(
+            messagesButton,
+            timeout: 5,
+            message: "The restored Messages entry must be actionable",
+            file: file,
+            line: line
+        )
+        assertElementExists("screen.messages.list", in: app, timeout: 8)
+        XCTAssertTrue(
+            app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8),
+            "The restored Messages destination must reach its accurate App-owned content",
+            file: file,
+            line: line
+        )
         let eventButton = buttons.element(boundBy: 1)
         tapWhenHittable(
             eventButton,
