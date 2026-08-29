@@ -255,7 +255,8 @@ final class PushGo_macOSUITests: XCTestCase {
         let context = configuredQualityApp(
             sessionID: sessionID,
             fixture: "messages.standard",
-            legacyStore: "messages.v17"
+            legacyStore: "messages.v17",
+            allowCrossAppDataAccess: true
         )
         launchQuality(context, sessionID: sessionID)
 
@@ -304,9 +305,67 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertTrue(
             context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."].exists
         )
-        let image = element(in: context.app, identifier: "message.image.0")
+
+        let pasteboard = NSPasteboard.general
+        let savedPasteboardItems: [[NSPasteboard.PasteboardType: Data]] =
+            pasteboard.pasteboardItems?.map { item in
+                Dictionary(uniqueKeysWithValues: item.types.compactMap { type in
+                    item.data(forType: type).map { (type, $0) }
+                })
+            } ?? []
+        defer {
+            pasteboard.clearContents()
+            let restoredItems = savedPasteboardItems.map { representations in
+                let item = NSPasteboardItem()
+                for (type, data) in representations {
+                    item.setData(data, forType: type)
+                }
+                return item
+            }
+            if !restoredItems.isEmpty {
+                pasteboard.writeObjects(restoredItems)
+            }
+        }
+
+        let metadataCopy = element(
+            in: context.app,
+            identifier: "action.message.copy_metadata_value.0"
+        )
         XCTAssertTrue(
-            image.waitForExistence(timeout: 8),
+            metadataCopy.waitForExistence(timeout: 5) && metadataCopy.isHittable,
+            "The canonical metadata value must expose a reachable production copy action."
+        )
+        assertExactPasteboardCopy(
+            "quality-fixture",
+            byClicking: metadataCopy,
+            pasteboard: pasteboard,
+            in: context.app,
+            purpose: "message metadata"
+        )
+
+        let copyLink = element(in: context.app, identifier: "action.message.copy_link")
+        let detailScroll = context.app.scrollViews.firstMatch
+        for _ in 0..<3 where !(copyLink.exists && copyLink.isHittable) {
+            detailScroll.swipeUp()
+        }
+        XCTAssertTrue(
+            copyLink.exists && copyLink.isHittable,
+            "The canonical message URL copy action remained unreachable in the real detail."
+        )
+        assertExactPasteboardCopy(
+            "https://pushgo.dev/quality-message",
+            byClicking: copyLink,
+            pasteboard: pasteboard,
+            in: context.app,
+            purpose: "message URL"
+        )
+
+        let image = element(in: context.app, identifier: "message.image.0")
+        for _ in 0..<3 where !(image.exists && image.isHittable) {
+            detailScroll.swipeDown()
+        }
+        XCTAssertTrue(
+            image.waitForExistence(timeout: 8) && image.isHittable,
             "The canonical message image must decode into an interactive detail asset."
         )
         image.click()
@@ -330,7 +389,8 @@ final class PushGo_macOSUITests: XCTestCase {
         let relaunched = configuredQualityApp(
             sessionID: sessionID,
             fixture: "messages.standard",
-            legacyStore: "messages.v17"
+            legacyStore: "messages.v17",
+            allowCrossAppDataAccess: true
         )
         launchQuality(relaunched, sessionID: sessionID)
         let relaunchedLegacyRow = element(
@@ -3570,6 +3630,47 @@ final class PushGo_macOSUITests: XCTestCase {
         field.click()
         field.typeKey("a", modifierFlags: .command)
         field.typeKey("v", modifierFlags: .command)
+    }
+
+    @MainActor
+    private func assertExactPasteboardCopy(
+        _ expected: String,
+        byClicking action: XCUIElement,
+        pasteboard: NSPasteboard,
+        in app: XCUIApplication,
+        purpose: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        pasteboard.clearContents()
+        XCTAssertTrue(
+            pasteboard.setString("pushgo-quality-copy-sentinel", forType: .string),
+            "Could not prepare the system pasteboard for \(purpose) verification.",
+            file: file,
+            line: line
+        )
+        action.click()
+        XCTAssertTrue(
+            element(in: app, identifier: "feedback.toast.success").waitForExistence(timeout: 2),
+            "The \(purpose) action did not report a successful system pasteboard write.",
+            file: file,
+            line: line
+        )
+        let copied = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                pasteboard.string(forType: .string) == expected
+            },
+            object: nil
+        )
+        let waitResult = XCTWaiter.wait(for: [copied], timeout: 3)
+        XCTAssertEqual(
+            waitResult,
+            .completed,
+            "The \(purpose) action did not copy its exact canonical value; actual="
+                + (pasteboard.string(forType: .string) ?? "<nil>"),
+            file: file,
+            line: line
+        )
     }
 
     @MainActor

@@ -3803,8 +3803,9 @@ final class PushGoAutomationRuntime {
         ]
         if includesMedia {
             rawPayload["images"] = "[\"\(Self.qualityStandardMessageImageURL.absoluteString)\"]"
+            rawPayload["metadata"] = ["environment": "quality-fixture"]
         }
-        return [
+        var message: [String: Any] = [
             "id": "00000000-0000-0000-0000-\(suffix)",
             "message_id": stableID,
             "title": title,
@@ -3815,6 +3816,10 @@ final class PushGoAutomationRuntime {
             "raw_payload": rawPayload,
             "status": "normal",
         ]
+        if includesMedia {
+            message["url"] = "https://pushgo.dev/quality-message"
+        }
+        return message
     }
 
     private func qualityCleanupFixtureMessages(referenceDate: Date = Date()) -> [[String: Any]] {

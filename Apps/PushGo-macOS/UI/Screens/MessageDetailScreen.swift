@@ -558,7 +558,14 @@ struct MessageDetailScreen: View {
     private func copyText(_ text: String, toastKey: String = "message_content_copied") {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        PushGoSystemInteraction.copyTextToPasteboard(trimmed)
+        guard PushGoSystemInteraction.copyTextToPasteboard(trimmed) else {
+            environment.showToast(
+                message: localizationManager.localized("operation_failed"),
+                style: .error,
+                duration: 2.5
+            )
+            return
+        }
         environment.showToast(
             message: localizationManager.localized(toastKey),
             style: .success,
