@@ -13,6 +13,8 @@ problem_reporter_cleaner="$repo_root/scripts/close_macos_problem_reporter.sh"
 test_app_executable="$derived_data_path/Build/Products/Debug/PushGo.app/Contents/MacOS/PushGo"
 test_runner_executable="$derived_data_path/Build/Products/Debug/PushGo-macOSUITests-Runner.app/Contents/MacOS/PushGo-macOSUITests-Runner"
 caffeinate_pid=""
+problem_reporter_monitor_pid=""
+problem_reporter_monitor_log=""
 
 if [[ ! "$max_retries" =~ ^[0-9]+$ ]] || (( max_retries != 0 )); then
   echo "status=BLOCKED"
@@ -62,6 +64,10 @@ finish() {
   if [[ -n "$caffeinate_pid" ]]; then
     kill "$caffeinate_pid" >/dev/null 2>&1 || true
   fi
+  if [[ -n "$problem_reporter_monitor_pid" ]]; then
+    kill "$problem_reporter_monitor_pid" >/dev/null 2>&1 || true
+    wait "$problem_reporter_monitor_pid" 2>/dev/null || true
+  fi
   close_stale_test_processes
   "$problem_reporter_cleaner" || true
   exit "$command_status"
@@ -83,6 +89,9 @@ caffeinate_pid=$!
 "$problem_reporter_cleaner"
 close_stale_test_processes
 mkdir -p "$results_root"
+problem_reporter_monitor_log="$(mktemp -t pushgo-problem-reporter-monitor.XXXXXX.log)"
+"$problem_reporter_cleaner" --watch-pid "$$" >>"$problem_reporter_monitor_log" 2>&1 &
+problem_reporter_monitor_pid=$!
 
 common_args=(
   -project "$project_path"
@@ -124,7 +133,20 @@ status=${PIPESTATUS[0]}
 set -e
 "$problem_reporter_cleaner"
 
+if ! kill -0 "$problem_reporter_monitor_pid" >/dev/null 2>&1; then
+  wait "$problem_reporter_monitor_pid" || monitor_status=$?
+  [[ -z "$runner_status_file" ]] || printf 'BLOCKED\n' > "$runner_status_file"
+  echo "status=BLOCKED"
+  echo "reason=macos_problem_reporter_cleanup_failed:${monitor_status:-unknown}"
+  echo "monitor_log=$problem_reporter_monitor_log"
+  echo "log=$log_file"
+  echo "result_bundle=$result_bundle"
+  exit 2
+fi
+
 if [[ $status -eq 0 ]]; then
+  rm -f "$problem_reporter_monitor_log"
+  problem_reporter_monitor_log=""
   rm -f "$log_file"
   echo "status=PASSED"
   echo "result_bundle=$result_bundle"
