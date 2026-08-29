@@ -257,6 +257,7 @@ struct ThingSplitScreen: View {
             } label: {
                 Image(systemName: "trash")
             }
+            .accessibilityIdentifier("action.thing.delete")
             .help(localizationManager.localized("delete"))
             .disabled(selectedThing == nil)
         }

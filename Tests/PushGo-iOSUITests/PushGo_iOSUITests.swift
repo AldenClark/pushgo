@@ -1825,6 +1825,23 @@ final class PushGo_iOSUITests: XCTestCase {
         )
         XCTAssertTrue(thingRow.waitForExistence(timeout: 8))
         XCTAssertTrue(distractorRow.waitForExistence(timeout: 8))
+        tapWhenHittable(
+            distractorRow,
+            timeout: 8,
+            message: "The distractor Thing must open before deletion"
+        )
+        assertElementExists("sheet.thing.detail", in: context.app, timeout: 8)
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.thing.delete"),
+            timeout: 8,
+            message: "The real Thing detail delete action must be reachable"
+        )
+        XCTAssertTrue(
+            distractorRow.waitForNonExistence(timeout: 8),
+            "Deleting one Thing must immediately remove only that target from the user-visible list."
+        )
+        XCTAssertTrue(thingRow.waitForExistence(timeout: 8))
+        assertElementExists("state.pending_deletion", in: context.app, timeout: 5)
         let searchField = runtimeQualitySearchField(in: context.app)
         XCTAssertTrue(searchField.waitForExistence(timeout: 8))
         searchField.tap()
@@ -1911,8 +1928,8 @@ final class PushGo_iOSUITests: XCTestCase {
         let relaunchedThing = element(in: context.app, identifier: "thing.row.quality-thing-rich")
         XCTAssertTrue(
             element(in: context.app, identifier: "thing.row.quality-thing-distractor")
-                .waitForExistence(timeout: 8),
-            "Relaunch must restore the complete canonical Thing set after the transient search."
+                .waitForNonExistence(timeout: 8),
+            "The deleted Thing must not return after the pending deletion commits and the App relaunches."
         )
         tapWhenHittable(relaunchedThing, timeout: 8, message: "The same Thing must survive relaunch")
         let relatedEvent = element(

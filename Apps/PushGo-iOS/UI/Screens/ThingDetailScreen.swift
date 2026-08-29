@@ -37,6 +37,7 @@ struct ThingDetailScreen: View {
                 } label: {
                     Image(systemName: "trash")
                 }
+                .accessibilityIdentifier("action.thing.delete")
                 .accessibilityLabel(localizationManager.localized("delete"))
             }
         }

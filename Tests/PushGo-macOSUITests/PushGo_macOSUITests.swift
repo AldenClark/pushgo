@@ -1145,6 +1145,33 @@ final class PushGo_macOSUITests: XCTestCase {
             identifier: "thing.row.quality-thing-distractor"
         )
         XCTAssertTrue(distractorRow.waitForExistence(timeout: 8))
+        distractorRow.click()
+        let deleteThing = element(in: context.app, identifier: "action.thing.delete")
+        XCTAssertTrue(deleteThing.waitForExistence(timeout: 8) && deleteThing.isHittable)
+        deleteThing.click()
+        XCTAssertTrue(
+            distractorRow.waitForNonExistence(timeout: 8),
+            "Deleting one Thing must immediately remove only that target from the user-visible list."
+        )
+        XCTAssertTrue(thingRow.waitForExistence(timeout: 8))
+        let pendingThingDeletion = element(in: context.app, identifier: "state.pending_deletion")
+        XCTAssertTrue(pendingThingDeletion.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            pendingThingDeletion.waitForNonExistence(timeout: 15),
+            "The production undo deadline must commit before the journey continues."
+        )
+
+        context.app.terminate()
+        launchQuality(context, sessionID: sessionID)
+        openSidebarTab("things", in: context.app)
+        XCTAssertTrue(
+            distractorRow.waitForNonExistence(timeout: 8),
+            "The deleted Thing must not return after the production deadline commits and the App relaunches."
+        )
+        XCTAssertTrue(
+            thingRow.waitForExistence(timeout: 8),
+            "Deleting one Thing must preserve the independent control Thing across relaunch."
+        )
         let searchField = context.app.searchFields.firstMatch
         XCTAssertTrue(searchField.waitForExistence(timeout: 8))
         searchField.click()
@@ -1225,29 +1252,6 @@ final class PushGo_macOSUITests: XCTestCase {
         )
         element(in: context.app, identifier: "action.thing.related.close").click()
 
-        context.app.terminate()
-        let relaunched = configuredQualityApp(sessionID: sessionID, fixture: "thing.standard")
-        launchQuality(relaunched, sessionID: sessionID)
-        openSidebarTab("things", in: relaunched.app)
-        let persistedThing = element(in: relaunched.app, identifier: "thing.row.quality-thing-rich")
-        XCTAssertTrue(persistedThing.waitForExistence(timeout: 8))
-        XCTAssertTrue(
-            element(in: relaunched.app, identifier: "thing.row.quality-thing-distractor")
-                .waitForExistence(timeout: 8),
-            "Relaunch must restore the complete canonical Thing set after the transient search."
-        )
-        persistedThing.click()
-        let persistedSummary = element(in: relaunched.app, identifier: "field.thing.detail.summary")
-        XCTAssertTrue(persistedSummary.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            persistedSummary.label.contains("Fixture thing summary")
-                || (persistedSummary.value as? String)?.contains("Fixture thing summary") == true
-        )
-        XCTAssertTrue(
-            element(in: relaunched.app, identifier: "thing.related.event.quality-related-event")
-                .waitForExistence(timeout: 8),
-            "The accurate Thing relation must survive a real process relaunch."
-        )
     }
 
     @MainActor
