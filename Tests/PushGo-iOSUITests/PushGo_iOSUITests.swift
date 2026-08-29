@@ -341,6 +341,80 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
+    func testHistoryCleanupRemovesOnlyOldMessagesAndPersistsAcrossRelaunch() {
+        let sessionID = "ios-cleanup-\(UUID().uuidString.lowercased())"
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.cleanup"
+        )
+        launch(context.app)
+
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        let oldRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c101"
+        )
+        let recentRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c102"
+        )
+        XCTAssertTrue(oldRow.waitForExistence(timeout: 8))
+        XCTAssertTrue(recentRow.waitForExistence(timeout: 8))
+        assertMessagesTabBadgeCount(2, in: context.app)
+
+        openMessageFilters(in: context.app)
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.messages.history_cleanup"),
+            timeout: 5
+        )
+        let rangeSheet = element(in: context.app, identifier: "sheet.messages.history_cleanup.range")
+        XCTAssertTrue(rangeSheet.waitForExistence(timeout: 8))
+        let thirtyDays = element(
+            in: context.app,
+            identifier: "option.messages.history_cleanup.30_days"
+        )
+        if !thirtyDays.waitForExistence(timeout: 2) || !thirtyDays.isHittable {
+            rangeSheet.swipeUp()
+        }
+        tapWhenHittable(thirtyDays, timeout: 5)
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.messages.history_cleanup.confirm"),
+            timeout: 5
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.messages.history_cleanup.done"),
+            timeout: 8
+        )
+
+        XCTAssertTrue(oldRow.waitForNonExistence(timeout: 8))
+        XCTAssertTrue(recentRow.waitForExistence(timeout: 8))
+        assertMessagesTabBadgeCount(1, in: context.app)
+
+        context.app.terminate()
+        let relaunched = configuredLaunchContext()
+        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.cleanup"
+        )
+        launch(relaunched.app)
+        assertQualityRuntimeReady(in: relaunched.app, timeout: 15)
+        XCTAssertFalse(
+            element(
+                in: relaunched.app,
+                identifier: "message.row.00000000-0000-0000-0000-00000000c101"
+            ).exists,
+            "The removed old message must not return after process relaunch"
+        )
+        XCTAssertTrue(
+            element(
+                in: relaunched.app,
+                identifier: "message.row.00000000-0000-0000-0000-00000000c102"
+            ).waitForExistence(timeout: 8)
+        )
+        assertMessagesTabBadgeCount(1, in: relaunched.app)
+    }
+
     func testMarkdownFixtureRendersMajorStructuresInTheRealDetail() {
         let sessionID = "ios-markdown-\(UUID().uuidString.lowercased())"
         let context = configuredLaunchContext()

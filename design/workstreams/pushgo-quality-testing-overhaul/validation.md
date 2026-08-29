@@ -229,7 +229,7 @@
 
 ## 残余风险与进入条件
 
-- macOS 系统自动化认证已解除，当前二十一条 App-owned 核心集默认零重试 21/21（`build/quality-results/macos-ui-21-final/run-20260829-120340.xcresult`），覆盖准确 standard 数据/relaunch、真实未读 badge 下的侧边栏标题视觉可读性/不重叠/导航、消息 Delete→Undo 恢复/生产期限提交且仅影响目标、首次及刷新 slow 预警、失败保留准确快照、Retry 新结果和 relaunch、Event 关闭持久化、Thing 三关系详情、Gateway 候选注册/提交中点失败的旧值保护/回滚/换域/重启、页面可见性双向 relaunch，以及解密生命周期/受保护写失败/错钥匙纠正/精确恢复/坏密文安全失败；下一批按价值推进 Event slow/error/duplicate close 等高风险缺口，不迁移低价值旧脚本。
+- macOS 系统自动化认证已解除；既有二十一条 App-owned 核心集有零重试 21/21 聚合证据（`build/quality-results/macos-ui-21-final/run-20260829-120340.xcresult`），后续新增能力均保留 focused 证据而不伪称旧聚合覆盖。历史清理新代表链 macOS 1/1、iOS 最终生产字节 1/1；1-day 过度删除变异精确杀死 iOS Oracle。当前 macOS 默认清单包含后续能力共 26 条，尚未重新做 26/26 聚合，因此只声明已运行分项，不把清单存在当全量通过。下一批继续按正向价值优先，不迁移低价值旧脚本。
 - 真实 APNs/FCM/权限/后台/升级只有在具备签名、账号、设备和隔离环境后进入 Release；缺条件即 `BLOCKED`。
 - 固定参考物理设备 runner 已实现，但仍需在专用设备完成至少 10 次 Release 基线并审定 p50/p95 与产品 SLO；当前只有 Simulator 粗退化证据，物理结果仍 `NOT RUN`。
 - Android 的 emulator Macrobenchmark dry-run 与 Baseline Profile 已完成，但 API 37 Perfetto 帧切片解析仍为工具链 `BLOCKED`；真机 runner 必须显式非个人设备和 owner 预算，未提供时保持 `NOT RUN`，不得用 emulator P95 替代。

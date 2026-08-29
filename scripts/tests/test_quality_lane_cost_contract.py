@@ -15,7 +15,7 @@ class QualityLaneCostContractTests(unittest.TestCase):
         nightly_scopes = self._scopes(runner, "nightly_negative_ui_scopes")
 
         self.assertEqual(len(scopes), len(set(scopes)))
-        self.assertEqual(12, len(scopes))
+        self.assertEqual(13, len(scopes))
         self.assertEqual(len(scopes + nightly_scopes), len(set(scopes + nightly_scopes)))
         self.assertFalse(
             [scope for scope in scopes + nightly_scopes if scope.rsplit("/", 1)[-1] not in discovered]

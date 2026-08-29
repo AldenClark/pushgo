@@ -101,6 +101,17 @@ enum MessageHistoryCleanupRange: String, CaseIterable, Identifiable {
 
     var isDestructive: Bool { self == .all }
 
+    var accessibilityIdentifierSuffix: String {
+        switch self {
+        case .all: "all"
+        case .sevenDays: "7_days"
+        case .thirtyDays: "30_days"
+        case .threeMonths: "3_months"
+        case .sixMonths: "6_months"
+        case .oneYear: "1_year"
+        }
+    }
+
     func cutoff(referenceDate: Date = Date(), calendar: Calendar = .autoupdatingCurrent) -> Date? {
         switch self {
         case .all:
@@ -180,6 +191,9 @@ struct MessageHistoryCleanupRangeSheet: View {
                                 phase = .confirmation
                                 selectedRange = range
                             }
+                            .accessibilityIdentifier(
+                                "option.messages.history_cleanup.\(range.accessibilityIdentifierSuffix)"
+                            )
                         }
                     }
                 }
@@ -194,6 +208,7 @@ struct MessageHistoryCleanupRangeSheet: View {
         .frame(minWidth: 380, idealWidth: 440, minHeight: 560)
 #endif
         .background(Color.primary.opacity(0.025))
+        .accessibilityIdentifier("sheet.messages.history_cleanup.range")
 #if os(iOS)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
@@ -488,6 +503,7 @@ private struct MessageHistoryCleanupActions: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .tint(.red)
+                    .accessibilityIdentifier("action.messages.history_cleanup.confirm")
             }
             .frame(maxWidth: 360)
         case .cleaning:
@@ -497,6 +513,7 @@ private struct MessageHistoryCleanupActions: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .frame(maxWidth: .infinity)
+                .accessibilityIdentifier("action.messages.history_cleanup.done")
         }
     }
 

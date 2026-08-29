@@ -191,3 +191,5 @@
 - 100k 数据量只在显式 opt-in `performance` Lane 执行，不进入日常回归；synthetic 替身指标不作为通过 claim。
 
 这些项目不得被模拟器绿色覆盖；它们需要真实平台或发布环境，必须在 Release 证据清单中独立报告。但 WP3–WP6 中仍可在本地/模拟器完成的功能缺口不能混入此清单。其余极端设备×语言×状态组合按风险等价采样，不构造全笛卡尔积。若某边缘用例不能对应高影响失败、历史事故或独有技术风险，则不实现或不进入常规 lane。
+
+- 2026-08-29 Apple 历史清理正向代表切片：新增共享 `messages.cleanup` App-owned fixture，仅包含相对当前时间 45 天的删除目标和 2 天的保留控制；共享 Range/Confirm/Done 使用稳定生产可访问性标识，iOS/macOS 各一条短旅程从真实筛选入口选择 30 days，要求旧行消失、控制行保留、未读 badge 2→1 且进程重启后差异持久。最终生产字节 iOS 1/1（45.456s，`build/quality-results/ios/run-1-20260829-232733.xcresult`）、macOS 1/1（36.157s，`build/quality-results/macos-ui/run-20260829-232429.xcresult`），均零 retry。临时把 30-day cutoff 改为 1 天时 iOS 精确失败于 2 天控制消息消失，恢复为 30 天后重新通过；首次运行还发现父级状态标识吞掉确认按钮的测试接入点缺陷，删除该低价值父标识后通过。日常 PR 只增加 iOS 这一条代表链（12→13）；macOS 放入其 Nightly/Release 默认集，不为 6 个范围、cancel/failure/DST 复制 UI 测试。脚本/影响合同 66/66 通过；全路径选择器因共享 Runtime/UI 变化保守推荐 `release`，本切片按当前“正向优先、控制预算”要求只执行两端 focused 与必要编译，Release 聚合明确 `NOT RUN`，留待里程碑汇总而不重复所有负向、通知、Watch 与性能波次。

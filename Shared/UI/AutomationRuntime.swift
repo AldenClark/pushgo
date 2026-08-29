@@ -3715,6 +3715,10 @@ final class PushGoAutomationRuntime {
             messages = qualityFilterFixtureMessages()
             entityRecords = []
             channelSubscriptions = []
+        case .messagesCleanup:
+            messages = qualityCleanupFixtureMessages()
+            entityRecords = []
+            channelSubscriptions = []
         case .messagesMarkdown:
             messages = [qualityMarkdownFixtureMessage()]
             entityRecords = []
@@ -3774,6 +3778,51 @@ final class PushGoAutomationRuntime {
             "is_read": false,
             "received_at": "2026-01-15T08:00:00Z",
             "raw_payload": rawPayload,
+            "status": "normal",
+        ]
+    }
+
+    private func qualityCleanupFixtureMessages(referenceDate: Date = Date()) -> [[String: Any]] {
+        let calendar = Calendar(identifier: .gregorian)
+        let formatter = ISO8601DateFormatter()
+        let oldDate = calendar.date(byAdding: .day, value: -45, to: referenceDate) ?? .distantPast
+        let recentDate = calendar.date(byAdding: .day, value: -2, to: referenceDate) ?? referenceDate
+
+        return [
+            qualityCleanupFixtureMessage(
+                id: "00000000-0000-0000-0000-00000000c101",
+                messageID: "quality-old-cleanup-target",
+                title: "Quality Old Cleanup Target",
+                receivedAt: formatter.string(from: oldDate)
+            ),
+            qualityCleanupFixtureMessage(
+                id: "00000000-0000-0000-0000-00000000c102",
+                messageID: "quality-recent-cleanup-control",
+                title: "Quality Recent Cleanup Control",
+                receivedAt: formatter.string(from: recentDate)
+            ),
+        ]
+    }
+
+    private func qualityCleanupFixtureMessage(
+        id: String,
+        messageID: String,
+        title: String,
+        receivedAt: String
+    ) -> [String: Any] {
+        [
+            "id": id,
+            "message_id": messageID,
+            "title": title,
+            "body": "Positive cleanup coverage fixture.",
+            "channel_id": "quality-cleanup",
+            "is_read": false,
+            "received_at": receivedAt,
+            "raw_payload": [
+                "entity_type": "message",
+                "message_id": messageID,
+                "delivery_id": "quality-delivery-\(messageID)",
+            ],
             "status": "normal",
         ]
     }

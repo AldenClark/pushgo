@@ -309,6 +309,76 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
+    func testHistoryCleanupRemovesOnlyOldMessagesAndPersistsAcrossRelaunch() {
+        let sessionID = "macos-cleanup-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "messages.cleanup")
+        launchQuality(context, sessionID: sessionID)
+
+        let oldRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c101"
+        )
+        let recentRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c102"
+        )
+        let badge = context.app.staticTexts["sidebar.messages.unread_badge"]
+        XCTAssertTrue(oldRow.waitForExistence(timeout: 8))
+        XCTAssertTrue(recentRow.waitForExistence(timeout: 8))
+        XCTAssertTrue(badge.waitForExistence(timeout: 8))
+        XCTAssertEqual(badge.value as? String, "2")
+
+        openMessageFilters(in: context.app)
+        let cleanup = element(in: context.app, identifier: "action.messages.history_cleanup")
+        XCTAssertTrue(cleanup.waitForExistence(timeout: 5) && cleanup.isHittable)
+        cleanup.click()
+        let rangeSheet = element(in: context.app, identifier: "sheet.messages.history_cleanup.range")
+        XCTAssertTrue(rangeSheet.waitForExistence(timeout: 8))
+        let thirtyDays = element(
+            in: context.app,
+            identifier: "option.messages.history_cleanup.30_days"
+        )
+        if !thirtyDays.waitForExistence(timeout: 2) || !thirtyDays.isHittable {
+            rangeSheet.swipeUp()
+        }
+        XCTAssertTrue(thirtyDays.waitForExistence(timeout: 5) && thirtyDays.isHittable)
+        thirtyDays.click()
+        let confirm = element(
+            in: context.app,
+            identifier: "action.messages.history_cleanup.confirm"
+        )
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5) && confirm.isHittable)
+        confirm.click()
+        let done = element(in: context.app, identifier: "action.messages.history_cleanup.done")
+        XCTAssertTrue(done.waitForExistence(timeout: 8) && done.isHittable)
+        done.click()
+
+        XCTAssertTrue(oldRow.waitForNonExistence(timeout: 8))
+        XCTAssertTrue(recentRow.waitForExistence(timeout: 8))
+        XCTAssertTrue(waitForValue("1", in: badge, timeout: 8))
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(sessionID: sessionID, fixture: "messages.cleanup")
+        launchQuality(relaunched, sessionID: sessionID)
+        XCTAssertFalse(
+            element(
+                in: relaunched.app,
+                identifier: "message.row.00000000-0000-0000-0000-00000000c101"
+            ).exists,
+            "The removed old message must not return after process relaunch."
+        )
+        XCTAssertTrue(
+            element(
+                in: relaunched.app,
+                identifier: "message.row.00000000-0000-0000-0000-00000000c102"
+            ).waitForExistence(timeout: 8)
+        )
+        let relaunchedBadge = relaunched.app.staticTexts["sidebar.messages.unread_badge"]
+        XCTAssertTrue(relaunchedBadge.waitForExistence(timeout: 8))
+        XCTAssertEqual(relaunchedBadge.value as? String, "1")
+    }
+
+    @MainActor
     func testMarkdownFixtureRendersMajorStructuresInTheRealDetail() {
         let sessionID = "macos-markdown-\(UUID().uuidString.lowercased())"
         let context = configuredQualityApp(sessionID: sessionID, fixture: "messages.markdown")
