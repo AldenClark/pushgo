@@ -91,22 +91,45 @@ class QualityImpactPlanTests(unittest.TestCase):
                 )
                 self.assertIn("Apple PR representative lane", plan["minimum_evidence"])
 
-    def test_macos_default_lane_cannot_silently_omit_discoverable_journeys(self):
+    def test_macos_positive_and_risk_sets_cover_every_discoverable_journey(self):
         test_source = (REPO / "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift").read_text()
         runner_source = (REPO / "scripts/run_macos_ui_tests.sh").read_text()
+        orchestrator_source = (REPO / "scripts/quality_test.sh").read_text()
         discoverable = set(re.findall(r"^\s+func (test[A-Za-z0-9_]+)\(", test_source, re.MULTILINE))
-        selected = set(
-            re.findall(
-                r'"PushGo-macOSUITests/PushGo_macOSUITests/(test[A-Za-z0-9_]+)"',
-                runner_source,
-            )
-        )
+        positive = self._macos_scopes(runner_source, "positive_scopes")
+        risk = self._macos_scopes(runner_source, "risk_scopes")
 
         self.assertEqual(26, len(discoverable))
+        self.assertEqual(16, len(positive))
+        self.assertEqual(10, len(risk))
+        self.assertFalse(positive & risk)
         self.assertEqual(
             discoverable,
-            selected,
-            "Every discoverable macOS user-purpose journey must run in the zero-retry default lane.",
+            positive | risk,
+            "Every discoverable macOS journey must belong to the positive or risk set.",
+        )
+        for deferred_fragment in (
+            "Fatal",
+            "Failure",
+            "Corrupt",
+            "WrongKey",
+            "DeleteUndo",
+            "InvalidServer",
+            "LocalCommitFailure",
+        ):
+            self.assertFalse(any(deferred_fragment in scope for scope in positive), deferred_fragment)
+        self.assertIn('case "${MACOS_SCOPE_SET:-positive}" in', runner_source)
+        self.assertIn("run_macos_ui positive", orchestrator_source)
+        self.assertEqual(2, orchestrator_source.count("run_macos_ui full"))
+
+    def _macos_scopes(self, source: str, variable: str) -> set[str]:
+        match = re.search(rf"^{variable}=\((.*?)^\)", source, re.MULTILINE | re.DOTALL)
+        self.assertIsNotNone(match, variable)
+        return set(
+            re.findall(
+                r'"PushGo-macOSUITests/PushGo_macOSUITests/(test[A-Za-z0-9_]+)"',
+                match.group(1),
+            )
         )
 
     def test_performance_test_change_selects_performance_lane(self):

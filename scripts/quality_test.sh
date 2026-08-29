@@ -209,10 +209,12 @@ run_watch_ui() {
 }
 
 run_macos_ui() {
-  selected_claims+=("macOS App-owned message empty/standard/initial-and-refresh slow/failure-retry/persistence, primary navigation, Settings feedback, and close/status-item/reopen journeys")
-  MAX_RETRIES=0 \
+  local scope_set="${1:-positive}"
+  selected_claims+=("macOS ${scope_set} App-owned user-purpose journeys")
+  MACOS_SCOPE_SET="$scope_set" \
+    MAX_RETRIES=0 \
     QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_macos_ui_tests.sh"
-  claims+=("macOS App-owned message empty/standard/initial-and-refresh slow/failure-retry/persistence, primary navigation, Settings feedback, and close/status-item/reopen journeys")
+  claims+=("macOS ${scope_set} App-owned user-purpose journeys")
 }
 
 run_system_notification_journey() {
@@ -259,7 +261,7 @@ case "$lane" in
     run_accessibility_localization
     ;;
   macos)
-    run_macos_ui
+    run_macos_ui positive
     ;;
   pr)
     run_core
@@ -279,7 +281,7 @@ case "$lane" in
     run_system_notification_journey
     run_watch_ui
     run_accessibility_localization
-    run_macos_ui
+    run_macos_ui full
     ;;
   release)
     run_core
@@ -291,7 +293,7 @@ case "$lane" in
     run_system_notification_journey
     run_watch_ui
     run_accessibility_localization
-    run_macos_ui
+    run_macos_ui full
     run_performance
     selected_claims+=("iOS/watchOS Release builds and Quality Runtime isolation")
     xcodebuild \

@@ -126,6 +126,8 @@ Quality session 不再只隔离 GRDB：server config、decryption material metad
 
 PR 的设备预算现固定投向 13 条跨能力正向代表链：空态 Oracle 已并入同 fixture 主导航，消息搜索已并入同 fixture 准确内容/relaunch；新增的唯一历史清理代表链一次覆盖入口、范围、真实删除、控制对象、未读投影和重启持久化，不复制六个时间档。其余继续覆盖 Markdown、分页/筛选/刷新、Event、Thing、Channel、页面可见性、Gateway 正常换域和解密恢复。慢态、错误恢复、独立删除 deadline、损坏密文及本地补偿保留在 Nightly/Release 风险集，或在其 owner 产品代码变更时 focused 执行。静态 Lane 合同锁定 13 条、scope 唯一、真实可发现、覆盖主要功能族且不允许已合并重复重新进入。
 
+macOS Runner 不再把 26 条正向与故障旅程无差别作为普通默认：`positive` 集为 16 条，优先覆盖首次使用、准确内容/Markdown、筛选/清理、频道生命周期、真实删除、慢加载/慢刷新预警、窗口恢复、主导航、Event/Thing、Settings/Decryption 正常生命周期和 Gateway 正常切换；`risk` 集为 10 条，承载 Store 初始化失败、Undo、加载/刷新/Event 失败、受保护写失败、错钥匙/坏密文、非法地址和 Gateway 本地提交补偿。独立 `macos` Lane 默认只跑 `positive`，Nightly/Release 明确跑 `full=positive+risk`。静态合同要求两集合互斥、16/10 成本固定且并集精确等于全部 26 条可发现旅程，因此提速不能靠静默漏测。
+
 计划中的 `required_checks` 是必须实际执行并写入收据的补充证据：Appcast/App Store metadata 使用快速语义契约，不启动完整 Release；Fastlane/构建/隐私/回滚变更强制执行发布静态契约并保持 Release Lane。两端各 120 次历史回放已校准旧路径漏选；无效或未知计划直接 `BLOCKED`，不回退为默认绿色。
 
 ## Test-system/flake 处置

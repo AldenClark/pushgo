@@ -22,32 +22,35 @@ if [[ ! "$max_retries" =~ ^[0-9]+$ ]] || (( max_retries != 0 )); then
   exit 2
 fi
 
-default_scopes=(
+positive_scopes=(
   "PushGo-macOSUITests/PushGo_macOSUITests/testQualitySessionUsesAppOwnedStoreAndReachesFunctionalEmptyState"
-  "PushGo-macOSUITests/PushGo_macOSUITests/testFatalStoreInitializationStopsReadWriteAndRecoversAfterRelaunch"
   "PushGo-macOSUITests/PushGo_macOSUITests/testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch"
   "PushGo-macOSUITests/PushGo_macOSUITests/testHistoryCleanupRemovesOnlyOldMessagesAndPersistsAcrossRelaunch"
   "PushGo-macOSUITests/PushGo_macOSUITests/testMarkdownFixtureRendersMajorStructuresInTheRealDetail"
   "PushGo-macOSUITests/PushGo_macOSUITests/testMessageChannelTagCombinedUngroupedFiltersAndScopedReadPersist"
   "PushGo-macOSUITests/PushGo_macOSUITests/testUnreadBadgeAndChannelLifecyclePersistThroughRealUserActions"
-  "PushGo-macOSUITests/PushGo_macOSUITests/testMessageDeleteUndoRestoresAccurateCanonicalContentAcrossRelaunch"
   "PushGo-macOSUITests/PushGo_macOSUITests/testMessageDeleteDeadlineCommitsOnlyTargetAndSurvivesRelaunch"
   "PushGo-macOSUITests/PushGo_macOSUITests/testSlowMessageLoadWarnsBeforeDataCompletes"
-  "PushGo-macOSUITests/PushGo_macOSUITests/testMessageLoadFailureRetryRecoversToFunctionalState"
   "PushGo-macOSUITests/PushGo_macOSUITests/testSlowMessageRefreshKeepsAccurateContentVisibleUntilCompletion"
-  "PushGo-macOSUITests/PushGo_macOSUITests/testMessageRefreshFailureKeepsSnapshotAndRetryPersistsAccurateResult"
   "PushGo-macOSUITests/PushGo_macOSUITests/testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow"
   "PushGo-macOSUITests/PushGo_macOSUITests/testSidebarNavigationCoversPrimaryScreens"
   "PushGo-macOSUITests/PushGo_macOSUITests/testEventDetailCloseAndRelaunchPreserveAccurateProjection"
-  "PushGo-macOSUITests/PushGo_macOSUITests/testEventCloseFailureKeepsAccurateDetailBlocksDuplicateAndRetryPersists"
   "PushGo-macOSUITests/PushGo_macOSUITests/testThingRelationsOpenAccurateDetailsAndSurviveRelaunch"
   "PushGo-macOSUITests/PushGo_macOSUITests/testSettingsDecryptionRejectsInvalidKeyPersistsAndClearsValidKey"
+  "PushGo-macOSUITests/PushGo_macOSUITests/testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch"
+  "PushGo-macOSUITests/PushGo_macOSUITests/testGatewayCandidateMustRegisterBeforeCommitAndPersistsAfterRelaunch"
+)
+
+risk_scopes=(
+  "PushGo-macOSUITests/PushGo_macOSUITests/testFatalStoreInitializationStopsReadWriteAndRecoversAfterRelaunch"
+  "PushGo-macOSUITests/PushGo_macOSUITests/testMessageDeleteUndoRestoresAccurateCanonicalContentAcrossRelaunch"
+  "PushGo-macOSUITests/PushGo_macOSUITests/testMessageLoadFailureRetryRecoversToFunctionalState"
+  "PushGo-macOSUITests/PushGo_macOSUITests/testMessageRefreshFailureKeepsSnapshotAndRetryPersistsAccurateResult"
+  "PushGo-macOSUITests/PushGo_macOSUITests/testEventCloseFailureKeepsAccurateDetailBlocksDuplicateAndRetryPersists"
   "PushGo-macOSUITests/PushGo_macOSUITests/testDecryptionProtectedStoreFailureDoesNotConfigureBeforeRetry"
   "PushGo-macOSUITests/PushGo_macOSUITests/testEncryptedMessageWrongKeyThenCorrectKeyRecoversAndSurvivesRelaunch"
   "PushGo-macOSUITests/PushGo_macOSUITests/testCorruptEncryptedMessageFailsSafelyAndSurvivesRelaunch"
-  "PushGo-macOSUITests/PushGo_macOSUITests/testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch"
   "PushGo-macOSUITests/PushGo_macOSUITests/testInvalidServerAddressShowsInlineFeedbackInsteadOfToast"
-  "PushGo-macOSUITests/PushGo_macOSUITests/testGatewayCandidateMustRegisterBeforeCommitAndPersistsAfterRelaunch"
   "PushGo-macOSUITests/PushGo_macOSUITests/testGatewayLocalCommitFailureRollsBackBeforeRetryCommits"
 )
 
@@ -114,7 +117,19 @@ common_args=(
 if [[ -n "$test_scopes" ]]; then
   IFS=',' read -r -a scope_list <<< "$test_scopes"
 else
-  scope_list=("${default_scopes[@]}")
+  case "${MACOS_SCOPE_SET:-positive}" in
+    positive)
+      scope_list=("${positive_scopes[@]}")
+      ;;
+    full)
+      scope_list=("${positive_scopes[@]}" "${risk_scopes[@]}")
+      ;;
+    *)
+      echo "status=BLOCKED"
+      echo "reason=unsupported_macos_scope_set:${MACOS_SCOPE_SET}"
+      exit 2
+      ;;
+  esac
 fi
 for scope in "${scope_list[@]}"; do
   [[ -n "$scope" ]] && common_args+=("-only-testing:${scope}")
