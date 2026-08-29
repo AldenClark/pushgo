@@ -1964,6 +1964,38 @@ final class PushGo_macOSUITests: XCTestCase {
         assertVisibleScreenThroughUI("screen.events.list", in: context.app, timeout: 8)
 
         openSidebarTab("settings", in: context.app)
+        let soundSettingsAction = element(
+            in: context.app,
+            identifier: "action.settings.notification_sounds"
+        )
+        XCTAssertTrue(
+            soundSettingsAction.waitForExistence(timeout: 8) && soundSettingsAction.isHittable,
+            "Notification sounds must be reachable through the real macOS Settings action."
+        )
+        soundSettingsAction.click()
+        let lowPrioritySound = element(
+            in: context.app,
+            identifier: "picker.settings.notification_sounds.low"
+        )
+        XCTAssertTrue(
+            lowPrioritySound.waitForExistence(timeout: 8),
+            "The real notification-sound editor must expose the low-priority setting."
+        )
+        XCTAssertFalse(
+            (lowPrioritySound.value as? String ?? "").isEmpty,
+            "The notification-sound editor must project the currently selected value."
+        )
+        let closeSoundSettings = element(
+            in: context.app,
+            identifier: "action.settings.notification_sounds.close"
+        )
+        XCTAssertTrue(closeSoundSettings.waitForExistence(timeout: 8) && closeSoundSettings.isHittable)
+        closeSoundSettings.click()
+        XCTAssertTrue(
+            closeSoundSettings.waitForNonExistence(timeout: 8),
+            "Closing notification-sound settings must reliably return to the Settings page."
+        )
+
         let eventToggle = element(in: context.app, identifier: "toggle.settings.page.events")
         XCTAssertTrue(eventToggle.waitForExistence(timeout: 8) && eventToggle.isHittable)
         eventToggle.click()

@@ -261,9 +261,30 @@ class QualityImpactPlanTests(unittest.TestCase):
     def test_settings_screen_no_longer_selects_channel_lifecycle(self):
         plan = self.plan("Apps/PushGo-iOS/UI/Screens/SettingsView.swift")
 
-        self.assertEqual("nightly", plan["recommended_lane"])
+        self.assertEqual("pr", plan["recommended_lane"])
         self.assertNotIn("channels", plan["impacted_capabilities"])
         self.assertIn("gateway-settings", plan["impacted_capabilities"])
+        self.assertIn("notification-sound", plan["impacted_capabilities"])
+        self.assertEqual(["apple-ios-settings-positive-extension"], plan["required_checks"])
+
+    def test_macos_settings_screen_selects_platform_purpose_evidence(self):
+        plan = self.plan("Apps/PushGo-macOS/UI/Screens/SettingsView.swift")
+
+        self.assertEqual("READY", plan["plan_status"])
+        self.assertEqual("pr", plan["recommended_lane"])
+        self.assertEqual(
+            ["decryption-settings", "gateway-settings", "notification-sound", "page-visibility"],
+            plan["impacted_capabilities"],
+        )
+        self.assertEqual(["apple-macos-settings-positive"], plan["required_checks"])
+
+    def test_shared_settings_view_model_retains_nightly_risk_evidence(self):
+        plan = self.plan("Shared/UI/SettingsViewModel.swift")
+
+        self.assertEqual("nightly", plan["recommended_lane"])
+        self.assertEqual([], plan["required_checks"])
+        self.assertIn("protected material", " ".join(plan["escalation_reasons"]))
+        self.assertIn("notification-sound", plan["impacted_capabilities"])
 
     def test_system_settings_component_from_history_is_mapped_to_real_consumers(self):
         plan = self.plan("Shared/UI/SystemIntegrationSettingsGroup.swift")

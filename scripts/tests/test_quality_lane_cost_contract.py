@@ -91,6 +91,36 @@ class QualityLaneCostContractTests(unittest.TestCase):
             ),
         )
 
+    def test_settings_ui_impact_checks_reuse_minimum_platform_purpose_journeys(self) -> None:
+        runner = (REPO / "scripts/quality_test.sh").read_text()
+
+        self.assertEqual(1, runner.count("apple-ios-settings-positive-extension)"))
+        self.assertEqual(1, runner.count("apple-macos-settings-positive)"))
+        self.assertEqual(
+            1,
+            runner.count(
+                'TEST_SCOPES="PushGo-iOSUITests/PushGo_iOSUITests/'
+                'testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch,'
+                'PushGo-iOSUITests/PushGo_iOSUITests/'
+                'testEncryptedMessageRecoversAfterConfiguringKeyAndSurvivesRelaunch"'
+            ),
+        )
+        self.assertEqual(
+            1,
+            runner.count(
+                'TEST_SCOPES="PushGo-macOSUITests/PushGo_macOSUITests/'
+                'testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch,'
+                'PushGo-macOSUITests/PushGo_macOSUITests/'
+                'testGatewayCandidateMustRegisterBeforeCommitAndPersistsAfterRelaunch,'
+                'PushGo-macOSUITests/PushGo_macOSUITests/'
+                'testSettingsDecryptionRejectsInvalidKeyPersistsAndClearsValidKey"'
+            ),
+        )
+        self.assertNotIn(
+            "testGatewayLocalCommitFailureRollsBackBeforeRetryCommits",
+            runner.split("apple-macos-settings-positive)", 1)[1].split(";;", 1)[0],
+        )
+
     def _scopes(self, source: str, variable: str) -> list[str]:
         match = re.search(rf'^{variable}="([^"]+)"$', source, re.MULTILINE)
         self.assertIsNotNone(match, variable)

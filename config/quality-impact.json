@@ -136,10 +136,30 @@
       "escalation_reasons": ["Channel state ownership crosses credentials, remote mutation, local persistence, compensation, and relaunch reconciliation."]
     },
     {
+      "id": "ios-settings-ui",
+      "paths": ["Apps/PushGo-iOS/UI/Screens/Settings*.swift"],
+      "capabilities": ["gateway-settings", "decryption-settings", "page-visibility", "notification-sound"],
+      "minimum_evidence": ["Apple PR Gateway candidate registration-before-commit positive journey", "iOS real Settings page-visibility, built-in notification-sound selection, and valid-key message-recovery/relaunch positive journeys"],
+      "required_checks": ["apple-ios-settings-positive-extension"],
+      "lane": "pr",
+      "known_evidence_gaps": ["Pure iOS Settings presentation/action-entry changes do not automatically run protected-write, rollback, corrupt-ciphertext, or remote-rejection matrices; run the owning focused risk journey when the diff changes those contracts."],
+      "escalation_reasons": ["The current iOS Settings purposes require real UI outcomes, while unrelated system-notification, Watch, and macOS fault matrices are not a minimum for a pure iOS screen change."]
+    },
+    {
+      "id": "macos-settings-ui",
+      "paths": ["Apps/PushGo-macOS/UI/Screens/Settings*.swift"],
+      "capabilities": ["gateway-settings", "decryption-settings", "page-visibility", "notification-sound"],
+      "minimum_evidence": ["macOS real Gateway candidate registration-before-commit, Settings page-visibility, valid-key recovery/relaunch, and notification-sound editor entry/content/return purpose journeys", "Apple PR broad positive representative set"],
+      "required_checks": ["apple-macos-settings-positive"],
+      "lane": "pr",
+      "known_evidence_gaps": ["Pure macOS Settings presentation/action-entry changes do not automatically run protected-write, rollback, corrupt-ciphertext, or remote-rejection matrices; actual sound selection, Sounds-directory authorization, import, preview, and playback remain separate real-system evidence."],
+      "escalation_reasons": ["The current macOS Settings purposes require real UI outcomes, while unrelated system-notification, Watch, and iOS fault matrices are not a minimum for a pure macOS screen change."]
+    },
+    {
       "id": "settings-state",
-      "paths": ["Shared/Application/DataPageVisibilityController.swift", "Shared/Models/ServerConfig.swift", "Shared/Models/SystemIntegrationSettings.swift", "Shared/UI/SettingsViewModel.swift", "Shared/Utilities/ManualNotificationKeyValidator.swift", "Apps/*/UI/Screens/Settings*.swift"],
-      "capabilities": ["gateway-settings", "decryption-settings", "page-visibility"],
-      "minimum_evidence": ["Settings validation and injectable gateway service contract tests", "real Settings page-visibility control and accurate destination journey", "real server invalid/candidate-registration-failure/no-commit/retry/normalize/data-scope/relaunch journey", "real decryption invalid/status/no-echo/clear/relaunch journey"],
+      "paths": ["Shared/Application/DataPageVisibilityController.swift", "Shared/Models/ServerConfig.swift", "Shared/Models/SystemIntegrationSettings.swift", "Shared/UI/SettingsViewModel.swift", "Shared/Utilities/ManualNotificationKeyValidator.swift"],
+      "capabilities": ["gateway-settings", "decryption-settings", "page-visibility", "notification-sound"],
+      "minimum_evidence": ["Settings validation and injectable gateway service contract tests", "real Settings page-visibility control and accurate destination journey", "real server invalid/candidate-registration-failure/no-commit/retry/normalize/data-scope/relaunch journey", "real decryption invalid/status/no-echo/clear/relaunch journey", "notification-sound persistence/parser contract and iOS built-in selection/relaunch journey"],
       "lane": "nightly",
       "known_evidence_gaps": ["Rollback-storage failure UI and notification-sound system behavior remain incomplete."],
       "escalation_reasons": ["Settings changes can alter protected material, gateway activation, persisted visibility, and restart behavior."]
