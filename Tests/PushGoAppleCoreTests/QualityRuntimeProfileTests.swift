@@ -53,12 +53,12 @@ struct QualityRuntimeProfileTests {
         let encoded = try encodedSession(
             sessionID: "event-close-result",
             fixture: "event.standard",
-            eventCloseScenario: "accepted_and_delivered"
+            eventCloseScenario: "fail_once_then_accepted_and_delivered"
         )
 
         let descriptor = try PushGoAutomationContext.decodeQualitySession(encoded)
 
-        #expect(descriptor.eventCloseScenario == .acceptedAndDelivered)
+        #expect(descriptor.eventCloseScenario == .failOnceThenAcceptedAndDelivered)
     }
 
     @Test("event close quality boundary becomes one production-shaped delivered payload")
@@ -92,6 +92,13 @@ struct QualityRuntimeProfileTests {
         #expect(delivery.payload["op_id"] as? String == "quality-close-operation")
         #expect(delivery.payload["message"] as? String == "closed by the user")
         #expect(boundary["entity_type"] == nil, "The immutable boundary input must not be rewritten in place.")
+        #expect(
+            PushGoQualityEventCloseDelivery.make(
+                boundaryPayload: boundary,
+                endpointPath: "/event/close",
+                scenario: .failOnceThenAcceptedAndDelivered
+            )?.payload["event_state"] as? String == "closed"
+        )
     }
 
     @Test("event close quality boundary rejects inactive or unrelated calls")

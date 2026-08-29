@@ -232,12 +232,21 @@ final class PushGo_macOSUITests: XCTestCase {
     func testUnreadBadgeKeepsMessagesSidebarTitleReadableAndNavigable() {
         let sessionID = "macos-sidebar-badge-\(UUID().uuidString.lowercased())"
         let context = configuredQualityApp(sessionID: sessionID, fixture: "channels.standard")
+        context.app.launchArguments += [
+            "-AppleLanguages", "(zh-Hans)",
+            "-AppleLocale", "zh_CN",
+        ]
         launchQuality(context, sessionID: sessionID)
 
         let title = context.app.staticTexts["sidebar-messages"]
         let badge = context.app.staticTexts["sidebar.messages.unread_badge"]
         XCTAssertTrue(title.waitForExistence(timeout: 8))
         XCTAssertTrue(badge.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            title.value as? String,
+            "消息",
+            "The representative sidebar state must exercise the real zh-Hans title."
+        )
         XCTAssertEqual(badge.value as? String, "2", "The fixture must exercise a real unread badge.")
         XCTAssertGreaterThanOrEqual(title.frame.width, 18, "The Messages title was compressed away.")
         XCTAssertGreaterThan(
@@ -684,6 +693,79 @@ final class PushGo_macOSUITests: XCTestCase {
             "The same Event must remain closed after a real process relaunch."
         )
         XCTAssertTrue(relaunched.app.staticTexts["P2 Event Active"].exists)
+    }
+
+    @MainActor
+    func testEventCloseFailureKeepsAccurateDetailBlocksDuplicateAndRetryPersists() {
+        let sessionID = "mac-event-close-retry-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "event.standard",
+            eventCloseScenario: "fail_once_then_accepted_and_delivered"
+        )
+        launchQuality(context, sessionID: sessionID)
+
+        openSidebarTab("events", in: context.app)
+        let eventRow = element(in: context.app, identifier: "event.row.quality-event-active")
+        XCTAssertTrue(eventRow.waitForExistence(timeout: 8))
+        eventRow.click()
+        assertVisibleScreenThroughUI("screen.events.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(context.app.staticTexts["P2 Event Active"].waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            context.app.staticTexts["Event fixture for app-owned UI validation."].waitForExistence(timeout: 5)
+        )
+
+        func confirmClose() {
+            let closeAction = element(in: context.app, identifier: "action.event.close")
+            XCTAssertTrue(closeAction.waitForExistence(timeout: 5) && closeAction.isHittable)
+            closeAction.click()
+            let confirm = element(in: context.app, identifier: "action.event.close.confirm")
+            XCTAssertTrue(confirm.waitForExistence(timeout: 5) && confirm.isHittable)
+            confirm.click()
+        }
+
+        confirmClose()
+        let closing = element(in: context.app, identifier: "state.event.close.in_progress")
+        XCTAssertTrue(closing.waitForExistence(timeout: 2), "A slow close must expose visible progress.")
+        XCTAssertFalse(
+            element(in: context.app, identifier: "action.event.close").exists,
+            "A close already in flight must not allow a duplicate submission."
+        )
+        XCTAssertTrue(context.app.staticTexts["P2 Event Active"].exists)
+        XCTAssertTrue(
+            element(in: context.app, identifier: "feedback.event.close").waitForExistence(timeout: 5),
+            "The first boundary failure must remain owned by the Event detail."
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "field.event.detail.status.ongoing").exists,
+            "A failed close must preserve the canonical ongoing state."
+        )
+
+        confirmClose()
+        XCTAssertTrue(closing.waitForExistence(timeout: 2))
+        XCTAssertFalse(element(in: context.app, identifier: "action.event.close").exists)
+        XCTAssertTrue(
+            element(in: context.app, identifier: "field.event.detail.status.closed")
+                .waitForExistence(timeout: 12),
+            "Retry succeeds only after the production-shaped delivery updates the canonical projection."
+        )
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "event.standard",
+            eventCloseScenario: "fail_once_then_accepted_and_delivered"
+        )
+        launchQuality(relaunched, sessionID: sessionID)
+        openSidebarTab("events", in: relaunched.app)
+        let persistedRow = element(in: relaunched.app, identifier: "event.row.quality-event-active")
+        XCTAssertTrue(persistedRow.waitForExistence(timeout: 8))
+        persistedRow.click()
+        XCTAssertTrue(
+            element(in: relaunched.app, identifier: "field.event.detail.status.closed")
+                .waitForExistence(timeout: 8)
+        )
+        XCTAssertFalse(element(in: relaunched.app, identifier: "action.event.close").exists)
     }
 
     @MainActor

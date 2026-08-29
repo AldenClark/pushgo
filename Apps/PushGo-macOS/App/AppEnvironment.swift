@@ -39,6 +39,8 @@ final class AppEnvironment {
         PushGoAutomationContext.qualitySession?.faults.failGatewaySwitchValidationOnce == true ? 1 : 0
     @ObservationIgnored private var remainingQualityGatewaySwitchCommitFailures =
         PushGoAutomationContext.qualitySession?.faults.failGatewaySwitchCommitOnce == true ? 1 : 0
+    @ObservationIgnored private var qualityEventCloseAttemptCount = 0
+    @ObservationIgnored private var isQualityEventCloseRoundTripInFlight = false
 #endif
 
     private var toastDismissTask: Task<Void, Never>?
@@ -1313,7 +1315,9 @@ final class AppEnvironment {
         }()
 
 #if DEBUG
-        if PushGoAutomationContext.qualitySession?.eventCloseScenario == .acceptedAndDelivered {
+        if let scenario = PushGoAutomationContext.qualitySession?.eventCloseScenario,
+           scenario != .none
+        {
             var boundaryPayload: [String: Any] = [
                 "channel_id": normalizedChannelId,
                 "op_id": OpaqueId.generateHex128(),
@@ -1694,13 +1698,37 @@ final class AppEnvironment {
         payload: [String: Any],
         endpointPath: String
     ) async throws -> Bool {
+        let scenario = PushGoAutomationContext.qualitySession?.eventCloseScenario ?? .none
         guard let delivery = PushGoQualityEventCloseDelivery.make(
             boundaryPayload: payload,
             endpointPath: endpointPath,
-            scenario: PushGoAutomationContext.qualitySession?.eventCloseScenario ?? .none
+            scenario: scenario
         )
         else {
             return false
+        }
+
+        if scenario == .failOnceThenAcceptedAndDelivered {
+            guard !isQualityEventCloseRoundTripInFlight else {
+                throw AppError.typedLocal(
+                    code: "quality_event_close_duplicate_in_flight",
+                    category: .local,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "a second event close crossed the boundary while the first was in flight"
+                )
+            }
+            isQualityEventCloseRoundTripInFlight = true
+            defer { isQualityEventCloseRoundTripInFlight = false }
+            qualityEventCloseAttemptCount += 1
+            try await Task.sleep(for: .milliseconds(2_500))
+            if qualityEventCloseAttemptCount == 1 {
+                throw AppError.typedLocal(
+                    code: "quality_event_close_rejected_once",
+                    category: .local,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "quality event close rejected once before retry"
+                )
+            }
         }
 
         let outcome = await persistRemotePayloadIfNeeded(

@@ -62,6 +62,7 @@ enum PushGoQualityMessageRefreshScenario: String, Codable, Sendable {
 enum PushGoQualityEventCloseScenario: String, Codable, Sendable {
     case none
     case acceptedAndDelivered = "accepted_and_delivered"
+    case failOnceThenAcceptedAndDelivered = "fail_once_then_accepted_and_delivered"
 }
 
 #if DEBUG
@@ -74,7 +75,7 @@ struct PushGoQualityEventCloseDelivery {
         endpointPath: String,
         scenario: PushGoQualityEventCloseScenario
     ) -> PushGoQualityEventCloseDelivery? {
-        guard scenario == .acceptedAndDelivered,
+        guard scenario != .none,
               endpointPath.hasSuffix("/event/close"),
               let eventID = boundaryPayload["event_id"] as? String,
               !eventID.isEmpty

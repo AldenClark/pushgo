@@ -1408,6 +1408,84 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
+    func testEventCloseFailureKeepsAccurateDetailBlocksDuplicateAndRetryPersists() {
+        let context = configuredLaunchContext()
+        let sessionID = "ios-event-close-retry-\(UUID().uuidString.lowercased())"
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "event.standard",
+            eventCloseScenario: "fail_once_then_accepted_and_delivered"
+        )
+        launch(context.app)
+
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        let eventsTab = context.app.tabBars.buttons.element(boundBy: 1)
+        XCTAssertTrue(eventsTab.waitForExistence(timeout: 8))
+        eventsTab.tap()
+        let eventRow = element(in: context.app, identifier: "event.row.quality-event-active")
+        XCTAssertTrue(eventRow.waitForExistence(timeout: 8))
+        eventRow.tap()
+        let detailSheet = element(in: context.app, identifier: "sheet.event.detail")
+        XCTAssertTrue(detailSheet.waitForExistence(timeout: 10))
+        XCTAssertTrue(
+            context.app.staticTexts["Event fixture for app-owned UI validation."].waitForExistence(timeout: 5)
+        )
+
+        func confirmClose() {
+            let closeAction = element(in: context.app, identifier: "action.event.close")
+            XCTAssertTrue(closeAction.waitForExistence(timeout: 5) && closeAction.isHittable)
+            closeAction.tap()
+            let confirm = context.app.alerts.buttons.element(boundBy: 1)
+            XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+            confirm.tap()
+        }
+
+        confirmClose()
+        let closing = element(in: context.app, identifier: "state.event.close.in_progress")
+        XCTAssertTrue(closing.waitForExistence(timeout: 2), "A slow close must expose visible progress.")
+        XCTAssertFalse(
+            closing.isEnabled,
+            "A close already in flight must not allow a duplicate submission."
+        )
+        XCTAssertTrue(detailSheet.exists)
+        XCTAssertTrue(context.app.staticTexts["P2 Event Active"].exists)
+        XCTAssertTrue(
+            element(in: context.app, identifier: "feedback.event.close").waitForExistence(timeout: 5),
+            "The first boundary failure must remain owned by the Event detail."
+        )
+        XCTAssertTrue(detailSheet.exists, "A failed close must keep the actionable detail open.")
+        XCTAssertTrue(
+            element(in: context.app, identifier: "field.event.detail.status.ongoing").exists,
+            "A failed close must not pretend the canonical Event is closed."
+        )
+
+        confirmClose()
+        XCTAssertTrue(closing.waitForExistence(timeout: 2))
+        XCTAssertFalse(closing.isEnabled)
+        XCTAssertTrue(
+            detailSheet.waitForNonExistence(timeout: 12),
+            "Retry succeeds only after the production-shaped delivery updates the canonical projection."
+        )
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "event.standard",
+            eventCloseScenario: "fail_once_then_accepted_and_delivered"
+        )
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        let relaunchedEventsTab = context.app.tabBars.buttons.element(boundBy: 1)
+        XCTAssertTrue(relaunchedEventsTab.waitForExistence(timeout: 8))
+        relaunchedEventsTab.tap()
+        let persistedRow = element(in: context.app, identifier: "event.row.quality-event-active")
+        XCTAssertTrue(persistedRow.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            persistedRow.label.localizedCaseInsensitiveContains("closed"),
+            "Relaunch must render the canonical Event as closed in the user-visible list."
+        )
+    }
+
     func testImportedThingFixtureCanOpenThingDetail() {
         let context = configuredLaunchContext()
         let encodedSession = qualitySessionPayload(

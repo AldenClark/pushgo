@@ -18,10 +18,11 @@
 1. 每个保留或新增测试必须能说明用户目的、适用状态、数据/系统终点和会让它失败的反例。
 2. Identifier、文件、版本、Automation State、报告和测试名不能单独成为产品 Oracle。
 3. 每次切片同时执行源码→测试与测试→可达产品的双向核对。
-4. Runner 不直接给 App 传宿主 DB/Fixture/结果绝对路径；数据由 App 在自身 Container 内生成或读取测试 Bundle 内容。
-5. Release 不能激活 Quality Runtime。
-6. `FAILED/FLAKY/BLOCKED/NOT RUN/WAIVED` 不得合并为绿色。
-7. 后续实现若与最终设计冲突，先修正文档并说明真实代码证据，不能静默偏离。
+4. 主导航、核心 CTA 和关键字段不能只在基础态证明可用；若 badge、loading、error、disabled 或长文案会改变布局，必须选择一个最高风险代表态证明原信息与动态状态同时可读、互不遮挡且仍可完成真实动作。
+5. Runner 不直接给 App 传宿主 DB/Fixture/结果绝对路径；数据由 App 在自身 Container 内生成或读取测试 Bundle 内容。
+6. Release 不能激活 Quality Runtime。
+7. `FAILED/FLAKY/BLOCKED/NOT RUN/WAIVED` 不得合并为绿色。
+8. 后续实现若与最终设计冲突，先修正文档并说明真实代码证据，不能静默偏离。
 
 ## 价值与预算护栏
 
@@ -87,6 +88,7 @@
 ## 验证策略
 
 - 黑盒：真实入口、可见对象/集合/字段、动作和重启终点；
+- 动态布局：为主导航/核心 CTA 选一个会改变几何或对比度的高风险状态，要求原始标题、动态装饰和点击终点同时成立；不以辅助树文字存在替代视觉可读；
 - 白盒：状态分支、错误、取消、并发、幂等、迁移和资源释放；
 - 数据血缘：ingress→canonical Store→projection/index→UI/system surface→mutation/delete；
 - 负控：错误字段、重复 cursor、Store failure、超预算 delay、不可读文件消费者、进程死亡；

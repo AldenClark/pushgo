@@ -17,10 +17,24 @@ struct EventDetailScreen: View {
     var onCloseEvent: (@MainActor () async throws -> Void)? = nil
     @State private var activeConfirmation: ConfirmationKind?
     @State private var isClosing = false
+    @State private var closeErrorMessage: String?
 
     var body: some View {
         navigationContainer {
-            EventDetailPanel(event: event)
+            VStack(spacing: 0) {
+                if let closeErrorMessage {
+                    AppInlineFeedbackBanner(
+                        message: closeErrorMessage,
+                        tone: .danger,
+                        accessibilityID: "feedback.event.close"
+                    ) {
+                        self.closeErrorMessage = nil
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                }
+                EventDetailPanel(event: event)
+            }
                 .navigationTitle("")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbarContent }
@@ -59,13 +73,21 @@ struct EventDetailScreen: View {
         ToolbarItemGroup(placement: .topBarTrailing) {
             if canShowCloseAction {
                 Button {
+                    guard !isClosing else { return }
+                    closeErrorMessage = nil
                     activeConfirmation = .close
                 } label: {
-                    Image(systemName: "checkmark.circle")
+                    if isClosing {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "checkmark.circle")
+                    }
                 }
-                .accessibilityLabel(localizationManager.localized("close"))
-                .accessibilityIdentifier("action.event.close")
                 .disabled(isClosing)
+                .accessibilityLabel(localizationManager.localized("close"))
+                .accessibilityIdentifier(
+                    isClosing ? "state.event.close.in_progress" : "action.event.close"
+                )
             }
 
             if onCommitDelete != nil {
@@ -88,15 +110,15 @@ struct EventDetailScreen: View {
     private func closeEvent() async {
         guard let onCloseEvent, !isClosing else { return }
         isClosing = true
+        closeErrorMessage = nil
         do {
             try await onCloseEvent()
             dismiss()
         } catch {
             isClosing = false
-            environment.showErrorToast(
+            closeErrorMessage = environment.userFacingErrorMessage(
                 error,
-                fallbackMessage: localizationManager.localized("operation_failed"),
-                duration: 2
+                fallbackMessage: localizationManager.localized("operation_failed")
             )
         }
     }

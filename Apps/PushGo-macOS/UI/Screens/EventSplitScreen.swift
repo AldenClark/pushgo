@@ -15,6 +15,8 @@ struct EventSplitScreen: View {
     @State private var hydrationRequestedEventIDs: Set<String> = []
     @State private var hydratedSelectedEvent: EventProjection?
     @State private var showCloseConfirmation = false
+    @State private var isClosingEvent = false
+    @State private var closeEventErrorMessage: String?
     @State private var searchFieldText: String = ""
     @State private var isFilterPopoverPresented = false
     private let fixedListWidth: CGFloat = 300
@@ -65,6 +67,8 @@ struct EventSplitScreen: View {
             syncSelection()
         }
         .onChange(of: selection) { _, id in
+            isClosingEvent = false
+            closeEventErrorMessage = nil
             guard let id else {
                 hydratedSelectedEvent = nil
                 return
@@ -118,7 +122,20 @@ struct EventSplitScreen: View {
 
     private var eventDetailPane: some View {
         navigationContainer {
-            EventDetailScreen(event: selectedEvent)
+            VStack(spacing: 0) {
+                if let closeEventErrorMessage, selectedEvent != nil {
+                    AppInlineFeedbackBanner(
+                        message: closeEventErrorMessage,
+                        tone: .danger,
+                        accessibilityID: "feedback.event.close"
+                    ) {
+                        self.closeEventErrorMessage = nil
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                }
+                EventDetailScreen(event: selectedEvent)
+            }
         }
         .toolbar { detailToolbarContent }
     }
@@ -217,13 +234,21 @@ struct EventSplitScreen: View {
     private var detailToolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .secondaryAction) {
             if canCloseSelectedEvent {
-                Button {
-                    showCloseConfirmation = true
-                } label: {
-                    Image(systemName: "checkmark.circle")
+                if isClosingEvent {
+                    ProgressView()
+                        .controlSize(.small)
+                        .accessibilityLabel(localizationManager.localized("close"))
+                        .accessibilityIdentifier("state.event.close.in_progress")
+                } else {
+                    Button {
+                        closeEventErrorMessage = nil
+                        showCloseConfirmation = true
+                    } label: {
+                        Image(systemName: "checkmark.circle")
+                    }
+                    .help(localizationManager.localized("close"))
+                    .accessibilityIdentifier("action.event.close")
                 }
-                .help(localizationManager.localized("close"))
-                .accessibilityIdentifier("action.event.close")
             }
 
             Button(role: .destructive) {
@@ -256,16 +281,21 @@ struct EventSplitScreen: View {
     }
 
     private func closeSelectedEvent() {
-        guard let selectedEvent else { return }
+        guard let selectedEvent, !isClosingEvent else { return }
+        isClosingEvent = true
+        closeEventErrorMessage = nil
         Task {
             do {
                 try await viewModel.closeEvent(event: selectedEvent)
+                await MainActor.run {
+                    isClosingEvent = false
+                }
             } catch {
                 await MainActor.run {
-                    environment.showErrorToast(
+                    isClosingEvent = false
+                    closeEventErrorMessage = environment.userFacingErrorMessage(
                         error,
-                        fallbackMessage: localizationManager.localized("operation_failed"),
-                        duration: 2
+                        fallbackMessage: localizationManager.localized("operation_failed")
                     )
                 }
             }

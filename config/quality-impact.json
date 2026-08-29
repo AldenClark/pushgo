@@ -94,7 +94,7 @@
       "capabilities": ["events", "things"],
       "minimum_evidence": ["projection semantics tests including out-of-order head rejection", "iOS Event close/filter/relaunch and Thing accurate list/detail/three-relation/open/return/relaunch journeys"],
       "lane": "nightly",
-      "known_evidence_gaps": ["Event slow/error/duplicate-close recovery and Thing filters/deep links/delete outcomes are not yet fully protected."],
+      "known_evidence_gaps": ["Event close slow/error/duplicate-submit recovery is protected on iOS and macOS through accurate detail, owner-scoped feedback, production-shaped canonical persistence, and relaunch. Thing filters/deep links/delete outcomes remain incomplete."],
       "escalation_reasons": ["Entity projections feed list, detail, Thing relations, notifications, and system surfaces."]
     },
     {
@@ -137,7 +137,7 @@
       "id": "app-shell-window-navigation",
       "paths": ["Shared/Application/AppNavigationState.swift", "Shared/Application/MainTab.swift", "Shared/Application/FeedbackPresentationPolicy.swift", "Shared/Application/MacMainWindowPresenter.swift", "Shared/Models/AppError.swift", "Shared/UI/RootView.swift", "Shared/Utilities/AppConstants.swift", "Apps/PushGo-iOS/ContentView.swift", "Apps/PushGo-iOS/pushgoApp.swift", "Apps/PushGo-iOS/App/**", "Apps/PushGo-iOS/UI/Screens/MainTabContainerView.swift", "Apps/PushGo-macOS/ContentView.swift", "Apps/PushGo-macOS/pushgomacApp.swift", "Apps/PushGo-macOS/App/**", "Apps/PushGo-macOS/MainWindowController.swift", "Apps/PushGo-macOS/MacMenuBarContentView.swift", "Apps/PushGo-macOS/UI/Screens/MainTabContainerView.swift", "Apps/PushGo-macOS/UI/ViewModels/**"],
       "capabilities": ["app-launch", "primary-navigation", "mac-window-status-item"],
-      "minimum_evidence": ["navigation/window state tests", "real control navigation UI journey", "macOS open/close/reopen UI evidence when available"],
+      "minimum_evidence": ["navigation/window state tests", "real control navigation UI journey including one applicable high-risk badge/loading/error/disabled state", "macOS open/close/reopen UI evidence when available"],
       "lane": "nightly",
       "known_evidence_gaps": ["The App-owned close/status-item/reopen, primary-navigation, Event/Thing detail, Gateway commit/relaunch, and page-visibility relaunch journeys execute on the controlled local macOS runner; close-during-real-ingress, notification actions, broader accessibility tasks, and performance remain incomplete."],
       "escalation_reasons": ["Composition and window changes affect reachability of every downstream capability."]
