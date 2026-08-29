@@ -1875,7 +1875,8 @@ final class PushGo_iOSUITests: XCTestCase {
 
     func testChannelCreateRenameAndBothUnsubscribeOutcomesPersist() {
         let context = configuredLaunchContext(
-            launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+            launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"],
+            allowCrossAppDataAccess: true
         )
         let encodedSession = qualitySessionPayload(
             sessionID: "ios-channels-\(UUID().uuidString.lowercased())",
@@ -1890,6 +1891,19 @@ final class PushGo_iOSUITests: XCTestCase {
             channelsTab(in: context.app),
             timeout: 8,
             message: "Channels must be reachable"
+        )
+        let expectedCopiedChannelID = "01H00000000000000000000001"
+        tapWhenHittable(
+            element(in: context.app, identifier: "channel.row.\(expectedCopiedChannelID)"),
+            timeout: 8,
+            message: "A visible Channel row must copy its exact ID"
+        )
+        assertElementExists("feedback.toast.success", in: context.app, timeout: 2)
+        XCTAssertTrue(
+            context.app.staticTexts.matching(
+                NSPredicate(format: "label CONTAINS %@", expectedCopiedChannelID)
+            ).firstMatch.waitForExistence(timeout: 2),
+            "The verified pasteboard success feedback did not identify the exact copied Channel ID"
         )
         tapWhenHittable(
             element(in: context.app, identifier: "action.channels.add"),
@@ -3108,7 +3122,8 @@ final class PushGo_iOSUITests: XCTestCase {
         startupFixturePath: String? = nil,
         requestName: String? = nil,
         args: [String: String] = [:],
-        launchArguments: [String] = []
+        launchArguments: [String] = [],
+        allowCrossAppDataAccess: Bool = false
     ) -> LaunchContext {
         let app = XCUIApplication()
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
@@ -3129,7 +3144,7 @@ final class PushGo_iOSUITests: XCTestCase {
         app.launchEnvironment["PUSHGO_AUTOMATION_STORAGE_ROOT"] = resolvedRuntimeRoot.path
         app.launchEnvironment["PUSHGO_AUTOMATION_PROVIDER_TOKEN"] = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         app.launchEnvironment["PUSHGO_AUTOMATION_SKIP_PUSH_AUTHORIZATION"] = "1"
-        app.launchEnvironment["PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS"] = "0"
+        app.launchEnvironment["PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS"] = allowCrossAppDataAccess ? "1" : "0"
         app.launchEnvironment["PUSHGO_AUTOMATION_RESPONSE_PATH"] = responseURL.path
         app.launchEnvironment["PUSHGO_AUTOMATION_STATE_PATH"] = stateURL.path
         app.launchEnvironment["PUSHGO_AUTOMATION_EVENTS_PATH"] = eventsURL.path

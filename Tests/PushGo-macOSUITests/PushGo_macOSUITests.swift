@@ -526,7 +526,11 @@ final class PushGo_macOSUITests: XCTestCase {
         )
 
         context.app.terminate()
-        let relaunched = configuredQualityApp(sessionID: sessionID, fixture: "channels.standard")
+        let relaunched = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            allowCrossAppDataAccess: true
+        )
         relaunched.app.launchArguments += [
             "-AppleLanguages", "(zh-Hans)",
             "-AppleLocale", "zh_CN",
@@ -536,6 +540,51 @@ final class PushGo_macOSUITests: XCTestCase {
             relaunched.app.staticTexts["sidebar.messages.unread_badge"]
                 .waitForExistence(timeout: 3),
             "The cleared sidebar badge must not return after process relaunch."
+        )
+        openSidebarTab("channels", in: relaunched.app)
+
+        let expectedChannelID = "01H00000000000000000000001"
+        let row = element(in: relaunched.app, identifier: "channel.row.\(expectedChannelID)")
+        XCTAssertTrue(row.waitForExistence(timeout: 8))
+
+        let pasteboard = NSPasteboard.general
+        let savedItems: [[NSPasteboard.PasteboardType: Data]] = pasteboard.pasteboardItems?.map { item in
+            Dictionary(uniqueKeysWithValues: item.types.compactMap { type in
+                item.data(forType: type).map { (type, $0) }
+            })
+        } ?? []
+        defer {
+            pasteboard.clearContents()
+            let restoredItems = savedItems.map { representations in
+                let item = NSPasteboardItem()
+                for (type, data) in representations {
+                    item.setData(data, forType: type)
+                }
+                return item
+            }
+            if !restoredItems.isEmpty {
+                pasteboard.writeObjects(restoredItems)
+            }
+        }
+        pasteboard.clearContents()
+        XCTAssertTrue(pasteboard.setString("pushgo-quality-copy-sentinel", forType: .string))
+        row.click()
+        XCTAssertTrue(
+            element(in: relaunched.app, identifier: "feedback.toast.success")
+                .waitForExistence(timeout: 2),
+            "The Channel row did not report a successful system pasteboard write"
+        )
+
+        let copied = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                pasteboard.string(forType: .string) == expectedChannelID
+            },
+            object: nil
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [copied], timeout: 3),
+            .completed,
+            "Clicking the real Channel row did not put its exact ID on the system pasteboard"
         )
     }
 
@@ -2544,7 +2593,8 @@ final class PushGo_macOSUITests: XCTestCase {
         failNotificationMaterialPersistenceOnce: Bool = false,
         messageRefreshScenario: String? = nil,
         eventCloseScenario: String? = nil,
-        channelMutationScenario: String? = nil
+        channelMutationScenario: String? = nil,
+        allowCrossAppDataAccess: Bool = false
     ) -> LaunchContext {
         XCTAssertTrue(
             isValidQualitySessionID(sessionID),
@@ -2554,7 +2604,11 @@ final class PushGo_macOSUITests: XCTestCase {
         launchedApps.append(app)
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
         setAutomationValue("1", for: "PUSHGO_AUTOMATION_SKIP_PUSH_AUTHORIZATION", in: app)
-        setAutomationValue("0", for: "PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS", in: app)
+        setAutomationValue(
+            allowCrossAppDataAccess ? "1" : "0",
+            for: "PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS",
+            in: app
+        )
         setAutomationValue("1", for: "PUSHGO_AUTOMATION_FORCE_FOREGROUND_APP", in: app)
         setAutomationValue(
             qualitySessionPayload(

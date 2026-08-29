@@ -782,15 +782,20 @@ enum OpaqueId {
 }
 
 enum PushGoSystemInteraction {
-    static func copyTextToPasteboard(_ text: String) {
-        guard !text.isEmpty else { return }
-        guard !PushGoAutomationContext.blocksCrossAppDataAccess else { return }
+    @discardableResult
+    static func copyTextToPasteboard(_ text: String) -> Bool {
+        guard !text.isEmpty else { return false }
+        guard !PushGoAutomationContext.blocksCrossAppDataAccess else { return false }
 #if os(iOS)
         UIPasteboard.general.string = text
+        return UIPasteboard.general.string == text
 #elseif os(macOS)
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        return pasteboard.setString(text, forType: .string)
+            && pasteboard.string(forType: .string) == text
+#else
+        return false
 #endif
     }
 

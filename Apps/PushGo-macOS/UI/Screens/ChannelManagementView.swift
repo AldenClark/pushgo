@@ -202,10 +202,10 @@ struct ChannelManagementView: View {
 
                     Spacer(minLength: 12)
                 }
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
             .accessibilityIdentifier("channel.row.\(channelId)")
 
             Menu {
@@ -562,9 +562,16 @@ struct ChannelManagementView: View {
     }
 
     private func copyChannelId(_ value: String) {
-        PushGoSystemInteraction.copyTextToPasteboard(value)
+        guard PushGoSystemInteraction.copyTextToPasteboard(value) else {
+            environment.showToast(
+                message: localizationManager.localized("operation_failed"),
+                style: .error,
+                duration: 2.5
+            )
+            return
+        }
         environment.showToast(
-            message: localizationManager.localized("channel_id_copied"),
+            message: "\(localizationManager.localized("channel_id_copied")): \(value)",
             style: .success,
             duration: 1.2
         )
