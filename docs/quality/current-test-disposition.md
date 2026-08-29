@@ -128,6 +128,18 @@ PR 的设备预算现固定投向 13 条跨能力正向代表链：空态 Oracle
 
 macOS Runner 不再把 26 条正向与故障旅程无差别作为普通默认：`positive` 集为 16 条，优先覆盖首次使用、准确内容/Markdown、筛选/清理、频道生命周期、真实删除、慢加载/慢刷新预警、窗口恢复、主导航、Event/Thing、Settings/Decryption 正常生命周期和 Gateway 正常切换；`risk` 集为 10 条，承载 Store 初始化失败、Undo、加载/刷新/Event 失败、受保护写失败、错钥匙/坏密文、非法地址和 Gateway 本地提交补偿。独立 `macos` Lane 默认只跑 `positive`，Nightly/Release 明确跑 `full=positive+risk`。静态合同要求两集合互斥、16/10 成本固定且并集精确等于全部 26 条可发现旅程，因此提速不能靠静默漏测。
 
+## 设备测试价值/成本审计与止损
+
+当前设备预算先证明“用户能否完成主要目的”，而不是先穷举所有失败姿势。日常正向集合固定为 iOS 13 条、Android 13 条、macOS 16 条；三端共同覆盖准确消息内容与详情、Markdown、分页/筛选/刷新、主导航、Event、Thing、Channel、Settings、Gateway/解密等主要功能族，历史清理也只选择一个能区分旧对象与控制对象的 30 天代表样本。空态、搜索等能被同 fixture 同启动证明的结果已经合并；六个清理档位、重复的单字段组合和对称第三次启动不复制成设备用例。
+
+用例进入日常正向集合需同时满足三点：它保护尚未由其他旅程证明的真实用户目的；最终 Oracle 是准确功能/数据/持久化结果而非文件、版本或控件存在；它不能以更低层合同或并入现有旅程的方式同等证明。新增能力默认先尝试复用已有 fixture、同一进程和既有 relaunch；若只是增加一个元素存在断言、重复相同存储机制、或只验证测试接入点，拒绝进入设备 Lane。测试 ID 只负责定位，不计作覆盖收益。
+
+负向与边缘场景不再与正向覆盖争抢日常预算。只有可能造成数据损坏/丢失、错误成功态、未验证即覆盖旧配置、崩溃、安全问题，或已经发生过高价值事故的反例，才保留阻断性风险证据；其余失败注入、权限拒绝、损坏输入、对称撤销、导入/试听失败和系统组合放入 Nightly/Release、owner 变更时 focused，或明确 `NOT RUN`。慢加载与慢刷新虽不是普通 happy path，但对应已发生的“数据很慢却未预警”事故，所以作为少数例外保留在 macOS 正向集；它们同时要求预警及时出现和最终准确数据到达，不能只看 loading 标志。
+
+执行时采用明确止损：同一测试接入障碍若连续两种独立操作方式都不能形成稳定的用户结果 Oracle，就停止消耗设备时间，回退未证实改动并登记为测试系统/接入点缺口；不得靠重试、sleep、测试专用业务 UI 或降低断言硬闯绿色。2026-08-29 的 macOS 通知声音候选即按此规则退出：真实 Sheet 可达，但 AppKit 原生 `Menu` 的弹出项无法被当前 XCUI 栈稳定查询或驱动，四次零重试聚焦运行均停在选择结果仍为 `None`；相关未完成代码已全部撤回，能力继续保持未覆盖，而不是占用日常 Lane 或虚报通过。后续只有在产品提供自然、可访问且不为测试专设的稳定交互语义时才重开。
+
+每轮扩面按“新增用户目的数 / 新增设备启动与运行时间”复核。优先级依次为：尚未覆盖的 P0 正向目的；已发生事故且能同时验证预警与最终结果的 P0/P1；数据安全事务反例；普通错误恢复；低频平台/输入组合。前两级未完成时，不主动扩展后两级。完整 discoverable 集仍由静态合同与 Nightly/Release 并集守住，延期必须显式记录，不能通过从 Runner 静默删除获得提速。
+
 计划中的 `required_checks` 是必须实际执行并写入收据的补充证据：Appcast/App Store metadata 使用快速语义契约，不启动完整 Release；Fastlane/构建/隐私/回滚变更强制执行发布静态契约并保持 Release Lane。两端各 120 次历史回放已校准旧路径漏选；无效或未知计划直接 `BLOCKED`，不回退为默认绿色。
 
 ## Test-system/flake 处置
@@ -144,7 +156,7 @@ macOS Runner 不再把 26 条正向与故障旅程无差别作为普通默认：
 - 集成攻击：首次 `build-for-testing` 发现新文件只进入 SwiftPM、未进入 Xcode macOS Sources phase；组件测试绿色不能掩盖产品未集成。补齐工程 membership 后 macOS App + UI target 构建通过。
 - 测试系统归因：历史授权失败发生在测试方法进入前，因此当时正确记录为 `BLOCKED/NOT RUN`。授权恢复后，受控签名 Runner 的关闭→状态栏→唯一窗口旅程已升级为关闭期间在途 Provider 结果不丢失，并在当前字节 focused 1/1、23.397 秒、零重试通过（`build/quality-results/macos-ui/run-20260829-213145.xcresult`）；既有二十二条正式核心旅程仍由先前零重试 22/22 结果包 `build/quality-results/macos-ui-22-final/run-20260829-130358.xcresult` 证明，后续测试源码变化只使本条受影响证据需要刷新，不虚构整批已重跑。
 - 崩溃归因：主导航首次真实执行发现 Message `HSplitView` 切换到 Event/Thing `HSplitView` 会在 AppKit `SplitViewChildController` 约束更新循环中崩溃。固定 300pt 列本就不提供用户可调语义，故三个页面统一改为 `HStack + Divider`；对象优先和完整往返导航均通过。页面级 identifier 另改为独立 1×1 语义标记，避免覆盖后代业务元素。
-- Runner 卫生：正式 `scripts/run_macos_ui_tests.sh` 零重试，默认精确选择当前二十二条可发现的高价值旅程；契约测试要求源码 `test...` 集合与 Runner scope 完全相等，防止新增能力被静默漏跑。它先通过 `IOConsoleLocked` 证明交互桌面已解锁，并在 Runner 生命周期持有 `caffeinate` 防止长批次中途空闲锁屏；锁屏直接归测试系统 `BLOCKED`，不再误报产品激活失败。XCTest 在每条旅程的 `setUp/tearDown` 终止本用例启动的 App，并在前后各观察一个安静窗口、关闭 bundle id 精确匹配的系统 `Problem Reporter`；外层 Runner 另在整批开始前、结束后及中断/退出时按系统可执行路径精确清场，且测试期间每 200ms 持续监控延迟出现的新窗口，无法关闭同样归 `BLOCKED`。因此某条崩溃仍保留产品 `FAILED`，但弹窗不会遮挡后续旅程，也无需为每条方法重启一次不稳定的 UI-test Runner；方法进入前失败归 `BLOCKED`，已执行 Oracle 失败归产品 `FAILED`。精确进程清理的独立契约 3/3 通过：精确目标可关闭、无目标无副作用、批次中途新目标可关闭且监控继续存活。
+- Runner 卫生：正式 `scripts/run_macos_ui_tests.sh` 零重试，26 条可发现旅程全部被静态合同精确分入 16 条 `positive` 与 10 条 `risk`；普通 macOS Lane 只跑前者，Nightly/Release 跑两者并集，防止新增能力被静默漏跑。它先通过 `IOConsoleLocked` 证明交互桌面已解锁，并在 Runner 生命周期持有 `caffeinate` 防止长批次中途空闲锁屏；锁屏直接归测试系统 `BLOCKED`，不再误报产品激活失败。XCTest 在每条旅程的 `setUp/tearDown` 终止本用例启动的 App，并在前后各观察一个安静窗口、关闭 bundle id 精确匹配的系统 `Problem Reporter`；外层 Runner 另在整批开始前、结束后及中断/退出时按系统可执行路径精确清场，且测试期间每 200ms 持续监控延迟出现的新窗口，无法关闭同样归 `BLOCKED`。因此某条崩溃仍保留产品 `FAILED`，但弹窗不会遮挡后续旅程，也无需为每条方法重启一次不稳定的 UI-test Runner；方法进入前失败归 `BLOCKED`，已执行 Oracle 失败归产品 `FAILED`。精确进程清理的独立契约 3/3 通过：精确目标可关闭、无目标无副作用、批次中途新目标可关闭且监控继续存活。
 - Apple 本机交互门禁：`scripts/require_unlocked_apple_ui_console.sh` 现由 macOS、iOS Simulator 与 watchOS Simulator 三个正式 UI Runner 共用；锁屏时三者都在启动构建/模拟器和任何产品动作前退出 2、写入 `BLOCKED`，并分别报告 `macos`、`ios_simulator`、`watchos_simulator` 原因。当前真实锁屏负控三入口均精确命中；共享门禁及三个 Runner 也由影响选择器纳入 `quality-system-trustworthiness` 的 PR 证据，不再被脚本忽略规则归为 `NOT_RUN`。
 - 数据加载纵向样板：App-owned standard 数据验证真实行的准确 title/body 语义、真实详情和进程重启持久化；8 秒受控延迟必须先显示 slow 提示再进入准确空态；首次失败必须显示真实错误并由可点击 Retry 恢复。初版标准数据 Oracle 错把 VoiceOver 合并行当作 `staticTexts`，首轮精确失败后改为校验真实行的 label/value，详情根 identifier 也拆为独立 marker，避免吞掉详情内容。
 - 刷新产品缺口：macOS 原 `.refreshable` 无显式入口且丢弃 Provider outcome，旧数据继续显示会掩盖慢/错。现增加真实 Refresh 工具栏按钮、慢态和 Messages-owned 失败态；失败保留原准确行，同入口 Retry 写入并打开准确新详情，relaunch 后仍存在。临时移除 slow marker 的负控在预警 Oracle 精确失败，恢复后 focused 2/2。
