@@ -2573,7 +2573,7 @@ struct LocalDataStoreTests {
     }
 
     @Test
-    func legacyRawPayloadTagFormatsRemainDeterministicAcrossReload() async throws {
+    func supportedRawPayloadTagFormatsRemainDeterministicAcrossReload() async throws {
         try await withIsolatedAutomationStorage { _, appGroupIdentifier in
             let jsonTags = makeMessage(
                 id: UUID(uuidString: "10000000-0000-0000-0000-000000000001")!,
@@ -2592,8 +2592,8 @@ struct LocalDataStoreTests {
                 id: UUID(uuidString: "10000000-0000-0000-0000-000000000002")!,
                 messageId: "legacy-tags-array-001",
                 notificationRequestId: "req-legacy-tags-array-001",
-                title: "Legacy direct array tags",
-                body: "Direct array tags are a legacy shape",
+                title: "Canonical direct array tags",
+                body: "Direct array tags are the canonical payload shape",
                 receivedAt: Date(timeIntervalSince1970: 1_800_000_090),
                 rawPayload: [
                     "tags": ["legacy-array", "ignored"],
@@ -2654,7 +2654,7 @@ struct LocalDataStoreTests {
             let loadedWrong = try #require(try await store.loadMessage(messageId: wrongTypeTags.messageId ?? ""))
 
             #expect(Set(loadedJSON.tags) == Set(["legacy-json", "stable"]))
-            #expect(loadedArray.tags.isEmpty)
+            #expect(Set(loadedArray.tags) == Set(["legacy-array", "ignored"]))
             #expect(loadedComma.tags.isEmpty)
             #expect(loadedMissing.tags.isEmpty)
             #expect(loadedWrong.tags.isEmpty)
@@ -2669,7 +2669,7 @@ struct LocalDataStoreTests {
             #expect(jsonTagPage.map(\.id) == [jsonTags.id])
 
             #expect(try await store.searchMessagesCount(query: "tag:legacy-json") == 1)
-            #expect(try await store.searchMessagesCount(query: "tag:legacy-array") == 0)
+            #expect(try await store.searchMessagesCount(query: "tag:legacy-array") == 1)
             #expect(try await store.searchMessagesCount(query: "tag:shadow-wrong") == 0)
 
             let tagCounts = try await store.messageTagCounts()
@@ -2677,7 +2677,8 @@ struct LocalDataStoreTests {
             #expect(!tagCounts.contains(where: { $0.tag == "shadow-json" }))
             #expect(!tagCounts.contains(where: { $0.tag == "shadow-missing" }))
             #expect(!tagCounts.contains(where: { $0.tag == "shadow-wrong" }))
-            #expect(!tagCounts.contains(where: { $0.tag == "legacy-array" }))
+            #expect(tagCounts.first(where: { $0.tag == "legacy-array" })?.totalCount == 1)
+            #expect(tagCounts.first(where: { $0.tag == "ignored" })?.totalCount == 1)
             #expect(!tagCounts.contains(where: { $0.tag == "legacy" }))
         }
     }

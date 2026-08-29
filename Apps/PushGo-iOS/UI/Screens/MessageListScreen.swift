@@ -884,6 +884,7 @@ private extension MessageListScreen {
         ScrollView {
             filterPopoverContent
         }
+        .accessibilityIdentifier("filter.surface")
         .frame(maxHeight: 420)
     }
 
@@ -929,6 +930,7 @@ private extension MessageListScreen {
                         ) {
                             viewModel.toggleChannelSelection(summary.key)
                         }
+                        .accessibilityIdentifier("filter.\(summary.key.id)")
                     }
                 }
             }

@@ -3601,6 +3601,10 @@ final class PushGoAutomationRuntime {
             messages = (0..<52).map(qualityWorkflowFixtureMessage)
             entityRecords = []
             channelSubscriptions = []
+        case .messagesFilters:
+            messages = qualityFilterFixtureMessages()
+            entityRecords = []
+            channelSubscriptions = []
         case .messagesLarge:
             messages = (0..<1_000).map(qualityFixtureMessage)
             entityRecords = []
@@ -3714,6 +3718,89 @@ final class PushGoAutomationRuntime {
                 "message_id": stableID,
                 "delivery_id": "quality-delivery-\(stableID)",
                 "tags": ["workflow", index.isMultiple(of: 2) ? "even" : "odd"],
+            ],
+            "status": "normal",
+        ]
+    }
+
+    private func qualityFilterFixtureMessages() -> [[String: Any]] {
+        [
+            qualityFilterFixtureMessage(
+                suffix: "f001",
+                messageID: "quality-filter-alpha-even",
+                title: "Quality filter alpha even",
+                channelID: "filter-alpha",
+                tags: ["workflow", "even"],
+                isRead: false,
+                offset: 5
+            ),
+            qualityFilterFixtureMessage(
+                suffix: "f002",
+                messageID: "quality-filter-alpha-odd",
+                title: "Quality filter alpha odd",
+                channelID: "filter-alpha",
+                tags: ["workflow", "odd"],
+                isRead: true,
+                offset: 4
+            ),
+            qualityFilterFixtureMessage(
+                suffix: "f003",
+                messageID: "quality-filter-beta-odd",
+                title: "Quality filter beta odd",
+                channelID: "filter-beta",
+                tags: ["workflow", "odd"],
+                isRead: false,
+                offset: 3
+            ),
+            qualityFilterFixtureMessage(
+                suffix: "f004",
+                messageID: "quality-filter-beta-even",
+                title: "Quality filter beta even",
+                channelID: "filter-beta",
+                tags: ["ops", "even"],
+                isRead: false,
+                offset: 2
+            ),
+            qualityFilterFixtureMessage(
+                suffix: "f005",
+                messageID: "quality-filter-ungrouped",
+                title: "Quality filter ungrouped orphan",
+                channelID: "",
+                tags: ["orphan"],
+                isRead: false,
+                offset: 1
+            ),
+        ]
+    }
+
+    private func qualityFilterFixtureMessage(
+        suffix: String,
+        messageID: String,
+        title: String,
+        channelID: String,
+        tags: [String],
+        isRead: Bool,
+        offset: TimeInterval
+    ) -> [String: Any] {
+        let body = "Exact filter fixture body for \(messageID)."
+        return [
+            "id": "00000000-0000-0000-0000-00000000\(suffix)",
+            "message_id": messageID,
+            "title": title,
+            "body": body,
+            "channel_id": channelID,
+            "is_read": isRead,
+            "received_at": ISO8601DateFormatter().string(
+                from: Date(timeIntervalSince1970: 1_768_464_000 + offset)
+            ),
+            "raw_payload": [
+                "entity_type": "message",
+                "message_id": messageID,
+                "delivery_id": "quality-delivery-\(messageID)",
+                "channel_id": channelID,
+                "title": title,
+                "body": body,
+                "tags": tags,
             ],
             "status": "normal",
         ]

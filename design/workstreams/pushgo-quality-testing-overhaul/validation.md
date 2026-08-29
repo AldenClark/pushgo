@@ -208,6 +208,10 @@
 | 50 次窄启动外推关闭所有平台 flake | focused 空态 50/50 能证明启动可靠，却未触发 Android 多旅程 aggregate drawing 或 macOS 授权边界 | iOS 历史 Runner issue 与 focused XCTest-process relaunch scope 一致后关闭并删重试；Android 报告把 startup 与 Compose aggregate 两个退出字段分开，后者固定 false | 50/50 只提升对应 WP1 受控入口；Android Compose、macOS、真机和两周观察继续 active/BLOCKED/NOT RUN |
 | Raw Instrument 日志只要含已知签名就吞产品失败 | Android focused campaign 不产 Gradle XML；同一日志若同时有 SnapshotStateObserver 与真实 AssertionError，简单 substring 会误归 test-system | 独立 raw-log 分类器先枚举 assertion message；任一非 `QUALITY_PRECONDITION` 断言优先 product `FAILED`，只有纯精确签名才给 flake/precondition ID | 混合已知签名+准确频道行断言负控必须 `PRODUCT_FAILED` 且 issue ID 为空 |
 | Entity 行准确但中央空白不可点 | SwiftUI layout/accessibility frame 覆盖整行，默认 hit shape 仍只包住短内容；测试只点标题或看 ID/状态 | Event/Thing label 显式矩形命中；关闭态短文案与 Thing 代表例均点可见中央，再要求真实详情和准确后续终点 | 中央触控不进入详情=`FAILED`；元素/状态存在不能替代交互目的 |
+| 筛选控件存在但真实 payload 标签为空 | 两端 JSON 解析器把标准 array 解成集合，产品模型却只接受“字符串里再编码一次的 array”；控件与 fixture 文件检查都可绿色 | Core 同时覆盖 canonical array 与 legacy encoded array；5 条 App-owned fixture 的 UI 最小链证明频道+标签 AND、未分组、作用域 mutation 和 relaunch | 标准 array 解码为空或集合错误=`FAILED`；只看 chip/文件/版本不计证据 |
+| 未分组 chip 可见但点击无效 | 空字符串既是未分组的业务 sentinel，又被 ViewModel/Repository 当成非法输入提前丢弃 | 保留空 sentinel 穿过 UI→filter state→Repository；精确结果集只能剩 ungrouped，对当前作用域已读后全局 badge 4→3 且重启保持 | 恢复 empty-return 的负控必须在 ungrouped 结果集失败；控件可点击不能单独通过 |
+| 详情打开副作用污染后续未读计数 | 测试先打开 unread 对象导致自动已读，却仍把后续 badge 变化归因给 scoped mark-all-read | 详情准确性选择 fixture 中既有 read 对象；作用域 mutation 独立作用于 ungrouped unread；前后集合、badge 与 relaunch 共同裁决 | 无法把 4→3 唯一归因给当前作用域动作时，测试设计无效，不能改期望值求绿 |
+| macOS 崩溃弹窗清理形式存在但仍遮挡下一轮 | 旧清理只识别 `com.apple.ProblemReporter`，新系统由 `com.apple.UserNotificationCenter` 承载“意外退出”窗口 | 每条旅程 setUp/tearDown 都清理两代 crash-dialog host 并校验无残留；业务动作不通过重试绕开遮挡 | 残留弹窗=`FAILED_TEST_SYSTEM/BLOCKED`；不得把不可点击误归产品或继续下一轮 |
 
 ## 双向覆盖反查
 

@@ -518,6 +518,7 @@ struct MessageSplitScreen: View {
                 }
                 .help(localizationManager.localized("mark_all_as_read"))
                 .accessibilityLabel(localizationManager.localized("mark_all_as_read"))
+                .accessibilityIdentifier("action.messages.mark_all_read")
             }
             Button {
                 isFilterPopoverPresented = true
@@ -554,6 +555,7 @@ struct MessageSplitScreen: View {
         ScrollView {
             filterPopoverContent
         }
+        .accessibilityIdentifier("filter.surface")
         .frame(maxHeight: 420)
     }
 
@@ -566,6 +568,7 @@ struct MessageSplitScreen: View {
                 ) {
                     messageListViewModel.toggleUnreadOnlyFilter()
                 }
+                .accessibilityIdentifier("filter.unread_only")
 
                 filterCloudChip(
                     title: localizationManager.localized("history_cleanup_chip"),
@@ -598,6 +601,7 @@ struct MessageSplitScreen: View {
                         ) {
                             messageListViewModel.toggleChannelSelection(summary.key)
                         }
+                        .accessibilityIdentifier("filter.\(summary.key.id)")
                     }
                 }
             }

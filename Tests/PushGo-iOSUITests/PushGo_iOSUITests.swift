@@ -504,6 +504,121 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.empty").exists)
     }
 
+    func testMessageChannelTagCombinedUngroupedFiltersAndScopedReadPersist() {
+        let sessionID = "ios-message-filters-\(UUID().uuidString.lowercased())"
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.filters"
+        )
+        let allTitles = [
+            "Quality filter alpha even",
+            "Quality filter alpha odd",
+            "Quality filter beta odd",
+            "Quality filter beta even",
+            "Quality filter ungrouped orphan",
+        ]
+
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        assertMessageTitles(allTitles, excluding: [], in: context.app)
+        assertMessagesTabBadgeCount(4, in: context.app)
+
+        openMessageFilters(in: context.app)
+        tapWhenHittable(element(in: context.app, identifier: "filter.channel-filter-alpha"), timeout: 5)
+        dismissMessageFilters(in: context.app)
+
+        openMessageFilters(in: context.app)
+        revealFilterOption("filter.tag.even", towardTags: true, in: context.app)
+        tapWhenHittable(element(in: context.app, identifier: "filter.tag.even"), timeout: 5)
+        dismissMessageFilters(in: context.app)
+        assertMessageTitles(
+            ["Quality filter alpha even"],
+            excluding: [
+                "Quality filter alpha odd",
+                "Quality filter beta odd",
+                "Quality filter beta even",
+                "Quality filter ungrouped orphan",
+            ],
+            in: context.app
+        )
+        openMessageFilters(in: context.app)
+        revealFilterOption("filter.channel-filter-alpha", towardTags: false, in: context.app)
+        tapWhenHittable(element(in: context.app, identifier: "filter.channel-filter-alpha"), timeout: 5)
+        dismissMessageFilters(in: context.app)
+        openMessageFilters(in: context.app)
+        revealFilterOption("filter.tag.even", towardTags: true, in: context.app)
+        tapWhenHittable(element(in: context.app, identifier: "filter.tag.even"), timeout: 5)
+        dismissMessageFilters(in: context.app)
+        openMessageFilters(in: context.app)
+        revealFilterOption("filter.channel-ungrouped", towardTags: false, in: context.app)
+        tapWhenHittable(element(in: context.app, identifier: "filter.channel-ungrouped"), timeout: 5)
+        dismissMessageFilters(in: context.app)
+        assertMessageTitles(
+            ["Quality filter ungrouped orphan"],
+            excluding: [
+                "Quality filter alpha even",
+                "Quality filter alpha odd",
+                "Quality filter beta odd",
+                "Quality filter beta even",
+            ],
+            in: context.app
+        )
+
+        let ungroupedRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000f005"
+        )
+        XCTAssertTrue(ungroupedRow.waitForExistence(timeout: 5))
+        let unreadUngroupedLabel = ungroupedRow.label
+        let markCurrentScopeRead = element(
+            in: context.app,
+            identifier: "action.messages.mark_all_read"
+        )
+        tapWhenHittable(markCurrentScopeRead, timeout: 5)
+        XCTAssertTrue(markCurrentScopeRead.waitForNonExistence(timeout: 8))
+        assertMessagesTabBadgeCount(
+            3,
+            in: context.app,
+            message: "Only the selected ungrouped unread message may be marked read"
+        )
+
+        context.app.terminate()
+        let relaunched = configuredLaunchContext()
+        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.filters"
+        )
+        launch(relaunched.app)
+        assertQualityRuntimeReady(in: relaunched.app, timeout: 15)
+        assertMessagesTabBadgeCount(3, in: relaunched.app)
+        let relaunchedUngroupedRow = element(
+            in: relaunched.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000f005"
+        )
+        XCTAssertTrue(relaunchedUngroupedRow.waitForExistence(timeout: 8))
+        XCTAssertNotEqual(
+            relaunchedUngroupedRow.label,
+            unreadUngroupedLabel,
+            "The scoped read result was not preserved across process relaunch"
+        )
+
+        openMessageFilters(in: relaunched.app)
+        revealFilterOption("filter.channel-ungrouped", towardTags: false, in: relaunched.app)
+        tapWhenHittable(element(in: relaunched.app, identifier: "filter.channel-ungrouped"), timeout: 5)
+        dismissMessageFilters(in: relaunched.app)
+        assertMessageTitles(
+            ["Quality filter ungrouped orphan"],
+            excluding: Array(allTitles.dropLast()),
+            in: relaunched.app
+        )
+        XCTAssertFalse(
+            element(in: relaunched.app, identifier: "action.messages.mark_all_read")
+                .waitForExistence(timeout: 2),
+            "The already-read ungrouped scope must not offer another unread bulk action"
+        )
+    }
+
     func testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail() {
         let context = configuredLaunchContext()
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
@@ -3125,6 +3240,88 @@ final class PushGo_iOSUITests: XCTestCase {
         guard let value = messagesTab.value as? String else { return nil }
         let digits = value.filter(\.isNumber)
         return digits.isEmpty ? nil : Int(digits)
+    }
+
+    private func openMessageFilters(in app: XCUIApplication) {
+        tapWhenHittable(
+            element(in: app, identifier: "action.messages.filter"),
+            timeout: 5,
+            message: "The production message filter control must be reachable"
+        )
+        XCTAssertTrue(
+            element(in: app, identifier: "filter.unread_only").waitForExistence(timeout: 5),
+            "The production filter surface did not open"
+        )
+        XCTAssertTrue(
+            element(in: app, identifier: "filter.surface").waitForExistence(timeout: 5),
+            "The production filter surface has no stable scroll owner"
+        )
+    }
+
+    private func revealFilterOption(
+        _ identifier: String,
+        towardTags: Bool,
+        in app: XCUIApplication
+    ) {
+        let option = element(in: app, identifier: identifier)
+        let surface = element(in: app, identifier: "filter.surface")
+        for _ in 0..<4 {
+            if option.exists, option.isHittable { return }
+            let visibleProbe = towardTags
+                ? element(in: app, identifier: "filter.unread_only")
+                : ["filter.tag.even", "filter.tag.odd"]
+                    .map { element(in: app, identifier: $0) }
+                    .first(where: { $0.exists && $0.isHittable })
+            let gestureSource = visibleProbe?.exists == true && visibleProbe?.isHittable == true
+                ? visibleProbe!
+                : surface
+            if towardTags {
+                gestureSource.swipeUp()
+            } else {
+                gestureSource.swipeDown()
+            }
+        }
+        XCTAssertTrue(option.exists && option.isHittable, "Filter option remained unreachable: \(identifier)")
+    }
+
+    private func dismissMessageFilters(in app: XCUIApplication) {
+        let filterSurfaceProbe = element(in: app, identifier: "filter.unread_only")
+        guard filterSurfaceProbe.exists else { return }
+        app.swipeDown()
+        XCTAssertTrue(
+            filterSurfaceProbe.waitForNonExistence(timeout: 5),
+            "The production filter surface did not dismiss after the platform gesture"
+        )
+    }
+
+    private func assertMessageTitles(
+        _ expected: [String],
+        excluding unexpected: [String],
+        in app: XCUIApplication,
+        timeout: TimeInterval = 8,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let deadline = Date().addingTimeInterval(timeout)
+        var matched = false
+        repeat {
+            matched = expected.allSatisfy { app.staticTexts[$0].exists }
+                && unexpected.allSatisfy { !app.staticTexts[$0].exists }
+            if matched { break }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        } while Date() < deadline
+        XCTAssertTrue(
+            matched,
+            "The visible message set did not match the exact selected facets",
+            file: file,
+            line: line
+        )
+        for title in expected {
+            XCTAssertTrue(app.staticTexts[title].exists, "Missing expected message: \(title)", file: file, line: line)
+        }
+        for title in unexpected {
+            XCTAssertFalse(app.staticTexts[title].exists, "Unexpected message remained visible: \(title)", file: file, line: line)
+        }
     }
 
     private func channelsTab(in app: XCUIApplication) -> XCUIElement {

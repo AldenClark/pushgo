@@ -354,6 +354,8 @@ extension PushMessage {
             } else {
                 values = []
             }
+        case let raw as [Any]:
+            values = raw.compactMap(metadataValueString)
         default:
             values = []
         }

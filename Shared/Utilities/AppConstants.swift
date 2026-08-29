@@ -47,6 +47,7 @@ enum PushGoQualityFixture: String, Codable, CaseIterable, Sendable {
     case messagesEncryptedValid = "messages.encrypted.valid"
     case messagesEncryptedCorrupt = "messages.encrypted.corrupt"
     case messagesWorkflow = "messages.workflow"
+    case messagesFilters = "messages.filters"
     case messagesLarge = "messages.large"
     case eventStandard = "event.standard"
     case thingStandard = "thing.standard"
