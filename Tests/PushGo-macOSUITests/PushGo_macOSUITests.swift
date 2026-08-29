@@ -2255,7 +2255,12 @@ final class PushGo_macOSUITests: XCTestCase {
     @MainActor
     func testInvalidServerAddressShowsInlineFeedbackInsteadOfToast() {
         let sessionID = "macos-invalid-server-\(UUID().uuidString.lowercased())"
-        let context = configuredQualityApp(sessionID: sessionID, fixture: "empty.clean")
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            failGatewaySwitchValidationOnce: true,
+            channelMutationScenario: "accepted"
+        )
         launchQuality(context, sessionID: sessionID)
 
         openSidebarTab("settings", in: context.app)
@@ -2264,16 +2269,51 @@ final class PushGo_macOSUITests: XCTestCase {
 
         let addressField = element(in: context.app, identifier: "field.settings.server.address")
         XCTAssertTrue(addressField.waitForExistence(timeout: 8))
+        let originalAddress = (addressField.value as? String) ?? ""
+        XCTAssertFalse(originalAddress.isEmpty)
         replaceText(in: addressField, with: "not a valid url")
         element(in: context.app, identifier: "action.settings.server.save").click()
 
+        let serverFeedback = element(in: context.app, identifier: "feedback.settings.server")
         XCTAssertTrue(
-            element(in: context.app, identifier: "feedback.settings.server").waitForExistence(timeout: 5),
+            serverFeedback.waitForExistence(timeout: 5),
             "Server validation errors should stay inline in the sheet."
         )
+        let invalidAddressFeedback = serverFeedback.label
+        XCTAssertFalse(invalidAddressFeedback.isEmpty)
         XCTAssertFalse(
             element(in: context.app, identifier: "feedback.toast.error").waitForExistence(timeout: 1),
             "Server validation errors must not be routed to the global toast overlay."
+        )
+
+        replaceText(in: addressField, with: "https://quality-macos-rejected.invalid/api")
+        element(in: context.app, identifier: "action.settings.server.save").click()
+        let registrationRejection = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label != %@", invalidAddressFeedback),
+            object: serverFeedback
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [registrationRejection], timeout: 8),
+            .completed,
+            "A rejected candidate registration must stay actionable in its editor."
+        )
+        XCTAssertTrue(addressField.exists, "Registration rejection must not dismiss the editor.")
+        XCTAssertFalse(
+            element(in: context.app, identifier: "feedback.settings.root").exists,
+            "A server editor failure must not leak into the host Settings page."
+        )
+
+        let cancel = element(in: context.app, identifier: "action.settings.server.cancel")
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5) && cancel.isHittable)
+        cancel.click()
+        XCTAssertTrue(addressField.waitForNonExistence(timeout: 8))
+        element(in: context.app, identifier: "action.settings.server_management").click()
+        let restoredField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(restoredField.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            restoredField.value as? String,
+            originalAddress,
+            "A rejected candidate must not replace the previously saved gateway."
         )
     }
 
@@ -2283,7 +2323,6 @@ final class PushGo_macOSUITests: XCTestCase {
         let context = configuredQualityApp(
             sessionID: sessionID,
             fixture: "channels.standard",
-            failGatewaySwitchValidationOnce: true,
             channelMutationScenario: "accepted"
         )
         launchQuality(context, sessionID: sessionID)
@@ -2309,36 +2348,8 @@ final class PushGo_macOSUITests: XCTestCase {
         let normalizedAddress = "https://quality-macos-settings.invalid/api"
         replaceText(in: addressField, with: "\(normalizedAddress)/")
         element(in: context.app, identifier: "action.settings.server.save").click()
-
         XCTAssertTrue(
-            element(in: context.app, identifier: "feedback.settings.server")
-                .waitForExistence(timeout: 8),
-            "A rejected candidate registration must stay actionable in its editor."
-        )
-        XCTAssertTrue(addressField.exists, "Registration rejection must not dismiss the editor.")
-        XCTAssertFalse(
-            element(in: context.app, identifier: "feedback.settings.root").exists,
-            "A server editor failure must not leak into the host Settings page."
-        )
-
-        let cancel = element(in: context.app, identifier: "action.settings.server.cancel")
-        XCTAssertTrue(cancel.waitForExistence(timeout: 5) && cancel.isHittable)
-        cancel.click()
-        XCTAssertTrue(addressField.waitForNonExistence(timeout: 8))
-        XCTAssertFalse(element(in: context.app, identifier: "feedback.settings.root").exists)
-
-        serverAction.click()
-        let retryField = element(in: context.app, identifier: "field.settings.server.address")
-        XCTAssertTrue(retryField.waitForExistence(timeout: 8))
-        XCTAssertEqual(
-            retryField.value as? String,
-            originalAddress,
-            "A rejected candidate must not replace the previously saved gateway."
-        )
-        replaceText(in: retryField, with: "\(normalizedAddress)/")
-        element(in: context.app, identifier: "action.settings.server.save").click()
-        XCTAssertTrue(
-            retryField.waitForNonExistence(timeout: 10),
+            addressField.waitForNonExistence(timeout: 10),
             "Only a registered and locally committed candidate may close the editor."
         )
 

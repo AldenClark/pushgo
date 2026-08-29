@@ -176,6 +176,14 @@ class QualityLaneCostContractTests(unittest.TestCase):
             "func testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch()",
             1,
         )[1].split("\n    @MainActor\n    func ", 1)[0]
+        macos_gateway_positive = macos_source.split(
+            "func testGatewayCandidateMustRegisterBeforeCommitAndPersistsAfterRelaunch()",
+            1,
+        )[1].split("\n    @MainActor\n    func ", 1)[0]
+        macos_gateway_risk = macos_source.split(
+            "func testInvalidServerAddressShowsInlineFeedbackInsteadOfToast()",
+            1,
+        )[1].split("\n    @MainActor\n    func ", 1)[0]
         ios_visibility_oracle = ios_source.split(
             "private func assertDataTabVisibility(",
             1,
@@ -186,6 +194,11 @@ class QualityLaneCostContractTests(unittest.TestCase):
         self.assertIn("messagesVisible: true", ios_visibility)
         self.assertIn('"P2 Split Seed Message"', ios_visibility_oracle)
         self.assertIn('"P2 Split Seed Message"', macos_visibility)
+        self.assertNotIn("failGatewaySwitchValidationOnce: true", macos_gateway_positive)
+        self.assertIn("failGatewaySwitchValidationOnce: true", macos_gateway_risk)
+        self.assertIn("invalidAddressFeedback", macos_gateway_risk)
+        self.assertIn('predicate: NSPredicate(format: "label != %@"', macos_gateway_risk)
+        self.assertIn("A rejected candidate must not replace", macos_gateway_risk)
 
     def test_shared_form_impact_uses_one_accessibility_and_one_macos_batch(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()
