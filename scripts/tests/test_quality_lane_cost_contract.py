@@ -140,6 +140,29 @@ class QualityLaneCostContractTests(unittest.TestCase):
             runner.split("apple-macos-settings-positive)", 1)[1].split(";;", 1)[0],
         )
 
+    def test_shared_form_impact_uses_one_accessibility_and_one_macos_batch(self) -> None:
+        runner = (REPO / "scripts/quality_test.sh").read_text()
+        ios_body = runner.split("apple-ios-shared-form-accessibility)", 1)[1].split(";;", 1)[0]
+        macos_body = runner.split("apple-macos-shared-form-purpose)", 1)[1].split(";;", 1)[0]
+
+        self.assertEqual(1, runner.count("apple-ios-shared-form-accessibility)"))
+        self.assertEqual(1, runner.count("apple-macos-shared-form-purpose)"))
+        self.assertEqual(
+            1,
+            ios_body.count(
+                "testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation"
+            ),
+        )
+        self.assertEqual(1, macos_body.count("testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch"))
+        self.assertEqual(1, macos_body.count("testInvalidServerAddressShowsInlineFeedbackInsteadOfToast"))
+        for deferred in (
+            "GatewayLocalCommitFailure",
+            "DecryptionProtectedStoreFailure",
+            "CorruptEncryptedMessage",
+            "ChannelCreateLocalFailure",
+        ):
+            self.assertNotIn(deferred, ios_body + macos_body)
+
     def _scopes(self, source: str, variable: str) -> list[str]:
         match = re.search(rf'^{variable}="([^"]+)"$', source, re.MULTILINE)
         self.assertIsNotNone(match, variable)

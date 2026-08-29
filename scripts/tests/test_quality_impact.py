@@ -310,6 +310,33 @@ class QualityImpactPlanTests(unittest.TestCase):
         self.assertIn("mac-window-status-item", plan["impacted_capabilities"])
         self.assertIn("close/reopen", " ".join(plan["minimum_evidence"]))
 
+    def test_shared_form_controls_select_cross_platform_purpose_evidence_without_media(self):
+        plan = self.plan("Shared/UI/AppFormControls.swift")
+
+        self.assertEqual("READY", plan["plan_status"])
+        self.assertEqual("pr", plan["recommended_lane"])
+        self.assertEqual(
+            ["apple-ios-shared-form-accessibility", "apple-macos-shared-form-purpose"],
+            plan["required_checks"],
+        )
+        self.assertIn("accessibility-localization", plan["impacted_capabilities"])
+        self.assertIn("gateway-settings", plan["impacted_capabilities"])
+        self.assertIn("message-detail", plan["impacted_capabilities"])
+        self.assertNotIn("delete-undo", plan["impacted_capabilities"])
+        self.assertNotIn("message-media", plan["impacted_capabilities"])
+
+    def test_shared_image_preview_owner_retains_nightly_media_evidence(self):
+        plan = self.plan("Shared/UI/KeyboardDismiss.swift")
+
+        self.assertEqual("nightly", plan["recommended_lane"])
+        self.assertIn("message-media", plan["impacted_capabilities"])
+
+    def test_toast_and_sound_editor_remain_nightly_risk_owners(self):
+        for path in ("Shared/UI/ToastView.swift", "Shared/UI/NotificationSoundEditorView.swift"):
+            with self.subTest(path=path):
+                plan = self.plan(path)
+                self.assertEqual("nightly", plan["recommended_lane"])
+
     def test_system_settings_component_from_history_is_mapped_to_real_consumers(self):
         plan = self.plan("Shared/UI/SystemIntegrationSettingsGroup.swift")
 

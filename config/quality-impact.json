@@ -228,8 +228,18 @@
       "escalation_reasons": ["Composition and window changes affect reachability of every downstream capability."]
     },
     {
+      "id": "shared-form-controls-ui",
+      "paths": ["Shared/UI/AppFormControls.swift"],
+      "capabilities": ["accessibility-localization", "channels", "decryption-settings", "events", "gateway-settings", "message-detail", "notification-sound", "page-visibility", "search-filter"],
+      "minimum_evidence": ["Apple PR broad positive representative set", "iOS zh-Hans accessibility5 real message-detail and Channel-create form journey", "macOS real Settings rows/toggles/sound-editor entry and one inline-error ownership journey"],
+      "required_checks": ["apple-ios-shared-form-accessibility", "apple-macos-shared-form-purpose"],
+      "lane": "pr",
+      "known_evidence_gaps": ["A shared control presentation change does not automatically run every Channel, Event, Gateway, decryption, sound, search, or missing-message business failure matrix; changes to the owning state/mutation files still promote independently."],
+      "escalation_reasons": ["This file owns cross-platform fields, actions, toggles, status badges, and inline feedback, so one large-text form task, one macOS Settings purpose task, and one error-owner counterexample are required without consuming unrelated platform/system suites."]
+    },
+    {
       "id": "shared-ui-media-accessibility-localization",
-      "paths": ["Shared/UI/AppFormControls.swift", "Shared/UI/KeyboardDismiss.swift", "Shared/UI/LiquidGlassEffect.swift", "Shared/UI/NotificationSoundEditorView.swift", "Shared/UI/PlatformColor.swift", "Shared/UI/PushGoMarkdownView.swift", "Shared/UI/RemoteImageView.swift", "Shared/UI/RootView.swift", "Shared/UI/ToastView.swift", "Shared/Models/NotificationSoundSettings.swift", "Shared/Services/NotificationSound*.swift", "Shared/Utilities/Localization*.swift", "Shared/Utilities/PushGoMarkdownCore.swift", "Shared/Utilities/SharedImageCache.swift", "Shared/Utilities/NotificationSound*.swift", "Resources/**"],
+      "paths": ["Shared/UI/KeyboardDismiss.swift", "Shared/UI/LiquidGlassEffect.swift", "Shared/UI/NotificationSoundEditorView.swift", "Shared/UI/PlatformColor.swift", "Shared/UI/PushGoMarkdownView.swift", "Shared/UI/RemoteImageView.swift", "Shared/UI/RootView.swift", "Shared/UI/ToastView.swift", "Shared/Models/NotificationSoundSettings.swift", "Shared/Services/NotificationSound*.swift", "Shared/Utilities/Localization*.swift", "Shared/Utilities/PushGoMarkdownCore.swift", "Shared/Utilities/SharedImageCache.swift", "Shared/Utilities/NotificationSound*.swift", "Resources/**"],
       "capabilities": ["accessibility-localization", "message-media", "notification-sound"],
       "minimum_evidence": ["format/parser/component correctness", "representative UI task", "nightly accessibility/localization review"],
       "lane": "nightly",

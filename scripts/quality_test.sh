@@ -166,6 +166,21 @@ PY
           QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_macos_ui_tests.sh"
         claims+=("macOS impact-selected Settings purpose journeys")
         ;;
+      apple-ios-shared-form-accessibility)
+        selected_claims+=("iOS impact-selected shared-form large-text purpose journey")
+        QUALITY_CONTENT_SIZE="accessibility-extra-extra-extra-large" \
+          TEST_SCOPES="PushGo-iOSUITests/PushGo_iOSUITests/testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation" \
+          MAX_RETRIES=0 \
+          QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
+        claims+=("iOS impact-selected shared-form large-text purpose journey")
+        ;;
+      apple-macos-shared-form-purpose)
+        selected_claims+=("macOS impact-selected shared-form positive and inline-error owner journeys")
+        TEST_SCOPES="PushGo-macOSUITests/PushGo_macOSUITests/testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch,PushGo-macOSUITests/PushGo_macOSUITests/testInvalidServerAddressShowsInlineFeedbackInsteadOfToast" \
+          MAX_RETRIES=0 \
+          QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_macos_ui_tests.sh"
+        claims+=("macOS impact-selected shared-form positive and inline-error owner journeys")
+        ;;
       *)
         echo "status=BLOCKED"
         echo "reason=unsupported_apple_impact_check:$check"
