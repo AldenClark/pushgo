@@ -232,6 +232,39 @@ class QualityImpactPlanTests(unittest.TestCase):
             plan["minimum_evidence"],
         )
 
+    def test_ios_channel_screen_selects_only_ios_positive_owner_evidence(self):
+        plan = self.plan("Apps/PushGo-iOS/UI/Screens/ChannelManagementScreen.swift")
+
+        self.assertEqual("READY", plan["plan_status"])
+        self.assertEqual("pr", plan["recommended_lane"])
+        self.assertEqual(["channels"], plan["impacted_capabilities"])
+        self.assertEqual(["apple-ios-channel-positive"], plan["required_checks"])
+        self.assertNotIn("gateway-settings", plan["impacted_capabilities"])
+        self.assertNotIn("decryption-settings", plan["impacted_capabilities"])
+
+    def test_macos_channel_screen_selects_only_macos_positive_owner_evidence(self):
+        plan = self.plan("Apps/PushGo-macOS/UI/Screens/ChannelManagementView.swift")
+
+        self.assertEqual("READY", plan["plan_status"])
+        self.assertEqual("pr", plan["recommended_lane"])
+        self.assertEqual(["channels"], plan["impacted_capabilities"])
+        self.assertEqual(["apple-macos-channel-positive"], plan["required_checks"])
+
+    def test_shared_channel_controller_retains_reconciliation_lane(self):
+        plan = self.plan("Shared/Application/ChannelSubscriptionController.swift")
+
+        self.assertEqual("nightly", plan["recommended_lane"])
+        self.assertEqual(["channels"], plan["impacted_capabilities"])
+        self.assertEqual([], plan["required_checks"])
+        self.assertIn("relaunch reconciliation", " ".join(plan["escalation_reasons"]))
+
+    def test_settings_screen_no_longer_selects_channel_lifecycle(self):
+        plan = self.plan("Apps/PushGo-iOS/UI/Screens/SettingsView.swift")
+
+        self.assertEqual("nightly", plan["recommended_lane"])
+        self.assertNotIn("channels", plan["impacted_capabilities"])
+        self.assertIn("gateway-settings", plan["impacted_capabilities"])
+
     def test_system_settings_component_from_history_is_mapped_to_real_consumers(self):
         plan = self.plan("Shared/UI/SystemIntegrationSettingsGroup.swift")
 

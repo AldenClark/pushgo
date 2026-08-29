@@ -71,6 +71,26 @@ class QualityLaneCostContractTests(unittest.TestCase):
         self.assertEqual(1, update_runner.count('"Install Update" "安装更新" "安裝更新"'))
         self.assertIn('"business_retries": 0', update_runner)
 
+    def test_channel_ui_impact_checks_run_one_platform_owner_journey(self) -> None:
+        runner = (REPO / "scripts/quality_test.sh").read_text()
+
+        self.assertEqual(1, runner.count("apple-ios-channel-positive)"))
+        self.assertEqual(1, runner.count("apple-macos-channel-positive)"))
+        self.assertEqual(
+            1,
+            runner.count(
+                'TEST_SCOPES="PushGo-iOSUITests/PushGo_iOSUITests/'
+                'testChannelCreateRenameAndBothUnsubscribeOutcomesPersist"'
+            ),
+        )
+        self.assertEqual(
+            1,
+            runner.count(
+                'TEST_SCOPES="PushGo-macOSUITests/PushGo_macOSUITests/'
+                'testUnreadBadgeAndChannelLifecyclePersistThroughRealUserActions"'
+            ),
+        )
+
     def _scopes(self, source: str, variable: str) -> list[str]:
         match = re.search(rf'^{variable}="([^"]+)"$', source, re.MULTILINE)
         self.assertIsNotNone(match, variable)

@@ -138,6 +138,20 @@ PY
         "$repo_root/scripts/verify_rollback_compatibility.sh"
         claims+=("Apple locked dependency/privacy/release/rollback static contracts")
         ;;
+      apple-ios-channel-positive)
+        selected_claims+=("iOS impact-selected Channel positive lifecycle")
+        TEST_SCOPES="PushGo-iOSUITests/PushGo_iOSUITests/testChannelCreateRenameAndBothUnsubscribeOutcomesPersist" \
+          MAX_RETRIES=0 \
+          QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
+        claims+=("iOS impact-selected Channel positive lifecycle")
+        ;;
+      apple-macos-channel-positive)
+        selected_claims+=("macOS impact-selected Channel positive lifecycle")
+        TEST_SCOPES="PushGo-macOSUITests/PushGo_macOSUITests/testUnreadBadgeAndChannelLifecyclePersistThroughRealUserActions" \
+          MAX_RETRIES=0 \
+          QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_macos_ui_tests.sh"
+        claims+=("macOS impact-selected Channel positive lifecycle")
+        ;;
       *)
         echo "status=BLOCKED"
         echo "reason=unsupported_apple_impact_check:$check"
