@@ -449,6 +449,7 @@ private struct PushgoImagePreviewOverlay: View {
                 .zIndex(10)
             }
         }
+        .accessibilityIdentifier("dialog.image.preview")
 #if os(macOS)
         .frame(minWidth: 980, minHeight: 620)
 #endif

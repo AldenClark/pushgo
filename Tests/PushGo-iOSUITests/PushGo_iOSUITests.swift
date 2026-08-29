@@ -295,6 +295,13 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(
             seeded.app.staticTexts["Seeded from fixture.seed_messages for UI validation."].exists
         )
+        let image = element(in: seeded.app, identifier: "message.image.0")
+        tapWhenHittable(
+            image,
+            timeout: 8,
+            message: "The canonical message image must decode into an interactive detail asset"
+        )
+        assertElementExists("dialog.image.preview", in: seeded.app, timeout: 8)
         seeded.app.terminate()
 
         let relaunched = configuredLaunchContext()

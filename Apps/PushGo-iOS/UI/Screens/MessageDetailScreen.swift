@@ -332,6 +332,7 @@ struct MessageDetailScreen: View {
                     }
                     .buttonStyle(.appPlain)
                     .accessibilityLabel(LocalizedStringKey("image_attachment"))
+                    .accessibilityIdentifier("message.image.0")
                 } placeholder: {
                     RoundedRectangle(cornerRadius: EntityVisualTokens.radiusMedium, style: .continuous)
                         .fill(EntityVisualTokens.subtleFill)

@@ -281,6 +281,17 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertTrue(
             context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."].exists
         )
+        let image = element(in: context.app, identifier: "message.image.0")
+        XCTAssertTrue(
+            image.waitForExistence(timeout: 8),
+            "The canonical message image must decode into an interactive detail asset."
+        )
+        image.click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "dialog.image.preview")
+                .waitForExistence(timeout: 8),
+            "The decoded message image must open the production preview."
+        )
 
         context.app.terminate()
         let relaunched = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")

@@ -86,7 +86,7 @@
       "capabilities": ["messages", "message-detail", "search-filter", "delete-undo"],
       "minimum_evidence": ["Swift message/search/deletion tests", "iOS accurate content/search/delete/relaunch UI journeys", "iOS provider refresh new-result/failure-recovery UI journeys"],
       "lane": "pr",
-      "known_evidence_gaps": ["media and macOS UI remain incomplete; representative iOS pagination/read plus slow, new-result, and failure-recovery refresh workflows are protected."]
+      "known_evidence_gaps": ["representative iOS/macOS local-cached media decode/click/preview, pagination/read, and slow, new-result, and failure-recovery refresh workflows are protected; multi-image, animation, share, cache eviction, and media performance remain incomplete."]
     },
     {
       "id": "events-things",

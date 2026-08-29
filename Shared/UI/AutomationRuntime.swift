@@ -1197,6 +1197,9 @@ final class PushGoAutomationRuntime {
                 return
             }
             let bundle = try loadStartupFixtureBundle()
+            if PushGoAutomationContext.qualitySession?.fixture == .messagesStandard {
+                try await prepareQualityStandardMessageImage()
+            }
             try await applyFixtureBundle(
                 bundle,
                 sourcePath: startupFixturePath,
@@ -3691,7 +3694,7 @@ final class PushGoAutomationRuntime {
                 ),
             ]
         case .messagesStandard:
-            messages = [qualityFixtureMessage(index: 0)]
+            messages = [qualityFixtureMessage(index: 0, includesMedia: true)]
             entityRecords = []
             channelSubscriptions = []
         case .messagesEncryptedValid, .messagesEncryptedCorrupt:
@@ -3713,7 +3716,7 @@ final class PushGoAutomationRuntime {
             entityRecords = []
             channelSubscriptions = []
         case .messagesLarge:
-            messages = (0..<1_000).map(qualityFixtureMessage)
+            messages = (0..<1_000).map { qualityFixtureMessage(index: $0) }
             entityRecords = []
             channelSubscriptions = []
         case .eventStandard:
@@ -3743,13 +3746,21 @@ final class PushGoAutomationRuntime {
         return try decodeFixtureBundle(data: JSONSerialization.data(withJSONObject: payload))
     }
 
-    private func qualityFixtureMessage(index: Int) -> [String: Any] {
+    private func qualityFixtureMessage(index: Int, includesMedia: Bool = false) -> [String: Any] {
         let suffix = String(format: "%012x", index + 1)
         let stableID = index == 0 ? "quality-standard-message" : "quality-large-\(index)"
         let title = index == 0 ? "P2 Split Seed Message" : "Quality message \(index)"
         let body = index == 0
             ? "Seeded from fixture.seed_messages for UI validation."
             : "Deterministic app-owned performance fixture row \(index)."
+        var rawPayload: [String: Any] = [
+            "entity_type": "message",
+            "message_id": stableID,
+            "delivery_id": "quality-delivery-\(stableID)",
+        ]
+        if includesMedia {
+            rawPayload["images"] = "[\"\(Self.qualityStandardMessageImageURL.absoluteString)\"]"
+        }
         return [
             "id": "00000000-0000-0000-0000-\(suffix)",
             "message_id": stableID,
@@ -3758,14 +3769,35 @@ final class PushGoAutomationRuntime {
             "channel_id": "quality",
             "is_read": false,
             "received_at": "2026-01-15T08:00:00Z",
-            "raw_payload": [
-                "entity_type": "message",
-                "message_id": stableID,
-                "delivery_id": "quality-delivery-\(stableID)",
-            ],
+            "raw_payload": rawPayload,
             "status": "normal",
         ]
     }
+
+    private static let qualityStandardMessageImageURL = URL(
+        string: "https://quality-media.pushgo.dev/standard-message.png"
+    )!
+
+    private func prepareQualityStandardMessageImage() async throws {
+        guard let data = Data(base64Encoded: Self.qualityStandardMessagePNGBase64) else {
+            throw PushGoAutomationError.invalidArgument("quality_standard_message_image")
+        }
+        guard await SharedImageCache.store(
+            data: data,
+            for: Self.qualityStandardMessageImageURL,
+            rendition: .original
+        ) != nil else {
+            throw PushGoAutomationError.invalidArgument("quality_standard_message_image_cache")
+        }
+        _ = await SharedImageCache.store(
+            data: data,
+            for: Self.qualityStandardMessageImageURL,
+            rendition: .listThumbnail
+        )
+    }
+
+    private static let qualityStandardMessagePNGBase64 =
+        "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFElEQVR42mNkYPj/n4GBgYGJAQoAHgQCAf2fP6sAAAAASUVORK5CYII="
 
     private func qualityMarkdownFixtureMessage() -> [String: Any] {
         let body = """
