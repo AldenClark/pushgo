@@ -2,7 +2,7 @@
 
 ## Current executable scope
 
-The target now exposes twelve XCTest-discoverable, App-owned journeys:
+The target now exposes fourteen XCTest-discoverable, App-owned journeys:
 
 - App-owned empty-state launch and functional message-list readiness;
 - accurate standard message row/detail data and process-relaunch persistence;
@@ -15,9 +15,11 @@ The target now exposes twelve XCTest-discoverable, App-owned journeys:
 - real Sidebar navigation across primary destinations;
 - real Settings entry to the decryption overlay;
 - inline invalid-server feedback through real controls;
+- candidate Gateway registration rejection with no local commit, inline ownership, retry, data re-scoping, and relaunch persistence;
+- local Gateway commit failure with immediate and process-relaunch rollback, followed by a successful real-control retry;
 - close/status-item/reopen window lifecycle with one functional window.
 
-The 18 host-path/command/state methods are named `legacyDiagnostic...` and no longer use XCTest's `test...` discovery convention. Their green results never counted as product coverage. The twelve current journeys use the App-owned quality session and real accessibility UI; they do not read the App database or state files from the host test process. Event slow/error/duplicate-close, Thing filter/deep-link/delete, page-visibility persistence, Gateway commit, notification action, and performance journeys remain explicit gaps until replaced by App-owned user-purpose tests.
+The 18 host-path/command/state methods are named `legacyDiagnostic...` and no longer use XCTest's `test...` discovery convention. Their green results never counted as product coverage. The fourteen current journeys use the App-owned quality session and real accessibility UI; they do not read the App database or state files from the host test process. Event slow/error/duplicate-close, Thing filter/deep-link/delete, page-visibility persistence, decryption mutation, notification action, and performance journeys remain explicit gaps until replaced by App-owned user-purpose tests.
 
 ## Run
 

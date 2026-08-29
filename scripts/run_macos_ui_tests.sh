@@ -33,6 +33,8 @@ default_scopes=(
   "PushGo-macOSUITests/PushGo_macOSUITests/testThingRelationsOpenAccurateDetailsAndSurviveRelaunch"
   "PushGo-macOSUITests/PushGo_macOSUITests/testSettingsSidebarCanOpenDecryptionOverlay"
   "PushGo-macOSUITests/PushGo_macOSUITests/testInvalidServerAddressShowsInlineFeedbackInsteadOfToast"
+  "PushGo-macOSUITests/PushGo_macOSUITests/testGatewayCandidateMustRegisterBeforeCommitAndPersistsAfterRelaunch"
+  "PushGo-macOSUITests/PushGo_macOSUITests/testGatewayLocalCommitFailureRollsBackBeforeRetryCommits"
 )
 
 close_stale_test_processes() {
@@ -62,13 +64,7 @@ if [[ -n "$runner_status_file" ]]; then
   mkdir -p "$(dirname "$runner_status_file")"
 fi
 
-console_locked="$(/usr/sbin/ioreg -n Root -d1 | awk -F'= ' '/"IOConsoleLocked"/ { print $2 }')"
-if [[ "$console_locked" != "No" ]]; then
-  [[ -z "$runner_status_file" ]] || printf 'BLOCKED\n' > "$runner_status_file"
-  echo "status=BLOCKED"
-  echo "reason=macos_console_must_be_unlocked:$console_locked"
-  exit 2
-fi
+"$repo_root/scripts/require_unlocked_apple_ui_console.sh" macos
 
 # Keep a long UI lane from reaching the login screen after a successful
 # preflight. This changes only idle-sleep behavior for the lifetime of this

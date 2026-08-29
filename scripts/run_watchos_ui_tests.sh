@@ -36,6 +36,7 @@ record_classification() {
   fi
 }
 
+"$repo_root/scripts/require_unlocked_apple_ui_console.sh" watchos_simulator
 command -v xcodebuild >/dev/null 2>&1 || block "xcodebuild_not_found"
 command -v xcrun >/dev/null 2>&1 || block "xcrun_not_found"
 command -v python3 >/dev/null 2>&1 || block "python3_not_found"

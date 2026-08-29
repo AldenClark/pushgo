@@ -160,6 +160,10 @@
 117. **刷新动作存在但用户不知道慢/错攻击**：macOS 原实现只有隐蔽 `.refreshable`，丢弃 Provider outcome，旧数据保留会让失败看起来像成功。结果：增加真实可访问 Refresh 按钮、1 秒慢态、Messages owner 失败态和同入口重试；Oracle 同时要求旧准确行不消失、重试产生准确新详情并跨进程保留。临时移除 slow marker 后 focused 负控精确失败于预警缺失，结果包 `build/quality-results/macos-ui-negative/run-20260829-000229.xcresult`，恢复后 focused 2/2 通过。
 118. **Event 点击确认就冒充真正关闭攻击**：若关闭边界返回成功但送达 projection 的状态仍为 active，只断言 alert 消失或消息文件存在会假绿。结果：macOS 用例必须等待同一 Event 的 canonical 状态变为 closed、关闭动作消失并跨进程保持；临时将 production-shaped delivery 的 `event_state` 改为 active 后，在准确 closed 终点精确失败（`build/quality-results/macos-ui-event-negative/run-20260829-004716.xcresult`），恢复后 focused 1/1 与默认 12/12 通过。
 119. **Thing 有关系数据但用户打不开或内容错误攻击**：三个并列 Sheet state、窄 Button 命中区和 Event projection 丢弃 canonical body，使 Store/行存在仍无法完成用户目的。结果：一个枚举拥有唯一 Sheet，关系行扩展为完整可点击区域，Event summary 按 profile→显式 event description→canonical body 回退；真实 UI 依次打开 Event/Message/Update、核对准确正文、关闭返回并 relaunch，首轮红结果分别锁定交互和数据显示根因。
+120. **Simulator Runner 在锁屏桌面把环境失败算成产品失败攻击**：macOS 已有 `IOConsoleLocked` 门禁，但 iOS/watchOS 本机 UI Runner 仍会启动模拟器和 XCTest；桌面不可交互时会制造超时、激活失败或无关截图。结果：三个 Apple UI Runner 共用同一前置门禁，在 build/boot/产品动作前返回 `BLOCKED`；当前真实锁屏下三入口均退出 2、状态文件均为 `BLOCKED`，原因保留具体平台。影响选择器负控另证明共享门禁和三入口修改都要求 `quality-system-trustworthiness` PR 证据。
+121. **测试准备契约错误被等成产品启动超时攻击**：macOS Gateway commit 用例的目的前缀加 UUID 共 65 字节，超过质量会话 ID 的 64 字节上限；App 因而正确按 production profile 启动，旧测试却等待 `quality-runtime.ready` 15 秒。失败快照证明主 UI 可用但不存在任何 `quality-runtime.*`，归因为 `FAILED_TEST_SYSTEM/QUALITY_PRECONDITION`，不冒充 Gateway 产品失败。修正为合法短 ID，并在 `XCUIApplication.launch()` 前校验与产品相同的字符/长度合同；每条用例另跟踪并先终止其所有 App 进程，再清理 session 目录，避免跨用例生命周期污染。修复后该旅程 focused 1/1、两条 Gateway 同进程 2/2、默认十四条 14/14 零重试通过，证明修复同时关闭准备合同与跨用例生命周期污染。
+122. **新增 `test...` 方法但默认 Lane 静默漏跑攻击**：只把 Gateway 用例写进 XCTest 源码，若忘记同步 Runner 的 `-only-testing` 白名单，focused 可以绿色而日常默认回归永远不执行。结果：选择器契约测试现在解析 macOS UI 源码中的全部可发现 `test...` 方法，并与零重试 Runner 的默认 scope 做精确集合相等校验，同时锁定当前十四条；删除、漏加或误把 `legacyDiagnostic...` 纳入都会在 PR 立即失败。该检查只防静默选择漂移，不替代十四条真实 UI 执行。
+123. **候选注册被常量结果绕过仍可能假绿攻击**：临时把生产 `prepareCandidateGateway` 调用替换为固定 device key，让 Save 在没有执行候选注册时继续。Gateway 拒绝旅程精确失败于“拒绝必须留在编辑器”的用户结果（`build/quality-results/macos-ui-gateway-bypass-negative/run-20260829-094611.xcresult`）；恢复真实 prepare 后同例 1/1 通过（`build/quality-results/macos-ui-gateway-bypass-restored/run-20260829-094735.xcresult`）。因此测试保护的是“先注册成功才覆盖旧 Gateway”，而非只看最终地址文本或 fixture 文件。
 
 ## 归因分析
 
@@ -207,7 +211,7 @@
 
 ## 残余风险与进入条件
 
-- macOS 系统自动化认证已解除，当前十二条 App-owned 核心集已加入准确 standard 数据/relaunch、首次及刷新 slow 预警、失败保留准确快照、Retry 新结果和 relaunch、Event 关闭持久化及 Thing 三关系详情；下一批按价值推进 Gateway commit、Event slow/error/duplicate close 与其他高风险缺口，不迁移低价值旧脚本。
+- macOS 系统自动化认证已解除，当前十四条 App-owned 核心集已零重试 14/14，覆盖准确 standard 数据/relaunch、首次及刷新 slow 预警、失败保留准确快照、Retry 新结果和 relaunch、Event 关闭持久化、Thing 三关系详情，以及 Gateway 候选注册/提交中点失败的旧值保护、回滚、换域和重启；下一批按价值推进 Event slow/error/duplicate close 等高风险缺口，不迁移低价值旧脚本。
 - 真实 APNs/FCM/权限/后台/升级只有在具备签名、账号、设备和隔离环境后进入 Release；缺条件即 `BLOCKED`。
 - 固定参考物理设备 runner 已实现，但仍需在专用设备完成至少 10 次 Release 基线并审定 p50/p95 与产品 SLO；当前只有 Simulator 粗退化证据，物理结果仍 `NOT RUN`。
 - Android 的 emulator Macrobenchmark dry-run 与 Baseline Profile 已完成，但 API 37 Perfetto 帧切片解析仍为工具链 `BLOCKED`；真机 runner 必须显式非个人设备和 owner 预算，未提供时保持 `NOT RUN`，不得用 emulator P95 替代。

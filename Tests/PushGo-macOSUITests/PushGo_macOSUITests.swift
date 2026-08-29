@@ -79,6 +79,7 @@ final class PushGo_macOSUITests: XCTestCase {
     private let seedMessageId = "msg_p2_seed_001"
     private let crossAppPromptDismissButtons = ["Don’t Allow", "Don't Allow", "Not Now", "Later", "不允许", "以后"]
     private var runtimeRoots: [URL] = []
+    private var launchedApps: [XCUIApplication] = []
 
     private static func fixturePath(_ filename: String) -> String {
         URL(fileURLWithPath: #filePath)
@@ -96,6 +97,11 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
+        for app in launchedApps where app.state != .notRunning {
+            app.terminate()
+        }
+        launchedApps.removeAll()
+
         var cleanupError: Error?
         do {
             try closeProblemReporter(waitForDelayedAppearance: true)
@@ -725,6 +731,206 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertFalse(
             element(in: context.app, identifier: "feedback.toast.error").waitForExistence(timeout: 1),
             "Server validation errors must not be routed to the global toast overlay."
+        )
+    }
+
+    @MainActor
+    func testGatewayCandidateMustRegisterBeforeCommitAndPersistsAfterRelaunch() {
+        let sessionID = "macos-settings-server-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            failGatewaySwitchValidationOnce: true,
+            channelMutationScenario: "accepted"
+        )
+        launchQuality(context, sessionID: sessionID)
+
+        openSidebarTab("channels", in: context.app)
+        let originalChannel = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000001"
+        )
+        XCTAssertTrue(
+            originalChannel.waitForExistence(timeout: 8),
+            "The original gateway-scoped channel must be usable before replacement."
+        )
+        openSidebarTab("settings", in: context.app)
+        let serverAction = element(in: context.app, identifier: "action.settings.server_management")
+        XCTAssertTrue(serverAction.waitForExistence(timeout: 8) && serverAction.isHittable)
+        serverAction.click()
+
+        let addressField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(addressField.waitForExistence(timeout: 8))
+        let originalAddress = (addressField.value as? String) ?? ""
+        XCTAssertFalse(originalAddress.isEmpty)
+        let normalizedAddress = "https://quality-macos-settings.invalid/api"
+        replaceText(in: addressField, with: "\(normalizedAddress)/")
+        element(in: context.app, identifier: "action.settings.server.save").click()
+
+        XCTAssertTrue(
+            element(in: context.app, identifier: "feedback.settings.server")
+                .waitForExistence(timeout: 8),
+            "A rejected candidate registration must stay actionable in its editor."
+        )
+        XCTAssertTrue(addressField.exists, "Registration rejection must not dismiss the editor.")
+        XCTAssertFalse(
+            element(in: context.app, identifier: "feedback.settings.root").exists,
+            "A server editor failure must not leak into the host Settings page."
+        )
+
+        let cancel = element(in: context.app, identifier: "action.settings.server.cancel")
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5) && cancel.isHittable)
+        cancel.click()
+        XCTAssertTrue(addressField.waitForNonExistence(timeout: 8))
+        XCTAssertFalse(element(in: context.app, identifier: "feedback.settings.root").exists)
+
+        serverAction.click()
+        let retryField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(retryField.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            retryField.value as? String,
+            originalAddress,
+            "A rejected candidate must not replace the previously saved gateway."
+        )
+        replaceText(in: retryField, with: "\(normalizedAddress)/")
+        element(in: context.app, identifier: "action.settings.server.save").click()
+        XCTAssertTrue(
+            retryField.waitForNonExistence(timeout: 10),
+            "Only a registered and locally committed candidate may close the editor."
+        )
+
+        openSidebarTab("channels", in: context.app)
+        XCTAssertTrue(
+            originalChannel.waitForNonExistence(timeout: 8),
+            "Accepted gateway replacement must immediately scope data away from the old gateway."
+        )
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            channelMutationScenario: "accepted"
+        )
+        launchQuality(relaunched, sessionID: sessionID)
+        openSidebarTab("channels", in: relaunched.app)
+        XCTAssertTrue(
+            element(
+                in: relaunched.app,
+                identifier: "channel.row.01H00000000000000000000001"
+            ).waitForNonExistence(timeout: 8),
+            "Relaunch must not reload channel data owned by the previous gateway."
+        )
+        openSidebarTab("settings", in: relaunched.app)
+        element(in: relaunched.app, identifier: "action.settings.server_management").click()
+        let restoredField = element(in: relaunched.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(restoredField.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            restoredField.value as? String,
+            normalizedAddress,
+            "The registered gateway must remain authoritative after a full process relaunch."
+        )
+    }
+
+    @MainActor
+    func testGatewayLocalCommitFailureRollsBackBeforeRetryCommits() {
+        let sessionID = "macos-gateway-commit-\(UUID().uuidString.lowercased())"
+        let failing = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            failGatewaySwitchCommitOnce: true,
+            channelMutationScenario: "accepted"
+        )
+        launchQuality(failing, sessionID: sessionID)
+
+        openSidebarTab("channels", in: failing.app)
+        let originalChannel = element(
+            in: failing.app,
+            identifier: "channel.row.01H00000000000000000000001"
+        )
+        XCTAssertTrue(
+            originalChannel.waitForExistence(timeout: 8),
+            "The old Gateway's channel data must be usable before the candidate commit."
+        )
+        openSidebarTab("settings", in: failing.app)
+        element(in: failing.app, identifier: "action.settings.server_management").click()
+
+        let addressField = element(in: failing.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(addressField.waitForExistence(timeout: 8))
+        let originalAddress = (addressField.value as? String) ?? ""
+        XCTAssertFalse(originalAddress.isEmpty)
+        let normalizedAddress = "https://quality-macos-commit.invalid/api"
+        replaceText(in: addressField, with: "\(normalizedAddress)/")
+        element(in: failing.app, identifier: "action.settings.server.save").click()
+        XCTAssertTrue(
+            element(in: failing.app, identifier: "feedback.settings.server")
+                .waitForExistence(timeout: 8),
+            "A failed local commit must remain in the server editor."
+        )
+        XCTAssertTrue(addressField.exists)
+        XCTAssertFalse(element(in: failing.app, identifier: "feedback.settings.root").exists)
+
+        let cancel = element(in: failing.app, identifier: "action.settings.server.cancel")
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5) && cancel.isHittable)
+        cancel.click()
+        XCTAssertTrue(addressField.waitForNonExistence(timeout: 8))
+        element(in: failing.app, identifier: "action.settings.server_management").click()
+        let rolledBackField = element(in: failing.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(rolledBackField.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            rolledBackField.value as? String,
+            originalAddress,
+            "A failed local commit must keep the old gateway active immediately, not only after restart."
+        )
+        element(in: failing.app, identifier: "action.settings.server.cancel").click()
+        XCTAssertTrue(rolledBackField.waitForNonExistence(timeout: 8))
+        openSidebarTab("channels", in: failing.app)
+        XCTAssertTrue(
+            originalChannel.waitForExistence(timeout: 8),
+            "Immediate rollback must keep the old Gateway's real channel data available."
+        )
+
+        failing.app.terminate()
+        let retry = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            channelMutationScenario: "accepted"
+        )
+        launchQuality(retry, sessionID: sessionID)
+        openSidebarTab("channels", in: retry.app)
+        let relaunchedOriginalChannel = element(
+            in: retry.app,
+            identifier: "channel.row.01H00000000000000000000001"
+        )
+        XCTAssertTrue(
+            relaunchedOriginalChannel.waitForExistence(timeout: 8),
+            "Process relaunch after rollback must still expose the old Gateway's channel data."
+        )
+        openSidebarTab("settings", in: retry.app)
+        element(in: retry.app, identifier: "action.settings.server_management").click()
+        let retryField = element(in: retry.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(retryField.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            retryField.value as? String,
+            originalAddress,
+            "Rollback must keep the old gateway authoritative after process restart."
+        )
+        replaceText(in: retryField, with: "\(normalizedAddress)/")
+        element(in: retry.app, identifier: "action.settings.server.save").click()
+        XCTAssertTrue(retryField.waitForNonExistence(timeout: 10))
+
+        openSidebarTab("channels", in: retry.app)
+        XCTAssertTrue(
+            relaunchedOriginalChannel.waitForNonExistence(timeout: 8),
+            "Only the successful retry may scope channel data away from the old Gateway."
+        )
+        openSidebarTab("settings", in: retry.app)
+        element(in: retry.app, identifier: "action.settings.server_management").click()
+        let committedField = element(in: retry.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(committedField.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            committedField.value as? String,
+            normalizedAddress,
+            "Only the successful retry may expose the candidate as active."
         )
     }
 
@@ -1426,6 +1632,7 @@ final class PushGo_macOSUITests: XCTestCase {
         args: [String: String] = [:]
     ) -> LaunchContext {
         let app = XCUIApplication()
+        launchedApps.append(app)
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
         let resolvedRuntimeRoot = runtimeRoot ?? makeRuntimeRoot()
         do {
@@ -1497,10 +1704,18 @@ final class PushGo_macOSUITests: XCTestCase {
         messageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         failMessageLoad: Bool = false,
+        failGatewaySwitchValidationOnce: Bool = false,
+        failGatewaySwitchCommitOnce: Bool = false,
         messageRefreshScenario: String? = nil,
-        eventCloseScenario: String? = nil
+        eventCloseScenario: String? = nil,
+        channelMutationScenario: String? = nil
     ) -> LaunchContext {
+        XCTAssertTrue(
+            isValidQualitySessionID(sessionID),
+            "QUALITY_CONFIGURATION: session ID must be 1...64 ASCII letters, digits, '-' or '_'; got \(sessionID.utf8.count) bytes."
+        )
         let app = XCUIApplication()
+        launchedApps.append(app)
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
         setAutomationValue("1", for: "PUSHGO_AUTOMATION_SKIP_PUSH_AUTHORIZATION", in: app)
         setAutomationValue("0", for: "PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS", in: app)
@@ -1512,8 +1727,11 @@ final class PushGo_macOSUITests: XCTestCase {
                 messageLoadDelayMilliseconds: messageLoadDelayMilliseconds,
                 messageRefreshDelayMilliseconds: messageRefreshDelayMilliseconds,
                 failMessageLoad: failMessageLoad,
+                failGatewaySwitchValidationOnce: failGatewaySwitchValidationOnce,
+                failGatewaySwitchCommitOnce: failGatewaySwitchCommitOnce,
                 messageRefreshScenario: messageRefreshScenario,
-                eventCloseScenario: eventCloseScenario
+                eventCloseScenario: eventCloseScenario,
+                channelMutationScenario: channelMutationScenario
             ),
             for: "PUSHGO_QUALITY_SESSION_BASE64",
             in: app
@@ -1559,11 +1777,16 @@ final class PushGo_macOSUITests: XCTestCase {
         messageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         failMessageLoad: Bool = false,
+        failGatewaySwitchValidationOnce: Bool = false,
+        failGatewaySwitchCommitOnce: Bool = false,
         messageRefreshScenario: String? = nil,
-        eventCloseScenario: String? = nil
+        eventCloseScenario: String? = nil,
+        channelMutationScenario: String? = nil
     ) -> String {
         var faults: [String: Any] = [
             "fail_message_load": failMessageLoad,
+            "fail_gateway_switch_validation_once": failGatewaySwitchValidationOnce,
+            "fail_gateway_switch_commit_once": failGatewaySwitchCommitOnce,
         ]
         if let messageLoadDelayMilliseconds {
             faults["message_load_delay_ms"] = messageLoadDelayMilliseconds
@@ -1583,8 +1806,23 @@ final class PushGo_macOSUITests: XCTestCase {
         if let eventCloseScenario {
             payload["event_close_scenario"] = eventCloseScenario
         }
+        if let channelMutationScenario {
+            payload["channel_mutation_scenario"] = channelMutationScenario
+        }
         let data = try! JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
         return data.base64EncodedString()
+    }
+
+    private func isValidQualitySessionID(_ value: String) -> Bool {
+        guard (1 ... 64).contains(value.utf8.count) else { return false }
+        return value.unicodeScalars.allSatisfy { scalar in
+            switch scalar.value {
+            case 45, 48 ... 57, 65 ... 90, 95, 97 ... 122:
+                return true
+            default:
+                return false
+            }
+        }
     }
 
     @MainActor

@@ -17,12 +17,14 @@ if [[ ! "$max_retries" =~ ^[0-9]+$ ]] || (( max_retries != 0 )); then
   echo "reason=ios_ui_retries_are_disabled:$max_retries"
   exit 2
 fi
-python3 "$repo_root/scripts/quality_test_system_issues.py" --check
 
 if [[ -n "$runner_status_file" && ! -f "$runner_status_file" ]]; then
   mkdir -p "$(dirname "$runner_status_file")"
   printf 'PASSED\n' > "$runner_status_file"
 fi
+
+"$repo_root/scripts/require_unlocked_apple_ui_console.sh" ios_simulator
+python3 "$repo_root/scripts/quality_test_system_issues.py" --check
 
 doctor_output="$("$repo_root/scripts/quality_doctor.sh")"
 printf '%s\n' "$doctor_output"

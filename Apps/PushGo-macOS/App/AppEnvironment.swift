@@ -35,6 +35,8 @@ final class AppEnvironment {
     @ObservationIgnored private var pendingDeletionActivity: NSObjectProtocol?
     @ObservationIgnored private var pendingDeletionActivityTask: Task<Void, Never>?
 #if DEBUG
+    @ObservationIgnored private var remainingQualityGatewaySwitchValidationFailures =
+        PushGoAutomationContext.qualitySession?.faults.failGatewaySwitchValidationOnce == true ? 1 : 0
     @ObservationIgnored private var remainingQualityGatewaySwitchCommitFailures =
         PushGoAutomationContext.qualitySession?.faults.failGatewaySwitchCommitOnce == true ? 1 : 0
 #endif
@@ -78,6 +80,17 @@ final class AppEnvironment {
     var channelSubscriptions: [ChannelSubscription] { channelSyncController.channelSubscriptions }
     private(set) var channelListFeedbackMessage: String?
     @ObservationIgnored private let appUpdateManager: any AppUpdateManaging
+
+    private var isQualityChannelMutationSession: Bool {
+#if DEBUG
+        guard let scenario = PushGoAutomationContext.qualitySession?.channelMutationScenario else {
+            return false
+        }
+        return scenario != .none
+#else
+        false
+#endif
+    }
 
     private let channelSubscriptionService = ChannelSubscriptionService()
     @ObservationIgnored private(set) lazy var providerRouteController = ProviderRouteController(
@@ -464,12 +477,7 @@ final class AppEnvironment {
             channelType: "apns"
         )?
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let providerToken = try await pushRegistrationService.awaitToken()
-        let preparedDeviceKey = try await providerRouteController.prepareProviderRoute(
-            config: normalized,
-            providerToken: providerToken,
-            reuseExistingDeviceKey: false
-        )
+        let preparedDeviceKey = try await prepareCandidateGateway(normalized)
 
         try await dataStore.saveServerConfig(normalized)
         do {
@@ -514,7 +522,10 @@ final class AppEnvironment {
         previousDeviceKey: String?
     ) async {
         serverConfig = normalized
-        await refreshChannelSubscriptions()
+        await refreshChannelSubscriptions(syncProviderRoute: !isQualityChannelMutationSession)
+        if isQualityChannelMutationSession {
+            return
+        }
         await syncPrivateChannelState()
         providerRouteController.schedulePreviousGatewayDeviceCleanup(
             previousConfig: previousConfig,
@@ -528,6 +539,37 @@ final class AppEnvironment {
         let normalized = config.normalized()
         let token = normalized.token?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return "\(normalized.baseURL.absoluteString)|\(token)"
+    }
+
+    private func prepareCandidateGateway(_ config: ServerConfig) async throws -> String {
+#if DEBUG
+        if PushGoAutomationContext.qualitySession != nil {
+            if remainingQualityGatewaySwitchValidationFailures > 0 {
+                remainingQualityGatewaySwitchValidationFailures -= 1
+                throw AppError.typedLocal(
+                    code: "quality_gateway_registration_rejected",
+                    category: .network,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "quality candidate gateway rejected device registration"
+                )
+            }
+            guard isQualityChannelMutationSession else {
+                throw AppError.typedLocal(
+                    code: "quality_gateway_validation_unconfigured",
+                    category: .internalError,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "quality gateway switch requires an explicit accepted round trip"
+                )
+            }
+            return "quality-gateway-device"
+        }
+#endif
+        let providerToken = try await pushRegistrationService.awaitToken()
+        return try await providerRouteController.prepareProviderRoute(
+            config: config,
+            providerToken: providerToken,
+            reuseExistingDeviceKey: false
+        )
     }
 
     func replaceMessages(_ newMessages: [PushMessage]) async {
@@ -981,14 +1023,27 @@ final class AppEnvironment {
     }
 
     private func syncSubscriptionsOnLaunch() async {
+        if isQualityChannelMutationSession {
+            await refreshChannelSubscriptions(syncProviderRoute: false)
+            return
+        }
         await channelSyncController.syncSubscriptionsOnLaunch()
     }
 
     func syncSubscriptionsOnChannelListEntry() async {
+        if isQualityChannelMutationSession {
+            channelListFeedbackMessage = nil
+            await refreshChannelSubscriptions(syncProviderRoute: false)
+            return
+        }
         await channelSyncController.syncSubscriptionsOnChannelListEntry()
     }
 
     func syncSubscriptionsIfNeeded() async throws {
+        if isQualityChannelMutationSession {
+            await refreshChannelSubscriptions(syncProviderRoute: false)
+            return
+        }
         try await channelSyncController.syncSubscriptionsIfNeeded()
     }
 
@@ -1119,8 +1174,10 @@ final class AppEnvironment {
             let mergedReasons = listFormatter.string(from: bootstrapErrors) ?? bootstrapErrors.joined(separator: "、")
             showToast(message: localizationManager.localized("initialization_failed_placeholder", mergedReasons))
         }
-        await refreshChannelSubscriptions()
-        await syncPrivateChannelState()
+        await refreshChannelSubscriptions(syncProviderRoute: !isQualityChannelMutationSession)
+        if !isQualityChannelMutationSession {
+            await syncPrivateChannelState()
+        }
     }
 
     private func preparePushInfrastructure() async {
@@ -1158,8 +1215,8 @@ final class AppEnvironment {
         await syncWidgetPushRegistration()
     }
 
-    func refreshChannelSubscriptions() async {
-        await channelSyncController.refreshChannelSubscriptions()
+    func refreshChannelSubscriptions(syncProviderRoute: Bool = true) async {
+        await channelSyncController.refreshChannelSubscriptions(syncProviderRoute: syncProviderRoute)
     }
 
     func channelDisplayName(for channelId: String?) -> String? {

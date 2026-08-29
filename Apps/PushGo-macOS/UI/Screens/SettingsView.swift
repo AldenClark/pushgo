@@ -545,6 +545,7 @@ private struct ServerManagementContentView: View {
                         closeSheet()
                     }
                     .disabled(viewModel.isSavingServerConfig)
+                    .accessibilityIdentifier("action.settings.server.cancel")
 
                     AppActionButton(
                         text: Text(localizationManager.localized("save_configuration"))

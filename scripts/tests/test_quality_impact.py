@@ -1,4 +1,5 @@
 import importlib.util
+import re
 import unittest
 from pathlib import Path
 
@@ -60,6 +61,41 @@ class QualityImpactPlanTests(unittest.TestCase):
         self.assertEqual("READY", plan["plan_status"])
         self.assertEqual("pr", plan["recommended_lane"])
         self.assertIn("quality-system-trustworthiness", plan["impacted_capabilities"])
+
+    def test_apple_ui_runner_preconditions_are_quality_system_changes(self):
+        for path in (
+            "scripts/require_unlocked_apple_ui_console.sh",
+            "scripts/run_ios_ui_tests.sh",
+            "scripts/run_macos_ui_tests.sh",
+            "scripts/run_watchos_ui_tests.sh",
+        ):
+            with self.subTest(path=path):
+                plan = self.plan(path)
+                self.assertEqual("READY", plan["plan_status"])
+                self.assertEqual("pr", plan["recommended_lane"])
+                self.assertIn(
+                    "quality-system-trustworthiness",
+                    plan["impacted_capabilities"],
+                )
+                self.assertIn("Apple PR representative lane", plan["minimum_evidence"])
+
+    def test_macos_default_lane_cannot_silently_omit_discoverable_journeys(self):
+        test_source = (REPO / "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift").read_text()
+        runner_source = (REPO / "scripts/run_macos_ui_tests.sh").read_text()
+        discoverable = set(re.findall(r"^\s+func (test[A-Za-z0-9_]+)\(", test_source, re.MULTILINE))
+        selected = set(
+            re.findall(
+                r'"PushGo-macOSUITests/PushGo_macOSUITests/(test[A-Za-z0-9_]+)"',
+                runner_source,
+            )
+        )
+
+        self.assertEqual(14, len(discoverable))
+        self.assertEqual(
+            discoverable,
+            selected,
+            "Every discoverable macOS user-purpose journey must run in the zero-retry default lane.",
+        )
 
     def test_performance_test_change_selects_performance_lane(self):
         plan = self.plan("Tests/PushGo-iOSUITests/PushGo_iOSPerformanceTests.swift")
@@ -147,6 +183,17 @@ class QualityImpactPlanTests(unittest.TestCase):
         self.assertIn("notification-route-actions", plan["impacted_capabilities"])
         self.assertIn(
             "iOS Simulator real system-notification journey for iOS/shared route changes",
+            plan["minimum_evidence"],
+        )
+
+    def test_app_environment_change_keeps_gateway_settings_evidence(self):
+        plan = self.plan("Apps/PushGo-macOS/App/AppEnvironment.swift")
+
+        self.assertEqual("READY", plan["plan_status"])
+        self.assertEqual("release", plan["recommended_lane"])
+        self.assertIn("gateway-settings", plan["impacted_capabilities"])
+        self.assertIn(
+            "real server invalid/candidate-registration-failure/no-commit/retry/normalize/data-scope/relaunch journey",
             plan["minimum_evidence"],
         )
 

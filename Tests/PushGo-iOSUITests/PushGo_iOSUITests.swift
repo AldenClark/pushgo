@@ -902,6 +902,14 @@ final class PushGo_iOSUITests: XCTestCase {
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
         launch(context.app)
         assertQualityRuntimeReady(in: context.app, timeout: 15)
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
+        XCTAssertTrue(
+            element(
+                in: context.app,
+                identifier: "channel.row.01H00000000000000000000001"
+            ).waitForNonExistence(timeout: 8),
+            "Relaunch must not reload channel data owned by the previous gateway"
+        )
         openSettingsFromChannels(in: context.app)
         tapWhenHittable(
             element(in: context.app, identifier: "action.settings.server_management"),
