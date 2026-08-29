@@ -307,7 +307,8 @@ final class PushGo_iOSUITests: XCTestCase {
         let relaunched = configuredLaunchContext()
         relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
-            fixture: "messages.standard"
+            fixture: "messages.standard",
+            messageSearchDelayMilliseconds: 2_000
         )
         launch(relaunched.app)
 
@@ -322,6 +323,7 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(searchField.waitForExistence(timeout: 8))
         searchField.tap()
         searchField.typeText("not-present-in-any-message")
+        assertElementExists("state.messages.search.loading", in: relaunched.app, timeout: 2)
         assertElementExists("state.messages.search.empty", in: relaunched.app, timeout: 8)
         XCTAssertFalse(relaunched.app.staticTexts["P2 Split Seed Message"].exists)
         tapWhenHittable(
@@ -3457,6 +3459,7 @@ final class PushGo_iOSUITests: XCTestCase {
         failLocalStoreInitialization: Bool = false,
         messageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
+        messageSearchDelayMilliseconds: Int? = nil,
         failMessageLoad: Bool = false,
         failGatewaySwitchValidationOnce: Bool = false,
         failGatewaySwitchCommitOnce: Bool = false,
@@ -3479,6 +3482,9 @@ final class PushGo_iOSUITests: XCTestCase {
         }
         if let messageRefreshDelayMilliseconds {
             faults["message_refresh_delay_ms"] = messageRefreshDelayMilliseconds
+        }
+        if let messageSearchDelayMilliseconds {
+            faults["message_search_delay_ms"] = messageSearchDelayMilliseconds
         }
         let payload: [String: Any] = [
             "schema_version": 1,

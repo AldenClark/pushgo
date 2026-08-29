@@ -7319,6 +7319,29 @@
         }
       }
     },
+    "searching_messages" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Searching messages…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在搜索消息…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在搜尋訊息…"
+          }
+        }
+      }
+    },
     "search_objects" : {
       "extractionState" : "manual",
       "localizations" : {

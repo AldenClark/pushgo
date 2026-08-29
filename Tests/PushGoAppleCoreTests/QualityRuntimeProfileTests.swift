@@ -11,6 +11,7 @@ struct QualityRuntimeProfileTests {
             fixture: "messages.standard",
             faults: [
                 "message_refresh_delay_ms": 2_500,
+                "message_search_delay_ms": 2_000,
                 "fail_gateway_switch_validation_once": true,
                 "fail_gateway_switch_commit_once": true,
                 "fail_notification_material_persistence_once": true,
@@ -25,6 +26,7 @@ struct QualityRuntimeProfileTests {
         #expect(descriptor.fixture == .messagesStandard)
         #expect(descriptor.faults.messageLoadDelayMilliseconds == nil)
         #expect(descriptor.faults.messageRefreshDelayMilliseconds == 2_500)
+        #expect(descriptor.faults.messageSearchDelayMilliseconds == 2_000)
         #expect(descriptor.faults.failMessageLoad == false)
         #expect(descriptor.faults.failGatewaySwitchValidationOnce)
         #expect(descriptor.faults.failGatewaySwitchCommitOnce)
@@ -199,6 +201,19 @@ struct QualityRuntimeProfileTests {
         )
 
         #expect(throws: PushGoQualitySessionError.invalidMessageRefreshDelay(30_001)) {
+            try PushGoAutomationContext.decodeQualitySession(encoded)
+        }
+    }
+
+    @Test("rejects unbounded search delay faults before app startup")
+    func rejectsUnboundedSearchDelay() throws {
+        let encoded = try encodedSession(
+            sessionID: "slow-search-negative-control",
+            fixture: "messages.standard",
+            faults: ["message_search_delay_ms": 30_001]
+        )
+
+        #expect(throws: PushGoQualitySessionError.invalidMessageSearchDelay(30_001)) {
             try PushGoAutomationContext.decodeQualitySession(encoded)
         }
     }

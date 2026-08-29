@@ -24,7 +24,7 @@
 | 消息慢刷新 | 点击正式刷新动作（下拉同调用链） | typed delay → user refresh boundary → provider/Store → list state | >1 秒出现 slow；准确旧快照不清空；完成后 slow 退出 | 后台刷新抢占 fault、只显示 spinner、清空旧行或永久 slow 均失败 |
 | 慢加载 | 启动列表并等待里程碑 | fault → repository/paging → UI state | 数据完成前出现明确 slow；完成后是真实内容/空态 | spinner 永久转或直接空态均失败 |
 | 失败恢复 | 首次查询失败、点 Retry | latched fault → error → retry → real query | 错误可见；Retry 后真实终点 | 自动吞错、假成功或 Retry 无效均失败 |
-| 搜索 | 真实搜索框输入错误词、再输入目标词并点行 | query → FTS/Store → 结果集合 → 详情 | 错误词排除目标；目标词只返回并打开准确对象 | 仅检查输入框/“App 仍运行”不能通过 |
+| 搜索 | 真实搜索框输入错误词、再输入目标词并点行；一次代表查询受控延迟 2 秒 | query → pending owner → 可见反馈 → FTS/Store → 结果集合 → 详情 | 延迟期间及时出现明确进度；错误词准确空集；目标词只返回并打开准确对象 | 继续显示旧列表、只检查输入框/标识/“App 仍运行”均不能通过；macOS 慢反馈当前 NOT RUN |
 | 删除撤销 | 详情页点删除、点 Undo、重启 | pending record → suppression scope → List → undo → Store | 行立即隐藏；Undo 可点击；重启仍为同一对象 | 只出现撤销条、对象仍在列表会失败 |
 | 删除提交 | 从准确目标详情点删除，明确不点 Undo，等待生产 deadline，重启 | 目标 canonical row → durable pending intent → suppression → claim/commit/cleanup → Store reopen → List/detail | pending 自行退出；目标永久不存在；无关控制消息标题/正文准确且跨重启保留 | 临时改为点击 Undo 时，两端均在“目标必须不存在”的产品断言精确失败；误删全表由控制消息断言击穿；只做内存隐藏会在重启击穿 |
 | 主导航 | 连续点击真实 Tab 与 Settings 按钮 | 用户控件 → route → 页面根视图 | 四个主页面及 Settings 均可达 | Runtime command 直达不计入 |

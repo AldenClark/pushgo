@@ -32,6 +32,7 @@ final class MessageSearchViewModel {
     private var debounceTask: Task<Void, Never>?
     private var loadMoreTask: Task<Void, Never>?
     private var searchRequestRevision: UInt64 = 0
+    private var shouldApplyQualitySearchDelay = true
 
     init(environment: AppEnvironment? = nil) {
         self.environment = environment ?? AppEnvironment.shared
@@ -169,6 +170,7 @@ final class MessageSearchViewModel {
         }
 
         do {
+            try await applyQualitySearchDelayIfNeeded()
             let count = try await dataStore.searchMessagesCount(query: trimmedQuery)
             try Task.checkCancellation()
             let page = try await loadVisiblePage(
@@ -195,6 +197,18 @@ final class MessageSearchViewModel {
             hasSearched = true
             completedSearchRevision &+= 1
         }
+    }
+
+    private func applyQualitySearchDelayIfNeeded() async throws {
+        #if DEBUG
+        guard shouldApplyQualitySearchDelay,
+              let delay = PushGoAutomationContext.qualitySession?.faults
+                .messageSearchDelayMilliseconds,
+              delay > 0
+        else { return }
+        shouldApplyQualitySearchDelay = false
+        try await Task.sleep(for: .milliseconds(delay))
+        #endif
     }
 
     private func loadNextPage(trimmedQuery: String, requestRevision: UInt64) async {

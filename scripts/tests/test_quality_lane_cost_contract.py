@@ -26,6 +26,11 @@ class QualityLaneCostContractTests(unittest.TestCase):
             self.assertFalse(any(deferred_fragment in scope for scope in scopes), deferred_fragment)
         self.assertFalse(any("FunctionalEmptyState" in scope for scope in scopes))
         self.assertFalse(any("MessageSearchReturnsOnly" in scope for scope in scopes))
+        self.assertEqual(1, test_source.count("messageSearchDelayMilliseconds: 2_000"))
+        self.assertEqual(
+            1,
+            test_source.count('assertElementExists("state.messages.search.loading"'),
+        )
         self.assertIn('nightly_ui_scopes="$pr_ui_scopes,$nightly_negative_ui_scopes"', runner)
 
     def test_real_macos_update_install_is_release_or_focused_only(self) -> None:

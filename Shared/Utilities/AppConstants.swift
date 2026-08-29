@@ -115,6 +115,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
     let failLocalStoreInitialization: Bool
     let messageLoadDelayMilliseconds: Int?
     let messageRefreshDelayMilliseconds: Int?
+    let messageSearchDelayMilliseconds: Int?
     let failMessageLoad: Bool
     let failGatewaySwitchValidationOnce: Bool
     let failGatewaySwitchCommitOnce: Bool
@@ -125,6 +126,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         failLocalStoreInitialization: Bool = false,
         messageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
+        messageSearchDelayMilliseconds: Int? = nil,
         failMessageLoad: Bool = false,
         failGatewaySwitchValidationOnce: Bool = false,
         failGatewaySwitchCommitOnce: Bool = false,
@@ -134,6 +136,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         self.failLocalStoreInitialization = failLocalStoreInitialization
         self.messageLoadDelayMilliseconds = messageLoadDelayMilliseconds
         self.messageRefreshDelayMilliseconds = messageRefreshDelayMilliseconds
+        self.messageSearchDelayMilliseconds = messageSearchDelayMilliseconds
         self.failMessageLoad = failMessageLoad
         self.failGatewaySwitchValidationOnce = failGatewaySwitchValidationOnce
         self.failGatewaySwitchCommitOnce = failGatewaySwitchCommitOnce
@@ -145,6 +148,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         case failLocalStoreInitialization = "fail_local_store_initialization"
         case messageLoadDelayMilliseconds = "message_load_delay_ms"
         case messageRefreshDelayMilliseconds = "message_refresh_delay_ms"
+        case messageSearchDelayMilliseconds = "message_search_delay_ms"
         case failMessageLoad = "fail_message_load"
         case failGatewaySwitchValidationOnce = "fail_gateway_switch_validation_once"
         case failGatewaySwitchCommitOnce = "fail_gateway_switch_commit_once"
@@ -165,6 +169,10 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         messageRefreshDelayMilliseconds = try container.decodeIfPresent(
             Int.self,
             forKey: .messageRefreshDelayMilliseconds
+        )
+        messageSearchDelayMilliseconds = try container.decodeIfPresent(
+            Int.self,
+            forKey: .messageSearchDelayMilliseconds
         )
         failMessageLoad = try container.decodeIfPresent(Bool.self, forKey: .failMessageLoad) ?? false
         failGatewaySwitchValidationOnce = try container.decodeIfPresent(
@@ -267,6 +275,7 @@ enum PushGoQualitySessionError: Error, Equatable, LocalizedError {
     case invalidSessionID
     case invalidMessageLoadDelay(Int)
     case invalidMessageRefreshDelay(Int)
+    case invalidMessageSearchDelay(Int)
     case systemColdLaunchNotAllowed
 
     var errorDescription: String? {
@@ -283,6 +292,8 @@ enum PushGoQualitySessionError: Error, Equatable, LocalizedError {
             return "Message load delay must be between 0 and 30000 ms: \(delay)."
         case let .invalidMessageRefreshDelay(delay):
             return "Message refresh delay must be between 0 and 30000 ms: \(delay)."
+        case let .invalidMessageSearchDelay(delay):
+            return "Message search delay must be between 0 and 30000 ms: \(delay)."
         case .systemColdLaunchNotAllowed:
             return "Quality session did not explicitly allow a system cold launch."
         }
@@ -471,6 +482,10 @@ enum PushGoAutomationContext {
         if let delay = descriptor.faults.messageRefreshDelayMilliseconds,
            !(0 ... 30_000).contains(delay) {
             throw PushGoQualitySessionError.invalidMessageRefreshDelay(delay)
+        }
+        if let delay = descriptor.faults.messageSearchDelayMilliseconds,
+           !(0 ... 30_000).contains(delay) {
+            throw PushGoQualitySessionError.invalidMessageSearchDelay(delay)
         }
         return descriptor
     }

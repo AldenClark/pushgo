@@ -291,7 +291,7 @@ struct MessageListScreen: View {
     }
 
     private var isShowingSearchResults: Bool {
-        searchViewModel.hasSearched
+        searchViewModel.hasSearched || searchViewModel.isSearching
     }
 
     private var hasMessages: Bool { viewModel.totalMessageCount > 0 }
@@ -619,6 +619,9 @@ struct MessageListScreen: View {
             ProgressView()
                 .progressViewStyle(.circular)
                 .controlSize(.large)
+            Text(localizationManager.localized("searching_messages"))
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("state.messages.search.loading")
             Spacer()
         }
         .padding(.vertical, 60)
