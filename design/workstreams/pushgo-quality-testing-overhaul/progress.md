@@ -209,10 +209,11 @@
 
 ### 当前按成本收益排序的剩余队列
 
-1. **当前产品可达的正向 P0/P1**：Android 更新可用→稍后与跨重启状态、Apple 两端媒体查看→可消费文件→系统分享面板、iOS Settings→Safari 官方文档域名均已完成；源码→测试稳定入口反查后，下一优先候选是 Android 详情图片的 dismiss/save/share 正向动作，Apple 普通 App-owned Lane 暂无不依赖系统/发布前置且值得新增启动的同级缺口。Skip 不做对称设备覆盖；文档 page×locale 不做设备矩阵；安装交接必须有真实签名 APK/隔离设备时进入 Release，而不是用替身冒充。开始前必须先反查生产入口，禁止为设计文档中的候选能力造测试专用功能；
-2. **发布环境高影响正向证据**：真实 APNs/FCM 到准确详情、通知权限恢复、安装升级、专用真机性能与 VoiceOver/TalkBack。缺签名、账号或专用设备时立即保持 `NOT RUN/BLOCKED` 并推进下一项；
-3. **有独有数据/事务风险的高影响反例**：只有 owner 变更或发布里程碑才运行现有补偿、错误成功态、进程死亡和数据损坏用例，不再占当前功能迁移主队列；
-4. **明确延期**：history cleanup 已有 30 days 正向范围代表，但 DST/cancel/failure 和其他范围全矩阵继续延期；rollback 自身再失败 UI、非法/缺失深链笛卡尔积、多语言×字号×状态全排列、低频媒体失败组合同样不投入当前设备时间。
+1. **变更命中的正向 P0/P1**：Android 更新稍后、媒体保存/分享/关闭、URL 复制、Key 显隐与严重度，以及 Apple 媒体/文档 handoff、Messages 页面显隐生命周期均已合入既有旅程。最新稳定入口反查剩余 Apple 15、Android 17 项，但逐项语义复核后主要是 cancel、版本行、Critical/拒绝/Doze、动态 identifier 误报、Watch 或系统更新；当前没有值得为其新增日常 UI 方法或 App 启动的同级缺口。以后先由变更影响选择唯一已有 owner 旅程，focused 通过后不重复跑整条 PR/Release；
+2. **里程碑正向聚合**：若一批共享 Runtime/fixture/navigation 变更已累计，再只执行一次 iOS positive、macOS positive 与 Android device-positive 聚合，先于任何风险集；focused 结果不能冒充聚合，但聚合也不在每个切片重复。当前 Messages 显隐两端精准方法已运行，影响计划建议 PR，故本切片不再复制设备波次；
+3. **发布环境高影响正向证据**：真实 APNs/FCM 到准确详情、通知权限恢复、安装升级、系统浏览器/更新交接、专用真机性能与 VoiceOver/TalkBack。缺签名、账号、隔离设备或稳定系统 owner 时保持 `NOT RUN/BLOCKED`，不得用 Intent、identifier、Toast 或模拟器数据层替身冒充；
+4. **有独有数据/事务风险的高影响反例**：只有 owner 变更、历史事故复发或发布里程碑才运行现有补偿、错误成功态、进程死亡和数据损坏用例，不再占当前功能迁移主队列；
+5. **明确延期**：history cleanup 已有 30 days 正向范围代表，但 DST/cancel/failure 和其他范围全矩阵继续延期；rollback 自身再失败 UI、非法/缺失深链笛卡尔积、多语言×字号×状态全排列、低频媒体失败组合同样不投入当前设备时间。
 
 每个后续切片默认约束为：零或一个新增 UI 方法、优先零新增 App 启动、一个跨层准确终点、一次必要 relaunch 上限；不能满足时必须说明独有平台/数据前置，否则拆分或下沉。
 
