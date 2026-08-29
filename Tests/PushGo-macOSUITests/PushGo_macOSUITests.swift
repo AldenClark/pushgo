@@ -252,8 +252,31 @@ final class PushGo_macOSUITests: XCTestCase {
     @MainActor
     func testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch() {
         let sessionID = "macos-standard-\(UUID().uuidString.lowercased())"
-        let context = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            legacyStore: "messages.v17"
+        )
         launchQuality(context, sessionID: sessionID)
+
+        let legacyRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000017"
+        )
+        XCTAssertTrue(
+            legacyRow.waitForExistence(timeout: 8)
+                && legacyRow.label.contains("Legacy Upgrade Message"),
+            "The production v17-to-current migration must preserve the legacy row in the real macOS list."
+        )
+        legacyRow.click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "screen.message.detail")
+                .waitForExistence(timeout: 8)
+        )
+        XCTAssertTrue(
+            context.app.staticTexts["Preserved through the production database migration."].exists,
+            "The migrated macOS detail must retain the exact legacy body."
+        )
 
         let row = element(
             in: context.app,
@@ -294,8 +317,21 @@ final class PushGo_macOSUITests: XCTestCase {
         )
 
         context.app.terminate()
-        let relaunched = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        let relaunched = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            legacyStore: "messages.v17"
+        )
         launchQuality(relaunched, sessionID: sessionID)
+        let relaunchedLegacyRow = element(
+            in: relaunched.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000017"
+        )
+        XCTAssertTrue(
+            relaunchedLegacyRow.waitForExistence(timeout: 8)
+                && relaunchedLegacyRow.label.contains("Legacy Upgrade Message"),
+            "The migrated macOS canonical message must survive an ordinary process relaunch."
+        )
         let relaunchedRow = element(
             in: relaunched.app,
             identifier: "message.row.00000000-0000-0000-0000-000000000001"
@@ -2950,6 +2986,7 @@ final class PushGo_macOSUITests: XCTestCase {
         failLocalStoreInitialization: Bool = false,
         messageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
+        legacyStore: String? = nil,
         failMessageLoad: Bool = false,
         failGatewaySwitchValidationOnce: Bool = false,
         failGatewaySwitchCommitOnce: Bool = false,
@@ -2980,6 +3017,7 @@ final class PushGo_macOSUITests: XCTestCase {
                 failLocalStoreInitialization: failLocalStoreInitialization,
                 messageLoadDelayMilliseconds: messageLoadDelayMilliseconds,
                 messageRefreshDelayMilliseconds: messageRefreshDelayMilliseconds,
+                legacyStore: legacyStore,
                 failMessageLoad: failMessageLoad,
                 failGatewaySwitchValidationOnce: failGatewaySwitchValidationOnce,
                 failGatewaySwitchCommitOnce: failGatewaySwitchCommitOnce,
@@ -3032,6 +3070,7 @@ final class PushGo_macOSUITests: XCTestCase {
         failLocalStoreInitialization: Bool = false,
         messageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
+        legacyStore: String? = nil,
         failMessageLoad: Bool = false,
         failGatewaySwitchValidationOnce: Bool = false,
         failGatewaySwitchCommitOnce: Bool = false,
@@ -3059,6 +3098,9 @@ final class PushGo_macOSUITests: XCTestCase {
             "fixture": fixture,
             "faults": faults,
         ]
+        if let legacyStore {
+            payload["legacy_store"] = legacyStore
+        }
         if let messageRefreshScenario {
             payload["message_refresh_scenario"] = messageRefreshScenario
         }

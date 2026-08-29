@@ -128,6 +128,8 @@ PR 的设备预算现固定投向 13 条跨能力正向代表链：空态 Oracle
 
 macOS Runner 不再把正向与故障旅程无差别作为普通默认：`positive` 集为 16 条，优先覆盖首次使用、准确内容/Markdown、筛选/清理、频道生命周期、删除 Undo→恢复→再次删除→提交的完整正向生命周期、慢加载/慢刷新预警、窗口恢复、主导航、Event/Thing、Settings/Decryption 正常生命周期和 Gateway 正常切换；`risk` 集为 9 条，承载 Store 初始化失败、加载/刷新/Event 失败、受保护写失败、错钥匙/坏密文、非法地址和 Gateway 本地提交补偿。独立 `macos` Lane 默认只跑 `positive`，Nightly/Release 明确跑 `full=positive+risk`。静态合同要求两集合互斥、16/9 成本固定且并集精确等于全部 25 条可发现旅程，因此提速不能靠静默漏测。
 
+macOS 标准消息正向方法同时承担最低充分的 migration UI：App 在隔离容器构造 v17 旧行后由普通 `GRDBStore` 正式迁移；同一方法核对旧标题/正文详情、新消息/图片预览共存以及唯一 relaunch 后两者都保留。它没有增加 discoverable 方法、fixture 名或启动次数，新增约 3 秒交互，替代单独的平台迁移方法；历史版本逐一升级、损坏库与 Watch 独立 Store 不从该代表例外推。
+
 ## 设备测试价值/成本审计与止损
 
 当前设备预算先证明“用户能否完成主要目的”，而不是先穷举所有失败姿势。日常正向集合固定为 iOS 13 条、Android 13 条、macOS 16 条；三端共同覆盖准确消息内容与详情、Markdown、分页/筛选/刷新、主导航、Event、Thing、Channel、Settings、Gateway/解密等主要功能族，历史清理也只选择一个能区分旧对象与控制对象的 30 天代表样本。空态、搜索等能被同 fixture 同启动证明的结果已经合并；六个清理档位、重复的单字段组合和对称第三次启动不复制成设备用例。
