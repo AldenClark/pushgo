@@ -140,6 +140,14 @@ macOS Runner 不再把正向与故障旅程无差别作为普通默认：`positi
 
 每轮扩面按“新增用户目的数 / 新增设备启动与运行时间”复核。优先级依次为：尚未覆盖的 P0 正向目的；已发生事故且能同时验证预警与最终结果的 P0/P1；数据安全事务反例；普通错误恢复；低频平台/输入组合。前两级未完成时，不主动扩展后两级。完整 discoverable 集仍由静态合同与 Nightly/Release 并集守住，延期必须显式记录，不能通过从 Runner 静默删除获得提速。
 
+### macOS 更新安装：一个 P0 正向纵切替代多层形式检查
+
+更新能力不再只凭 Appcast、版本号或文件存在宣称可用。专项 `macos-update-install` 使用临时本地 feed 和每轮临时 Ed25519 材料构建旧/新两个 DMG 版本；用户路径从旧版 Settings 的正式 Check for Updates 开始，随后要求 Sparkle 对签名包完成下载和 sandbox 安装、原安装路径中的 bundle 被替换、新 PID 从同一路径自动重启、App-owned quality session 恢复，最后在真实 Settings 看见新版本。整个业务动作只执行一次、业务重试为 0，不把 HTTP readiness 的有界准备轮询算作产品恢复。最新证据为 `build/quality-results/macos-update-install/20260830-005007/evidence.json`，总入口双状态收据为 `build/quality-results/apple-macos-update-install-summary.json`；1/1 通过，本次复用构建缓存的端到端总时长 18 秒。
+
+首次真实执行发现两个之前静态元数据契约无法发现的发布缺陷：sandboxed DMG 缺少 Sparkle installer launcher 开关和 `-spks`/`-spki` mach lookup 权限；仓库 xcconfig 又给公钥值保留了字面引号，导致本地/Fastlane 生成的 enclosure 没有 EdDSA signature。实现现按 [Sparkle 官方 sandbox 集成要求](https://sparkle-project.org/documentation/sandboxing/)补齐 launcher 与最小 mach 权限，并让公钥以合法 32-byte base64 进入构建；静态校验保留为便宜的 PR 前置，但只有真实专项旅程可以完成“可安装”的声明。
+
+该旅程构建两个 DMG target 的 hermetic Debug 版本，覆盖收益高但固定成本不适合日常：只由独立 Lane 和 Release 调用；PR 仍只跑毫秒级元数据/集成合同，Nightly 与普通 `macos` 明确记录 `NOT_RUN`。静态成本合同阻止它被误塞回三个常用 Lane，同时锁定一次检查、一次安装、零业务重试。它证明 Sparkle 真实安装集成，不证明线上生产签名+公证 archive；后者与 App Store 客户端安装仍是外部受控缺口，不能由本旅程绿色外推。
+
 计划中的 `required_checks` 是必须实际执行并写入收据的补充证据：Appcast/App Store metadata 使用快速语义契约，不启动完整 Release；Fastlane/构建/隐私/回滚变更强制执行发布静态契约并保持 Release Lane。两端各 120 次历史回放已校准旧路径漏选；无效或未知计划直接 `BLOCKED`，不回退为默认绿色。
 
 ## Test-system/flake 处置

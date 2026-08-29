@@ -161,11 +161,12 @@
     },
     {
       "id": "update-distribution-contract",
-      "paths": ["release/appcast.xml", "release/appstore.json", "release/update-notes/*.json", "scripts/release_appcast.sh", "scripts/publish_update_artifacts.sh", "scripts/verify_update_distribution.py"],
+      "paths": ["release/appcast.xml", "release/appstore.json", "release/update-notes/*.json", "scripts/release_appcast.sh", "scripts/publish_update_artifacts.sh", "scripts/verify_update_distribution.py", "scripts/run_macos_update_install_test.sh", "scripts/macos_ui_driver.swift", "scripts/tests/test_update_distribution.py"],
       "capabilities": ["update-distribution"],
-      "minimum_evidence": ["Sparkle/App Store metadata semantic contract"],
+      "minimum_evidence": ["Sparkle/App Store metadata semantic contract", "Release-only real macOS signed update install and relaunch journey"],
       "required_checks": ["apple-update-distribution-contract"],
       "lane": "pr",
+      "known_evidence_gaps": ["The hermetic Debug DMG-target Sparkle install is intentionally Release/dedicated only; installation of the production-signed/notarized artifact and App Store client installation remain controlled externally."],
       "escalation_reasons": ["Machine-consumed update metadata can prevent or misdirect user updates without changing App source."]
     },
     {

@@ -25,6 +25,9 @@ not_run=(
   "physical APNs network delivery, permission denial, physical-device notification-action/process-death parity, and other system-surface evidence"
   "physical VoiceOver task-completion evidence"
 )
+if [[ "$lane" != "macos-update-install" && "$lane" != "release" ]]; then
+  not_run+=("macOS real Sparkle signed download, sandbox install, bundle replacement, and relaunch evidence")
+fi
 physical_performance_requested=0
 not_run+=("physical-device frame/hitch and release trace evidence")
 if [[ ( "$lane" == "performance" || "$lane" == "release" ) && -n "${IOS_PERFORMANCE_DEVICE_ID:-}" ]]; then
@@ -217,6 +220,12 @@ run_macos_ui() {
   claims+=("macOS ${scope_set} App-owned user-purpose journeys")
 }
 
+run_macos_update_install() {
+  selected_claims+=("macOS real Sparkle signed update install and relaunch journey")
+  "$repo_root/scripts/run_macos_update_install_test.sh"
+  claims+=("macOS real Sparkle signed update install and relaunch journey")
+}
+
 run_system_notification_journey() {
   local cold_launch_scope="PushGo-iOSUITests/PushGo_iOSSystemNotificationTests/testSystemNotificationTapColdLaunchesAccurateReadDetailAndPersists"
   local delete_action_scope="PushGo-iOSUITests/PushGo_iOSSystemNotificationTests/testSystemNotificationDeleteActionRemovesOnlyTargetAndPersists"
@@ -240,6 +249,9 @@ run_system_notification_journey() {
 }
 
 case "$lane" in
+  macos-update-install)
+    run_macos_update_install
+    ;;
   system-notification)
     run_system_notification_journey
     ;;
@@ -294,6 +306,7 @@ case "$lane" in
     run_watch_ui
     run_accessibility_localization
     run_macos_ui full
+    run_macos_update_install
     run_performance
     selected_claims+=("iOS/watchOS Release builds and Quality Runtime isolation")
     xcodebuild \
