@@ -4,6 +4,8 @@
 
 **体系改造进行中，不能宣称完成。** Runtime/环境底座及 Messages、Entity、Channel、Settings、数据层性能、代表性本地化/大字体任务已有多条高价值纵向证据，但设计第 21.2 节的完成条件尚未满足。WP3–WP6 仍有当前产品可达能力和真实平台证据未迁移。低价值边缘组合不进入日常门禁，但这不能用于延期高频 P0 功能。
 
+- 2026-08-29 正向优先与通知声音切片：剩余队列改按用户频率、失败影响、跨层广度和设备成本排序，不再优先扩充 history cutoff/DST、rollback 再失败、非法深链等边缘矩阵。源码→测试反查发现 Apple 通知声音虽有 Core 持久化/解析合同，却没有用户从真实 Settings 选择、保存并在重启后恢复的 UI 证据。iOS 直接把该目的并入既有页面显隐正向旅程：同一 fixture、同一测试方法和必要 relaunch 内完成 low priority 选择 `Alert Beacon`、准确选择值、明确保存关闭与重启恢复。首次红证据 `build/quality-results/ios/run-1-20260829-224255.xcresult` 发现声音 Sheet 没有可靠关闭动作且下拉手势不能返回，属于用户无法完成保存闭环的真实产品缺陷；现提供等待 commit 成功后才关闭的真实动作，修复后 1/1、零重试通过于 `build/quality-results/ios/run-1-20260829-224443.xcresult`。随后成本复核删除“恢复为显示后再重启一次”的对称重复：关闭态已经跨进程证明同一持久化机制，恢复态保留两个真实页面可达终点，不再为低独有风险付出第三次 App 启动。最终当前字节 1/1、零重试、85.052 秒（`build/quality-results/ios/run-1-20260829-224942.xcresult`），比扩面前约 86.254 秒还少约 1.2 秒；macOS Debug 共享代码构建通过。该切片只证明 iOS 内置声音设置正向目的，不外推 macOS 目录授权、实际通知播放、导入/失败矩阵或 Android Alert service。
+
 - 2026-08-29 Channel 活动投影正向切片：源码→测试反查发现设计要求 Channel 行显示 total/unread/latest，但三端生产 UI 都只显示名称/ID，已有生命周期测试因此无法发现统计数据不加载、未读不刷新或最新时间串频道。现直接复用各端 canonical 聚合与同一条既有 Channel 生命周期旅程，不新增 fixture、方法、App 启动或负向矩阵：iOS 核对目标频道 1 条/1 未读/准确最新时间；macOS 先真实阅读两条消息，再核对目标频道 1 条/0 未读且最新时间不变；Android 核对完整本地化活动摘要。最终当前字节 iOS 1/1（150.855 秒，`build/quality-results/ios-channel-stats-final/run-1-20260829-221552.xcresult`）、macOS 1/1（98.732 秒，`build/quality-results/macos-channel-stats-oracle-final/run-20260829-221751.xcresult`）、Android 1/1（47 秒），均零重试。首轮 macOS/Android 失败均由框架合并可访问性子节点造成；Android 日志同时打印了正确可见文本，Oracle 改为精确完整摘要，macOS 改从真实可访问 Channel 行判定，没有降级为元素存在。
 - 2026-08-29 Android 日常 Device Lane 降本：执行审计发现脚本已定义 12 条正向代表链，但 `device` 仍按四个 Journey 类整类执行 31 条，把 19 条故障/负向 UI 方法带入每次 Room、投影和 fixture 修改。现 `device` 与 `pr-ui` 共用 12 条正向代表链，同时继续执行 18 条 migration/deletion/ACK/transport 核心数据边界；完整 Journey 类只留 Nightly/Release。脚本合同锁定日常恰为 12 条、四个功能族可发现且无 failure/corrupt/slow/rejection 回流，并反向锁定 Nightly/Release 不被误缩成正向子集。
 
@@ -169,6 +171,15 @@
 2. 历史任务评估底座与首轮同上下文语义基线已落地：Apple/Android 各 10 条真实任务，自动回放均为 `READY_FOR_RECORDED_SEMANTIC_REVIEW`，并真实发现 Apple 加密恢复、Apple RootView a11y/l10n、Android 加密恢复 3 个“Lane 很重但能力漏选”的缺口；下一阶段仍需执行独立上下文 blind packets，并以连续两周真实变更校准漏选、过度升级、时长和 flake；
 3. Messages、Entity/Channel/Settings 当前高价值切片及错 Key/坏密文、本地 commit/受保护写失败、Channel 远端密码拒绝与创建补偿已完成；性能与 a11y/l10n 已建立独立 Lane、真实代表任务及两端用户目的启动证据，Android 还已生成并验证 Profile；两端当前模拟器可达的系统通知点击纵切也已完成。下一步只推进剩余高价值系统/后台/平台表面合同与 macOS/watchOS 缺口，并在具备专用设备时执行真机性能和 VoiceOver/TalkBack 合同，不扩张设备×语言×状态×故障的低价值笛卡尔积；
 4. 旧 Runtime command/state 测试只在更强旅程接管相同风险后退役；数据层 provisional 性能绿色与真机 launch/frame/system 证据分开，后者继续单列 `NOT_RUN/BLOCKED`，不得借模拟器绿色结案。
+
+### 当前按成本收益排序的剩余队列
+
+1. **当前产品可达的正向 P0/P1**：Android 更新可用→稍后/跳过/安装交接的准确 UI 状态；仍可在既有主链合并的媒体查看/分享正向目的；真实可达的系统路由入口。开始前必须先反查生产入口，禁止为设计文档中的候选能力造测试专用功能；
+2. **发布环境高影响正向证据**：真实 APNs/FCM 到准确详情、通知权限恢复、安装升级、专用真机性能与 VoiceOver/TalkBack。缺签名、账号或专用设备时立即保持 `NOT RUN/BLOCKED` 并推进下一项；
+3. **有独有数据/事务风险的高影响反例**：只有 owner 变更或发布里程碑才运行现有补偿、错误成功态、进程死亡和数据损坏用例，不再占当前功能迁移主队列；
+4. **明确延期**：history cleanup 的 DST/cancel/failure 全矩阵、rollback 自身再失败 UI、非法/缺失深链笛卡尔积、多语言×字号×状态全排列、低频媒体失败组合。它们不删除，但在前两级仍有缺口时不投入设备时间。
+
+每个后续切片默认约束为：零或一个新增 UI 方法、优先零新增 App 启动、一个跨层准确终点、一次必要 relaunch 上限；不能满足时必须说明独有平台/数据前置，否则拆分或下沉。
 
 ## 需要 Release/外部环境的明确证据
 

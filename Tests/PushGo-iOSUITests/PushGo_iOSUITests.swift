@@ -1062,6 +1062,49 @@ final class PushGo_iOSUITests: XCTestCase {
         assertDataTabVisibility(eventsVisible: true, thingsVisible: true, in: context.app)
 
         openSettingsFromChannels(in: context.app)
+        let soundSettingsAction = scrollToHittableElement(
+            identifier: "action.settings.notification_sounds",
+            in: context.app
+        )
+        tapWhenHittable(
+            soundSettingsAction,
+            timeout: 8,
+            message: "Notification sounds must open through the real Settings action"
+        )
+        let soundSettingsScreen = element(
+            in: context.app,
+            identifier: "screen.settings.notification_sounds"
+        )
+        XCTAssertTrue(soundSettingsScreen.waitForExistence(timeout: 8))
+        let lowPrioritySound = element(
+            in: context.app,
+            identifier: "picker.settings.notification_sounds.low"
+        )
+        tapWhenHittable(
+            lowPrioritySound,
+            timeout: 8,
+            message: "The low-priority sound selector must be operable"
+        )
+        tapWhenHittable(
+            context.app.buttons["Alert Beacon"],
+            timeout: 8,
+            message: "A real built-in sound must be selectable"
+        )
+        XCTAssertEqual(
+            lowPrioritySound.value as? String,
+            "Alert Beacon",
+            "The sound editor must project the user's selected low-priority sound."
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.notification_sounds.close"),
+            timeout: 8,
+            message: "Saving the selected sound must provide a reliable way back to Settings"
+        )
+        XCTAssertTrue(
+            soundSettingsScreen.waitForNonExistence(timeout: 8),
+            "Dismissing the sound editor must return to Settings before lifecycle checks."
+        )
+
         let eventToggle = scrollToHittableElement(
             identifier: "toggle.settings.page.events",
             in: context.app
@@ -1085,6 +1128,37 @@ final class PushGo_iOSUITests: XCTestCase {
         assertDataTabVisibility(eventsVisible: false, thingsVisible: false, in: context.app)
 
         openSettingsFromChannels(in: context.app)
+        let persistedSoundSettingsAction = scrollToHittableElement(
+            identifier: "action.settings.notification_sounds",
+            in: context.app
+        )
+        tapWhenHittable(
+            persistedSoundSettingsAction,
+            timeout: 8,
+            message: "Notification sound settings must remain reachable after relaunch"
+        )
+        let persistedSoundSettingsScreen = element(
+            in: context.app,
+            identifier: "screen.settings.notification_sounds"
+        )
+        XCTAssertTrue(persistedSoundSettingsScreen.waitForExistence(timeout: 8))
+        let persistedLowPrioritySound = element(
+            in: context.app,
+            identifier: "picker.settings.notification_sounds.low"
+        )
+        XCTAssertTrue(persistedLowPrioritySound.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            persistedLowPrioritySound.value as? String,
+            "Alert Beacon",
+            "The selected sound must be restored from App-owned settings after process relaunch."
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.notification_sounds.close"),
+            timeout: 8,
+            message: "The restored sound editor must remain dismissible"
+        )
+        XCTAssertTrue(persistedSoundSettingsScreen.waitForNonExistence(timeout: 8))
+
         let persistedOffToggle = scrollToHittableElement(
             identifier: "toggle.settings.page.events",
             in: context.app
@@ -1098,17 +1172,6 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(persistedOffThingToggle.isHittable)
         persistedOffThingToggle.tap()
         leaveSettings(in: context.app)
-        assertDataTabVisibility(
-            eventsVisible: true,
-            thingsVisible: true,
-            in: context.app,
-            openWhenVisible: true
-        )
-
-        context.app.terminate()
-        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
-        launch(context.app)
-        assertQualityRuntimeReady(in: context.app, timeout: 15)
         assertDataTabVisibility(
             eventsVisible: true,
             thingsVisible: true,

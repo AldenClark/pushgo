@@ -57,16 +57,15 @@ struct ServerManagementSheet: View {
 
 struct NotificationSoundSettingsSheet: View {
     @Bindable var viewModel: SettingsViewModel
-    @Environment(LocalizationManager.self) private var localizationManager
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         navigationContainer {
             NotificationSoundSettingsContentView(
                 viewModel: viewModel,
-                dismissAction: { dismiss() }
+                dismissAction: { dismiss() },
+                showsInlineTitle: true
             )
-                .navigationTitle(localizationManager.localized("notification_sounds"))
         }
         .accessibilityIdentifier("screen.settings.notification_sounds")
     }
