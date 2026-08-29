@@ -315,6 +315,16 @@ final class PushGo_macOSUITests: XCTestCase {
                 .waitForExistence(timeout: 8),
             "The decoded message image must open the production preview."
         )
+        let shareImage = element(in: context.app, identifier: "action.image.preview.share")
+        XCTAssertTrue(
+            shareImage.waitForExistence(timeout: 8) && shareImage.isHittable,
+            "The preview must prepare a real file before enabling its native Share action."
+        )
+        shareImage.click()
+        XCTAssertTrue(
+            context.app.menus.firstMatch.waitForExistence(timeout: 5),
+            "The prepared image file must reach the native sharing service picker."
+        )
 
         context.app.terminate()
         let relaunched = configuredQualityApp(

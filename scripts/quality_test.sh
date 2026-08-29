@@ -181,6 +181,13 @@ PY
           QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_macos_ui_tests.sh"
         claims+=("macOS impact-selected shared-form positive and inline-error owner journeys")
         ;;
+      apple-macos-shared-image-preview-positive)
+        selected_claims+=("macOS impact-selected image preview and native share journey")
+        TEST_SCOPES="PushGo-macOSUITests/PushGo_macOSUITests/testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch" \
+          MAX_RETRIES=0 \
+          QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_macos_ui_tests.sh"
+        claims+=("macOS impact-selected image preview and native share journey")
+        ;;
       *)
         echo "status=BLOCKED"
         echo "reason=unsupported_apple_impact_check:$check"

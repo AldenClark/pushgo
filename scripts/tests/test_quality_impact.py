@@ -325,11 +325,16 @@ class QualityImpactPlanTests(unittest.TestCase):
         self.assertNotIn("delete-undo", plan["impacted_capabilities"])
         self.assertNotIn("message-media", plan["impacted_capabilities"])
 
-    def test_shared_image_preview_owner_retains_nightly_media_evidence(self):
+    def test_shared_image_preview_owner_uses_existing_ios_pr_and_one_macos_positive(self):
         plan = self.plan("Shared/UI/KeyboardDismiss.swift")
 
-        self.assertEqual("nightly", plan["recommended_lane"])
+        self.assertEqual("pr", plan["recommended_lane"])
+        self.assertEqual(
+            ["apple-macos-shared-image-preview-positive"],
+            plan["required_checks"],
+        )
         self.assertIn("message-media", plan["impacted_capabilities"])
+        self.assertNotIn("notification-sound", plan["impacted_capabilities"])
 
     def test_toast_and_sound_editor_remain_nightly_risk_owners(self):
         for path in ("Shared/UI/ToastView.swift", "Shared/UI/NotificationSoundEditorView.swift"):

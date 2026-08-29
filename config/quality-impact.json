@@ -238,8 +238,18 @@
       "escalation_reasons": ["This file owns cross-platform fields, actions, toggles, status badges, and inline feedback, so one large-text form task, one macOS Settings purpose task, and one error-owner counterexample are required without consuming unrelated platform/system suites."]
     },
     {
+      "id": "shared-image-preview-ui",
+      "paths": ["Shared/UI/KeyboardDismiss.swift"],
+      "capabilities": ["accessibility-localization", "message-media"],
+      "minimum_evidence": ["Apple PR iOS standard-message image decode, preview, share handoff, migration, search, and relaunch journey", "macOS standard-message image decode, preview, native share handoff, migration, and relaunch journey"],
+      "required_checks": ["apple-macos-shared-image-preview-positive"],
+      "lane": "pr",
+      "known_evidence_gaps": ["The representative single-image share handoff does not prove multi-image layout, animated playback, macOS save-panel completion, a selected third-party share destination, or cache eviction."],
+      "escalation_reasons": ["The iOS purpose journey is already in the fixed PR set; only the macOS counterpart is added, without unrelated notification-sound or failure matrices."]
+    },
+    {
       "id": "shared-ui-media-accessibility-localization",
-      "paths": ["Shared/UI/KeyboardDismiss.swift", "Shared/UI/LiquidGlassEffect.swift", "Shared/UI/NotificationSoundEditorView.swift", "Shared/UI/PlatformColor.swift", "Shared/UI/PushGoMarkdownView.swift", "Shared/UI/RemoteImageView.swift", "Shared/UI/RootView.swift", "Shared/UI/ToastView.swift", "Shared/Models/NotificationSoundSettings.swift", "Shared/Services/NotificationSound*.swift", "Shared/Utilities/Localization*.swift", "Shared/Utilities/PushGoMarkdownCore.swift", "Shared/Utilities/SharedImageCache.swift", "Shared/Utilities/NotificationSound*.swift", "Resources/**"],
+      "paths": ["Shared/UI/LiquidGlassEffect.swift", "Shared/UI/NotificationSoundEditorView.swift", "Shared/UI/PlatformColor.swift", "Shared/UI/PushGoMarkdownView.swift", "Shared/UI/RemoteImageView.swift", "Shared/UI/RootView.swift", "Shared/UI/ToastView.swift", "Shared/Models/NotificationSoundSettings.swift", "Shared/Services/NotificationSound*.swift", "Shared/Utilities/Localization*.swift", "Shared/Utilities/PushGoMarkdownCore.swift", "Shared/Utilities/SharedImageCache.swift", "Shared/Utilities/NotificationSound*.swift", "Resources/**"],
       "capabilities": ["accessibility-localization", "message-media", "notification-sound"],
       "minimum_evidence": ["format/parser/component correctness", "representative UI task", "nightly accessibility/localization review"],
       "lane": "nightly",

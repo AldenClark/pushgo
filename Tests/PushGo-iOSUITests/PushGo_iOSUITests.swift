@@ -319,6 +319,15 @@ final class PushGo_iOSUITests: XCTestCase {
             message: "The canonical message image must decode into an interactive detail asset"
         )
         assertElementExists("dialog.image.preview", in: seeded.app, timeout: 8)
+        tapWhenHittable(
+            element(in: seeded.app, identifier: "action.image.preview.share"),
+            timeout: 8,
+            message: "The decoded image preview must expose its real Share action"
+        )
+        XCTAssertTrue(
+            seeded.app.otherElements["ActivityListView"].waitForExistence(timeout: 8),
+            "Sharing must prepare a consumable image file and hand it to the system activity view"
+        )
         seeded.app.terminate()
 
         let relaunched = configuredLaunchContext()

@@ -381,6 +381,7 @@ private struct PushgoImagePreviewOverlay: View {
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel(LocalizedStringKey("share"))
+                            .accessibilityIdentifier("action.image.preview.share")
 
                             Button {
                                 dismiss()
@@ -449,6 +450,7 @@ private struct PushgoImagePreviewOverlay: View {
                 .zIndex(10)
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("dialog.image.preview")
 #if os(macOS)
         .frame(minWidth: 980, minHeight: 620)
@@ -1015,6 +1017,7 @@ private struct PushGoMacShareButton: NSViewRepresentable {
         button.imageScaling = .scaleProportionallyDown
         button.contentTintColor = .white
         button.toolTip = LocalizationProvider.localized("share_image")
+        button.setAccessibilityIdentifier("action.image.preview.share")
         button.isEnabled = fileURL != nil
         button.target = context.coordinator
         button.action = #selector(Coordinator.shareTapped(_:))
@@ -1025,6 +1028,7 @@ private struct PushGoMacShareButton: NSViewRepresentable {
         nsView.target = context.coordinator
         nsView.action = #selector(Coordinator.shareTapped(_:))
         context.coordinator.fileURL = fileURL
+        nsView.setAccessibilityIdentifier("action.image.preview.share")
         nsView.isEnabled = fileURL != nil
         nsView.contentTintColor = fileURL == nil ? NSColor.white.withAlphaComponent(0.45) : .white
         nsView.image = Self.shareIcon()

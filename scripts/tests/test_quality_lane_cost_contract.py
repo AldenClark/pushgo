@@ -163,6 +163,19 @@ class QualityLaneCostContractTests(unittest.TestCase):
         ):
             self.assertNotIn(deferred, ios_body + macos_body)
 
+    def test_shared_image_preview_reuses_ios_pr_and_adds_only_one_macos_scope(self) -> None:
+        runner = (REPO / "scripts/quality_test.sh").read_text()
+        handler = runner.split("apple-macos-shared-image-preview-positive)", 1)[1].split(";;", 1)[0]
+        standard = "testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch"
+
+        self.assertEqual(1, runner.count("apple-macos-shared-image-preview-positive)"))
+        self.assertEqual(1, handler.count(standard))
+        self.assertTrue(
+            any(scope.endswith("/" + standard) for scope in self._scopes(runner, "pr_ui_scopes"))
+        )
+        for deferred in ("Failure", "Corrupt", "WrongKey", "Undo", "LocalCommitFailure"):
+            self.assertNotIn(deferred, handler)
+
     def _scopes(self, source: str, variable: str) -> list[str]:
         match = re.search(rf'^{variable}="([^"]+)"$', source, re.MULTILINE)
         self.assertIsNotNone(match, variable)
