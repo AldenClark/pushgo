@@ -1601,10 +1601,13 @@ final class PushGo_macOSUITests: XCTestCase {
     func testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch() {
         let sessionID = "macos-settings-visibility-\(UUID().uuidString.lowercased())"
         let context = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        context.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         launchQuality(context, sessionID: sessionID)
 
         let eventsEntry = element(in: context.app, identifier: "sidebar-events")
+        let thingsEntry = element(in: context.app, identifier: "sidebar-things")
         XCTAssertTrue(eventsEntry.waitForExistence(timeout: 8))
+        XCTAssertTrue(thingsEntry.waitForExistence(timeout: 8))
         openSidebarTab("events", in: context.app)
         assertVisibleScreenThroughUI("screen.events.list", in: context.app, timeout: 8)
 
@@ -1612,18 +1615,33 @@ final class PushGo_macOSUITests: XCTestCase {
         let eventToggle = element(in: context.app, identifier: "toggle.settings.page.events")
         XCTAssertTrue(eventToggle.waitForExistence(timeout: 8) && eventToggle.isHittable)
         eventToggle.click()
+        let thingToggle = element(in: context.app, identifier: "toggle.settings.page.things")
+        XCTAssertTrue(thingToggle.waitForExistence(timeout: 8) && thingToggle.isHittable)
+        thingToggle.click()
         XCTAssertTrue(
             eventsEntry.waitForNonExistence(timeout: 8),
             "Turning off the Event page must remove its real navigation destination."
         )
+        XCTAssertTrue(
+            thingsEntry.waitForNonExistence(timeout: 8),
+            "Turning off the Thing page must remove its real navigation destination."
+        )
+        openSidebarTab("channels", in: context.app)
+        assertVisibleScreenThroughUI("screen.channels", in: context.app, timeout: 8)
 
         context.app.terminate()
         let persistedOff = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        persistedOff.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         launchQuality(persistedOff, sessionID: sessionID)
         XCTAssertTrue(
             element(in: persistedOff.app, identifier: "sidebar-events")
                 .waitForNonExistence(timeout: 8),
             "The hidden Event page must remain hidden after a full process relaunch."
+        )
+        XCTAssertTrue(
+            element(in: persistedOff.app, identifier: "sidebar-things")
+                .waitForNonExistence(timeout: 8),
+            "The hidden Thing page must remain hidden after a full process relaunch."
         )
         openSidebarTab("settings", in: persistedOff.app)
         let persistedOffToggle = element(
@@ -1632,6 +1650,14 @@ final class PushGo_macOSUITests: XCTestCase {
         )
         XCTAssertTrue(persistedOffToggle.waitForExistence(timeout: 8) && persistedOffToggle.isHittable)
         persistedOffToggle.click()
+        let persistedOffThingToggle = element(
+            in: persistedOff.app,
+            identifier: "toggle.settings.page.things"
+        )
+        XCTAssertTrue(
+            persistedOffThingToggle.waitForExistence(timeout: 8) && persistedOffThingToggle.isHittable
+        )
+        persistedOffThingToggle.click()
 
         let restoredEventsEntry = element(in: persistedOff.app, identifier: "sidebar-events")
         XCTAssertTrue(
@@ -1640,12 +1666,26 @@ final class PushGo_macOSUITests: XCTestCase {
         )
         openSidebarTab("events", in: persistedOff.app)
         assertVisibleScreenThroughUI("screen.events.list", in: persistedOff.app, timeout: 8)
+        XCTAssertTrue(persistedOff.app.staticTexts["No events yet"].waitForExistence(timeout: 8))
+        let restoredThingsEntry = element(in: persistedOff.app, identifier: "sidebar-things")
+        XCTAssertTrue(
+            restoredThingsEntry.waitForExistence(timeout: 8),
+            "Turning the Thing page back on must restore a reachable navigation destination."
+        )
+        openSidebarTab("things", in: persistedOff.app)
+        assertVisibleScreenThroughUI("screen.things.list", in: persistedOff.app, timeout: 8)
+        XCTAssertTrue(persistedOff.app.staticTexts["No objects yet"].waitForExistence(timeout: 8))
 
         persistedOff.app.terminate()
         let persistedOn = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        persistedOn.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         launchQuality(persistedOn, sessionID: sessionID)
         openSidebarTab("events", in: persistedOn.app)
         assertVisibleScreenThroughUI("screen.events.list", in: persistedOn.app, timeout: 8)
+        XCTAssertTrue(persistedOn.app.staticTexts["No events yet"].waitForExistence(timeout: 8))
+        openSidebarTab("things", in: persistedOn.app)
+        assertVisibleScreenThroughUI("screen.things.list", in: persistedOn.app, timeout: 8)
+        XCTAssertTrue(persistedOn.app.staticTexts["No objects yet"].waitForExistence(timeout: 8))
     }
 
     @MainActor

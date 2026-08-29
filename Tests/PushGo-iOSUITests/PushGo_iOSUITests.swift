@@ -1028,9 +1028,10 @@ final class PushGo_iOSUITests: XCTestCase {
             fixture: "messages.standard"
         )
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        context.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         launch(context.app)
         assertQualityRuntimeReady(in: context.app, timeout: 15)
-        assertEventTabVisibility(true, in: context.app, openWhenVisible: false)
+        assertDataTabVisibility(eventsVisible: true, thingsVisible: true, in: context.app)
 
         openSettingsFromChannels(in: context.app)
         let eventToggle = scrollToHittableElement(
@@ -1039,14 +1040,21 @@ final class PushGo_iOSUITests: XCTestCase {
         )
         XCTAssertTrue(eventToggle.isHittable)
         eventToggle.tap()
+        let thingToggle = scrollToHittableElement(
+            identifier: "toggle.settings.page.things",
+            in: context.app
+        )
+        XCTAssertTrue(thingToggle.isHittable)
+        thingToggle.tap()
         leaveSettings(in: context.app)
-        assertEventTabVisibility(false, in: context.app)
+        assertDataTabVisibility(eventsVisible: false, thingsVisible: false, in: context.app)
+        assertElementExists("screen.channels", in: context.app, timeout: 8)
 
         context.app.terminate()
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
         launch(context.app)
         assertQualityRuntimeReady(in: context.app, timeout: 15)
-        assertEventTabVisibility(false, in: context.app)
+        assertDataTabVisibility(eventsVisible: false, thingsVisible: false, in: context.app)
 
         openSettingsFromChannels(in: context.app)
         let persistedOffToggle = scrollToHittableElement(
@@ -1055,14 +1063,30 @@ final class PushGo_iOSUITests: XCTestCase {
         )
         XCTAssertTrue(persistedOffToggle.isHittable)
         persistedOffToggle.tap()
+        let persistedOffThingToggle = scrollToHittableElement(
+            identifier: "toggle.settings.page.things",
+            in: context.app
+        )
+        XCTAssertTrue(persistedOffThingToggle.isHittable)
+        persistedOffThingToggle.tap()
         leaveSettings(in: context.app)
-        assertEventTabVisibility(true, in: context.app, openWhenVisible: true)
+        assertDataTabVisibility(
+            eventsVisible: true,
+            thingsVisible: true,
+            in: context.app,
+            openWhenVisible: true
+        )
 
         context.app.terminate()
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
         launch(context.app)
         assertQualityRuntimeReady(in: context.app, timeout: 15)
-        assertEventTabVisibility(true, in: context.app, openWhenVisible: true)
+        assertDataTabVisibility(
+            eventsVisible: true,
+            thingsVisible: true,
+            in: context.app,
+            openWhenVisible: true
+        )
     }
 
     func testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch() {
@@ -3511,15 +3535,16 @@ final class PushGo_iOSUITests: XCTestCase {
         return target
     }
 
-    private func assertEventTabVisibility(
-        _ expectedVisible: Bool,
+    private func assertDataTabVisibility(
+        eventsVisible: Bool,
+        thingsVisible: Bool,
         in app: XCUIApplication,
         openWhenVisible: Bool = false,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
         let buttons = app.tabBars.buttons
-        let expectedCount = expectedVisible ? 4 : 3
+        let expectedCount = 2 + (eventsVisible ? 1 : 0) + (thingsVisible ? 1 : 0)
         let countExpectation = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "count == %d", expectedCount),
             object: buttons
@@ -3527,13 +3552,11 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertEqual(
             XCTWaiter.wait(for: [countExpectation], timeout: 8),
             .completed,
-            expectedVisible
-                ? "Events must restore a fourth real navigation entry"
-                : "Disabling Events must remove one real navigation entry",
+            "The real navigation destinations must match the saved Events/Things visibility settings",
             file: file,
             line: line
         )
-        guard expectedVisible, openWhenVisible, buttons.count == expectedCount else { return }
+        guard eventsVisible, thingsVisible, openWhenVisible, buttons.count == expectedCount else { return }
         let eventButton = buttons.element(boundBy: 1)
         tapWhenHittable(
             eventButton,
@@ -3543,6 +3566,27 @@ final class PushGo_iOSUITests: XCTestCase {
             line: line
         )
         assertElementExists("screen.events.list", in: app, timeout: 8)
+        XCTAssertTrue(
+            app.staticTexts["No events yet"].waitForExistence(timeout: 8),
+            "The restored Events destination must reach its functional empty state",
+            file: file,
+            line: line
+        )
+        let thingButton = buttons.element(boundBy: 2)
+        tapWhenHittable(
+            thingButton,
+            timeout: 5,
+            message: "The restored Things entry must be actionable",
+            file: file,
+            line: line
+        )
+        assertElementExists("screen.things.list", in: app, timeout: 8)
+        XCTAssertTrue(
+            app.staticTexts["No objects yet"].waitForExistence(timeout: 8),
+            "The restored Things destination must reach its functional empty state",
+            file: file,
+            line: line
+        )
     }
 
     private func assertVisibleScreen(
