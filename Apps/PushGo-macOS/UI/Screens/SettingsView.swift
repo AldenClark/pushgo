@@ -180,7 +180,6 @@ struct SettingsView: View {
                         eventIsOn: $bindableEnvironment.eventPageEnabled,
                         thingIsOn: $bindableEnvironment.thingPageEnabled
                     )
-                    .accessibilityIdentifier("group.settings.page_visibility")
                     SettingsRowDivider()
                     Button {
                         viewModel.clearError()

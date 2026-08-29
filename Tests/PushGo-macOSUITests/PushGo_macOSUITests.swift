@@ -698,6 +698,57 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
+    func testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch() {
+        let sessionID = "macos-settings-visibility-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        launchQuality(context, sessionID: sessionID)
+
+        let eventsEntry = element(in: context.app, identifier: "sidebar-events")
+        XCTAssertTrue(eventsEntry.waitForExistence(timeout: 8))
+        openSidebarTab("events", in: context.app)
+        assertVisibleScreenThroughUI("screen.events.list", in: context.app, timeout: 8)
+
+        openSidebarTab("settings", in: context.app)
+        let eventToggle = element(in: context.app, identifier: "toggle.settings.page.events")
+        XCTAssertTrue(eventToggle.waitForExistence(timeout: 8) && eventToggle.isHittable)
+        eventToggle.click()
+        XCTAssertTrue(
+            eventsEntry.waitForNonExistence(timeout: 8),
+            "Turning off the Event page must remove its real navigation destination."
+        )
+
+        context.app.terminate()
+        let persistedOff = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        launchQuality(persistedOff, sessionID: sessionID)
+        XCTAssertTrue(
+            element(in: persistedOff.app, identifier: "sidebar-events")
+                .waitForNonExistence(timeout: 8),
+            "The hidden Event page must remain hidden after a full process relaunch."
+        )
+        openSidebarTab("settings", in: persistedOff.app)
+        let persistedOffToggle = element(
+            in: persistedOff.app,
+            identifier: "toggle.settings.page.events"
+        )
+        XCTAssertTrue(persistedOffToggle.waitForExistence(timeout: 8) && persistedOffToggle.isHittable)
+        persistedOffToggle.click()
+
+        let restoredEventsEntry = element(in: persistedOff.app, identifier: "sidebar-events")
+        XCTAssertTrue(
+            restoredEventsEntry.waitForExistence(timeout: 8),
+            "Turning the Event page back on must restore a reachable navigation destination."
+        )
+        openSidebarTab("events", in: persistedOff.app)
+        assertVisibleScreenThroughUI("screen.events.list", in: persistedOff.app, timeout: 8)
+
+        persistedOff.app.terminate()
+        let persistedOn = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        launchQuality(persistedOn, sessionID: sessionID)
+        openSidebarTab("events", in: persistedOn.app)
+        assertVisibleScreenThroughUI("screen.events.list", in: persistedOn.app, timeout: 8)
+    }
+
+    @MainActor
     func legacyDiagnosticSettingsScreenControlMatrixShowsCriticalGroups() {
         let context = configuredApp()
         launch(context)
