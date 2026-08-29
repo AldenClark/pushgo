@@ -931,14 +931,28 @@ final class PushGo_macOSUITests: XCTestCase {
     @MainActor
     func testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow() {
         let sessionID = "macos-window-lifecycle-\(UUID().uuidString.lowercased())"
-        let context = configuredQualityApp(sessionID: sessionID, fixture: "empty.clean")
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            messageRefreshDelayMilliseconds: 2_500,
+            messageRefreshScenario: "new_message"
+        )
         launchQuality(context, sessionID: sessionID)
 
-        XCTAssertTrue(
-            element(in: context.app, identifier: "state.messages.empty")
-                .waitForExistence(timeout: 5),
-            "The App-owned empty state did not become visible after runtime readiness."
+        let originalRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
         )
+        XCTAssertTrue(originalRow.waitForExistence(timeout: 8))
+        let refresh = element(in: context.app, identifier: "action.messages.refresh")
+        XCTAssertTrue(refresh.waitForExistence(timeout: 5) && refresh.isHittable)
+        refresh.click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.refresh.slow")
+                .waitForExistence(timeout: 2),
+            "The provider refresh must still be in flight when the main window closes."
+        )
+        XCTAssertTrue(originalRow.exists, "Closing begins from the last accurate snapshot.")
 
         let mainWindow = context.app.windows.firstMatch
         XCTAssertTrue(mainWindow.exists)
@@ -966,10 +980,22 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertTrue(context.app.windows.firstMatch.waitForExistence(timeout: 10))
         XCTAssertEqual(context.app.windows.count, 1, "Reopening must restore the unique main window.")
         XCTAssertTrue(element(in: context.app, identifier: "screen.messages.list").exists)
+        let refreshedRow = context.app.buttons
+            .matching(NSPredicate(format: "label CONTAINS %@", "P2 Refresh Result"))
+            .firstMatch
         XCTAssertTrue(
-            element(in: context.app, identifier: "state.messages.empty")
-                .waitForExistence(timeout: 5),
-            "The restored window did not recover the functional empty state."
+            refreshedRow.waitForExistence(timeout: 8),
+            "Closing the window must not cancel or lose an in-flight provider result."
+        )
+        XCTAssertTrue(
+            (refreshedRow.value as? String)?.contains(
+                "Persisted through the provider refresh ingress path."
+            ) == true,
+            "The restored window did not expose the accurate persisted provider body."
+        )
+        XCTAssertTrue(
+            originalRow.waitForExistence(timeout: 5),
+            "Receiving while the window is closed must not replace unrelated canonical data."
         )
         XCTAssertEqual(
             element(in: context.app, identifier: "quality-runtime.ready").value as? String,

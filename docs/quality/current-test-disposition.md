@@ -60,7 +60,7 @@
 | delete | `testBaselineAutomationStateHasNoRuntimeErrors` | 无独立用户结果；Runtime 错误转为测试系统状态。 |
 | move | `testRuntimeQualityLargeFixtureLaunchAndListReadiness` | 拆 Store/performance/UI，删除 state/response 自证和 artifact 静默退出。 |
 | move | `testRuntimeQualityReservedMarkdownFixturesStayBelowGatewayBodyLimit` | 移到 Core fixture/parser 合同。 |
-| keep（新增目的级证据） | `testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow` | 从真实主窗口关闭按钮进入，要求进程继续运行、App 自有状态栏入口仍可达、恢复后仅一个窗口，且同一 App-owned session 的功能空态仍准确；授权恢复后已在受控本机签名 Runner 真实通过。 |
+| keep（新增目的级证据） | `testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow` | 从准确旧消息发起正式 Provider Refresh，在 slow/in-flight 时关闭真实主窗口；要求进程继续运行、App 自有状态栏入口仍可达、恢复后仅一个窗口，且经正式 ingress 持久化的新消息精确正文与原控制消息同时可见。复用既有方法、fixture 与启动。 |
 
 ## 已确认的首要缺陷模式
 
@@ -138,7 +138,7 @@ PR 的设备预算现固定投向 12 条跨能力正向代表链：空态 Oracle
 - 实施：`MacMainWindowPresenter` 强持有唯一主窗口、设置 `isReleasedWhenClosed = false`、按固定 identifier 接管丢失 capture 的窗口，并在聚焦前显式 deminiaturize。AppDelegate 的状态栏按钮增加稳定、可访问的产品级 identifier；UI 用例最终仍看唯一窗口和同一 Store 功能态，不以 identifier 本身作为通过终点。
 - 负控：临时删除 `makeKeyAndOrderFront` 后，关闭恢复测试在 `window.isVisible` 精确失败，最小化测试在调用次数精确失败；恢复实现后 3/3 通过，证明 Oracle 对“找到了窗口但没有真正显示”敏感。
 - 集成攻击：首次 `build-for-testing` 发现新文件只进入 SwiftPM、未进入 Xcode macOS Sources phase；组件测试绿色不能掩盖产品未集成。补齐工程 membership 后 macOS App + UI target 构建通过。
-- 测试系统归因：历史授权失败发生在测试方法进入前，因此当时正确记录为 `BLOCKED/NOT RUN`。授权恢复后，受控签名 Runner 的关闭→状态栏→唯一窗口→同一 App-owned 功能空态旅程 1/1 通过；加入 Event/Thing、Gateway 两条失败恢复、页面可见性、解密、消息删除、动态侧边栏及 Event 失败恢复后，当前二十二条正式核心旅程零重试 22/22，结果包 `build/quality-results/macos-ui-22-final/run-20260829-130358.xcresult`。
+- 测试系统归因：历史授权失败发生在测试方法进入前，因此当时正确记录为 `BLOCKED/NOT RUN`。授权恢复后，受控签名 Runner 的关闭→状态栏→唯一窗口旅程已升级为关闭期间在途 Provider 结果不丢失，并在当前字节 focused 1/1、23.397 秒、零重试通过（`build/quality-results/macos-ui/run-20260829-213145.xcresult`）；既有二十二条正式核心旅程仍由先前零重试 22/22 结果包 `build/quality-results/macos-ui-22-final/run-20260829-130358.xcresult` 证明，后续测试源码变化只使本条受影响证据需要刷新，不虚构整批已重跑。
 - 崩溃归因：主导航首次真实执行发现 Message `HSplitView` 切换到 Event/Thing `HSplitView` 会在 AppKit `SplitViewChildController` 约束更新循环中崩溃。固定 300pt 列本就不提供用户可调语义，故三个页面统一改为 `HStack + Divider`；对象优先和完整往返导航均通过。页面级 identifier 另改为独立 1×1 语义标记，避免覆盖后代业务元素。
 - Runner 卫生：正式 `scripts/run_macos_ui_tests.sh` 零重试，默认精确选择当前二十二条可发现的高价值旅程；契约测试要求源码 `test...` 集合与 Runner scope 完全相等，防止新增能力被静默漏跑。它先通过 `IOConsoleLocked` 证明交互桌面已解锁，并在 Runner 生命周期持有 `caffeinate` 防止长批次中途空闲锁屏；锁屏直接归测试系统 `BLOCKED`，不再误报产品激活失败。XCTest 在每条旅程的 `setUp/tearDown` 终止本用例启动的 App，并在前后各观察一个安静窗口、关闭 bundle id 精确匹配的系统 `Problem Reporter`；外层 Runner 另在整批开始前、结束后及中断/退出时按系统可执行路径精确清场，且测试期间每 200ms 持续监控延迟出现的新窗口，无法关闭同样归 `BLOCKED`。因此某条崩溃仍保留产品 `FAILED`，但弹窗不会遮挡后续旅程，也无需为每条方法重启一次不稳定的 UI-test Runner；方法进入前失败归 `BLOCKED`，已执行 Oracle 失败归产品 `FAILED`。精确进程清理的独立契约 3/3 通过：精确目标可关闭、无目标无副作用、批次中途新目标可关闭且监控继续存活。
 - Apple 本机交互门禁：`scripts/require_unlocked_apple_ui_console.sh` 现由 macOS、iOS Simulator 与 watchOS Simulator 三个正式 UI Runner 共用；锁屏时三者都在启动构建/模拟器和任何产品动作前退出 2、写入 `BLOCKED`，并分别报告 `macos`、`ios_simulator`、`watchos_simulator` 原因。当前真实锁屏负控三入口均精确命中；共享门禁及三个 Runner 也由影响选择器纳入 `quality-system-trustworthiness` 的 PR 证据，不再被脚本忽略规则归为 `NOT_RUN`。
