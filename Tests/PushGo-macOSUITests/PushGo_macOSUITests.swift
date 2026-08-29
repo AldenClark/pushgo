@@ -1208,6 +1208,7 @@ final class PushGo_macOSUITests: XCTestCase {
             messageRefreshDelayMilliseconds: 2_500,
             messageRefreshScenario: "new_message"
         )
+        context.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         launchQuality(context, sessionID: sessionID)
 
         let originalRow = element(
@@ -1246,10 +1247,20 @@ final class PushGo_macOSUITests: XCTestCase {
             statusItem.waitForExistence(timeout: 8),
             "The app-owned status item must remain reachable after the main window closes."
         )
-        statusItem.click()
+        statusItem.rightClick()
+        let openMainWindow = context.app.menuItems["Open main window"]
+        XCTAssertTrue(
+            openMainWindow.waitForExistence(timeout: 5) && openMainWindow.isHittable,
+            "The real status-item context menu must offer its localized main-window action."
+        )
+        openMainWindow.click()
 
         XCTAssertTrue(context.app.windows.firstMatch.waitForExistence(timeout: 10))
-        XCTAssertEqual(context.app.windows.count, 1, "Reopening must restore the unique main window.")
+        XCTAssertEqual(
+            context.app.windows.count,
+            1,
+            "The context-menu action must restore the unique main window."
+        )
         XCTAssertTrue(element(in: context.app, identifier: "screen.messages.list").exists)
         let refreshedRow = context.app.buttons
             .matching(NSPredicate(format: "label CONTAINS %@", "P2 Refresh Result"))
@@ -1272,6 +1283,21 @@ final class PushGo_macOSUITests: XCTestCase {
             element(in: context.app, identifier: "quality-runtime.ready").value as? String,
             sessionID,
             "The restored window must still show the same App-owned session and Store state."
+        )
+
+        let restoredWindow = context.app.windows.firstMatch
+        restoredWindow.buttons[XCUIIdentifierCloseWindow].click()
+        XCTAssertTrue(
+            waitForElementToDisappear(restoredWindow, timeout: 8),
+            "The restored unique window must remain closable before testing the primary status-item action."
+        )
+        pushGoStatusItem(in: context.app).click()
+        XCTAssertTrue(context.app.windows.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertEqual(context.app.windows.count, 1, "Left click must restore, not duplicate, the main window.")
+        XCTAssertEqual(
+            element(in: context.app, identifier: "quality-runtime.ready").value as? String,
+            sessionID,
+            "Both status-item entry points must preserve the same App-owned session."
         )
     }
 

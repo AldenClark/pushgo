@@ -1542,10 +1542,10 @@ Apple 用 `os_signpost`/XCTMetric；Android 用 trace/Macrobenchmark。里程碑
 | 级别 | 必测行为 | 平台/层 | 最终 Oracle |
 | --- | --- | --- | --- |
 | P0 | macOS 状态栏左键打开主窗口 | M physical UI | 复用唯一主窗口，成为 key/main，菜单或 popover 正确关闭 |
-| P1 | macOS 状态栏右键菜单 | M physical UI | Open Main Window 和 Quit 可达、文案本地化、动作准确 |
+| P1 | macOS 状态栏右键菜单 | M physical UI | Open Main Window 的本地化文案与真实动作准确；Quit 只在受控 Release/人工批次验证，不以菜单项存在判通过 |
 | P0 | 主窗口关闭/最小化/恢复 | M UI/platform | 可见性状态准确；按产品语义继续后台接收；再次打开不重复创建窗口 |
 | P1 | 最小窗口和 Sidebar 固定宽度 | M UI | 1100×640 及大窗口下分栏、Toolbar、详情和焦点可用 |
-| P0 | 菜单栏未读加载正常/空/失败 | M component/UI | Content/Empty/Error 分开；数据库失败不得被 `try?` 吞成“没有未读” |
+| 已删除 | 菜单栏未读内容 | M reachability | 当前产品没有该入口；未挂载实现及其把数据库错误吞成空态的 ViewModel 已删除，未来若重新设计必须先形成可达产品语义，再补 Content/Empty/Error Oracle |
 | P1 | iOS BGTask 注册/调度/执行 | I integration | permitted identifier、提交、拉取/ACK/derived work 和 completion 结果准确 |
 | P1 | iOS BGTask expiration/取消/重启 | I integration | expiration 只完成一次；任务停止；durable work 下次恢复，无重复 ACK/投影 |
 | P1 | Android Private Channel Service 启停 | D integration/physical | Transport、前后台、notification、连接状态一致，重复 start 幂等 |
@@ -2014,10 +2014,10 @@ WP0 必须至少把以下当前源码事实写入覆盖索引，不能被更粗�
 | Settings | Gateway/token/page visibility/decryption/声音编辑/通知权限/docs/version/iOS Watch/macOS login-update/Android transport-Doze-update |
 | Apple 系统 | 3 类 Widget、watch complication、5 个 Control Widget、当前 App Intents/10 Shortcuts、Spotlight/User Activity、Focus、Live Activity、NSE、Widget push |
 | watchOS | 三列表/三详情/read/delete/image/decrypt/standalone provisioning generations/Receiver Health/notification route/complication；历史 mirror 仅在兼容承诺存在时测试 |
-| macOS | Sidebar/split/detail/Updater/Launch at Login/Window close-reopen/Status Item/菜单栏数据错误态 |
+| macOS | Sidebar/split/detail/Updater/Launch at Login/Window close-reopen/Status Item；未接入产品的菜单栏未读内容已删除，不计能力 |
 | Android 后台 | FCM、Private foreground service、Boot/Dismiss Receiver、AlertPlayback、ACK/Ingress/PostProcess/Deletion/ImageCleanup/Update Workers、Install Receiver |
 
-当前三端均能检索到导出序列化/helper 实现，但本轮未检索到明确的用户入口调用；WP0 必须决定接通还是删除，接通前不能把第 25.12 节的 Picker/分享任务记为现有能力通过。`MacMenuBarContentView.swift` 当前也未发现真实挂载入口：在确认挂载前只列为死代码候选，不得用“文件存在”声称菜单栏消息列表已实现。`pushgo-windows` 不在本文范围；若目标改为全部 App 平台，必须另行纳入而不能默认为已覆盖。
+当前三端均能检索到导出序列化/helper 实现，但本轮未检索到明确的用户入口调用；WP0 必须决定接通还是删除，接通前不能把第 25.12 节的 Picker/分享任务记为现有能力通过。`MacMenuBarContentView.swift` 的可达性裁决已经完成：生产树没有挂载入口，配套 `MenuBarViewModel` 还以 `try?` 把数据库失败伪装成空数据，因此两者已删除并从能力索引移除；影响清单只保留两个精确旧路径作为 deletion tombstone，使本次删除可归因，且未来若按原路径重新引入会重新触发 Status Item 证据。真实产品语义只有状态栏左键恢复窗口、右键 Open Main Window/Quit，其中 Open 与左键恢复已用真实 UI 和准确 Store 终点验证，Quit 保留为受控 Release/人工系统动作。`pushgo-windows` 不在本文范围；若目标改为全部 App 平台，必须另行纳入而不能默认为已覆盖。
 
 ### 32.6 新代码的强制增量规则
 
@@ -2082,7 +2082,7 @@ CI 对“新增入口但索引未更新”只做阻断式提醒；最终是否�
 | Oracle 反例 | 错字段、重复 cursor、错误吞 Empty、保存假成功、敏感系统输出 | 第 30.4 节新增负控；对应负控不红则 Suite 绿色失效 |
 | 红方 | 尝试用存在性、聚合条目、单系统表面、标准截图、Worker 调度变绿 | 第 30.1 节逐项阻断；Capability 索引明确不计分、不判通过 |
 | 蓝方可实施性 | 复用现有 XCTest/Swift Testing/Compose/UIAutomator/Room/Worker/Widget/Intent 测试资产 | 不更换主测试框架；扩展工作量调整为 102–147 人日并按 WP 分段退出 |
-| 双向覆盖 | 源码→测试、测试→可达产品 | 修正 Thing 错误规格和 Android 行动作过度声称；标记导出候选、未挂载 MacMenuBarContentView 和范围外 Windows |
+| 双向覆盖 | 源码→测试、测试→可达产品 | 修正 Thing 错误规格和 Android 行动作过度声称；删除未挂载 MacMenuBarContentView/吞错 ViewModel，标记导出候选和范围外 Windows |
 | 环境可执行性 | App-owned Store、readiness、doctor、teardown、Release isolation | 保留无需复制 DB/处理跨沙箱权限的核心设计；准备失败 10 秒内分离 |
 | 非功能 | 设备/窗口、a11y、视觉、性能/资源 | 新增第 33.1 矩阵和第 33.2 初始 SLO |
 

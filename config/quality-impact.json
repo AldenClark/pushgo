@@ -220,7 +220,7 @@
     },
     {
       "id": "app-shell-window-navigation",
-      "paths": ["Shared/Application/AppNavigationState.swift", "Shared/Application/MainTab.swift", "Shared/Application/FeedbackPresentationPolicy.swift", "Shared/Application/MacMainWindowPresenter.swift", "Shared/Models/AppError.swift", "Shared/UI/RootView.swift", "Shared/Utilities/AppConstants.swift", "Apps/PushGo-iOS/ContentView.swift", "Apps/PushGo-iOS/pushgoApp.swift", "Apps/PushGo-iOS/App/**", "Apps/PushGo-macOS/ContentView.swift", "Apps/PushGo-macOS/pushgomacApp.swift", "Apps/PushGo-macOS/App/**", "Apps/PushGo-macOS/MainWindowController.swift", "Apps/PushGo-macOS/MacMenuBarContentView.swift", "Apps/PushGo-macOS/UI/ViewModels/**"],
+      "paths": ["Shared/Application/AppNavigationState.swift", "Shared/Application/MainTab.swift", "Shared/Application/FeedbackPresentationPolicy.swift", "Shared/Application/MacMainWindowPresenter.swift", "Shared/Models/AppError.swift", "Shared/UI/RootView.swift", "Shared/Utilities/AppConstants.swift", "Apps/PushGo-iOS/ContentView.swift", "Apps/PushGo-iOS/pushgoApp.swift", "Apps/PushGo-iOS/App/**", "Apps/PushGo-macOS/ContentView.swift", "Apps/PushGo-macOS/pushgomacApp.swift", "Apps/PushGo-macOS/App/**", "Apps/PushGo-macOS/MainWindowController.swift", "Apps/PushGo-macOS/MacMenuBarContentView.swift", "Apps/PushGo-macOS/UI/ViewModels/MenuBarViewModel.swift"],
       "capabilities": ["app-launch", "primary-navigation", "mac-window-status-item"],
       "minimum_evidence": ["navigation/window state tests", "real control navigation UI journey including one applicable high-risk badge/loading/error/disabled state", "macOS open/close/reopen UI evidence when available"],
       "lane": "nightly",

@@ -706,7 +706,6 @@
 				App/MainWindowLifecycleController.swift,
 				App/PushGoAppDelegate.swift,
 				ContentView.swift,
-				MacMenuBarContentView.swift,
 				MainWindowController.swift,
 				pushgomacApp.swift,
 				UI/Components/MessageRowView.swift,
@@ -724,7 +723,6 @@
 				UI/Screens/ThingDetailScreen.swift,
 				UI/Screens/ThingListScreen.swift,
 				UI/Screens/ThingSplitScreen.swift,
-				UI/ViewModels/MenuBarViewModel.swift,
 			);
 			target = 135A23D0A0668F4A0D2918DB /* PushGo-macOS-DMG */;
 		};
@@ -753,7 +751,6 @@
 				App/MainWindowLifecycleController.swift,
 				App/PushGoAppDelegate.swift,
 				ContentView.swift,
-				MacMenuBarContentView.swift,
 				MainWindowController.swift,
 				"PushGo-macOS-DMG-Info.plist",
 				pushgomacApp.swift,
@@ -772,7 +769,6 @@
 				UI/Screens/ThingDetailScreen.swift,
 				UI/Screens/ThingListScreen.swift,
 				UI/Screens/ThingSplitScreen.swift,
-				UI/ViewModels/MenuBarViewModel.swift,
 			);
 			target = AA240E502EF1BEA400F812DA /* PushGo-macOS */;
 		};

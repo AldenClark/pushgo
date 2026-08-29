@@ -24,7 +24,7 @@ The target now exposes twenty-five XCTest-discoverable, App-owned journeys:
 - inline invalid-server feedback through real controls;
 - candidate Gateway registration rejection with no local commit, inline ownership, retry, data re-scoping, and relaunch persistence;
 - local Gateway commit failure with immediate and process-relaunch rollback, followed by a successful real-control retry;
-- close/status-item/reopen window lifecycle with one functional window.
+- close during in-flight refresh, then restore one functional window through the real localized right-click Open Main Window action and again through the primary left click, preserving the same session and accurate Store result.
 
 The 19 host-path/command/state methods are named `legacyDiagnostic...` and no longer use XCTest's `test...` discovery convention. Their green results never counted as product coverage. The twenty-five current journeys use the App-owned quality session and real accessibility UI; they do not read the App database or state files from the host test process. Thing filter/deep-link/delete, notification action/reconciliation, and performance journeys remain explicit gaps until replaced by App-owned user-purpose tests.
 

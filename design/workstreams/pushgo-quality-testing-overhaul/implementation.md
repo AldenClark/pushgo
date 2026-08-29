@@ -57,7 +57,7 @@
 - 两仓库 `docs/quality/current-test-disposition.md`；
 - 两仓库 `docs/quality/capability-coverage.md`；
 - 当前 smoke、弱 Oracle、skip/return、固定等待、路径协议和 Release Runtime 基线；
-- 导出 helper 与 `MacMenuBarContentView` 可达性裁决。
+- 导出 helper 与菜单栏内容可达性裁决；`MacMenuBarContentView`/`MenuBarViewModel` 已因无生产挂载且吞错为空而删除，真实 Status Item 动作由目的级 UI 旅程保护。
 
 退出：所有现有 UI/device 测试均有处置；P0 缺口明确；没有因测试数量或文件存在宣称覆盖。
 
