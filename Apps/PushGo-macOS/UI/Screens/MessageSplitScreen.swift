@@ -545,6 +545,7 @@ struct MessageSplitScreen: View {
             }
             .help(localizationManager.localized("delete"))
             .accessibilityLabel(localizationManager.localized("delete"))
+            .accessibilityIdentifier("action.message.delete")
             .disabled(selectedMessageSnapshot?.id != selection)
         }
     }

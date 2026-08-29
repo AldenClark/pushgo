@@ -23,6 +23,9 @@ fi
 default_scopes=(
   "PushGo-macOSUITests/PushGo_macOSUITests/testQualitySessionUsesAppOwnedStoreAndReachesFunctionalEmptyState"
   "PushGo-macOSUITests/PushGo_macOSUITests/testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch"
+  "PushGo-macOSUITests/PushGo_macOSUITests/testUnreadBadgeKeepsMessagesSidebarTitleReadableAndNavigable"
+  "PushGo-macOSUITests/PushGo_macOSUITests/testMessageDeleteUndoRestoresAccurateCanonicalContentAcrossRelaunch"
+  "PushGo-macOSUITests/PushGo_macOSUITests/testMessageDeleteDeadlineCommitsOnlyTargetAndSurvivesRelaunch"
   "PushGo-macOSUITests/PushGo_macOSUITests/testSlowMessageLoadWarnsBeforeDataCompletes"
   "PushGo-macOSUITests/PushGo_macOSUITests/testMessageLoadFailureRetryRecoversToFunctionalState"
   "PushGo-macOSUITests/PushGo_macOSUITests/testSlowMessageRefreshKeepsAccurateContentVisibleUntilCompletion"

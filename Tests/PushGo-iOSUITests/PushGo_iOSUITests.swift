@@ -483,9 +483,16 @@ final class PushGo_iOSUITests: XCTestCase {
         launch(context.app)
 
         assertQualityRuntimeReady(in: context.app, timeout: 15)
+        let targetRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c002"
+        )
         let targetTitle = context.app.staticTexts["Quality Delete History Message"]
         let controlTitle = context.app.staticTexts["Quality Keep History Message"]
-        XCTAssertTrue(targetTitle.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            targetRow.waitForExistence(timeout: 8) && targetTitle.exists,
+            "The exact target row must exist before its later absence can prove deletion"
+        )
         XCTAssertTrue(controlTitle.exists, "The unrelated control message must exist before deletion")
         targetTitle.tap()
         assertElementExists("sheet.message.detail", in: context.app, timeout: 8)
@@ -500,10 +507,6 @@ final class PushGo_iOSUITests: XCTestCase {
             timeout: 8
         )
 
-        let targetRow = element(
-            in: context.app,
-            identifier: "message.row.00000000-0000-0000-0000-00000000c002"
-        )
         XCTAssertTrue(targetRow.waitForNonExistence(timeout: 2))
         let pendingDeletion = element(in: context.app, identifier: "state.pending_deletion")
         XCTAssertTrue(pendingDeletion.waitForExistence(timeout: 5))

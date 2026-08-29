@@ -2,10 +2,13 @@
 
 ## Current executable scope
 
-The target now exposes eighteen XCTest-discoverable, App-owned journeys:
+The target now exposes twenty-one XCTest-discoverable, App-owned journeys:
 
 - App-owned empty-state launch and functional message-list readiness;
 - accurate standard message row/detail data and process-relaunch persistence;
+- selected Messages sidebar title remains visibly readable, non-overlapping, and navigable with a real unread badge;
+- message deletion through the real detail action, immediate suppression, real Undo, exact-content restoration, and process-relaunch persistence;
+- deletion deadline commit that permanently removes only the target while preserving an accurate unrelated control message across relaunch;
 - a user-visible slow-load warning before delayed completion;
 - visible initial-load failure and recovery through the real Retry control;
 - slow refresh feedback while the last accurate snapshot remains visible;
@@ -22,7 +25,7 @@ The target now exposes eighteen XCTest-discoverable, App-owned journeys:
 - local Gateway commit failure with immediate and process-relaunch rollback, followed by a successful real-control retry;
 - close/status-item/reopen window lifecycle with one functional window.
 
-The 19 host-path/command/state methods are named `legacyDiagnostic...` and no longer use XCTest's `test...` discovery convention. Their green results never counted as product coverage. The eighteen current journeys use the App-owned quality session and real accessibility UI; they do not read the App database or state files from the host test process. Event slow/error/duplicate-close, Thing filter/deep-link/delete, notification action, and performance journeys remain explicit gaps until replaced by App-owned user-purpose tests.
+The 19 host-path/command/state methods are named `legacyDiagnostic...` and no longer use XCTest's `test...` discovery convention. Their green results never counted as product coverage. The twenty-one current journeys use the App-owned quality session and real accessibility UI; they do not read the App database or state files from the host test process. Event slow/error/duplicate-close, Thing filter/deep-link/delete, notification action/reconciliation, and performance journeys remain explicit gaps until replaced by App-owned user-purpose tests.
 
 ## Run
 

@@ -229,6 +229,179 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
+    func testUnreadBadgeKeepsMessagesSidebarTitleReadableAndNavigable() {
+        let sessionID = "macos-sidebar-badge-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "channels.standard")
+        launchQuality(context, sessionID: sessionID)
+
+        let title = context.app.staticTexts["sidebar-messages"]
+        let badge = context.app.staticTexts["sidebar.messages.unread_badge"]
+        XCTAssertTrue(title.waitForExistence(timeout: 8))
+        XCTAssertTrue(badge.waitForExistence(timeout: 8))
+        XCTAssertEqual(badge.value as? String, "2", "The fixture must exercise a real unread badge.")
+        XCTAssertGreaterThanOrEqual(title.frame.width, 18, "The Messages title was compressed away.")
+        XCTAssertGreaterThan(
+            badge.frame.minX,
+            title.frame.maxX + 4,
+            "The unread badge overlaps the Messages title."
+        )
+
+        let titleScreenshot = title.screenshot()
+        let attachment = XCTAttachment(screenshot: titleScreenshot)
+        attachment.name = "selected-messages-sidebar-title-with-unread-badge"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        XCTAssertTrue(
+            hasReadableForegroundContrast(in: titleScreenshot),
+            "The selected Messages title has insufficient visible foreground contrast."
+        )
+
+        title.click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "screen.messages.list")
+                .waitForExistence(timeout: 8),
+            "The readable Messages entry must remain a functional navigation target."
+        )
+    }
+
+    @MainActor
+    func testMessageDeleteUndoRestoresAccurateCanonicalContentAcrossRelaunch() {
+        let sessionID = "macos-delete-undo-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        launchQuality(context, sessionID: sessionID)
+
+        let row = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertTrue(row.waitForExistence(timeout: 8))
+        row.click()
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 8),
+            "Deletion must begin from the exact canonical message detail."
+        )
+        let delete = element(in: context.app, identifier: "action.message.delete")
+        XCTAssertTrue(delete.waitForExistence(timeout: 8) && delete.isHittable)
+        delete.click()
+
+        XCTAssertTrue(
+            row.waitForNonExistence(timeout: 2),
+            "Scheduling deletion must immediately suppress the target row."
+        )
+        let pending = element(in: context.app, identifier: "state.pending_deletion")
+        XCTAssertTrue(pending.waitForExistence(timeout: 5))
+        let undo = element(in: context.app, identifier: "action.pending_deletion.undo")
+        XCTAssertTrue(undo.waitForExistence(timeout: 5) && undo.isHittable)
+        undo.click()
+
+        let restoredRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertTrue(
+            restoredRow.waitForExistence(timeout: 8),
+            "Undo must restore the real row, not merely dismiss the pending-deletion bar."
+        )
+        restoredRow.click()
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 8),
+            "Undo must restore the same canonical content."
+        )
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        launchQuality(relaunched, sessionID: sessionID)
+        let persistedRow = element(
+            in: relaunched.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertTrue(
+            persistedRow.waitForExistence(timeout: 8),
+            "An undone deletion must keep the canonical object across process relaunch."
+        )
+        persistedRow.click()
+        XCTAssertTrue(
+            relaunched.app.staticTexts["Seeded from fixture.seed_messages for UI validation."].exists
+        )
+    }
+
+    @MainActor
+    func testMessageDeleteDeadlineCommitsOnlyTargetAndSurvivesRelaunch() {
+        let sessionID = "macos-delete-commit-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(sessionID: sessionID, fixture: "channels.standard")
+        launchQuality(context, sessionID: sessionID)
+
+        let targetRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c002"
+        )
+        let controlRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c001"
+        )
+        XCTAssertTrue(targetRow.waitForExistence(timeout: 8))
+        XCTAssertTrue(controlRow.exists, "The unrelated control must exist before deletion.")
+        targetRow.click()
+        XCTAssertTrue(
+            context.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000002."
+            ].waitForExistence(timeout: 8),
+            "The delete action must begin from the exact target detail."
+        )
+        let delete = element(in: context.app, identifier: "action.message.delete")
+        XCTAssertTrue(delete.waitForExistence(timeout: 8) && delete.isHittable)
+        delete.click()
+
+        XCTAssertTrue(targetRow.waitForNonExistence(timeout: 2))
+        let pending = element(in: context.app, identifier: "state.pending_deletion")
+        XCTAssertTrue(pending.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            element(in: context.app, identifier: "action.pending_deletion.undo").isHittable,
+            "The journey must observe the real undo opportunity before allowing commit."
+        )
+        XCTAssertTrue(
+            pending.waitForNonExistence(timeout: 15),
+            "The production undo deadline did not commit and clear the pending deletion."
+        )
+        XCTAssertFalse(targetRow.exists, "The committed target must remain absent.")
+        XCTAssertTrue(
+            controlRow.waitForExistence(timeout: 5),
+            "Committing one deletion must preserve the unrelated control message."
+        )
+        controlRow.click()
+        XCTAssertTrue(
+            context.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000001."
+            ].waitForExistence(timeout: 8),
+            "The control message must retain its exact canonical content."
+        )
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(sessionID: sessionID, fixture: "channels.standard")
+        launchQuality(relaunched, sessionID: sessionID)
+        XCTAssertFalse(
+            element(
+                in: relaunched.app,
+                identifier: "message.row.00000000-0000-0000-0000-00000000c002"
+            ).exists,
+            "A committed deletion must not revive after process relaunch."
+        )
+        let persistedControl = element(
+            in: relaunched.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c001"
+        )
+        XCTAssertTrue(persistedControl.waitForExistence(timeout: 8))
+        persistedControl.click()
+        XCTAssertTrue(
+            relaunched.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000001."
+            ].exists
+        )
+    }
+
+    @MainActor
     func testSlowMessageLoadWarnsBeforeDataCompletes() {
         let sessionID = "macos-slow-\(UUID().uuidString.lowercased())"
         let context = configuredQualityApp(
@@ -2216,6 +2389,34 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertTrue(sidebar.waitForExistence(timeout: 5), "sidebar-\(tabIdentifier) not found")
         sidebar.click()
         RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+    }
+
+    private func hasReadableForegroundContrast(in screenshot: XCUIScreenshot) -> Bool {
+        guard let bitmap = NSBitmapImageRep(data: screenshot.pngRepresentation),
+              bitmap.pixelsWide > 0,
+              bitmap.pixelsHigh > 0
+        else {
+            return false
+        }
+        var luminances: [CGFloat] = []
+        luminances.reserveCapacity(bitmap.pixelsWide * bitmap.pixelsHigh)
+        for y in 0 ..< bitmap.pixelsHigh {
+            for x in 0 ..< bitmap.pixelsWide {
+                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else {
+                    continue
+                }
+                luminances.append(
+                    0.2126 * color.redComponent
+                        + 0.7152 * color.greenComponent
+                        + 0.0722 * color.blueComponent
+                )
+            }
+        }
+        guard luminances.count >= 10 else { return false }
+        luminances.sort()
+        let darkSample = luminances[luminances.count / 10]
+        let lightSample = luminances[luminances.count * 9 / 10]
+        return lightSample - darkSample >= 0.25
     }
 
     @MainActor

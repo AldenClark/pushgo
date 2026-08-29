@@ -186,8 +186,18 @@ struct MainTabContainerView: View {
 
     private func sidebarPrimaryRow(_ tab: MainTab) -> some View {
         return HStack(spacing: SidebarLayout.rowSpacing) {
-            Label(tab.localizedTitle(using: localizationManager), systemImage: tab.systemImageName)
-                .font(.headline.weight(.semibold))
+            HStack(spacing: SidebarLayout.titleSpacing) {
+                Image(systemName: tab.systemImageName)
+                    .foregroundStyle(Color.appAccentPrimary)
+                    .frame(width: SidebarLayout.iconWidth)
+                Text(tab.localizedTitle(using: localizationManager))
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Color.appTextPrimary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .accessibilityIdentifier("sidebar-\(tab.accessibilityIdentifier)")
+            }
+            .layoutPriority(1)
             Spacer(minLength: 8)
             if tab == .messages {
                 SidebarUnreadBadge()
@@ -195,7 +205,6 @@ struct MainTabContainerView: View {
         }
         .padding(.horizontal, SidebarLayout.rowHorizontalPadding)
         .padding(.vertical, SidebarLayout.primaryRowVerticalPadding)
-        .accessibilityIdentifier("sidebar-\(tab.accessibilityIdentifier)")
         .listRowInsets(
             EdgeInsets(
                 top: SidebarLayout.rowInsetVertical,
@@ -210,9 +219,11 @@ struct MainTabContainerView: View {
     private enum SidebarLayout {
         static let rowInsetHorizontal: CGFloat = 8
         static let rowInsetVertical: CGFloat = 2
-        static let rowHorizontalPadding: CGFloat = 10
+        static let rowHorizontalPadding: CGFloat = 0
         static let primaryRowVerticalPadding: CGFloat = 7
         static let rowSpacing: CGFloat = 10
+        static let titleSpacing: CGFloat = 10
+        static let iconWidth: CGFloat = 16
     }
     @ViewBuilder
     private var detailContent: some View {
@@ -394,6 +405,7 @@ private struct SidebarUnreadBadge: View {
                 )
                 .accessibilityLabel(LocalizedStringKey("unread"))
                 .accessibilityValue(Text(displayText))
+                .accessibilityIdentifier("sidebar.messages.unread_badge")
         }
     }
 }

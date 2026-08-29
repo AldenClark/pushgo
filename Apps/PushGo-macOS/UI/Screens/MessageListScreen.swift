@@ -143,7 +143,7 @@ struct MessageListScreen: View {
                             .entityListRowTapTarget()
                     }
                     .buttonStyle(.plain)
-                    .accessibilityIdentifier("message.row.\(message.id.uuidString)")
+                    .accessibilityIdentifier("message.row.\(message.id.uuidString.lowercased())")
                     .modifier(messageAccessibilityActions(for: message))
                     .id(message.id)
                     .listRowInsets(Layout.rowInsets)
@@ -191,7 +191,7 @@ struct MessageListScreen: View {
                                     .entityListRowTapTarget()
                             }
                             .buttonStyle(.plain)
-                            .accessibilityIdentifier("message.row.\(message.id.uuidString)")
+                            .accessibilityIdentifier("message.row.\(message.id.uuidString.lowercased())")
                             .modifier(messageAccessibilityActions(for: message))
                             .id(message.id)
                             .listRowInsets(Layout.rowInsets)

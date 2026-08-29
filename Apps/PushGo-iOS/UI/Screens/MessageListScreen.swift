@@ -517,7 +517,7 @@ struct MessageListScreen: View {
             markReadAction(for: message)
             deleteAction(for: message)
         }
-        .accessibilityIdentifier("message.row.\(message.id.uuidString)")
+        .accessibilityIdentifier("message.row.\(message.id.uuidString.lowercased())")
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text(PushGoMessageSummarySystemBridge.summary(for: message).accessibilityLabel))
         .accessibilityValue(Text(PushGoMessageSummarySystemBridge.summary(for: message).accessibilityValue ?? ""))
