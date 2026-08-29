@@ -1092,6 +1092,21 @@ final class PushGo_macOSUITests: XCTestCase {
         openSidebarTab("things", in: context.app)
         let thingRow = element(in: context.app, identifier: "thing.row.quality-thing-rich")
         XCTAssertTrue(thingRow.waitForExistence(timeout: 8))
+        let distractorRow = element(
+            in: context.app,
+            identifier: "thing.row.quality-thing-distractor"
+        )
+        XCTAssertTrue(distractorRow.waitForExistence(timeout: 8))
+        let searchField = context.app.searchFields.firstMatch
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
+        searchField.click()
+        searchField.typeText("thing-rich")
+        searchField.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(thingRow.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            distractorRow.waitForNonExistence(timeout: 5),
+            "Thing search must keep the exact target while excluding a real distractor."
+        )
         XCTAssertTrue(thingRow.label.contains("P2 Thing Rich"))
         thingRow.click()
         assertVisibleScreenThroughUI("screen.things.detail", in: context.app, timeout: 8)
@@ -1168,6 +1183,11 @@ final class PushGo_macOSUITests: XCTestCase {
         openSidebarTab("things", in: relaunched.app)
         let persistedThing = element(in: relaunched.app, identifier: "thing.row.quality-thing-rich")
         XCTAssertTrue(persistedThing.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            element(in: relaunched.app, identifier: "thing.row.quality-thing-distractor")
+                .waitForExistence(timeout: 8),
+            "Relaunch must restore the complete canonical Thing set after the transient search."
+        )
         persistedThing.click()
         let persistedSummary = element(in: relaunched.app, identifier: "field.thing.detail.summary")
         XCTAssertTrue(persistedSummary.waitForExistence(timeout: 5))

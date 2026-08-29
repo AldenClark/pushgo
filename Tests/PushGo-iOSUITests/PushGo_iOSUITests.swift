@@ -1788,6 +1788,21 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(thingsTab.waitForExistence(timeout: 8))
         thingsTab.tap()
         let thingRow = element(in: context.app, identifier: "thing.row.quality-thing-rich")
+        let distractorRow = element(
+            in: context.app,
+            identifier: "thing.row.quality-thing-distractor"
+        )
+        XCTAssertTrue(thingRow.waitForExistence(timeout: 8))
+        XCTAssertTrue(distractorRow.waitForExistence(timeout: 8))
+        let searchField = runtimeQualitySearchField(in: context.app)
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8))
+        searchField.tap()
+        searchField.typeText("thing-rich")
+        XCTAssertTrue(thingRow.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            distractorRow.waitForNonExistence(timeout: 5),
+            "Thing search must keep the exact target while excluding a real distractor."
+        )
         let thingRowActionable = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == true AND hittable == true"),
             object: thingRow
@@ -1863,6 +1878,11 @@ final class PushGo_iOSUITests: XCTestCase {
             message: "Things must remain reachable after relaunch"
         )
         let relaunchedThing = element(in: context.app, identifier: "thing.row.quality-thing-rich")
+        XCTAssertTrue(
+            element(in: context.app, identifier: "thing.row.quality-thing-distractor")
+                .waitForExistence(timeout: 8),
+            "Relaunch must restore the complete canonical Thing set after the transient search."
+        )
         tapWhenHittable(relaunchedThing, timeout: 8, message: "The same Thing must survive relaunch")
         let relatedEvent = element(
             in: context.app,

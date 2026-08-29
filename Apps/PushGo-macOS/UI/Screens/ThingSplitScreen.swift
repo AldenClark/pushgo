@@ -13,7 +13,6 @@ struct ThingSplitScreen: View {
     @State private var selectedChannelIDs: Set<String> = []
     @State private var selectedTags: Set<String> = []
     @State private var hydrationRequestedThingIDs: Set<String> = []
-    @State private var searchFieldText: String = ""
     @State private var isFilterPopoverPresented = false
     private let fixedListWidth: CGFloat = 300
 
@@ -41,14 +40,7 @@ struct ThingSplitScreen: View {
         }
         .id(pendingLocalDeletionController.effectiveScope)
         .onAppear {
-            if searchFieldText != searchQuery {
-                searchFieldText = searchQuery
-            }
             syncSelection()
-        }
-        .onChange(of: searchFieldText) { _, newValue in
-            guard searchQuery != newValue else { return }
-            searchQuery = newValue
         }
         .onChange(of: viewModel.things) { _, _ in
             syncSelection()
@@ -104,7 +96,7 @@ struct ThingSplitScreen: View {
                 await handleProviderIngressPullRefresh()
             }
             .searchable(
-                text: $searchFieldText,
+                text: $searchQuery,
                 placement: .toolbar,
                 prompt: Text(localizationManager.localized("search_objects"))
             )
@@ -141,7 +133,6 @@ struct ThingSplitScreen: View {
 #endif
 
     private var filteredThings: [ThingProjection] {
-        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let filtered = viewModel.things.filter { thing in
             guard !isPendingLocalDeletion(thing) else { return false }
             if !selectedChannelIDs.isEmpty {
@@ -156,28 +147,10 @@ struct ThingSplitScreen: View {
                     return false
                 }
             }
-            guard !query.isEmpty else { return true }
-            let externalValues = thing.externalIDs
-                .sorted { $0.key.localizedStandardCompare($1.key) == .orderedAscending }
-                .map { "\($0.key) \($0.value)" }
-                .joined(separator: " ")
-            return [
-                thing.title,
-                thing.summary ?? "",
-                thing.tags.joined(separator: " "),
-                thing.id,
-                normalizedThingState(thing.state),
-                thing.channelId ?? "",
-                thing.locationType ?? "",
-                thing.locationValue ?? "",
-                externalValues,
-                thing.attrsJSON ?? "",
-                thing.relatedMessages.map(\.title).joined(separator: " "),
-                thing.relatedMessages.compactMap(\.summary).joined(separator: " "),
-            ]
-            .joined(separator: " ")
-            .lowercased()
-            .contains(query)
+            return SearchQuerySemantics.matchesEntityFields(
+                searchableFields(for: thing),
+                rawQuery: searchQuery
+            )
         }
         return filtered.sorted { lhs, rhs in
             let lhsRank = stateSortPriority(lhs.state)
@@ -200,6 +173,32 @@ struct ThingSplitScreen: View {
             .sorted { lhs, rhs in
                 lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             }
+    }
+
+    private func searchableFields(for thing: ThingProjection) -> [String] {
+        let externalValues = thing.externalIDs
+            .sorted { $0.key.localizedStandardCompare($1.key) == .orderedAscending }
+            .map { "\($0.key) \($0.value)" }
+            .joined(separator: " ")
+        let metadataValues = thing.metadata
+            .sorted { $0.key.localizedStandardCompare($1.key) == .orderedAscending }
+            .map { "\($0.key) \($0.value)" }
+            .joined(separator: " ")
+        return [
+            thing.title,
+            thing.summary ?? "",
+            thing.tags.joined(separator: " "),
+            thing.id,
+            normalizedThingState(thing.state),
+            thing.channelId ?? "",
+            thing.locationType ?? "",
+            thing.locationValue ?? "",
+            externalValues,
+            thing.attrsJSON ?? "",
+            metadataValues,
+            thing.relatedMessages.map(\.title).joined(separator: " "),
+            thing.relatedMessages.compactMap(\.summary).joined(separator: " "),
+        ]
     }
 
     private func stateSortPriority(_ state: String?) -> Int {
@@ -293,7 +292,6 @@ struct ThingSplitScreen: View {
         {
             if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 searchQuery = ""
-                searchFieldText = ""
                 return
             }
             if !selectedChannelIDs.isEmpty {

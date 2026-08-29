@@ -3625,6 +3625,7 @@ final class PushGoAutomationRuntime {
             messages = [
                 qualityThingInitialFixture(),
                 qualityThingFixture(),
+                qualityThingDistractorFixture(),
                 qualityThingRelatedEventFixture(),
                 qualityThingRelatedMessageFixture(),
             ]
@@ -3920,6 +3921,34 @@ final class PushGoAutomationRuntime {
                 "delivery_id": "quality-delivery-thing-initial",
                 "observed_at": "2026-01-15T08:00:00Z",
                 "state": "active",
+                "projection_destination": "things",
+            ],
+            "status": "normal",
+        ]
+    }
+
+    private func qualityThingDistractorFixture() -> [String: Any] {
+        [
+            "id": "00000000-0000-0000-0000-00000000a004",
+            "message_id": "quality-thing-distractor-message",
+            "title": "Quality Pump Beta",
+            "body": "Secondary fixture that must be excluded by the target search.",
+            "channel_id": "quality-secondary",
+            "is_read": false,
+            "received_at": "2026-01-15T08:01:30Z",
+            "raw_payload": [
+                "entity_type": "thing",
+                "entity_id": "quality-thing-distractor",
+                "thing_id": "quality-thing-distractor",
+                "title": "Quality Pump Beta",
+                "description": "Secondary fixture that must be excluded by the target search.",
+                "thing_title": "Quality Pump Beta",
+                "thing_summary": "Secondary fixture that must be excluded by the target search.",
+                "op_id": "quality-op-thing-distractor",
+                "delivery_id": "quality-delivery-thing-distractor",
+                "observed_at": "2026-01-15T08:01:30Z",
+                "state": "active",
+                "attrs": "{\"region\":\"eu-west\",\"owner\":\"operations\"}",
                 "projection_destination": "things",
             ],
             "status": "normal",

@@ -243,7 +243,6 @@ struct ThingListScreen: View {
     }
 
     private var filteredThings: [ThingProjection] {
-        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let matched = viewModel.things.filter { thing in
             guard !isPendingLocalDeletion(thing) else { return false }
             let channelMatched = selectedChannelIDs.isEmpty || selectedChannelIDs.contains(normalizedChannel(thing.channelId) ?? "")
@@ -252,8 +251,10 @@ struct ThingListScreen: View {
                 let normalizedThingTags = Set(thing.tags.map(normalizedTag))
                 guard selectedTags.contains(where: normalizedThingTags.contains) else { return false }
             }
-            guard !query.isEmpty else { return true }
-            return searchableText(for: thing).contains(query)
+            return SearchQuerySemantics.matchesEntityFields(
+                searchableFields(for: thing),
+                rawQuery: searchQuery
+            )
         }
         return matched.sorted { lhs, rhs in
             let lhsRank = thingSortPriority(lhs)
@@ -295,8 +296,12 @@ struct ThingListScreen: View {
         environment.updateThingListPosition(isAtTop: isAtTop)
     }
 
-    private func searchableText(for thing: ThingProjection) -> String {
+    private func searchableFields(for thing: ThingProjection) -> [String] {
         let externalValues = thing.externalIDs
+            .sorted { $0.key.localizedStandardCompare($1.key) == .orderedAscending }
+            .map { "\($0.key) \($0.value)" }
+            .joined(separator: " ")
+        let metadataValues = thing.metadata
             .sorted { $0.key.localizedStandardCompare($1.key) == .orderedAscending }
             .map { "\($0.key) \($0.value)" }
             .joined(separator: " ")
@@ -311,11 +316,10 @@ struct ThingListScreen: View {
             thing.locationValue ?? "",
             externalValues,
             thing.attrsJSON ?? "",
+            metadataValues,
             thing.relatedMessages.map(\.title).joined(separator: " "),
             thing.relatedMessages.compactMap(\.summary).joined(separator: " "),
         ]
-        .joined(separator: " ")
-        .lowercased()
     }
 
     private func handlePullToRefresh() async {
