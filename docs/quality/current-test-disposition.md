@@ -89,7 +89,7 @@
 - `testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen`
 - `testEventClosePersistsAndOngoingFilterReflectsRealProjection`
 - `testImportedThingFixtureCanOpenThingDetail`
-- `testChannelCreateRenameAndBothUnsubscribeOutcomesPersist`
+- `testChannelCreateRenameAndBothUnsubscribeOutcomesPersist`（同一次启动先经真实 Sheet 订阅既有频道，并要求准确行和 relaunch 保留，再继续创建、改名及两类退订；复制反馈由独立 macOS 旅程覆盖，不在该生命周期用例重复等待瞬时 toast）
 - `testChannelRemoteRejectionStaysInSheetAndRetryPersists`
 - `testChannelCreateLocalFailureCompensatesRemoteBeforeRetry`
 - `testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch`

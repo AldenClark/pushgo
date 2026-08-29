@@ -11,6 +11,109 @@ import AppKit
 
 #if DEBUG && !os(watchOS)
 @MainActor
+final class QualityChannelAutomationRoundTrip: ChannelMutationRoundTrip, ChannelSubscriptionSyncRoundTrip {
+    private let scenario: PushGoQualityChannelMutationScenario
+    private var subscribeAttempts = 0
+    private var activeCreatedChannelIDs = Set<String>()
+
+    init(scenario: PushGoQualityChannelMutationScenario) {
+        self.scenario = scenario
+    }
+
+    func subscribe(
+        channelId: String?,
+        channelName: String?,
+        credential: String
+    ) async throws -> ChannelSubscriptionService.SubscribePayload {
+        guard !credential.isEmpty else {
+            throw AppError.typedLocal(
+                code: "quality_channel_credential_required",
+                category: .validation,
+                message: "A channel credential is required."
+            )
+        }
+        subscribeAttempts += 1
+        if scenario == .rejectOnceThenAccepted, subscribeAttempts == 1 {
+            throw AppError.typedLocal(
+                code: "password_mismatch",
+                category: .conflict,
+                message: "Channel password is incorrect. Check the password and retry."
+            )
+        }
+        let resolvedID = channelId ?? "01H00000000000000000000003"
+        if scenario == .requireCreateCompensation,
+           channelId == nil,
+           activeCreatedChannelIDs.contains(resolvedID)
+        {
+            throw AppError.typedLocal(
+                code: "channel_compensation_missing",
+                category: .conflict,
+                message: "The previous channel creation was not compensated."
+            )
+        }
+        if channelId == nil {
+            activeCreatedChannelIDs.insert(resolvedID)
+        }
+        let resolvedName = channelName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ChannelSubscriptionService.SubscribePayload(
+            channelId: resolvedID,
+            channelName: resolvedName.flatMap { $0.isEmpty ? nil : $0 } ?? resolvedID,
+            created: channelId == nil,
+            subscribed: true
+        )
+    }
+
+    func rename(
+        channelId: String,
+        channelName: String,
+        credential: String
+    ) async throws -> ChannelSubscriptionService.RenamePayload {
+        guard !credential.isEmpty else {
+            throw AppError.typedLocal(
+                code: "quality_channel_credential_required",
+                category: .validation,
+                message: "A channel credential is required."
+            )
+        }
+        return ChannelSubscriptionService.RenamePayload(
+            channelId: channelId,
+            channelName: channelName
+        )
+    }
+
+    func unsubscribe(channelId: String) async throws {
+        guard !channelId.isEmpty else {
+            throw AppError.typedLocal(
+                code: "quality_channel_id_required",
+                category: .validation,
+                message: "A channel identifier is required."
+            )
+        }
+        activeCreatedChannelIDs.remove(channelId)
+    }
+
+    func sync(
+        channels: [ChannelSubscriptionService.SyncItem]
+    ) async throws -> ChannelSubscriptionService.SyncPayload {
+        let results = channels.map { item in
+            ChannelSubscriptionService.SyncResult(
+                channelId: item.channelId,
+                channelName: nil,
+                subscribed: true,
+                error: nil,
+                errorCode: nil,
+                problem: nil
+            )
+        }
+        return ChannelSubscriptionService.SyncPayload(
+            success: results.count,
+            failed: 0,
+            channels: results
+        )
+    }
+}
+
+@MainActor
 private final class PushGoAutomationPerformanceMonitor: NSObject {
     static let shared = PushGoAutomationPerformanceMonitor()
 

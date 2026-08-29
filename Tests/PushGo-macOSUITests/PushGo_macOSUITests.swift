@@ -447,7 +447,11 @@ final class PushGo_macOSUITests: XCTestCase {
     @MainActor
     func testUnreadBadgeKeepsMessagesSidebarTitleReadableAndNavigable() {
         let sessionID = "macos-sidebar-badge-\(UUID().uuidString.lowercased())"
-        let context = configuredQualityApp(sessionID: sessionID, fixture: "channels.standard")
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            channelMutationScenario: "accepted"
+        )
         context.app.launchArguments += [
             "-AppleLanguages", "(zh-Hans)",
             "-AppleLocale", "zh_CN",
@@ -525,10 +529,38 @@ final class PushGo_macOSUITests: XCTestCase {
             "Reading the final unread message must remove the sidebar badge."
         )
 
+        openSidebarTab("channels", in: context.app)
+        element(in: context.app, identifier: "action.channels.add").click()
+        let entryMode = element(in: context.app, identifier: "select.channels.entry.mode")
+        XCTAssertTrue(entryMode.waitForExistence(timeout: 8))
+        let subscribeMode = element(in: context.app, identifier: "mode.channels.entry.subscribe")
+        XCTAssertTrue(subscribeMode.waitForExistence(timeout: 5))
+        subscribeMode.click()
+        let subscribedChannelID = "01H00000000000000000000004"
+        let subscribeID = element(in: context.app, identifier: "field.channels.subscribe.id")
+        let subscribePassword = element(in: context.app, identifier: "field.channels.subscribe.password")
+        XCTAssertTrue(subscribeID.waitForExistence(timeout: 5))
+        subscribeID.click()
+        subscribeID.typeText(subscribedChannelID)
+        XCTAssertTrue(subscribePassword.waitForExistence(timeout: 5))
+        replaceSecureText(in: subscribePassword, with: "qualityx")
+        let subscribeSubmit = element(
+            in: context.app,
+            identifier: "action.channels.entry.submit"
+        )
+        XCTAssertTrue(subscribeSubmit.waitForExistence(timeout: 5))
+        subscribeSubmit.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "channel.row.\(subscribedChannelID)")
+                .waitForExistence(timeout: 8),
+            "An accepted existing-channel subscription must enter the canonical Channel list"
+        )
+
         context.app.terminate()
         let relaunched = configuredQualityApp(
             sessionID: sessionID,
             fixture: "channels.standard",
+            channelMutationScenario: "accepted",
             allowCrossAppDataAccess: true
         )
         relaunched.app.launchArguments += [
@@ -542,6 +574,11 @@ final class PushGo_macOSUITests: XCTestCase {
             "The cleared sidebar badge must not return after process relaunch."
         )
         openSidebarTab("channels", in: relaunched.app)
+        XCTAssertTrue(
+            element(in: relaunched.app, identifier: "channel.row.\(subscribedChannelID)")
+                .waitForExistence(timeout: 8),
+            "The existing-channel subscription must survive process relaunch"
+        )
 
         let expectedChannelID = "01H00000000000000000000001"
         let row = element(in: relaunched.app, identifier: "channel.row.\(expectedChannelID)")

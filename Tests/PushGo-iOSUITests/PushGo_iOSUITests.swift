@@ -1912,23 +1912,38 @@ final class PushGo_iOSUITests: XCTestCase {
             timeout: 8,
             message: "Channels must be reachable"
         )
-        let expectedCopiedChannelID = "01H00000000000000000000001"
-        tapWhenHittable(
-            element(in: context.app, identifier: "channel.row.\(expectedCopiedChannelID)"),
-            timeout: 8,
-            message: "A visible Channel row must copy its exact ID"
-        )
-        assertElementExists("feedback.toast.success", in: context.app, timeout: 2)
-        XCTAssertTrue(
-            context.app.staticTexts.matching(
-                NSPredicate(format: "label CONTAINS %@", expectedCopiedChannelID)
-            ).firstMatch.waitForExistence(timeout: 2),
-            "The verified pasteboard success feedback did not identify the exact copied Channel ID"
-        )
+        let subscribedChannelID = "01H00000000000000000000004"
         tapWhenHittable(
             element(in: context.app, identifier: "action.channels.add"),
             timeout: 8,
             message: "Add Channel must be actionable"
+        )
+        let entryMode = element(in: context.app, identifier: "select.channels.entry.mode")
+        XCTAssertTrue(entryMode.waitForExistence(timeout: 8))
+        tapWhenHittable(entryMode.buttons["Subscribe Channel"], timeout: 5)
+        replaceText(
+            in: element(in: context.app, identifier: "field.channels.subscribe.id"),
+            with: subscribedChannelID
+        )
+        enterSecureText(
+            in: element(in: context.app, identifier: "field.channels.subscribe.password"),
+            with: "qualityx"
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channels.entry.submit"),
+            timeout: 8,
+            message: "Subscribe Channel must submit through the real form"
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "channel.row.\(subscribedChannelID)")
+                .waitForExistence(timeout: 8),
+            "An accepted existing-channel subscription must enter the canonical Channel list"
+        )
+
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channels.add"),
+            timeout: 8,
+            message: "Add Channel must remain usable after subscribing"
         )
         let createName = element(in: context.app, identifier: "field.channels.create.name")
         let createCredential = element(in: context.app, identifier: "field.channels.create.password")
@@ -1983,6 +1998,11 @@ final class PushGo_iOSUITests: XCTestCase {
         assertQualityRuntimeReady(in: context.app, timeout: 15)
         tapWhenHittable(channelsTab(in: context.app), timeout: 8)
         XCTAssertTrue(context.app.staticTexts["Quality Renamed Channel"].waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            element(in: context.app, identifier: "channel.row.\(subscribedChannelID)")
+                .waitForExistence(timeout: 8),
+            "The existing-channel subscription must survive process relaunch"
+        )
 
         let keepRow = element(
             in: context.app,

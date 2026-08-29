@@ -237,6 +237,7 @@ final class AppEnvironment {
         pushRegistrationService: pushRegistrationService,
         channelSubscriptionService: channelSubscriptionService,
         providerRouteController: providerRouteController,
+        subscriptionSyncRoundTrip: Self.makeQualityChannelSyncRoundTrip(),
         localizationManager: localizationManager,
         serverConfigProvider: { [weak self] in
             self?.serverConfig
@@ -362,7 +363,20 @@ final class AppEnvironment {
         else {
             return nil
         }
-        return QualityChannelMutationRoundTrip(scenario: scenario)
+        return QualityChannelAutomationRoundTrip(scenario: scenario)
+#else
+        return nil
+#endif
+    }
+
+    private static func makeQualityChannelSyncRoundTrip() -> (any ChannelSubscriptionSyncRoundTrip)? {
+#if DEBUG
+        guard let scenario = PushGoAutomationContext.qualitySession?.channelMutationScenario,
+              scenario != .none
+        else {
+            return nil
+        }
+        return QualityChannelAutomationRoundTrip(scenario: scenario)
 #else
         return nil
 #endif
@@ -2291,88 +2305,6 @@ final class AppEnvironment {
         return raw.addingPercentEncoding(withAllowedCharacters: allowed) ?? raw
     }
 
-}
-
-private final class QualityChannelMutationRoundTrip: ChannelMutationRoundTrip {
-    private let scenario: PushGoQualityChannelMutationScenario
-    private var subscribeAttempts = 0
-    private var activeCreatedChannelIDs = Set<String>()
-
-    init(scenario: PushGoQualityChannelMutationScenario) {
-        self.scenario = scenario
-    }
-
-    func subscribe(
-        channelId: String?,
-        channelName: String?,
-        credential: String
-    ) async throws -> ChannelSubscriptionService.SubscribePayload {
-        guard !credential.isEmpty else {
-            throw AppError.typedLocal(
-                code: "quality_channel_credential_required",
-                category: .validation,
-                message: "A channel credential is required."
-            )
-        }
-        subscribeAttempts += 1
-        if scenario == .rejectOnceThenAccepted, subscribeAttempts == 1 {
-            throw AppError.typedLocal(
-                code: "password_mismatch",
-                category: .conflict,
-                message: "Channel password is incorrect. Check the password and retry."
-            )
-        }
-        let resolvedID = channelId ?? "01H00000000000000000000003"
-        if scenario == .requireCreateCompensation,
-           channelId == nil,
-           activeCreatedChannelIDs.contains(resolvedID)
-        {
-            throw AppError.typedLocal(
-                code: "channel_compensation_missing",
-                category: .conflict,
-                message: "The previous channel creation was not compensated."
-            )
-        }
-        if channelId == nil {
-            activeCreatedChannelIDs.insert(resolvedID)
-        }
-        let resolvedName = channelName?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return ChannelSubscriptionService.SubscribePayload(
-            channelId: resolvedID,
-            channelName: resolvedName.flatMap { $0.isEmpty ? nil : $0 } ?? resolvedID,
-            created: channelId == nil,
-            subscribed: true
-        )
-    }
-
-    func rename(
-        channelId: String,
-        channelName: String,
-        credential: String
-    ) async throws -> ChannelSubscriptionService.RenamePayload {
-        guard !credential.isEmpty else {
-            throw AppError.typedLocal(
-                code: "quality_channel_credential_required",
-                category: .validation,
-                message: "A channel credential is required."
-            )
-        }
-        return ChannelSubscriptionService.RenamePayload(
-            channelId: channelId,
-            channelName: channelName
-        )
-    }
-
-    func unsubscribe(channelId: String) async throws {
-        guard !channelId.isEmpty else {
-            throw AppError.typedLocal(
-                code: "quality_channel_id_required",
-                category: .validation,
-                message: "A channel identifier is required."
-            )
-        }
-        activeCreatedChannelIDs.remove(channelId)
-    }
 }
 
 private final class NetworkPermissionChecker {

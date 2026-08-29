@@ -2,6 +2,13 @@ import Foundation
 import Observation
 
 @MainActor
+protocol ChannelSubscriptionSyncRoundTrip {
+    func sync(
+        channels: [ChannelSubscriptionService.SyncItem]
+    ) async throws -> ChannelSubscriptionService.SyncPayload
+}
+
+@MainActor
 @Observable
 final class ChannelSyncController {
     typealias ServerConfigProvider = @MainActor () -> ServerConfig?
@@ -14,6 +21,7 @@ final class ChannelSyncController {
     private let pushRegistrationService: PushRegistrationService
     private let channelSubscriptionService: ChannelSubscriptionService
     private let providerRouteController: ProviderRouteController
+    private let subscriptionSyncRoundTrip: (any ChannelSubscriptionSyncRoundTrip)?
     private let localizationManager: LocalizationManager
     @ObservationIgnored private let serverConfigProvider: ServerConfigProvider
     @ObservationIgnored private let requestWatchStandaloneProvisioningSync: WatchProvisioningRequester
@@ -35,6 +43,7 @@ final class ChannelSyncController {
         pushRegistrationService: PushRegistrationService,
         channelSubscriptionService: ChannelSubscriptionService,
         providerRouteController: ProviderRouteController,
+        subscriptionSyncRoundTrip: (any ChannelSubscriptionSyncRoundTrip)? = nil,
         localizationManager: LocalizationManager,
         serverConfigProvider: @escaping ServerConfigProvider,
         requestWatchStandaloneProvisioningSync: @escaping WatchProvisioningRequester,
@@ -47,6 +56,7 @@ final class ChannelSyncController {
         self.pushRegistrationService = pushRegistrationService
         self.channelSubscriptionService = channelSubscriptionService
         self.providerRouteController = providerRouteController
+        self.subscriptionSyncRoundTrip = subscriptionSyncRoundTrip
         self.localizationManager = localizationManager
         self.serverConfigProvider = serverConfigProvider
         self.requestWatchStandaloneProvisioningSync = requestWatchStandaloneProvisioningSync
@@ -284,31 +294,45 @@ final class ChannelSyncController {
         providerToken: String
     ) async throws {
         let gatewayKey = config.gatewayKey
-        let deviceKey = try await providerRouteController.ensureProviderRoute(
-            config: config,
-            providerToken: providerToken
-        )
+        let deviceKey = if subscriptionSyncRoundTrip == nil {
+            try await providerRouteController.ensureProviderRoute(
+                config: config,
+                providerToken: providerToken
+            )
+        } else {
+            ""
+        }
         let channels = credentials.map {
             ChannelSubscriptionService.SyncItem(channelId: $0.channelId, password: $0.password)
         }
 
-        let payload = try await channelSubscriptionService.sync(
-            baseURL: config.baseURL,
-            token: config.token,
-            deviceKey: deviceKey,
-            channels: channels
-        )
+        let payload: ChannelSubscriptionService.SyncPayload
+        if let subscriptionSyncRoundTrip {
+            payload = try await subscriptionSyncRoundTrip.sync(channels: channels)
+        } else {
+            payload = try await channelSubscriptionService.sync(
+                baseURL: config.baseURL,
+                token: config.token,
+                deviceKey: deviceKey,
+                channels: channels
+            )
+        }
 
         let syncedAt = Date()
         var staleChannels: [String] = []
         var passwordMismatchChannels: [String] = []
         for result in payload.channels {
             if result.subscribed {
-                try? await dataStore.updateChannelDisplayName(
-                    gateway: gatewayKey,
-                    channelId: result.channelId,
-                    displayName: result.channelName ?? result.channelId
-                )
+                if let channelName = result.channelName?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                   !channelName.isEmpty
+                {
+                    try? await dataStore.updateChannelDisplayName(
+                        gateway: gatewayKey,
+                        channelId: result.channelId,
+                        displayName: channelName
+                    )
+                }
                 try? await dataStore.updateChannelLastSynced(
                     gateway: gatewayKey,
                     channelId: result.channelId,

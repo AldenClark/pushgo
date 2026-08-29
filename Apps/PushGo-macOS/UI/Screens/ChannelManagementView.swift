@@ -357,8 +357,10 @@ struct ChannelManagementView: View {
             Picker("", selection: $channelEntryMode) {
                 Text(localizationManager.localized("create_channel"))
                     .tag(ChannelEntryMode.create)
+                    .accessibilityIdentifier("mode.channels.entry.create")
                 Text(localizationManager.localized("subscribe_channel"))
                     .tag(ChannelEntryMode.subscribe)
+                    .accessibilityIdentifier("mode.channels.entry.subscribe")
             }
             .pickerStyle(.segmented)
             .transientPresentationSelectionControl()

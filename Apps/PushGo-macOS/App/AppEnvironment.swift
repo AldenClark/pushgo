@@ -129,6 +129,7 @@ final class AppEnvironment {
         pushRegistrationService: pushRegistrationService,
         channelSubscriptionService: channelSubscriptionService,
         providerRouteController: providerRouteController,
+        subscriptionSyncRoundTrip: Self.makeQualityChannelSyncRoundTrip(),
         localizationManager: localizationManager,
         serverConfigProvider: { [weak self] in
             self?.serverConfig
@@ -156,7 +157,8 @@ final class AppEnvironment {
         },
         messageStateCoordinatorProvider: { [weak self] in
             self?.messageStateCoordinator
-        }
+        },
+        channelMutationRoundTrip: Self.makeQualityChannelMutationRoundTrip()
     )
     @ObservationIgnored private(set) lazy var pendingLocalDeletionController = PendingLocalDeletionController(
         dataStore: dataStore,
@@ -240,6 +242,32 @@ final class AppEnvironment {
             }
         }
         registerDefaultNotificationCategories()
+    }
+
+    private static func makeQualityChannelMutationRoundTrip() -> (any ChannelMutationRoundTrip)? {
+#if DEBUG
+        guard let scenario = PushGoAutomationContext.qualitySession?.channelMutationScenario,
+              scenario != .none
+        else {
+            return nil
+        }
+        return QualityChannelAutomationRoundTrip(scenario: scenario)
+#else
+        return nil
+#endif
+    }
+
+    private static func makeQualityChannelSyncRoundTrip() -> (any ChannelSubscriptionSyncRoundTrip)? {
+#if DEBUG
+        guard let scenario = PushGoAutomationContext.qualitySession?.channelMutationScenario,
+              scenario != .none
+        else {
+            return nil
+        }
+        return QualityChannelAutomationRoundTrip(scenario: scenario)
+#else
+        return nil
+#endif
     }
 
     private func makeNotificationIngressController() -> NotificationIngressController {
