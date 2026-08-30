@@ -265,6 +265,8 @@ run_performance() {
     QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_macos_ui_tests.sh"
   claims+=("macOS prepared 1k Store cold-launch-to-accurate-content local metrics and purpose oracle")
   QUALITY_REUSE_BUILT_TESTS=1 \
+    "$repo_root/scripts/run_macos_performance_negative_control.sh"
+  QUALITY_REUSE_BUILT_TESTS=1 \
     "$repo_root/scripts/run_ios_performance_negative_control.sh"
   QUALITY_REUSE_BUILT_TESTS=1 \
     "$repo_root/scripts/run_ios_data_field_negative_control.sh"

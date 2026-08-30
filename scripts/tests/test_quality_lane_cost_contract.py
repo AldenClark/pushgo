@@ -135,7 +135,7 @@ class QualityLaneCostContractTests(unittest.TestCase):
     def test_macos_performance_is_weekly_release_only_and_checks_accurate_content(self) -> None:
         orchestrator = (REPO / "scripts/quality_test.sh").read_text()
         macos_runner = (REPO / "scripts/run_macos_ui_tests.sh").read_text()
-        macos_source = (REPO / "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift").read_text()
+        macos_source = (REPO / "Tests/PushGo-macOSUITests/PushGo_macOSPerformanceTests.swift").read_text()
 
         performance_scope = (
             "PushGo-macOSUITests/PushGo_macOSUITests/"
@@ -163,6 +163,57 @@ class QualityLaneCostContractTests(unittest.TestCase):
         self.assertIn('staticTexts["Deterministic app-owned performance fixture row 999."]', method)
         self.assertIn("XCTAssertLessThanOrEqual", method)
         self.assertNotIn("sleep(", method)
+
+    def test_macos_slow_load_negative_control_reuses_positive_build(self) -> None:
+        runner = (REPO / "scripts/quality_test.sh").read_text()
+        ui_runner = (REPO / "scripts/run_macos_ui_tests.sh").read_text()
+        control = (REPO / "scripts/run_macos_performance_negative_control.sh").read_text()
+        performance = (
+            REPO / "Tests/PushGo-macOSUITests/PushGo_macOSPerformanceTests.swift"
+        ).read_text()
+
+        performance_function = runner.split("run_performance() {", 1)[1].split("\n}", 1)[0]
+        self.assertEqual(
+            1,
+            performance_function.count("run_macos_performance_negative_control.sh"),
+        )
+        self.assertLess(
+            performance_function.index('claims+=("macOS prepared 1k Store'),
+            performance_function.index("run_macos_performance_negative_control.sh"),
+        )
+        self.assertIn("QUALITY_REUSE_BUILT_TESTS=1", performance_function)
+        self.assertIn("func testSlowLargeMessageLoadTripsAccurateContentBudget()", performance)
+        self.assertIn("messageLoadDelayMilliseconds: 8_000", performance)
+        self.assertIn("XCTExpectedFailure.Options()", performance)
+        self.assertIn("expectationOptions.isStrict = true", performance)
+        self.assertIn("expectationOptions.issueMatcher", performance)
+        self.assertIn("budget=8000ms", performance)
+        self.assertIn("QUALITY_REUSE_BUILT_TESTS", ui_runner)
+        self.assertIn("QUALITY_ALLOW_EXPECTED_FAILURES", ui_runner)
+        self.assertIn("macos_reusable_built_tests_missing", ui_runner)
+        sensitivity_scope = (
+            "PushGo-macOSUITests/PushGo_macOSUITests/"
+            "testSlowLargeMessageLoadTripsAccurateContentBudget"
+        )
+        self.assertEqual(
+            [sensitivity_scope],
+            self._array_scopes(ui_runner, "performance_sensitivity_scopes"),
+        )
+        self.assertIn(
+            'macos_expected_failures_require_exact_sensitivity_scope',
+            ui_runner,
+        )
+        self.assertIn(f'performance_scope="{sensitivity_scope}"', control)
+        self.assertIn("QUALITY_ALLOW_EXPECTED_FAILURES=1", control)
+        self.assertIn('"product_status": "NOT_RUN"', control)
+        self.assertIn('"test_system_status": "PASSED"', control)
+        self.assertIn("launch-to-accurate-content took", control)
+        self.assertIn("xcresulttool get test-results summary", control)
+        self.assertIn('"expectedFailures": 1', control)
+        self.assertIn('"passedTests": 0', control)
+        self.assertIn('"failedTests": 0', control)
+        self.assertIn('"native_result_bundle": result_bundle', control)
+        self.assertNotIn("sleep ", control)
 
     def test_ios_data_field_negative_control_reuses_the_same_positive_build(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()

@@ -48,9 +48,9 @@
     },
     {
       "id": "performance-system",
-      "paths": ["Tests/PushGo-iOSUITests/PushGo_iOSPerformanceTests.swift", "Tests/PushGoAppleCoreTests/MessagePerformanceArchitectureGuardrailTests.swift", "Tests/PushGoAppleCoreTests/RuntimeQualityLargeScaleTests.swift", "scripts/run_ios_physical_performance.sh"],
+      "paths": ["Tests/PushGo-iOSUITests/PushGo_iOSPerformanceTests.swift", "Tests/PushGo-macOSUITests/PushGo_macOSPerformanceTests.swift", "Tests/PushGoAppleCoreTests/MessagePerformanceArchitectureGuardrailTests.swift", "Tests/PushGoAppleCoreTests/RuntimeQualityLargeScaleTests.swift", "scripts/run_ios_physical_performance.sh", "scripts/run_macos_performance_negative_control.sh"],
       "capabilities": ["performance-evidence-trustworthiness"],
-      "minimum_evidence": ["Apple 100k Store/10k Watch correctness and provisional host ceilings", "iOS prepared 1k Store launch-to-accurate-content purpose metric", "fixed physical reference-device evidence when its explicit contract is available"],
+      "minimum_evidence": ["Apple 100k Store/10k Watch correctness and provisional host ceilings", "iOS and macOS prepared 1k Store launch-to-accurate-content purpose metrics and slow-load sensitivity controls", "fixed physical reference-device evidence when its explicit contract is available"],
       "lane": "performance",
       "known_evidence_gaps": ["Simulator and host evidence do not prove physical frame/hitch, APNs, background, or release trace behavior."],
       "escalation_reasons": ["Performance test changes can silently weaken budgets, measured intervals, fixture scale, or accurate-content oracles."]

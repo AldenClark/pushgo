@@ -120,7 +120,10 @@ class QualityImpactPlanTests(unittest.TestCase):
                 self.assertIn("Apple PR representative lane", plan["minimum_evidence"])
 
     def test_macos_positive_and_risk_sets_cover_every_discoverable_journey(self):
-        test_source = (REPO / "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift").read_text()
+        test_source = "\n".join(
+            path.read_text()
+            for path in sorted((REPO / "Tests/PushGo-macOSUITests").glob("*.swift"))
+        )
         runner_source = (REPO / "scripts/run_macos_ui_tests.sh").read_text()
         orchestrator_source = (REPO / "scripts/quality_test.sh").read_text()
         discoverable = set(re.findall(r"^\s+func (test[A-Za-z0-9_]+)\(", test_source, re.MULTILINE))
@@ -129,21 +132,28 @@ class QualityImpactPlanTests(unittest.TestCase):
         system = self._macos_scopes(runner_source, "system_scopes")
         preparation = self._macos_scopes(runner_source, "preparation_scopes")
         performance = self._macos_scopes(runner_source, "performance_scopes")
+        performance_sensitivity = self._macos_scopes(
+            runner_source,
+            "performance_sensitivity_scopes",
+        )
 
-        self.assertEqual(28, len(discoverable))
+        self.assertEqual(29, len(discoverable))
         self.assertEqual(16, len(positive))
         self.assertEqual(9, len(risk))
         self.assertEqual(1, len(system))
         self.assertEqual(1, len(preparation))
         self.assertEqual(1, len(performance))
+        self.assertEqual(1, len(performance_sensitivity))
         self.assertFalse(positive & risk)
-        self.assertFalse((positive | risk) & (system | preparation | performance))
-        self.assertFalse(system & (preparation | performance))
-        self.assertFalse(preparation & performance)
+        special = system | preparation | performance | performance_sensitivity
+        self.assertFalse((positive | risk) & special)
+        self.assertFalse(system & (preparation | performance | performance_sensitivity))
+        self.assertFalse(preparation & (performance | performance_sensitivity))
+        self.assertFalse(performance & performance_sensitivity)
         self.assertEqual(
             discoverable,
-            positive | risk | system | preparation | performance,
-            "Every discoverable macOS journey must belong to the positive, risk, real-system, preparation, or performance set.",
+            positive | risk | special,
+            "Every discoverable macOS journey must belong to the positive, risk, real-system, preparation, performance, or sensitivity set.",
         )
         for deferred_fragment in (
             "Fatal",
@@ -180,9 +190,23 @@ class QualityImpactPlanTests(unittest.TestCase):
         self.assertEqual("performance", plan["recommended_lane"])
         self.assertIn("performance-evidence-trustworthiness", plan["impacted_capabilities"])
         self.assertIn(
-            "iOS prepared 1k Store launch-to-accurate-content purpose metric",
+            "iOS and macOS prepared 1k Store launch-to-accurate-content purpose metrics and slow-load sensitivity controls",
             plan["minimum_evidence"],
         )
+
+    def test_macos_performance_sources_select_performance_lane(self):
+        for path in (
+            "Tests/PushGo-macOSUITests/PushGo_macOSPerformanceTests.swift",
+            "scripts/run_macos_performance_negative_control.sh",
+        ):
+            with self.subTest(path=path):
+                plan = self.plan(path)
+                self.assertEqual("READY", plan["plan_status"])
+                self.assertEqual("performance", plan["recommended_lane"])
+                self.assertIn(
+                    "performance-evidence-trustworthiness",
+                    plan["impacted_capabilities"],
+                )
 
     def test_physical_performance_runner_is_not_ignored(self):
         plan = self.plan("scripts/run_ios_physical_performance.sh")

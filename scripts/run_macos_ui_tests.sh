@@ -10,6 +10,8 @@ derived_data_path="${DERIVED_DATA_PATH:-$repo_root/build/.deriveddata-macos-ui}"
 results_root="${RESULTS_ROOT:-$repo_root/build/quality-results/macos-ui}"
 runner_status_file="${QUALITY_RUNNER_STATUS_FILE:-}"
 runner_issue_file="${QUALITY_RUNNER_ISSUE_FILE:-}"
+reuse_built_tests="${QUALITY_REUSE_BUILT_TESTS:-0}"
+allow_expected_failures="${QUALITY_ALLOW_EXPECTED_FAILURES:-0}"
 problem_reporter_cleaner="$repo_root/scripts/close_macos_problem_reporter.sh"
 test_app_executable="$derived_data_path/Build/Products/Debug/PushGo.app/Contents/MacOS/PushGo"
 test_runner_executable="$derived_data_path/Build/Products/Debug/PushGo-macOSUITests-Runner.app/Contents/MacOS/PushGo-macOSUITests-Runner"
@@ -32,6 +34,16 @@ fi
 if [[ ! "$max_retries" =~ ^[0-9]+$ ]] || (( max_retries != 0 )); then
   echo "status=BLOCKED"
   echo "reason=macos_ui_retries_are_disabled:$max_retries"
+  exit 2
+fi
+if [[ "$reuse_built_tests" != "0" && "$reuse_built_tests" != "1" ]]; then
+  echo "status=BLOCKED"
+  echo "reason=invalid_macos_reuse_built_tests:$reuse_built_tests"
+  exit 2
+fi
+if [[ "$allow_expected_failures" != "0" && "$allow_expected_failures" != "1" ]]; then
+  echo "status=BLOCKED"
+  echo "reason=invalid_macos_allow_expected_failures:$allow_expected_failures"
   exit 2
 fi
 
@@ -85,6 +97,19 @@ preparation_scopes=(
 performance_scopes=(
   "PushGo-macOSUITests/PushGo_macOSUITests/testPreparedLargeMessageStoreColdLaunchReachesAccurateContent"
 )
+
+# Strict expected-failure controls are discoverable but never part of an ordinary
+# product scope. The dedicated wrapper opts in, verifies the exact rejected budget,
+# and records product NOT_RUN / test-system PASSED.
+performance_sensitivity_scopes=(
+  "PushGo-macOSUITests/PushGo_macOSUITests/testSlowLargeMessageLoadTripsAccurateContentBudget"
+)
+
+if [[ "$allow_expected_failures" == "1" && "$test_scopes" != "${performance_sensitivity_scopes[0]}" ]]; then
+  echo "status=BLOCKED"
+  echo "reason=macos_expected_failures_require_exact_sensitivity_scope"
+  exit 2
+fi
 
 close_stale_test_processes() {
   local process_pattern
@@ -181,8 +206,17 @@ if [[ -n "$runner_status_file" ]]; then
   printf 'PASSED\n' > "$runner_status_file"
 fi
 
-echo "==> macOS build-for-testing"
-xcodebuild "${common_args[@]}" build-for-testing
+if [[ "$reuse_built_tests" == "1" ]]; then
+  [[ -x "$test_app_executable" && -x "$test_runner_executable" ]] || {
+    echo "status=BLOCKED"
+    echo "reason=macos_reusable_built_tests_missing"
+    exit 2
+  }
+  echo "==> reuse macOS build-for-testing products"
+else
+  echo "==> macOS build-for-testing"
+  xcodebuild "${common_args[@]}" build-for-testing
+fi
 
 result_bundle="$results_root/run-$(date +%Y%m%d-%H%M%S).xcresult"
 log_file="$(mktemp -t pushgo-macos-ui.XXXXXX.log)"
@@ -206,7 +240,9 @@ if ! kill -0 "$problem_reporter_monitor_pid" >/dev/null 2>&1; then
 fi
 
 if [[ $status -eq 0 ]]; then
-  if ! python3 "$repo_root/scripts/verify_apple_test_execution.py" --result-bundle "$result_bundle"; then
+  verify_execution_args=(--result-bundle "$result_bundle")
+  [[ "$allow_expected_failures" == "0" ]] || verify_execution_args+=(--allow-expected-failures)
+  if ! python3 "$repo_root/scripts/verify_apple_test_execution.py" "${verify_execution_args[@]}"; then
     [[ -z "$runner_status_file" ]] || printf 'FAILED\n' > "$runner_status_file"
     echo "status=FAILED_TEST_SYSTEM"
     echo "reason=selected_macos_ui_scope_executed_zero_tests"
