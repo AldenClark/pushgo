@@ -1,0 +1,145 @@
+{
+  "schema_version": 1,
+  "platforms": {
+    "apple": {
+      "unreferenced_product_identifiers": {
+        "action.channel.unsubscribe.cancel": {
+          "disposition": "DEFERRED",
+          "reason": "Cancellation is residual P1-CHANNELS scope owned by the Channel lifecycle quality owner, due 2026-10-19; the two committed unsubscribe outcomes already hold the higher-value positive evidence."
+        },
+        "action.settings.open_developer_api_docs": {
+          "disposition": "SEMANTICALLY_COVERED_SHARED_ROUTE",
+          "reason": "The full visible documentation-control to localized URL mapping is covered by PushGoDocumentationTests; Getting Started supplies the one real browser handoff per Apple platform, avoiding three duplicate system journeys."
+        },
+        "action.settings.open_e2ee_docs": {
+          "disposition": "SEMANTICALLY_COVERED_SHARED_ROUTE",
+          "reason": "The full visible documentation-control to localized URL mapping is covered by PushGoDocumentationTests; Getting Started supplies the one real browser handoff per Apple platform, avoiding three duplicate system journeys."
+        },
+        "button.settings.watch_receiver_resync": {
+          "disposition": "DEFERRED",
+          "reason": "Real receiver resync is residual P1-APPLE-SETTINGS scope owned by the Apple platform-settings quality owner, due 2026-11-09; a state string is not accepted as closure."
+        },
+        "row.settings.watch_receiver": {
+          "disposition": "DEFERRED",
+          "reason": "Real receiver status and recovery are residual P1-APPLE-SETTINGS scope owned by the Apple platform-settings quality owner, due 2026-11-09."
+        },
+        "screen.receiver.health": {
+          "disposition": "DEFERRED",
+          "reason": "Real Ready, degraded, recovery and transport convergence are residual P1-WATCH scope owned by the watchOS quality owner, due 2026-11-30."
+        },
+        "tab.events": {
+          "disposition": "SEMANTICALLY_COVERED_NON_LITERAL_QUERY",
+          "reason": "The iOS primary-navigation journey and Watch core journey reach Events through real controls and require exact canonical rows and details; neither relies on this identifier as its success Oracle."
+        },
+        "toggle.settings.beta_channel": {
+          "disposition": "DEFERRED",
+          "reason": "Beta selection and its real update candidate effect are residual P1-APPLE-SETTINGS scope owned by the Apple platform-settings quality owner, due 2026-11-09."
+        }
+      },
+      "test_only_identifiers": {
+        "action.channel.01H00000000000000000000001.unsubscribe": {
+          "disposition": "DYNAMIC_PRODUCT_CONTRACT",
+          "reason": "The product identifier is constructed as action.channel.<channelId>.unsubscribe; the test supplies one canonical fixture id and then verifies the correct history endpoint and relaunch result."
+        },
+        "action.channel.01H00000000000000000000002.unsubscribe": {
+          "disposition": "DYNAMIC_PRODUCT_CONTRACT",
+          "reason": "The product identifier is constructed as action.channel.<channelId>.unsubscribe; the second canonical id selects the other history endpoint and is judged by Store and relaunch results."
+        },
+        "action.channel.01H00000000000000000000003.rename": {
+          "disposition": "DYNAMIC_PRODUCT_CONTRACT",
+          "reason": "The product identifier is constructed as action.channel.<channelId>.rename; the test verifies cancel, rejection, accepted rename and relaunch on the exact canonical row."
+        },
+        "action.message.copy_metadata_value.0": {
+          "disposition": "DYNAMIC_PRODUCT_CONTRACT",
+          "reason": "The product identifier appends the rendered metadata index dynamically; the macOS journey verifies the exact system Pasteboard value rather than treating the identifier as success."
+        },
+        "row.event.quality-watch-event-001": {
+          "disposition": "DYNAMIC_PRODUCT_CONTRACT",
+          "reason": "The Watch product constructs row.event.<eventId>; the test fixture id is accepted only after exact row semantics and detail content are observed."
+        },
+        "row.message.quality-watch-message-001": {
+          "disposition": "DYNAMIC_PRODUCT_CONTRACT",
+          "reason": "The Watch product constructs row.message.<messageId>; the test requires exact row semantics, detail fields, read transition and relaunch."
+        },
+        "row.message.quality-watch-message-002": {
+          "disposition": "DYNAMIC_PRODUCT_CONTRACT",
+          "reason": "The Watch product constructs row.message.<messageId>; the second id is the control object for exact deletion and read persistence."
+        },
+        "row.thing.quality-watch-thing-001": {
+          "disposition": "DYNAMIC_PRODUCT_CONTRACT",
+          "reason": "The Watch product constructs row.thing.<thingId>; the test requires the canonical Thing detail and decoded image result."
+        },
+        "tab.thing.detail.messages": {
+          "disposition": "DYNAMIC_PRODUCT_CONTRACT",
+          "reason": "The Apple product constructs tab.thing.detail.<tab>; the test opens the Messages tab and an exact related message before accepting it."
+        },
+        "tab.thing.detail.updates": {
+          "disposition": "DYNAMIC_PRODUCT_CONTRACT",
+          "reason": "The Apple product constructs tab.thing.detail.<tab>; the test opens the Updates tab and an exact related update before accepting it."
+        },
+        "toggle.settings.page.events": {
+          "disposition": "DYNAMIC_PRODUCT_CONTRACT",
+          "reason": "The shared page-visibility control constructs toggle.settings.page.<page>; the test verifies the Events entry disappears and returns across relaunch."
+        },
+        "toggle.settings.page.messages": {
+          "disposition": "DYNAMIC_PRODUCT_CONTRACT",
+          "reason": "The shared page-visibility control constructs toggle.settings.page.<page>; the test verifies Messages and its badge ownership disappear and return across relaunch."
+        },
+        "toggle.settings.page.things": {
+          "disposition": "DYNAMIC_PRODUCT_CONTRACT",
+          "reason": "The shared page-visibility control constructs toggle.settings.page.<page>; the test verifies the Things entry disappears and returns across relaunch."
+        }
+      }
+    },
+    "android": {
+      "unreferenced_product_identifiers": {
+        "action.settings.decryption.toggle_visibility": {
+          "disposition": "SEMANTICALLY_REFERENCED_DYNAMIC_TEST",
+          "reason": "QualitySettingsJourneyInstrumentedTest constructs this tag from stable segments, verifies masked pixels and state descriptions, reveals/re-masks, then continues through real decryption and relaunch results."
+        },
+        "action.settings.open_notification_settings": {
+          "disposition": "SEMANTICALLY_COVERED_SHARED_SYSTEM_ACTION",
+          "reason": "The disabled card and persistent Settings row call the same openAppNotificationSettings adapter; the controlled permission journey proves the denied explanation, exact PushGo system page, real switch, return refresh and enabled App state."
+        },
+        "action.settings.update.skip": {
+          "disposition": "DEFERRED",
+          "reason": "Skip expiry and target-version policy are residual P1-ANDROID-SETTINGS scope owned by the Android platform-settings quality owner, due 2026-11-09."
+        },
+        "row.settings.app_version": {
+          "disposition": "NOT_A_STANDALONE_CAPABILITY",
+          "reason": "A non-actionable version row is supporting information, not an independent user purpose; update installation is accepted only from the actual installed package version, retained data and resumed App state."
+        },
+        "row.settings.page.visibility": {
+          "disposition": "SEMANTICALLY_COVERED_BY_CHILD_ACTIONS",
+          "reason": "The container has no independent action; child Events and Things switches are exercised through hide, legal fallback, ordinary relaunch, restore and exact destination results."
+        },
+        "row.settings.update.channel": {
+          "disposition": "DEFERRED",
+          "reason": "Stable/Beta candidate selection is residual P1-ANDROID-SETTINGS scope owned by the Android platform-settings quality owner, due 2026-11-09."
+        }
+      },
+      "test_only_identifiers": {
+        "action.settings": {
+          "disposition": "TEST_REFERENCE_CONSTRUCTION_FRAGMENT",
+          "reason": "This is the first segment of a list-joined decryption visibility tag in the test, not a queried product entrypoint or a claimed user capability."
+        },
+        "row.settings.docs.e2ee": {
+          "disposition": "INDIRECT_PRODUCT_CONTRACT",
+          "reason": "DocumentationSettingsRow receives the stable tag from the E2EE page descriptor; resource/URL contracts cover every page and the Getting Started row supplies the representative browser handoff."
+        },
+        "row.settings.docs.getting_started": {
+          "disposition": "INDIRECT_PRODUCT_CONTRACT",
+          "reason": "DocumentationSettingsRow receives the stable tag from the Getting Started page descriptor; the process-restart journey proves exact browser URL and return continuity."
+        },
+        "row.settings.docs.message_api": {
+          "disposition": "INDIRECT_PRODUCT_CONTRACT",
+          "reason": "DocumentationSettingsRow receives the stable tag from the Message API page descriptor; the full resource/URL contract avoids another browser-install-dependent device journey."
+        },
+        "toggle.settings.notifications": {
+          "disposition": "COMPONENT_ONLY_TEST_CONTRACT",
+          "reason": "SettingsAccessibilitySemanticsTest supplies this synthetic tag to the reusable SettingsToggleRow component; it verifies merged semantics and does not claim a production notification toggle exists."
+        }
+      }
+    }
+  }
+}

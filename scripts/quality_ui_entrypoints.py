@@ -18,6 +18,17 @@ from typing import Iterable
 
 
 ENTRYPOINT_LITERAL = re.compile(
+    r'["\']((?:action|screen|tab|toggle|button|row|banner)\.'
+    r'[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_-])?)["\']'
+)
+ENTRYPOINT_TOKEN = re.compile(
+    r'(?<![A-Za-z0-9_.-])'
+    r'((?:action|screen|tab|toggle|button|row|banner)\.'
+    r'[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_-])?)'
+    r'(?![A-Za-z0-9_.-])'
+)
+PRODUCT_ENTRYPOINT_LITERAL = re.compile(
+    r'(?:accessibilityIdentifier|[A-Za-z0-9]*[Tt]estTag)\s*(?:\(\s*|=\s*)'
     r'["\']((?:action|screen|tab|toggle|button|row|banner)\.[A-Za-z0-9_.-]+)["\']'
 )
 SOURCE_SUFFIXES = {".swift", ".kt", ".kts", ".sh"}
@@ -38,6 +49,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--test-root", action="append", required=True)
     parser.add_argument("--base-root", default=".")
     parser.add_argument("--output", required=True)
+    parser.add_argument("--dispositions")
     return parser.parse_args()
 
 
@@ -154,12 +166,22 @@ def display_path(path: Path, base_root: Path) -> str:
         return path.resolve().as_posix()
 
 
-def collect_literals(roots: Iterable[Path], base_root: Path) -> dict[str, list[dict[str, object]]]:
+def collect_literals(
+    roots: Iterable[Path],
+    base_root: Path,
+    *,
+    product_source: bool = False,
+) -> dict[str, list[dict[str, object]]]:
     occurrences: dict[str, list[dict[str, object]]] = {}
     for path in source_files(roots):
         raw_source = path.read_text(encoding="utf-8")
         source = without_shell_comments(raw_source) if path.suffix == ".sh" else without_comments(raw_source)
-        for match in ENTRYPOINT_LITERAL.finditer(source):
+        pattern = (
+            PRODUCT_ENTRYPOINT_LITERAL
+            if product_source
+            else ENTRYPOINT_TOKEN if path.suffix == ".sh" else ENTRYPOINT_LITERAL
+        )
+        for match in pattern.finditer(source):
             identifier = match.group(1)
             location = {
                 "path": display_path(path, base_root),
@@ -192,7 +214,7 @@ def build_report(
     test_roots: Iterable[Path],
     base_root: Path,
 ) -> dict[str, object]:
-    product = collect_literals(product_roots, base_root)
+    product = collect_literals(product_roots, base_root, product_source=True)
     tests = collect_literals(test_roots, base_root)
     product_ids = set(product)
     test_ids = set(tests)
@@ -226,12 +248,73 @@ def build_report(
             "REQUIRES_DYNAMIC_OR_REMOVED_PRODUCT_OWNER_REVIEW",
         ),
         "scope_notice": (
-            "This report discovers stable UI-contract literals only. Identifier overlap is not "
+            "This report discovers stable UI-contract literals attached to production "
+            "accessibilityIdentifier/testTag calls only; routing aliases and Automation state "
+            "strings are diagnostics, not UI entrypoints. Identifier overlap is not "
             "product coverage, absence is not automatically a defect, and counts are not a score. "
             "A human or AI must trace reachability, user purpose, state/data ownership, the business "
             "terminal, and the lowest sufficient evidence before adding, deferring, or deleting a test."
         ),
     }
+
+
+def apply_dispositions(
+    report: dict[str, object],
+    dispositions: dict[str, dict[str, dict[str, str]]],
+) -> dict[str, object]:
+    reviewed: dict[str, list[dict[str, object]]] = {}
+    unresolved: dict[str, list[dict[str, object]]] = {}
+    stale: list[dict[str, str]] = []
+    categories = ("unreferenced_product_identifiers", "test_only_identifiers")
+
+    for category in categories:
+        configured = dispositions.get(category, {})
+        current = {item["identifier"]: item for item in report[category]}
+        reviewed_items = []
+        for identifier, item in current.items():
+            review = configured.get(identifier)
+            if review is None:
+                continue
+            if not review.get("disposition") or len(review.get("reason", "")) < 20:
+                raise ValueError(f"incomplete UI-entrypoint disposition: {category}:{identifier}")
+            reviewed_items.append({**item, "review": review})
+        reviewed[category] = reviewed_items
+        unresolved[category] = [
+            item for identifier, item in current.items() if identifier not in configured
+        ]
+        stale.extend(
+            {"category": category, "identifier": identifier}
+            for identifier in configured
+            if identifier not in current
+        )
+
+    report["reviewed_unreferenced_product_identifiers"] = reviewed[
+        "unreferenced_product_identifiers"
+    ]
+    report["reviewed_test_only_identifiers"] = reviewed["test_only_identifiers"]
+    report["unresolved_unreferenced_product_identifiers"] = unresolved[
+        "unreferenced_product_identifiers"
+    ]
+    report["unresolved_test_only_identifiers"] = unresolved["test_only_identifiers"]
+    report["stale_dispositions"] = stale
+    report["review_status"] = (
+        "REVIEW_REQUIRED"
+        if unresolved["unreferenced_product_identifiers"]
+        or unresolved["test_only_identifiers"]
+        or stale
+        else "READY_FOR_SEMANTIC_REVIEW"
+    )
+    return report
+
+
+def load_dispositions(path: Path, platform: str) -> dict[str, dict[str, dict[str, str]]]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("schema_version") != 1:
+        raise ValueError("unsupported UI-entrypoint disposition schema")
+    platform_payload = payload.get("platforms", {}).get(platform)
+    if not isinstance(platform_payload, dict):
+        raise ValueError(f"missing UI-entrypoint dispositions for platform: {platform}")
+    return platform_payload
 
 
 def write_json(path: Path, payload: dict[str, object]) -> None:
@@ -249,6 +332,11 @@ def main() -> int:
     product_roots = [Path(value).resolve() for value in args.product_root]
     test_roots = [Path(value).resolve() for value in args.test_root]
     report = build_report(args.platform, product_roots, test_roots, base_root)
+    if args.dispositions:
+        report = apply_dispositions(
+            report,
+            load_dispositions(Path(args.dispositions).resolve(), args.platform),
+        )
     output = Path(args.output).resolve()
     write_json(output, report)
     print(f"ui_entrypoint_report={output}")
@@ -259,6 +347,16 @@ def main() -> int:
         f"{len(report['unreferenced_product_identifiers'])}"
     )
     print(f"test_only_identifier_count={len(report['test_only_identifiers'])}")
+    if args.dispositions:
+        print(
+            "unresolved_unreferenced_product_identifier_count="
+            f"{len(report['unresolved_unreferenced_product_identifiers'])}"
+        )
+        print(
+            "unresolved_test_only_identifier_count="
+            f"{len(report['unresolved_test_only_identifiers'])}"
+        )
+        print(f"stale_disposition_count={len(report['stale_dispositions'])}")
     return 0
 
 

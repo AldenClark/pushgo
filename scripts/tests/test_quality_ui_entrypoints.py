@@ -71,6 +71,27 @@ class QualityUIEntrypointAuditTests(unittest.TestCase):
             report["referenced_product_identifiers"][0]["identifier"],
         )
 
+    def test_product_routing_and_automation_strings_are_not_ui_entrypoints(self):
+        report = self.report(
+            '''
+            let routeAlias = "tab.events"
+            let visibleScreen = "screen.message.detail"
+            Modifier.testTag("action.message.open")
+            SettingsToggleRow(testTag = "toggle.settings.notifications")
+            SettingsRow(rowTestTag = "row.settings.notifications")
+            ''',
+            '''
+            app.buttons["action.message.open"].click()
+            onNodeWithTag("toggle.settings.notifications").performClick()
+            onNodeWithTag("row.settings.notifications").performClick()
+            ''',
+        )
+
+        self.assertEqual(3, report["product_identifier_count"])
+        self.assertEqual([], report["unreferenced_product_identifiers"])
+        self.assertNotIn("tab.events", str(report["referenced_product_identifiers"]))
+        self.assertNotIn("screen.message.detail", str(report["referenced_product_identifiers"]))
+
     def test_shell_host_journey_counts_real_references_but_not_comments(self):
         report = self.report(
             """
@@ -94,6 +115,102 @@ class QualityUIEntrypointAuditTests(unittest.TestCase):
             ["action.comment.only"],
             [item["identifier"] for item in report["unreferenced_product_identifiers"]],
         )
+
+    def test_shell_bare_identifier_argument_is_a_test_reference(self):
+        report = self.report(
+            '.testTag("action.settings.check_for_updates")',
+            'driver click-identifier app.bundle action.settings.check_for_updates 10',
+            test_suffix=".sh",
+        )
+
+        self.assertEqual([], report["unreferenced_product_identifiers"])
+
+    def test_reviewed_exceptions_leave_new_or_stale_differences_visible(self):
+        report = self.report(
+            '''
+            .testTag("action.covered")
+            .testTag("action.deferred")
+            ''',
+            'onNodeWithTag("action.removed").performClick()',
+        )
+        reviewed = AUDIT.apply_dispositions(
+            report,
+            {
+                "unreferenced_product_identifiers": {
+                    "action.deferred": {
+                        "disposition": "DEFERRED",
+                        "reason": "Owned by a dated P1 closure group.",
+                    },
+                    "action.stale": {
+                        "disposition": "DEFERRED",
+                        "reason": "This stale entry must not disappear silently.",
+                    },
+                },
+                "test_only_identifiers": {},
+            },
+        )
+
+        self.assertEqual("REVIEW_REQUIRED", reviewed["review_status"])
+        self.assertEqual(
+            ["action.covered"],
+            [
+                item["identifier"]
+                for item in reviewed["unresolved_unreferenced_product_identifiers"]
+            ],
+        )
+        self.assertEqual(
+            ["action.removed"],
+            [item["identifier"] for item in reviewed["unresolved_test_only_identifiers"]],
+        )
+        self.assertEqual(
+            [{"category": "unreferenced_product_identifiers", "identifier": "action.stale"}],
+            reviewed["stale_dispositions"],
+        )
+
+    def test_complete_exception_review_is_not_product_pass(self):
+        report = self.report(
+            '.testTag("action.deferred")',
+            'onNodeWithTag("action.dynamic").performClick()',
+        )
+        reviewed = AUDIT.apply_dispositions(
+            report,
+            {
+                "unreferenced_product_identifiers": {
+                    "action.deferred": {
+                        "disposition": "DEFERRED",
+                        "reason": "Owned by a dated P1 closure group.",
+                    },
+                },
+                "test_only_identifiers": {
+                    "action.dynamic": {
+                        "disposition": "DYNAMIC_PRODUCT_CONTRACT",
+                        "reason": "The product constructs this stable prefix with a runtime id.",
+                    },
+                },
+            },
+        )
+
+        self.assertEqual("READY_FOR_SEMANTIC_REVIEW", reviewed["review_status"])
+        self.assertNotIn("PASSED", str(reviewed))
+
+    def test_current_apple_entrypoint_differences_are_all_reviewed(self):
+        report = AUDIT.build_report(
+            "apple",
+            [REPO / "Apps", REPO / "Extensions", REPO / "Shared"],
+            [REPO / "Tests", REPO / "scripts"],
+            REPO,
+        )
+        dispositions = AUDIT.load_dispositions(
+            REPO / "config/quality-ui-entrypoint-dispositions.json",
+            "apple",
+        )
+        reviewed = AUDIT.apply_dispositions(report, dispositions)
+
+        self.assertEqual("READY_FOR_SEMANTIC_REVIEW", reviewed["review_status"])
+        self.assertEqual([], reviewed["unresolved_unreferenced_product_identifiers"])
+        self.assertEqual([], reviewed["unresolved_test_only_identifiers"])
+        self.assertEqual([], reviewed["stale_dispositions"])
+        self.assertNotIn("PASSED", str(reviewed))
 
 
 if __name__ == "__main__":
