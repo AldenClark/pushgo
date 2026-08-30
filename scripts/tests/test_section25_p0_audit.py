@@ -40,6 +40,19 @@ class Section25P0AuditContractTest(unittest.TestCase):
 
         self.assertEqual(Counter({"V": 88, "P": 6, "N": 8, "NA": 1}), Counter(states))
 
+        ledger = (REPO_ROOT / "docs/quality/completion-gate-ledger.md").read_text()
+        ledger_counts = re.search(
+            r"reconciles all 103 design rows.*?: (\d+) `V`, (\d+) conditional `NA`, "
+            r"(\d+) `P`, and (\d+) external/Release `N`",
+            ledger,
+        )
+        self.assertIsNotNone(ledger_counts, "completion ledger must publish machine-checkable audit counts")
+        self.assertEqual(
+            (88, 1, 6, 8),
+            tuple(map(int, ledger_counts.groups())),
+            "completion ledger counts must stay synchronized with the semantic audit",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
