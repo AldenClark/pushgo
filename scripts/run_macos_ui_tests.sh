@@ -80,6 +80,12 @@ preparation_scopes=(
   "PushGo-macOSUITests/PushGo_macOSUITests/testInvalidQualitySessionStopsBeforeBusinessUIWithinTenSeconds"
 )
 
+# Performance is intentionally excluded from ordinary positive/full batches. It
+# pays for five cold launches and is selected only by the weekly/Release lane.
+performance_scopes=(
+  "PushGo-macOSUITests/PushGo_macOSUITests/testPreparedLargeMessageStoreColdLaunchReachesAccurateContent"
+)
+
 close_stale_test_processes() {
   local process_pattern
   for process_pattern in "^$test_app_executable($| )" "^$test_runner_executable($| )"; do
@@ -156,6 +162,9 @@ else
       ;;
     preparation)
       scope_list=("${preparation_scopes[@]}")
+      ;;
+    performance)
+      scope_list=("${performance_scopes[@]}")
       ;;
     *)
       echo "status=BLOCKED"

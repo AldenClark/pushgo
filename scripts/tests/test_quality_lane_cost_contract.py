@@ -123,6 +123,38 @@ class QualityLaneCostContractTests(unittest.TestCase):
             r'\s+write_result NOT_RUN FAILED "a required test-system sensitivity control',
         )
 
+    def test_macos_performance_is_weekly_release_only_and_checks_accurate_content(self) -> None:
+        orchestrator = (REPO / "scripts/quality_test.sh").read_text()
+        macos_runner = (REPO / "scripts/run_macos_ui_tests.sh").read_text()
+        macos_source = (REPO / "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift").read_text()
+
+        performance_scope = (
+            "PushGo-macOSUITests/PushGo_macOSUITests/"
+            "testPreparedLargeMessageStoreColdLaunchReachesAccurateContent"
+        )
+        self.assertIn(f'macos_performance_ui_scope="{performance_scope}"', orchestrator)
+        performance_function = orchestrator.split("run_performance() {", 1)[1].split("\n}", 1)[0]
+        self.assertEqual(1, performance_function.count('TEST_SCOPES="$macos_performance_ui_scope"'))
+        for lane in ("pr", "nightly", "macos"):
+            lane_body = orchestrator.split(f"  {lane})\n", 1)[1].split("    ;;", 1)[0]
+            self.assertNotIn("macos_performance_ui_scope", lane_body)
+        self.assertIn(f'"{performance_scope}"', macos_runner)
+        self.assertNotIn(performance_scope, self._array_scopes(macos_runner, "positive_scopes"))
+        self.assertNotIn(performance_scope, self._array_scopes(macos_runner, "risk_scopes"))
+
+        method = macos_source.split(
+            "func testPreparedLargeMessageStoreColdLaunchReachesAccurateContent()",
+            1,
+        )[1].split("\n    @MainActor", 1)[0]
+        self.assertIn('fixture: "messages.large"', method)
+        self.assertIn("options.iterationCount = 5", method)
+        self.assertIn("XCTApplicationLaunchMetric", method)
+        self.assertIn('identifier: "message.row.00000000-0000-0000-0000-0000000003e8"', method)
+        self.assertIn('exactRow.label.contains("Quality message 999")', method)
+        self.assertIn('staticTexts["Deterministic app-owned performance fixture row 999."]', method)
+        self.assertIn("XCTAssertLessThanOrEqual", method)
+        self.assertNotIn("sleep(", method)
+
     def test_ios_data_field_negative_control_reuses_the_same_positive_build(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()
         ui_runner = (REPO / "scripts/run_ios_ui_tests.sh").read_text()

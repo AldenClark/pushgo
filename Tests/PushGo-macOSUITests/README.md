@@ -2,7 +2,7 @@
 
 ## Current executable scope
 
-The target now exposes twenty-five curated XCTest-discoverable, App-owned product journeys:
+The target now exposes twenty-eight curated XCTest-discoverable, App-owned product journeys:
 
 - App-owned empty-state launch and functional message-list readiness;
 - accurate standard message row/detail data and process-relaunch persistence;
@@ -10,6 +10,7 @@ The target now exposes twenty-five curated XCTest-discoverable, App-owned produc
 - message deletion through the real detail action, immediate suppression, real Undo, exact-content restoration, and process-relaunch persistence;
 - deletion deadline commit that permanently removes only the target while preserving an accurate unrelated control message across relaunch;
 - a user-visible slow-load warning before delayed completion;
+- a weekly/Release-only five-sample cold-launch metric from a prepared 1,000-message canonical Store to the exact highest row, followed by the matching detail body; this local Debug ceiling is trend evidence, not a physical Release SLO;
 - visible initial-load failure and recovery through the real Retry control;
 - slow refresh feedback while the last accurate snapshot remains visible;
 - refresh failure ownership, retry, accurate new detail, and relaunch persistence;
@@ -26,7 +27,7 @@ The target now exposes twenty-five curated XCTest-discoverable, App-owned produc
 - local Gateway commit failure with immediate and process-relaunch rollback, followed by a successful real-control retry;
 - native-minimize the real main window and restore that same usable window through the primary status-item action without duplicating its session or content; then close during in-flight refresh and restore one functional window through the real localized right-click Open Main Window action and again through the primary left click, preserving the same session and accurate Store result.
 
-The 19 host-path/command/state methods are named `legacyDiagnostic...` and no longer use XCTest's `test...` discovery convention. Their green results never counted as product coverage. The twenty-five current journeys use the App-owned quality session and real accessibility UI; they do not read the App database or state files from the host test process. Thing filter, exact relation detail, delete/commit/relaunch and registered deep-link purposes are now covered in the App-owned Thing journey. The remaining macOS gaps are Notification Center card interaction/reconciliation under the current system accessibility boundary, physical accessibility/performance, and real external-provider delivery; they are not inferred from fixture, identifier, simulator, or component evidence.
+The 19 host-path/command/state methods are named `legacyDiagnostic...` and no longer use XCTest's `test...` discovery convention. Their green results never counted as product coverage. The twenty-eight current journeys use the App-owned quality session and real accessibility UI; they do not read the App database or state files from the host test process. Thing filter, exact relation detail, delete/commit/relaunch and registered deep-link purposes are now covered in the App-owned Thing journey. The remaining macOS gaps are Notification Center card interaction/reconciliation under the current system accessibility boundary, physical accessibility/performance, and real external-provider delivery; they are not inferred from fixture, identifier, simulator, or component evidence.
 
 ## Run
 

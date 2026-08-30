@@ -222,6 +222,7 @@ accessibility_ui_scope="PushGo-iOSUITests/PushGo_iOSUITests/testSimplifiedChines
 nightly_ui_scopes="$positive_ui_scopes,$nightly_negative_ui_scopes"
 watch_ui_scopes="PushGo-watchOSUITests/PushGo_watchOSUITests/testCoreWatchJourneyShowsAccurateObjectsDeletesOneAndPersistsAfterRelaunch,PushGo-watchOSUITests/PushGo_watchOSUITests/testLegacyWatchStoreMigratesAccurateMessageAndKeepsNewDataAcrossRelaunch,PushGo-watchOSUITests/PushGo_watchOSUITests/testInvalidHermeticScenarioFailsReadinessExplicitly,PushGo-watchOSUITests/PushGo_watchOSUITests/testMessageReadFailureStaysOwnedByMessagesWhileOtherDomainsRemainUsable"
 performance_ui_scope="PushGo-iOSUITests/PushGo_iOSUITests/testPreparedLargeMessageStoreColdLaunchReachesAccurateContent"
+macos_performance_ui_scope="PushGo-macOSUITests/PushGo_macOSUITests/testPreparedLargeMessageStoreColdLaunchReachesAccurateContent"
 
 run_core() {
   selected_claims+=("Apple Core/Store/integration suite and localization completeness")
@@ -258,6 +259,11 @@ run_performance() {
     MAX_RETRIES=0 \
     QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
   claims+=("iOS prepared 1k Store cold-launch-to-accurate-content metrics and purpose oracle")
+  selected_claims+=("macOS prepared 1k Store cold-launch-to-accurate-content local metrics and purpose oracle")
+  TEST_SCOPES="$macos_performance_ui_scope" \
+    MAX_RETRIES=0 \
+    QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_macos_ui_tests.sh"
+  claims+=("macOS prepared 1k Store cold-launch-to-accurate-content local metrics and purpose oracle")
   QUALITY_REUSE_BUILT_TESTS=1 \
     "$repo_root/scripts/run_ios_performance_negative_control.sh"
   QUALITY_REUSE_BUILT_TESTS=1 \

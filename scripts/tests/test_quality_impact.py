@@ -128,19 +128,22 @@ class QualityImpactPlanTests(unittest.TestCase):
         risk = self._macos_scopes(runner_source, "risk_scopes")
         system = self._macos_scopes(runner_source, "system_scopes")
         preparation = self._macos_scopes(runner_source, "preparation_scopes")
+        performance = self._macos_scopes(runner_source, "performance_scopes")
 
-        self.assertEqual(27, len(discoverable))
+        self.assertEqual(28, len(discoverable))
         self.assertEqual(16, len(positive))
         self.assertEqual(9, len(risk))
         self.assertEqual(1, len(system))
         self.assertEqual(1, len(preparation))
+        self.assertEqual(1, len(performance))
         self.assertFalse(positive & risk)
-        self.assertFalse((positive | risk) & (system | preparation))
-        self.assertFalse(system & preparation)
+        self.assertFalse((positive | risk) & (system | preparation | performance))
+        self.assertFalse(system & (preparation | performance))
+        self.assertFalse(preparation & performance)
         self.assertEqual(
             discoverable,
-            positive | risk | system | preparation,
-            "Every discoverable macOS journey must belong to the positive, risk, real-system, or preparation set.",
+            positive | risk | system | preparation | performance,
+            "Every discoverable macOS journey must belong to the positive, risk, real-system, preparation, or performance set.",
         )
         for deferred_fragment in (
             "Fatal",
@@ -153,6 +156,7 @@ class QualityImpactPlanTests(unittest.TestCase):
         ):
             self.assertFalse(any(deferred_fragment in scope for scope in positive), deferred_fragment)
         self.assertIn('case "${MACOS_SCOPE_SET:-positive}" in', runner_source)
+        self.assertIn('performance)\n      scope_list=("${performance_scopes[@]}")', runner_source)
         self.assertIn('classification_issue_ids=.*apple-quality-precondition', runner_source)
         self.assertIn('reason=app_owned_quality_precondition_failed', runner_source)
         self.assertIn('runner_issue_file="${QUALITY_RUNNER_ISSUE_FILE:-}"', runner_source)
