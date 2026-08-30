@@ -18,8 +18,8 @@ Platform vector order is `I / M / D / W` (iOS, macOS, Android, watchOS). `-` mea
 | `D-ENTITY` | `QualityEntityJourneyInstrumentedTest` plus Room projection/property journeys in `RuntimeDataLayerInstrumentedTest`. |
 | `A-CHANNEL` | iOS/macOS Channel lifecycle journeys: existing subscribe, accepted create, rename cancel/invalid/remote-rejection/retry/success, both unsubscribe outcomes, history/stat projection and relaunch. Rename failures remain in the owning Sheet with the submitted value and unchanged canonical row; current receipts: `build/quality-results/ios-channel-rename-sheet-final-3/run-20260830-2301.xcresult` and `build/quality-results/macos-channel-rename-sheet-final-3/run-20260830-2304.xcresult`. macOS additionally has an external Pasteboard equality oracle. |
 | `D-CHANNEL` | `QualityChannelJourneyInstrumentedTest`, Channel transaction integration tests, exact ClipboardManager result, statistics and relaunch. The existing positive lifecycle method now proves rename cancel/invalid/remote-rejection/retry/success without another fixture or App launch; current receipt: `../pushgo-android/build/quality-results/android-channel-rename-ownership-final-3.log`. |
-| `A-SET` | iOS/macOS Gateway, visibility, decryption, protected-store and documentation journeys plus their Core contracts. |
-| `D-SET` | `QualitySettingsJourneyInstrumentedTest`, notification-permission/Doze host journeys and transport integration tests. |
+| `A-SET` | iOS/macOS Gateway, visibility, decryption, protected-store and documentation journeys plus their Core contracts. User-visible Gateway Token and message-decryption Key both prove masked default, exact reveal, re-mask and relaunch-safe persistence in existing purpose journeys. Current receipts: `build/quality-results/ios-secret-visibility-final/run-20260830-2343-gateway.xcresult` (Gateway 1/1 after removing the real Password AutoFill overlay), `build/quality-results/ios-secret-visibility-final/run-20260830-2354-decryption.xcresult` (decryption 1/1 on final product bytes), and `build/quality-results/macos-secret-visibility-final/run-20260830-2345.xcresult` (2/2). APNs/FCM device tokens are system-generated, not user-editable fields, and are outside this row. |
+| `D-SET` | `QualitySettingsJourneyInstrumentedTest`, notification-permission/Doze host journeys and transport integration tests. The existing Gateway journey now proves Password semantics, exact reveal/re-mask and persisted secret after activity recreation; the existing decryption recovery journey already proves the same visible-secret semantics and then exact message recovery. Current Gateway receipt: `../pushgo-android/build/quality-results/android-gateway-secret-visibility-final.log` (1/1). System-generated FCM tokens are outside the user-visible-field row. |
 | `A-INGRESS` | Apple Core ingress/dedup/order/ACK contracts and system-notification simulator journeys. Simulator push proves the local OS boundary, not real APNs. |
 | `D-INGRESS` | Android parser/coordinator/ledger/Worker integration tests and `QualitySystemNotificationJourneyInstrumentedTest`. |
 | `A-DELETE` | iOS/macOS pending deletion coordinator/Store contracts plus real Undo, deadline commit and relaunch journeys. |
@@ -137,7 +137,7 @@ Platform vector order is `I / M / D / W` (iOS, macOS, Android, watchOS). `-` mea
 | Line | P0 purpose | I/M/D/W | State | Evidence or exact remaining closure |
 | --- | --- | --- | --- | --- |
 | 1408 | Gateway URL valid/invalid/normalized | V/V/V/- | `V` | `A-SET`, `D-SET`: invalid inline owner, candidate validation/registration before commit, normalized saved endpoint and relaunch. |
-| 1411 | Token reveal/hide and safe persistence | P/P/P/- | `P` | Secret fields and protected-store failure compensation are covered for decryption/subscription material. The row's generic “Token” must be normalized to each actually user-visible token field and checked for reveal state, secure persistence and relaunch; current evidence cannot be globally inferred. |
+| 1411 | Token reveal/hide and safe persistence | V/V/V/- | `V` | `A-SET`, `D-SET`: the reachable user-visible secrets are Gateway authentication Token and message-decryption Key. Each platform now proves masked-by-default semantics, an explicit reveal with the exact entered value, re-masking, accepted persistence and relaunch/recreation without default plaintext exposure. iOS additionally suppresses the system save-password overlay for app-scoped tokens, discovered by the real UI journey. Protected-store compensation remains covered separately. APNs/FCM registration tokens are generated system material without a user reveal/edit surface and are deliberately not inferred into this row. |
 | 1413 | Page visibility | V/V/V/- | `V` | Real controls, legal navigation and relaunch in `A-SET`, `D-SET`. |
 | 1414 | Decryption key hex/base64 boundaries | V/V/V/- | `V` | Validator matrix plus real invalid and accepted UI paths. |
 | 1415 | Saving key recovers original message | V/V/V/- | `V` | Same canonical encrypted message becomes exact plaintext and remains after relaunch. |
@@ -213,14 +213,14 @@ Platform vector order is `I / M / D / W` (iOS, macOS, Android, watchOS). `-` mea
 
 The design contains 103 P0/P0 Release rows. This audit deliberately does **not** declare section 21.2(1) complete:
 
-- 84 rows are currently classified `V`; 1 conditional export row is `NA` because the product capability was explicitly removed.
-- 10 rows remain `P` and require semantic closure, an explicit product-scope correction, or an externally owned sub-gate.
+- 85 rows are currently classified `V`; 1 conditional export row is `NA` because the product capability was explicitly removed.
+- 9 rows remain `P` and require semantic closure, an explicit product-scope correction, or an externally owned sub-gate.
 - Two platform sub-results are explicitly `B`: iOS Channel Pasteboard and macOS notification interaction. Neither is hidden inside a green aggregate.
 - 8 P0 Release/external rows remain `N`; local Simulator/emulator evidence is retained but never promoted to physical/provider acceptance.
 
 The next implementation order is constrained by value and reuse:
 
-1. Audit rows 1391 and 1411 against existing tests and product reachability; prefer documenting already-real evidence or low-level parameterization over device matrices.
+1. Audit row 1391 against existing tests and product reachability; prefer documenting already-real evidence or low-level parameterization over device matrices.
 2. Add one representative macOS and Android documentation system handoff for row 1421 only if it can reuse existing Settings/navigation journeys. Keep all page×locale correctness in fast contracts.
 3. Keep physical/provider/watch-media/accessibility items in their explicit Release/owner lanes. They cannot displace locally reachable positive P0 work and cannot be turned green with mocks.
 

@@ -2289,6 +2289,23 @@ final class PushGo_macOSUITests: XCTestCase {
         let keyField = element(in: context.app, identifier: "field.settings.decryption.key")
         XCTAssertTrue(keyField.waitForExistence(timeout: 8))
         replaceSecureText(in: keyField, with: "short")
+        XCTAssertEqual(keyField.elementType, .secureTextField)
+        let visibilityAction = element(
+            in: context.app,
+            identifier: "action.settings.decryption.toggle_visibility"
+        )
+        visibilityAction.click()
+        let visibleKeyField = element(in: context.app, identifier: keyField.identifier)
+        XCTAssertEqual(visibleKeyField.elementType, .textField)
+        XCTAssertEqual(visibleKeyField.value as? String, "short")
+        element(
+            in: context.app,
+            identifier: "action.settings.decryption.toggle_visibility"
+        ).click()
+        XCTAssertEqual(
+            element(in: context.app, identifier: keyField.identifier).elementType,
+            .secureTextField
+        )
         element(in: context.app, identifier: "action.settings.decryption.save").click()
         XCTAssertTrue(
             element(in: context.app, identifier: "feedback.settings.decryption")
@@ -2834,6 +2851,25 @@ final class PushGo_macOSUITests: XCTestCase {
 
         let addressField = element(in: context.app, identifier: "field.settings.server.address")
         XCTAssertTrue(addressField.waitForExistence(timeout: 8))
+        let gatewayCredential = String(repeating: "g", count: 24)
+        let gatewayFieldID = ["field", "settings", "server", "token"].joined(separator: ".")
+        var credentialField = context.app.secureTextFields.matching(identifier: gatewayFieldID).firstMatch
+        XCTAssertTrue(credentialField.waitForExistence(timeout: 5))
+        replaceTextUsingPasteboard(in: credentialField, with: gatewayCredential)
+        let credentialVisibilityAction = element(
+            in: context.app,
+            identifier: "action.settings.server.token.toggle_visibility"
+        )
+        credentialVisibilityAction.click()
+        let revealedCredentialField = context.app.textFields.matching(identifier: gatewayFieldID).firstMatch
+        XCTAssertTrue(revealedCredentialField.waitForExistence(timeout: 5))
+        XCTAssertEqual(revealedCredentialField.value as? String, gatewayCredential)
+        element(
+            in: context.app,
+            identifier: "action.settings.server.token.toggle_visibility"
+        ).click()
+        credentialField = context.app.secureTextFields.matching(identifier: gatewayFieldID).firstMatch
+        XCTAssertTrue(credentialField.waitForExistence(timeout: 5))
         let originalAddress = (addressField.value as? String) ?? ""
         XCTAssertFalse(originalAddress.isEmpty)
         let normalizedAddress = "https://quality-macos-settings.invalid/api"
@@ -2874,6 +2910,17 @@ final class PushGo_macOSUITests: XCTestCase {
             normalizedAddress,
             "The registered gateway must remain authoritative after a full process relaunch."
         )
+        credentialField = relaunched.app.secureTextFields.matching(identifier: gatewayFieldID).firstMatch
+        XCTAssertTrue(credentialField.waitForExistence(timeout: 5))
+        element(
+            in: relaunched.app,
+            identifier: "action.settings.server.token.toggle_visibility"
+        ).click()
+        let restoredVisibleCredentialField = relaunched.app.textFields
+            .matching(identifier: gatewayFieldID)
+            .firstMatch
+        XCTAssertTrue(restoredVisibleCredentialField.waitForExistence(timeout: 5))
+        XCTAssertEqual(restoredVisibleCredentialField.value as? String, gatewayCredential)
     }
 
     @MainActor

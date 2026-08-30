@@ -148,6 +148,10 @@ private struct ServerManagementContentView: View {
                         }
                     }
                     .textFieldStyle(.plain)
+                    // API credentials are app-scoped secrets, not website passwords.
+                    // Use code semantics so Password AutoFill does not treat them as a
+                    // website login and cover this sheet after reveal/hide.
+                    .textContentType(.oneTimeCode)
                     .accessibilityIdentifier("field.settings.server.token")
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled(true)
@@ -166,6 +170,7 @@ private struct ServerManagementContentView: View {
                             .foregroundStyle(Color.appTextSecondary)
                     }
                     .buttonStyle(.appPlain)
+                    .accessibilityIdentifier("action.settings.server.token.toggle_visibility")
                     .accessibilityLabel(
                         LocalizedStringKey(viewModel.gatewayInput.isTokenVisible ? "hide_key" : "show_key")
                     )
@@ -334,6 +339,7 @@ private struct ManualKeySettingsContentView: View {
                             }
                         }
                         .textFieldStyle(.plain)
+                        .textContentType(.oneTimeCode)
                         .font(.system(.body, design: .monospaced))
                         .accessibilityIdentifier("field.settings.decryption.key")
                         .focused($sheetFocus, equals: .manualKey)
@@ -352,6 +358,7 @@ private struct ManualKeySettingsContentView: View {
                                 .font(.callout.weight(.medium))
                         }
                         .buttonStyle(.appPlain)
+                        .accessibilityIdentifier("action.settings.decryption.toggle_visibility")
                         .accessibilityLabel(
                             LocalizedStringKey(viewModel.manualKeyInput.isSecretVisible ? "hide_key" : "show_key")
                         )
@@ -376,6 +383,7 @@ private struct ManualKeySettingsContentView: View {
                             }
                         }
                         .textFieldStyle(.plain)
+                        .textContentType(.oneTimeCode)
                         .font(.system(.body, design: .monospaced))
                         .accessibilityIdentifier("field.settings.decryption.key")
                         .focused($sheetFocus, equals: .manualKey)
@@ -394,6 +402,7 @@ private struct ManualKeySettingsContentView: View {
                                 .font(.callout.weight(.medium))
                         }
                         .buttonStyle(.appPlain)
+                        .accessibilityIdentifier("action.settings.decryption.toggle_visibility")
                         .accessibilityLabel(
                             LocalizedStringKey(viewModel.manualKeyInput.isSecretVisible ? "hide_key" : "show_key")
                         )

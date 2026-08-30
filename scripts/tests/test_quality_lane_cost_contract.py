@@ -45,6 +45,9 @@ class QualityLaneCostContractTests(unittest.TestCase):
             self.assertIn("build/.pushgo-apple-ui-tests.lock", runner)
             self.assertIn("/usr/bin/lockf -s -t 0 9", runner)
             self.assertIn("reason=pushgo_apple_ui_lease_busy", runner)
+            self.assertIn("-parallel-testing-enabled NO", runner)
+            self.assertIn("-maximum-parallel-testing-workers 1", runner)
+            self.assertIn("-collect-test-diagnostics never", runner)
             self.assertNotIn("killall Simulator", runner)
             self.assertNotIn("killall CoreSimulator", runner)
 

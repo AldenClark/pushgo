@@ -137,6 +137,7 @@ common_args=(
   -skipPackageUpdates
   -parallel-testing-enabled NO
   -maximum-parallel-testing-workers 1
+  -collect-test-diagnostics never
   CODE_SIGNING_ALLOWED=YES
 )
 

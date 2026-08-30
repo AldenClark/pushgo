@@ -1643,8 +1643,32 @@ final class PushGo_iOSUITests: XCTestCase {
 
         let addressField = element(in: context.app, identifier: "field.settings.server.address")
         XCTAssertTrue(addressField.waitForExistence(timeout: 8))
+        let gatewayCredential = String(repeating: "g", count: 24)
+        let gatewayFieldID = ["field", "settings", "server", "token"].joined(separator: ".")
+        var credentialField = context.app.secureTextFields.matching(identifier: gatewayFieldID).firstMatch
+        XCTAssertTrue(credentialField.waitForExistence(timeout: 5))
+        enterSecureText(in: credentialField, with: gatewayCredential)
+        let credentialVisibilityAction = element(
+            in: context.app,
+            identifier: "action.settings.server.token.toggle_visibility"
+        )
+        tapWhenHittable(credentialVisibilityAction, timeout: 5)
+        var revealedCredentialField = context.app.textFields.matching(identifier: gatewayFieldID).firstMatch
+        XCTAssertTrue(revealedCredentialField.waitForExistence(timeout: 5))
+        XCTAssertEqual(revealedCredentialField.value as? String, gatewayCredential)
+        revealedCredentialField.typeKey(XCUIKeyboardKey.return.rawValue, modifierFlags: [])
+        tapWhenHittable(
+            element(
+                in: context.app,
+                identifier: "action.settings.server.token.toggle_visibility"
+            ),
+            timeout: 5
+        )
+        credentialField = context.app.secureTextFields.matching(identifier: gatewayFieldID).firstMatch
+        XCTAssertTrue(credentialField.waitForExistence(timeout: 5))
         let normalizedAddress = "https://quality-settings.invalid/api"
         replaceText(in: addressField, with: "\(normalizedAddress)/")
+        addressField.typeKey(XCUIKeyboardKey.return.rawValue, modifierFlags: [])
         tapWhenHittable(
             element(in: context.app, identifier: "action.settings.server.save"),
             timeout: 8
@@ -1684,6 +1708,15 @@ final class PushGo_iOSUITests: XCTestCase {
             normalizedAddress,
             "The normalized server address must survive a full app relaunch"
         )
+        credentialField = context.app.secureTextFields.matching(identifier: gatewayFieldID).firstMatch
+        XCTAssertTrue(credentialField.waitForExistence(timeout: 5))
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server.token.toggle_visibility"),
+            timeout: 5
+        )
+        revealedCredentialField = context.app.textFields.matching(identifier: gatewayFieldID).firstMatch
+        XCTAssertTrue(revealedCredentialField.waitForExistence(timeout: 5))
+        XCTAssertEqual(revealedCredentialField.value as? String, gatewayCredential)
     }
 
     func testSettingsServerRejectsInvalidAndUnregisteredCandidatesWithoutLeakingSheetError() {
@@ -1784,6 +1817,26 @@ final class PushGo_iOSUITests: XCTestCase {
         let keyField = element(in: context.app, identifier: "field.settings.decryption.key")
         XCTAssertTrue(keyField.waitForExistence(timeout: 8))
         enterSecureText(in: keyField, with: "short")
+        XCTAssertEqual(keyField.elementType, .secureTextField)
+        let visibilityAction = element(
+            in: context.app,
+            identifier: "action.settings.decryption.toggle_visibility"
+        )
+        tapWhenHittable(visibilityAction, timeout: 5)
+        let visibleKeyField = element(in: context.app, identifier: keyField.identifier)
+        XCTAssertEqual(visibleKeyField.elementType, .textField)
+        XCTAssertEqual(visibleKeyField.value as? String, "short")
+        tapWhenHittable(
+            element(
+                in: context.app,
+                identifier: "action.settings.decryption.toggle_visibility"
+            ),
+            timeout: 5
+        )
+        XCTAssertEqual(
+            element(in: context.app, identifier: keyField.identifier).elementType,
+            .secureTextField
+        )
         tapWhenHittable(
             element(in: context.app, identifier: "action.settings.decryption.save"),
             timeout: 8

@@ -522,6 +522,7 @@ private struct ServerManagementContentView: View {
                                 .foregroundStyle(Color.appTextSecondary)
                         }
                         .buttonStyle(.appPlain)
+                        .accessibilityIdentifier("action.settings.server.token.toggle_visibility")
                         .accessibilityLabel(
                             LocalizedStringKey(viewModel.gatewayInput.isTokenVisible ? "hide_key" : "show_key")
                         )
@@ -733,6 +734,7 @@ private struct ManualKeySettingsContentView: View {
                                 .font(.callout.weight(.medium))
                         }
                         .buttonStyle(.appPlain)
+                        .accessibilityIdentifier("action.settings.decryption.toggle_visibility")
                         .accessibilityLabel(
                             LocalizedStringKey(viewModel.manualKeyInput.isSecretVisible ? "hide_key" : "show_key")
                         )
@@ -773,6 +775,7 @@ private struct ManualKeySettingsContentView: View {
                                 .font(.callout.weight(.medium))
                         }
                         .buttonStyle(.appPlain)
+                        .accessibilityIdentifier("action.settings.decryption.toggle_visibility")
                         .accessibilityLabel(
                             LocalizedStringKey(viewModel.manualKeyInput.isSecretVisible ? "hide_key" : "show_key")
                         )
