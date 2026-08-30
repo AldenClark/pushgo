@@ -7,6 +7,20 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 class QualityLaneCostContractTests(unittest.TestCase):
+    def test_ci_receipts_outlive_the_full_observation_window(self) -> None:
+        workflow = (REPO / ".github/workflows/apple-quality.yml").read_text()
+        receipt_upload = workflow.split("- name: Upload compact longitudinal receipts", 1)[1]
+
+        self.assertIn("if-no-files-found: error", receipt_upload)
+        self.assertIn("retention-days: 21", receipt_upload)
+        self.assertIn("path: build/quality-results/*-summary.json", receipt_upload)
+        self.assertNotIn("**/*.xcresult", receipt_upload)
+        diagnostic_upload = workflow.split("- name: Upload diagnostic evidence", 1)[1].split(
+            "- name: Upload compact longitudinal receipts", 1
+        )[0]
+        self.assertIn("retention-days: 14", diagnostic_upload)
+        self.assertIn("!build/quality-results/*-summary.json", diagnostic_upload)
+
     def test_pr_ui_is_unique_discoverable_positive_breadth(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()
         test_source = (REPO / "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift").read_text()

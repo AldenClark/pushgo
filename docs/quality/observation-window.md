@@ -6,6 +6,8 @@
 
 先从 CI artifacts 下载观察期内的 `build/quality-results/*.json`，可以按日期或 workflow run 分目录保存。报告器递归读取目录，只识别同时含 `recorded_at`、`lane`、`product_capability_status` 和 `test_system_status` 的正式收据：
 
+质量工作流另行上传只含 `*-summary.json` 的轻量收据 artifact 并保留 21 天，为 14 个完整 UTC 日的观察窗口留出上传和审核时刻余量；体积较大的 xcresult、日志和 Android 报告仍按 14 天诊断周期保留，并明确排除 summary，保证每个 run identity 只有一份观测输入。不能为了观察窗口无差别延长大包成本，也不要把同一收据从多个 artifact 复制进输入目录。
+
 ```bash
 python3 scripts/quality_observation.py \
   --input /path/to/downloaded-quality-artifacts \
