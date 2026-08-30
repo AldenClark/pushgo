@@ -14,6 +14,8 @@ struct EventListScreen: View {
     let viewModel: EntityProjectionViewModel
     var openEventId: String? = nil
     var scrollToTopToken: Int = 0
+    var unavailableTargetFeedback: String? = nil
+    var onUnavailableTargetFeedbackChanged: ((String?) -> Void)? = nil
     var onOpenEventHandled: (() -> Void)? = nil
     @State private var selectedEvent: EventProjection?
     @State private var searchQuery: String = ""
@@ -28,7 +30,6 @@ struct EventListScreen: View {
         let baseContent = listContainer(filteredEvents: filteredEventsSnapshot)
             .id(pendingLocalDeletionController.effectiveScope)
         let content = applySearchIfNeeded(baseContent)
-        .accessibilityIdentifier("screen.events.list")
         .refreshable {
             await handlePullToRefresh()
         }
@@ -90,25 +91,39 @@ struct EventListScreen: View {
     @ViewBuilder
     private func listContainer(filteredEvents: [EventProjection]) -> some View {
         let overlayState = overlayState(for: filteredEvents)
-        ZStack {
-            if overlayState == nil {
-                eventList(filteredEvents: filteredEvents)
+        VStack(spacing: 0) {
+            if let unavailableTargetFeedback {
+                AppInlineFeedbackBanner(
+                    message: unavailableTargetFeedback,
+                    tone: .danger,
+                    accessibilityID: "feedback.entity.target_unavailable",
+                    dismissAction: { onUnavailableTargetFeedbackChanged?(nil) }
+                )
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
             }
 
-            switch overlayState {
-            case .onboarding:
-                EntityOnboardingEmptyView(kind: .events)
-            case .searchPlaceholder:
-                MessageSearchPlaceholderView(
-                    imageName: "questionmark.circle",
-                    title: "no_matching_results",
-                    detailKey: "try_changing_a_keyword_or_clear_the_filter_conditions"
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.horizontal, 24)
-            case nil:
-                EmptyView()
+            ZStack {
+                if overlayState == nil {
+                    eventList(filteredEvents: filteredEvents)
+                }
+
+                switch overlayState {
+                case .onboarding:
+                    EntityOnboardingEmptyView(kind: .events)
+                case .searchPlaceholder:
+                    MessageSearchPlaceholderView(
+                        imageName: "questionmark.circle",
+                        title: "no_matching_results",
+                        detailKey: "try_changing_a_keyword_or_clear_the_filter_conditions"
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.horizontal, 24)
+                case nil:
+                    EmptyView()
+                }
             }
+            .accessibilityIdentifier("screen.events.list")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -374,6 +389,10 @@ struct EventListScreen: View {
     private func openEventIfNeeded() {
         let target = openEventId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !target.isEmpty else { return }
+        if pendingLocalDeletionController.suppressesEvent(id: target, channelId: nil) {
+            handleUnavailableEventTarget()
+            return
+        }
         if let matched = viewModel.events.first(where: { $0.id == target }) {
             openEvent(matched, target: target)
             return
@@ -384,9 +403,20 @@ struct EventListScreen: View {
         Task { @MainActor in
             let hydrated = await viewModel.ensureEventDetailsLoaded(eventId: target, forceRefresh: true)
             hydrationRequestedEventIDs.remove(target)
-            guard let hydrated else { return }
+            guard let hydrated else {
+                guard viewModel.error == nil else { return }
+                handleUnavailableEventTarget()
+                return
+            }
             openEvent(hydrated, target: target)
         }
+    }
+
+    private func handleUnavailableEventTarget() {
+        onUnavailableTargetFeedbackChanged?(
+            localizationManager.localized("gateway_resource_not_found")
+        )
+        onOpenEventHandled?()
     }
 
     private func openEvent(_ event: EventProjection, target: String) {
@@ -408,6 +438,7 @@ struct EventListScreen: View {
     }
 
     private func selectEvent(_ event: EventProjection) {
+        onUnavailableTargetFeedbackChanged?(nil)
         selectedEvent = event
         Task { @MainActor in
             if let hydrated = await viewModel.ensureEventDetailsLoaded(eventId: event.id, forceRefresh: true) {

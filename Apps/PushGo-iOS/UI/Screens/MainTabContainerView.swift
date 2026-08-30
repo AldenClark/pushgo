@@ -18,6 +18,8 @@ struct MainTabContainerView: View {
     @State private var messageScrollToTopToken: Int = 0
     @State private var eventScrollToTopToken: Int = 0
     @State private var thingScrollToTopToken: Int = 0
+    @State private var unavailableEventTargetFeedback: String?
+    @State private var unavailableThingTargetFeedback: String?
     @State private var pendingMessageReselectTask: Task<Void, Never>?
     @State private var lastReselectedTab: MainTab?
     @State private var lastReselectAt: TimeInterval = 0
@@ -196,6 +198,8 @@ struct MainTabContainerView: View {
                         viewModel: entityViewModel,
                         openEventId: environment.notificationOpenController.pendingEventToOpen,
                         scrollToTopToken: eventScrollToTopToken,
+                        unavailableTargetFeedback: unavailableEventTargetFeedback,
+                        onUnavailableTargetFeedbackChanged: { unavailableEventTargetFeedback = $0 },
                         onOpenEventHandled: {
                             environment.pendingEventToOpen = nil
                         }
@@ -214,6 +218,8 @@ struct MainTabContainerView: View {
                         viewModel: entityViewModel,
                         openThingId: environment.notificationOpenController.pendingThingToOpen,
                         scrollToTopToken: thingScrollToTopToken,
+                        unavailableTargetFeedback: unavailableThingTargetFeedback,
+                        onUnavailableTargetFeedbackChanged: { unavailableThingTargetFeedback = $0 },
                         onOpenThingHandled: {
                             environment.pendingThingToOpen = nil
                         }

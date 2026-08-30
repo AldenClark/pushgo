@@ -14,6 +14,8 @@ struct ThingListScreen: View {
     let viewModel: EntityProjectionViewModel
     var openThingId: String? = nil
     var scrollToTopToken: Int = 0
+    var unavailableTargetFeedback: String? = nil
+    var onUnavailableTargetFeedbackChanged: ((String?) -> Void)? = nil
     var onOpenThingHandled: (() -> Void)? = nil
     @State private var selectedThing: ThingProjection?
     @State private var searchQuery: String = ""
@@ -27,7 +29,6 @@ struct ThingListScreen: View {
         let baseContent = listContainer(filteredThings: filteredThingsSnapshot)
             .id(pendingLocalDeletionController.effectiveScope)
         let content = applySearchIfNeeded(baseContent)
-        .accessibilityIdentifier("screen.things.list")
         .refreshable {
             await handlePullToRefresh()
         }
@@ -86,26 +87,40 @@ struct ThingListScreen: View {
     @ViewBuilder
     private func listContainer(filteredThings: [ThingProjection]) -> some View {
         let overlayState = overlayState(for: filteredThings)
-        ZStack {
-            thingList(filteredThings: filteredThings)
-                .opacity(overlayState == nil ? 1 : 0.001)
-                .allowsHitTesting(overlayState == nil)
-                .accessibilityHidden(overlayState != nil)
-
-            switch overlayState {
-            case .onboarding:
-                EntityOnboardingEmptyView(kind: .things)
-            case .searchPlaceholder:
-                MessageSearchPlaceholderView(
-                    imageName: "questionmark.circle",
-                    title: "no_matching_results",
-                    detailKey: "try_changing_a_keyword_or_clear_the_filter_conditions"
+        VStack(spacing: 0) {
+            if let unavailableTargetFeedback {
+                AppInlineFeedbackBanner(
+                    message: unavailableTargetFeedback,
+                    tone: .danger,
+                    accessibilityID: "feedback.entity.target_unavailable",
+                    dismissAction: { onUnavailableTargetFeedbackChanged?(nil) }
                 )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.horizontal, 24)
-            case nil:
-                EmptyView()
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
             }
+
+            ZStack {
+                thingList(filteredThings: filteredThings)
+                    .opacity(overlayState == nil ? 1 : 0.001)
+                    .allowsHitTesting(overlayState == nil)
+                    .accessibilityHidden(overlayState != nil)
+
+                switch overlayState {
+                case .onboarding:
+                    EntityOnboardingEmptyView(kind: .things)
+                case .searchPlaceholder:
+                    MessageSearchPlaceholderView(
+                        imageName: "questionmark.circle",
+                        title: "no_matching_results",
+                        detailKey: "try_changing_a_keyword_or_clear_the_filter_conditions"
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.horizontal, 24)
+                case nil:
+                    EmptyView()
+                }
+            }
+            .accessibilityIdentifier("screen.things.list")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -372,6 +387,10 @@ struct ThingListScreen: View {
     private func openThingIfNeeded() {
         let target = openThingId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !target.isEmpty else { return }
+        if pendingLocalDeletionController.suppressesThing(id: target, channelId: nil) {
+            handleUnavailableThingTarget()
+            return
+        }
         if let matched = viewModel.things.first(where: { $0.id == target }) {
             openThing(matched, target: target)
             return
@@ -382,9 +401,20 @@ struct ThingListScreen: View {
         Task { @MainActor in
             let hydrated = await viewModel.ensureThingDetailsLoaded(thingId: target, forceRefresh: true)
             hydrationRequestedThingIDs.remove(target)
-            guard let hydrated else { return }
+            guard let hydrated else {
+                guard viewModel.error == nil else { return }
+                handleUnavailableThingTarget()
+                return
+            }
             openThing(hydrated, target: target)
         }
+    }
+
+    private func handleUnavailableThingTarget() {
+        onUnavailableTargetFeedbackChanged?(
+            localizationManager.localized("gateway_resource_not_found")
+        )
+        onOpenThingHandled?()
     }
 
     private func openThing(_ thing: ThingProjection, target: String) {
@@ -406,6 +436,7 @@ struct ThingListScreen: View {
     }
 
     private func selectThing(_ thing: ThingProjection) {
+        onUnavailableTargetFeedbackChanged?(nil)
         selectedThing = thing
         Task { @MainActor in
             if let hydrated = await viewModel.ensureThingDetailsLoaded(thingId: thing.id, forceRefresh: true) {

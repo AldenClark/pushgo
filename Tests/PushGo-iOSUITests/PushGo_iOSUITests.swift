@@ -2512,7 +2512,9 @@ final class PushGo_iOSUITests: XCTestCase {
     }
 
     func testImportedThingFixtureCanOpenThingDetail() {
-        let context = configuredLaunchContext()
+        let context = configuredLaunchContext(
+            launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        )
         let encodedSession = qualitySessionPayload(
             sessionID: "ios-thing-\(UUID().uuidString.lowercased())",
             fixture: "thing.standard"
@@ -2653,29 +2655,52 @@ final class PushGo_iOSUITests: XCTestCase {
             "Returning from Update detail must preserve the same Thing Updates tab"
         )
 
-        context.app.terminate()
-        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
-        launch(context.app)
-        assertQualityRuntimeReady(in: context.app, timeout: 15)
-        tapWhenHittable(
-            element(in: context.app, identifier: "tab.things"),
-            timeout: 8,
-            message: "Things must remain reachable after relaunch"
+        let unavailableTarget = configuredLaunchContext(
+            runtimeRoot: context.runtimeRoot,
+            requestName: "entity.open",
+            args: [
+                "entity_type": "thing",
+                "entity_id": "quality-thing-distractor",
+            ],
+            launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         )
-        let relaunchedThing = element(in: context.app, identifier: "thing.row.quality-thing-rich")
+        unavailableTarget.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(unavailableTarget.app)
+        assertQualityRuntimeReady(in: unavailableTarget.app, timeout: 15)
+        assertElementExists("screen.things.list", in: unavailableTarget.app, timeout: 8)
         XCTAssertTrue(
-            element(in: context.app, identifier: "thing.row.quality-thing-distractor")
+            element(in: unavailableTarget.app, identifier: "thing.row.quality-thing-distractor")
                 .waitForNonExistence(timeout: 8),
             "The deleted Thing must not return after the pending deletion commits and the App relaunches."
         )
-        tapWhenHittable(relaunchedThing, timeout: 8, message: "The same Thing must survive relaunch")
+        let unavailableFeedback = element(
+            in: unavailableTarget.app,
+            identifier: "feedback.entity.target_unavailable"
+        )
+        XCTAssertTrue(
+            unavailableFeedback.waitForExistence(timeout: 5),
+            "Opening a deleted Thing must visibly explain the fallback instead of leaving a pending target."
+        )
+        XCTAssertTrue(
+            unavailableFeedback.label.contains("The requested item was not found or has expired."),
+            "The fallback must explain that the exact target is unavailable."
+        )
+        let survivingThing = element(
+            in: unavailableTarget.app,
+            identifier: "thing.row.quality-thing-rich"
+        )
+        XCTAssertTrue(
+            survivingThing.waitForExistence(timeout: 5),
+            "After the deleted-target fallback, the canonical Things list must remain usable."
+        )
+        tapWhenHittable(survivingThing, timeout: 8, message: "The same Thing must survive relaunch")
         let relatedEvent = element(
-            in: context.app,
+            in: unavailableTarget.app,
             identifier: "thing.related.event.quality-related-event"
         )
         tapWhenHittable(relatedEvent, timeout: 8, message: "Related Event must open")
-        assertElementExists("screen.events.detail", in: context.app, timeout: 8)
-        XCTAssertTrue(context.app.staticTexts["Quality Related Event"].waitForExistence(timeout: 8))
+        assertElementExists("screen.events.detail", in: unavailableTarget.app, timeout: 8)
+        XCTAssertTrue(unavailableTarget.app.staticTexts["Quality Related Event"].waitForExistence(timeout: 8))
     }
 
     func testChannelCreateRenameAndBothUnsubscribeOutcomesPersist() {

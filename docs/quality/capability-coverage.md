@@ -48,6 +48,8 @@ P1-NAV 当前证据刷新（取代上表该行较早的 `ios-message-navigation-
 
 P1-NAV Events/Things 当前 Tab 证据（2026-08-31）：两端复用既有 Event close/convergence 与 Thing delete/search/relations/relaunch 正向方法；16 个较旧 App-owned 导航对象经正式 ingestion/projection 形成长列表。iOS 真实滚离顶部后，先点击系统收缩的当前 Tab 使其展开，再双击展开后的当前 Tab；Event 最终 1/1（`build/quality-results/ios-event-navigation-positive-closed-fillers/run-1-20260831-035018.xcresult`），Thing 在两方法结果包中 1/1（`build/quality-results/ios-entity-navigation-positive/run-1-20260831-034619.xcresult`）。Android 使用生产 LazyColumn 的 ScrollToIndex 语义只做确定性准备，真实双击与最新行/深层控制行的可见性反转裁决 2/2，收据 `build/quality-results/android-focused-summary.json`；临时切断 Event top token 后同一用例精确超时于反转 Oracle，随后源文件 SHA-256 完整恢复。没有新增方法、fixture 类型、App 启动或 Lane；冷/无效/已删除目标与物理设备仍 `NOT RUN`，实现与审查同属一个上下文，保留 `common-mode-risk`。
 
+P1-NAV 代表性已删除目标证据（2026-08-31）：两端继续复用既有 Thing 删除/搜索/三关系/relaunch 正向方法，不增加方法、fixture 类型、启动次数或 Lane。真实删除 distractor 并提交后，通过 App-owned cold route 再次请求同一 ID；必须显示准确“目标不存在或已过期”反馈、目标不得复活、canonical Things 列表仍可用，并从幸存 Thing 打开准确关联 Event。Android `thingFixtureShowsAccurateOverviewAndAllThreeRealRelationTabs` 在 `emulator-5554` focused 1/1，收据 `../pushgo-android/build/quality-results/android-focused-summary.json`；临时切断生产反馈后同例精确失败于 `feedback.entity.target_unavailable`，恢复前后目标文件 SHA-256 同为 `d70e2ffd243755a5c7d204dc4a24d1bafc75e202e793d4735d2ceef6049ecfa5`。iOS `testImportedThingFixtureCanOpenThingDetail` 在专用 Simulator 1/1、零重试，收据 `build/quality-results/ios/run-1-20260831-045040.xcresult`；失败结果的最终可访问性树先证明反馈和幸存数据真实可见，再定位到外层页面 ID 覆盖同级反馈 ID 的测试接入缺陷，修正语义边界后通过。该证据只关闭代表性 deleted Thing fallback，不外推任意非法 ID、Event/Message 删除路线、真实 URL handoff 或物理设备。
+
 ## 增量规则
 
 新增或改变 Screen、Route、Action、持久字段、系统表面、后台任务、权限或性能敏感路径时，必须更新相应行并运行调用者/数据/平台消费者影响分析。`config/quality-impact.json` 只强制确定性最低 Lane；未映射产品路径阻断，命中路径也不能自动宣称覆盖。
