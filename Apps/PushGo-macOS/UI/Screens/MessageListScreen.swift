@@ -289,15 +289,20 @@ struct MessageListScreen: View {
     }
 
     private var searchProgressRow: some View {
-        HStack {
-            Spacer()
+        VStack(spacing: 12) {
             ProgressView()
                 .progressViewStyle(.circular)
                 .controlSize(.large)
-            Spacer()
+
+            Text(localizationManager.localized("searching_messages"))
+                .font(.subheadline)
+                .foregroundStyle(Color.appTextSecondary)
         }
+        .frame(maxWidth: .infinity, alignment: .center)
         .padding(.vertical, 60)
         .listRowInsets(EdgeInsets())
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("state.messages.search.loading")
     }
 
     private func scrollToSelectionIfNeeded(_ proxy: ScrollViewProxy) {

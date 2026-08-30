@@ -7,6 +7,15 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 class QualityLaneCostContractTests(unittest.TestCase):
+    def test_changed_runner_help_exits_before_tests_or_stale_lane_selection(self) -> None:
+        runner = (REPO / "scripts/quality_changed.sh").read_text()
+
+        help_guard = runner.index('if [[ "${1:-}" == "-h"')
+        script_tests = runner.index("python3 -m unittest discover")
+        lane_execution = runner.index('exec "$repo_root/scripts/quality_test.sh"')
+        self.assertLess(help_guard, script_tests)
+        self.assertLess(help_guard, lane_execution)
+
     def test_ci_receipts_outlive_the_full_observation_window(self) -> None:
         workflow = (REPO / ".github/workflows/apple-quality.yml").read_text()
         receipt_upload = workflow.split("- name: Upload compact longitudinal receipts", 1)[1]

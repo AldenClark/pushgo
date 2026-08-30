@@ -2,6 +2,12 @@
 set -euo pipefail
 export PYTHONDONTWRITEBYTECODE=1
 
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  echo "usage: scripts/quality_changed.sh [quality_impact.py options]"
+  echo "Generates a fresh impact plan and executes its recommended minimum lane."
+  exit 0
+fi
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 results_root="$repo_root/build/quality-results"
 impact_file="$results_root/apple-impact-plan.json"

@@ -105,7 +105,7 @@ struct MessageSplitScreen: View {
                 viewModel: messageListViewModel,
                 messages: visibleFilteredMessages,
                 searchResults: visibleSearchResults,
-                isShowingSearchResults: searchViewModel.hasSearched,
+                isShowingSearchResults: searchViewModel.hasSearched || searchViewModel.isSearching,
                 selection: $selection,
                 onOpenMessage: { message in
                     selection = message.id

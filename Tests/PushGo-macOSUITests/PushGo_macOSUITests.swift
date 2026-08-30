@@ -628,6 +628,7 @@ final class PushGo_macOSUITests: XCTestCase {
         let relaunched = configuredQualityApp(
             sessionID: sessionID,
             fixture: "messages.standard",
+            messageSearchDelayMilliseconds: 2_000,
             legacyStore: "messages.v17",
             allowCrossAppDataAccess: true
         )
@@ -651,6 +652,37 @@ final class PushGo_macOSUITests: XCTestCase {
             "The canonical message did not survive a real process relaunch."
         )
         XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.empty").exists)
+
+        let searchField = relaunched.app.searchFields.firstMatch
+        XCTAssertTrue(
+            searchField.waitForExistence(timeout: 8) && searchField.isHittable,
+            "The real macOS message search field must remain reachable after relaunch."
+        )
+        searchField.click()
+        searchField.typeText("P2 Split")
+        let slowSearchFeedback = element(
+            in: relaunched.app,
+            identifier: "state.messages.search.loading"
+        )
+        XCTAssertTrue(
+            slowSearchFeedback.waitForExistence(timeout: 2),
+            "A deliberately slow first search must warn the user before its result is available."
+        )
+        XCTAssertTrue(
+            slowSearchFeedback.frame.intersects(relaunched.app.windows.firstMatch.frame)
+                && slowSearchFeedback.frame.width > 0
+                && slowSearchFeedback.frame.height > 0,
+            "The slow-search warning must occupy visible window space, not only exist in semantics."
+        )
+        XCTAssertTrue(
+            relaunchedRow.waitForExistence(timeout: 8)
+                && relaunchedRow.label.contains("P2 Split Seed Message"),
+            "The slow search must finish with the exact canonical target."
+        )
+        XCTAssertFalse(
+            relaunchedLegacyRow.exists,
+            "The completed search must not leave the unrelated pre-search row visible."
+        )
     }
 
     @MainActor
@@ -3498,6 +3530,7 @@ final class PushGo_macOSUITests: XCTestCase {
         localStoreFailureStreakThreshold: Int? = nil,
         messageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
+        messageSearchDelayMilliseconds: Int? = nil,
         legacyStore: String? = nil,
         failMessageLoad: Bool = false,
         failGatewaySwitchValidationOnce: Bool = false,
@@ -3535,6 +3568,7 @@ final class PushGo_macOSUITests: XCTestCase {
                 localStoreFailureStreakThreshold: localStoreFailureStreakThreshold,
                 messageLoadDelayMilliseconds: messageLoadDelayMilliseconds,
                 messageRefreshDelayMilliseconds: messageRefreshDelayMilliseconds,
+                messageSearchDelayMilliseconds: messageSearchDelayMilliseconds,
                 legacyStore: legacyStore,
                 failMessageLoad: failMessageLoad,
                 failGatewaySwitchValidationOnce: failGatewaySwitchValidationOnce,
@@ -3589,6 +3623,7 @@ final class PushGo_macOSUITests: XCTestCase {
         localStoreFailureStreakThreshold: Int? = nil,
         messageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
+        messageSearchDelayMilliseconds: Int? = nil,
         legacyStore: String? = nil,
         failMessageLoad: Bool = false,
         failGatewaySwitchValidationOnce: Bool = false,
@@ -3613,6 +3648,9 @@ final class PushGo_macOSUITests: XCTestCase {
         }
         if let messageRefreshDelayMilliseconds {
             faults["message_refresh_delay_ms"] = messageRefreshDelayMilliseconds
+        }
+        if let messageSearchDelayMilliseconds {
+            faults["message_search_delay_ms"] = messageSearchDelayMilliseconds
         }
         var payload: [String: Any] = [
             "schema_version": 1,
