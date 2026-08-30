@@ -21,14 +21,21 @@ final class PushGo_watchOSUITests: XCTestCase {
         configureHermeticLaunch(app, sessionID: sessionID)
         app.launch()
 
-        let gatewayMessage = app.staticTexts["Gateway health warning"]
-        let databaseMessage = app.staticTexts["Database recovered"]
-        let databaseUnreadIndicator = app.descendants(matching: .any)[
-            "indicator.message.unread.quality-watch-message-002"
-        ]
+        let gatewayMessage = app.buttons["row.message.quality-watch-message-001"]
+        let databaseMessage = app.buttons["row.message.quality-watch-message-002"]
         XCTAssertTrue(gatewayMessage.waitForExistence(timeout: 10), startupFailureDescription(in: app))
         XCTAssertTrue(databaseMessage.exists)
-        XCTAssertTrue(databaseUnreadIndicator.exists)
+        XCTAssertEqual(gatewayMessage.label, "Gateway health warning")
+        XCTAssertEqual(
+            gatewayMessage.value as? String,
+            "Unread, Critical, Primary API latency is above budget."
+        )
+        XCTAssertTrue(gatewayMessage.isHittable)
+        XCTAssertEqual(databaseMessage.label, "Database recovered")
+        XCTAssertEqual(
+            databaseMessage.value as? String,
+            "Unread, Normal, Replica lag returned to normal."
+        )
 
         gatewayMessage.tap()
         XCTAssertTrue(app.staticTexts["Primary API latency is above budget."].waitForExistence(timeout: 5))
@@ -54,27 +61,38 @@ final class PushGo_watchOSUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Replica lag returned to normal."].waitForExistence(timeout: 5))
         pressBack(in: app)
         XCTAssertTrue(databaseMessage.waitForExistence(timeout: 5))
-        XCTAssertTrue(waitUntil(timeout: 5) { !databaseUnreadIndicator.exists })
+        XCTAssertTrue(
+            waitUntil(timeout: 5) {
+                databaseMessage.value as? String == "Read, Normal, Replica lag returned to normal."
+            }
+        )
 
         app.terminate()
         configureHermeticLaunch(app, sessionID: sessionID)
         app.launch()
         XCTAssertTrue(databaseMessage.waitForExistence(timeout: 10), startupFailureDescription(in: app))
-        XCTAssertFalse(app.staticTexts["Gateway health warning"].exists)
-        XCTAssertFalse(databaseUnreadIndicator.exists)
+        XCTAssertFalse(gatewayMessage.exists)
+        XCTAssertEqual(
+            databaseMessage.value as? String,
+            "Read, Normal, Replica lag returned to normal."
+        )
 
-        let event = app.staticTexts["Payments incident"]
+        let event = app.buttons["row.event.quality-watch-event-001"]
         XCTAssertTrue(swipeLeft(to: event, in: app))
-        XCTAssertTrue(app.staticTexts["Checkout errors exceeded threshold."].exists)
+        XCTAssertEqual(event.label, "Payments incident")
+        XCTAssertEqual(event.value as? String, "ONGOING, High, Checkout errors exceeded threshold.")
+        XCTAssertTrue(event.isHittable)
         event.tap()
         XCTAssertTrue(app.descendants(matching: .any)["screen.event.detail"].waitForExistence(timeout: 5))
         XCTAssertTrue(scrollToElement(app.staticTexts["Checkout errors exceeded threshold."], in: app, maximumSwipes: 2))
         XCTAssertTrue(app.staticTexts["ONGOING"].exists)
 
         pressBack(in: app)
-        let thing = app.staticTexts["Checkout API"]
+        let thing = app.buttons["row.thing.quality-watch-thing-001"]
         XCTAssertTrue(swipeLeft(to: thing, in: app))
-        XCTAssertTrue(app.staticTexts["Degraded in eu-west."].exists)
+        XCTAssertEqual(thing.label, "Checkout API")
+        XCTAssertEqual(thing.value as? String, "Degraded in eu-west.")
+        XCTAssertTrue(thing.isHittable)
         thing.tap()
         XCTAssertTrue(app.descendants(matching: .any)["screen.thing.detail"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Degraded in eu-west."].waitForExistence(timeout: 5))

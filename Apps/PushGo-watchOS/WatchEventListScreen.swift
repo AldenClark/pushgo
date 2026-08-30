@@ -27,6 +27,9 @@ struct WatchEventListScreen: View {
                         NavigationLink(value: event.eventId) {
                             WatchLightEventRow(event: event)
                         }
+                        .accessibilityIdentifier("row.event.\(event.eventId)")
+                        .accessibilityLabel(Text(event.title))
+                        .accessibilityValue(Text(eventAccessibilityValue(event)))
                     }
                 }
             }
@@ -74,6 +77,19 @@ struct WatchEventListScreen: View {
             }
 #endif
         }
+    }
+
+    private func eventAccessibilityValue(_ event: WatchLightEvent) -> String {
+        [
+            normalizedWatchEventStatus(event.state) ?? localizedDefaultWatchCreatedEventStatus(),
+            event.severity?.capitalized,
+            event.summary,
+        ]
+        .compactMap { value in
+            value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        .filter { !$0.isEmpty }
+        .joined(separator: ", ")
     }
 
     private func reload() {

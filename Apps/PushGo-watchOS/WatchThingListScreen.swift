@@ -28,6 +28,9 @@ struct WatchThingListScreen: View {
                             NavigationLink(value: thing.thingId) {
                                 WatchLightThingRow(thing: thing)
                             }
+                            .accessibilityIdentifier("row.thing.\(thing.thingId)")
+                            .accessibilityLabel(Text(thing.title))
+                            .accessibilityValue(Text(thingAccessibilityValue(thing)))
                         }
                     }
                 }
@@ -76,6 +79,18 @@ struct WatchThingListScreen: View {
             }
 #endif
         }
+    }
+
+    private func thingAccessibilityValue(_ thing: WatchLightThing) -> String {
+        [
+            watchDecryptionStateText(thing.decryptionState),
+            thing.summary,
+        ]
+        .compactMap { value in
+            value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        .filter { !$0.isEmpty }
+        .joined(separator: ", ")
     }
 
     private func reload() {

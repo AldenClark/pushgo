@@ -198,7 +198,7 @@ Platform vector order is `I / M / D / W` (iOS, macOS, Android, watchOS). `-` mea
 
 | Line | P0 purpose | I/M/D/W | State | Evidence or exact remaining closure |
 | --- | --- | --- | --- | --- |
-| 1522 | Message/Event/Thing row semantics | V/V/V/P | `P` | Apple and Android semantics/real task representatives cover name, state and primary action. Watch exact visual journeys exist, but the final semantic-accessibility mapping for all three row types is not closed. |
+| 1522 | Message/Event/Thing row semantics | V/V/V/V | `V` | Apple and Android semantics/real task representatives cover name, state and primary action. Watch production `NavigationLink` rows now own stable semantic IDs plus exact labels and purpose values: Message exposes title + read state + severity + body, Event exposes title + lifecycle state + severity + summary, and Thing exposes title + available decryption state + business summary. The existing core journey queries those real buttons, checks exact label/value and hittability, opens accurate details, and proves Message unread→read survives relaunch; no new method, fixture or launch was added. This closes simulator semantic mapping only; physical VoiceOver/TalkBack tasks remain row 1523 `N`. |
 | 1523 | VoiceOver/TalkBack opens, searches and deletes with Undo (`P0 Release`) | N/N/N/N | `N` | Requires dedicated physical accessibility runs and focus-order evidence. Simulator large-font/localization is complementary, not a substitute. |
 | 1528 | Supported-language resource completeness | V/V/V/V | `V` | Every production key is non-empty in supported locales and placeholders are compatible; this is intentionally not used as layout evidence. |
 
@@ -213,8 +213,8 @@ Platform vector order is `I / M / D / W` (iOS, macOS, Android, watchOS). `-` mea
 
 The design contains 103 P0/P0 Release rows. This audit deliberately does **not** declare section 21.2(1) complete:
 
-- 87 rows are currently classified `V`; 1 conditional export row is `NA` because the product capability was explicitly removed.
-- 7 rows remain `P` and require semantic closure, an explicit product-scope correction, or an externally owned sub-gate.
+- 88 rows are currently classified `V`; 1 conditional export row is `NA` because the product capability was explicitly removed.
+- 6 rows remain `P` and require semantic closure, an explicit product-scope correction, or an externally owned sub-gate.
 - Two platform sub-results are explicitly `B`: iOS Channel Pasteboard and macOS notification interaction. Neither is hidden inside a green aggregate.
 - 8 P0 Release/external rows remain `N`; local Simulator/emulator evidence is retained but never promoted to physical/provider acceptance.
 

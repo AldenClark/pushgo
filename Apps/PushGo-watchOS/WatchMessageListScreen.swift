@@ -25,6 +25,9 @@ struct WatchMessageListScreen: View {
                             NavigationLink(value: message.messageId) {
                                 WatchLightMessageRowView(message: message)
                             }
+                            .accessibilityIdentifier("row.message.\(message.messageId)")
+                            .accessibilityLabel(Text(message.title))
+                            .accessibilityValue(Text(messageAccessibilityValue(message)))
                         }
                     }
                 }
@@ -73,6 +76,19 @@ struct WatchMessageListScreen: View {
             }
 #endif
         }
+    }
+
+    private func messageAccessibilityValue(_ message: WatchLightMessage) -> String {
+        [
+            localizationManager.localized(message.isRead ? "read" : "unread"),
+            message.severity?.capitalized,
+            message.body,
+        ]
+        .compactMap { value in
+            value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        .filter { !$0.isEmpty }
+        .joined(separator: ", ")
     }
 
     private func reload() {
