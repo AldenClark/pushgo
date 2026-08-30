@@ -215,7 +215,7 @@ final class PushGo_macOSUITests: XCTestCase {
         )
 
         context.app.launch()
-        authorizeMacNotificationsIfNeeded(in: context.app)
+        resolveMacNotificationAuthorizationIfNeeded(in: context.app)
         context.app.activate()
         XCTAssertTrue(context.app.windows.firstMatch.waitForExistence(timeout: 12))
         let ready = element(in: context.app, identifier: "quality-runtime.ready")
@@ -3540,29 +3540,43 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
-    private func authorizeMacNotificationsIfNeeded(in app: XCUIApplication) {
+    private func resolveMacNotificationAuthorizationIfNeeded(in app: XCUIApplication) {
         let hosts = [
             app,
             XCUIApplication(bundleIdentifier: "com.apple.UserNotificationCenter"),
         ]
-        for host in hosts {
-            let alert = host.alerts.firstMatch
-            guard alert.waitForExistence(timeout: 2) else { continue }
-            let allow = alert.buttons
-                .matching(NSPredicate(format: "label IN %@", ["Allow", "允许", "允許"]))
-                .firstMatch
-            XCTAssertTrue(
-                allow.waitForExistence(timeout: 3),
-                "QUALITY_PRECONDITION: the macOS notification permission Allow action was unavailable."
-            )
-            if allow.exists {
-                allow.click()
-                XCTAssertTrue(
-                    alert.waitForNonExistence(timeout: 8),
-                    "QUALITY_PRECONDITION: the macOS notification permission prompt did not dismiss."
-                )
+        let ready = element(in: app, identifier: "quality-runtime.ready")
+        let commandSucceeded = element(in: app, identifier: "quality-command.succeeded")
+        let commandFailed = element(in: app, identifier: "quality-command.failed")
+        let deadline = Date().addingTimeInterval(6)
+
+        while Date() < deadline {
+            // An already-granted or already-denied host completes the command
+            // without presenting UI. Stop as soon as the App-owned boundary can
+            // classify that result instead of paying two fixed alert timeouts.
+            if ready.exists || commandSucceeded.exists || commandFailed.exists {
+                return
             }
-            return
+            for host in hosts {
+                let alert = host.alerts.firstMatch
+                guard alert.exists else { continue }
+                let allow = alert.buttons
+                    .matching(NSPredicate(format: "label IN %@", ["Allow", "允许", "允許"]))
+                    .firstMatch
+                XCTAssertTrue(
+                    allow.waitForExistence(timeout: 3),
+                    "QUALITY_PRECONDITION: the macOS notification permission Allow action was unavailable."
+                )
+                if allow.exists {
+                    allow.click()
+                    XCTAssertTrue(
+                        alert.waitForNonExistence(timeout: 8),
+                        "QUALITY_PRECONDITION: the macOS notification permission prompt did not dismiss."
+                    )
+                }
+                return
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         }
     }
 

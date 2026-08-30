@@ -126,6 +126,7 @@ class QualityLaneCostContractTests(unittest.TestCase):
     def test_real_macos_system_notification_is_release_or_focused_only(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()
         macos_runner = (REPO / "scripts/run_macos_ui_tests.sh").read_text()
+        macos_source = (REPO / "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift").read_text()
 
         self.assertIn("macos-system-notification)\n    run_macos_system_notification", runner)
         release_body = runner.split("  release)\n", 1)[1].split("  *)\n", 1)[0]
@@ -143,6 +144,15 @@ class QualityLaneCostContractTests(unittest.TestCase):
             system,
         )
         self.assertIn("MAX_RETRIES=0", runner.split("run_macos_system_notification() {", 1)[1].split("\n}", 1)[0])
+        authorization = macos_source.split(
+            "private func resolveMacNotificationAuthorizationIfNeeded",
+            1,
+        )[1].split("\n    @MainActor", 1)[0]
+        self.assertIn('identifier: "quality-runtime.ready"', authorization)
+        self.assertIn('identifier: "quality-command.succeeded"', authorization)
+        self.assertIn('identifier: "quality-command.failed"', authorization)
+        self.assertIn("while Date() < deadline", authorization)
+        self.assertNotIn("alert.waitForExistence(timeout: 2)", authorization)
 
     def test_channel_ui_impact_checks_run_one_platform_owner_journey(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()
