@@ -77,7 +77,9 @@ on_exit() {
   elif [[ $status -eq 2 ]]; then
     write_result NOT_RUN BLOCKED "lane preparation was blocked before product evidence completed"
   elif [[ $status -eq 3 ]]; then
-    write_result NOT_RUN FAILED "the selected Apple test scope executed zero tests; no product claim was completed"
+    write_result NOT_RUN FAILED "the selected Apple scope produced no acceptable executed-test evidence; no product claim was completed"
+  elif [[ $status -eq 4 ]]; then
+    write_result NOT_RUN FAILED "a required test-system sensitivity control did not reject the deliberately broken behavior"
   else
     write_result FAILED "$runner_status" "an executed product oracle failed; inspect xcresult/log for the first failure"
   fi
@@ -256,6 +258,8 @@ run_performance() {
     MAX_RETRIES=0 \
     QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
   claims+=("iOS prepared 1k Store cold-launch-to-accurate-content metrics and purpose oracle")
+  QUALITY_REUSE_BUILT_TESTS=1 \
+    "$repo_root/scripts/run_ios_performance_negative_control.sh"
   if [[ $physical_performance_requested -eq 1 ]]; then
     selected_claims+=("iOS fixed physical reference-device Release launch-to-accurate-content budget")
     "$repo_root/scripts/run_ios_physical_performance.sh"

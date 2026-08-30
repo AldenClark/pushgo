@@ -46,6 +46,8 @@
 
 ## 红队攻击结果（设计防线与已实现防线分开理解）
 
+- **低预算天然超时冒充慢加载敏感性攻击（Apple）**：初版用 3,500ms 注入攻击 2,000ms 上限，观察 6,601ms 看似成功；临时移除注入后 Simulator 自身仍约 6 秒，负控继续绿色，证明它只验证了“不现实预算”。蓝方废弃该结果，改用既有正向 8 秒粗退化上限与 8 秒真实 Store→SwiftUI 延迟；最终准确 title 后 11,913ms 被精确拒绝。严格 expected-failure matcher 只接受预算 issue；取消延迟时准确 title/body 仍完成，但“应失败而未失败”使测试系统退出 4，恢复后再通过。首轮 Shell 环境未进入 XCTest、expectedFailures 被零执行校验器漏计也都保留为测试系统红证据并已修正。该实验独立记 product `NOT_RUN` / test-system `PASSED`，复用正向构建且只进 Performance/Release；Simulator 仍不提供真机 SLO，负控/实现/审查同上下文保留 `common-mode-risk`。
+
 1. **形式 Oracle 攻击**：只保留文件存在、版本、screen id、count 或 response=ok。裁决：不能阻断；必须绑定准确内容/动作/重启或数据终点。
 2. **宿主权限攻击**：App 无权读 Runner 临时目录/数据库。裁决：fixture 与结果写入 App container；宿主路径协议只留旧诊断迁移清单，不再用于新核心纵向用例。
 3. **错误 Fixture 血缘攻击**：事件/事物写入 `entity_records` 后行存在但真实投影不可打开。结果：UI 用例失败；已改为生产消息摄入路径。这证明 Oracle 不是恒真。

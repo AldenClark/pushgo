@@ -226,6 +226,9 @@
 
 ## 已完成切片的本轮证据
 
+- 2026-08-30 Apple 真实慢加载性能敏感性负控（补齐 Android 切片当时的跨平台缺口）：复用既有 iOS 1k 正向性能方法的 App-owned Store、准确 `Quality message 999`/正文和 `.deriveddata-ui-tests` 构建，不引入产品代码或新 fixture。首个 Shell 环境变量方案没有进入 XCTest，负控错误接受正向模式并按专用退出码变红；改为独立 scope 后又发现 `verify_apple_test_execution.py` 只计 passed/failed、把 xcresult 的 `expectedFailures=1/totalTestCount=1` 误报为零执行，现将 expected failure 计为真实执行而仍排除 skipped。第一次 3,500ms 对 2,000ms 虽观察 6,601ms，但取消注入后 Simulator 自身仍约 6 秒，负控继续绿色，红队判为“不现实低预算”假绿并废弃。最终以 8,000ms 真实 Store→SwiftUI 延迟攻击既有 8,000ms 粗退化上限，严格 matcher 只接受准确标题出现后的预算 issue；当前字节观察 11,913ms。临时取消注入时准确 title/body 正常但严格 expected failure 未发生，测试系统退出 4；恢复后独立收据 product `NOT_RUN` / test-system `PASSED`。正向当前字节 1/1、5 次准确内容与详情通过；126 条脚本合同、Shell、diff 均通过。负控复用正向 build-for-testing，只进 Performance/Release；第 21.2(7) 的跨平台慢加载负控由两端当前证据补齐，但真机、warm/scroll、真实网络慢源和独立审查仍不外推。
+
+- 最终 `performance` 聚合入口随后完整通过：10 条 RuntimeQualityLargeScaleTests（含 100k Store/upgrade、10k Watch/concurrency）、iOS 1k 正向 1/1 与慢加载敏感性负控均由同一 Lane 串联；`apple-performance-summary.json` 的 product/test-system=`PASSED/PASSED`、selected=executed，最终负控收据观察 11,506ms > 8,000ms。物理 launch/frame/trace 仍明确 `NOT RUN`。
 - 两仓静态检查、单元测试、编译、Release 构建与代表性 UI/数据旅程均已完成；详见“新鲜证据”。
 - 红蓝审计、归因分析、双向覆盖反查和残余风险已记录在 `validation.md`；这是同上下文证据，不是独立审查。
 - 提交边界：按可独立验证的体系切片分别提交 Apple 与 Android；不 push、不发布。本表不以提交数量作为完成判据。

@@ -9,16 +9,24 @@ from pathlib import Path
 import subprocess
 
 
-def executed_test_count(summary: dict[str, object]) -> int:
-    values = [summary.get(name, 0) for name in ("passedTests", "failedTests")]
+def executed_test_count(
+    summary: dict[str, object], *, allow_expected_failures: bool = False
+) -> int:
+    values = [
+        summary.get(name, 0)
+        for name in ("passedTests", "failedTests", "expectedFailures")
+    ]
     if any(isinstance(value, bool) or not isinstance(value, int) for value in values):
-        raise ValueError("xcresult passedTests/failedTests are not integers")
+        raise ValueError("xcresult passedTests/failedTests/expectedFailures are not integers")
+    if values[2] > 0 and not allow_expected_failures:
+        raise ValueError("xcresult contains expected failures outside an authorized sensitivity control")
     return sum(values)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--result-bundle", required=True, type=Path)
+    parser.add_argument("--allow-expected-failures", action="store_true")
     args = parser.parse_args()
 
     try:
@@ -38,7 +46,10 @@ def main() -> int:
             capture_output=True,
             text=True,
         )
-        count = executed_test_count(json.loads(completed.stdout))
+        count = executed_test_count(
+            json.loads(completed.stdout),
+            allow_expected_failures=args.allow_expected_failures,
+        )
     except (OSError, ValueError, json.JSONDecodeError, subprocess.CalledProcessError) as error:
         print("status=FAILED_TEST_SYSTEM")
         print(f"reason=invalid_apple_test_result:{error}")

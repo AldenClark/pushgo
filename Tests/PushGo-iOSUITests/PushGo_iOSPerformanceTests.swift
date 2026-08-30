@@ -77,6 +77,58 @@ extension PushGo_iOSUITests {
         )
     }
 
+    func testSlowLargeMessageLoadTripsAccurateContentBudget() {
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: "ios-performance-negative-\(UUID().uuidString.lowercased())",
+            fixture: "messages.large",
+            messageLoadDelayMilliseconds: 8_000
+        )
+        let exactTitle = context.app.staticTexts["Quality message 999"]
+
+        // Seed outside the measured interval, then force a real cold relaunch through the
+        // same Store -> view model -> SwiftUI path as the positive performance journey.
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 30)
+        XCTAssertTrue(exactTitle.waitForExistence(timeout: 12))
+        context.app.terminate()
+
+        let expectationOptions = XCTExpectedFailure.Options()
+        expectationOptions.isStrict = true
+        expectationOptions.issueMatcher = { issue in
+            issue.compactDescription.contains(
+                "slow-load negative control: launch-to-accurate-content took"
+            ) && issue.compactDescription.contains("budget=8000ms")
+        }
+        XCTExpectFailure(
+            "The controlled 8-second load must trip the existing 8-second accurate-content ceiling.",
+            options: expectationOptions
+        )
+
+        let launchStartedAt = ContinuousClock.now
+        context.app.launch()
+        let reachedAccurateContent = exactTitle.waitForExistence(timeout: 12)
+        let elapsed = launchStartedAt.duration(to: .now)
+        let seconds = Double(elapsed.components.seconds)
+            + Double(elapsed.components.attoseconds) / 1_000_000_000_000_000_000
+        XCTAssertTrue(
+            reachedAccurateContent,
+            "The deliberately delayed 1,000-message Store did not reach its exact canonical title"
+        )
+        let elapsedMilliseconds = Int((seconds * 1_000).rounded())
+        XCTAssertLessThanOrEqual(
+            seconds,
+            8,
+            "slow-load negative control: launch-to-accurate-content took \(elapsedMilliseconds)ms; budget=8000ms"
+        )
+        tapWhenHittable(exactTitle, timeout: 5)
+        assertElementExists("sheet.message.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Deterministic app-owned performance fixture row 999."].exists,
+            "The deliberately slow title must still open the matching persisted body"
+        )
+    }
+
     func testPhysicalReferenceDeviceColdLaunchReachesExpectedContent() throws {
         let environment = ProcessInfo.processInfo.environment
         try XCTSkipIf(

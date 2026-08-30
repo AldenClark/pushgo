@@ -11,10 +11,23 @@ derived_data_path="${DERIVED_DATA_PATH:-$repo_root/.deriveddata-ui-tests}"
 results_root="${RESULTS_ROOT:-$repo_root/build/quality-results/ios}"
 runner_status_file="${QUALITY_RUNNER_STATUS_FILE:-}"
 runner_issue_file="${QUALITY_RUNNER_ISSUE_FILE:-}"
+reuse_built_tests="${QUALITY_REUSE_BUILT_TESTS:-0}"
+allow_expected_failures="${QUALITY_ALLOW_EXPECTED_FAILURES:-0}"
 
 if [[ ! "$max_retries" =~ ^[0-9]+$ ]] || (( max_retries != 0 )); then
   echo "status=BLOCKED"
   echo "reason=ios_ui_retries_are_disabled:$max_retries"
+  exit 2
+fi
+
+if [[ "$reuse_built_tests" != "0" && "$reuse_built_tests" != "1" ]]; then
+  echo "status=BLOCKED"
+  echo "reason=invalid_ios_reuse_built_tests:$reuse_built_tests"
+  exit 2
+fi
+if [[ "$allow_expected_failures" != "0" && "$allow_expected_failures" != "1" ]]; then
+  echo "status=BLOCKED"
+  echo "reason=invalid_ios_allow_expected_failures:$allow_expected_failures"
   exit 2
 fi
 
@@ -118,10 +131,20 @@ if [[ -n "$requested_content_size" ]]; then
   echo "content_size=$applied_content_size"
 fi
 
-echo "==> build-for-testing"
-xcodebuild "${common_args[@]}" build-for-testing
-
 app_bundle="$derived_data_path/Build/Products/Debug-iphonesimulator/PushGo.app"
+test_runner_bundle="$derived_data_path/Build/Products/Debug-iphonesimulator/PushGo-iOSUITests-Runner.app"
+if [[ "$reuse_built_tests" == "1" ]]; then
+  [[ -d "$app_bundle" && -d "$test_runner_bundle" ]] || {
+    echo "status=BLOCKED"
+    echo "reason=ios_reusable_built_tests_missing"
+    exit 2
+  }
+  echo "==> reuse build-for-testing products"
+else
+  echo "==> build-for-testing"
+  xcodebuild "${common_args[@]}" build-for-testing
+fi
+
 if ! "$repo_root/scripts/prepare_ios_ui_test_app.sh" "$target" "$app_bundle" "$app_bundle_identifier"; then
   [[ -z "$runner_status_file" ]] || printf 'BLOCKED\n' > "$runner_status_file"
   exit 2
@@ -148,10 +171,12 @@ until [[ $attempt -gt $((max_retries + 1)) ]]; do
   echo "==> test-without-building (attempt ${attempt}/$((max_retries + 1)))"
 
   if run_test_once "$log_file" "$result_bundle"; then
-    if ! python3 "$repo_root/scripts/verify_apple_test_execution.py" --result-bundle "$result_bundle"; then
+    verify_execution_args=(--result-bundle "$result_bundle")
+    [[ "$allow_expected_failures" == "0" ]] || verify_execution_args+=(--allow-expected-failures)
+    if ! python3 "$repo_root/scripts/verify_apple_test_execution.py" "${verify_execution_args[@]}"; then
       [[ -z "$runner_status_file" ]] || printf 'FAILED\n' > "$runner_status_file"
       echo "status=FAILED_TEST_SYSTEM"
-      echo "reason=selected_ios_ui_scope_executed_zero_tests"
+      echo "reason=apple_test_execution_receipt_rejected"
       echo "result_bundle=$result_bundle"
       exit 3
     fi
