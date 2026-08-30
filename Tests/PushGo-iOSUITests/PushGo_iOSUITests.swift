@@ -755,9 +755,34 @@ final class PushGo_iOSUITests: XCTestCase {
             "The oldest canonical object from production page 2 was not reachable"
         )
 
+        let messagesTab = context.app.tabBars.firstMatch.buttons.element(boundBy: 0)
+        messagesTab.tap()
+        XCTAssertTrue(
+            context.app.staticTexts["Quality workflow 39"].waitForExistence(timeout: 5),
+            "Reselecting Messages once must reach the nearest unread canonical object"
+        )
+        XCTAssertFalse(context.app.staticTexts["Quality workflow 51"].exists)
+
+        messagesTab.doubleTap()
+        XCTAssertTrue(
+            context.app.staticTexts["Quality workflow 51"].waitForExistence(timeout: 5),
+            "Double-tapping Messages must reach the newest canonical object"
+        )
+        RunLoop.current.run(until: Date().addingTimeInterval(0.45))
+        XCTAssertTrue(
+            context.app.staticTexts["Quality workflow 51"].exists,
+            "The canceled single-tap task must not move the list after a double-tap"
+        )
+        XCTAssertFalse(context.app.staticTexts["Quality workflow 39"].exists)
+
+        messagesTab.tap()
+        XCTAssertTrue(
+            context.app.staticTexts["Quality workflow 39"].waitForExistence(timeout: 5),
+            "A later single reselect must still reach the nearest unread object"
+        )
         let unreadRow = element(
             in: context.app,
-            identifier: "message.row.00000000-0000-0000-0000-000000000002"
+            identifier: "message.row.00000000-0000-0000-0000-000000000028"
         )
         XCTAssertTrue(unreadRow.waitForExistence(timeout: 5))
         let unreadLabel = unreadRow.label

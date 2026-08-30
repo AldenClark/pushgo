@@ -4098,15 +4098,16 @@ final class PushGoAutomationRuntime {
         let title = "Quality workflow \(index)"
         let body = "Cross-page deterministic workflow row \(index)."
         let receivedAt = Date(timeIntervalSince1970: 1_768_464_000 + Double(index))
+        // Keep the established 39-unread count while separating the navigation
+        // oracles: a reselect lands on row 39, whereas a double-tap lands on row 51.
+        let isRead = index >= 40 || (index.isMultiple(of: 4) && index > 32)
         return [
             "id": "00000000-0000-0000-0000-\(suffix)",
             "message_id": stableID,
             "title": title,
             "body": body,
             "channel_id": index.isMultiple(of: 2) ? "workflow-alpha" : "workflow-beta",
-            // Rows at and above 52 are reserved for larger focused fixtures, so
-            // this two-page UI journey retains the same 39-unread oracle.
-            "is_read": index >= 52 || index.isMultiple(of: 4),
+            "is_read": isRead,
             "received_at": ISO8601DateFormatter().string(from: receivedAt),
             "raw_payload": [
                 "entity_type": "message",
