@@ -16,7 +16,7 @@
 | --- | --- | --- |
 | rewrite | `testLaunchesIntoMessageList` | 不能只断言 screen id；改为 Empty/Content/Error 正确状态、可操作和无永久 Loading。 |
 | rewrite | `testAutomationRequestCanOpenChannelsScreen`、`testNavSwitchTabMatrixCoversPrimaryScreens` | 删除 Runtime 直接导航；改为真实 Tab 点击并检查目标页独有内容、选中和返回。 |
-| keep（已迁移并扩展系统终点） | `testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen` | 单次真实会话先经已注册 `pushgo://` 外部入口打开准确 Message 及 Event/Thing 列表，再点击四个主入口及 Settings 并核对各目标页；最后从生产 Getting Started 控件拉起真实 Safari，并要求系统可访问性树出现 `pushgo.dev`。精确 path/locale 映射由快速 Core 合同全量裁决，避免为每个文档页、语言和平台复制设备 UI。替代 Runtime 导航矩阵进入 PR/Nightly/Release。 |
+| keep（已迁移并扩展系统终点） | `testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen` | 单次真实会话先经已注册 `pushgo://` 外部入口打开准确 Message、Event 与 Thing 详情，分别核对 canonical 正文/摘要并返回 App，再点击四个主入口及 Settings 完成各页真实功能终点；最后从生产 Getting Started 控件拉起真实 Safari，并要求系统可访问性树出现 `pushgo.dev`。精确文档 path/locale 映射由快速 Core 合同全量裁决，避免为每个文档页、语言和平台复制设备 UI。替代 Runtime 导航矩阵进入 PR/Nightly/Release。 |
 | keep（已迁移） | `testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail` | 输入错误查询证明排除集合，再输入目标查询并打开准确正文；替代“App 没崩”Oracle。 |
 | keep（已迁移） | `testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch` | 从真实详情删除，验证行立即隐藏、Undo 可操作、重启后 canonical 对象仍在。 |
 | keep（新增目的级证据） | `testQualityMessageDeleteWithoutUndoPermanentlyRemovesOnlyTargetAcrossRelaunch` | 从准确目标详情删除但不撤销，等待生产 5 秒 deadline 自行提交；要求目标永久消失、无关控制消息字段准确，并在完整 App relaunch 后保持该差异。 |

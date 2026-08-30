@@ -4,6 +4,8 @@
 
 方案目标仍正确，但 2026-08-28 的实现复核发现此前“只剩真机/外部证据”的结论不成立。readiness、identifier、fixture、版本、文件和报告只能准备或归因；当前已证明 Runtime/环境底座、Messages 核心样板，以及两端 Event/Thing/Channel accepted-mutation、Settings 页面可见性、server 数据换域/持久化和 decryption key 安全持久化的首批准确用户旅程，WP3–WP6 的可达产品能力仍有显著缺口。真实系统能力继续按 `BLOCKED/NOT RUN` 独立呈现，局部 lane 绿色不得提升为整体完成。
 
+- **列表路由/标识存在冒充准确实体系统入口攻击（Apple）**：旧 PR 旅程对 Event/Thing 只打开 `id=list`，低层 parser、pending ID、目标 identifier 和随后手点列表都能通过，却无法证明外部准确 ID 真正抵达对应 canonical 对象。蓝方复用同一 iOS/macOS PR 方法，分别用 `quality-event-active` 与 `quality-thing-rich` 从注册 URL scheme 直接进入真实 detail owner，并对账独有 canonical 摘要；iOS 还从系统路由详情完成生产关闭动作、确认和 canonical 接受。红方判别：忽略 ID、错误 ID、退化为列表、复用旧详情、摘要串线、Event 动作未提交都会在对应业务终点失败；静态成本契约同时禁止这两个旅程退回 `id=list`，但该契约本身不冒充产品证据。精确路由 focused iOS 1/1、68.057 秒，macOS 1/1、45.577 秒。首次 PR 聚合另以 3/4 暴露测试接入缺陷：真实 TabBar 的 `消息` 项和 canonical `39项` 徽标存在，但大徽标状态未传播语义 ID；修复没有放宽为任意按钮，而是把 fallback 限定在真实 TabBar 首项、精确本地化目的标题与数字值，focused 1/1、86.153 秒。最终 PR 聚合 Core 421/421、XCTest 25/25、iOS 4/4、macOS 1/1，均零业务重试。另一次 stale output 攻击证明影响计划“成功生成”仍可能读取旧 lane；runner 现把写入与读取绑定同一路径，缺值失败退出，自定义 plan-only 精确选择 PR。Android 精确实体系统入口仍 `NOT RUN`；同上下文实现/审计保留 `common-mode-risk`。
+
 ## 完成声明对抗复核
 
 | 被攻击的声明 | 当前源码/CI 反例 | 裁决与修正 |

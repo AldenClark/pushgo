@@ -1306,10 +1306,30 @@ final class PushGo_iOSUITests: XCTestCase {
             timeout: 5,
             message: "The system-routed Message detail must return to the App"
         )
-        context.app.open(try XCTUnwrap(URL(string: "pushgo://open?kind=event&id=list")))
-        assertElementExists("screen.events.list", in: context.app, timeout: 8)
-        context.app.open(try XCTUnwrap(URL(string: "pushgo://open?kind=thing&id=list")))
-        assertElementExists("screen.things.list", in: context.app, timeout: 8)
+        context.app.open(
+            try XCTUnwrap(URL(string: "pushgo://open?kind=event&id=quality-event-active"))
+        )
+        let routedEventDetail = element(in: context.app, identifier: "sheet.event.detail")
+        XCTAssertTrue(routedEventDetail.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            context.app.staticTexts["Event fixture for app-owned UI validation."]
+                .waitForExistence(timeout: 5),
+            "The real system URL must resolve the exact canonical Event detail."
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.event.close"),
+            timeout: 5,
+            message: "The system-routed Event must expose its real positive action"
+        )
+        tapWhenHittable(
+            context.app.alerts.buttons.element(boundBy: 1),
+            timeout: 5,
+            message: "The system-routed Event confirmation must complete the positive state change"
+        )
+        XCTAssertTrue(
+            routedEventDetail.waitForNonExistence(timeout: 12),
+            "The system-routed Event must return only after the canonical projection accepts the change."
+        )
 
         tabs.element(boundBy: 0).tap()
         assertElementExists("screen.messages.list", in: context.app, timeout: 8)
@@ -1321,27 +1341,9 @@ final class PushGo_iOSUITests: XCTestCase {
         tabs.element(boundBy: 1).tap()
         assertElementExists("screen.events.list", in: context.app, timeout: 8)
         let event = element(in: context.app, identifier: "event.row.quality-event-active")
-        tapWhenHittable(event, timeout: 8, message: "The canonical Event row must open")
-        let eventSheet = element(in: context.app, identifier: "sheet.event.detail")
-        XCTAssertTrue(eventSheet.waitForExistence(timeout: 8))
         XCTAssertTrue(
-            context.app.staticTexts["Event fixture for app-owned UI validation."]
-                .waitForExistence(timeout: 5),
-            "Events is usable only when its canonical purpose-bearing summary is accurate."
-        )
-        tapWhenHittable(
-            element(in: context.app, identifier: "action.event.close"),
-            timeout: 5,
-            message: "The Event close action must remain usable in the positive core journey"
-        )
-        tapWhenHittable(
-            context.app.alerts.buttons.element(boundBy: 1),
-            timeout: 5,
-            message: "The real Event confirmation must complete the positive state change"
-        )
-        XCTAssertTrue(
-            eventSheet.waitForNonExistence(timeout: 12),
-            "The Event sheet must close only after the canonical projection accepts the change."
+            event.waitForExistence(timeout: 8),
+            "The system-routed Event state change must return to the canonical Events list."
         )
 
         tabs.element(boundBy: 2).tap()
@@ -1396,6 +1398,15 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(
             browserAddress.waitForExistence(timeout: 8),
             "Safari must expose the official pushgo.dev destination selected by Settings."
+        )
+        context.app.open(
+            try XCTUnwrap(URL(string: "pushgo://open?kind=thing&id=quality-thing-rich"))
+        )
+        let routedThingDetail = element(in: context.app, identifier: "sheet.thing.detail")
+        XCTAssertTrue(routedThingDetail.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            context.app.staticTexts["Fixture thing summary"].waitForExistence(timeout: 5),
+            "The real system URL must resolve the exact canonical Thing detail."
         )
     }
 
@@ -3881,10 +3892,26 @@ final class PushGo_iOSUITests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        let messagesTab = app.buttons["tab.messages"]
+        let tabBar = app.tabBars.firstMatch
+        XCTAssertTrue(
+            tabBar.waitForExistence(timeout: timeout),
+            "The production TabBar must exist before its Messages badge can be verified",
+            file: file,
+            line: line
+        )
+        let identifiedMessagesTab = tabBar.buttons["tab.messages"]
+        let messagesTab = identifiedMessagesTab.exists
+            ? identifiedMessagesTab
+            : tabBar.buttons.element(boundBy: 0)
         XCTAssertTrue(
             messagesTab.waitForExistence(timeout: timeout),
-            "The real Messages tab must exist before its badge can be verified",
+            "The production Messages tab must exist before its badge can be verified",
+            file: file,
+            line: line
+        )
+        XCTAssertTrue(
+            ["Messages", "消息", "訊息"].contains(messagesTab.label),
+            "The first production tab must remain the localized Messages destination",
             file: file,
             line: line
         )

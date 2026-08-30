@@ -1678,10 +1678,23 @@ final class PushGo_macOSUITests: XCTestCase {
                 .waitForExistence(timeout: 5),
             "The registered macOS URL scheme must resolve the exact canonical Message."
         )
-        context.app.open(try XCTUnwrap(URL(string: "pushgo://open?kind=event&id=list")))
-        assertVisibleScreenThroughUI("screen.events.list", in: context.app, timeout: 8)
-        context.app.open(try XCTUnwrap(URL(string: "pushgo://open?kind=thing&id=list")))
-        assertVisibleScreenThroughUI("screen.things.list", in: context.app, timeout: 8)
+        context.app.open(
+            try XCTUnwrap(URL(string: "pushgo://open?kind=event&id=quality-event-active"))
+        )
+        assertVisibleScreenThroughUI("screen.events.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Event fixture for app-owned UI validation."]
+                .waitForExistence(timeout: 5),
+            "The registered macOS URL scheme must resolve the exact canonical Event detail."
+        )
+        context.app.open(
+            try XCTUnwrap(URL(string: "pushgo://open?kind=thing&id=quality-thing-rich"))
+        )
+        assertVisibleScreenThroughUI("screen.things.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Fixture thing summary"].waitForExistence(timeout: 5),
+            "The registered macOS URL scheme must resolve the exact canonical Thing detail."
+        )
 
         openSidebarTab("messages", in: context.app)
         assertVisibleScreenThroughUI("screen.messages.list", in: context.app, timeout: 8)

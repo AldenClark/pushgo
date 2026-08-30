@@ -16,6 +16,22 @@ class QualityLaneCostContractTests(unittest.TestCase):
         self.assertLess(help_guard, script_tests)
         self.assertLess(help_guard, lane_execution)
 
+    def test_changed_runner_reads_the_same_fresh_plan_path_it_writes(self) -> None:
+        runner = (REPO / "scripts/quality_changed.sh").read_text()
+
+        self.assertIn('impact_args=("$@")', runner)
+        self.assertIn('impact_file="${impact_args[$((index + 1))]}"', runner)
+        self.assertIn('impact_file="${argument#--output=}"', runner)
+        self.assertIn('impact_args+=(--output "$impact_file")', runner)
+        self.assertIn(
+            'python3 "$repo_root/scripts/quality_impact.py" "${impact_args[@]}" --check',
+            runner,
+        )
+        self.assertIn(
+            'json.load(open(sys.argv[1]))["recommended_lane"]',
+            runner,
+        )
+
     def test_ci_receipts_outlive_the_full_observation_window(self) -> None:
         workflow = (REPO / ".github/workflows/apple-quality.yml").read_text()
         receipt_upload = workflow.split("- name: Upload compact longitudinal receipts", 1)[1]
@@ -102,6 +118,14 @@ class QualityLaneCostContractTests(unittest.TestCase):
     def test_primary_navigation_ui_reuses_existing_cross_platform_pr_oracles(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()
         pr_scopes = self._scopes(runner, "pr_ui_scopes")
+        ios_source = (REPO / "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift").read_text()
+        macos_source = (REPO / "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift").read_text()
+        ios_journey = ios_source.split(
+            "func testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen()", 1
+        )[1].split("func testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch()", 1)[0]
+        macos_journey = macos_source.split(
+            "func testSidebarNavigationCoversPrimaryScreens()", 1
+        )[1].split("func testEventDetailCloseAndRelaunchPreserveAccurateProjection()", 1)[0]
 
         self.assertEqual(
             1,
@@ -117,11 +141,21 @@ class QualityLaneCostContractTests(unittest.TestCase):
                 'testSidebarNavigationCoversPrimaryScreens"'
             ),
         )
+        for journey in (ios_journey, macos_journey):
+            self.assertIn("pushgo://open?kind=event&id=quality-event-active", journey)
+            self.assertIn("Event fixture for app-owned UI validation.", journey)
+            self.assertIn("pushgo://open?kind=thing&id=quality-thing-rich", journey)
+            self.assertIn("Fixture thing summary", journey)
+            self.assertNotIn("pushgo://open?kind=event&id=list", journey)
+            self.assertNotIn("pushgo://open?kind=thing&id=list", journey)
 
     def test_pr_message_and_gateway_journeys_keep_positive_oracles_without_negative_cost(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()
         test_source = (REPO / "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift").read_text()
         runtime = (REPO / "Shared/UI/AutomationRuntime.swift").read_text()
+        badge_helper = test_source.split(
+            "private func assertMessagesTabBadgeCount(", 1
+        )[1].split("private func messagesTabBadgeCount(", 1)[0]
         positive_gateway = test_source.split(
             "func testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch()", 1
         )[1].split(
@@ -131,6 +165,10 @@ class QualityLaneCostContractTests(unittest.TestCase):
 
         self.assertIn("messages = (0..<52).map(qualityWorkflowFixtureMessage)", runtime)
         self.assertNotIn("messages = (0..<125).map(qualityWorkflowFixtureMessage)", runtime)
+        self.assertIn("let tabBar = app.tabBars.firstMatch", badge_helper)
+        self.assertIn("tabBar.buttons.element(boundBy: 0)", badge_helper)
+        self.assertIn('["Messages", "消息", "訊息"]', badge_helper)
+        self.assertNotIn('let messagesTab = app.buttons["tab.messages"]', badge_helper)
         self.assertNotIn("failGatewaySwitchValidationOnce", positive_gateway)
         self.assertNotIn("not a valid url", positive_gateway)
         self.assertTrue(
