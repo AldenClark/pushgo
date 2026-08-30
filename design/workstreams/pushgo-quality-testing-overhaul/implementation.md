@@ -72,7 +72,7 @@
 
 ### WP2 慢加载纵向样板
 
-- Message List 首次加载/分页/刷新状态；其中 iOS/Android 分页正向子项已落地为一次性受控延迟、旧页保持、底部进度、重复压力不重复追加及准确下一页唯一对象，并复用原分页/已读/relaunch 方法；
+- Message List 首次加载/分页/刷新状态；三端分页正向子项均已落地为一次性受控延迟、旧页保持、可见进度、重复压力不重复追加及准确下一页唯一对象。iOS/Android 复用原分页/已读/relaunch 方法；macOS 复用原首次慢加载方法，并以固定在列表可视底部的进度浮层处理 `List` 离屏 `onAppear` 会自动触发分页、普通行尾进度对用户不可见的平台行为；
 - delay/query failure fault；
 - 正确内容、Retry、旧内容保留和超预算负控；
 - Store/VM/UI milestone 与参考设备预算。

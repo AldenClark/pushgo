@@ -3867,6 +3867,29 @@
         }
       }
     },
+    "message_page_loading" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading earlier messages…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在加载更早的消息…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在載入更早的訊息…"
+          }
+        }
+      }
+    },
     "message_ingress_processing_progress" : {
       "extractionState" : "manual",
       "localizations" : {

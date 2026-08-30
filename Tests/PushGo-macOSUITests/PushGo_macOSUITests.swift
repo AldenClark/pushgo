@@ -1461,8 +1461,9 @@ final class PushGo_macOSUITests: XCTestCase {
         let sessionID = "macos-slow-\(UUID().uuidString.lowercased())"
         let context = configuredQualityApp(
             sessionID: sessionID,
-            fixture: "empty.clean",
-            messageLoadDelayMilliseconds: 8_000
+            fixture: "messages.workflow",
+            messageLoadDelayMilliseconds: 8_000,
+            messagePageLoadDelayMilliseconds: 8_000
         )
         launch(context)
 
@@ -1471,12 +1472,53 @@ final class PushGo_macOSUITests: XCTestCase {
                 .waitForExistence(timeout: 4),
             "A deliberately slow load must warn the user before completion."
         )
+        let firstPageHead = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000034"
+        )
         XCTAssertTrue(
-            element(in: context.app, identifier: "state.messages.empty")
-                .waitForExistence(timeout: 10),
-            "The delayed load did not complete into its accurate functional state."
+            firstPageHead.waitForExistence(timeout: 6) && firstPageHead.isHittable,
+            "The delayed load did not complete into its accurate canonical collection."
         )
         XCTAssertFalse(element(in: context.app, identifier: "state.messages.load_failed").exists)
+
+        let list = element(in: context.app, identifier: "messages.list.scroll")
+        XCTAssertTrue(list.waitForExistence(timeout: 5))
+        let pageLoading = element(in: context.app, identifier: "state.messages.page.loading")
+        XCTAssertTrue(
+            pageLoading.waitForExistence(timeout: 3) && pageLoading.isHittable,
+            "A slow next page must expose visible progress instead of looking frozen."
+        )
+        XCTAssertTrue(
+            firstPageHead.exists && firstPageHead.isHittable,
+            "Already loaded page-1 content must remain usable while page 2 is loading."
+        )
+        list.swipeUp()
+        list.swipeUp()
+        let secondPageTargetID = "message.row.00000000-0000-0000-0000-000000000002"
+        let secondPageTarget = element(in: context.app, identifier: secondPageTargetID)
+        func targetIsVisiblyInsideWindow() -> Bool {
+            guard secondPageTarget.exists, !secondPageTarget.frame.isEmpty else { return false }
+            let visibleHeight = context.app.windows.firstMatch.frame
+                .intersection(secondPageTarget.frame).height
+            return visibleHeight >= secondPageTarget.frame.height * 0.8
+        }
+        for _ in 0..<4 where !targetIsVisiblyInsideWindow() {
+            list.swipeUp()
+        }
+        XCTAssertTrue(
+            secondPageTarget.waitForExistence(timeout: 5) && targetIsVisiblyInsideWindow(),
+            "The canonical page-2 boundary object was not reachable."
+        )
+        XCTAssertTrue(
+            secondPageTarget.label.contains("Quality workflow 1"),
+            "The reachable page-2 row did not expose the expected canonical content."
+        )
+        XCTAssertEqual(
+            context.app.descendants(matching: .any).matching(identifier: secondPageTargetID).count,
+            1,
+            "Repeated scroll pressure while loading must not append page 2 more than once."
+        )
     }
 
     @MainActor
@@ -3954,6 +3996,7 @@ final class PushGo_macOSUITests: XCTestCase {
         failLocalStoreInitialization: Bool = false,
         localStoreFailureStreakThreshold: Int? = nil,
         messageLoadDelayMilliseconds: Int? = nil,
+        messagePageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         messageSearchDelayMilliseconds: Int? = nil,
         legacyStore: String? = nil,
@@ -3993,6 +4036,7 @@ final class PushGo_macOSUITests: XCTestCase {
                 failLocalStoreInitialization: failLocalStoreInitialization,
                 localStoreFailureStreakThreshold: localStoreFailureStreakThreshold,
                 messageLoadDelayMilliseconds: messageLoadDelayMilliseconds,
+                messagePageLoadDelayMilliseconds: messagePageLoadDelayMilliseconds,
                 messageRefreshDelayMilliseconds: messageRefreshDelayMilliseconds,
                 messageSearchDelayMilliseconds: messageSearchDelayMilliseconds,
                 legacyStore: legacyStore,
@@ -4126,6 +4170,7 @@ final class PushGo_macOSUITests: XCTestCase {
         failLocalStoreInitialization: Bool = false,
         localStoreFailureStreakThreshold: Int? = nil,
         messageLoadDelayMilliseconds: Int? = nil,
+        messagePageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         messageSearchDelayMilliseconds: Int? = nil,
         legacyStore: String? = nil,
@@ -4147,6 +4192,9 @@ final class PushGo_macOSUITests: XCTestCase {
         ]
         if let messageLoadDelayMilliseconds {
             faults["message_load_delay_ms"] = messageLoadDelayMilliseconds
+        }
+        if let messagePageLoadDelayMilliseconds {
+            faults["message_page_load_delay_ms"] = messagePageLoadDelayMilliseconds
         }
         if let localStoreFailureStreakThreshold {
             faults["local_store_failure_streak_threshold"] = localStoreFailureStreakThreshold

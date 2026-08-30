@@ -157,9 +157,26 @@ struct MessageListScreen: View {
                     .onAppear { Task { await viewModel.loadMoreIfNeeded(currentItem: message) } }
                 }
             }
+            .accessibilityIdentifier("messages.list.scroll")
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .background(EntityVisualTokens.pageBackground)
+            .overlay(alignment: .bottom) {
+                if viewModel.isLoadingPage {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text(localizationManager.localized("message_page_loading"))
+                            .font(.caption)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.bottom, 10)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("state.messages.page.loading")
+                }
+            }
             .onAppear { scrollToSelectionIfNeeded(proxy) }
             .onChange(of: selection) { _, newValue in
                 pendingScrollTarget = newValue
