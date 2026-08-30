@@ -91,7 +91,7 @@
 - `testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen`
 - `testEventClosePersistsAndOngoingFilterReflectsRealProjection`
 - `testImportedThingFixtureCanOpenThingDetail`
-- `testChannelCreateRenameAndBothUnsubscribeOutcomesPersist`（同一次启动先经真实 Sheet 订阅既有频道，并要求准确行和 relaunch 保留，再继续创建、改名及两类退订；复制反馈由独立 macOS 旅程覆盖，不在该生命周期用例重复等待瞬时 toast）
+- `testChannelCreateRenameAndBothUnsubscribeOutcomesPersist`（同一次启动先经真实 Sheet 订阅既有频道，并要求准确行和 relaunch 保留；改名在同一受控 Sheet 内依次证明取消不改名、非法值/远端拒绝由 Sheet 自己显示且保留输入与旧行、同入口重试成功并跨 relaunch 保留，再继续两类退订。该扩展不新增 fixture、测试方法或 App 启动；复制反馈由独立 macOS 旅程覆盖，不重复等待瞬时 toast）
 - macOS `testUnreadBadgeAndChannelLifecyclePersistThroughRealUserActions`（复用原 badge→读取→Channel copy 方法和唯一 relaunch；新增真实订阅、创建、菜单改名、保留/删除历史退订，最终从准确 Channel 行、消息正文、生产删除期限、relaunch 和系统剪贴板裁决，不增加默认方法或启动）
 - `testChannelRemoteRejectionStaysInSheetAndRetryPersists`
 - `testChannelCreateLocalFailureCompensatesRemoteBeforeRetry`

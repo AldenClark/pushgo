@@ -932,7 +932,7 @@ final class PushGo_macOSUITests: XCTestCase {
         let context = configuredQualityApp(
             sessionID: sessionID,
             fixture: "channels.standard",
-            channelMutationScenario: "accepted"
+            channelMutationScenario: "rename_reject_once_then_accepted"
         )
         context.app.launchArguments += [
             "-AppleLanguages", "(zh-Hans)",
@@ -1080,16 +1080,47 @@ final class PushGo_macOSUITests: XCTestCase {
         )
         XCTAssertTrue(createdMenu.waitForExistence(timeout: 5) && createdMenu.isHittable)
         createdMenu.click()
-        let renameAction = element(
+        var renameAction = element(
             in: context.app,
             identifier: "action.channel.\(createdChannelID).rename"
         )
         XCTAssertTrue(renameAction.waitForExistence(timeout: 5))
         renameAction.click()
-        let renameField = context.app.sheets.firstMatch.textFields.firstMatch
+        var renameSheet = context.app.sheets.firstMatch
+        var renameField = renameSheet.textFields.firstMatch
         XCTAssertTrue(renameField.waitForExistence(timeout: 5))
+        replaceTextUsingPasteboard(in: renameField, with: "Cancelled Rename")
+        element(in: context.app, identifier: "action.channel.rename.cancel").click()
+        XCTAssertTrue(waitForLabelContaining("Quality Created Channel", in: createdRow, timeout: 5))
+
+        createdMenu.click()
+        renameAction = element(
+            in: context.app,
+            identifier: "action.channel.\(createdChannelID).rename"
+        )
+        XCTAssertTrue(renameAction.waitForExistence(timeout: 5))
+        renameAction.click()
+        renameSheet = context.app.sheets.firstMatch
+        renameField = renameSheet.textFields.firstMatch
+        XCTAssertTrue(renameField.waitForExistence(timeout: 5))
+        replaceTextUsingPasteboard(in: renameField, with: String(repeating: "x", count: 129))
+        renameField.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(
+            renameSheet.staticTexts["频道名称过长（最多 128）。"].waitForExistence(timeout: 8),
+            "Invalid rename feedback must remain owned by the rename sheet."
+        )
+        XCTAssertTrue(waitForLabelContaining("Quality Created Channel", in: createdRow, timeout: 5))
+
         replaceTextUsingPasteboard(in: renameField, with: "Quality Renamed Channel")
         renameField.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
+        XCTAssertTrue(
+            renameSheet.staticTexts["The channel rename was rejected. Check the name and retry."]
+                .waitForExistence(timeout: 8),
+            "Remote rejection must reopen the owning rename sheet."
+        )
+        XCTAssertEqual(renameSheet.textFields.firstMatch.value as? String, "Quality Renamed Channel")
+        XCTAssertTrue(waitForLabelContaining("Quality Created Channel", in: createdRow, timeout: 5))
+        renameSheet.textFields.firstMatch.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
         XCTAssertTrue(
             waitForLabelContaining("Quality Renamed Channel", in: createdRow, timeout: 8),
             "The created Channel row must expose the exact accepted rename."

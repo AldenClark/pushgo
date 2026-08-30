@@ -16,8 +16,8 @@ Platform vector order is `I / M / D / W` (iOS, macOS, Android, watchOS). `-` mea
 | `D-MSG` | `QualityMessageJourneyInstrumentedTest` purpose journeys. High-unread boundary current receipt: `../pushgo-android/build/quality-results/android-high-unread-final.log`; the temporary raw-`100` rejection is retained beside it. Refresh ingress badge receipt: `../pushgo-android/app/build/outputs/androidTest-results/connected/debug/TEST-Medium_Phone(AVD) - 17-_app-.xml`. |
 | `A-ENTITY` | iOS/macOS Event close/failure and Thing relation/search/delete/relaunch journeys, including exact detail/timeline/relation endpoints. |
 | `D-ENTITY` | `QualityEntityJourneyInstrumentedTest` plus Room projection/property journeys in `RuntimeDataLayerInstrumentedTest`. |
-| `A-CHANNEL` | iOS/macOS Channel lifecycle journeys: existing subscribe, accepted create, rename, both unsubscribe outcomes, history/stat projection and relaunch. macOS additionally has an external Pasteboard equality oracle. |
-| `D-CHANNEL` | `QualityChannelJourneyInstrumentedTest`, Channel transaction integration tests, exact ClipboardManager result, statistics and relaunch. |
+| `A-CHANNEL` | iOS/macOS Channel lifecycle journeys: existing subscribe, accepted create, rename cancel/invalid/remote-rejection/retry/success, both unsubscribe outcomes, history/stat projection and relaunch. Rename failures remain in the owning Sheet with the submitted value and unchanged canonical row; current receipts: `build/quality-results/ios-channel-rename-sheet-final-3/run-20260830-2301.xcresult` and `build/quality-results/macos-channel-rename-sheet-final-3/run-20260830-2304.xcresult`. macOS additionally has an external Pasteboard equality oracle. |
+| `D-CHANNEL` | `QualityChannelJourneyInstrumentedTest`, Channel transaction integration tests, exact ClipboardManager result, statistics and relaunch. The existing positive lifecycle method now proves rename cancel/invalid/remote-rejection/retry/success without another fixture or App launch; current receipt: `../pushgo-android/build/quality-results/android-channel-rename-ownership-final-3.log`. |
 | `A-SET` | iOS/macOS Gateway, visibility, decryption, protected-store and documentation journeys plus their Core contracts. |
 | `D-SET` | `QualitySettingsJourneyInstrumentedTest`, notification-permission/Doze host journeys and transport integration tests. |
 | `A-INGRESS` | Apple Core ingress/dedup/order/ACK contracts and system-notification simulator journeys. Simulator push proves the local OS boundary, not real APNs. |
@@ -126,7 +126,7 @@ Platform vector order is `I / M / D / W` (iOS, macOS, Android, watchOS). `-` mea
 | 1388 | Name/ID/password boundaries | V/V/V/- | `V` | Unit/JVM boundary matrix plus representative real form semantics and secret-field privacy. |
 | 1391 | Duplicate/auth/limit/not-found recovery | P/P/P/- | `P` | Auth rejection with retained input/retry is real. Duplicate/limit/not-found are not yet all reconciled to reachable product responses and owned recovery actions on every platform. |
 | 1394 | Click row copies exact Channel ID | B/V/V/- | `P` | macOS and Android external clipboard equality pass. iOS 27 denies Runner Pasteboard reads and the system Paste consumer attempt was unstable; iOS remains product `N` / test-system `B`, not inferred from toast or other platforms. |
-| 1395 | Rename success/cancel/invalid/failure | P/P/P/- | `P` | Accepted rename and persistence are real; the final audit must bind cancel, invalid and remote failure to unchanged old name/retry on every platform. |
+| 1395 | Rename success/cancel/invalid/failure | V/V/V/- | `V` | `A-CHANNEL`, `D-CHANNEL`: cancel preserves the exact old row; invalid and typed remote rejection remain visibly owned by the rename Sheet/Dialog, retain the submitted value and do not mutate the canonical row; the same open form retries to the accepted name, which survives relaunch. The red controls exposed three distinct test-system/product defects before green: Apple alert identifiers did not bind the input, macOS alert retry lost input, and Android could dismiss/route errors globally; a subsequent Android red showed a disabled post-validation submit being silently dropped, so the test now waits on the action's enabled semantics rather than increasing timeouts. |
 | 1396 | Delete confirmation cancel has no local/remote effect | V/V/V/- | `V` | Real cancel followed by exact retained row/history. |
 | 1397 | Unsubscribe while preserving history | V/V/V/- | `V` | Subscription stops, exact history/search consumers remain and relaunch preserves state. |
 | 1398 | Unsubscribe/delete history with Undo | V/V/V/- | `V` | Undo window and final delete semantics converge with related data. |
@@ -213,14 +213,14 @@ Platform vector order is `I / M / D / W` (iOS, macOS, Android, watchOS). `-` mea
 
 The design contains 103 P0/P0 Release rows. This audit deliberately does **not** declare section 21.2(1) complete:
 
-- 83 rows are currently classified `V`; 1 conditional export row is `NA` because the product capability was explicitly removed.
-- 11 rows remain `P` and require semantic closure, an explicit product-scope correction, or an externally owned sub-gate.
+- 84 rows are currently classified `V`; 1 conditional export row is `NA` because the product capability was explicitly removed.
+- 10 rows remain `P` and require semantic closure, an explicit product-scope correction, or an externally owned sub-gate.
 - Two platform sub-results are explicitly `B`: iOS Channel Pasteboard and macOS notification interaction. Neither is hidden inside a green aggregate.
 - 8 P0 Release/external rows remain `N`; local Simulator/emulator evidence is retained but never promoted to physical/provider acceptance.
 
 The next implementation order is constrained by value and reuse:
 
-1. Audit rows 1391, 1395 and 1411 against existing tests and product reachability; prefer documenting already-real evidence or low-level parameterization over device matrices.
+1. Audit rows 1391 and 1411 against existing tests and product reachability; prefer documenting already-real evidence or low-level parameterization over device matrices.
 2. Add one representative macOS and Android documentation system handoff for row 1421 only if it can reuse existing Settings/navigation journeys. Keep all page×locale correctness in fast contracts.
 3. Keep physical/provider/watch-media/accessibility items in their explicit Release/owner lanes. They cannot displace locally reachable positive P0 work and cannot be turned green with mocks.
 

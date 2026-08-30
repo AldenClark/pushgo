@@ -2512,7 +2512,7 @@ final class PushGo_iOSUITests: XCTestCase {
         let encodedSession = qualitySessionPayload(
             sessionID: "ios-channels-\(UUID().uuidString.lowercased())",
             fixture: "channels.standard",
-            channelMutationScenario: "accepted"
+            channelMutationScenario: "rename_reject_once_then_accepted"
         )
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
         launch(context.app)
@@ -2602,21 +2602,55 @@ final class PushGo_iOSUITests: XCTestCase {
                 in: context.app,
                 identifier: "action.channel.01H00000000000000000000003.rename"
             ),
+            timeout: 5
+        )
+        var renameField = element(in: context.app, identifier: "field.channel.rename.alias")
+        XCTAssertTrue(renameField.waitForExistence(timeout: 5))
+        replaceText(in: renameField, with: "Cancelled Rename")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channel.rename.cancel"),
+            timeout: 5
+        )
+        XCTAssertTrue(context.app.staticTexts["Quality Created Channel"].waitForExistence(timeout: 5))
+
+        createdRow.swipeLeft()
+        tapWhenHittable(
+            element(
+                in: context.app,
+                identifier: "action.channel.01H00000000000000000000003.rename"
+            ),
             timeout: 5,
             message: "Created Channel must expose Rename"
         )
-        let renameAlert = context.app.alerts.firstMatch
-        XCTAssertTrue(renameAlert.waitForExistence(timeout: 5))
-        let renameField = renameAlert.textFields.firstMatch
+        renameField = element(in: context.app, identifier: "field.channel.rename.alias")
         XCTAssertTrue(renameField.waitForExistence(timeout: 5))
+        replaceText(in: renameField, with: String(repeating: "x", count: 129))
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channel.rename.save"),
+            timeout: 5
+        )
+        XCTAssertTrue(
+            context.app.staticTexts["Channel name is too long (max 128)."].waitForExistence(timeout: 8),
+            "Invalid rename feedback must remain owned by the rename alert."
+        )
+        XCTAssertTrue(context.app.staticTexts["Quality Created Channel"].exists)
+
         replaceText(in: renameField, with: "Quality Renamed Channel")
-        renameField.typeKey(XCUIKeyboardKey.return, modifierFlags: [])
-        if renameAlert.exists {
-            let renameButton = renameAlert.buttons["Confirm"].firstMatch
-            XCTAssertTrue(renameButton.waitForExistence(timeout: 5))
-            XCTAssertTrue(renameButton.isEnabled, "Rename confirmation must be enabled")
-            renameButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        }
+        let renameButton = element(in: context.app, identifier: "action.channel.rename.save")
+        XCTAssertTrue(renameButton.waitForExistence(timeout: 5))
+        XCTAssertTrue(renameButton.isEnabled, "Rename confirmation must be enabled")
+        renameButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(
+            context.app.staticTexts["The channel rename was rejected. Check the name and retry."]
+                .waitForExistence(timeout: 8),
+            "Remote rejection must reopen the owning rename alert."
+        )
+        XCTAssertEqual(renameField.value as? String, "Quality Renamed Channel")
+        XCTAssertTrue(context.app.staticTexts["Quality Created Channel"].exists)
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channel.rename.save"),
+            timeout: 5
+        )
         XCTAssertTrue(context.app.staticTexts["Quality Renamed Channel"].waitForExistence(timeout: 8))
 
         context.app.terminate()

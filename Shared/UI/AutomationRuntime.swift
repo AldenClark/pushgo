@@ -15,6 +15,7 @@ import UserNotifications
 final class QualityChannelAutomationRoundTrip: ChannelMutationRoundTrip, ChannelSubscriptionSyncRoundTrip {
     private let scenario: PushGoQualityChannelMutationScenario
     private var subscribeAttempts = 0
+    private var renameAttempts = 0
     private var activeCreatedChannelIDs = Set<String>()
 
     init(scenario: PushGoQualityChannelMutationScenario) {
@@ -74,6 +75,14 @@ final class QualityChannelAutomationRoundTrip: ChannelMutationRoundTrip, Channel
                 code: "quality_channel_credential_required",
                 category: .validation,
                 message: "A channel credential is required."
+            )
+        }
+        renameAttempts += 1
+        if scenario == .renameRejectOnceThenAccepted, renameAttempts == 1 {
+            throw AppError.typedLocal(
+                code: "channel_rename_rejected",
+                category: .conflict,
+                message: "The channel rename was rejected. Check the name and retry."
             )
         }
         return ChannelSubscriptionService.RenamePayload(

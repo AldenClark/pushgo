@@ -9,6 +9,7 @@ struct ChannelManagementView: View {
     @State private var isRemoving = false
     @State private var pendingRename: ChannelSubscription?
     @State private var renameAlias: String = ""
+    @State private var renameErrorMessage: String?
     @State private var isRenaming = false
     @State private var isShowingRemovalConfirmation = false
     @State private var isShowingRenameAlert = false
@@ -92,25 +93,8 @@ struct ChannelManagementView: View {
                 }
                 .accessibilityIdentifier("action.channel.unsubscribe.cancel")
             }
-            .alert(
-                localizationManager.localized("rename_channel"),
-                isPresented: $isShowingRenameAlert
-            ) {
-                TextField(
-                    localizationManager.localized("channel_name_placeholder"),
-                    text: $renameAlias
-                )
-                Button(localizationManager.localized("confirm")) {
-                    if let target = pendingRename {
-                        Task { await renameChannel(target) }
-                    }
-                }
-                .disabled(isRenaming || renameAlias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .accessibilityIdentifier("action.channel.rename.save")
-                Button(localizationManager.localized("cancel"), role: .cancel) {
-                    pendingRename = nil
-                }
-                .accessibilityIdentifier("action.channel.rename.cancel")
+            .sheet(isPresented: $isShowingRenameAlert, onDismiss: resetRenameState) {
+                renameSheet
             }
             .onAppear {
                 Task { @MainActor in
@@ -120,11 +104,6 @@ struct ChannelManagementView: View {
             .onChange(of: isShowingRemovalConfirmation) { _, isPresented in
                 if !isPresented {
                     pendingRemoval = nil
-                }
-            }
-            .onChange(of: isShowingRenameAlert) { _, isPresented in
-                if !isPresented {
-                    pendingRename = nil
                 }
             }
         }
@@ -556,33 +535,75 @@ struct ChannelManagementView: View {
         return subscription.channelId.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private var renameSheet: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(localizationManager.localized("rename_channel"))
+                .font(.headline)
+            TextField(
+                localizationManager.localized("channel_name_placeholder"),
+                text: $renameAlias
+            )
+            .textFieldStyle(.roundedBorder)
+            .disabled(isRenaming)
+            .accessibilityIdentifier("field.channel.rename.alias")
+            if let renameErrorMessage {
+                Text(renameErrorMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .accessibilityIdentifier("feedback.channel.rename")
+            }
+            HStack {
+                Button(localizationManager.localized("cancel"), role: .cancel) {
+                    isShowingRenameAlert = false
+                }
+                .accessibilityIdentifier("action.channel.rename.cancel")
+                Spacer()
+                Button(localizationManager.localized("confirm")) {
+                    if let target = pendingRename {
+                        Task { await renameChannel(target) }
+                    }
+                }
+                .disabled(isRenaming || renameAlias.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("action.channel.rename.save")
+            }
+        }
+        .padding(24)
+        .frame(minWidth: 360)
+    }
+
     @MainActor
     private func renameChannel(_ subscription: ChannelSubscription) async {
         guard !isRenaming else { return }
         isRenaming = true
-        defer {
-            isRenaming = false
-            pendingRename = nil
-            renameAlias = ""
-        }
+        defer { isRenaming = false }
+        let submittedAlias = renameAlias.trimmingCharacters(in: .whitespacesAndNewlines)
 
         do {
-            let trimmedAlias = renameAlias.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmedAlias.isEmpty else { return }
-            if trimmedAlias == subscription.displayName {
+            guard !submittedAlias.isEmpty else { return }
+            if submittedAlias == subscription.displayName {
+                isShowingRenameAlert = false
+                pendingRename = nil
+                renameAlias = ""
+                renameErrorMessage = nil
                 return
             }
             try await environment.renameChannel(
                 channelId: subscription.channelId,
-                alias: trimmedAlias
+                alias: submittedAlias
             )
             environment.showToast(
                 message: localizationManager.localized("channel_renamed"),
                 style: .success,
                 duration: 1.5
             )
+            isShowingRenameAlert = false
+            pendingRename = nil
+            renameAlias = ""
+            renameErrorMessage = nil
         } catch {
-            environment.showErrorToast(error, duration: 2.5)
+            renameAlias = submittedAlias
+            renameErrorMessage = environment.userFacingErrorMessage(error)
         }
     }
 
@@ -605,8 +626,15 @@ struct ChannelManagementView: View {
     private func beginRename(_ subscription: ChannelSubscription) {
         guard !isRenaming else { return }
         renameAlias = subscription.displayName
+        renameErrorMessage = nil
         pendingRename = subscription
         isShowingRenameAlert = true
+    }
+
+    private func resetRenameState() {
+        pendingRename = nil
+        renameAlias = ""
+        renameErrorMessage = nil
     }
 }
 
