@@ -292,6 +292,80 @@ struct RuntimeQualityLargeScaleTests {
     }
 
     @Test
+    func currentV24StorePreservesPendingDeletionThroughV25AndReopen() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            let v24Store = LocalDataStore(
+                appGroupIdentifier: appGroupIdentifier,
+                spotlightIndexer: nil
+            )
+            let now = Date(timeIntervalSince1970: 1_768_500_000)
+            let pending = try await v24Store.enqueuePendingLocalDeletion(
+                summary: "Delete migrated event",
+                undoLabel: "Undo",
+                intent: .events(ids: ["migration-event-v24"]),
+                timeout: 30,
+                now: now
+            )
+            LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: root)
+
+            let databaseURL = try upgradeMainDatabaseURL(
+                appGroupIdentifier: appGroupIdentifier
+            )
+            do {
+                let queue = try DatabaseQueue(path: databaseURL.path)
+                try await queue.write { db in
+                    try db.execute(sql: "DROP TABLE IF EXISTS canonical_derived_work;")
+                    try db.execute(
+                        sql: "DELETE FROM grdb_migrations WHERE identifier = 'v25_canonical_derived_work_outbox';"
+                    )
+                }
+            }
+
+            let migratedStore = LocalDataStore(
+                appGroupIdentifier: appGroupIdentifier,
+                spotlightIndexer: nil
+            )
+            let afterMigration = try await migratedStore.loadPendingLocalDeletions(now: now)
+            #expect(afterMigration.count == 1)
+            #expect(afterMigration.first == pending)
+            #expect(afterMigration.first?.id == pending.id)
+            #expect(afterMigration.first?.summary == "Delete migrated event")
+            #expect(afterMigration.first?.intent == .events(ids: ["migration-event-v24"]))
+            #expect(afterMigration.first?.state == .undoable)
+            #expect(afterMigration.first?.deadline == pending.deadline)
+
+            let migrationFacts = try await DatabaseQueue(path: databaseURL.path).read { db in
+                let applied = try Bool.fetchOne(
+                    db,
+                    sql: "SELECT EXISTS(SELECT 1 FROM grdb_migrations WHERE identifier = 'v25_canonical_derived_work_outbox');"
+                ) ?? false
+                let table = try Bool.fetchOne(
+                    db,
+                    sql: "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'canonical_derived_work');"
+                ) ?? false
+                return (applied, table)
+            }
+            #expect(migrationFacts.0)
+            #expect(migrationFacts.1)
+
+            LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: root)
+            let reopenedStore = LocalDataStore(
+                appGroupIdentifier: appGroupIdentifier,
+                spotlightIndexer: nil
+            )
+            let afterReopen = try await reopenedStore.loadPendingLocalDeletions(now: now)
+            #expect(afterReopen.count == 1)
+            #expect(afterReopen.first == pending)
+            #expect(afterReopen.first?.id == pending.id)
+            #expect(afterReopen.first?.summary == "Delete migrated event")
+            #expect(afterReopen.first?.undoLabel == "Undo")
+            #expect(afterReopen.first?.intent == .events(ids: ["migration-event-v24"]))
+            #expect(afterReopen.first?.state == .undoable)
+            #expect(afterReopen.first?.deadline == pending.deadline)
+        }
+    }
+
+    @Test
     func legacyUpgradeTenThousandOpensRebuildsAndServesCanonicalQueries() async throws {
         try await runLegacyUpgradeScenario(
             scale: 10_000,

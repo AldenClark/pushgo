@@ -34,6 +34,16 @@ class StoreMigrationRegistryContractTest(unittest.TestCase):
 
         self.assertIn('migratedTables.contains("pending_local_deletions")', test_text)
         self.assertIn('migratedTables.contains("canonical_derived_work")', test_text)
+        self.assertIn(
+            "currentV24StorePreservesPendingDeletionThroughV25AndReopen",
+            test_text,
+        )
+        self.assertIn(
+            "loadPendingLocalDeletions(now: now)",
+            test_text,
+        )
+        self.assertIn("afterMigration.first == pending", test_text)
+        self.assertIn("afterReopen.first == pending", test_text)
 
 
 if __name__ == "__main__":

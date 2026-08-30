@@ -40,7 +40,7 @@ Platform vector order is `I / M / D / W` (iOS, macOS, Android, watchOS). `-` mea
 | 1255 | Two-second Store delay | V/V/V/- | `V` | Existing positive journeys require visible Loading followed by accurate content. |
 | 1256 | Temporary query/I/O failure and Retry | V/V/V/- | `V` | Apple and Android failure journeys require owned error, a new request and accurate recovery. |
 | 1257 | Fatal Store initialization failure | V/V/V/- | `V` | `A-LAUNCH`, `D-LAUNCH`: no business UI/Empty masquerade, safe stop/rebuild and accurate recovered Store. |
-| 1258 | Every supported schema upgrade | P/P/P/- | `P` | Apple v17 now genuinely removes and reapplies every registered v18–v25 migration; a registry contract rejects future suffix drift, and the focused Store test proves v24/v25 tables plus existing Message/Entity projections. It remains `P`: Apple still needs a v24 pending-deletion row preserved through v25/reopen, while Android's 21→30 chain and v24/v25 state tests still need explicit v27 legacy-ingress and v28 pending-deletion rows preserved through 30. Migration names/schema existence alone cannot close retained business data. |
+| 1258 | Every supported schema upgrade | V/V/V/- | `V` | Apple v17 genuinely removes and reapplies every registered v18–v25 migration, then a separate v24 boundary preserves the exact pending-deletion ID, summary, intent, undoable state and deadline through v25 and a second reopen. Android builds authoritative v27/v28 databases from exported Room schemas, inserts an exact queued legacy-ingress payload and pending-deletion intent, runs the registered production chain to v30, then closes/reopens and rechecks every business field. Apple focused Store tests passed 1/1 for each boundary; Android's migration device class passed 7/7 on API 37. Fast contracts reject migration-chain, registration, schema-export or selected stateful-boundary drift. Table/column existence and final schema numbers are retained only as supporting facts, never the final Oracle. |
 | 1259 | Reopen after migration | V/V/V/V | `V` | Apple iOS/macOS/watch and Android Store/repository reopen consumers retain exact data. |
 | 1263 | Session teardown isolation | V/V/V/V | `V` | App-owned session roots plus teardown/relaunch contracts; no host DB path or final verdict path. |
 | 1264 | Release Runtime cannot activate | V/V/V/V | `V` | `A-RELEASE`, `D-RELEASE`; Release cannot decode/activate Quality Runtime controls. |
@@ -213,16 +213,15 @@ Platform vector order is `I / M / D / W` (iOS, macOS, Android, watchOS). `-` mea
 
 The design contains 103 P0/P0 Release rows. This audit deliberately does **not** declare section 21.2(1) complete:
 
-- 79 rows are currently classified `V`; 1 conditional export row is `NA` because the product capability was explicitly removed.
-- 15 rows remain `P` and require semantic closure, an explicit product-scope correction, or an externally owned sub-gate.
+- 80 rows are currently classified `V`; 1 conditional export row is `NA` because the product capability was explicitly removed.
+- 14 rows remain `P` and require semantic closure, an explicit product-scope correction, or an externally owned sub-gate.
 - Two platform sub-results are explicitly `B`: iOS Channel Pasteboard and macOS notification interaction. Neither is hidden inside a green aggregate.
 - 8 P0 Release/external rows remain `N`; local Simulator/emulator evidence is retained but never promoted to physical/provider acceptance.
 
 The next implementation order is constrained by value and reuse:
 
-1. Reconcile row 1258 against the actual supported migration registry before adding any migration UI; add only missing field-family/version coverage at Store level.
-2. Audit rows 1355, 1360, 1372, 1391, 1395 and 1411 against existing tests and product reachability; prefer documenting already-real evidence or low-level parameterization over device matrices.
-3. Add one representative macOS and Android documentation system handoff for row 1421 only if it can reuse existing Settings/navigation journeys. Keep all page×locale correctness in fast contracts.
-4. Keep physical/provider/watch-media/accessibility items in their explicit Release/owner lanes. They cannot displace locally reachable positive P0 work and cannot be turned green with mocks.
+1. Audit rows 1355, 1360, 1372, 1391, 1395 and 1411 against existing tests and product reachability; prefer documenting already-real evidence or low-level parameterization over device matrices.
+2. Add one representative macOS and Android documentation system handoff for row 1421 only if it can reuse existing Settings/navigation journeys. Keep all page×locale correctness in fast contracts.
+3. Keep physical/provider/watch-media/accessibility items in their explicit Release/owner lanes. They cannot displace locally reachable positive P0 work and cannot be turned green with mocks.
 
 Every status change must update this ledger, the platform `capability-coverage.md`, and the retained receipt path in the same slice. A same-context implementation/review remains `common-mode-risk` until an independent blind packet verifies the row mapping.
