@@ -330,10 +330,57 @@ final class PushGo_macOSUITests: XCTestCase {
     @MainActor
     func testFatalStoreInitializationStopsReadWriteAndRecoversAfterRelaunch() {
         let sessionID = "macos-store-fatal-\(UUID().uuidString.lowercased())"
+        let seeded = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        seeded.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        launchQuality(seeded, sessionID: sessionID)
+        XCTAssertTrue(
+            element(
+                in: seeded.app,
+                identifier: "message.row.00000000-0000-0000-0000-000000000001"
+            ).waitForExistence(timeout: 8),
+            "The destructive recovery journey must begin with real canonical data to lose."
+        )
+        seeded.app.terminate()
+        XCTAssertEqual(seeded.app.state, .notRunning)
+
+        let firstFailure = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            failLocalStoreInitialization: true,
+            localStoreFailureStreakThreshold: 2
+        )
+        firstFailure.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        firstFailure.app.launch()
+        firstFailure.app.activate()
+        dismissSystemPrivacyDialogsIfNeeded(in: firstFailure.app)
+        XCTAssertTrue(
+            element(
+                in: firstFailure.app,
+                identifier: "state.storage.unavailable"
+            ).waitForExistence(timeout: 8)
+        )
+        XCTAssertFalse(
+            firstFailure.app.sheets.firstMatch.buttons["Rebuild database and exit"].exists,
+            "Destructive recovery must not be offered before the configured repeated-failure threshold."
+        )
+        let exit = storageRecoveryButton(
+            in: firstFailure.app,
+            identifier: "action.storage.exit",
+            fallbackLabel: "Exit App"
+        )
+        XCTAssertTrue(exit.waitForExistence(timeout: 5) && exit.isHittable)
+        exit.click()
+        let firstExit = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "state == %d", XCUIApplication.State.notRunning.rawValue),
+            object: firstFailure.app
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [firstExit], timeout: 5), .completed)
+
         let failing = configuredQualityApp(
             sessionID: sessionID,
             fixture: "messages.standard",
-            failLocalStoreInitialization: true
+            failLocalStoreInitialization: true,
+            localStoreFailureStreakThreshold: 2
         )
         failing.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         failing.app.launch()
@@ -361,9 +408,13 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertFalse(element(in: failing.app, identifier: "screen.messages.list").exists)
         XCTAssertFalse(element(in: failing.app, identifier: "state.messages.empty").exists)
         XCTAssertFalse(element(in: failing.app, identifier: "quality-runtime.ready").exists)
-        let exit = failing.app.sheets.firstMatch.buttons["Exit App"]
-        XCTAssertTrue(exit.waitForExistence(timeout: 5) && exit.isHittable)
-        exit.click()
+        let rebuild = storageRecoveryButton(
+            in: failing.app,
+            identifier: "action.storage.rebuild",
+            fallbackLabel: "Rebuild database and exit"
+        )
+        XCTAssertTrue(rebuild.waitForExistence(timeout: 5) && rebuild.isHittable)
+        rebuild.click()
         let terminated = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "state == %d", XCUIApplication.State.notRunning.rawValue),
             object: failing.app
@@ -371,19 +422,29 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertEqual(
             XCTWaiter.wait(for: [terminated], timeout: 5),
             .completed,
-            "The storage recovery Exit action must actually terminate the App."
+            "The storage rebuild action must finish deletion before terminating the App."
         )
 
         let recovered = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
         recovered.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         launchQuality(recovered, sessionID: sessionID)
         XCTAssertTrue(
+            element(in: recovered.app, identifier: "screen.messages.list")
+                .waitForExistence(timeout: 8)
+        )
+        XCTAssertTrue(
+            element(in: recovered.app, identifier: "state.messages.empty")
+                .waitForExistence(timeout: 8)
+        )
+        XCTAssertFalse(
             element(
                 in: recovered.app,
                 identifier: "message.row.00000000-0000-0000-0000-000000000001"
-            ).waitForExistence(timeout: 8)
+            ).exists,
+            "A destructive rebuild must not resurrect the canonical row that existed before recovery."
         )
-        XCTAssertFalse(element(in: recovered.app, identifier: "action.storage.exit").exists)
+        XCTAssertFalse(recovered.app.sheets.firstMatch.buttons["Exit App"].exists)
+        XCTAssertFalse(recovered.app.sheets.firstMatch.buttons["Rebuild database and exit"].exists)
     }
 
     @MainActor
@@ -3393,6 +3454,7 @@ final class PushGo_macOSUITests: XCTestCase {
         sessionID: String,
         fixture: String,
         failLocalStoreInitialization: Bool = false,
+        localStoreFailureStreakThreshold: Int? = nil,
         messageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         legacyStore: String? = nil,
@@ -3429,6 +3491,7 @@ final class PushGo_macOSUITests: XCTestCase {
                 sessionID: sessionID,
                 fixture: fixture,
                 failLocalStoreInitialization: failLocalStoreInitialization,
+                localStoreFailureStreakThreshold: localStoreFailureStreakThreshold,
                 messageLoadDelayMilliseconds: messageLoadDelayMilliseconds,
                 messageRefreshDelayMilliseconds: messageRefreshDelayMilliseconds,
                 legacyStore: legacyStore,
@@ -3482,6 +3545,7 @@ final class PushGo_macOSUITests: XCTestCase {
         sessionID: String,
         fixture: String,
         failLocalStoreInitialization: Bool = false,
+        localStoreFailureStreakThreshold: Int? = nil,
         messageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         legacyStore: String? = nil,
@@ -3502,6 +3566,9 @@ final class PushGo_macOSUITests: XCTestCase {
         ]
         if let messageLoadDelayMilliseconds {
             faults["message_load_delay_ms"] = messageLoadDelayMilliseconds
+        }
+        if let localStoreFailureStreakThreshold {
+            faults["local_store_failure_streak_threshold"] = localStoreFailureStreakThreshold
         }
         if let messageRefreshDelayMilliseconds {
             faults["message_refresh_delay_ms"] = messageRefreshDelayMilliseconds
@@ -3778,6 +3845,16 @@ final class PushGo_macOSUITests: XCTestCase {
     @MainActor
     private func element(in app: XCUIApplication, identifier: String) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+    }
+
+    @MainActor
+    private func storageRecoveryButton(
+        in app: XCUIApplication,
+        identifier: String,
+        fallbackLabel: String
+    ) -> XCUIElement {
+        let semanticButton = element(in: app, identifier: identifier)
+        return semanticButton.exists ? semanticButton : app.sheets.firstMatch.buttons[fallbackLabel]
     }
 
     @MainActor

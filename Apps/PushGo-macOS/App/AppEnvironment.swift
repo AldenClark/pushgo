@@ -113,7 +113,10 @@ final class AppEnvironment {
         }
     )
     @ObservationIgnored private(set) lazy var notificationIngressController = makeNotificationIngressController()
-    @ObservationIgnored private let localStoreFailureStreakThreshold = 3
+    // Quality may compress repeated process launches, but still exercises the
+    // production recovery surface and destructive Store implementation.
+    @ObservationIgnored private let localStoreFailureStreakThreshold =
+        PushGoAutomationContext.qualitySession?.faults.localStoreFailureStreakThreshold ?? 3
     @ObservationIgnored private let localStoreFailureStreakKey = "pushgo.local_store.failure_streak"
     @ObservationIgnored private let localStoreFailureDefaults = AppConstants.sharedUserDefaults()
     // Keep AppEnvironment as the composition root. Feature-specific behavior

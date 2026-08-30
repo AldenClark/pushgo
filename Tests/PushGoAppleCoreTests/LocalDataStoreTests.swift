@@ -5,6 +5,42 @@ import Testing
 
 struct LocalDataStoreTests {
     @Test
+    func recoveryRebuildDeletesEveryCurrentAndLegacySQLiteFileFamily() async throws {
+        try await withIsolatedLocalDataStore { store, appGroupIdentifier in
+            try await store.saveMessagesBatch([
+                makeMessage(
+                    messageId: "recovery-delete-001",
+                    notificationRequestId: "recovery-delete-request-001",
+                    title: "Must be deleted",
+                    body: "Recovery must remove this canonical row."
+                ),
+            ])
+
+            let directory = try AppConstants.appLocalDatabaseDirectory(
+                appGroupIdentifier: appGroupIdentifier
+            )
+            let filenames = Set([
+                AppConstants.databaseStoreFilename,
+                AppConstants.messageIndexDatabaseFilename,
+            ] + AppConstants.legacyDatabaseStoreFilenames + AppConstants.legacyMessageIndexDatabaseFilenames)
+            let suffixes = ["", "-wal", "-shm", "-journal"]
+            let artifacts = filenames.flatMap { filename in
+                suffixes.map { suffix in
+                    directory.appendingPathComponent(filename + suffix)
+                }
+            }
+            for artifact in artifacts where !FileManager.default.fileExists(atPath: artifact.path) {
+                try Data("recovery-sentinel".utf8).write(to: artifact)
+            }
+            #expect(artifacts.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
+
+            try await store.rebuildPersistentStoresForRecovery()
+
+            #expect(artifacts.allSatisfy { !FileManager.default.fileExists(atPath: $0.path) })
+        }
+    }
+
+    @Test
     func persistNotificationMessageUpdatesExistingRowForDuplicateRequest() async throws {
         try await withIsolatedLocalDataStore { store, _ in
             let first = makeMessage(

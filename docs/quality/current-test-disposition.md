@@ -120,6 +120,8 @@ readiness 之前的 App-owned session、系统授权操作、后台切换和 Run
 
 Quality session 不再只隔离 GRDB：server config、decryption material metadata 与手动编码偏好由 App 自己的 session `config` 目录持有，同 session relaunch 可读、不同 session 不共享，生产 Keychain/gateway token/fallback 不读不写。配置文件损坏或权限错误必须阻断 readiness，不能被默认值伪装成成功。首次完整 Release 的 2/18 失败正是该隔离缺口的负控证据；结构修复后定向 3/3 与完整 18/18 均通过，原失败结果包继续保留。
 
+Store fatal recovery 风险方法不再只证明错误页与普通退出：同一方法先建立真实 canonical 数据，保留第一次失败时 destructive action 不应出现及安全退出，第二次失败才点击生产 rebuild，并要求 App 完成删除后退出；同 session 普通重启必须进入可用空列表且旧 canonical 行不复活。Quality Runtime 只把生产 3 次门槛压缩为 2 次准备，不替代真实 Store、UI、删除或重启；0 阈值在 decoder 边界拒绝。主库/index/legacy 及 SQLite sidecar 完整删除由独立 Store 测试对账。该方法仍只属于 iOS/macOS Nightly/Release risk 集，不进入 PR/positive。no-op destructive Store 反例最终在 iOS 普通重启后的空态终点精确失败；正式实现恢复后 iOS 1/1、41.627 秒与 macOS 1/1、28.919 秒均零业务重试通过，Core 聚焦 24/24 通过。Alert 动作由 semantic ID 优先、固定英文可见按钮兜底；macOS 可见节点限定到 sheet，避免同名不可点击节点。容量阻断、Problem Reporter 清理阻断和接入错误均保留为测试系统证据，不能被最终绿色改写；Simulator lease 已释放。
+
 ## 变更影响门禁
 
 `config/quality-impact.json` 把当前产品源码分配到 Messages、Entity、Channel/Settings、Ingress、系统表面、Watch、App shell、共享 UI/媒体、Performance 和 Release 等具名能力。`scripts/quality_changed.sh` 先执行选择器负控，再运行不低于推荐值的真实 Lane；独立性能测试/runner 变更选择 `performance`，与产品规则同时变化则提升到同时执行功能和性能的 `release`。新产品路径未映射时直接 `BLOCKED`。这只是确定性下限，不能替代对 caller、Store、错误分支和平台消费者的语义追踪。

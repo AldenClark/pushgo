@@ -118,6 +118,7 @@ enum PushGoQualityChannelMutationScenario: String, Codable, Sendable {
 
 struct PushGoQualityFaults: Codable, Equatable, Sendable {
     let failLocalStoreInitialization: Bool
+    let localStoreFailureStreakThreshold: Int?
     let messageLoadDelayMilliseconds: Int?
     let messageRefreshDelayMilliseconds: Int?
     let messageSearchDelayMilliseconds: Int?
@@ -129,6 +130,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
 
     init(
         failLocalStoreInitialization: Bool = false,
+        localStoreFailureStreakThreshold: Int? = nil,
         messageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         messageSearchDelayMilliseconds: Int? = nil,
@@ -139,6 +141,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         failChannelSubscriptionPersistenceOnce: Bool = false
     ) {
         self.failLocalStoreInitialization = failLocalStoreInitialization
+        self.localStoreFailureStreakThreshold = localStoreFailureStreakThreshold
         self.messageLoadDelayMilliseconds = messageLoadDelayMilliseconds
         self.messageRefreshDelayMilliseconds = messageRefreshDelayMilliseconds
         self.messageSearchDelayMilliseconds = messageSearchDelayMilliseconds
@@ -151,6 +154,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case failLocalStoreInitialization = "fail_local_store_initialization"
+        case localStoreFailureStreakThreshold = "local_store_failure_streak_threshold"
         case messageLoadDelayMilliseconds = "message_load_delay_ms"
         case messageRefreshDelayMilliseconds = "message_refresh_delay_ms"
         case messageSearchDelayMilliseconds = "message_search_delay_ms"
@@ -167,6 +171,10 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
             Bool.self,
             forKey: .failLocalStoreInitialization
         ) ?? false
+        localStoreFailureStreakThreshold = try container.decodeIfPresent(
+            Int.self,
+            forKey: .localStoreFailureStreakThreshold
+        )
         messageLoadDelayMilliseconds = try container.decodeIfPresent(
             Int.self,
             forKey: .messageLoadDelayMilliseconds
@@ -289,6 +297,7 @@ enum PushGoQualitySessionError: Error, Equatable, LocalizedError {
     case invalidMessageLoadDelay(Int)
     case invalidMessageRefreshDelay(Int)
     case invalidMessageSearchDelay(Int)
+    case invalidLocalStoreFailureStreakThreshold(Int)
     case systemColdLaunchNotAllowed
 
     var errorDescription: String? {
@@ -307,6 +316,8 @@ enum PushGoQualitySessionError: Error, Equatable, LocalizedError {
             return "Message refresh delay must be between 0 and 30000 ms: \(delay)."
         case let .invalidMessageSearchDelay(delay):
             return "Message search delay must be between 0 and 30000 ms: \(delay)."
+        case let .invalidLocalStoreFailureStreakThreshold(threshold):
+            return "Local Store failure streak threshold must be between 1 and 3: \(threshold)."
         case .systemColdLaunchNotAllowed:
             return "Quality session did not explicitly allow a system cold launch."
         }
@@ -499,6 +510,10 @@ enum PushGoAutomationContext {
         if let delay = descriptor.faults.messageSearchDelayMilliseconds,
            !(0 ... 30_000).contains(delay) {
             throw PushGoQualitySessionError.invalidMessageSearchDelay(delay)
+        }
+        if let threshold = descriptor.faults.localStoreFailureStreakThreshold,
+           !(1 ... 3).contains(threshold) {
+            throw PushGoQualitySessionError.invalidLocalStoreFailureStreakThreshold(threshold)
         }
         return descriptor
     }
