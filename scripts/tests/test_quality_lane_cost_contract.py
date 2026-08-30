@@ -7,6 +7,31 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 class QualityLaneCostContractTests(unittest.TestCase):
+    def test_macos_minimize_restore_reuses_the_existing_window_journey(self) -> None:
+        runner = (REPO / "scripts/run_macos_ui_tests.sh").read_text()
+        ui_test = (REPO / "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift").read_text()
+
+        self.assertEqual(
+            1,
+            runner.count(
+                "testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow"
+            ),
+        )
+        method = ui_test.split(
+            "func testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow()",
+            1,
+        )[1].split("\n    @MainActor", 1)[0]
+        self.assertIn("XCUIIdentifierMinimizeWindow", method)
+        self.assertIn("Minimize and restore must preserve the same App-owned session", method)
+        self.assertIn("Restoring a minimized main window must not create a duplicate window", method)
+        minimize_restore = method.split("XCUIIdentifierMinimizeWindow", 1)[1].split(
+            'identifier: "action.messages.refresh"', 1
+        )[0]
+        self.assertIn("minimizedStatusItem.click()", minimize_restore)
+        self.assertNotIn("minimizedStatusItem.rightClick()", minimize_restore)
+        self.assertIn("XCUIIdentifierCloseWindow", method)
+        self.assertIn("Open main window", method)
+
     def test_ios_slow_load_performance_negative_control_reuses_positive_build(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()
         ui_runner = (REPO / "scripts/run_ios_ui_tests.sh").read_text()

@@ -1547,6 +1547,59 @@ final class PushGo_macOSUITests: XCTestCase {
             identifier: "message.row.00000000-0000-0000-0000-000000000001"
         )
         XCTAssertTrue(originalRow.waitForExistence(timeout: 8))
+        let mainWindow = context.app.windows.firstMatch
+        XCTAssertTrue(mainWindow.exists)
+        let minimizeButton = mainWindow.buttons[XCUIIdentifierMinimizeWindow]
+        XCTAssertTrue(
+            minimizeButton.waitForExistence(timeout: 5) && minimizeButton.isHittable,
+            "The real main window must expose its native minimize action."
+        )
+        minimizeButton.click()
+        let minimized = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hittable == false"),
+            object: mainWindow
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [minimized], timeout: 5),
+            .completed,
+            "The native minimize action must actually remove the main window from interaction."
+        )
+        XCTAssertNotEqual(
+            context.app.state,
+            .notRunning,
+            "Minimizing the main window must not terminate the status-item app."
+        )
+
+        let minimizedStatusItem = pushGoStatusItem(in: context.app)
+        XCTAssertTrue(
+            minimizedStatusItem.waitForExistence(timeout: 8),
+            "The status item must remain reachable while the main window is minimized."
+        )
+        minimizedStatusItem.click()
+        let deminiaturized = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hittable == true"),
+            object: mainWindow
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [deminiaturized], timeout: 8),
+            .completed,
+            "The primary status-item action must restore the minimized main window."
+        )
+        XCTAssertEqual(
+            context.app.windows.count,
+            1,
+            "Restoring a minimized main window must not create a duplicate window."
+        )
+        XCTAssertTrue(
+            originalRow.waitForExistence(timeout: 5) && originalRow.isHittable,
+            "The restored main window must preserve its accurate, usable canonical content."
+        )
+        XCTAssertEqual(
+            element(in: context.app, identifier: "quality-runtime.ready").value as? String,
+            sessionID,
+            "Minimize and restore must preserve the same App-owned session."
+        )
+
         let refresh = element(in: context.app, identifier: "action.messages.refresh")
         XCTAssertTrue(refresh.waitForExistence(timeout: 5) && refresh.isHittable)
         refresh.click()
@@ -1557,8 +1610,6 @@ final class PushGo_macOSUITests: XCTestCase {
         )
         XCTAssertTrue(originalRow.exists, "Closing begins from the last accurate snapshot.")
 
-        let mainWindow = context.app.windows.firstMatch
-        XCTAssertTrue(mainWindow.exists)
         let closeButton = mainWindow.buttons[XCUIIdentifierCloseWindow]
         XCTAssertTrue(closeButton.waitForExistence(timeout: 5))
         closeButton.click()
