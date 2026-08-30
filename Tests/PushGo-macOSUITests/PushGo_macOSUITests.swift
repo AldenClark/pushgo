@@ -191,6 +191,116 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
+    func testSystemNotificationClickPersistsAccurateMessageAndSurvivesRelaunch() {
+        let sessionID = "macos-system-notification-\(UUID().uuidString.lowercased())"
+        let requestID = "quality-macos-notification-\(UUID().uuidString.lowercased())"
+        let messageID = "quality-macos-message-\(UUID().uuidString.lowercased())"
+        let title = "Quality macOS System Message"
+        let body = "The real macOS notification opens this canonical body."
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "empty.clean",
+            skipPushAuthorization: false
+        )
+        context.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        setAutomationRequest(
+            name: "notification.schedule_system",
+            args: [
+                "notification_request_id": requestID,
+                "message_id": messageID,
+                "title": title,
+                "body": body,
+            ],
+            in: context.app
+        )
+
+        context.app.launch()
+        authorizeMacNotificationsIfNeeded(in: context.app)
+        context.app.activate()
+        XCTAssertTrue(context.app.windows.firstMatch.waitForExistence(timeout: 12))
+        let ready = element(in: context.app, identifier: "quality-runtime.ready")
+        XCTAssertTrue(
+            ready.waitForExistence(timeout: 15),
+            "QUALITY_PRECONDITION: App-owned notification session did not become ready."
+        )
+        XCTAssertEqual(ready.value as? String, sessionID)
+
+        let commandSucceeded = element(in: context.app, identifier: "quality-command.succeeded")
+        let commandFailed = element(in: context.app, identifier: "quality-command.failed")
+        guard commandSucceeded.exists else {
+            let failureDetail = commandFailed.exists
+                ? ((commandFailed.value as? String) ?? "unknown command error")
+                : "missing App-owned command outcome"
+            XCTFail(
+                "QUALITY_PRECONDITION: macOS system notification scheduling failed before product verification: "
+                    + failureDetail
+            )
+            return
+        }
+
+        context.app.typeKey("h", modifierFlags: .command)
+        let backgrounded = XCTNSPredicateExpectation(
+            predicate: NSPredicate(
+                format: "state == %d",
+                XCUIApplication.State.runningBackground.rawValue
+            ),
+            object: context.app
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [backgrounded], timeout: 5),
+            .completed,
+            "QUALITY_PRECONDITION: PushGo did not leave the foreground before notification delivery."
+        )
+
+        let notificationCenter = XCUIApplication(bundleIdentifier: "com.apple.notificationcenterui")
+        let titleElement = notificationCenter.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", title))
+            .firstMatch
+        XCTAssertTrue(
+            titleElement.waitForExistence(timeout: 15),
+            "The exact App-owned payload did not appear in the real macOS notification surface."
+        )
+        XCTAssertTrue(
+            notificationCenter.descendants(matching: .any)
+                .matching(NSPredicate(format: "label == %@", body))
+                .firstMatch
+                .waitForExistence(timeout: 3),
+            "The macOS notification surface changed or lost the exact payload body."
+        )
+        titleElement.click()
+
+        XCTAssertTrue(
+            element(in: context.app, identifier: "screen.message.detail")
+                .waitForExistence(timeout: 12),
+            "The real notification click did not route into the canonical message detail."
+        )
+        XCTAssertTrue(context.app.staticTexts[title].waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            context.app.staticTexts[body].waitForExistence(timeout: 5),
+            "The routed detail did not display the exact notification body."
+        )
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(sessionID: sessionID, fixture: "empty.clean")
+        relaunched.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        launchQuality(relaunched, sessionID: sessionID)
+        let persistedRow = messageRow(containing: title, in: relaunched.app)
+        XCTAssertTrue(
+            persistedRow.waitForExistence(timeout: 10),
+            "The system-ingressed canonical message did not survive process relaunch."
+        )
+        persistedRow.click()
+        XCTAssertTrue(
+            element(in: relaunched.app, identifier: "screen.message.detail")
+                .waitForExistence(timeout: 8)
+        )
+        XCTAssertTrue(
+            relaunched.app.staticTexts[body].waitForExistence(timeout: 5),
+            "The persisted notification message changed after relaunch."
+        )
+    }
+
+    @MainActor
     func testFatalStoreInitializationStopsReadWriteAndRecoversAfterRelaunch() {
         let sessionID = "macos-store-fatal-\(UUID().uuidString.lowercased())"
         let failing = configuredQualityApp(
@@ -3266,7 +3376,8 @@ final class PushGo_macOSUITests: XCTestCase {
         messageRefreshScenario: String? = nil,
         eventCloseScenario: String? = nil,
         channelMutationScenario: String? = nil,
-        allowCrossAppDataAccess: Bool = false
+        allowCrossAppDataAccess: Bool = false,
+        skipPushAuthorization: Bool = true
     ) -> LaunchContext {
         XCTAssertTrue(
             isValidQualitySessionID(sessionID),
@@ -3275,7 +3386,11 @@ final class PushGo_macOSUITests: XCTestCase {
         let app = XCUIApplication()
         launchedApps.append(app)
         app.launchArguments += ["-ApplePersistenceIgnoreState", "YES"]
-        setAutomationValue("1", for: "PUSHGO_AUTOMATION_SKIP_PUSH_AUTHORIZATION", in: app)
+        setAutomationValue(
+            skipPushAuthorization ? "1" : "0",
+            for: "PUSHGO_AUTOMATION_SKIP_PUSH_AUTHORIZATION",
+            in: app
+        )
         setAutomationValue(
             allowCrossAppDataAccess ? "1" : "0",
             for: "PUSHGO_AUTOMATION_ALLOW_CROSS_APP_DATA_ACCESS",
@@ -3402,6 +3517,53 @@ final class PushGo_macOSUITests: XCTestCase {
     private func setAutomationValue(_ value: String, for key: String, in app: XCUIApplication) {
         app.launchEnvironment[key] = value
         app.launchArguments += ["-\(key)", value]
+    }
+
+    @MainActor
+    private func setAutomationRequest(
+        name: String,
+        args: [String: String],
+        in app: XCUIApplication
+    ) {
+        let request: [String: Any] = [
+            "id": UUID().uuidString,
+            "plane": "command",
+            "name": name,
+            "args": args,
+        ]
+        let data = try! JSONSerialization.data(withJSONObject: request, options: [.sortedKeys])
+        setAutomationValue(
+            String(decoding: data, as: UTF8.self),
+            for: "PUSHGO_AUTOMATION_REQUEST",
+            in: app
+        )
+    }
+
+    @MainActor
+    private func authorizeMacNotificationsIfNeeded(in app: XCUIApplication) {
+        let hosts = [
+            app,
+            XCUIApplication(bundleIdentifier: "com.apple.UserNotificationCenter"),
+        ]
+        for host in hosts {
+            let alert = host.alerts.firstMatch
+            guard alert.waitForExistence(timeout: 2) else { continue }
+            let allow = alert.buttons
+                .matching(NSPredicate(format: "label IN %@", ["Allow", "允许", "允許"]))
+                .firstMatch
+            XCTAssertTrue(
+                allow.waitForExistence(timeout: 3),
+                "QUALITY_PRECONDITION: the macOS notification permission Allow action was unavailable."
+            )
+            if allow.exists {
+                allow.click()
+                XCTAssertTrue(
+                    alert.waitForNonExistence(timeout: 8),
+                    "QUALITY_PRECONDITION: the macOS notification permission prompt did not dismiss."
+                )
+            }
+            return
+        }
     }
 
     @MainActor

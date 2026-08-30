@@ -21,12 +21,17 @@ export QUALITY_RUNNER_ISSUE_FILE="$runner_issue_file"
 
 claims=()
 selected_claims=()
+macos_system_notification_completed=0
+macos_system_notification_not_run_claim="macOS real Notification Center delivery, click route, accurate canonical persistence, and relaunch evidence"
 not_run=(
   "physical APNs network delivery, permission denial, physical-device notification-action/process-death parity, and other system-surface evidence"
   "physical VoiceOver task-completion evidence"
 )
 if [[ "$lane" != "macos-update-install" && "$lane" != "release" ]]; then
   not_run+=("macOS real Sparkle signed download, sandbox install, bundle replacement, and relaunch evidence")
+fi
+if [[ "$lane" != "macos-system-notification" && "$lane" != "release" ]]; then
+  not_run+=("$macos_system_notification_not_run_claim")
 fi
 physical_performance_requested=0
 not_run+=("physical-device frame/hitch and release trace evidence")
@@ -188,6 +193,9 @@ PY
           QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_macos_ui_tests.sh"
         claims+=("macOS impact-selected image preview and native share journey")
         ;;
+      apple-macos-system-notification)
+        run_macos_system_notification
+        ;;
       *)
         echo "status=BLOCKED"
         echo "reason=unsupported_apple_impact_check:$check"
@@ -196,8 +204,6 @@ PY
     esac
   done <<< "$checks_output"
 }
-
-run_impact_contracts
 
 # PR spends device minutes on one broad positive representative per user-purpose
 # family. Failure injection, deadline behavior, corruption, and compensation stay
@@ -279,6 +285,23 @@ run_macos_update_install() {
   claims+=("macOS real Sparkle signed update install and relaunch journey")
 }
 
+run_macos_system_notification() {
+  [[ $macos_system_notification_completed -eq 0 ]] || return 0
+  local -a remaining_not_run=()
+  local deferred_claim
+  for deferred_claim in "${not_run[@]}"; do
+    [[ "$deferred_claim" == "$macos_system_notification_not_run_claim" ]] \
+      || remaining_not_run+=("$deferred_claim")
+  done
+  not_run=("${remaining_not_run[@]}")
+  selected_claims+=("macOS real Notification Center delivery, click route, accurate canonical persistence, and relaunch journey")
+  MACOS_SCOPE_SET=system \
+    MAX_RETRIES=0 \
+    QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_macos_ui_tests.sh"
+  claims+=("macOS real Notification Center delivery, click route, accurate canonical persistence, and relaunch journey")
+  macos_system_notification_completed=1
+}
+
 run_ios_positive() {
   selected_claims+=("iOS complete positive App-owned journeys before fault injection")
   TEST_SCOPES="$positive_ui_scopes" \
@@ -329,9 +352,14 @@ run_system_notification_journey() {
   claims+=("iOS Simulator system notification permission/delivery/hot-and-terminated-process tap/detail/read plus direct mark-read and destructive delete/control/relaunch journeys")
 }
 
+run_impact_contracts
+
 case "$lane" in
   macos-update-install)
     run_macos_update_install
+    ;;
+  macos-system-notification)
+    run_macos_system_notification
     ;;
   system-notification)
     run_system_notification_journey
@@ -384,6 +412,7 @@ case "$lane" in
     run_system_notification_journey
     run_watch_ui
     run_accessibility_localization
+    run_macos_system_notification
     run_macos_ui full
     run_macos_update_install
     run_performance

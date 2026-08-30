@@ -123,6 +123,27 @@ class QualityLaneCostContractTests(unittest.TestCase):
         self.assertEqual(1, update_runner.count('"Install Update" "安装更新" "安裝更新"'))
         self.assertIn('"business_retries": 0', update_runner)
 
+    def test_real_macos_system_notification_is_release_or_focused_only(self) -> None:
+        runner = (REPO / "scripts/quality_test.sh").read_text()
+        macos_runner = (REPO / "scripts/run_macos_ui_tests.sh").read_text()
+
+        self.assertIn("macos-system-notification)\n    run_macos_system_notification", runner)
+        release_body = runner.split("  release)\n", 1)[1].split("  *)\n", 1)[0]
+        self.assertEqual(1, release_body.count("run_macos_system_notification"))
+        for lane in ("pr", "nightly", "macos"):
+            body = runner.split(f"  {lane})\n", 1)[1].split("    ;;", 1)[0]
+            self.assertNotIn("run_macos_system_notification", body)
+
+        system = self._array_scopes(macos_runner, "system_scopes")
+        self.assertEqual(
+            [
+                "PushGo-macOSUITests/PushGo_macOSUITests/"
+                "testSystemNotificationClickPersistsAccurateMessageAndSurvivesRelaunch"
+            ],
+            system,
+        )
+        self.assertIn("MAX_RETRIES=0", runner.split("run_macos_system_notification() {", 1)[1].split("\n}", 1)[0])
+
     def test_channel_ui_impact_checks_run_one_platform_owner_journey(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()
 
@@ -255,6 +276,11 @@ class QualityLaneCostContractTests(unittest.TestCase):
         match = re.search(rf'^{variable}="([^"]+)"$', source, re.MULTILINE)
         self.assertIsNotNone(match, variable)
         return match.group(1).split(",")
+
+    def _array_scopes(self, source: str, variable: str) -> list[str]:
+        match = re.search(rf"^{variable}=\((.*?)^\)", source, re.MULTILINE | re.DOTALL)
+        self.assertIsNotNone(match, variable)
+        return re.findall(r'"(PushGo-macOSUITests/[^\"]+)"', match.group(1))
 
 
 if __name__ == "__main__":

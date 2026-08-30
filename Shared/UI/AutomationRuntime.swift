@@ -7,6 +7,7 @@ import Darwin
 #endif
 #if os(macOS)
 import AppKit
+import UserNotifications
 #endif
 
 #if DEBUG && !os(watchOS)
@@ -211,6 +212,8 @@ private struct PushGoAutomationRequest: Decodable {
         let baseURL: String?
         let token: String?
         let notificationRequestId: String?
+        let title: String?
+        let body: String?
         let key: String?
         let encoding: String?
 
@@ -226,6 +229,8 @@ private struct PushGoAutomationRequest: Decodable {
             case baseURL = "base_url"
             case token
             case notificationRequestId = "notification_request_id"
+            case title
+            case body
             case key
             case encoding
         }
@@ -656,6 +661,8 @@ final class PushGoAutomationRuntime {
     private var markdownAttachmentAnimatedCount = 0
     private var activeTrace: PushGoAutomationActiveTrace?
     private var expensiveStateEnrichmentSuspensionCount = 0
+    private(set) var startupRequestStatus: String?
+    private(set) var startupRequestError: String?
 
     private init() {}
 
@@ -842,6 +849,8 @@ final class PushGoAutomationRuntime {
         didExecuteStartupRequest = true
 
         if let requestDecodeError {
+            startupRequestStatus = "failed"
+            startupRequestError = requestDecodeError
             await writeResponse(ok: false, error: requestDecodeError, environment: environment)
             return
         }
@@ -949,6 +958,8 @@ final class PushGoAutomationRuntime {
                 try await updateGatewayConfig(request: request, environment: environment)
             case "notification.open":
                 try await handleNotificationOpen(request: request, environment: environment)
+            case "notification.schedule_system":
+                try await scheduleSystemNotification(request: request)
             case "notification.mark_read":
                 try await handleNotificationAction(request: request, action: .markRead, environment: environment)
             case "notification.delete":
@@ -1030,6 +1041,8 @@ final class PushGoAutomationRuntime {
             )
             writeEvent(type: "command.completed", command: request.name, details: [:])
             endCommandTrace(status: "ok", attributes: [:], errorCode: nil, errorMessage: nil)
+            startupRequestStatus = "succeeded"
+            startupRequestError = nil
             await writeResponse(ok: true, error: nil, environment: environment)
         } catch {
             let commandTotalMs = max(0, Int(Date().timeIntervalSince(commandStartedAt) * 1_000))
@@ -1068,6 +1081,8 @@ final class PushGoAutomationRuntime {
                 errorCode: nil,
                 errorMessage: error.localizedDescription
             )
+            startupRequestStatus = "failed"
+            startupRequestError = error.localizedDescription
             await writeResponse(ok: false, error: error.localizedDescription, environment: environment)
         }
     }
@@ -3465,6 +3480,63 @@ final class PushGoAutomationRuntime {
             throw PushGoAutomationError.missingArgument("entity_id")
         }
         await environment.handleNotificationOpen(entityType: entityType, entityId: entityId)
+    }
+
+    private func scheduleSystemNotification(request: PushGoAutomationRequest) async throws {
+        #if os(macOS)
+        guard PushGoAutomationContext.qualitySession != nil else {
+            throw PushGoAutomationError.invalidArgument("quality_session")
+        }
+        guard let requestID = normalizedIdentifier(request.args?.notificationRequestId) else {
+            throw PushGoAutomationError.missingArgument("notification_request_id")
+        }
+        guard let messageID = normalizedIdentifier(request.args?.messageId) else {
+            throw PushGoAutomationError.missingArgument("message_id")
+        }
+        guard let title = normalizedIdentifier(request.args?.title) else {
+            throw PushGoAutomationError.missingArgument("title")
+        }
+        guard let body = normalizedIdentifier(request.args?.body) else {
+            throw PushGoAutomationError.missingArgument("body")
+        }
+
+        let center = UNUserNotificationCenter.current()
+        let authorized = try await center.requestAuthorization(options: [.alert, .badge, .sound])
+        guard authorized else {
+            throw PushGoAutomationError.invalidArgument("notification_authorization")
+        }
+
+        center.removePendingNotificationRequests(withIdentifiers: [requestID])
+        center.removeDeliveredNotifications(withIdentifiers: [requestID])
+
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.categoryIdentifier = AppConstants.notificationDefaultCategoryIdentifier
+        content.threadIdentifier = "quality-system-route"
+        content.userInfo = [
+            "entity_type": "message",
+            "entity_id": messageID,
+            "message_id": messageID,
+            "title": title,
+            "body": body,
+            "channel_id": "quality-system-route",
+            "severity": "normal",
+            "sent_at": String(Int(Date().timeIntervalSince1970 * 1_000)),
+        ]
+        // The UI journey must move the App to the background before delivery;
+        // leave enough room for an already-authorized host to finish launch and
+        // readiness checks without accidentally exercising willPresent instead.
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 12, repeats: false)
+        try await center.add(UNNotificationRequest(
+            identifier: requestID,
+            content: content,
+            trigger: trigger
+        ))
+        #else
+        throw PushGoAutomationError.unsupportedCommand("notification.schedule_system")
+        #endif
     }
 
     private func handleNotificationAction(

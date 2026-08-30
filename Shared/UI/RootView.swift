@@ -69,6 +69,18 @@ private extension View {
                 )
                 .accessibilityValue(session.sessionID)
             }
+            .overlay(alignment: .topLeading) {
+                if let commandStatus = PushGoAutomationRuntime.shared.startupRequestStatus {
+                    Text("Quality command \(commandStatus)")
+                        .font(.system(size: 1))
+                        .foregroundStyle(.clear)
+                        .frame(width: 1, height: 1)
+                        .accessibilityIdentifier("quality-command.\(commandStatus)")
+                        .accessibilityValue(
+                            PushGoAutomationRuntime.shared.startupRequestError ?? ""
+                        )
+                }
+            }
         } else if PushGoAutomationContext.isActive {
             overlay(alignment: .topLeading) {
                 Text("Quality runtime \(PushGoAutomationContext.qualitySessionInputStatus)")

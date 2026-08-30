@@ -118,15 +118,18 @@ class QualityImpactPlanTests(unittest.TestCase):
         discoverable = set(re.findall(r"^\s+func (test[A-Za-z0-9_]+)\(", test_source, re.MULTILINE))
         positive = self._macos_scopes(runner_source, "positive_scopes")
         risk = self._macos_scopes(runner_source, "risk_scopes")
+        system = self._macos_scopes(runner_source, "system_scopes")
 
-        self.assertEqual(25, len(discoverable))
+        self.assertEqual(26, len(discoverable))
         self.assertEqual(16, len(positive))
         self.assertEqual(9, len(risk))
+        self.assertEqual(1, len(system))
         self.assertFalse(positive & risk)
+        self.assertFalse((positive | risk) & system)
         self.assertEqual(
             discoverable,
-            positive | risk,
-            "Every discoverable macOS journey must belong to the positive or risk set.",
+            positive | risk | system,
+            "Every discoverable macOS journey must belong to the positive, risk, or real-system set.",
         )
         for deferred_fragment in (
             "Fatal",
@@ -139,6 +142,9 @@ class QualityImpactPlanTests(unittest.TestCase):
         ):
             self.assertFalse(any(deferred_fragment in scope for scope in positive), deferred_fragment)
         self.assertIn('case "${MACOS_SCOPE_SET:-positive}" in', runner_source)
+        self.assertIn('classification_issue_ids=.*apple-quality-precondition', runner_source)
+        self.assertIn('reason=app_owned_quality_precondition_failed', runner_source)
+        self.assertIn('runner_issue_file="${QUALITY_RUNNER_ISSUE_FILE:-}"', runner_source)
         self.assertIn("run_macos_ui positive", orchestrator_source)
         self.assertEqual(2, orchestrator_source.count("run_macos_ui full"))
 
@@ -236,6 +242,29 @@ class QualityImpactPlanTests(unittest.TestCase):
         self.assertEqual("READY", plan["plan_status"])
         self.assertEqual("nightly", plan["recommended_lane"])
         self.assertIn("notification-route-actions", plan["impacted_capabilities"])
+        self.assertIn(
+            "iOS Simulator real permission/delivery/hot-and-terminated-process tap/detail/read/relaunch journeys plus direct Mark as read and destructive Delete actions with durable canonical oracles",
+            plan["minimum_evidence"],
+        )
+        self.assertNotIn("apple-macos-system-notification", plan["required_checks"])
+
+    def test_macos_app_delegate_change_selects_only_macos_system_notification_supplement(self):
+        plan = self.plan("Apps/PushGo-macOS/App/PushGoAppDelegate.swift")
+
+        self.assertEqual("READY", plan["plan_status"])
+        self.assertEqual("nightly", plan["recommended_lane"])
+        self.assertIn("notification-route-actions", plan["impacted_capabilities"])
+        self.assertEqual(["apple-macos-system-notification"], plan["required_checks"])
+        self.assertNotIn(
+            "iOS Simulator real system-notification journey for iOS/shared route changes",
+            plan["minimum_evidence"],
+        )
+
+    def test_shared_notification_change_selects_both_platform_system_consumers(self):
+        plan = self.plan("Shared/Application/NotificationActionCoordinator.swift")
+
+        self.assertEqual("nightly", plan["recommended_lane"])
+        self.assertIn("apple-macos-system-notification", plan["required_checks"])
         self.assertIn(
             "iOS Simulator real system-notification journey for iOS/shared route changes",
             plan["minimum_evidence"],

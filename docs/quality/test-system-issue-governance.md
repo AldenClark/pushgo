@@ -8,7 +8,7 @@
 
 | 平台 | 注册表 | 校验/分类 | 收据接入 |
 | --- | --- | --- | --- |
-| Apple | `config/quality-test-system-issues.json` | `scripts/quality_test_system_issues.py` 与 iOS UI、系统通知、watchOS 三个 Runner | `scripts/quality_test.sh` → `test_system_issue_ids` |
+| Apple | `config/quality-test-system-issues.json` | `scripts/quality_test_system_issues.py` 与 iOS UI、iOS 系统通知、macOS UI/系统通知、watchOS Runner | `scripts/quality_test.sh` → `test_system_issue_ids` |
 | Android | `../pushgo-android/config/quality-test-system-issues.json` | `../pushgo-android/scripts/quality_test_system_issues.py`、`classify_android_test_failure.py` | `../pushgo-android/scripts/quality_test.sh` → `test_system_issue_ids` |
 
 注册表与分类脚本属于 `quality-system-trustworthiness`，修改后最低进入 PR 代表证据。两端 `quality_changed.sh` 的单元发现会每日检查到期、未知 ID、隔离替代证据和产品断言负控；每个 `quality_test.sh` 也会在 Lane 开始前再次检查。

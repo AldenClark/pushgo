@@ -9,6 +9,7 @@ max_retries="${MAX_RETRIES:-0}"
 derived_data_path="${DERIVED_DATA_PATH:-$repo_root/build/.deriveddata-macos-ui}"
 results_root="${RESULTS_ROOT:-$repo_root/build/quality-results/macos-ui}"
 runner_status_file="${QUALITY_RUNNER_STATUS_FILE:-}"
+runner_issue_file="${QUALITY_RUNNER_ISSUE_FILE:-}"
 problem_reporter_cleaner="$repo_root/scripts/close_macos_problem_reporter.sh"
 test_app_executable="$derived_data_path/Build/Products/Debug/PushGo.app/Contents/MacOS/PushGo"
 test_runner_executable="$derived_data_path/Build/Products/Debug/PushGo-macOSUITests-Runner.app/Contents/MacOS/PushGo-macOSUITests-Runner"
@@ -51,6 +52,14 @@ risk_scopes=(
   "PushGo-macOSUITests/PushGo_macOSUITests/testCorruptEncryptedMessageFailsSafelyAndSurvivesRelaunch"
   "PushGo-macOSUITests/PushGo_macOSUITests/testInvalidServerAddressShowsInlineFeedbackInsteadOfToast"
   "PushGo-macOSUITests/PushGo_macOSUITests/testGatewayLocalCommitFailureRollsBackBeforeRetryCommits"
+)
+
+# Real Notification Center delivery is a high-value positive system boundary,
+# but it requires host authorization and has a materially different cost and
+# precondition profile from App-owned UI. Keep it discoverable and independently
+# runnable without charging every ordinary macOS batch.
+system_scopes=(
+  "PushGo-macOSUITests/PushGo_macOSUITests/testSystemNotificationClickPersistsAccurateMessageAndSurvivesRelaunch"
 )
 
 close_stale_test_processes() {
@@ -123,6 +132,9 @@ else
     full)
       scope_list=("${positive_scopes[@]}" "${risk_scopes[@]}")
       ;;
+    system)
+      scope_list=("${system_scopes[@]}")
+      ;;
     *)
       echo "status=BLOCKED"
       echo "reason=unsupported_macos_scope_set:${MACOS_SCOPE_SET}"
@@ -182,6 +194,24 @@ if grep -q "macos_problem_reporter_cleanup_failed" "$log_file"; then
   [[ -z "$runner_status_file" ]] || printf 'BLOCKED\n' > "$runner_status_file"
   echo "status=BLOCKED"
   echo "reason=macos_problem_reporter_cleanup_failed"
+  echo "log=$log_file"
+  echo "result_bundle=$result_bundle"
+  exit 2
+fi
+
+# App-owned readiness, authorization, and desktop-transition failures occur
+# before a product oracle can start. They are zero-retry test-system blockers,
+# never product failures and never a route to a green receipt.
+if classification="$(python3 "$repo_root/scripts/quality_test_system_issues.py" --match-file "$log_file")" \
+  && printf '%s\n' "$classification" | grep -q 'classification_issue_ids=.*apple-quality-precondition'; then
+  printf '%s\n' "$classification"
+  issue_ids="$(printf '%s\n' "$classification" | sed -n 's/^classification_issue_ids=//p')"
+  if [[ -n "$runner_issue_file" && -n "$issue_ids" ]]; then
+    printf '%s\n' "$issue_ids" | tr ',' '\n' >> "$runner_issue_file"
+  fi
+  [[ -z "$runner_status_file" ]] || printf 'BLOCKED\n' > "$runner_status_file"
+  echo "status=BLOCKED"
+  echo "reason=app_owned_quality_precondition_failed"
   echo "log=$log_file"
   echo "result_bundle=$result_bundle"
   exit 2
