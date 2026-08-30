@@ -2854,6 +2854,13 @@ final class PushGo_macOSUITests: XCTestCase {
         openSidebarTab("events", in: persistedOff.app)
         assertVisibleScreenThroughUI("screen.events.list", in: persistedOff.app, timeout: 8)
         XCTAssertTrue(persistedOff.app.staticTexts["No events yet"].waitForExistence(timeout: 8))
+        XCTAssertTrue(persistedOff.app.staticTexts["Track issues from open to close."].exists)
+        XCTAssertTrue(persistedOff.app.staticTexts["Add a channel."].exists)
+        XCTAssertTrue(persistedOff.app.staticTexts["Close it when finished."].exists)
+        XCTAssertTrue(
+            persistedOff.app.buttons["Event API docs"].exists
+                && persistedOff.app.buttons["Event API docs"].isHittable
+        )
         let restoredThingsEntry = element(in: persistedOff.app, identifier: "sidebar-things")
         XCTAssertTrue(
             restoredThingsEntry.waitForExistence(timeout: 8),
@@ -2862,6 +2869,13 @@ final class PushGo_macOSUITests: XCTestCase {
         openSidebarTab("things", in: persistedOff.app)
         assertVisibleScreenThroughUI("screen.things.list", in: persistedOff.app, timeout: 8)
         XCTAssertTrue(persistedOff.app.staticTexts["No objects yet"].waitForExistence(timeout: 8))
+        XCTAssertTrue(persistedOff.app.staticTexts["Track changing state by object."].exists)
+        XCTAssertTrue(persistedOff.app.staticTexts["Create or subscribe to a channel."].exists)
+        XCTAssertTrue(persistedOff.app.staticTexts["Update related events and messages."].exists)
+        XCTAssertTrue(
+            persistedOff.app.buttons["Object API docs"].exists
+                && persistedOff.app.buttons["Object API docs"].isHittable
+        )
 
         persistedOff.app.terminate()
         let persistedOn = configuredQualityApp(

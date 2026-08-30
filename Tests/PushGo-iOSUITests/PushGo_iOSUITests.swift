@@ -4501,6 +4501,13 @@ final class PushGo_iOSUITests: XCTestCase {
             file: file,
             line: line
         )
+        XCTAssertTrue(app.staticTexts["Track issues from open to close."].exists)
+        XCTAssertTrue(app.staticTexts["Add a channel."].exists)
+        XCTAssertTrue(app.staticTexts["Close it when finished."].exists)
+        XCTAssertTrue(
+            app.buttons["Event API docs"].exists && app.buttons["Event API docs"].isHittable,
+            "The Events empty state must give the user an actionable next step"
+        )
         let thingButton = buttons.element(boundBy: 2)
         tapWhenHittable(
             thingButton,
@@ -4515,6 +4522,13 @@ final class PushGo_iOSUITests: XCTestCase {
             "The restored Things destination must reach its functional empty state",
             file: file,
             line: line
+        )
+        XCTAssertTrue(app.staticTexts["Track changing state by object."].exists)
+        XCTAssertTrue(app.staticTexts["Create or subscribe to a channel."].exists)
+        XCTAssertTrue(app.staticTexts["Update related events and messages."].exists)
+        XCTAssertTrue(
+            app.buttons["Object API docs"].exists && app.buttons["Object API docs"].isHittable,
+            "The Things empty state must give the user an actionable next step"
         )
     }
 
