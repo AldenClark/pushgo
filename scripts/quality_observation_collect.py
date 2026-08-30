@@ -7,6 +7,7 @@ import argparse
 import io
 import json
 import os
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -18,6 +19,11 @@ from typing import Any
 
 MAX_ARCHIVE_BYTES = 8 * 1024 * 1024
 MAX_RECEIPT_BYTES = 1024 * 1024
+MAX_RECEIPT_ARTIFACT_AGE = timedelta(hours=24)
+MAX_RECEIPT_FUTURE_SKEW = timedelta(minutes=15)
+GITHUB_RUN_IDENTITY = re.compile(
+    r"github:(?P<run_id>[1-9][0-9]*):(?P<attempt>[1-9][0-9]*):(?P<job>[A-Za-z0-9_.-]+)"
+)
 
 
 class CollectionError(ValueError):
@@ -174,7 +180,61 @@ def list_workflow_run_ids(
     raise CollectionError("GitHub workflow run pagination exceeded 100 pages")
 
 
-def extract_receipts(archive: bytes, destination: Path, artifact_id: int) -> int:
+def validate_receipt_artifact_binding(
+    content: bytes,
+    artifact_id: int,
+    workflow_run_id: int,
+    workflow_source_revision: str,
+    artifact_created_at: datetime,
+) -> None:
+    try:
+        payload = json.loads(content)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return
+    if not isinstance(payload, dict):
+        return
+
+    run_identity = payload.get("run_identity")
+    if run_identity is not None:
+        if not isinstance(run_identity, str):
+            raise CollectionError(f"artifact {artifact_id} receipt run identity has an invalid type")
+        match = GITHUB_RUN_IDENTITY.fullmatch(run_identity)
+        if not match:
+            raise CollectionError(f"artifact {artifact_id} receipt has a non-GitHub run identity")
+        if int(match.group("run_id")) != workflow_run_id:
+            raise CollectionError(
+                f"artifact {artifact_id} receipt run identity does not match its workflow run"
+            )
+
+    source_revision = payload.get("source_revision")
+    if source_revision is not None:
+        if not isinstance(source_revision, str):
+            raise CollectionError(f"artifact {artifact_id} receipt source revision has an invalid type")
+        if source_revision != workflow_source_revision:
+            raise CollectionError(
+                f"artifact {artifact_id} receipt source revision does not match its workflow run"
+            )
+
+    recorded_at = payload.get("recorded_at")
+    if recorded_at is not None:
+        try:
+            receipt_time = parse_github_time(recorded_at)
+        except CollectionError as error:
+            raise CollectionError(f"artifact {artifact_id} receipt has an invalid recorded_at") from error
+        if receipt_time < artifact_created_at - MAX_RECEIPT_ARTIFACT_AGE:
+            raise CollectionError(f"artifact {artifact_id} receipt predates its artifact window")
+        if receipt_time > artifact_created_at + MAX_RECEIPT_FUTURE_SKEW:
+            raise CollectionError(f"artifact {artifact_id} receipt postdates its artifact window")
+
+
+def extract_receipts(
+    archive: bytes,
+    destination: Path,
+    artifact_id: int,
+    workflow_run_id: int,
+    workflow_source_revision: str,
+    artifact_created_at: datetime,
+) -> int:
     artifact_root = destination / str(artifact_id)
     receipt_count = 0
     try:
@@ -193,6 +253,13 @@ def extract_receipts(archive: bytes, destination: Path, artifact_id: int) -> int
                 content = bundle.read(member)
                 if len(content) > MAX_RECEIPT_BYTES:
                     raise CollectionError(f"artifact {artifact_id} contains an oversized receipt")
+                validate_receipt_artifact_binding(
+                    content,
+                    artifact_id,
+                    workflow_run_id,
+                    workflow_source_revision,
+                    artifact_created_at,
+                )
                 artifact_root.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(content)
                 receipt_count += 1
@@ -248,12 +315,25 @@ def main() -> int:
         receipt_count = 0
         encoded_repository = urllib.parse.quote(args.repository, safe="/")
         for artifact in candidates:
+            workflow_run = artifact["workflow_run"]
+            source_revision = workflow_run.get("head_sha")
+            if not isinstance(source_revision, str) or not source_revision:
+                raise CollectionError(
+                    f"artifact {artifact['id']} has no workflow source revision"
+                )
             archive_url = (
                 f"{args.api_url.rstrip('/')}/repos/{encoded_repository}/actions/artifacts/"
                 f"{artifact['id']}/zip"
             )
             archive = request_bytes(archive_url, token, accept="application/vnd.github+json")
-            receipt_count += extract_receipts(archive, output, artifact["id"])
+            receipt_count += extract_receipts(
+                archive,
+                output,
+                artifact["id"],
+                workflow_run["id"],
+                source_revision,
+                parse_github_time(artifact["created_at"]),
+            )
     except CollectionError as error:
         print(f"status=BLOCKED\nreason={error}")
         return 2

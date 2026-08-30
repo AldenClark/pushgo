@@ -1,4 +1,5 @@
 import io
+import json
 import os
 import subprocess
 import tempfile
@@ -16,6 +17,8 @@ SCRIPT = REPO / "scripts/quality_observation_collect.py"
 
 
 class QualityObservationCollectTests(unittest.TestCase):
+    artifact_time = datetime(2026, 8, 20, 0, 5, tzinfo=timezone.utc)
+
     def archive(self, entries: dict[str, bytes]) -> bytes:
         output = io.BytesIO()
         with zipfile.ZipFile(output, "w") as bundle:
@@ -48,7 +51,17 @@ class QualityObservationCollectTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            self.assertEqual(1, collector.extract_receipts(archive, root, 42))
+            self.assertEqual(
+                1,
+                collector.extract_receipts(
+                    archive,
+                    root,
+                    42,
+                    101,
+                    "revision-101",
+                    self.artifact_time,
+                ),
+            )
             self.assertEqual(b"{}", (root / "42/apple-pr-summary.json").read_bytes())
             self.assertFalse((root / "42/diagnostic.json").exists())
 
@@ -56,13 +69,109 @@ class QualityObservationCollectTests(unittest.TestCase):
         archive = self.archive({"../stolen-summary.json": b"{}"})
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(collector.CollectionError, "unsafe path"):
-                collector.extract_receipts(archive, Path(directory), 9)
+                collector.extract_receipts(
+                    archive,
+                    Path(directory),
+                    9,
+                    101,
+                    "revision-101",
+                    self.artifact_time,
+                )
 
     def test_rejects_duplicate_receipt_basenames(self) -> None:
         archive = self.archive({"a/run-summary.json": b"{}", "b/run-summary.json": b"{}"})
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(collector.CollectionError, "duplicate receipt names"):
-                collector.extract_receipts(archive, Path(directory), 10)
+                collector.extract_receipts(
+                    archive,
+                    Path(directory),
+                    10,
+                    101,
+                    "revision-101",
+                    self.artifact_time,
+                )
+
+    def test_rejects_receipt_bound_to_a_different_workflow_run(self) -> None:
+        receipt = json.dumps(
+            {
+                "recorded_at": "2026-08-20T00:00:00Z",
+                "run_identity": "github:999:1:quality",
+            }
+        ).encode()
+        archive = self.archive({"apple-pr-summary.json": receipt})
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(collector.CollectionError, "does not match"):
+                collector.extract_receipts(
+                    archive,
+                    Path(directory),
+                    11,
+                    101,
+                    "revision-101",
+                    self.artifact_time,
+                )
+
+    def test_accepts_receipt_bound_to_its_workflow_run_and_artifact_time(self) -> None:
+        receipt = json.dumps(
+            {
+                "recorded_at": "2026-08-20T00:00:00Z",
+                "run_identity": "github:101:2:quality",
+                "source_revision": "revision-101",
+            }
+        ).encode()
+        archive = self.archive({"apple-pr-summary.json": receipt})
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.assertEqual(
+                1,
+                collector.extract_receipts(
+                    archive,
+                    root,
+                    13,
+                    101,
+                    "revision-101",
+                    self.artifact_time,
+                ),
+            )
+            self.assertTrue((root / "13/apple-pr-summary.json").is_file())
+
+    def test_rejects_receipt_date_outside_its_artifact_window(self) -> None:
+        receipt = json.dumps(
+            {
+                "recorded_at": "2026-08-01T00:00:00Z",
+                "run_identity": "github:101:1:quality",
+            }
+        ).encode()
+        archive = self.archive({"apple-pr-summary.json": receipt})
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(collector.CollectionError, "predates"):
+                collector.extract_receipts(
+                    archive,
+                    Path(directory),
+                    12,
+                    101,
+                    "revision-101",
+                    self.artifact_time,
+                )
+
+    def test_rejects_receipt_bound_to_a_different_source_revision(self) -> None:
+        receipt = json.dumps(
+            {
+                "recorded_at": "2026-08-20T00:00:00Z",
+                "run_identity": "github:101:1:quality",
+                "source_revision": "substituted-revision",
+            }
+        ).encode()
+        archive = self.archive({"apple-pr-summary.json": receipt})
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(collector.CollectionError, "source revision does not match"):
+                collector.extract_receipts(
+                    archive,
+                    Path(directory),
+                    14,
+                    101,
+                    "revision-101",
+                    self.artifact_time,
+                )
 
     def test_cross_host_artifact_redirect_does_not_forward_github_token(self) -> None:
         request = urllib.request.Request(
