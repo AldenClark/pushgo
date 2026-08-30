@@ -27,7 +27,12 @@ final class PushGo_iOSSystemNotificationTests: XCTestCase {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         authorizeNotificationsIfNeeded(in: springboard)
         background(app)
-        let readinessURL = try publishReadiness(title: title, body: body, messageID: messageID)
+        let readinessURL = try publishReadiness(
+            title: title,
+            body: body,
+            messageID: messageID,
+            severity: "critical"
+        )
         defer { try? FileManager.default.removeItem(at: readinessURL) }
 
         let notificationTitle = springboard.staticTexts[title]
@@ -54,6 +59,11 @@ final class PushGo_iOSSystemNotificationTests: XCTestCase {
         XCTAssertTrue(detail.waitForExistence(timeout: 10), "The exact message detail did not open")
         XCTAssertTrue(detail.staticTexts[title].waitForExistence(timeout: 5))
         XCTAssertTrue(detail.staticTexts[body].waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            detail.staticTexts["Critical message, please handle it as soon as possible."]
+                .waitForExistence(timeout: 5),
+            "The critical system message did not expose its user guidance in the exact detail"
+        )
         tapWhenHittable(
             element(in: app, identifier: "action.message.close"),
             timeout: 8,
@@ -371,11 +381,21 @@ final class PushGo_iOSSystemNotificationTests: XCTestCase {
         )
     }
 
-    private func publishReadiness(title: String, body: String, messageID: String) throws -> URL {
+    private func publishReadiness(
+        title: String,
+        body: String,
+        messageID: String,
+        severity: String = "normal"
+    ) throws -> URL {
         let readinessURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent("pushgo-system-notification-ready", isDirectory: false)
         let readinessPayload = try JSONSerialization.data(
-            withJSONObject: ["title": title, "body": body, "message_id": messageID],
+            withJSONObject: [
+                "title": title,
+                "body": body,
+                "message_id": messageID,
+                "severity": severity,
+            ],
             options: [.sortedKeys]
         )
         do {

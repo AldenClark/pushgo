@@ -161,6 +161,9 @@ contract = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 for key in ("title", "body", "message_id"):
     if not isinstance(contract.get(key), str) or not contract[key]:
         raise SystemExit(f"invalid readiness field: {key}")
+severity = contract.get("severity", "normal")
+if severity not in {"normal", "low", "medium", "high", "critical"}:
+    raise SystemExit("invalid readiness field: severity")
 payload = {
     "aps": {
         "alert": {"title": contract["title"], "body": contract["body"]},
@@ -174,7 +177,7 @@ payload = {
     "title": contract["title"],
     "body": contract["body"],
     "channel_id": "quality-system-route",
-    "severity": "normal",
+    "severity": severity,
     "sent_at": "1787918400000",
 }
 print(json.dumps(payload, separators=(",", ":")))
