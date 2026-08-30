@@ -407,6 +407,14 @@ class QualityLaneCostContractTests(unittest.TestCase):
             self.assertNotIn("pushgo://open?kind=event&id=list", journey)
             self.assertNotIn("pushgo://open?kind=thing&id=list", journey)
 
+        self.assertIn('"pushgo.dev/guides/getting-started/"', ios_journey)
+        self.assertIn('"https://pushgo.dev/guides/getting-started/"', ios_journey)
+        self.assertIn("safari.textFields.matching", ios_journey)
+        self.assertIn(
+            "exact Getting Started destination, not merely any pushgo.dev page",
+            ios_journey,
+        )
+
     def test_pr_message_and_gateway_journeys_keep_positive_oracles_without_negative_cost(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()
         test_source = (REPO / "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift").read_text()

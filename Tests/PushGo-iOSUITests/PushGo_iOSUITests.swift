@@ -1518,16 +1518,24 @@ final class PushGo_iOSUITests: XCTestCase {
             safari.wait(for: .runningForeground, timeout: 10),
             "The documentation action must hand off to the real system browser."
         )
-        let browserAddress = safari.descendants(matching: .any).matching(
+        let collapsedAddress = safari.descendants(matching: .any)
+            .matching(identifier: "TabBarItemTitle")
+            .firstMatch
+        tapWhenHittable(
+            collapsedAddress,
+            timeout: 8,
+            message: "Safari must let the user inspect the Settings documentation destination"
+        )
+        let browserAddress = safari.textFields.matching(
             NSPredicate(
-                format: "label CONTAINS[c] %@ OR value CONTAINS[c] %@",
-                "pushgo.dev",
-                "pushgo.dev"
+                format: "value ==[c] %@ OR value ==[c] %@",
+                "pushgo.dev/guides/getting-started/",
+                "https://pushgo.dev/guides/getting-started/"
             )
         ).firstMatch
         XCTAssertTrue(
             browserAddress.waitForExistence(timeout: 8),
-            "Safari must expose the official pushgo.dev destination selected by Settings."
+            "Safari must expose the exact Getting Started destination, not merely any pushgo.dev page."
         )
         context.app.open(
             try XCTUnwrap(URL(string: "pushgo://open?kind=thing&id=quality-thing-rich"))
