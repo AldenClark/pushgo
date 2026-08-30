@@ -40,6 +40,30 @@ class QualityLaneCostContractTests(unittest.TestCase):
             r'\s+write_result NOT_RUN FAILED "a required test-system sensitivity control',
         )
 
+    def test_ios_data_field_negative_control_reuses_the_same_positive_build(self) -> None:
+        runner = (REPO / "scripts/quality_test.sh").read_text()
+        ui_runner = (REPO / "scripts/run_ios_ui_tests.sh").read_text()
+        control = (REPO / "scripts/run_ios_data_field_negative_control.sh").read_text()
+        performance = (REPO / "Tests/PushGo-iOSUITests/PushGo_iOSPerformanceTests.swift").read_text()
+
+        performance_function = runner.split("run_performance() {", 1)[1].split("\n}", 1)[0]
+        self.assertEqual(1, performance_function.count("run_ios_data_field_negative_control.sh"))
+        self.assertLess(
+            performance_function.index('claims+=("iOS prepared 1k Store'),
+            performance_function.index("run_ios_data_field_negative_control.sh"),
+        )
+        self.assertIn("QUALITY_REUSE_BUILT_TESTS=1", performance_function)
+        self.assertIn("func testLargeMessageDataFieldOracleRejectsWrongCanonicalBody()", performance)
+        self.assertIn("XCTExpectedFailure.Options()", performance)
+        self.assertIn("expectationOptions.isStrict = true", performance)
+        self.assertIn("expectationOptions.issueMatcher", performance)
+        self.assertIn("Deliberately wrong canonical body 999.", performance)
+        self.assertIn("QUALITY_REUSE_BUILT_TESTS", ui_runner)
+        self.assertIn("QUALITY_ALLOW_EXPECTED_FAILURES=1", control)
+        self.assertIn('"product_status": "NOT_RUN"', control)
+        self.assertIn('"test_system_status": "PASSED"', control)
+        self.assertNotIn("sleep ", control)
+
     def test_changed_runner_help_exits_before_tests_or_stale_lane_selection(self) -> None:
         runner = (REPO / "scripts/quality_changed.sh").read_text()
 

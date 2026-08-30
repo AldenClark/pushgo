@@ -2,7 +2,7 @@
 
 ## Current executable scope
 
-The target now exposes twenty-five XCTest-discoverable, App-owned journeys:
+The target now exposes twenty-five curated XCTest-discoverable, App-owned product journeys:
 
 - App-owned empty-state launch and functional message-list readiness;
 - accurate standard message row/detail data and process-relaunch persistence;
@@ -26,7 +26,7 @@ The target now exposes twenty-five XCTest-discoverable, App-owned journeys:
 - local Gateway commit failure with immediate and process-relaunch rollback, followed by a successful real-control retry;
 - close during in-flight refresh, then restore one functional window through the real localized right-click Open Main Window action and again through the primary left click, preserving the same session and accurate Store result.
 
-The 19 host-path/command/state methods are named `legacyDiagnostic...` and no longer use XCTest's `test...` discovery convention. Their green results never counted as product coverage. The twenty-five current journeys use the App-owned quality session and real accessibility UI; they do not read the App database or state files from the host test process. Thing filter/deep-link/delete, notification action/reconciliation, and performance journeys remain explicit gaps until replaced by App-owned user-purpose tests.
+The 19 host-path/command/state methods are named `legacyDiagnostic...` and no longer use XCTest's `test...` discovery convention. Their green results never counted as product coverage. The twenty-five current journeys use the App-owned quality session and real accessibility UI; they do not read the App database or state files from the host test process. Thing filter, exact relation detail, delete/commit/relaunch and registered deep-link purposes are now covered in the App-owned Thing journey. The remaining macOS gaps are Notification Center card interaction/reconciliation under the current system accessibility boundary, physical accessibility/performance, and real external-provider delivery; they are not inferred from fixture, identifier, simulator, or component evidence.
 
 ## Run
 

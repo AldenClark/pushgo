@@ -260,6 +260,8 @@ run_performance() {
   claims+=("iOS prepared 1k Store cold-launch-to-accurate-content metrics and purpose oracle")
   QUALITY_REUSE_BUILT_TESTS=1 \
     "$repo_root/scripts/run_ios_performance_negative_control.sh"
+  QUALITY_REUSE_BUILT_TESTS=1 \
+    "$repo_root/scripts/run_ios_data_field_negative_control.sh"
   if [[ $physical_performance_requested -eq 1 ]]; then
     selected_claims+=("iOS fixed physical reference-device Release launch-to-accurate-content budget")
     "$repo_root/scripts/run_ios_physical_performance.sh"

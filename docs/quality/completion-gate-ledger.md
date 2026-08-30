@@ -1,0 +1,26 @@
+# Quality overhaul completion-gate ledger
+
+This ledger is the operational reading of design section 21.2. It prevents a green focused run, an implemented script, or a stale progress paragraph from being mistaken for completion. `PASSED` requires current executable evidence; `PARTIAL` means useful evidence exists but the full condition is not closed; `INSUFFICIENT_EVIDENCE` is never green.
+
+| 21.2 gate | Current state | Evidence and remaining closure |
+| --- | --- | --- |
+| 1. All applicable P0 cases implemented and freshly executed | `PARTIAL` | High-value hermetic journeys cover launch, accurate Messages/Events/Things/Channels/Settings, mutations, persistence, system notification representatives, Watch, macOS windows, update install, accessibility/localization samples and performance. Real APNs/FCM/Private delivery, physical notification actions/accessibility/performance and the final section-25 row-by-row audit remain open. |
+| 2. Every P1 implemented or explicitly deferred with owner and deadline | `PARTIAL` | Residual gaps are described in `capability-coverage.md`, but the final owner/deadline normalization is incomplete. A reason without an accountable owner and date does not close this gate. |
+| 3. Apple UI tests do not pass host fixture/DB/state/event/response paths to the App | `PASSED` | Curated journeys use typed App-owned sessions and container-owned Stores; the old host-path command/state bodies are non-discoverable diagnostics. Final-diff audit must keep this true. |
+| 4. Android UI tests do not exchange final verdict state through arbitrary paths | `PASSED` | Curated journeys use typed App-owned control/readiness and visible/system/data endpoints; host scripts do not read a product DB as their product oracle. Final-diff audit must keep this true. |
+| 5. Hermetic launch succeeds at least 49/50 and disagreement stays `FLAKY` | `PASSED` | Controlled iOS, macOS and Android 50-run campaigns are recorded in `startup-reliability.md`; ordinary business retries remain zero. These campaigns do not prove physical-device or external-system reliability. |
+| 6. Final UI assertions come from visible content, continued operation and required relaunch | `PARTIAL` | Curated suites have been migrated to purpose-level endpoints, but the final discovery/disposition audit and remaining real-system journeys are not closed. Identifier or readiness checks alone still cannot satisfy this gate. |
+| 7. Slow-load and wrong-field controls reliably fail their owning oracles | `PASSED` for controlled local scope | Android and iOS slow-load controls reject real Store-to-UI delay. Android's process-restart control rejects fixed wrong body/URL endpoints. iOS now has a retained strict wrong-body control: it first proves exact `Quality message 999` and its real body, then accepts only the fixed wrong-body assertion failure. Its receipt is `build/quality-results/apple-data-field-negative-control.json`; product remains `NOT_RUN`. Physical/external performance is separate. |
+| 8. Release cannot resolve or activate Quality Runtime | `PASSED` | Release isolation checks and generic Release builds are part of the Release lane. This must be rechecked after Runtime, manifest, entitlement or build-setting changes. |
+| 9. PR/Nightly/Release operate for 14 consecutive days without hidden P0 `BLOCKED/NOT RUN` | `INSUFFICIENT_EVIDENCE` | The provenance-bound observation collector is implemented, but the required real consecutive window has not elapsed. No focused run or copied receipt may fill it. |
+| 10. AI correctly adds/selects/runs/reports tests on historical tasks without skip/retry/assertion weakening | `PARTIAL` | Deterministic history replay and adversarial contracts exist. Independent-context blind packets and the completed 14-day calibration are still required; same-context review retains `common-mode-risk`. |
+| 11. Bidirectional coverage has no unexplained source-without-test or unreachable-test target | `PARTIAL` | The stable-entrypoint reporter and capability map expose both directions without inventing a coverage score. A final semantic review of every remaining candidate and stale document statement is still required. |
+| 12. Device/window/background/system gates are passed or honestly classified, with no missing P0 Release gate | `PARTIAL` | macOS window/status item, simulator notifications, process restart and representative update install have executable evidence. Real provider delivery, physical accessibility/performance/install and blocked macOS Notification Center interaction remain explicit; P0 Release gaps prevent completion. |
+
+## Next closure order
+
+1. Finish the section-25 P0 semantic audit and remove stale gap statements before adding tests.
+2. Execute only locally reachable high-value P0 gaps; merge each purpose into an existing journey when it shares the same fixture, owner and lifecycle.
+3. Normalize every retained P1 deferral to reason, owner and deadline.
+4. Run externally owned Release gates only when the exact sandbox account, signing identity and dedicated physical device exist; otherwise preserve `NOT RUN/BLOCKED`.
+5. Accumulate the real 14-day receipts and finish independent blind-packet review. Until then the overall goal remains active.

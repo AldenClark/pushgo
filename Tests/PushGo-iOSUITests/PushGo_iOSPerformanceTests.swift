@@ -129,6 +129,44 @@ extension PushGo_iOSUITests {
         )
     }
 
+    func testLargeMessageDataFieldOracleRejectsWrongCanonicalBody() {
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: "ios-data-oracle-negative-\(UUID().uuidString.lowercased())",
+            fixture: "messages.large"
+        )
+
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 30)
+        let exactTitle = context.app.staticTexts["Quality message 999"]
+        tapWhenHittable(
+            exactTitle,
+            timeout: 8,
+            message: "The data-field sensitivity control must reach the exact canonical row"
+        )
+        assertElementExists("sheet.message.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Deterministic app-owned performance fixture row 999."].exists,
+            "The control must first prove the real canonical body is visible"
+        )
+
+        let expectationOptions = XCTExpectedFailure.Options()
+        expectationOptions.isStrict = true
+        expectationOptions.issueMatcher = { issue in
+            issue.compactDescription.contains(
+                "data-field negative control: accepted an intentionally wrong canonical body"
+            )
+        }
+        XCTExpectFailure(
+            "An exact visible-field oracle must reject a fixed wrong canonical body.",
+            options: expectationOptions
+        )
+        XCTAssertTrue(
+            context.app.staticTexts["Deliberately wrong canonical body 999."].exists,
+            "data-field negative control: accepted an intentionally wrong canonical body"
+        )
+    }
+
     func testPhysicalReferenceDeviceColdLaunchReachesExpectedContent() throws {
         let environment = ProcessInfo.processInfo.environment
         try XCTSkipIf(
