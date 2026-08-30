@@ -2202,6 +2202,17 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(closeAction.waitForExistence(timeout: 5))
         XCTAssertTrue(closeAction.isHittable)
         closeAction.tap()
+        let cancel = context.app.alerts.buttons.element(boundBy: 0)
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        cancel.tap()
+        XCTAssertTrue(detailSheet.waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            element(in: context.app, identifier: "field.event.detail.status.ongoing")
+                .waitForExistence(timeout: 5),
+            "Cancelling close must leave the canonical Event ongoing."
+        )
+        XCTAssertTrue(closeAction.waitForExistence(timeout: 5) && closeAction.isHittable)
+        closeAction.tap()
         let confirm = context.app.alerts.buttons.element(boundBy: 1)
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         confirm.tap()
@@ -2220,6 +2231,22 @@ final class PushGo_iOSUITests: XCTestCase {
         context.app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.75)).tap()
         let filteredEventRow = element(in: context.app, identifier: "event.row.quality-event-active")
         XCTAssertTrue(filteredEventRow.waitForNonExistence(timeout: 8))
+
+        let thingsTab = element(in: context.app, identifier: "tab.things")
+        tapWhenHittable(thingsTab, timeout: 8, message: "The linked Thing must remain reachable")
+        let linkedThing = element(in: context.app, identifier: "thing.row.quality-thing-rich")
+        tapWhenHittable(linkedThing, timeout: 8, message: "The exact linked Thing must open")
+        let linkedEvent = element(
+            in: context.app,
+            identifier: "thing.related.event.quality-event-active"
+        )
+        XCTAssertTrue(linkedEvent.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            linkedEvent.value as? String,
+            "closed",
+            "The Thing consumer must converge to the same closed Event."
+        )
+        XCTAssertTrue(linkedEvent.label.contains("P2 Event Active"))
 
         context.app.terminate()
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
@@ -2253,6 +2280,10 @@ final class PushGo_iOSUITests: XCTestCase {
         )
         let persistedStatus = element(in: context.app, identifier: "field.event.detail.status.closed")
         XCTAssertTrue(persistedStatus.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            element(in: context.app, identifier: "event.timeline.count.2")
+                .waitForExistence(timeout: 8)
+        )
         XCTAssertFalse(
             element(in: context.app, identifier: "action.event.close")
                 .waitForExistence(timeout: 2)

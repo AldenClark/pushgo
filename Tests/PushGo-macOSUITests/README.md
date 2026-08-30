@@ -13,7 +13,7 @@ The target now exposes twenty-five curated XCTest-discoverable, App-owned produc
 - visible initial-load failure and recovery through the real Retry control;
 - slow refresh feedback while the last accurate snapshot remains visible;
 - refresh failure ownership, retry, accurate new detail, and relaunch persistence;
-- accurate Event row/detail data, confirmed close through the production-shaped delivery path, closed-state persistence, and no repeated close action;
+- accurate Event row/detail data, cancel with no state change, confirmed close through the production-shaped delivery path, list/detail/timeline/ongoing-filter/Thing convergence, closed-state persistence, and no repeated close action;
 - Event close failure/retry with visible in-flight feedback, no duplicate action, detail-owned error, unchanged canonical ongoing state after rejection, production-shaped delivery on retry, and relaunch persistence;
 - accurate Thing identity/summary, real Event/Message/Update relation details, working Sheet return, and relaunch persistence;
 - one-start PR Sidebar navigation across accurate Message, Event, Thing, Channel, and Settings destinations, with the selected Simplified-Chinese Messages title still visibly readable, non-overlapping, and clickable beside a real `99+` unread badge;

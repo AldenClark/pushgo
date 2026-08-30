@@ -1856,6 +1856,16 @@ final class PushGo_macOSUITests: XCTestCase {
         let closeAction = element(in: context.app, identifier: "action.event.close")
         XCTAssertTrue(closeAction.waitForExistence(timeout: 5) && closeAction.isHittable)
         closeAction.click()
+        let cancel = element(in: context.app, identifier: "action.event.close.cancel")
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5) && cancel.isHittable)
+        cancel.click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "field.event.detail.status.ongoing")
+                .waitForExistence(timeout: 5),
+            "Cancelling close must leave the canonical Event ongoing."
+        )
+        XCTAssertTrue(closeAction.waitForExistence(timeout: 5) && closeAction.isHittable)
+        closeAction.click()
         let confirm = element(in: context.app, identifier: "action.event.close.confirm")
         XCTAssertTrue(confirm.waitForExistence(timeout: 5) && confirm.isHittable)
         confirm.click()
@@ -1867,6 +1877,46 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertTrue(
             closeAction.waitForNonExistence(timeout: 5),
             "A closed Event must not continue to offer the close action."
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "event.timeline.count.2")
+                .waitForExistence(timeout: 8),
+            "The Event detail must show both the original and close timeline points."
+        )
+        let filterAction = element(in: context.app, identifier: "action.events.filter")
+        XCTAssertTrue(filterAction.waitForExistence(timeout: 5) && filterAction.isHittable)
+        filterAction.click()
+        let ongoingOnly = element(in: context.app, identifier: "filter.events.ongoing")
+        XCTAssertTrue(ongoingOnly.waitForExistence(timeout: 5) && ongoingOnly.isHittable)
+        ongoingOnly.click()
+        XCTAssertTrue(
+            eventRow.waitForNonExistence(timeout: 8),
+            "The ongoing-only filter must exclude the same closed Event."
+        )
+        XCTAssertTrue(ongoingOnly.waitForExistence(timeout: 5) && ongoingOnly.isHittable)
+        ongoingOnly.click()
+        XCTAssertTrue(
+            eventRow.waitForExistence(timeout: 8),
+            "Clearing the filter must restore the exact closed Event."
+        )
+        openSidebarTab("things", in: context.app)
+        let linkedThing = element(in: context.app, identifier: "thing.row.quality-thing-rich")
+        XCTAssertTrue(linkedThing.waitForExistence(timeout: 8) && linkedThing.isHittable)
+        linkedThing.click()
+        let linkedEvent = element(
+            in: context.app,
+            identifier: "thing.related.event.quality-event-active"
+        )
+        XCTAssertTrue(linkedEvent.waitForExistence(timeout: 8) && linkedEvent.isHittable)
+        linkedEvent.click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "field.event.detail.status.closed")
+                .waitForExistence(timeout: 8),
+            "The Thing consumer must converge to the same closed Event."
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "event.timeline.count.2")
+                .waitForExistence(timeout: 8)
         )
 
         context.app.terminate()
@@ -1884,6 +1934,10 @@ final class PushGo_macOSUITests: XCTestCase {
             element(in: relaunched.app, identifier: "field.event.detail.status.closed")
                 .waitForExistence(timeout: 8),
             "The same Event must remain closed after a real process relaunch."
+        )
+        XCTAssertTrue(
+            element(in: relaunched.app, identifier: "event.timeline.count.2")
+                .waitForExistence(timeout: 8)
         )
         XCTAssertTrue(relaunched.app.staticTexts["P2 Event Active"].exists)
     }

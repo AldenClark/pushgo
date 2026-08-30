@@ -21,7 +21,7 @@
 | keep（已迁移） | `testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch` | 从真实详情删除，验证行立即隐藏、Undo 可操作、重启后 canonical 对象仍在。 |
 | keep（新增目的级证据） | `testQualityMessageDeleteWithoutUndoPermanentlyRemovesOnlyTargetAcrossRelaunch` | 从准确目标详情删除但不撤销，等待生产 5 秒 deadline 自行提交；要求目标永久消失、无关控制消息字段准确，并在完整 App relaunch 后保持该差异。 |
 | keep（已迁移） | `testImportedEventFixtureCanOpenEventDetail`、`testImportedThingFixtureCanOpenThingDetail` | 已改为 App-owned 内置 fixture，走真实消息摄入/投影并点击 Tab、列表行、详情字段；不以 response/events 文件作最终 Oracle。 |
-| keep（已迁移） | `testEventClosePersistsAndOngoingFilterReflectsRealProjection` | 从真实 Event 行进入详情并确认关闭；关闭载荷经正式通知解析与 canonical projection 更新，验证状态变为 closed、仅进行中筛选排除该事件、重启后 closed 仍保留且关闭动作不再出现。Runtime marker 仅用于启动归因，不作为产品 Oracle。 |
+| keep（已迁移并扩成目的闭环） | `testEventClosePersistsAndOngoingFilterReflectsRealProjection` | 同一现有正向方法先取消关闭并要求详情仍 ongoing，再确认关闭；关闭载荷经正式通知解析与 canonical projection 更新，随后核对列表、仅 ongoing 筛选排除、Thing 关联详情、准确时间线以及普通 relaunch 后 closed/时间线保持且关闭动作不复活。Runtime marker 只负责准备归因，不能替代任一产品终点。 |
 | keep（已迁移） | `testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch` | 同一条正向旅程从真实 Channels→Settings 入口同时操作 Events/Things 开关，验证两个入口真实减少且 Channels 仍可用、恢复后分别可达准确功能空态，并在关闭和恢复后分别 relaunch 核对持久化；替代 Runtime command/state 用例，没有新增设备启动或边缘方法。 |
 | keep（新增目的级证据） | `testEncryptedMessageRecoversAfterConfiguringKeyAndSurvivesRelaunch` | 合成密文先经正式通知摄入进入 App-owned Store；用户从真实消息详情进入解密设置并保存匹配格式的合法 Key，最终核对原消息的准确标题/正文、成功状态和 relaunch 持久化。configured 标记、fixture marker 和密钥文件均不是终点。 |
 | keep（新增代表性 a11y/l10n/动态导航证据） | `testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation` | 先证明实际 SwiftUI Dynamic Type 为 accessibility5，并在真实 unread=1 下核对系统 Messages Tab 自己拥有“消息”标题和 badge、保留可点宽度、标题区域有可读像素对比度；再点击进入准确消息详情、填写真实频道表单并要求 accepted mutation 生成准确频道行。临时把生产 badge 改成 9 时精确红灯；资源全集由独立合同覆盖，物理 VoiceOver 仍单列。 |
@@ -47,6 +47,7 @@
 | --- | --- | --- |
 | rewrite | `testLaunchesIntoMessageList` | 改为正确首屏状态、独有数据和可导航；不能只看 screen id。 |
 | keep（已迁移） | `testSidebarNavigationCoversPrimaryScreens` | 同一 App-owned 会话由真实 canonical 101 未读产生 `99+`，先裁决“消息”标题不被覆盖且可点击，再经 macOS 已注册 `pushgo://` 打开准确 Message 与 Event/Thing 详情并真实点击 Sidebar 完成五域准确内容。 |
+| keep（已迁移并扩成目的闭环） | `testEventDetailCloseAndRelaunchPreserveAccurateProjection` | 不新增方法或 App 启动；同一旅程验证取消无副作用、确认关闭、时间线更新、ongoing-only 筛选排除/恢复、Thing 关联详情同步，以及普通 relaunch 后 closed/时间线保持。测试真实发现 macOS 原产品缺少 ongoing-only 筛选入口，补齐产品后才转绿。 |
 | rewrite | `testAutomationRequestCanOpenChannelsScreen` | 删除 Runtime 导航，合入真实 Sidebar 旅程。 |
 | rewrite | `testImportedEventFixtureCanOpenEventDetailFromStartupRequest`、`testImportedThingFixtureCanOpenThingDetailFromStartupRequest` | 去宿主 Fixture 绝对路径和静默 return；从真实列表/系统路由打开并核对对象。 |
 | keep | `testSettingsSidebarCanOpenDecryptionOverlay` | 已从真实 Sidebar 和按钮进入；迁移公共 Launcher 后保留。 |

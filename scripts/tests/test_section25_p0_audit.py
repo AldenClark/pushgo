@@ -38,7 +38,7 @@ class Section25P0AuditContractTest(unittest.TestCase):
             self.assertTrue(cells[4], "purpose-level evidence or a precise closure gap is required")
             states.append(cells[3].strip("`"))
 
-        self.assertEqual(Counter({"V": 80, "P": 14, "N": 8, "NA": 1}), Counter(states))
+        self.assertEqual(Counter({"V": 81, "P": 13, "N": 8, "NA": 1}), Counter(states))
 
 
 if __name__ == "__main__":

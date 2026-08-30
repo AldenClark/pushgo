@@ -3838,8 +3838,13 @@ final class PushGoAutomationRuntime {
         case .eventStandard:
             // Events enter the product through the message ingestion path. Saving this
             // as an entity record would bypass projection, so the detail could never
-            // be opened even though a fixture row existed.
-            messages = [qualityEventFixture()]
+            // be opened even though a fixture row existed. The linked Thing keeps the
+            // close journey on one canonical state transition across every consumer.
+            messages = [
+                qualityThingInitialFixture(),
+                qualityThingFixture(),
+                qualityEventFixture(thingID: "quality-thing-rich"),
+            ]
             entityRecords = []
             channelSubscriptions = []
         case .thingStandard:
@@ -4158,8 +4163,23 @@ final class PushGoAutomationRuntime {
         ]
     }
 
-    private func qualityEventFixture() -> [String: Any] {
-        [
+    private func qualityEventFixture(thingID: String? = nil) -> [String: Any] {
+        var rawPayload: [String: Any] = [
+            "entity_type": "event",
+            "entity_id": "quality-event-active",
+            "event_id": "quality-event-active",
+            "event_state": "active",
+            "status": "ongoing",
+            "message": "Event fixture for app-owned UI validation.",
+            "severity": "high",
+            "event_title": "P2 Event Active",
+            "event_message": "Event fixture for app-owned UI validation.",
+            "projection_destination": "event_head",
+        ]
+        if let thingID {
+            rawPayload["thing_id"] = thingID
+        }
+        return [
             "id": "00000000-0000-0000-0000-00000000e001",
             "message_id": "quality-event-message",
             "title": "P2 Event Active",
@@ -4167,18 +4187,7 @@ final class PushGoAutomationRuntime {
             "channel_id": "01H00000000000000000000000",
             "is_read": false,
             "received_at": "2026-01-15T08:01:00Z",
-            "raw_payload": [
-                "entity_type": "event",
-                "entity_id": "quality-event-active",
-                "event_id": "quality-event-active",
-                "event_state": "active",
-                "status": "ongoing",
-                "message": "Event fixture for app-owned UI validation.",
-                "severity": "high",
-                "event_title": "P2 Event Active",
-                "event_message": "Event fixture for app-owned UI validation.",
-                "projection_destination": "event_head",
-            ],
+            "raw_payload": rawPayload,
             "status": "normal",
         ]
     }

@@ -103,7 +103,7 @@ Platform vector order is `I / M / D / W` (iOS, macOS, Android, watchOS). `-` mea
 | 1349 | Active/resolved patch and out-of-order canonical head | V/V/V/- | `V` | Apple/Android Store/property contracts reject stale heads while retaining history. |
 | 1350 | Search only supported Event fields | V/V/V/- | `V` | Store enumeration plus representative UI result; unsupported metadata is not claimed. |
 | 1353 | Exact Event detail and ordered timeline | V/V/V/V | `V` | `A-ENTITY`, `D-ENTITY`, `W-CORE`. |
-| 1355 | Close cancel/success converges list/detail/timeline/filter/Thing | P/P/P/- | `P` | Main close, filtering, persistence and Thing-linked views are covered, but the final row audit has not yet demonstrated every platform's cancel branch and all four consumers in one traceable state transition. |
+| 1355 | Close cancel/success converges list/detail/timeline/filter/Thing | V/V/V/- | `V` | One existing positive journey per platform now proves cancel leaves the Event ongoing, confirm closes it, the list/filter/detail/timeline/Thing projection converge, and a normal relaunch preserves closed without a repeated action. Current receipts: iOS `build/quality-results/ios-event-close-convergence-pass/run-1-20260830-213425.xcresult`; macOS `build/quality-results/macos-event-close-convergence-final/run-20260830-215247.xcresult`; Android `build/quality-results/android-event-close-convergence-final.log`. |
 | 1356 | Close failure/retry and duplicate-submit protection | V/V/V/- | `V` | Owned error, canonical ongoing state, disabled duplicate action, retry to closed and relaunch. |
 | 1360 | macOS split-view selection/delete fallback | -/P/-/- | `P` | Selection-to-detail is proved. Exact post-delete fallback selection needs a direct retained oracle rather than inference from object disappearance. |
 
@@ -213,14 +213,14 @@ Platform vector order is `I / M / D / W` (iOS, macOS, Android, watchOS). `-` mea
 
 The design contains 103 P0/P0 Release rows. This audit deliberately does **not** declare section 21.2(1) complete:
 
-- 80 rows are currently classified `V`; 1 conditional export row is `NA` because the product capability was explicitly removed.
-- 14 rows remain `P` and require semantic closure, an explicit product-scope correction, or an externally owned sub-gate.
+- 81 rows are currently classified `V`; 1 conditional export row is `NA` because the product capability was explicitly removed.
+- 13 rows remain `P` and require semantic closure, an explicit product-scope correction, or an externally owned sub-gate.
 - Two platform sub-results are explicitly `B`: iOS Channel Pasteboard and macOS notification interaction. Neither is hidden inside a green aggregate.
 - 8 P0 Release/external rows remain `N`; local Simulator/emulator evidence is retained but never promoted to physical/provider acceptance.
 
 The next implementation order is constrained by value and reuse:
 
-1. Audit rows 1355, 1360, 1372, 1391, 1395 and 1411 against existing tests and product reachability; prefer documenting already-real evidence or low-level parameterization over device matrices.
+1. Audit rows 1360, 1372, 1391, 1395 and 1411 against existing tests and product reachability; prefer documenting already-real evidence or low-level parameterization over device matrices.
 2. Add one representative macOS and Android documentation system handoff for row 1421 only if it can reuse existing Settings/navigation journeys. Keep all page×locale correctness in fast contracts.
 3. Keep physical/provider/watch-media/accessibility items in their explicit Release/owner lanes. They cannot displace locally reachable positive P0 work and cannot be turned green with mocks.
 

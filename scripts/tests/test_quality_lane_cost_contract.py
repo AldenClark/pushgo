@@ -7,6 +7,34 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 class QualityLaneCostContractTests(unittest.TestCase):
+    def test_event_close_convergence_reuses_one_existing_positive_journey_per_platform(self) -> None:
+        quality_test = (REPO / "scripts/quality_test.sh").read_text()
+        mac_runner = (REPO / "scripts/run_macos_ui_tests.sh").read_text()
+        ios_source = (REPO / "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift").read_text()
+        mac_source = (REPO / "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift").read_text()
+        ios_method = ios_source.split(
+            "func testEventClosePersistsAndOngoingFilterReflectsRealProjection()", 1
+        )[1].split("func testEventCloseFailureKeepsAccurateDetailBlocksDuplicateAndRetryPersists()", 1)[0]
+        mac_method = mac_source.split(
+            "func testEventDetailCloseAndRelaunchPreserveAccurateProjection()", 1
+        )[1].split("func testEventCloseFailureKeepsAccurateDetailBlocksDuplicateAndRetryPersists()", 1)[0]
+
+        self.assertEqual(
+            1,
+            quality_test.count("testEventClosePersistsAndOngoingFilterReflectsRealProjection"),
+        )
+        self.assertEqual(
+            1,
+            mac_runner.count("testEventDetailCloseAndRelaunchPreserveAccurateProjection"),
+        )
+        self.assertIn("Cancelling close must leave the canonical Event ongoing.", ios_method)
+        self.assertIn("action.event.close.cancel", mac_method)
+        for method in (ios_method, mac_method):
+            self.assertIn("filter.events.ongoing", method)
+            self.assertIn("thing.related.event.quality-event-active", method)
+            self.assertIn("event.timeline.count.2", method)
+            self.assertIn("field.event.detail.status.closed", method)
+
     def test_high_unread_navigation_reuses_both_core_positive_journeys(self) -> None:
         quality_test = (REPO / "scripts/quality_test.sh").read_text()
         mac_runner = (REPO / "scripts/run_macos_ui_tests.sh").read_text()

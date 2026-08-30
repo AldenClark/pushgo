@@ -428,6 +428,7 @@ private struct ThingDetailPanel: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("thing.related.event.\(event.id)")
+                    .accessibilityValue(eventLifecycleState(from: event.state).rawValue.lowercased())
                 }
             }
         }

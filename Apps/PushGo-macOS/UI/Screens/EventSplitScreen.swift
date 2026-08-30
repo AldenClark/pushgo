@@ -12,6 +12,7 @@ struct EventSplitScreen: View {
     @State private var searchQuery: String = ""
     @State private var selectedChannelIDs: Set<String> = []
     @State private var selectedTags: Set<String> = []
+    @State private var showOnlyOngoingEvents = false
     @State private var hydrationRequestedEventIDs: Set<String> = []
     @State private var hydratedSelectedEvent: EventProjection?
     @State private var showCloseConfirmation = false
@@ -61,6 +62,9 @@ struct EventSplitScreen: View {
             syncSelection()
         }
         .onChange(of: searchQuery) { _, _ in
+            syncSelection()
+        }
+        .onChange(of: showOnlyOngoingEvents) { _, _ in
             syncSelection()
         }
         .onChange(of: openEventId) { _, _ in
@@ -164,6 +168,10 @@ struct EventSplitScreen: View {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return viewModel.events.filter { event in
             guard !isPendingLocalDeletion(event) else { return false }
+            if showOnlyOngoingEvents,
+               eventLifecycleState(from: event.state) != .ongoing {
+                return false
+            }
             if !selectedChannelIDs.isEmpty {
                 let eventChannelId = event.channelId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 if !selectedChannelIDs.contains(eventChannelId) {
@@ -224,6 +232,7 @@ struct EventSplitScreen: View {
             }
             .help(localizationManager.localized("channel"))
             .accessibilityLabel(localizationManager.localized("channel"))
+            .accessibilityIdentifier("action.events.filter")
             .popover(isPresented: $isFilterPopoverPresented, arrowEdge: .top) {
                 filterPopoverContent
             }
@@ -406,6 +415,14 @@ struct EventSplitScreen: View {
 
     private var filterPopoverContent: some View {
         VStack(alignment: .leading, spacing: 14) {
+            filterCloudChip(
+                title: localizationManager.localized("filter_ongoing_events"),
+                isSelected: showOnlyOngoingEvents
+            ) {
+                showOnlyOngoingEvents.toggle()
+            }
+            .accessibilityIdentifier("filter.events.ongoing")
+
             if !channelOptions.isEmpty {
                 Rectangle()
                     .fill(Color.appDividerSubtle.opacity(0.9))
@@ -485,7 +502,7 @@ struct EventSplitScreen: View {
     }
 
     private var isFilterMenuHighlighted: Bool {
-        !selectedChannelIDs.isEmpty || !selectedTags.isEmpty
+        showOnlyOngoingEvents || !selectedChannelIDs.isEmpty || !selectedTags.isEmpty
     }
 
     private func tagCloudChip(tag: String) -> some View {

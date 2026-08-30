@@ -204,6 +204,7 @@ private struct EventDetailPanel: View {
                             )
                         }
                     }
+                    .accessibilityIdentifier("event.timeline.count.\(orderedTimeline.count)")
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

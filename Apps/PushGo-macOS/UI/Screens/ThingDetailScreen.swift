@@ -433,7 +433,7 @@ private struct ThingDetailPanel: View {
             } else {
                 ThingDetailList(items: relatedEvents) { event in
                     Button {
-                        relatedDetail = .event(event)
+                        openEvent(event)
                     } label: {
                         EventListRow(event: event)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -444,6 +444,10 @@ private struct ThingDetailPanel: View {
                 }
             }
         }
+    }
+
+    private func openEvent(_ event: EventProjection) {
+        relatedDetail = .event(event)
     }
 
     private var relatedMessagesSection: some View {
