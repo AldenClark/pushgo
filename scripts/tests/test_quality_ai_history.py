@@ -1,6 +1,8 @@
 import copy
 import importlib.util
 import json
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -89,6 +91,60 @@ class QualityAIHistoryTests(unittest.TestCase):
             self.assertNotIn("semantic_review", packet)
             self.assertNotIn("required_capabilities", packet)
             self.assertIn("--materialize-task", packet["materialize_command"])
+
+    def test_materialized_snapshot_is_history_free_parent_without_review_answers(self):
+        task = self.corpus["tasks"][0]
+        full_commit, changed_paths, parent = AI_HISTORY.changed_paths(REPO, task["commit"])
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "snapshot"
+            AI_HISTORY.materialize_history_free_snapshot(
+                REPO,
+                self.corpus,
+                task["id"],
+                output,
+            )
+
+            self.assertFalse((output / ".git").exists())
+            for relative in AI_HISTORY.BLIND_REVIEW_ONLY_PATHS:
+                self.assertFalse((output / relative).exists(), relative)
+
+            compared = False
+            for path in changed_paths:
+                parent_bytes = subprocess.run(
+                    ["git", "show", f"{parent}:{path}"],
+                    cwd=REPO,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                )
+                target_bytes = subprocess.run(
+                    ["git", "show", f"{full_commit}:{path}"],
+                    cwd=REPO,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                )
+                snapshot_path = output / path
+                if (
+                    parent_bytes.returncode == 0
+                    and target_bytes.returncode == 0
+                    and parent_bytes.stdout != target_bytes.stdout
+                    and snapshot_path.is_file()
+                ):
+                    self.assertEqual(parent_bytes.stdout, snapshot_path.read_bytes())
+                    compared = True
+                    break
+            self.assertTrue(compared, "fixture task must contain a changed parent file")
+
+    def test_materialization_refuses_to_overwrite_existing_output(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "already-exists"
+            output.mkdir()
+            with self.assertRaisesRegex(ValueError, "must not already exist"):
+                AI_HISTORY.materialize_history_free_snapshot(
+                    REPO,
+                    self.corpus,
+                    self.corpus["tasks"][0]["id"],
+                    output,
+                )
 
 
 if __name__ == "__main__":

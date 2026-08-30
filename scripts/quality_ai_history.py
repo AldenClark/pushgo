@@ -13,6 +13,7 @@ import fnmatch
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import tarfile
 import tempfile
@@ -29,6 +30,15 @@ SEMANTIC_REVIEW_FIELDS = (
     "negative_control",
     "weak_oracle_rejected",
     "evidence",
+)
+
+BLIND_REVIEW_ONLY_PATHS = (
+    "config/quality-ai-task-history.json",
+    "docs/quality/ai-historical-task-evaluation.md",
+    "build/quality-results/apple-ai-history-audit.json",
+    "build/quality-results/apple-ai-history-blind.json",
+    "build/quality-results/android-ai-history-audit.json",
+    "build/quality-results/android-ai-history-blind.json",
 )
 
 
@@ -251,6 +261,12 @@ def materialize_history_free_snapshot(
         run_git(repo, "archive", "--format=tar", f"--output={archive}", parent)
         with tarfile.open(archive, "r") as handle:
             handle.extractall(export, filter="data")
+        for relative in BLIND_REVIEW_ONLY_PATHS:
+            candidate = export / relative
+            if candidate.is_dir():
+                shutil.rmtree(candidate)
+            elif candidate.exists():
+                candidate.unlink()
         os.replace(export, output)
 
 

@@ -89,7 +89,7 @@ python3 scripts/quality_ai_history.py --check \
 
 月度、能力矩阵重构或选择器有实质改动时执行：
 
-1. 使用 packet 的 `materialize_command` 导出一个全新目录；工具通过 `git archive` 只导出 base commit 已跟踪内容，目录中没有 `.git`，因此评估者不能查询后续历史；输出目录已存在时工具拒绝覆盖；
+1. 使用 packet 的 `materialize_command` 导出一个全新目录；工具通过 `git archive` 只导出 base commit 已跟踪内容，目录中没有 `.git`，并主动移除任务语料、本评估文档及历史评估结果，即使未来 base commit 已包含这些参考答案也不能泄漏；输出目录已存在时工具拒绝覆盖；
 2. 给评估 AI 仅提供该 packet 中基于真实任务归一化的需求，不提供目标 commit、预期能力、现有答案或本报告；
 3. 禁止先搜索后续 commit；保留第一次提交前分析，包括目的、影响链、可信反例、拟补测试、最低 Lane 和不能运行项；
 4. 允许 AI 在隔离树内实现和运行，但不能把 runner 绿色当语义正确；
@@ -120,6 +120,8 @@ python3 scripts/quality_ai_history.py --check \
 | Android | `encrypted-corruption-safe-recovery` | Settings device test 只被当成通用 androidTest，漏选 decryption/messages/ingress-ack | 增加具名 Settings 语义旅程规则并要求 device 执行自身 |
 
 修正只针对真实语义 owner，没有把所有 UI test 或所有 shared path 无差别提升 Release。当前两端各 10 条均达到 `READY_FOR_RECORDED_SEMANTIC_REVIEW`。
+
+2026-08-31 的隔离攻击进一步验证了 snapshot 本身：两端单元测试都真实物化一个任务，逐字节证明至少一个目标变更文件来自 parent 而非 target commit，且输出没有 `.git`、语料、评估答案文档或历史结果；预先存在的输出目录会被拒绝。当前 10 个 parent 尚未包含答案资产，但显式剥离阻断了未来月度样本的时间性泄漏。Apple 与 Android 自动回放各 10/10 仍只得到 `READY_FOR_RECORDED_SEMANTIC_REVIEW`；没有独立 reviewer 的本轮不能借此消除 `common-mode-risk`。
 
 ## 8. 红蓝验证与归因
 
