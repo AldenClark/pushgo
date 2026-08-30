@@ -4015,6 +4015,9 @@ final class PushGoAutomationRuntime {
         "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFElEQVR42mNkYPj/n4GBgYGJAQoAHgQCAf2fP6sAAAAASUVORK5CYII="
 
     private func qualityMarkdownFixtureMessage() -> [String: Any] {
+        let longContent = (1...24).map { index in
+            "Long content paragraph \(index): multilingual text 中文繁體 العربية emoji 👩🏽‍💻 remains readable after wrapping."
+        }.joined(separator: "\n\n")
         let body = """
         # Quality Markdown Heading
 
@@ -4032,6 +4035,10 @@ final class PushGoAutomationRuntime {
         ```json
         {"environment":"quality"}
         ```
+
+        \(longContent)
+
+        ## Unicode completion sentinel 终点 終點 Ω مرحبا 👩🏽‍💻
         """
         return [
             "id": "00000000-0000-0000-0000-00000000d001",

@@ -841,6 +841,30 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertNotEqual(gateway.frame, healthy.frame, "The table collapsed into one plain text node")
         XCTAssertLessThan(abs(gateway.frame.midY - healthy.frame.midY), 6)
         XCTAssertGreaterThan(healthy.frame.minX, gateway.frame.minX)
+
+        let tail = renderedElement("Unicode completion sentinel 终点 終點 Ω مرحبا 👩🏽‍💻")
+        XCTAssertTrue(tail.waitForExistence(timeout: 5), "The exact Unicode tail was truncated before rendering")
+        let detailScroll = context.app.scrollViews.allElementsBoundByIndex
+            .filter { $0.frame.width > 200 && $0.frame.height > 200 }
+            .max { $0.frame.midX < $1.frame.midX }
+        XCTAssertNotNil(detailScroll, "The split detail must retain a real user-scrollable region")
+        let detailViewport = detailScroll?.frame ?? .zero
+        XCTAssertFalse(
+            detailViewport.intersects(tail.frame),
+            "The representative body must actually overflow the initial viewport"
+        )
+        for _ in 0..<12 {
+            if detailViewport.intersects(tail.frame) { break }
+            detailScroll?.swipeUp()
+        }
+        XCTAssertTrue(
+            detailViewport.intersects(tail.frame),
+            "A user must be able to scroll through the exact long body to its Unicode tail"
+        )
+        openSidebarTab("events", in: context.app)
+        XCTAssertTrue(element(in: context.app, identifier: "screen.events.list").waitForExistence(timeout: 8))
+        openSidebarTab("messages", in: context.app)
+        XCTAssertTrue(row.waitForExistence(timeout: 8), "Returning must preserve the exact source message")
     }
 
     @MainActor

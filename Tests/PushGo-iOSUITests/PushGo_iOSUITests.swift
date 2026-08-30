@@ -633,6 +633,29 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertNotEqual(gateway.frame, healthy.frame, "The table collapsed into one plain text node")
         XCTAssertLessThan(abs(gateway.frame.midY - healthy.frame.midY), 6)
         XCTAssertGreaterThan(healthy.frame.minX, gateway.frame.minX)
+
+        let tail = renderedElement("Unicode completion sentinel 终点 終點 Ω مرحبا 👩🏽‍💻")
+        XCTAssertTrue(tail.waitForExistence(timeout: 5), "The exact Unicode tail was truncated before rendering")
+        let detail = element(in: context.app, identifier: "sheet.message.detail")
+        XCTAssertFalse(
+            detail.frame.intersects(tail.frame),
+            "The representative body must actually overflow the initial viewport"
+        )
+        for _ in 0..<12 {
+            if detail.frame.intersects(tail.frame) { break }
+            detail.swipeUp()
+        }
+        XCTAssertTrue(
+            detail.frame.intersects(tail.frame),
+            "A user must be able to scroll through the exact long body to its Unicode tail"
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.message.close"),
+            timeout: 8,
+            message: "Long content must not strand the user in the detail"
+        )
+        assertElementExists("screen.messages.list", in: context.app, timeout: 8)
+        XCTAssertTrue(row.waitForExistence(timeout: 5), "Returning must preserve the exact source message")
     }
 
     func testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation() {
