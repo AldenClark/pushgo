@@ -3844,6 +3844,7 @@ final class PushGoAutomationRuntime {
                 qualityThingInitialFixture(),
                 qualityThingFixture(),
                 qualityEventFixture(thingID: "quality-thing-rich"),
+                qualityEventControlFixture(),
             ]
             entityRecords = []
             channelSubscriptions = []
@@ -4188,6 +4189,31 @@ final class PushGoAutomationRuntime {
             "is_read": false,
             "received_at": "2026-01-15T08:01:00Z",
             "raw_payload": rawPayload,
+            "status": "normal",
+        ]
+    }
+
+    private func qualityEventControlFixture() -> [String: Any] {
+        [
+            "id": "00000000-0000-0000-0000-00000000e002",
+            "message_id": "quality-event-control-message",
+            "title": "P3 Event Control",
+            "body": "Control event must become the selected detail after deleting the current event.",
+            "channel_id": "01H00000000000000000000000",
+            "is_read": true,
+            "received_at": "2026-01-15T08:00:00Z",
+            "raw_payload": [
+                "entity_type": "event",
+                "entity_id": "quality-event-control",
+                "event_id": "quality-event-control",
+                "event_state": "active",
+                "status": "ongoing",
+                "message": "Control event must become the selected detail after deleting the current event.",
+                "severity": "normal",
+                "event_title": "P3 Event Control",
+                "event_message": "Control event must become the selected detail after deleting the current event.",
+                "projection_destination": "event_head",
+            ],
             "status": "normal",
         ]
     }

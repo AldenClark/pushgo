@@ -1940,6 +1940,23 @@ final class PushGo_macOSUITests: XCTestCase {
                 .waitForExistence(timeout: 8)
         )
         XCTAssertTrue(relaunched.app.staticTexts["P2 Event Active"].exists)
+
+        let deleteAction = element(in: relaunched.app, identifier: "action.event.delete")
+        XCTAssertTrue(deleteAction.waitForExistence(timeout: 5) && deleteAction.isHittable)
+        deleteAction.click()
+        XCTAssertTrue(
+            persistedRow.waitForNonExistence(timeout: 8),
+            "Deleting the selected Event must remove its row immediately."
+        )
+        XCTAssertTrue(
+            relaunched.app.staticTexts["P3 Event Control"].waitForExistence(timeout: 8),
+            "The split view must select the next exact Event instead of leaving a blank detail."
+        )
+        XCTAssertTrue(
+            relaunched.app.staticTexts[
+                "Control event must become the selected detail after deleting the current event."
+            ].waitForExistence(timeout: 5)
+        )
     }
 
     @MainActor

@@ -16,6 +16,18 @@ test_runner_executable="$derived_data_path/Build/Products/Debug/PushGo-macOSUITe
 caffeinate_pid=""
 problem_reporter_monitor_pid=""
 problem_reporter_monitor_log=""
+apple_ui_lease_file="${PUSHGO_APPLE_UI_LEASE_FILE:-$repo_root/build/.pushgo-apple-ui-tests.lock}"
+
+# Share one PushGo-local host lease with the iOS UI runner. Concurrent heavy
+# Apple UI builds can starve macOS scene creation and be killed by the system
+# watchdog before any product oracle starts.
+mkdir -p "$(dirname "$apple_ui_lease_file")"
+exec 9>"$apple_ui_lease_file"
+if ! /usr/bin/lockf -s -t 0 9; then
+  echo "status=BLOCKED"
+  echo "reason=pushgo_apple_ui_lease_busy"
+  exit 2
+fi
 
 if [[ ! "$max_retries" =~ ^[0-9]+$ ]] || (( max_retries != 0 )); then
   echo "status=BLOCKED"

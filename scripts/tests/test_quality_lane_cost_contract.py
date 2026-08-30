@@ -34,6 +34,19 @@ class QualityLaneCostContractTests(unittest.TestCase):
             self.assertIn("thing.related.event.quality-event-active", method)
             self.assertIn("event.timeline.count.2", method)
             self.assertIn("field.event.detail.status.closed", method)
+        self.assertIn("action.event.delete", mac_method)
+        self.assertIn("P3 Event Control", mac_method)
+
+    def test_apple_ui_runners_share_one_pushgo_local_nonblocking_host_lease(self) -> None:
+        ios_runner = (REPO / "scripts/run_ios_ui_tests.sh").read_text()
+        mac_runner = (REPO / "scripts/run_macos_ui_tests.sh").read_text()
+
+        for runner in (ios_runner, mac_runner):
+            self.assertIn("build/.pushgo-apple-ui-tests.lock", runner)
+            self.assertIn("/usr/bin/lockf -s -t 0 9", runner)
+            self.assertIn("reason=pushgo_apple_ui_lease_busy", runner)
+            self.assertNotIn("killall Simulator", runner)
+            self.assertNotIn("killall CoreSimulator", runner)
 
     def test_high_unread_navigation_reuses_both_core_positive_journeys(self) -> None:
         quality_test = (REPO / "scripts/quality_test.sh").read_text()

@@ -47,7 +47,7 @@
 | --- | --- | --- |
 | rewrite | `testLaunchesIntoMessageList` | 改为正确首屏状态、独有数据和可导航；不能只看 screen id。 |
 | keep（已迁移） | `testSidebarNavigationCoversPrimaryScreens` | 同一 App-owned 会话由真实 canonical 101 未读产生 `99+`，先裁决“消息”标题不被覆盖且可点击，再经 macOS 已注册 `pushgo://` 打开准确 Message 与 Event/Thing 详情并真实点击 Sidebar 完成五域准确内容。 |
-| keep（已迁移并扩成目的闭环） | `testEventDetailCloseAndRelaunchPreserveAccurateProjection` | 不新增方法或 App 启动；同一旅程验证取消无副作用、确认关闭、时间线更新、ongoing-only 筛选排除/恢复、Thing 关联详情同步，以及普通 relaunch 后 closed/时间线保持。测试真实发现 macOS 原产品缺少 ongoing-only 筛选入口，补齐产品后才转绿。 |
+| keep（已迁移并扩成目的闭环） | `testEventDetailCloseAndRelaunchPreserveAccurateProjection` | 不新增方法或 App 启动；同一旅程验证取消无副作用、确认关闭、时间线更新、ongoing-only 筛选排除/恢复、Thing 关联详情同步、普通 relaunch 后 closed/时间线保持，最后删除当前 Event 并要求剩余控制事件的准确标题/摘要立即替换分栏详情。筛选缺失是真实产品缺陷；delete fallback 首轮即通过，归为证据补齐。 |
 | rewrite | `testAutomationRequestCanOpenChannelsScreen` | 删除 Runtime 导航，合入真实 Sidebar 旅程。 |
 | rewrite | `testImportedEventFixtureCanOpenEventDetailFromStartupRequest`、`testImportedThingFixtureCanOpenThingDetailFromStartupRequest` | 去宿主 Fixture 绝对路径和静默 return；从真实列表/系统路由打开并核对对象。 |
 | keep | `testSettingsSidebarCanOpenDecryptionOverlay` | 已从真实 Sidebar 和按钮进入；迁移公共 Launcher 后保留。 |

@@ -266,6 +266,7 @@ struct EventSplitScreen: View {
                 Image(systemName: "trash")
             }
             .help(localizationManager.localized("delete"))
+            .accessibilityIdentifier("action.event.delete")
             .disabled(selectedEvent == nil)
         }
     }

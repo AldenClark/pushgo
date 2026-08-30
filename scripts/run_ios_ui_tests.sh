@@ -13,6 +13,19 @@ runner_status_file="${QUALITY_RUNNER_STATUS_FILE:-}"
 runner_issue_file="${QUALITY_RUNNER_ISSUE_FILE:-}"
 reuse_built_tests="${QUALITY_REUSE_BUILT_TESTS:-0}"
 allow_expected_failures="${QUALITY_ALLOW_EXPECTED_FAILURES:-0}"
+apple_ui_lease_file="${PUSHGO_APPLE_UI_LEASE_FILE:-$repo_root/build/.pushgo-apple-ui-tests.lock}"
+
+# iOS and macOS UI builds can saturate the same host and make macOS launch hit
+# the scene-create watchdog. Fail as a test-system resource conflict instead of
+# manufacturing a product crash. This lease is PushGo-local and never touches
+# another repository's devices or DerivedData.
+mkdir -p "$(dirname "$apple_ui_lease_file")"
+exec 9>"$apple_ui_lease_file"
+if ! /usr/bin/lockf -s -t 0 9; then
+  echo "status=BLOCKED"
+  echo "reason=pushgo_apple_ui_lease_busy"
+  exit 2
+fi
 
 if [[ ! "$max_retries" =~ ^[0-9]+$ ]] || (( max_retries != 0 )); then
   echo "status=BLOCKED"
