@@ -128,6 +128,8 @@ PR 的固定设备预算现只投向 4 条最高密度正向链：`core.positive
 
 macOS Runner 不再把 App-owned 正向、故障旅程和真实系统边界无差别作为普通默认：`positive` 集为 16 条，优先覆盖首次使用、准确内容/Markdown、筛选/清理、频道生命周期、删除 Undo→恢复→再次删除→提交的完整正向生命周期、慢加载/慢刷新预警、窗口恢复、主导航、Event/Thing、Settings/Decryption 正常生命周期和 Gateway 正常切换；`risk` 集为 9 条，承载 Store 初始化失败、加载/刷新/Event 失败、受保护写失败、错钥匙/坏密文、非法地址和 Gateway 本地提交补偿；`system` 集仅 1 条真实 Notification Center 点击→准确详情→持久化→relaunch 正向旅程。独立 `macos` Lane 默认只跑 `positive`，Nightly 跑 `full=positive+risk`，Release 在正向优先顺序中额外执行一次 `system`；开发者/AI 可用 `scripts/quality_test.sh macos-system-notification` 定向执行。静态合同要求 16/9/1 三集合互斥且并集精确等于全部 26 条可发现旅程；系统旅程不进入 PR、普通 macOS 或 Nightly 固定成本，也不能从这些 Lane 的绿色外推。
 
+本机 PushGo 通知权限开启后的 macOS 27 新鲜证据进一步划清了系统边界：唯一标题/正文已真实出现在横幅和通知中心，说明授权与调度完成；但通知卡片没有 XCTest AX 节点，XCUICoordinate 与 HID event 都未产生 `UNNotificationResponse`。两种替代输入收敛后停止，不继续增加坐标、等待或重试。当前 `macos-system-notification` 因而必须输出产品 `NOT_RUN`、测试系统 `BLOCKED`、`apple-quality-precondition`，而不是把视觉出现判为功能通过，也不是误报 App 产品失败。未来只有稳定可操作的系统节点或 Apple 提供的受控通知消费者出现后才恢复这条链；低层/App-owned response 合同不能替代真实系统点击。
+
 macOS 状态栏只保留真实产品语义：左键恢复主窗口，右键提供 Open Main Window 与 Quit。既有窗口正向旅程现于正式 Refresh slow/in-flight 时关闭主窗口，真实右键并点击本地化 Open Main Window，核对唯一窗口、同一 App-owned session、准确新旧消息，再次关闭并用左键恢复；1/1、29.132 秒、零重试。未挂载的 `MacMenuBarContentView` 及其用 `try?` 把数据库失败伪装为空态的 `MenuBarViewModel` 已删除，不再用死代码制造菜单栏未读“覆盖”。Quit 会终止测试主体，保留为受控 Release/人工动作，不以菜单项存在判通过。
 
 macOS 标准消息正向方法同时承担最低充分的 migration UI：App 在隔离容器构造 v17 旧行后由普通 `GRDBStore` 正式迁移；同一方法核对旧标题/正文详情、新消息/图片预览共存以及唯一 relaunch 后两者都保留。它没有增加 discoverable 方法、fixture 名或启动次数，新增约 3 秒交互，替代单独的平台迁移方法；历史版本逐一升级、损坏库与 Watch 独立 Store 不从该代表例外推。

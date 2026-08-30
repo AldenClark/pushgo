@@ -256,10 +256,20 @@ final class PushGo_macOSUITests: XCTestCase {
         let titleElement = notificationCenter.descendants(matching: .any)
             .matching(NSPredicate(format: "label == %@", title))
             .firstMatch
-        XCTAssertTrue(
-            titleElement.waitForExistence(timeout: 15),
-            "The exact App-owned payload did not appear in the real macOS notification surface."
-        )
+        if !titleElement.waitForExistence(timeout: 5) {
+            XCTAssertTrue(
+                revealNotificationCenter(),
+                "QUALITY_PRECONDITION: The real macOS notification surface could not be opened."
+            )
+        }
+        guard titleElement.waitForExistence(timeout: 5) else {
+            XCTFail(
+                "QUALITY_PRECONDITION: App scheduling succeeded, but macOS did not expose this "
+                    + "notification card to XCTest; display, accessibility, and real-click outcomes "
+                    + "cannot be distinguished trustworthily."
+            )
+            return
+        }
         XCTAssertTrue(
             notificationCenter.descendants(matching: .any)
                 .matching(NSPredicate(format: "label == %@", body))
@@ -298,6 +308,23 @@ final class PushGo_macOSUITests: XCTestCase {
             relaunched.app.staticTexts[body].waitForExistence(timeout: 5),
             "The persisted notification message changed after relaunch."
         )
+    }
+
+    @MainActor
+    private func revealNotificationCenter() -> Bool {
+        let notificationCenter = XCUIApplication(bundleIdentifier: "com.apple.notificationcenterui")
+        let systemMenuBar = notificationCenter.menuBars.firstMatch
+        guard systemMenuBar.exists, systemMenuBar.frame.width > 0 else { return false }
+
+        // macOS 27 no longer exposes the clock/status item as an AX child to XCTest,
+        // while the owning system menu bar remains a stable full-screen-width surface.
+        // Use a normalized coordinate inside its far-right date/time area rather than
+        // hard-coding this host's screen size.
+        systemMenuBar.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.985, dy: 0.5)
+        ).click()
+
+        return true
     }
 
     @MainActor
