@@ -652,6 +652,12 @@ final class PushGo_macOSUITests: XCTestCase {
             "The canonical message did not survive a real process relaunch."
         )
         XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.empty").exists)
+        relaunchedLegacyRow.click()
+        XCTAssertTrue(
+            relaunched.app.staticTexts["Preserved through the production database migration."]
+                .waitForExistence(timeout: 8),
+            "The control detail must start on a different canonical message before search selection."
+        )
 
         let searchField = relaunched.app.searchFields.firstMatch
         XCTAssertTrue(
@@ -682,6 +688,24 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertFalse(
             relaunchedLegacyRow.exists,
             "The completed search must not leave the unrelated pre-search row visible."
+        )
+        relaunchedRow.click()
+        XCTAssertTrue(
+            element(in: relaunched.app, identifier: "screen.message.detail")
+                .waitForExistence(timeout: 8),
+            "Selecting the exact search result must open its real detail pane."
+        )
+        XCTAssertTrue(
+            relaunched.app.staticTexts["P2 Split Seed Message"].exists,
+            "The search result selection must retain the canonical title in detail."
+        )
+        XCTAssertTrue(
+            relaunched.app.staticTexts["Seeded from fixture.seed_messages for UI validation."].exists,
+            "The search result selection must bind to the canonical body, not a stale or unrelated detail."
+        )
+        XCTAssertFalse(
+            relaunched.app.staticTexts["Preserved through the production database migration."].exists,
+            "Opening the search result must replace the previous message detail instead of leaving stale content."
         )
     }
 
