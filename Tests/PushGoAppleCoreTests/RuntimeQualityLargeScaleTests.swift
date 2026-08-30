@@ -275,6 +275,19 @@ struct RuntimeQualityLargeScaleTests {
             #expect(applied.contains("v21_message_search_derived_state"))
             #expect(applied.contains("v22_split_message_stats_and_revision_update_triggers"))
             #expect(applied.contains("v23_trigram_message_search_index"))
+            #expect(applied.contains("v24_durable_pending_local_deletions"))
+            #expect(applied.contains("v25_canonical_derived_work_outbox"))
+
+            let migratedTables = try await dbQueue.read { db in
+                try Set(
+                    String.fetchAll(
+                        db,
+                        sql: "SELECT name FROM sqlite_master WHERE type = 'table';"
+                    )
+                )
+            }
+            #expect(migratedTables.contains("pending_local_deletions"))
+            #expect(migratedTables.contains("canonical_derived_work"))
         }
     }
 
@@ -1045,6 +1058,8 @@ struct RuntimeQualityLargeScaleTests {
                 DROP TABLE IF EXISTS message_channel_stats;
                 DROP TABLE IF EXISTS message_global_stats;
                 DROP TABLE IF EXISTS message_store_revision;
+                DROP TABLE IF EXISTS canonical_derived_work;
+                DROP TABLE IF EXISTS pending_local_deletions;
                 DROP INDEX IF EXISTS idx_messages_top_level_read_received;
                 DROP INDEX IF EXISTS idx_messages_top_level_channel_key_read_received;
                 DROP INDEX IF EXISTS idx_messages_top_level_channel_key_received;
@@ -1056,7 +1071,9 @@ struct RuntimeQualityLargeScaleTests {
                     'v20_message_entity_identity_index',
                     'v21_message_search_derived_state',
                     'v22_split_message_stats_and_revision_update_triggers',
-                    'v23_trigram_message_search_index'
+                    'v23_trigram_message_search_index',
+                    'v24_durable_pending_local_deletions',
+                    'v25_canonical_derived_work_outbox'
                 );
                 """)
         }
