@@ -10,12 +10,22 @@ CLEANER = REPO_ROOT / "scripts" / "close_macos_problem_reporter.sh"
 SYSTEM_REPORTER_COMMAND = (
     "/System/Library/CoreServices/Problem Reporter.app/Contents/MacOS/Problem Reporter"
 )
+CURRENT_REPORTER_COMMAND = (
+    "/System/Library/CoreServices/UserNotificationCenter.app/Contents/MacOS/"
+    "UserNotificationCenter"
+)
 
 
 class CloseMacOSProblemReporterTests(unittest.TestCase):
-    def test_default_rule_closes_only_exact_system_reporter_process(self) -> None:
-        target = subprocess.Popen(
+    def test_default_rule_closes_both_exact_system_reporter_processes_only(self) -> None:
+        legacy_target = subprocess.Popen(
             [SYSTEM_REPORTER_COMMAND, "30"],
+            executable="/bin/sleep",
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        current_target = subprocess.Popen(
+            [CURRENT_REPORTER_COMMAND, "30"],
             executable="/bin/sleep",
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -35,10 +45,11 @@ class CloseMacOSProblemReporterTests(unittest.TestCase):
                 text=True,
             )
             self.assertIn("problem_reporter_closed=", result.stdout)
-            target.wait(timeout=2)
+            legacy_target.wait(timeout=2)
+            current_target.wait(timeout=2)
             self.assertIsNone(unrelated.poll())
         finally:
-            for process in (target, unrelated):
+            for process in (legacy_target, current_target, unrelated):
                 if process.poll() is None:
                     process.terminate()
                     process.wait(timeout=2)

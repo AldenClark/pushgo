@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-system_reporter_pattern='^/System/Library/CoreServices/Problem Reporter\.app/Contents/MacOS/Problem Reporter($| )'
+legacy_reporter='/System/Library/CoreServices/Problem Reporter\.app/Contents/MacOS/Problem Reporter'
+current_reporter='/System/Library/CoreServices/UserNotificationCenter\.app/Contents/MacOS/UserNotificationCenter'
+system_reporter_pattern="^(${legacy_reporter}|${current_reporter})(\$| )"
 pattern="$system_reporter_pattern"
 watch_pid=""
 poll_interval="0.2"
