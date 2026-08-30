@@ -20,6 +20,17 @@ class QualityLaneCostContractTests(unittest.TestCase):
         )[0]
         self.assertIn("retention-days: 14", diagnostic_upload)
         self.assertIn("!build/quality-results/*-summary.json", diagnostic_upload)
+        global_permissions = workflow.split("permissions:", 1)[1].split("concurrency:", 1)[0]
+        self.assertNotIn("actions: read", global_permissions)
+        observation_job = workflow.split("\n  observation:\n", 1)[1]
+        self.assertIn("github.event.schedule == '17 18 * * *'", observation_job)
+        self.assertIn("needs: quality", observation_job)
+        self.assertIn("actions: read", observation_job)
+        self.assertIn("quality_observation_collect.py", observation_job)
+        self.assertIn("--workflow apple-quality.yml", observation_job)
+        self.assertIn("quality_observation.py", observation_job)
+        self.assertNotIn("--require-ready", observation_job)
+        self.assertIn("if-no-files-found: error", observation_job)
 
     def test_pr_ui_is_unique_discoverable_positive_breadth(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()

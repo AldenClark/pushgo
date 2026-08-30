@@ -8,6 +8,8 @@
 
 质量工作流另行上传只含 `*-summary.json` 的轻量收据 artifact 并保留 21 天，为 14 个完整 UTC 日的观察窗口留出上传和审核时刻余量；体积较大的 xcresult、日志和 Android 报告仍按 14 天诊断周期保留，并明确排除 summary，保证每个 run identity 只有一份观测输入。不能为了观察窗口无差别延长大包成本，也不要把同一收据从多个 artifact 复制进输入目录。
 
+Nightly 产品 job 完成收据上传后，独立 observation job 才以只读 `actions: read` 权限下载仍有效的轻量收据并生成 `*-two-week-observation.json`；PR 和产品测试 job 不拥有 artifact 读取权限。下载器同时限定确切质量 workflow 的 run ID 与轻量 artifact 名称前缀，拒绝其他 workflow 冒名输入；它要求专用空目录，只提取 `*-summary.json`，限制 archive/单收据大小并拒绝路径穿越，GitHub API 跨主机重定向时不会转发访问令牌。API、下载或收据准备失败会让 observation job 失败，不能静默跳过；证据尚不足则正常生成 `INSUFFICIENT_EVIDENCE` 报告而不把产品判失败。
+
 ```bash
 python3 scripts/quality_observation.py \
   --input /path/to/downloaded-quality-artifacts \
