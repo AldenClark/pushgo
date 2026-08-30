@@ -183,6 +183,53 @@ class QualityTestSystemIssueTests(unittest.TestCase):
         self.assertIn("iterations_must_be_between_1_and_100:0", process.stdout)
         self.assertNotIn("simulator_id=", process.stdout)
 
+    def test_macos_startup_reliability_rejects_invalid_iterations_before_ui_preflight(self):
+        process = subprocess.run(
+            [str(REPO / "scripts/run_macos_startup_reliability.sh")],
+            cwd=REPO,
+            env={"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "ITERATIONS": "101"},
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+
+        self.assertEqual(2, process.returncode)
+        self.assertIn("iterations_must_be_between_1_and_100:101", process.stdout)
+        self.assertNotIn("macos_console_must_be_unlocked", process.stdout)
+
+    def test_macos_startup_campaign_keeps_business_oracle_and_crash_cleanup_in_every_repetition(self):
+        runner = (REPO / "scripts/run_macos_startup_reliability.sh").read_text()
+        test_source = (REPO / "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift").read_text()
+        journey = test_source.split(
+            "func testQualitySessionUsesAppOwnedStoreAndReachesFunctionalEmptyState()",
+            1,
+        )[1].split("\n    @MainActor", 1)[0]
+
+        self.assertIn("for (( iteration = 1; iteration <= iterations; iteration++ )); do", runner)
+        self.assertNotIn('-test-iterations "$iterations"', runner)
+        self.assertNotIn("-test-repetition-relaunch-enabled YES", runner)
+        self.assertIn('"business_retries": 0', runner)
+        self.assertIn('"$problem_reporter_cleaner" --watch-pid "$$"', runner)
+        self.assertIn('openSidebarTab("settings"', journey)
+        self.assertIn('openSidebarTab("messages"', journey)
+        self.assertGreaterEqual(journey.count('identifier: "state.messages.empty"'), 2)
+
+        launch_helper = test_source.split("private func launch(_ context: LaunchContext)", 1)[1].split(
+            "\n    @MainActor",
+            1,
+        )[0]
+        self.assertIn("context.app.launch()", launch_helper)
+        self.assertIn("context.app.activate()", launch_helper)
+        self.assertIn("activation_failures == failed", runner)
+        self.assertIn('"calibration_only": total != 50', runner)
+        self.assertIn('"startup_reliability_exit_criteria_met": total == 50', runner)
+
+        ios_runner = (REPO / "scripts/run_ios_startup_reliability.sh").read_text()
+        self.assertIn('"calibration_only": total != 50', ios_runner)
+        self.assertIn('"startup_reliability_exit_criteria_met": total == 50', ios_runner)
+
+
 
 if __name__ == "__main__":
     unittest.main()

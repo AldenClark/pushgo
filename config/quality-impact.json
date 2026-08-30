@@ -29,7 +29,7 @@
   "rules": [
     {
       "id": "quality-system",
-      "paths": ["AGENTS.md", "Tests/**", "scripts/tests/**", "scripts/quality_*.py", "scripts/quality_*.sh", "scripts/require_unlocked_apple_ui_console.sh", "scripts/run_ios_ui_tests.sh", "scripts/run_macos_ui_tests.sh", "scripts/run_watchos_ui_tests.sh", ".github/workflows/apple-quality.yml", "config/quality-impact.json", "config/quality-ai-task-history.json", "config/quality-test-system-issues.json"],
+      "paths": ["AGENTS.md", "Tests/**", "scripts/tests/**", "scripts/quality_*.py", "scripts/quality_*.sh", "scripts/require_unlocked_apple_ui_console.sh", "scripts/run_ios_ui_tests.sh", "scripts/run_macos_ui_tests.sh", "scripts/run_macos_startup_reliability.sh", "scripts/run_watchos_ui_tests.sh", ".github/workflows/apple-quality.yml", "config/quality-impact.json", "config/quality-ai-task-history.json", "config/quality-test-system-issues.json"],
       "exclude_paths": ["scripts/quality_ui_entrypoints.py", "scripts/tests/test_quality_ui_entrypoints.py"],
       "capabilities": ["quality-system-trustworthiness"],
       "minimum_evidence": ["quality selector unit/negative controls", "Apple PR representative lane"],

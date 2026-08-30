@@ -9,14 +9,17 @@
 ## 可执行入口
 
 ```bash
-# Apple：专用 PushGo Quality iPhone Simulator；XCTest repetition 每轮重启测试进程
+# Apple iOS：专用 PushGo Quality iPhone Simulator；XCTest repetition 每轮重启测试进程
 scripts/run_ios_startup_reliability.sh
+
+# Apple macOS：当前已解锁的受控本机桌面；每轮独立 XCTest invocation，持续清理崩溃弹窗
+scripts/run_macos_startup_reliability.sh
 
 # Android：只允许 quality_doctor 选出的受控 emulator，禁止个人设备
 ../pushgo-android/scripts/run_android_startup_reliability.sh
 ```
 
-两个入口默认 `ITERATIONS=50`，先构建一次，正式样本不启用 retry-on-failure。`ITERATIONS=1` 只用于命令校准，不能满足完成条件；非法范围在接触设备前 `BLOCKED`。每个 campaign 使用唯一结果目录，保留逐次日志/xcresult 或 Android iteration 表和机器可读 `summary.json`。
+三个入口默认 `ITERATIONS=50`，先构建一次，正式样本不启用 retry-on-failure。iOS 使用 XCTest repetition 重启测试进程；macOS 为避开 repetition runner 自身偶发的 `Running Background` 激活故障，每轮使用独立的 `test-without-building` invocation 和 xcresult，这些都是预先计划的独立样本，不是失败重试。`ITERATIONS=1` 只用于命令校准，不能满足完成条件；非法范围在接触设备或桌面前 `BLOCKED`。每个 campaign 使用唯一结果目录，保留逐次结果、原始日志/xcresult 或 Android iteration 表和机器可读 `summary.json`。macOS 每轮除准确空态外，还必须完成 Settings→Messages 的真实导航往返并再次落到准确空态；外层监控会持续关闭系统崩溃窗口，但绝不改变产品失败或重跑断言。
 
 ## 结果合同
 
@@ -41,7 +44,13 @@ Apple 的 focused journey 正好覆盖 `apple-simulator-xctest-runner-launch` �
 
 两周观察仍是独立治理条件。单次 50/50 只证明当前受控平台、当前 Xcode/SDK/Emulator 和当前 focused 功能终点，不能替代后续真实变更的 Lane 时长、启动失败率、业务失败率和 issue 到期审查。
 
-## 2026-08-28 基线
+## 2026-08-30 macOS 基线
+
+- macOS 受控本机桌面：50 个独立 invocation 全部通过，product/test-system=`PASSED/PASSED`、issue ID 为空；p50=16.163s、p95=16.378s、max=19.405s；激活故障、Problem Reporter 清理和业务重试均为 0；`build/quality-results/macos-startup-reliability/20260830-135031/summary.json`。
+- repetition 负证据：首轮 49/50 在第 37 轮出现 XCTest `Running Background` 激活超时；去除 helper 冗余激活后仍在后续 campaign 复现，App 启动侧试探性调整也没有消除，均撤回。该故障属于 repetition runner 共模，不允许用 98% 或后续绿色隐藏，也不归因给产品空态/导航。
+- Oracle 负控：临时错误空态 identifier 后单轮精确输出 product=`FAILED`、test-system=`PASSED`，恢复后才执行正式 campaign。
+
+## 2026-08-28 iOS/Android 基线
 
 - iOS 专用 Simulator：50/50，product/test-system=`PASSED/PASSED`、issue ID 为空；p50=8.604s、p95=10.634s、max=13.875s；`build/quality-results/ios-startup-reliability/20260828-205055/summary.json`。
 - Android 受控 `emulator-5554`：50/50，双状态通过、issue ID 为空；p50=1901.5ms、p95=9073ms、max=15226ms；`../pushgo-android/build/quality-results/android-startup-reliability/20260828-205052/summary.json`。

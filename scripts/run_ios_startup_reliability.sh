@@ -57,11 +57,17 @@ result_bundle="$campaign_root/campaign.xcresult"
 xcrun simctl terminate "$target" "$app_bundle_identifier" >/dev/null 2>&1 || true
 started_ns="$(python3 -c 'import time; print(time.monotonic_ns())')"
 set +e
-xcodebuild "${common_args[@]}" \
-  -test-iterations "$iterations" \
-  -test-repetition-relaunch-enabled YES \
-  -resultBundlePath "$result_bundle" \
-  test-without-building >"$log_file" 2>&1
+if (( iterations == 1 )); then
+  xcodebuild "${common_args[@]}" \
+    -resultBundlePath "$result_bundle" \
+    test-without-building >"$log_file" 2>&1
+else
+  xcodebuild "${common_args[@]}" \
+    -test-iterations "$iterations" \
+    -test-repetition-relaunch-enabled YES \
+    -resultBundlePath "$result_bundle" \
+    test-without-building >"$log_file" 2>&1
+fi
 command_status=$?
 set -e
 finished_ns="$(python3 -c 'import time; print(time.monotonic_ns())')"
@@ -127,8 +133,9 @@ payload = {
     "product_status": product_status,
     "test_system_status": test_system_status,
     "test_system_issue_ids": issue_ids,
-    "startup_reliability_exit_criteria_met": passed == total and not issue_ids,
-    "resolved_runner_flake_exit_evidence_reproduced": passed == total and not issue_ids,
+    "calibration_only": total != 50,
+    "startup_reliability_exit_criteria_met": total == 50 and passed == total and not issue_ids,
+    "resolved_runner_flake_exit_evidence_reproduced": total == 50 and passed == total and not issue_ids,
     "oracle": "XCTest repetitions relaunch the test process; each repetition launches a fresh App-owned empty.clean session and requires the functional empty state in an isolated database. No retry-on-failure is enabled.",
     "log": str(Path(log_path).resolve()),
     "result_bundle": str(Path(result_bundle).resolve()),

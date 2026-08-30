@@ -188,6 +188,19 @@ final class PushGo_macOSUITests: XCTestCase {
             element(in: context.app, identifier: "state.messages.empty")
                 .waitForExistence(timeout: 5)
         )
+
+        // A startup marker and a rendered empty state are insufficient if the
+        // first window is frozen or its navigation cannot be used. Exercise one
+        // real round trip and require the same accurate business state at the end.
+        openSidebarTab("settings", in: context.app)
+        assertVisibleScreenThroughUI("screen.settings", in: context.app, timeout: 5)
+        openSidebarTab("messages", in: context.app)
+        assertVisibleScreenThroughUI("screen.messages.list", in: context.app, timeout: 5)
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.empty")
+                .waitForExistence(timeout: 5),
+            "The functional empty state must remain accurate after real user navigation."
+        )
     }
 
     @MainActor
