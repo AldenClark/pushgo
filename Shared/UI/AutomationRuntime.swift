@@ -35,7 +35,10 @@ final class QualityChannelAutomationRoundTrip: ChannelMutationRoundTrip, Channel
             )
         }
         subscribeAttempts += 1
-        if scenario == .rejectOnceThenAccepted, subscribeAttempts == 1 {
+        if (scenario == .rejectOnceThenAccepted
+            || scenario == .subscribeAndRenameRejectOnceThenAccepted),
+           subscribeAttempts == 1
+        {
             throw AppError.typedLocal(
                 code: "password_mismatch",
                 category: .conflict,
@@ -78,7 +81,10 @@ final class QualityChannelAutomationRoundTrip: ChannelMutationRoundTrip, Channel
             )
         }
         renameAttempts += 1
-        if scenario == .renameRejectOnceThenAccepted, renameAttempts == 1 {
+        if (scenario == .renameRejectOnceThenAccepted
+            || scenario == .subscribeAndRenameRejectOnceThenAccepted),
+           renameAttempts == 1
+        {
             throw AppError.typedLocal(
                 code: "channel_rename_rejected",
                 category: .conflict,

@@ -932,7 +932,7 @@ final class PushGo_macOSUITests: XCTestCase {
         let context = configuredQualityApp(
             sessionID: sessionID,
             fixture: "channels.standard",
-            channelMutationScenario: "rename_reject_once_then_accepted"
+            channelMutationScenario: "subscribe_and_rename_reject_once_then_accepted"
         )
         context.app.launchArguments += [
             "-AppleLanguages", "(zh-Hans)",
@@ -1047,6 +1047,24 @@ final class PushGo_macOSUITests: XCTestCase {
             identifier: "action.channels.entry.submit"
         )
         XCTAssertTrue(subscribeSubmit.waitForExistence(timeout: 5))
+        subscribeSubmit.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        let subscribeFeedback = element(in: context.app, identifier: "feedback.channels.entry")
+        XCTAssertTrue(
+            subscribeFeedback.waitForExistence(timeout: 8),
+            "A rejected existing-channel subscription must remain owned by the Channel sheet."
+        )
+        XCTAssertTrue(subscribeFeedback.label.contains("Channel password is incorrect"))
+        XCTAssertEqual(
+            subscribeID.value as? String,
+            subscribedChannelID,
+            "The recoverable Channel ID must remain available for correction or retry."
+        )
+        XCTAssertTrue(subscribePassword.exists)
+        XCTAssertTrue(subscribeSubmit.isEnabled)
+        XCTAssertFalse(
+            element(in: context.app, identifier: "channel.row.\(subscribedChannelID)").exists,
+            "A rejected subscription must not create a canonical Channel row."
+        )
         subscribeSubmit.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
         XCTAssertTrue(
             element(in: context.app, identifier: "channel.row.\(subscribedChannelID)")

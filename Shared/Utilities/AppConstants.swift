@@ -114,6 +114,7 @@ enum PushGoQualityChannelMutationScenario: String, Codable, Sendable {
     case accepted
     case rejectOnceThenAccepted = "reject_once_then_accepted"
     case renameRejectOnceThenAccepted = "rename_reject_once_then_accepted"
+    case subscribeAndRenameRejectOnceThenAccepted = "subscribe_and_rename_reject_once_then_accepted"
     case requireCreateCompensation = "require_create_compensation"
 }
 

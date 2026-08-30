@@ -489,6 +489,75 @@ struct ChannelSubscriptionServiceTests {
     }
 
     @Test
+    func existingChannelSubscriptionIsAnIdempotentSuccess() async throws {
+        let host = "apple-channel-idempotent-\(UUID().uuidString.lowercased()).example"
+        let baseURL = try #require(URL(string: "https://\(host)/GatewayA"))
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ChannelServiceURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer {
+            session.invalidateAndCancel()
+            ChannelServiceURLProtocol.unregister(host: host)
+        }
+
+        ChannelServiceURLProtocol.register(host: host) { request in
+            #expect(request.url?.path == "/GatewayA/channel/subscribe")
+            let body = try #require(ChannelServiceURLProtocol.bodyData(from: request))
+            let object = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            #expect(object["channel_id"] as? String == "existing-channel")
+            let payload = """
+            {"success":true,"data":{"channel_id":"existing-channel","channel_name":"Existing","created":false,"subscribed":true}}
+            """
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, Data(payload.utf8))
+        }
+
+        let result = try await ChannelSubscriptionService(session: session).subscribe(
+            baseURL: baseURL,
+            token: "token",
+            deviceKey: "device",
+            channelId: "existing-channel",
+            channelName: nil,
+            password: "qualityx"
+        )
+
+        #expect(result.channelId == "existing-channel")
+        #expect(!result.created)
+        #expect(result.subscribed)
+    }
+
+    @Test
+    func gatewayRecoveryErrorsKeepDistinctActionableSemantics() {
+        let cases: [(Int, String?, GatewayErrorCategory, Bool, String)] = [
+            (401, "authentication_failed", .auth, false, "server_authentication_failed_please_check_the_token"),
+            (404, "channel_not_found", .notFound, false, "channel_not_found"),
+            (400, "channel_subscriber_limit_exceeded", .validation, false, "channel_subscriber_limit_exceeded"),
+            (429, nil, .rateLimit, true, "gateway_rate_limited"),
+        ]
+
+        for (status, code, expectedCategory, expectedRetryable, messageKey) in cases {
+            let error = ChannelSubscriptionService.buildGatewayError(
+                statusCode: status,
+                legacyError: nil,
+                errorCode: code,
+                problem: nil
+            )
+            guard case let .gateway(problem) = error else {
+                Issue.record("Expected HTTP \(status) / \(code ?? "no-code") to remain a typed gateway problem.")
+                continue
+            }
+            #expect(problem.category == expectedCategory)
+            #expect(problem.retryable == expectedRetryable)
+            #expect(error.errorDescription == LocalizationProvider.localized(messageKey))
+        }
+    }
+
+    @Test
     func gatewayAcceptLanguageNormalizesSimplifiedChineseForGateway() {
         let header = ChannelSubscriptionService.buildGatewayAcceptLanguageValue(
             preferredLanguages: ["zh-Hans-CN", "en-US"],
