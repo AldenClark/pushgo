@@ -141,7 +141,7 @@ Platform vector order is `I / M / D / W` (iOS, macOS, Android, watchOS). `-` mea
 | 1413 | Page visibility | V/V/V/- | `V` | Real controls, legal navigation and relaunch in `A-SET`, `D-SET`. |
 | 1414 | Decryption key hex/base64 boundaries | V/V/V/- | `V` | Validator matrix plus real invalid and accepted UI paths. |
 | 1415 | Saving key recovers original message | V/V/V/- | `V` | Same canonical encrypted message becomes exact plaintext and remains after relaunch. |
-| 1421 | Every visible documentation link reaches a safe localized target | V/P/P/- | `P` | Full URL/page/locale mapping has Core contracts and iOS has a real Safari handoff. macOS and Android still need one representative system-consumer handoff each, and the audit must reconcile every currently visible control against the mapping rather than count URL constants. |
+| 1421 | Every visible documentation link reaches a safe localized target | V/V/V/- | `V` | Fast contracts reconcile the actual visible controls rather than URL constants: Apple Settings exposes Getting Started, Message API and E2EE; the Message/Event/Thing onboarding surfaces add their matching API page plus Getting Started; `selfHosting` is mapped but not counted because no current UI exposes it. Android Settings exposes Getting Started, Message API and E2EE, with production row semantics and en/zh-CN/zh-TW resources checked. One representative real system-consumer handoff per platform reuses an existing positive journey: iOS Safari, macOS default browser and Android's resolved browser must receive the exact safe Getting Started HTTPS host/path and return to the same App-owned screen. This proves routing/continuity, not public-site content or network SLA. |
 | 1422 | Notification-permission card and settings return | V/B/V/- | `P` | iOS and Android exercise real system decisions/Settings and return refresh. macOS notification delivery is authorized and visible, but the current notification card/click surface is not operable through XCTest; the exact remaining macOS Settings-card path must stay `B`, not green. |
 | 1426 | Android FCM/Private transport selection | -/-/P/- | `P` | Real UI, durable mode, Service/token/connection state and rollback/relaunch are covered. A real post-switch FCM and Private delivery is externally owned and remains `N`; typed/fake integration cannot close that endpoint. |
 
@@ -213,14 +213,13 @@ Platform vector order is `I / M / D / W` (iOS, macOS, Android, watchOS). `-` mea
 
 The design contains 103 P0/P0 Release rows. This audit deliberately does **not** declare section 21.2(1) complete:
 
-- 86 rows are currently classified `V`; 1 conditional export row is `NA` because the product capability was explicitly removed.
-- 8 rows remain `P` and require semantic closure, an explicit product-scope correction, or an externally owned sub-gate.
+- 87 rows are currently classified `V`; 1 conditional export row is `NA` because the product capability was explicitly removed.
+- 7 rows remain `P` and require semantic closure, an explicit product-scope correction, or an externally owned sub-gate.
 - Two platform sub-results are explicitly `B`: iOS Channel Pasteboard and macOS notification interaction. Neither is hidden inside a green aggregate.
 - 8 P0 Release/external rows remain `N`; local Simulator/emulator evidence is retained but never promoted to physical/provider acceptance.
 
 The next implementation order is constrained by value and reuse:
 
-1. Add one representative macOS and Android documentation system handoff for row 1421 only if it can reuse existing Settings/navigation journeys. Keep all page×locale correctness in fast contracts.
-2. Keep physical/provider/watch-media/accessibility items in their explicit Release/owner lanes. They cannot displace locally reachable positive P0 work and cannot be turned green with mocks.
+1. Keep physical/provider/watch-media/accessibility items in their explicit Release/owner lanes. They cannot displace locally reachable positive P0 work and cannot be turned green with mocks.
 
 Every status change must update this ledger, the platform `capability-coverage.md`, and the retained receipt path in the same slice. A same-context implementation/review remains `common-mode-risk` until an independent blind packet verifies the row mapping.

@@ -2745,7 +2745,11 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertTrue(persistedOff.app.staticTexts["No objects yet"].waitForExistence(timeout: 8))
 
         persistedOff.app.terminate()
-        let persistedOn = configuredQualityApp(sessionID: sessionID, fixture: "messages.standard")
+        let persistedOn = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            allowCrossAppDataAccess: true
+        )
         persistedOn.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         launchQuality(persistedOn, sessionID: sessionID)
         openSidebarTab("messages", in: persistedOn.app)
@@ -2764,6 +2768,63 @@ final class PushGo_macOSUITests: XCTestCase {
         openSidebarTab("things", in: persistedOn.app)
         assertVisibleScreenThroughUI("screen.things.list", in: persistedOn.app, timeout: 8)
         XCTAssertTrue(persistedOn.app.staticTexts["No objects yet"].waitForExistence(timeout: 8))
+
+        openSidebarTab("settings", in: persistedOn.app)
+        assertVisibleScreenThroughUI("screen.settings", in: persistedOn.app, timeout: 8)
+        let documentationAction = element(
+            in: persistedOn.app,
+            identifier: "action.settings.open_getting_started_docs"
+        )
+        XCTAssertTrue(
+            documentationAction.waitForExistence(timeout: 8) && documentationAction.isHittable,
+            "The visible Getting Started documentation action must remain usable."
+        )
+        let expectedDocumentationURL = URL(string: "https://pushgo.dev/guides/getting-started/")!
+        guard let browserApplicationURL = NSWorkspace.shared.urlForApplication(
+            toOpen: expectedDocumentationURL
+        ),
+        let browserBundleIdentifier = Bundle(url: browserApplicationURL)?.bundleIdentifier
+        else {
+            XCTFail("QUALITY_PRECONDITION: no default browser can consume the documentation URL.")
+            return
+        }
+        let browser = XCUIApplication(bundleIdentifier: browserBundleIdentifier)
+        documentationAction.click()
+        XCTAssertTrue(
+            browser.wait(for: .runningForeground, timeout: 10),
+            "The production documentation action must hand off to the default system browser."
+        )
+        browser.typeKey("l", modifierFlags: .command)
+        let browserAddress = browser.descendants(matching: .any).matching(
+            NSPredicate(
+                format: "value CONTAINS[c] %@ OR label CONTAINS[c] %@",
+                "pushgo.dev/guides/getting-started",
+                "pushgo.dev/guides/getting-started"
+            )
+        ).firstMatch
+        XCTAssertTrue(
+            browserAddress.waitForExistence(timeout: 8),
+            "The browser must expose the exact official documentation host and path."
+        )
+        let displayedAddress = ((browserAddress.value as? String) ?? browserAddress.label)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedAddress = displayedAddress.contains("://")
+            ? displayedAddress
+            : "https://\(displayedAddress)"
+        let consumedURL = URL(string: normalizedAddress)
+        XCTAssertEqual(consumedURL?.scheme, "https")
+        XCTAssertEqual(consumedURL?.host, "pushgo.dev")
+        XCTAssertEqual(
+            consumedURL?.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")),
+            "guides/getting-started",
+            "A different pushgo.dev page must not satisfy the documentation handoff."
+        )
+        persistedOn.app.activate()
+        XCTAssertTrue(
+            persistedOn.app.wait(for: .runningForeground, timeout: 8),
+            "Returning from the browser must restore the same PushGo Settings journey."
+        )
+        assertVisibleScreenThroughUI("screen.settings", in: persistedOn.app, timeout: 8)
     }
 
     @MainActor

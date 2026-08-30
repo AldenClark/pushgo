@@ -95,7 +95,7 @@
 - macOS `testUnreadBadgeAndChannelLifecyclePersistThroughRealUserActions`（复用原 badge→读取→Channel copy 方法和唯一 relaunch；既有频道订阅先经历一次 typed 密码拒绝，要求错误只属于 Channel Sheet、ID 与密码字段保留、提交仍可用且没有脏行，再在同一 Sheet 重试成功；随后继续创建、菜单改名、保留/删除历史退订，并从准确 Channel 行、消息正文、生产删除期限、relaunch 和系统剪贴板裁决。没有增加默认方法或启动；当前回执 `build/quality-results/macos-channel-recovery-final/run-20260831-000123.xcresult` 为 1/1、108.202 秒、零重试）
 - `testChannelRemoteRejectionStaysInSheetAndRetryPersists`
 - `testChannelCreateLocalFailureCompensatesRemoteBeforeRetry`
-- `testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch`
+- macOS `testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch`（复用原页面显隐旅程、fixture 和第三次既有 relaunch；末尾从真实 Settings Getting Started 控件交给系统默认浏览器，地址栏必须是准确安全 HTTPS host/path，返回后仍在同一 Settings。page×locale 全映射由 Core 快速合同负责，不新增测试方法、App 启动或页面×语言×浏览器矩阵；当前 1/1、100.450 秒、零重试，回执 `build/quality-results/macos-documentation-handoff/run-20260831-001201.xcresult`）
 - `testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch`
 - `testGatewayLocalCommitFailureRollsBackBeforeRetryCommits`
 - `testSettingsDecryptionRejectsInvalidKeyPersistsAndClearsValidKey`
