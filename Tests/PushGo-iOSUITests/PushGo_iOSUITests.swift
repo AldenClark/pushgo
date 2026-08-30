@@ -1445,6 +1445,36 @@ final class PushGo_iOSUITests: XCTestCase {
             event.waitForExistence(timeout: 8),
             "The system-routed Event state change must return to the canonical Events list."
         )
+        tapWhenHittable(
+            event,
+            timeout: 8,
+            message: "The Event changed through the system route must remain actionable"
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "sheet.event.detail")
+                .waitForExistence(timeout: 8)
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "field.event.detail.status.closed")
+                .waitForExistence(timeout: 8),
+            "PR navigation must prove the routed close reached canonical closed state, not only that the row still exists."
+        )
+        XCTAssertFalse(
+            element(in: context.app, identifier: "action.event.close").exists,
+            "A canonically closed Event must not continue offering the close action."
+        )
+        let verifiedClosedDetail = element(in: context.app, identifier: "sheet.event.detail")
+        verifiedClosedDetail.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.02))
+            .press(
+                forDuration: 0.2,
+                thenDragTo: verifiedClosedDetail.coordinate(
+                    withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)
+                )
+            )
+        XCTAssertTrue(
+            verifiedClosedDetail.waitForNonExistence(timeout: 5),
+            "The verified closed Event detail must return to navigation"
+        )
 
         tabs.element(boundBy: 2).tap()
         assertElementExists("screen.things.list", in: context.app, timeout: 8)
