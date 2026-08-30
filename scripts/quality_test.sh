@@ -143,6 +143,9 @@ PY
         "$repo_root/scripts/verify_rollback_compatibility.sh"
         claims+=("Apple locked dependency/privacy/release/rollback static contracts")
         ;;
+      apple-preparation-contract)
+        run_preparation_contract
+        ;;
       apple-ios-channel-positive)
         selected_claims+=("iOS impact-selected Channel positive lifecycle")
         TEST_SCOPES="PushGo-iOSUITests/PushGo_iOSUITests/testChannelCreateRenameAndBothUnsubscribeOutcomesPersist" \
@@ -224,6 +227,19 @@ run_core() {
   python3 "$repo_root/scripts/verify_apple_localizations.py"
   swift test --package-path "$repo_root"
   claims+=("Apple Core/Store/integration suite and localization completeness")
+}
+
+run_preparation_contract() {
+  local ios_scopes="PushGo-iOSUITests/PushGo_iOSUITests/testInvalidQualitySessionStopsBeforeBusinessUIWithinTenSeconds,PushGo-iOSUITests/PushGo_iOSUITests/testQualitySessionUsesAppOwnedStoreAndReachesFunctionalEmptyState"
+  local macos_scopes="PushGo-macOSUITests/PushGo_macOSUITests/testInvalidQualitySessionStopsBeforeBusinessUIWithinTenSeconds,PushGo-macOSUITests/PushGo_macOSUITests/testQualitySessionUsesAppOwnedStoreAndReachesFunctionalEmptyState"
+  selected_claims+=("Apple App-owned preparation rejects invalid sessions within 10 seconds and recovers to accurate functional empty state")
+  TEST_SCOPES="$ios_scopes" \
+    MAX_RETRIES=0 \
+    QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
+  TEST_SCOPES="$macos_scopes" \
+    MAX_RETRIES=0 \
+    QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_macos_ui_tests.sh"
+  claims+=("Apple App-owned preparation rejects invalid sessions within 10 seconds and recovers to accurate functional empty state")
 }
 
 run_performance() {
@@ -355,6 +371,9 @@ run_system_notification_journey() {
 run_impact_contracts
 
 case "$lane" in
+  preparation)
+    run_preparation_contract
+    ;;
   macos-update-install)
     run_macos_update_install
     ;;

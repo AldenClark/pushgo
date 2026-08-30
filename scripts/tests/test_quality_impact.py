@@ -52,6 +52,14 @@ class QualityImpactPlanTests(unittest.TestCase):
 
         self.assertEqual("release", plan["recommended_lane"])
         self.assertIn("release-runtime-isolation", plan["impacted_capabilities"])
+        self.assertIn("apple-preparation-contract", plan["required_checks"])
+
+    def test_preparation_surface_change_selects_the_dedicated_contract(self):
+        plan = self.plan("Shared/UI/RootView.swift")
+
+        self.assertEqual("READY", plan["plan_status"])
+        self.assertIn("apple-preparation-contract", plan["required_checks"])
+        self.assertIn("app-owned-quality-runtime", plan["impacted_capabilities"])
 
     def test_unmapped_product_screen_is_blocked(self):
         path = "Apps/PushGo-iOS/UI/Screens/NewCapabilityScreen.swift"
@@ -119,17 +127,20 @@ class QualityImpactPlanTests(unittest.TestCase):
         positive = self._macos_scopes(runner_source, "positive_scopes")
         risk = self._macos_scopes(runner_source, "risk_scopes")
         system = self._macos_scopes(runner_source, "system_scopes")
+        preparation = self._macos_scopes(runner_source, "preparation_scopes")
 
-        self.assertEqual(26, len(discoverable))
+        self.assertEqual(27, len(discoverable))
         self.assertEqual(16, len(positive))
         self.assertEqual(9, len(risk))
         self.assertEqual(1, len(system))
+        self.assertEqual(1, len(preparation))
         self.assertFalse(positive & risk)
-        self.assertFalse((positive | risk) & system)
+        self.assertFalse((positive | risk) & (system | preparation))
+        self.assertFalse(system & preparation)
         self.assertEqual(
             discoverable,
-            positive | risk | system,
-            "Every discoverable macOS journey must belong to the positive, risk, or real-system set.",
+            positive | risk | system | preparation,
+            "Every discoverable macOS journey must belong to the positive, risk, real-system, or preparation set.",
         )
         for deferred_fragment in (
             "Fatal",

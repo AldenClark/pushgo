@@ -66,6 +66,7 @@
 - Runtime Profile、受限 Session Descriptor、App-owned session Store；
 - `empty.clean`、`messages.standard`、`messages.large`；
 - readiness、doctor、teardown、唯一结果目录；
+- Session/Store/fixture 准备失败必须在 10 秒内输出稳定阶段并停止，禁止业务 UI/空态/ready；同批正常 `empty.clean` 必须继续到准确功能空态；
 - Release isolation 负测；
 - 两端连续启动验证。
 

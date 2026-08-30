@@ -179,6 +179,22 @@ class QualityLaneCostContractTests(unittest.TestCase):
         self.assertIn("while Date() < deadline", authorization)
         self.assertNotIn("alert.waitForExistence(timeout: 2)", authorization)
 
+    def test_macos_preparation_calibration_is_not_charged_to_ordinary_batches(self) -> None:
+        runner = (REPO / "scripts/quality_test.sh").read_text()
+        macos_runner = (REPO / "scripts/run_macos_ui_tests.sh").read_text()
+
+        preparation = self._array_scopes(macos_runner, "preparation_scopes")
+        self.assertEqual(
+            [
+                "PushGo-macOSUITests/PushGo_macOSUITests/"
+                "testInvalidQualitySessionStopsBeforeBusinessUIWithinTenSeconds"
+            ],
+            preparation,
+        )
+        self.assertIn("preparation)\n    run_preparation_contract", runner)
+        for variable in ("positive_scopes", "risk_scopes", "system_scopes"):
+            self.assertNotIn(preparation[0], self._array_scopes(macos_runner, variable))
+
     def test_channel_ui_impact_checks_run_one_platform_owner_journey(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()
 

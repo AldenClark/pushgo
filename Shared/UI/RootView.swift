@@ -28,6 +28,24 @@ struct RootView: View {
 
     @ViewBuilder
     private var mainContent: some View {
+        #if DEBUG
+        if PushGoAutomationContext.qualitySessionInputStatus == "invalid" {
+            ContentUnavailableView(
+                "Quality test preparation failed",
+                systemImage: "exclamationmark.triangle",
+                description: Text("The App-owned quality session is invalid. No product journey was started.")
+            )
+            .accessibilityIdentifier("quality-runtime.invalid")
+        } else {
+            productContent
+        }
+        #else
+        productContent
+        #endif
+    }
+
+    @ViewBuilder
+    private var productContent: some View {
         #if os(watchOS)
         EmptyView()
         #else
@@ -54,7 +72,9 @@ private extension View {
 #if os(watchOS)
         self
 #else
-        if let session = PushGoAutomationContext.qualitySession {
+        if PushGoAutomationContext.qualitySessionInputStatus == "invalid" {
+            self
+        } else if let session = PushGoAutomationContext.qualitySession {
             let status = environment.qualityRuntimeReadiness == "inactive"
                 ? "initializing"
                 : environment.qualityRuntimeReadiness

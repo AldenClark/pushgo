@@ -21,6 +21,28 @@ private enum PushGoIOSUITestRuntimeRoots {
 
 @MainActor
 final class PushGo_iOSUITests: XCTestCase {
+    func testInvalidQualitySessionStopsBeforeBusinessUIWithinTenSeconds() {
+        let context = configuredLaunchContext()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = "not-valid-base64"
+        let startedAt = Date()
+
+        launch(context.app)
+
+        XCTAssertTrue(
+            element(in: context.app, identifier: "quality-runtime.invalid")
+                .waitForExistence(timeout: 8),
+            "QUALITY_PRECONDITION: invalid App-owned session was not classified within 8 seconds."
+        )
+        XCTAssertLessThan(
+            Date().timeIntervalSince(startedAt),
+            10,
+            "QUALITY_PRECONDITION: invalid App-owned session exceeded the 10-second preparation budget."
+        )
+        XCTAssertFalse(element(in: context.app, identifier: "quality-runtime.ready").exists)
+        XCTAssertFalse(element(in: context.app, identifier: "screen.messages.list").exists)
+        XCTAssertFalse(element(in: context.app, identifier: "state.messages.empty").exists)
+    }
+
     private struct AutomationState: Decodable {
         let activeTab: String?
         let visibleScreen: String?

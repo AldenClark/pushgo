@@ -186,6 +186,8 @@
 
 140. **测试直接授权冒充通知权限用户链攻击**：旧 Nightly 在业务旅程内用 `UiAutomation.grantRuntimePermission`，因此通知/PendingIntent 全绿也无法发现拒绝后的 App 提示错误、错误设置入口或返回不刷新。蓝方新增 typed capability 与宿主驱动链：App-owned fixture 完成后退出 instrumentation，以普通宿主触发真实 Android permission controller，点击拒绝；App 必须暴露 title/message/urgency 三类解释，再进入真实 `com.android.settings` 主开关，打开后返回且提示消失；独立语义 verifier 继续对账系统 permission、`NotificationManagerCompat` 和 App Settings banner，现有通知链再证明授权确实可消费。红方第一轮把链留在 `ActivityScenario`，API 37 系统窗被 instrumentation 行为改变而不出现；没有把这一环境差异改成 product fail 或直接 grant，而是更换执行边界。fixture control 仅 debug/Release-like quality variant 启用，受 `android.permission.DUMP` 限制，Release 清单静态为 disabled/non-exported；host 脚本拒绝非 emulator 并验证 session、权限 flags、首次请求偏好与进程清理。API 37 当前 1/1，随后原系统 2/2 回归；Doze、OEM/真机与真实外部 delivery 不外推。残余 `common-mode-risk`：系统资源 ID 与当前 AOSP Settings 契约来自同一 emulator，后续 API/OEM 差异必须归环境能力或专门物理 Lane，不能在日常加入文本/坐标重试矩阵。
 
+141. **准备失败继续挂载业务 UI / shell 返回码冒充准备成功攻击**：Apple 旧实现把非法 Session 解码成 production profile，虽然能出现 `quality-runtime.invalid`，业务根界面仍可能构造，空态存在性测试会把准备失败与真实业务结果混在一起；Android 首个宿主又证明 Binder Provider 抛出明确异常时，`content call` 仍可能返回 shell 状态 0。蓝方把 Apple 非法输入提升为专用根面，要求 `ready`、消息列表和业务空态全部不存在；Android 以稳定 phase + 不得出现 `status=ready` 裁决，并在已解码后的任一失败上回收 Session DB/preferences/目录/持久控制。红方反例不是遍历权限×DB×fixture 笛卡尔积，而是每平台一个最早非法 Session，必须 10 秒内终止且零重试；Android 另取一个已发生持久化变更后的 `storage.open` 失败，证明清理后正向控制仍可运行；同批正常 `empty.clean` 只有真实 readiness 与准确功能空态同时出现才证明 fail-fast 没有误杀。当前 Apple iOS/macOS 非法 Session 分别 8.151/5.981 秒，Android 非法 Session 2.488 秒、`storage.open` 失败 1.245 秒，正向控制均通过。残余 `common-mode-risk`：阶段命名、实现与 Oracle 来自同一上下文；物理设备和连续观察仍独立保留。
+
 ## 归因分析
 
 | 过去症状 | 根因 | 结构修正 | 失败分类 |

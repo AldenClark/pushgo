@@ -2,6 +2,10 @@
 
 此索引防遗漏，不计算覆盖分，不是测试 Oracle。入口或类型存在不能让能力通过；最终判定以真实用户结果和必要数据/系统终点为准。
 
+## App-owned 准备合同
+
+非法 Session 必须在 10 秒内进入专用准备失败根面，且不得挂载消息列表、业务空态或 `quality-runtime.ready`；同一批次必须再以正常 `empty.clean` 到达准确功能空态，防止 fail-fast 误杀正常启动。独立 `preparation` Lane 当前在 iOS Simulator 以 8.151 秒、macOS 本机以 5.981 秒完成非法反例，随后两端正向控制均通过，零重试、产品/测试系统双 `PASSED`（`build/quality-results/apple-preparation-summary.json`）。该 Lane 只由 Runtime/准备边界变更和定向验证触发，不进入普通 UI PR 固定成本，也不外推物理设备启动性能。
+
 | 平台/真实入口 | 用户目的 | 关键状态/分支 | 数据/系统终点 | 最低证据 | Lane/当前状态 | 主要 owner |
 | --- | --- | --- | --- | --- | --- | --- |
 | I/M/W App launch | 进入可操作 App，或在持久存储致命失败时安全停止 | Empty/Content/slow/error/fatal/recovery/migration | App-owned Store、session 配置、首屏、导航、启动任务边界 | Store + UI + launch metric + relaunch | P0；iOS/macOS empty/content/slow/error-retry 已由 App-owned session 实跑；确定性 Store 初始化失败要求显示不可用及原始原因、完全不挂载业务页面、不启动观察/合并/派生/推送任务并可安全退出。destructive recovery 已完成最低充分纵向 Oracle：先确认真实 canonical 数据，第一次失败不允许过早提供 rebuild 且实际安全退出，第二次失败点击生产 rebuild，普通重启后必须是可用空 Store 且旧行不复活；低层同时要求 main/index/legacy 全 SQLite 文件族删除。生产门槛仍为 3，仅 Debug session 将准备压缩为 2。no-op Store 反例精确失败于 iOS 最终空态，正式实现恢复后 iOS 1/1、41.627 秒和 macOS 1/1、28.919 秒通过，Core 24/24；semantic ID 缺失时只以用户可见精确按钮完成真实动作，最终仍由数据终点裁决。历史容量、Problem Reporter 与 sheet 定位失败保留为测试系统证据，不能被绿色抹除。quality DB 与 server/key metadata 均按 session 隔离，坏配置读取阻断 readiness。iOS 与 macOS 各自在既有标准消息主链从 App-owned v17 旧库走正式 migration，证明准确旧标题/正文可用、新数据共存并跨 relaunch 保留；Watch 使用独立 Store，其 P0 正向 UI 已以同一旅程证明准确 Message/Event/Thing、删除及 relaunch，独立 Store migration UI 仍待补，不从共享 Store 或手机/桌面结果外推 | `AppEnvironment`、`LocalDataStore`、Root UI |

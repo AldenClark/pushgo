@@ -62,6 +62,12 @@ system_scopes=(
   "PushGo-macOSUITests/PushGo_macOSUITests/testSystemNotificationClickPersistsAccurateMessageAndSurvivesRelaunch"
 )
 
+# One-time oracle calibration for Runtime/preparation changes. It is intentionally
+# excluded from both the ordinary positive set and the broad Nightly risk set.
+preparation_scopes=(
+  "PushGo-macOSUITests/PushGo_macOSUITests/testInvalidQualitySessionStopsBeforeBusinessUIWithinTenSeconds"
+)
+
 close_stale_test_processes() {
   local process_pattern
   for process_pattern in "^$test_app_executable($| )" "^$test_runner_executable($| )"; do
@@ -134,6 +140,9 @@ else
       ;;
     system)
       scope_list=("${system_scopes[@]}")
+      ;;
+    preparation)
+      scope_list=("${preparation_scopes[@]}")
       ;;
     *)
       echo "status=BLOCKED"
