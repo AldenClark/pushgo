@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import tempfile
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -21,6 +22,48 @@ except ModuleNotFoundError:
 
 
 STATUSES = {"PASSED", "FAILED", "FLAKY", "BLOCKED", "NOT_RUN", "WAIVED"}
+
+
+def git_value(*arguments: str, allow_empty: bool = False) -> str | None:
+    try:
+        process = subprocess.run(
+            ["git", *arguments],
+            cwd=Path(__file__).resolve().parent.parent,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    value = process.stdout.strip()
+    return value if process.returncode == 0 and (value or allow_empty) else None
+
+
+def source_provenance() -> tuple[str | None, bool | None, str | None]:
+    revision = os.environ.get("QUALITY_SOURCE_REVISION") or os.environ.get("GITHUB_SHA")
+    if not revision:
+        revision = git_value("rev-parse", "HEAD")
+
+    explicit_dirty = os.environ.get("QUALITY_SOURCE_DIRTY")
+    if explicit_dirty is not None:
+        normalized = explicit_dirty.strip().lower()
+        if normalized not in {"0", "1", "false", "true"}:
+            raise SystemExit("QUALITY_SOURCE_DIRTY must be true/false or 1/0")
+        dirty: bool | None = normalized in {"1", "true"}
+    else:
+        status = git_value(
+            "status", "--porcelain", "--untracked-files=normal", allow_empty=True
+        )
+        dirty = None if status is None else bool(status)
+
+    run_identity = os.environ.get("QUALITY_RUN_ID")
+    if not run_identity and os.environ.get("GITHUB_RUN_ID"):
+        run_identity = "github:{run}:{attempt}:{job}".format(
+            run=os.environ["GITHUB_RUN_ID"],
+            attempt=os.environ.get("GITHUB_RUN_ATTEMPT", "1"),
+            job=os.environ.get("GITHUB_JOB", "unknown"),
+        )
+    return revision, dirty, run_identity
 
 
 def parse_args() -> argparse.Namespace:
@@ -40,6 +83,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    source_revision, source_dirty, run_identity = source_provenance()
     issue_ids = list(dict.fromkeys(args.test_system_issue_id))
     if args.test_system_status == "PASSED" and issue_ids:
         raise SystemExit("PASSED test-system status cannot carry test-system issue ids")
@@ -80,8 +124,11 @@ def main() -> None:
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "recorded_at": datetime.now(timezone.utc).isoformat(),
+        "source_revision": source_revision,
+        "source_dirty": source_dirty,
+        "run_identity": run_identity,
         "platform": args.platform,
         "lane": args.lane,
         "product_capability_status": args.product_status,
