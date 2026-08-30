@@ -7,6 +7,32 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 class QualityLaneCostContractTests(unittest.TestCase):
+    def test_entity_tab_reselection_reuses_existing_positive_journeys(self) -> None:
+        runtime = (REPO / "Shared/UI/AutomationRuntime.swift").read_text()
+        source = (REPO / "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift").read_text()
+        event_method = source.split(
+            "func testEventClosePersistsAndOngoingFilterReflectsRealProjection()", 1
+        )[1].split(
+            "func testEventCloseFailureKeepsAccurateDetailBlocksDuplicateAndRetryPersists()", 1
+        )[0]
+        thing_method = source.split(
+            "func testImportedThingFixtureCanOpenThingDetail()", 1
+        )[1].split("\n    @MainActor", 1)[0]
+
+        self.assertEqual(1, source.count("func testEventClosePersistsAndOngoingFilterReflectsRealProjection()"))
+        self.assertEqual(1, source.count("func testImportedThingFixtureCanOpenThingDetail()"))
+        self.assertEqual(2, runtime.count("(0..<16).map(quality"))
+        self.assertIn('identifier: "event.row.quality-event-navigation-08"', event_method)
+        self.assertIn('identifier: "thing.row.quality-thing-navigation-08"', thing_method)
+        for method, top_row in (
+            (event_method, "event.row.quality-event-active"),
+            (thing_method, "thing.row.quality-thing-rich"),
+        ):
+            self.assertIn("collapsed", method)
+            self.assertIn(".doubleTap()", method)
+            self.assertIn(top_row, method)
+            self.assertIn("must actually leave its off-top control position", method)
+
     def test_event_close_convergence_reuses_one_existing_positive_journey_per_platform(self) -> None:
         quality_test = (REPO / "scripts/quality_test.sh").read_text()
         mac_runner = (REPO / "scripts/run_macos_ui_tests.sh").read_text()

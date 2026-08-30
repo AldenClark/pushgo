@@ -2297,6 +2297,37 @@ final class PushGo_iOSUITests: XCTestCase {
         eventsTab.tap()
         let eventRow = element(in: context.app, identifier: "event.row.quality-event-active")
         XCTAssertTrue(eventRow.waitForExistence(timeout: 8))
+        let offscreenEvent = element(
+            in: context.app,
+            identifier: "event.row.quality-event-navigation-08"
+        )
+        let eventList = runtimeQualityScrollableList(in: context.app)
+        for _ in 0..<12 where !offscreenEvent.exists {
+            eventList.swipeUp()
+        }
+        XCTAssertTrue(
+            offscreenEvent.waitForExistence(timeout: 5),
+            "The Event fixture must establish a real off-top position before testing reselection."
+        )
+        XCTAssertFalse(
+            eventRow.exists,
+            "The Events list must remain genuinely away from its newest object before the double-tap."
+        )
+        let collapsedEventsTab = context.app.tabBars.buttons.firstMatch
+        XCTAssertTrue(collapsedEventsTab.waitForExistence(timeout: 5))
+        XCTAssertTrue(collapsedEventsTab.isHittable)
+        collapsedEventsTab.tap()
+        let expandedEventsTab = context.app.tabBars.buttons.element(boundBy: 1)
+        XCTAssertTrue(expandedEventsTab.waitForExistence(timeout: 5))
+        expandedEventsTab.doubleTap()
+        XCTAssertTrue(
+            eventRow.waitForExistence(timeout: 5),
+            "Double-tapping the current Events tab must return to the newest canonical Event."
+        )
+        XCTAssertFalse(
+            offscreenEvent.exists,
+            "The Events list must actually leave its off-top control position."
+        )
         eventRow.tap()
         let detailSheet = element(in: context.app, identifier: "sheet.event.detail")
         XCTAssertTrue(detailSheet.waitForExistence(timeout: 10))
@@ -2329,7 +2360,11 @@ final class PushGo_iOSUITests: XCTestCase {
             detailSheet.waitForNonExistence(timeout: 15),
             "Closing is complete only after the real async action succeeds and the detail dismisses"
         )
-        XCTAssertTrue(eventRow.waitForExistence(timeout: 10))
+        let closedEventRow = element(
+            in: context.app,
+            identifier: "event.row.quality-event-active"
+        )
+        XCTAssertTrue(closedEventRow.waitForExistence(timeout: 10))
         let filters = context.app.buttons["action.events.filters"]
         tapWhenHittable(filters, timeout: 5, message: "Event filters must be an actionable control")
         let ongoingOnly = element(in: context.app, identifier: "filter.events.ongoing")
@@ -2496,6 +2531,37 @@ final class PushGo_iOSUITests: XCTestCase {
         )
         XCTAssertTrue(thingRow.waitForExistence(timeout: 8))
         XCTAssertTrue(distractorRow.waitForExistence(timeout: 8))
+        let offscreenThing = element(
+            in: context.app,
+            identifier: "thing.row.quality-thing-navigation-08"
+        )
+        let thingList = runtimeQualityScrollableList(in: context.app)
+        for _ in 0..<12 where !offscreenThing.exists {
+            thingList.swipeUp()
+        }
+        XCTAssertTrue(
+            offscreenThing.waitForExistence(timeout: 5),
+            "The Thing fixture must establish a real off-top position before testing reselection."
+        )
+        XCTAssertFalse(
+            thingRow.exists,
+            "The Things list must remain genuinely away from its newest object before the double-tap."
+        )
+        let collapsedThingsTab = context.app.tabBars.buttons.firstMatch
+        XCTAssertTrue(collapsedThingsTab.waitForExistence(timeout: 5))
+        XCTAssertTrue(collapsedThingsTab.isHittable)
+        collapsedThingsTab.tap()
+        let expandedThingsTab = element(in: context.app, identifier: "tab.things")
+        XCTAssertTrue(expandedThingsTab.waitForExistence(timeout: 5))
+        expandedThingsTab.doubleTap()
+        XCTAssertTrue(
+            thingRow.waitForExistence(timeout: 5),
+            "Double-tapping the current Things tab must return to the newest canonical Thing."
+        )
+        XCTAssertFalse(
+            offscreenThing.exists,
+            "The Things list must actually leave its off-top control position."
+        )
         tapWhenHittable(
             distractorRow,
             timeout: 8,

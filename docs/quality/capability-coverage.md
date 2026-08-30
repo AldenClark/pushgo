@@ -46,6 +46,8 @@ Gateway 后续请求补充证据：iOS/macOS 既有正向 Gateway 旅程现在�
 
 P1-NAV 当前证据刷新（取代上表该行较早的 `ios-message-navigation-final-pass` 时序收据）：最终对抗审查发现 280ms single 提交早于 320ms double 窗口结束，会让 280–320ms 内的有效第二击产生 unread→top 抖动。Apple/Android 现均在完整 320ms 窗口之后的 340ms 才提交 single；iOS 观察器销毁时还会解除 window gesture。当前 iOS 原业务主链 1/1、97.947 秒、零重试，收据为 `build/quality-results/ios-message-navigation-reviewed-final/run-1-20260831-030035.xcresult`。
 
+P1-NAV Events/Things 当前 Tab 证据（2026-08-31）：两端复用既有 Event close/convergence 与 Thing delete/search/relations/relaunch 正向方法；16 个较旧 App-owned 导航对象经正式 ingestion/projection 形成长列表。iOS 真实滚离顶部后，先点击系统收缩的当前 Tab 使其展开，再双击展开后的当前 Tab；Event 最终 1/1（`build/quality-results/ios-event-navigation-positive-closed-fillers/run-1-20260831-035018.xcresult`），Thing 在两方法结果包中 1/1（`build/quality-results/ios-entity-navigation-positive/run-1-20260831-034619.xcresult`）。Android 使用生产 LazyColumn 的 ScrollToIndex 语义只做确定性准备，真实双击与最新行/深层控制行的可见性反转裁决 2/2，收据 `build/quality-results/android-focused-summary.json`；临时切断 Event top token 后同一用例精确超时于反转 Oracle，随后源文件 SHA-256 完整恢复。没有新增方法、fixture 类型、App 启动或 Lane；冷/无效/已删除目标与物理设备仍 `NOT RUN`，实现与审查同属一个上下文，保留 `common-mode-risk`。
+
 ## 增量规则
 
 新增或改变 Screen、Route、Action、持久字段、系统表面、后台任务、权限或性能敏感路径时，必须更新相应行并运行调用者/数据/平台消费者影响分析。`config/quality-impact.json` 只强制确定性最低 Lane；未映射产品路径阻断，命中路径也不能自动宣称覆盖。

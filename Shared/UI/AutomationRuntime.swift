@@ -3882,7 +3882,7 @@ final class PushGoAutomationRuntime {
                 qualityThingFixture(),
                 qualityEventFixture(thingID: "quality-thing-rich"),
                 qualityEventControlFixture(),
-            ]
+            ] + (0..<16).map(qualityEventNavigationFixture)
             entityRecords = []
             channelSubscriptions = []
         case .thingStandard:
@@ -3893,7 +3893,7 @@ final class PushGoAutomationRuntime {
                 qualityThingDistractorFixture(),
                 qualityThingRelatedEventFixture(),
                 qualityThingRelatedMessageFixture(),
-            ]
+            ] + (0..<16).map(qualityThingNavigationFixture)
             entityRecords = []
             channelSubscriptions = []
         }
@@ -4256,6 +4256,36 @@ final class PushGoAutomationRuntime {
         ]
     }
 
+    private func qualityEventNavigationFixture(index: Int) -> [String: Any] {
+        let suffix = String(format: "%02d", index)
+        let eventID = "quality-event-navigation-\(suffix)"
+        let title = "Navigation Event \(suffix)"
+        let receivedAt = "2026-01-15T07:\(suffix):00Z"
+        return [
+            "id": "00000000-0000-0000-0000-00000000e1\(suffix)",
+            "message_id": "\(eventID)-message",
+            "title": title,
+            "body": "Deterministic off-screen Event used to prove current-tab return-to-top.",
+            "channel_id": "quality-navigation",
+            "is_read": true,
+            "received_at": receivedAt,
+            "raw_payload": [
+                "entity_type": "event",
+                "entity_id": eventID,
+                "event_id": eventID,
+                "event_state": "closed",
+                "status": "closed",
+                "message": "Deterministic off-screen Event used to prove current-tab return-to-top.",
+                "severity": "normal",
+                "event_title": title,
+                "event_message": "Deterministic off-screen Event used to prove current-tab return-to-top.",
+                "event_time": receivedAt,
+                "projection_destination": "event_head",
+            ],
+            "status": "normal",
+        ]
+    }
+
     private func qualityThingFixture() -> [String: Any] {
         [
             "id": "00000000-0000-0000-0000-00000000a001",
@@ -4333,6 +4363,37 @@ final class PushGoAutomationRuntime {
                 "observed_at": "2026-01-15T08:01:30Z",
                 "state": "active",
                 "attrs": "{\"region\":\"eu-west\",\"owner\":\"operations\"}",
+                "projection_destination": "things",
+            ],
+            "status": "normal",
+        ]
+    }
+
+    private func qualityThingNavigationFixture(index: Int) -> [String: Any] {
+        let suffix = String(format: "%02d", index)
+        let thingID = "quality-thing-navigation-\(suffix)"
+        let title = "Navigation Thing \(suffix)"
+        let observedAt = "2026-01-15T07:\(suffix):00Z"
+        return [
+            "id": "00000000-0000-0000-0000-00000000a1\(suffix)",
+            "message_id": "\(thingID)-message",
+            "title": title,
+            "body": "Deterministic off-screen Thing used to prove current-tab return-to-top.",
+            "channel_id": "quality-navigation",
+            "is_read": true,
+            "received_at": observedAt,
+            "raw_payload": [
+                "entity_type": "thing",
+                "entity_id": thingID,
+                "thing_id": thingID,
+                "title": title,
+                "description": "Deterministic off-screen Thing used to prove current-tab return-to-top.",
+                "thing_title": title,
+                "thing_summary": "Deterministic off-screen Thing used to prove current-tab return-to-top.",
+                "op_id": "quality-op-\(thingID)",
+                "delivery_id": "quality-delivery-\(thingID)",
+                "observed_at": observedAt,
+                "state": "active",
                 "projection_destination": "things",
             ],
             "status": "normal",
