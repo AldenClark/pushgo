@@ -1179,6 +1179,11 @@ final class PushGo_iOSUITests: XCTestCase {
         let refreshedTitle = context.app.staticTexts["P2 Refresh Result"]
         XCTAssertTrue(refreshedTitle.waitForExistence(timeout: 8))
         XCTAssertTrue(context.app.staticTexts["P2 Split Seed Message"].exists)
+        assertMessagesTabBadgeCount(
+            2,
+            in: context.app,
+            message: "The provider ingress result must increment the real navigation badge exactly once"
+        )
         refreshedTitle.tap()
         XCTAssertTrue(
             context.app.staticTexts["Persisted through the provider refresh ingress path."]
@@ -1189,6 +1194,11 @@ final class PushGo_iOSUITests: XCTestCase {
         launch(context.app)
         assertQualityRuntimeReady(in: context.app, timeout: 15)
         XCTAssertTrue(context.app.staticTexts["P2 Refresh Result"].waitForExistence(timeout: 8))
+        assertMessagesTabBadgeCount(
+            1,
+            in: context.app,
+            message: "Opening the provider result must persist one remaining unread control message"
+        )
     }
 
     func testMessageRefreshFailureKeepsSnapshotAndRetryRecoversPersistedResult() {
@@ -1517,6 +1527,10 @@ final class PushGo_iOSUITests: XCTestCase {
             thingsVisible: false,
             in: context.app
         )
+        XCTAssertFalse(
+            context.app.tabBars.buttons["tab.messages"].exists,
+            "Hiding Messages must remove the badge-owning navigation destination, not orphan its unread state"
+        )
         assertElementExists("screen.channels", in: context.app, timeout: 8)
 
         context.app.terminate()
@@ -1528,6 +1542,10 @@ final class PushGo_iOSUITests: XCTestCase {
             eventsVisible: false,
             thingsVisible: false,
             in: context.app
+        )
+        XCTAssertFalse(
+            context.app.tabBars.buttons["tab.messages"].exists,
+            "The hidden Messages badge owner must not return after process relaunch"
         )
 
         openSettingsFromChannels(in: context.app)
@@ -1581,6 +1599,11 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(persistedOffThingToggle.isHittable)
         persistedOffThingToggle.tap()
         leaveSettings(in: context.app)
+        assertMessagesTabBadgeCount(
+            1,
+            in: context.app,
+            message: "Restoring Messages must project the still-unread canonical message back into its badge owner"
+        )
         assertDataTabVisibility(
             messagesVisible: true,
             eventsVisible: true,

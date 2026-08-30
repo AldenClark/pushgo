@@ -1476,6 +1476,9 @@ final class PushGo_macOSUITests: XCTestCase {
             identifier: "message.row.00000000-0000-0000-0000-000000000001"
         )
         XCTAssertTrue(originalRow.waitForExistence(timeout: 8))
+        let badge = context.app.staticTexts["sidebar.messages.unread_badge"]
+        XCTAssertTrue(badge.waitForExistence(timeout: 8))
+        XCTAssertEqual(badge.value as? String, "1")
         let refresh = element(in: context.app, identifier: "action.messages.refresh")
         XCTAssertTrue(refresh.waitForExistence(timeout: 5) && refresh.isHittable)
         refresh.click()
@@ -1498,6 +1501,10 @@ final class PushGo_macOSUITests: XCTestCase {
         )
         XCTAssertTrue(originalRow.exists, "Retry must not replace an unrelated canonical message.")
         XCTAssertTrue(
+            waitForValue("2", in: badge, timeout: 8),
+            "The provider ingress result must increment the real sidebar badge exactly once."
+        )
+        XCTAssertTrue(
             (refreshedRow.value as? String)?.contains(
                 "Persisted through the provider refresh ingress path."
             ) == true,
@@ -1512,6 +1519,10 @@ final class PushGo_macOSUITests: XCTestCase {
             context.app.staticTexts["Persisted through the provider refresh ingress path."]
                 .waitForExistence(timeout: 5),
             "The refreshed row did not open its accurate real detail."
+        )
+        XCTAssertTrue(
+            waitForValue("1", in: badge, timeout: 8),
+            "Opening the provider result must leave only the original unread control message."
         )
 
         context.app.terminate()
@@ -1528,6 +1539,9 @@ final class PushGo_macOSUITests: XCTestCase {
                 .waitForExistence(timeout: 8),
             "The provider refresh result did not survive a real process relaunch."
         )
+        let relaunchedBadge = relaunched.app.staticTexts["sidebar.messages.unread_badge"]
+        XCTAssertTrue(relaunchedBadge.waitForExistence(timeout: 8))
+        XCTAssertEqual(relaunchedBadge.value as? String, "1")
     }
 
     @MainActor
@@ -2463,6 +2477,10 @@ final class PushGo_macOSUITests: XCTestCase {
             thingsEntry.waitForNonExistence(timeout: 8),
             "Turning off the Thing page must remove its real navigation destination."
         )
+        XCTAssertTrue(
+            context.app.staticTexts["sidebar.messages.unread_badge"].waitForNonExistence(timeout: 8),
+            "Hiding Messages must remove its badge owner instead of leaving an orphan unread decoration."
+        )
         openSidebarTab("channels", in: context.app)
         assertVisibleScreenThroughUI("screen.channels", in: context.app, timeout: 8)
 
@@ -2484,6 +2502,11 @@ final class PushGo_macOSUITests: XCTestCase {
             element(in: persistedOff.app, identifier: "sidebar-things")
                 .waitForNonExistence(timeout: 8),
             "The hidden Thing page must remain hidden after a full process relaunch."
+        )
+        XCTAssertTrue(
+            persistedOff.app.staticTexts["sidebar.messages.unread_badge"]
+                .waitForNonExistence(timeout: 8),
+            "The hidden Messages badge owner must not return after a full process relaunch."
         )
         openSidebarTab("settings", in: persistedOff.app)
         let persistedOffMessageToggle = element(
@@ -2514,6 +2537,13 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertTrue(
             restoredMessagesEntry.waitForExistence(timeout: 8),
             "Turning the Messages page back on must restore a reachable navigation destination."
+        )
+        let restoredBadge = persistedOff.app.staticTexts["sidebar.messages.unread_badge"]
+        XCTAssertTrue(restoredBadge.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            restoredBadge.value as? String,
+            "1",
+            "Restoring Messages must project the still-unread canonical message back into its badge owner."
         )
         openSidebarTab("messages", in: persistedOff.app)
         assertVisibleScreenThroughUI("screen.messages.list", in: persistedOff.app, timeout: 8)
