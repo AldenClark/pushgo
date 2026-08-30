@@ -184,6 +184,8 @@
 
 139. **预览存在冒充图片可分享攻击**：旧主链只断言图片解码和预览容器出现，文件转码/写入失败、Share 按钮不可达或没有交给系统时仍会绿。现在两端复用同一条准确消息主链：iOS 必须看到真实 `ActivityListView`，macOS 必须看到 `NSSharingServicePicker` 的原生 Menu；两个终点都只在解码后的图片已规范化并写成可消费文件后可达。红方首轮还发现 iOS 预览容器吞掉子操作的辅助语义，`.contain` 修正后同一 Oracle 绿。影响规则也从聚合 Nightly 拆为 `pr/message-media`：iOS 复用固定 PR scope，仅额外提升一条 macOS 标准消息 scope，不再声称 notification-sound。该切片零新增方法/启动，边际约 3–4 秒/端；不以系统面板出现外推某个第三方分享目标已完成，也不展开多图/动画/保存失败矩阵。 残余 `common-mode-risk`：产品接入点、两端 Oracle、影响规则和审查均由同一上下文完成；后续以真实预览改动的漏选率和 flake 校准。
 
+140. **测试直接授权冒充通知权限用户链攻击**：旧 Nightly 在业务旅程内用 `UiAutomation.grantRuntimePermission`，因此通知/PendingIntent 全绿也无法发现拒绝后的 App 提示错误、错误设置入口或返回不刷新。蓝方新增 typed capability 与宿主驱动链：App-owned fixture 完成后退出 instrumentation，以普通宿主触发真实 Android permission controller，点击拒绝；App 必须暴露 title/message/urgency 三类解释，再进入真实 `com.android.settings` 主开关，打开后返回且提示消失；独立语义 verifier 继续对账系统 permission、`NotificationManagerCompat` 和 App Settings banner，现有通知链再证明授权确实可消费。红方第一轮把链留在 `ActivityScenario`，API 37 系统窗被 instrumentation 行为改变而不出现；没有把这一环境差异改成 product fail 或直接 grant，而是更换执行边界。fixture control 仅 debug/Release-like quality variant 启用，受 `android.permission.DUMP` 限制，Release 清单静态为 disabled/non-exported；host 脚本拒绝非 emulator 并验证 session、权限 flags、首次请求偏好与进程清理。API 37 当前 1/1，随后原系统 2/2 回归；Doze、OEM/真机与真实外部 delivery 不外推。残余 `common-mode-risk`：系统资源 ID 与当前 AOSP Settings 契约来自同一 emulator，后续 API/OEM 差异必须归环境能力或专门物理 Lane，不能在日常加入文本/坐标重试矩阵。
+
 ## 归因分析
 
 | 过去症状 | 根因 | 结构修正 | 失败分类 |
