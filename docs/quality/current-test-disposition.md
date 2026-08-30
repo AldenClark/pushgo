@@ -61,7 +61,7 @@
 | delete | `testBaselineAutomationStateHasNoRuntimeErrors` | 无独立用户结果；Runtime 错误转为测试系统状态。 |
 | move | `testRuntimeQualityLargeFixtureLaunchAndListReadiness` | 拆 Store/performance/UI，删除 state/response 自证和 artifact 静默退出。 |
 | move | `testRuntimeQualityReservedMarkdownFixturesStayBelowGatewayBodyLimit` | 移到 Core fixture/parser 合同。 |
-| keep（新增目的级证据） | `testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow` | 从准确旧消息发起正式 Provider Refresh，在 slow/in-flight 时关闭真实主窗口；要求进程继续运行、App 自有状态栏入口仍可达、恢复后仅一个窗口，且经正式 ingress 持久化的新消息精确正文与原控制消息同时可见。复用既有方法、fixture 与启动。 |
+| keep（新增目的级证据） | `testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow` | 从准确旧消息发起正式 Provider Refresh，在 slow/in-flight 时关闭真实主窗口；要求进程继续运行、App 自有状态栏入口仍可达、恢复后仅一个窗口，且经正式 ingress 持久化的新消息精确正文与原控制消息同时可见。恢复后的同一 App/Store 继续以方向键双向穿过 Messages/Events/Things/Channels/Settings，每步核对真实页面 owner，最后回到同一准确消息；复用既有方法、fixture 与启动。当前 1/1、54.561 秒、零重试（`build/quality-results/macos-keyboard-navigation/run-20260831-013627.xcresult`）。 |
 
 ## 已确认的首要缺陷模式
 

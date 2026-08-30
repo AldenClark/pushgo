@@ -1852,6 +1852,32 @@ final class PushGo_macOSUITests: XCTestCase {
             sessionID,
             "Both status-item entry points must preserve the same App-owned session."
         )
+
+        // Reuse the restored functional window for the macOS-only keyboard route.
+        // Each arrow must change the real selection and content owner; focus or an
+        // identifier alone is not accepted as navigation evidence.
+        openSidebarTab("messages", in: context.app)
+        assertVisibleScreenThroughUI("screen.messages.list", in: context.app, timeout: 5)
+        let keyboardDestinations = [
+            "screen.events.list",
+            "screen.things.list",
+            "screen.channels",
+            "screen.settings",
+        ]
+        for screen in keyboardDestinations {
+            context.app.typeKey(.downArrow, modifierFlags: [])
+            assertVisibleScreenThroughUI(screen, in: context.app, timeout: 5)
+        }
+        for screen in keyboardDestinations.dropLast().reversed() {
+            context.app.typeKey(.upArrow, modifierFlags: [])
+            assertVisibleScreenThroughUI(screen, in: context.app, timeout: 5)
+        }
+        context.app.typeKey(.upArrow, modifierFlags: [])
+        assertVisibleScreenThroughUI("screen.messages.list", in: context.app, timeout: 5)
+        XCTAssertTrue(
+            originalRow.waitForExistence(timeout: 5) && originalRow.isHittable,
+            "Keyboard navigation must return to the same accurate canonical Messages content."
+        )
     }
 
     @MainActor

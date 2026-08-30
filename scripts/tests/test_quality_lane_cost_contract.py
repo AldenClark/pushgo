@@ -89,6 +89,15 @@ class QualityLaneCostContractTests(unittest.TestCase):
         self.assertNotIn("minimizedStatusItem.rightClick()", minimize_restore)
         self.assertIn("XCUIIdentifierCloseWindow", method)
         self.assertIn("Open main window", method)
+        self.assertIn('openSidebarTab("messages", in: context.app)', method)
+        self.assertIn("let keyboardDestinations = [", method)
+        self.assertIn('"screen.events.list"', method)
+        self.assertIn('"screen.things.list"', method)
+        self.assertIn('"screen.channels"', method)
+        self.assertIn('"screen.settings"', method)
+        self.assertIn("context.app.typeKey(.downArrow", method)
+        self.assertIn("context.app.typeKey(.upArrow", method)
+        self.assertIn("Keyboard navigation must return to the same accurate canonical Messages content", method)
 
     def test_ios_slow_load_performance_negative_control_reuses_positive_build(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()
