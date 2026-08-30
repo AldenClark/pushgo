@@ -10,7 +10,7 @@ A product result passes only when the test uses a reachable user entry and verif
 
 | Lane | Journey | Product oracle |
 | --- | --- | --- |
-| PR+ | Empty/content/workflow messages | Functional empty state; accurate list/detail; page-size boundary; read state; filters; relaunch |
+| PR+ | Empty/content/workflow messages | Functional empty state; accurate list/detail; exact message URL handoff to Safari and return continuity; page-size boundary; read state; filters; relaunch |
 | PR+ | Search/delete/undo/commit | Exclusion and exact-result sets; accurate detail; immediate suppression; undo restore or real-deadline permanent removal; unrelated control preserved; relaunch |
 | PR+ | Slow/error/refresh | User-visible slow/error states; accurate snapshot retained; provider result persisted; real Retry recovery |
 | PR+ | Primary navigation | One real session reaches the unique Messages, Events, Things, Channels, and Settings destinations, then uses the production Getting Started action to hand off to Safari at `pushgo.dev` |

@@ -27,7 +27,7 @@
 | keep（新增代表性 a11y/l10n/动态导航证据） | `testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation` | 先证明实际 SwiftUI Dynamic Type 为 accessibility5，并在真实 unread=1 下核对系统 Messages Tab 自己拥有“消息”标题和 badge、保留可点宽度、标题区域有可读像素对比度；再点击进入准确消息详情、填写真实频道表单并要求 accepted mutation 生成准确频道行。临时把生产 badge 改成 9 时精确红灯；资源全集由独立合同覆盖，物理 VoiceOver 仍单列。 |
 | delete（已被更强旅程替代） | `testPushSettingsCanOpenDecryptionScreen` | 新解密旅程从真实 Channels→Settings 入口操作 invalid/valid key，核对成功状态、不回显、清除和两种 relaunch；仅打开页面不再进入常规 lane。 |
 | delete（已被更强旅程替代） | `testInvalidServerAddressShowsInlineFeedbackInsteadOfToast` | 新 server 旅程同时覆盖 invalid 不 dismiss、标准化保存、数据换域和 relaunch；只验证错误呈现的弱重复已移出常规 lane。 |
-| rewrite；由新核心旅程替代 | `testFixtureSeedMessagesRefreshesMessageList` | `testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch` 已在同一次 App-owned 主链证明准确行/详情、本地缓存图片真实解码→点击→生产预览以及 relaunch；旧 seed count/state 用例应在后续删除。 |
+| rewrite；由新核心旅程替代 | `testFixtureSeedMessagesRefreshesMessageList` | `testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch` 已在同一次 App-owned 主链证明准确行/详情、生产 Open Link→Safari 展开地址栏后的精确 canonical path→返回同一准确详情、本地缓存图片真实解码→点击→生产预览/系统分享、搜索以及 relaunch；旧 seed count/state 用例应在后续删除。 |
 | rewrite | `testSubmittingPopulatedSearchResultsKeepsAppRunning` | “App 仍运行”过弱；改为目标集合、排除集合、最新 query 和打开准确详情。 |
 | rewrite | `testFixtureSeedEntityRecordsPublishesProjectionCounts`、`testFixtureSeedSubscriptionsPublishesImportState` | 改为真实 Event/Thing/Channel 内容与后续操作；内部 count 只诊断。 |
 | delete（已被更强旅程替代） | `testSettingsPageVisibilityCommandCanHideEventPage`、`testSettingsPageVisibilityCommandCanRoundTripEventPage` | `testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch` 已覆盖真实入口、动作、准确页面和双向 relaunch；旧 command/state 不再进入常规 lane。 |

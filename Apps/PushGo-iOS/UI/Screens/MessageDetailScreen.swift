@@ -208,6 +208,7 @@ struct MessageDetailScreen: View {
                             .buttonStyle(.borderedProminent)
                             .appButtonHeight()
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityIdentifier("action.message.open_link")
 
                             Button {
                                 copyText(safeOpenURL.absoluteString, toastKey: "link_copied")

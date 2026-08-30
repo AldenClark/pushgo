@@ -400,7 +400,52 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(
             seeded.app.staticTexts["Seeded from fixture.seed_messages for UI validation."].exists
         )
+
+        let openLink = scrollToHittableElement(
+            identifier: "action.message.open_link",
+            in: seeded.app
+        )
+        tapWhenHittable(
+            openLink,
+            timeout: 8,
+            message: "The canonical message URL must remain reachable through the production detail action"
+        )
+        let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
+        XCTAssertTrue(
+            safari.wait(for: .runningForeground, timeout: 10),
+            "Opening the canonical message URL must hand off to the real system browser."
+        )
+        let collapsedAddress = safari.descendants(matching: .any)
+            .matching(identifier: "TabBarItemTitle")
+            .firstMatch
+        tapWhenHittable(
+            collapsedAddress,
+            timeout: 8,
+            message: "Safari must let the user expand its domain-only address display"
+        )
+        let browserAddress = safari.textFields.matching(
+            NSPredicate(
+                format: "value ==[c] %@ OR value ==[c] %@",
+                "pushgo.dev/quality-message",
+                "https://pushgo.dev/quality-message"
+            )
+        ).firstMatch
+        XCTAssertTrue(
+            browserAddress.waitForExistence(timeout: 8),
+            "Safari must expose the exact canonical message destination, not merely any web page."
+        )
+        seeded.app.activate()
+        assertElementExists("sheet.message.detail", in: seeded.app, timeout: 8)
+        XCTAssertTrue(
+            seeded.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 5),
+            "Returning from the browser must preserve the same accurate message detail."
+        )
+
         let image = element(in: seeded.app, identifier: "message.image.0")
+        for _ in 0..<6 where !(image.exists && image.isHittable) {
+            seeded.app.scrollViews.firstMatch.swipeDown()
+        }
         tapWhenHittable(
             image,
             timeout: 8,

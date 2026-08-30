@@ -253,6 +253,8 @@
 
 ## 残余风险与进入条件
 
+- **Link/浏览器前台/域名冒充准确 Message URL 消费攻击（iOS）**：URLSanitizer、fixture 中的正确字符串、Link identifier、Safari 前台或收起栏的 `pushgo.dev` 都无法证明用户打开的是目标消息 path；错 route、根域或 Safari 旧页面仍可能绿色。蓝方在既有标准消息主链的准确详情内点击生产 `action.message.open_link`，要求真实 Safari 前台，按用户动作展开地址栏后从系统 TextField 仅接受省略 scheme 或完整 HTTPS 的精确目标，再激活 PushGo 并核对同一详情和准确正文；原 migration、图片分享、搜索与 relaunch 继续通过。首次运行的失败附件证明 iOS 27 收起栏只有域名，因此修复系统 UI Oracle 而没有放宽到域名。反例判别：动作删除/不可点、目标改成根域或其他 path、未发生系统交接、返回状态丢失均在对应终点失败；公网内容/SLA、第三方浏览器、macOS handoff 和网络失败不从本证据外推。最终严格相等当前字节 1/1、63.934 秒、零业务重试（`build/quality-results/ios/run-1-20260830-165818.xcresult`）；同上下文实现/审计保留 `common-mode-risk`。
+
 - macOS 系统自动化认证已解除；既有二十一条 App-owned 核心集有零重试 21/21 聚合证据（`build/quality-results/macos-ui-21-final/run-20260829-120340.xcresult`），后续新增能力均保留 focused 证据而不伪称旧聚合覆盖。历史清理新代表链 macOS 1/1、iOS 最终生产字节 1/1；1-day 过度删除变异精确杀死 iOS Oracle。当前 macOS 清单经删除生命周期去重后为 25 条，尚未重新做 25/25 聚合，因此只声明已运行分项，不把清单存在当全量通过。下一批继续按正向价值优先，不迁移低价值旧脚本。
 - 真实 APNs/FCM/权限/后台/升级只有在具备签名、账号、设备和隔离环境后进入 Release；缺条件即 `BLOCKED`。
 - 固定参考物理设备 runner 已实现，但仍需在专用设备完成至少 10 次 Release 基线并审定 p50/p95 与产品 SLO；当前只有 Simulator 粗退化证据，物理结果仍 `NOT RUN`。

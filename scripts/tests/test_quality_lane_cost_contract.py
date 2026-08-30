@@ -312,11 +312,15 @@ class QualityLaneCostContractTests(unittest.TestCase):
 
     def test_shared_image_preview_reuses_ios_pr_and_adds_only_one_macos_scope(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()
+        ios_source = (REPO / "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift").read_text()
         macos_source = (REPO / "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift").read_text()
         runtime = (REPO / "Shared/UI/AutomationRuntime.swift").read_text()
         handler = runner.split("apple-macos-shared-image-preview-positive)", 1)[1].split(";;", 1)[0]
         standard = "testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch"
-        standard_body = macos_source.split("func " + standard + "()", 1)[1].split("\n    @MainActor", 1)[0]
+        ios_standard_body = ios_source.split("func " + standard + "()", 1)[1].split("\n    func ", 1)[0]
+        macos_standard_body = macos_source.split("func " + standard + "()", 1)[1].split(
+            "\n    @MainActor", 1
+        )[0]
 
         self.assertEqual(1, runner.count("apple-macos-shared-image-preview-positive)"))
         self.assertEqual(1, handler.count(standard))
@@ -325,10 +329,14 @@ class QualityLaneCostContractTests(unittest.TestCase):
         )
         for deferred in ("Failure", "Corrupt", "WrongKey", "Undo", "LocalCommitFailure"):
             self.assertNotIn(deferred, handler)
-        self.assertIn('identifier: "action.message.copy_metadata_value.0"', standard_body)
-        self.assertIn('identifier: "action.message.copy_link"', standard_body)
-        self.assertIn('"quality-fixture"', standard_body)
-        self.assertIn('"https://pushgo.dev/quality-message"', standard_body)
+        self.assertIn('identifier: "action.message.copy_metadata_value.0"', macos_standard_body)
+        self.assertIn('identifier: "action.message.copy_link"', macos_standard_body)
+        self.assertIn('"quality-fixture"', macos_standard_body)
+        self.assertIn('"https://pushgo.dev/quality-message"', macos_standard_body)
+        self.assertIn('identifier: "action.message.open_link"', ios_standard_body)
+        self.assertIn('bundleIdentifier: "com.apple.mobilesafari"', ios_standard_body)
+        self.assertIn('"pushgo.dev/quality-message"', ios_standard_body)
+        self.assertIn('assertElementExists("sheet.message.detail"', ios_standard_body)
         self.assertIn('rawPayload["metadata"] = ["environment": "quality-fixture"]', runtime)
         self.assertIn('message["url"] = "https://pushgo.dev/quality-message"', runtime)
 
