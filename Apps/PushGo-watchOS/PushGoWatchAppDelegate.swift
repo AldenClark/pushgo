@@ -9,6 +9,9 @@ final class PushGoWatchAppDelegate: NSObject, WKApplicationDelegate, UNUserNotif
         UNUserNotificationCenter.current().delegate = self
 
         _ = AppEnvironment.shared
+#if DEBUG
+        guard !WatchQualityRuntime.isHermeticRequested else { return }
+#endif
         WatchSessionBridge.shared.activateIfNeeded()
     }
 

@@ -1041,6 +1041,11 @@ final class AppEnvironment {
             isSceneActive = true
             clearDeliveredSystemNotifications()
             syncBadgeWithUnreadCount()
+#if DEBUG
+            if WatchQualityRuntime.isHermeticRequested {
+                return
+            }
+#endif
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 _ = await self.mergeNotificationIngressInbox(

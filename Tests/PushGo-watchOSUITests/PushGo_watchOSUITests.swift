@@ -82,6 +82,43 @@ final class PushGo_watchOSUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["region"].exists)
         XCTAssertTrue(scrollToElement(app.staticTexts["version"], in: app, maximumSwipes: 2))
         XCTAssertTrue(app.staticTexts["42"].exists)
+
+        pressBack(in: app)
+        let receiverTitle = app.staticTexts["Receiver"]
+        XCTAssertTrue(
+            swipeLeft(to: receiverTitle, in: app),
+            "The Receiver page must remain reachable after the three canonical data pages."
+        )
+        let needsSyncState = app.staticTexts["Needs sync"]
+        XCTAssertTrue(
+            needsSyncState.waitForExistence(timeout: 5),
+            "A data-only hermetic launch must not claim that the unprovisioned receiver is ready."
+        )
+        XCTAssertFalse(app.staticTexts["Ready"].exists)
+        XCTAssertTrue(app.staticTexts["Direct receive"].exists)
+        XCTAssertTrue(
+            scrollToElement(
+                app.staticTexts["Apple Watch stores PushGo deliveries from direct notifications and pull refreshes."],
+                in: app,
+                maximumSwipes: 1
+            )
+        )
+        XCTAssertTrue(
+            scrollToElement(
+                app.staticTexts["If the watch has no cellular service and is away from iPhone and Wi-Fi, messages arrive after it reconnects."],
+                in: app,
+                maximumSwipes: 2
+            )
+        )
+        XCTAssertTrue(app.staticTexts["Offline behavior"].exists)
+        XCTAssertTrue(
+            scrollToElement(
+                app.staticTexts["Keep iPhone nearby when refreshing receiver credentials and subscriptions."],
+                in: app,
+                maximumSwipes: 2
+            )
+        )
+        XCTAssertTrue(app.staticTexts["iPhone sync"].exists)
     }
 
     func testLegacyWatchStoreMigratesAccurateMessageAndKeepsNewDataAcrossRelaunch() {
@@ -212,10 +249,10 @@ final class PushGo_watchOSUITests: XCTestCase {
         in app: XCUIApplication,
         maximumSwipes: Int
     ) -> Bool {
-        if element.exists { return true }
+        if element.exists, element.isHittable { return true }
         for _ in 0..<maximumSwipes {
             app.swipeUp()
-            if element.waitForExistence(timeout: 1) {
+            if element.waitForExistence(timeout: 1), element.isHittable {
                 return true
             }
         }
