@@ -217,6 +217,10 @@ struct LocalDataStoreTests {
 	                    "description": "Original thing body",
 	                    "attrs": #"{"pressure":"ok","rpm":"40"}"#,
 	                    "metadata": #"{"owner":"ops","site":"sha"}"#,
+	                    "external_ids": #"{"asset":"asset-42","serial":"legacy-serial"}"#,
+	                    "tags": ["legacy-tag"],
+	                    "location_type": "legacy-zone",
+	                    "location_value": "legacy-rack-9",
 	                    "observed_at": "1800010000000",
 	                ]
 	            )
@@ -232,18 +236,60 @@ struct LocalDataStoreTests {
 	                    "thing_id": "thing-head-patch-001",
 	                    "attrs": #"{"pressure":null,"rpm":"50"}"#,
 	                    "metadata": #"{"owner":"noc","site":null}"#,
+	                    "external_ids": #"{"serial":null}"#,
+	                    "tags": [],
+	                    "location": NSNull(),
 	                    "observed_at": "1800010020000",
 	                ]
 	            )
+	            let legacyLocationCreate = makeMessage(
+	                messageId: "thing-location-alias-create",
+	                notificationRequestId: "req-thing-location-alias-create",
+	                title: "Location alias create",
+	                body: "Location alias create",
+	                receivedAt: Date(timeIntervalSince1970: 1_800_010_000),
+	                rawPayload: [
+	                    "entity_type": "thing",
+	                    "entity_id": "thing-location-alias-001",
+	                    "thing_id": "thing-location-alias-001",
+	                    "location": ["type": "nested-zone", "value": "nested-rack"],
+	                    "observed_at": "1800010000000",
+	                ]
+	            )
+	            let legacyLocationPatch = makeMessage(
+	                messageId: "thing-location-alias-update",
+	                notificationRequestId: "req-thing-location-alias-update",
+	                title: "Location alias update",
+	                body: "Location alias update",
+	                receivedAt: Date(timeIntervalSince1970: 1_800_010_030),
+	                rawPayload: [
+	                    "entity_type": "thing",
+	                    "entity_id": "thing-location-alias-001",
+	                    "thing_id": "thing-location-alias-001",
+	                    "location_type": "flat-zone",
+	                    "location_value": "flat-rack",
+	                    "observed_at": "1800010030000",
+	                ]
+	            )
 
-	            try await store.saveEntityRecords([eventCreate, eventPatch, thingCreate, thingPatch])
+	            try await store.saveEntityRecords([
+	                eventCreate,
+	                eventPatch,
+	                thingCreate,
+	                thingPatch,
+	                legacyLocationCreate,
+	                legacyLocationPatch,
+	            ])
 
 	            let eventHeads = try await store.loadEventMessagesForProjection()
 	            let thingHeads = try await store.loadThingMessagesForProjection()
 	            #expect(eventHeads.count == 1)
-	            #expect(thingHeads.count == 1)
+	            #expect(thingHeads.count == 2)
 	            let eventHead = try #require(eventHeads.first)
-	            let thingHead = try #require(thingHeads.first)
+	            let thingHead = try #require(thingHeads.first(where: { $0.thingId == "thing-head-patch-001" }))
+	            let legacyLocationHead = try #require(
+	                thingHeads.first(where: { $0.thingId == "thing-location-alias-001" })
+	            )
 
 	            #expect(eventHead.title == "Original event")
 	            #expect(eventHead.body == "Original event body")
@@ -255,6 +301,13 @@ struct LocalDataStoreTests {
 	            #expect(normalizedPayloadJSONObject(thingHead.rawPayload["attrs"]?.value) == #"{"rpm":"50"}"#)
 	            #expect(normalizedPayloadJSONObject(thingHead.rawPayload["metadata"]?.value) == #"{"owner":"noc"}"#)
 	            #expect(thingHead.metadata["owner"] == "noc")
+	            #expect(normalizedPayloadJSONObject(thingHead.rawPayload["external_ids"]?.value) == #"{"asset":"asset-42"}"#)
+	            #expect((thingHead.rawPayload["tags"]?.value as? [Any])?.isEmpty == true)
+	            #expect(thingHead.rawPayload["location_type"] == nil)
+	            #expect(thingHead.rawPayload["location_value"] == nil)
+	            #expect(legacyLocationHead.rawPayload["location"] == nil)
+	            #expect(legacyLocationHead.rawPayload["location_type"]?.value as? String == "flat-zone")
+	            #expect(legacyLocationHead.rawPayload["location_value"]?.value as? String == "flat-rack")
 	        }
 	    }
 

@@ -20,7 +20,7 @@
 | keep（已迁移） | `testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail` | 输入错误查询证明排除集合，再输入目标查询并打开准确正文；替代“App 没崩”Oracle。 |
 | keep（已迁移） | `testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch` | 从真实详情删除，验证行立即隐藏、Undo 可操作、重启后 canonical 对象仍在。 |
 | keep（新增目的级证据） | `testQualityMessageDeleteWithoutUndoPermanentlyRemovesOnlyTargetAcrossRelaunch` | 从准确目标详情删除但不撤销，等待生产 5 秒 deadline 自行提交；要求目标永久消失、无关控制消息字段准确，并在完整 App relaunch 后保持该差异。 |
-| keep（已迁移） | `testImportedEventFixtureCanOpenEventDetail`、`testImportedThingFixtureCanOpenThingDetail` | 已改为 App-owned 内置 fixture，走真实消息摄入/投影并点击 Tab、列表行、详情字段；不以 response/events 文件作最终 Oracle。 |
+| keep（已迁移） | `testImportedEventFixtureCanOpenEventDetail`、`testImportedThingFixtureCanOpenThingDetail` | 已改为 App-owned 内置 fixture，走真实消息摄入/投影并点击 Tab、列表行、详情字段；不以 response/events 文件作最终 Oracle。Thing populated/empty UI 与快速 canonical-head patch 合同组合覆盖 tags/location/metadata/external IDs 的显示和显式清空，避免为每个字段复制设备 UI。 |
 | keep（已迁移并扩成目的闭环） | `testEventClosePersistsAndOngoingFilterReflectsRealProjection` | 同一现有正向方法先取消关闭并要求详情仍 ongoing，再确认关闭；关闭载荷经正式通知解析与 canonical projection 更新，随后核对列表、仅 ongoing 筛选排除、Thing 关联详情、准确时间线以及普通 relaunch 后 closed/时间线保持且关闭动作不复活。Runtime marker 只负责准备归因，不能替代任一产品终点。 |
 | keep（已迁移） | `testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch` | 同一条正向旅程从真实 Channels→Settings 入口同时操作 Events/Things 开关，验证两个入口真实减少且 Channels 仍可用、恢复后分别可达准确功能空态，并在关闭和恢复后分别 relaunch 核对持久化；替代 Runtime command/state 用例，没有新增设备启动或边缘方法。 |
 | keep（新增目的级证据） | `testEncryptedMessageRecoversAfterConfiguringKeyAndSurvivesRelaunch` | 合成密文先经正式通知摄入进入 App-owned Store；用户从真实消息详情进入解密设置并保存匹配格式的合法 Key，最终核对原消息的准确标题/正文、成功状态和 relaunch 持久化。configured 标记、fixture marker 和密钥文件均不是终点。 |

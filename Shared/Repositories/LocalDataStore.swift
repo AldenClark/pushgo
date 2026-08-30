@@ -5793,6 +5793,15 @@ private actor GRDBStore {
 	            return incomingRaw
 	        }
 	        var merged = jsonObject(fromJSONString: existingRaw) ?? [:]
+	        if incoming.keys.contains("location") {
+	            // Nested location is the canonical patch representation. A null
+	            // value clears the logical pair, including legacy flat aliases.
+	            merged.removeValue(forKey: "location_type")
+	            merged.removeValue(forKey: "location_value")
+	        } else if incoming.keys.contains("location_type") || incoming.keys.contains("location_value") {
+	            // A legacy flat patch supersedes an older nested representation.
+	            merged.removeValue(forKey: "location")
+	        }
 	        for (key, value) in incoming {
 	            if blankTextPatchPayloadKeys.contains(key),
 	               let text = value as? String,

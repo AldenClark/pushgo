@@ -115,7 +115,7 @@ Platform vector order is `I / M / D / W` (iOS, macOS, Android, watchOS). `-` mea
 | 1369 | Patch/out-of-order canonical head | V/V/V/- | `V` | Store/property contracts prevent old updates overwriting the current head. |
 | 1370 | Search location/external IDs/attrs/related text | V/V/V/- | `V` | Store field matrix plus exact representative UI object. |
 | 1371 | Overview and real Events/Messages/Updates tabs | V/V/V/- | `V` | Three actual relation collections, order, details and relaunch are checked. |
-| 1372 | Tags/location/metadata values, empty and clear | P/P/P/- | `P` | Value rendering and representative Empty states are covered; tombstone/explicit field-clear convergence is still an identified Store-to-UI gap. |
+| 1372 | Tags/location/metadata values, empty and clear | V/V/V/- | `V` | Existing UI journeys cover populated and empty Thing surfaces. Fast canonical-head contracts now prove tags empty arrays, metadata/external-ID key tombstones and nested/flat location replacement or clear cannot leave stale searchable/displayable values. Apple retained receipt: `build/quality-results/apple-thing-field-clear-final.log`; Android retained receipt: `build/quality-results/android-thing-field-clear-final.log`. Object deletion tombstones remain a distinct deferred capability. |
 | 1381 | macOS split-view selection | -/V/-/- | `V` | Exact selected row and detail identity. |
 
 ## 25.8 Channels
@@ -213,14 +213,14 @@ Platform vector order is `I / M / D / W` (iOS, macOS, Android, watchOS). `-` mea
 
 The design contains 103 P0/P0 Release rows. This audit deliberately does **not** declare section 21.2(1) complete:
 
-- 82 rows are currently classified `V`; 1 conditional export row is `NA` because the product capability was explicitly removed.
-- 12 rows remain `P` and require semantic closure, an explicit product-scope correction, or an externally owned sub-gate.
+- 83 rows are currently classified `V`; 1 conditional export row is `NA` because the product capability was explicitly removed.
+- 11 rows remain `P` and require semantic closure, an explicit product-scope correction, or an externally owned sub-gate.
 - Two platform sub-results are explicitly `B`: iOS Channel Pasteboard and macOS notification interaction. Neither is hidden inside a green aggregate.
 - 8 P0 Release/external rows remain `N`; local Simulator/emulator evidence is retained but never promoted to physical/provider acceptance.
 
 The next implementation order is constrained by value and reuse:
 
-1. Audit rows 1372, 1391, 1395 and 1411 against existing tests and product reachability; prefer documenting already-real evidence or low-level parameterization over device matrices.
+1. Audit rows 1391, 1395 and 1411 against existing tests and product reachability; prefer documenting already-real evidence or low-level parameterization over device matrices.
 2. Add one representative macOS and Android documentation system handoff for row 1421 only if it can reuse existing Settings/navigation journeys. Keep all page×locale correctness in fast contracts.
 3. Keep physical/provider/watch-media/accessibility items in their explicit Release/owner lanes. They cannot displace locally reachable positive P0 work and cannot be turned green with mocks.
 
