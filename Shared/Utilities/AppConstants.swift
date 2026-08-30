@@ -219,6 +219,7 @@ struct PushGoQualitySessionDescriptor: Codable, Equatable, Sendable {
     let messageRefreshScenario: PushGoQualityMessageRefreshScenario
     let eventCloseScenario: PushGoQualityEventCloseScenario
     let channelMutationScenario: PushGoQualityChannelMutationScenario
+    let expectedChannelMutationGatewayURL: String?
     let legacyStore: PushGoQualityLegacyStore?
     let allowsSystemColdLaunch: Bool
 
@@ -230,6 +231,7 @@ struct PushGoQualitySessionDescriptor: Codable, Equatable, Sendable {
         messageRefreshScenario: PushGoQualityMessageRefreshScenario = .none,
         eventCloseScenario: PushGoQualityEventCloseScenario = .none,
         channelMutationScenario: PushGoQualityChannelMutationScenario = .none,
+        expectedChannelMutationGatewayURL: String? = nil,
         legacyStore: PushGoQualityLegacyStore? = nil,
         allowsSystemColdLaunch: Bool = false
     ) {
@@ -240,6 +242,7 @@ struct PushGoQualitySessionDescriptor: Codable, Equatable, Sendable {
         self.messageRefreshScenario = messageRefreshScenario
         self.eventCloseScenario = eventCloseScenario
         self.channelMutationScenario = channelMutationScenario
+        self.expectedChannelMutationGatewayURL = expectedChannelMutationGatewayURL
         self.legacyStore = legacyStore
         self.allowsSystemColdLaunch = allowsSystemColdLaunch
     }
@@ -252,6 +255,7 @@ struct PushGoQualitySessionDescriptor: Codable, Equatable, Sendable {
         case messageRefreshScenario = "message_refresh_scenario"
         case eventCloseScenario = "event_close_scenario"
         case channelMutationScenario = "channel_mutation_scenario"
+        case expectedChannelMutationGatewayURL = "expected_channel_mutation_gateway_url"
         case legacyStore = "legacy_store"
         case allowsSystemColdLaunch = "allows_system_cold_launch"
     }
@@ -275,6 +279,10 @@ struct PushGoQualitySessionDescriptor: Codable, Equatable, Sendable {
             PushGoQualityChannelMutationScenario.self,
             forKey: .channelMutationScenario
         ) ?? .none
+        expectedChannelMutationGatewayURL = try container.decodeIfPresent(
+            String.self,
+            forKey: .expectedChannelMutationGatewayURL
+        )
         legacyStore = try container.decodeIfPresent(
             PushGoQualityLegacyStore.self,
             forKey: .legacyStore

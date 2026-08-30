@@ -3036,10 +3036,12 @@ final class PushGo_macOSUITests: XCTestCase {
     @MainActor
     func testGatewayCandidateMustRegisterBeforeCommitAndPersistsAfterRelaunch() {
         let sessionID = "macos-settings-server-\(UUID().uuidString.lowercased())"
+        let normalizedAddress = "https://quality-macos-settings.invalid/api"
         let context = configuredQualityApp(
             sessionID: sessionID,
             fixture: "channels.standard",
-            channelMutationScenario: "accepted"
+            channelMutationScenario: "accepted",
+            expectedChannelMutationGatewayURL: normalizedAddress
         )
         launchQuality(context, sessionID: sessionID)
 
@@ -3080,7 +3082,6 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertTrue(credentialField.waitForExistence(timeout: 5))
         let originalAddress = (addressField.value as? String) ?? ""
         XCTAssertFalse(originalAddress.isEmpty)
-        let normalizedAddress = "https://quality-macos-settings.invalid/api"
         replaceText(in: addressField, with: "\(normalizedAddress)/")
         element(in: context.app, identifier: "action.settings.server.save").click()
         XCTAssertTrue(
@@ -3093,12 +3094,30 @@ final class PushGo_macOSUITests: XCTestCase {
             originalChannel.waitForNonExistence(timeout: 8),
             "Accepted gateway replacement must immediately scope data away from the old gateway."
         )
+        element(in: context.app, identifier: "action.channels.add").click()
+        let createName = element(in: context.app, identifier: "field.channels.create.name")
+        let createPassword = element(in: context.app, identifier: "field.channels.create.password")
+        XCTAssertTrue(createName.waitForExistence(timeout: 8))
+        replaceTextUsingPasteboard(in: createName, with: "New Gateway Channel")
+        XCTAssertTrue(createPassword.waitForExistence(timeout: 5))
+        replaceSecureText(in: createPassword, with: "qualityx")
+        element(in: context.app, identifier: "action.channels.entry.submit").click()
+        let createdChannel = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000003"
+        )
+        XCTAssertTrue(
+            createdChannel.waitForExistence(timeout: 8),
+            "A post-commit Channel operation must reach the newly active gateway and persist its exact result."
+        )
+        XCTAssertTrue(createdChannel.label.contains("New Gateway Channel"))
 
         context.app.terminate()
         let relaunched = configuredQualityApp(
             sessionID: sessionID,
             fixture: "channels.standard",
-            channelMutationScenario: "accepted"
+            channelMutationScenario: "accepted",
+            expectedChannelMutationGatewayURL: normalizedAddress
         )
         launchQuality(relaunched, sessionID: sessionID)
         openSidebarTab("channels", in: relaunched.app)
@@ -3108,6 +3127,13 @@ final class PushGo_macOSUITests: XCTestCase {
                 identifier: "channel.row.01H00000000000000000000001"
             ).waitForNonExistence(timeout: 8),
             "Relaunch must not reload channel data owned by the previous gateway."
+        )
+        XCTAssertTrue(
+            element(
+                in: relaunched.app,
+                identifier: "channel.row.01H00000000000000000000003"
+            ).waitForExistence(timeout: 8),
+            "The exact post-switch Channel result must remain owned by the new gateway after relaunch."
         )
         openSidebarTab("settings", in: relaunched.app)
         element(in: relaunched.app, identifier: "action.settings.server_management").click()
@@ -4014,6 +4040,7 @@ final class PushGo_macOSUITests: XCTestCase {
         messageRefreshScenario: String? = nil,
         eventCloseScenario: String? = nil,
         channelMutationScenario: String? = nil,
+        expectedChannelMutationGatewayURL: String? = nil,
         allowCrossAppDataAccess: Bool = false,
         skipPushAuthorization: Bool = true
     ) -> LaunchContext {
@@ -4051,7 +4078,8 @@ final class PushGo_macOSUITests: XCTestCase {
                 failNotificationMaterialPersistenceOnce: failNotificationMaterialPersistenceOnce,
                 messageRefreshScenario: messageRefreshScenario,
                 eventCloseScenario: eventCloseScenario,
-                channelMutationScenario: channelMutationScenario
+                channelMutationScenario: channelMutationScenario,
+                expectedChannelMutationGatewayURL: expectedChannelMutationGatewayURL
             ),
             for: "PUSHGO_QUALITY_SESSION_BASE64",
             in: app
@@ -4183,7 +4211,8 @@ final class PushGo_macOSUITests: XCTestCase {
         failNotificationMaterialPersistenceOnce: Bool = false,
         messageRefreshScenario: String? = nil,
         eventCloseScenario: String? = nil,
-        channelMutationScenario: String? = nil
+        channelMutationScenario: String? = nil,
+        expectedChannelMutationGatewayURL: String? = nil
     ) -> String {
         var faults: [String: Any] = [
             "fail_local_store_initialization": failLocalStoreInitialization,
@@ -4221,6 +4250,9 @@ final class PushGo_macOSUITests: XCTestCase {
         }
         if let channelMutationScenario {
             payload["channel_mutation_scenario"] = channelMutationScenario
+        }
+        if let expectedChannelMutationGatewayURL {
+            payload["expected_channel_mutation_gateway_url"] = expectedChannelMutationGatewayURL
         }
         let data = try! JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
         return data.base64EncodedString()

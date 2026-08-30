@@ -14,19 +14,24 @@ import UserNotifications
 @MainActor
 final class QualityChannelAutomationRoundTrip: ChannelMutationRoundTrip, ChannelSubscriptionSyncRoundTrip {
     private let scenario: PushGoQualityChannelMutationScenario
+    private let expectedGatewayURL: String?
     private var subscribeAttempts = 0
     private var renameAttempts = 0
     private var activeCreatedChannelIDs = Set<String>()
 
-    init(scenario: PushGoQualityChannelMutationScenario) {
+    init(scenario: PushGoQualityChannelMutationScenario, expectedGatewayURL: String? = nil) {
         self.scenario = scenario
+        self.expectedGatewayURL = expectedGatewayURL?.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     }
 
     func subscribe(
+        baseURL: URL,
+        token: String?,
         channelId: String?,
         channelName: String?,
         credential: String
     ) async throws -> ChannelSubscriptionService.SubscribePayload {
+        try requireExpectedGateway(baseURL)
         guard !credential.isEmpty else {
             throw AppError.typedLocal(
                 code: "quality_channel_credential_required",
@@ -69,10 +74,13 @@ final class QualityChannelAutomationRoundTrip: ChannelMutationRoundTrip, Channel
     }
 
     func rename(
+        baseURL: URL,
+        token: String?,
         channelId: String,
         channelName: String,
         credential: String
     ) async throws -> ChannelSubscriptionService.RenamePayload {
+        try requireExpectedGateway(baseURL)
         guard !credential.isEmpty else {
             throw AppError.typedLocal(
                 code: "quality_channel_credential_required",
@@ -97,7 +105,8 @@ final class QualityChannelAutomationRoundTrip: ChannelMutationRoundTrip, Channel
         )
     }
 
-    func unsubscribe(channelId: String) async throws {
+    func unsubscribe(baseURL: URL, token: String?, channelId: String) async throws {
+        try requireExpectedGateway(baseURL)
         guard !channelId.isEmpty else {
             throw AppError.typedLocal(
                 code: "quality_channel_id_required",
@@ -106,6 +115,19 @@ final class QualityChannelAutomationRoundTrip: ChannelMutationRoundTrip, Channel
             )
         }
         activeCreatedChannelIDs.remove(channelId)
+    }
+
+    private func requireExpectedGateway(_ baseURL: URL) throws {
+        guard let expectedGatewayURL else { return }
+        let actual = baseURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard actual == expectedGatewayURL else {
+            throw AppError.typedLocal(
+                code: "quality_channel_wrong_gateway",
+                category: .internalError,
+                message: "The channel operation was routed through the wrong gateway.",
+                detail: "expected=\(expectedGatewayURL); actual=\(actual)"
+            )
+        }
     }
 
     func sync(

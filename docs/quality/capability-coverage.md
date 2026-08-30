@@ -42,6 +42,8 @@
 | I/M Export candidate | 导出消息文件 | reachable/cancel/failure/large | JSON/file consumer | product reachability review | 删除候选；不投入本轮预算 | Settings export helpers |
 | M MenuBar content (removed) | 在菜单栏浏览未读 | mounted/loading/empty/error | MenuBar VM/Store | source reachability review | 已裁决删除：生产无挂载入口，且旧 ViewModel 用 `try?` 把数据库失败伪装成空态；不把死代码算能力，若未来重新引入必须先定义可达交互与目的 Oracle | 无当前 owner |
 
+Gateway 后续请求补充证据：iOS/macOS 既有正向 Gateway 旅程现在把生产 `ChannelMutationRoundTrip` 的 `baseURL/token` 纳入边界，并由 App-owned fake 对精确新 Gateway URL 做敏感裁决。用户完成候选验证/注册与提交后，旅程立即通过生产频道 UI 创建 `New Gateway Channel`，要求准确 canonical 行出现；普通进程重启后旧 Gateway 的频道仍不得回流，新频道必须继续存在。当前 macOS 1/1、53.550 秒（`build/quality-results/macos-gateway-post-commit/run-20260831-014545.xcresult`），iOS 专用 Simulator 1/1、108.439 秒（`build/quality-results/ios-gateway-post-commit/run-1-20260831-014803.xcresult`），均零重试。这证明 Apple 受控 transport boundary 的提交后请求归属，不外推真实公网 Gateway、Android parity 或物理设备网络。
+
 ## 增量规则
 
 新增或改变 Screen、Route、Action、持久字段、系统表面、后台任务、权限或性能敏感路径时，必须更新相应行并运行调用者/数据/平台消费者影响分析。`config/quality-impact.json` 只强制确定性最低 Lane；未映射产品路径阻断，命中路径也不能自动宣称覆盖。

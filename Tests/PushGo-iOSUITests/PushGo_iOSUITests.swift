@@ -1616,10 +1616,12 @@ final class PushGo_iOSUITests: XCTestCase {
     func testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch() {
         let context = configuredLaunchContext()
         let sessionID = "ios-settings-server-\(UUID().uuidString.lowercased())"
+        let normalizedAddress = "https://quality-settings.invalid/api"
         let encodedSession = qualitySessionPayload(
             sessionID: sessionID,
             fixture: "channels.standard",
-            channelMutationScenario: "accepted"
+            channelMutationScenario: "accepted",
+            expectedChannelMutationGatewayURL: normalizedAddress
         )
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
         launch(context.app)
@@ -1666,7 +1668,6 @@ final class PushGo_iOSUITests: XCTestCase {
         )
         credentialField = context.app.secureTextFields.matching(identifier: gatewayFieldID).firstMatch
         XCTAssertTrue(credentialField.waitForExistence(timeout: 5))
-        let normalizedAddress = "https://quality-settings.invalid/api"
         replaceText(in: addressField, with: "\(normalizedAddress)/")
         addressField.typeKey(XCUIKeyboardKey.return.rawValue, modifierFlags: [])
         tapWhenHittable(
@@ -1683,6 +1684,28 @@ final class PushGo_iOSUITests: XCTestCase {
                 .waitForNonExistence(timeout: 8),
             "Changing servers must immediately scope channel data to the new gateway"
         )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channels.add"),
+            timeout: 8
+        )
+        let createName = element(in: context.app, identifier: "field.channels.create.name")
+        let createPassword = element(in: context.app, identifier: "field.channels.create.password")
+        XCTAssertTrue(createName.waitForExistence(timeout: 8))
+        replaceText(in: createName, with: "New Gateway Channel")
+        enterSecureText(in: createPassword, with: "qualityx")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channels.entry.submit"),
+            timeout: 8
+        )
+        let createdChannel = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000003"
+        )
+        XCTAssertTrue(
+            createdChannel.waitForExistence(timeout: 8),
+            "A post-commit Channel operation must use the newly active Gateway transport."
+        )
+        XCTAssertTrue(createdChannel.label.contains("New Gateway Channel"))
 
         context.app.terminate()
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
@@ -1695,6 +1718,13 @@ final class PushGo_iOSUITests: XCTestCase {
                 identifier: "channel.row.01H00000000000000000000001"
             ).waitForNonExistence(timeout: 8),
             "Relaunch must not reload channel data owned by the previous gateway"
+        )
+        XCTAssertTrue(
+            element(
+                in: context.app,
+                identifier: "channel.row.01H00000000000000000000003"
+            ).waitForExistence(timeout: 8),
+            "The exact post-switch Channel result must remain under the new gateway after relaunch."
         )
         openSettingsFromChannels(in: context.app)
         tapWhenHittable(
@@ -3952,7 +3982,8 @@ final class PushGo_iOSUITests: XCTestCase {
         failChannelSubscriptionPersistenceOnce: Bool = false,
         messageRefreshScenario: String? = nil,
         eventCloseScenario: String? = nil,
-        channelMutationScenario: String? = nil
+        channelMutationScenario: String? = nil,
+        expectedChannelMutationGatewayURL: String? = nil
     ) -> String {
         var faults: [String: Any] = [
             "fail_local_store_initialization": failLocalStoreInitialization,
@@ -3984,6 +4015,7 @@ final class PushGo_iOSUITests: XCTestCase {
             .merging(messageRefreshScenario.map { ["message_refresh_scenario": $0] } ?? [:]) { _, new in new }
             .merging(eventCloseScenario.map { ["event_close_scenario": $0] } ?? [:]) { _, new in new }
             .merging(channelMutationScenario.map { ["channel_mutation_scenario": $0] } ?? [:]) { _, new in new }
+            .merging(expectedChannelMutationGatewayURL.map { ["expected_channel_mutation_gateway_url": $0] } ?? [:]) { _, new in new }
         let data = try! JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
         return data.base64EncodedString()
     }

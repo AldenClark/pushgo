@@ -159,16 +159,19 @@ struct QualityRuntimeProfileTests {
 
     @Test("decodes the typed channel mutation round trip")
     func decodesChannelMutationScenario() throws {
+        let expectedGatewayURL = "https://quality-settings.invalid/api"
         let encoded = try encodedSession(
             sessionID: "channel-mutation-result",
             fixture: "channels.standard",
-            channelMutationScenario: "accepted"
+            channelMutationScenario: "accepted",
+            expectedChannelMutationGatewayURL: expectedGatewayURL
         )
 
         let descriptor = try PushGoAutomationContext.decodeQualitySession(encoded)
 
         #expect(descriptor.fixture == .channelsStandard)
         #expect(descriptor.channelMutationScenario == .accepted)
+        #expect(descriptor.expectedChannelMutationGatewayURL == expectedGatewayURL)
     }
 
     @Test("decodes channel rejection and compensation scenarios")
@@ -435,6 +438,7 @@ struct QualityRuntimeProfileTests {
         messageRefreshScenario: String? = nil,
         eventCloseScenario: String? = nil,
         channelMutationScenario: String? = nil,
+        expectedChannelMutationGatewayURL: String? = nil,
         legacyStore: String? = nil,
         allowsSystemColdLaunch: Bool = false
     ) throws -> String {
@@ -454,6 +458,9 @@ struct QualityRuntimeProfileTests {
         }
         if let channelMutationScenario {
             payload["channel_mutation_scenario"] = channelMutationScenario
+        }
+        if let expectedChannelMutationGatewayURL {
+            payload["expected_channel_mutation_gateway_url"] = expectedChannelMutationGatewayURL
         }
         if let legacyStore {
             payload["legacy_store"] = legacyStore

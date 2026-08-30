@@ -3,16 +3,20 @@ import Foundation
 @MainActor
 protocol ChannelMutationRoundTrip {
     func subscribe(
+        baseURL: URL,
+        token: String?,
         channelId: String?,
         channelName: String?,
         credential: String
     ) async throws -> ChannelSubscriptionService.SubscribePayload
     func rename(
+        baseURL: URL,
+        token: String?,
         channelId: String,
         channelName: String,
         credential: String
     ) async throws -> ChannelSubscriptionService.RenamePayload
-    func unsubscribe(channelId: String) async throws
+    func unsubscribe(baseURL: URL, token: String?, channelId: String) async throws
 }
 
 @MainActor
@@ -88,6 +92,8 @@ final class ChannelSubscriptionController {
 
         let payload = if let channelMutationRoundTrip {
             try await channelMutationRoundTrip.rename(
+                baseURL: config.baseURL,
+                token: config.token,
                 channelId: normalizedId,
                 channelName: normalizedAlias,
                 credential: password
@@ -115,7 +121,11 @@ final class ChannelSubscriptionController {
         let gatewayKey = config.gatewayKey
         let normalized = try ChannelIdValidator.normalize(channelId)
         if let channelMutationRoundTrip {
-            try await channelMutationRoundTrip.unsubscribe(channelId: normalized)
+            try await channelMutationRoundTrip.unsubscribe(
+                baseURL: config.baseURL,
+                token: config.token,
+                channelId: normalized
+            )
         } else {
             let token = try await channelSyncController.ensureActivePushToken(serverConfig: config)
             let deviceKey = try await providerRouteController.ensureProviderRoute(
@@ -384,7 +394,11 @@ final class ChannelSubscriptionController {
         channelId: String
     ) async throws -> String {
         if let channelMutationRoundTrip {
-            try await channelMutationRoundTrip.unsubscribe(channelId: channelId)
+            try await channelMutationRoundTrip.unsubscribe(
+                baseURL: config.baseURL,
+                token: config.token,
+                channelId: channelId
+            )
             return ""
         }
         let token = try await channelSyncController.ensureActivePushToken(serverConfig: config)
@@ -409,6 +423,8 @@ final class ChannelSubscriptionController {
     ) async throws -> ChannelSubscriptionService.SubscribePayload {
         if let channelMutationRoundTrip {
             return try await channelMutationRoundTrip.subscribe(
+                baseURL: config.baseURL,
+                token: config.token,
                 channelId: channelId,
                 channelName: alias,
                 credential: password

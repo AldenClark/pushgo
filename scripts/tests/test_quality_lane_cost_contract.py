@@ -334,6 +334,7 @@ class QualityLaneCostContractTests(unittest.TestCase):
         runner = (REPO / "scripts/quality_test.sh").read_text()
         test_source = (REPO / "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift").read_text()
         runtime = (REPO / "Shared/UI/AutomationRuntime.swift").read_text()
+        channel_controller = (REPO / "Shared/Application/ChannelSubscriptionController.swift").read_text()
         badge_helper = test_source.split(
             "private func assertMessagesTabBadgeCount(", 1
         )[1].split("private func messagesTabBadgeCount(", 1)[0]
@@ -352,6 +353,15 @@ class QualityLaneCostContractTests(unittest.TestCase):
         self.assertNotIn('let messagesTab = app.buttons["tab.messages"]', badge_helper)
         self.assertNotIn("failGatewaySwitchValidationOnce", positive_gateway)
         self.assertNotIn("not a valid url", positive_gateway)
+        self.assertIn("expectedChannelMutationGatewayURL: normalizedAddress", positive_gateway)
+        self.assertIn('identifier: "action.channels.add"', positive_gateway)
+        self.assertIn('identifier: "channel.row.01H00000000000000000000003"', positive_gateway)
+        self.assertIn("The exact post-switch Channel result must remain", positive_gateway)
+        self.assertIn("try requireExpectedGateway(baseURL)", runtime)
+        self.assertIn('code: "quality_channel_wrong_gateway"', runtime)
+        for mutation in ("subscribe", "rename", "unsubscribe"):
+            self.assertIn(f"channelMutationRoundTrip.{mutation}(", channel_controller)
+        self.assertGreaterEqual(channel_controller.count("baseURL: config.baseURL"), 4)
         self.assertTrue(
             any(
                 scope.endswith(
@@ -501,6 +511,10 @@ class QualityLaneCostContractTests(unittest.TestCase):
         self.assertIn('"P2 Split Seed Message"', ios_visibility_oracle)
         self.assertIn('"P2 Split Seed Message"', macos_visibility)
         self.assertNotIn("failGatewaySwitchValidationOnce: true", macos_gateway_positive)
+        self.assertIn("expectedChannelMutationGatewayURL: normalizedAddress", macos_gateway_positive)
+        self.assertIn('identifier: "action.channels.add"', macos_gateway_positive)
+        self.assertIn('identifier: "channel.row.01H00000000000000000000003"', macos_gateway_positive)
+        self.assertIn("The exact post-switch Channel result must remain", macos_gateway_positive)
         self.assertIn("failGatewaySwitchValidationOnce: true", macos_gateway_risk)
         self.assertIn("invalidAddressFeedback", macos_gateway_risk)
         self.assertIn('predicate: NSPredicate(format: "label != %@"', macos_gateway_risk)

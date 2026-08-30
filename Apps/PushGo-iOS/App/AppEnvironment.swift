@@ -366,7 +366,10 @@ final class AppEnvironment {
         else {
             return nil
         }
-        return QualityChannelAutomationRoundTrip(scenario: scenario)
+        return QualityChannelAutomationRoundTrip(
+            scenario: scenario,
+            expectedGatewayURL: PushGoAutomationContext.qualitySession?.expectedChannelMutationGatewayURL
+        )
 #else
         return nil
 #endif
@@ -379,7 +382,10 @@ final class AppEnvironment {
         else {
             return nil
         }
-        return QualityChannelAutomationRoundTrip(scenario: scenario)
+        return QualityChannelAutomationRoundTrip(
+            scenario: scenario,
+            expectedGatewayURL: PushGoAutomationContext.qualitySession?.expectedChannelMutationGatewayURL
+        )
 #else
         return nil
 #endif
