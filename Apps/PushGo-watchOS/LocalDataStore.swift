@@ -116,6 +116,12 @@ actor LocalDataStore {
         decoder.dateDecodingStrategy = .iso8601
 
         do {
+#if DEBUG
+            try WatchQualityRuntime.prepareLegacyStoreIfRequested(
+                fileManager: fileManager,
+                appGroupIdentifier: appGroupIdentifier
+            )
+#endif
             sqliteStore = try WatchLocalSQLiteStore(
                 fileManager: fileManager,
                 appGroupIdentifier: appGroupIdentifier

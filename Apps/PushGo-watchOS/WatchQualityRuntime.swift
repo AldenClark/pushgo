@@ -1,5 +1,6 @@
 #if DEBUG
 import Foundation
+import SQLite3
 
 enum WatchQualityRuntime {
     private static let profileEnvironmentKey = "PUSHGO_QUALITY_PROFILE"
@@ -11,6 +12,117 @@ enum WatchQualityRuntime {
         normalizedEnvironmentValue(profileEnvironmentKey) == "hermetic"
     }
 
+    static func prepareLegacyStoreIfRequested(
+        fileManager: FileManager,
+        appGroupIdentifier: String
+    ) throws {
+        guard isHermeticRequested,
+              normalizedEnvironmentValue(scenarioEnvironmentKey) == "watch.migration",
+              let sessionID = normalizedEnvironmentValue(sessionEnvironmentKey)
+        else { return }
+
+        let defaults = UserDefaults.standard
+        guard defaults.string(forKey: preparedSessionDefaultsKey) != sessionID else { return }
+
+        let directory = try AppConstants.appLocalDatabaseDirectory(
+            fileManager: fileManager,
+            appGroupIdentifier: appGroupIdentifier
+        )
+        let storeURL = directory.appendingPathComponent(AppConstants.databaseStoreFilename)
+        for suffix in ["", "-wal", "-shm"] {
+            let member = URL(fileURLWithPath: storeURL.path + suffix)
+            if fileManager.fileExists(atPath: member.path) {
+                try fileManager.removeItem(at: member)
+            }
+        }
+
+        var db: OpaquePointer?
+        let openResult = sqlite3_open_v2(
+            storeURL.path,
+            &db,
+            SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX,
+            nil
+        )
+        guard openResult == SQLITE_OK, let db else {
+            if let db { sqlite3_close(db) }
+            throw WatchQualityRuntimeError.legacyStorePreparationFailed("open code \(openResult)")
+        }
+        defer { sqlite3_close(db) }
+
+        try executeLegacySQL(
+            """
+            CREATE TABLE watch_light_messages (
+                message_id TEXT PRIMARY KEY NOT NULL,
+                title TEXT NOT NULL,
+                body TEXT NOT NULL,
+                image_url TEXT,
+                url TEXT,
+                severity TEXT,
+                received_at REAL NOT NULL,
+                is_read INTEGER NOT NULL,
+                entity_type TEXT NOT NULL,
+                entity_id TEXT,
+                notification_request_id TEXT
+            );
+            INSERT INTO watch_light_messages (
+                message_id, title, body, severity, received_at, is_read, entity_type
+            ) VALUES (
+                'quality-watch-legacy-message',
+                'Legacy watch alert',
+                'Persisted before the upgrade.',
+                'normal',
+                1788000120,
+                0,
+                'message'
+            );
+
+            CREATE TABLE watch_light_events (
+                event_id TEXT PRIMARY KEY NOT NULL,
+                title TEXT NOT NULL,
+                summary TEXT,
+                state TEXT,
+                severity TEXT,
+                image_url TEXT,
+                updated_at REAL NOT NULL
+            );
+            INSERT INTO watch_light_events (
+                event_id, title, summary, state, severity, updated_at
+            ) VALUES (
+                'quality-watch-legacy-event',
+                'Legacy payments incident',
+                'Legacy checkout errors remain visible.',
+                'RESOLVED',
+                'high',
+                1788000120
+            );
+
+            CREATE TABLE watch_light_things (
+                thing_id TEXT PRIMARY KEY NOT NULL,
+                title TEXT NOT NULL,
+                summary TEXT,
+                attrs_json TEXT,
+                image_url TEXT,
+                updated_at REAL NOT NULL
+            );
+            INSERT INTO watch_light_things (
+                thing_id, title, summary, attrs_json, updated_at
+            ) VALUES (
+                'quality-watch-legacy-thing',
+                'Legacy checkout API',
+                'Legacy region remains available.',
+                '{"region":"legacy-eu","version":"17"}',
+                1788000120
+            );
+
+            CREATE TABLE app_settings (
+                id TEXT PRIMARY KEY NOT NULL,
+                updated_at REAL NOT NULL DEFAULT 0
+            );
+            """,
+            db: db
+        )
+    }
+
     @MainActor
     static func prepareIfRequested(environment: AppEnvironment) async throws {
         guard isHermeticRequested else { return }
@@ -19,7 +131,10 @@ enum WatchQualityRuntime {
             throw WatchQualityRuntimeError.missingSession
         }
         let scenario = normalizedEnvironmentValue(scenarioEnvironmentKey)
-        guard scenario == "watch.standard" || scenario == "watch.message-load-failure" else {
+        guard scenario == "watch.standard"
+                || scenario == "watch.migration"
+                || scenario == "watch.message-load-failure"
+        else {
             throw WatchQualityRuntimeError.unsupportedScenario(
                 scenario ?? "<missing>"
             )
@@ -27,7 +142,9 @@ enum WatchQualityRuntime {
 
         let defaults = UserDefaults.standard
         if defaults.string(forKey: preparedSessionDefaultsKey) != sessionID {
-            try await environment.dataStore.clearWatchLightStore()
+            if scenario != "watch.migration" {
+                try await environment.dataStore.clearWatchLightStore()
+            }
             let snapshot = standardSnapshot()
             try await environment.dataStore.mergeWatchMirrorSnapshot(snapshot)
             defaults.set(sessionID, forKey: preparedSessionDefaultsKey)
@@ -113,11 +230,27 @@ enum WatchQualityRuntime {
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return value.isEmpty ? nil : value
     }
+
+    private static func executeLegacySQL(_ sql: String, db: OpaquePointer) throws {
+        var errorMessage: UnsafeMutablePointer<CChar>?
+        let result = sqlite3_exec(db, sql, nil, nil, &errorMessage)
+        guard result == SQLITE_OK else {
+            let message: String
+            if let errorMessage {
+                message = String(cString: errorMessage)
+            } else {
+                message = "code \(result)"
+            }
+            sqlite3_free(errorMessage)
+            throw WatchQualityRuntimeError.legacyStorePreparationFailed(message)
+        }
+    }
 }
 
 private enum WatchQualityRuntimeError: LocalizedError {
     case missingSession
     case unsupportedScenario(String)
+    case legacyStorePreparationFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -125,6 +258,8 @@ private enum WatchQualityRuntimeError: LocalizedError {
             return "Hermetic watch quality launch requires an App-owned session identifier."
         case let .unsupportedScenario(scenario):
             return "Unsupported hermetic watch quality scenario: \(scenario)."
+        case let .legacyStorePreparationFailed(reason):
+            return "Unable to prepare the App-owned legacy watch store: \(reason)."
         }
     }
 }

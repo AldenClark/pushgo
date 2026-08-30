@@ -63,9 +63,8 @@ final class PushGo_watchOSUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Gateway health warning"].exists)
         XCTAssertFalse(databaseUnreadIndicator.exists)
 
-        XCTAssertTrue(swipeLeft(to: "screen.events.list", in: app))
         let event = app.staticTexts["Payments incident"]
-        XCTAssertTrue(event.waitForExistence(timeout: 5))
+        XCTAssertTrue(swipeLeft(to: event, in: app))
         XCTAssertTrue(app.staticTexts["Checkout errors exceeded threshold."].exists)
         event.tap()
         XCTAssertTrue(app.descendants(matching: .any)["screen.event.detail"].waitForExistence(timeout: 5))
@@ -73,9 +72,8 @@ final class PushGo_watchOSUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["ONGOING"].exists)
 
         pressBack(in: app)
-        XCTAssertTrue(swipeLeft(to: "screen.things.list", in: app))
         let thing = app.staticTexts["Checkout API"]
-        XCTAssertTrue(thing.waitForExistence(timeout: 5))
+        XCTAssertTrue(swipeLeft(to: thing, in: app))
         XCTAssertTrue(app.staticTexts["Degraded in eu-west."].exists)
         thing.tap()
         XCTAssertTrue(app.descendants(matching: .any)["screen.thing.detail"].waitForExistence(timeout: 5))
@@ -84,6 +82,25 @@ final class PushGo_watchOSUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["region"].exists)
         XCTAssertTrue(scrollToElement(app.staticTexts["version"], in: app, maximumSwipes: 2))
         XCTAssertTrue(app.staticTexts["42"].exists)
+    }
+
+    func testLegacyWatchStoreMigratesAccurateMessageAndKeepsNewDataAcrossRelaunch() {
+        let app = XCUIApplication()
+        let sessionID = UUID().uuidString
+        configureHermeticLaunch(app, sessionID: sessionID, scenario: "watch.migration")
+        app.launch()
+
+        let legacyMessage = app.staticTexts["Legacy watch alert"]
+        XCTAssertTrue(legacyMessage.waitForExistence(timeout: 10), startupFailureDescription(in: app))
+        XCTAssertTrue(app.staticTexts["Gateway health warning"].exists)
+        legacyMessage.tap()
+        XCTAssertTrue(app.staticTexts["Persisted before the upgrade."].waitForExistence(timeout: 5))
+
+        app.terminate()
+        configureHermeticLaunch(app, sessionID: sessionID, scenario: "watch.migration")
+        app.launch()
+        XCTAssertTrue(legacyMessage.waitForExistence(timeout: 10), startupFailureDescription(in: app))
+        XCTAssertTrue(app.staticTexts["Gateway health warning"].exists)
     }
 
     func testInvalidHermeticScenarioFailsReadinessExplicitly() {
@@ -160,11 +177,10 @@ final class PushGo_watchOSUITests: XCTestCase {
     }
 
     private func swipeLeft(
-        to screenIdentifier: String,
+        to destination: XCUIElement,
         in app: XCUIApplication,
         maximumAttempts: Int = 2
     ) -> Bool {
-        let destination = app.descendants(matching: .any)[screenIdentifier]
         if destination.exists, destination.isHittable { return true }
 
         let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5))
