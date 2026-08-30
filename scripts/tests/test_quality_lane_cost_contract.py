@@ -7,6 +7,20 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 class QualityLaneCostContractTests(unittest.TestCase):
+    def test_high_unread_navigation_reuses_both_core_positive_journeys(self) -> None:
+        quality_test = (REPO / "scripts/quality_test.sh").read_text()
+        mac_runner = (REPO / "scripts/run_macos_ui_tests.sh").read_text()
+        runtime = (REPO / "Shared/UI/AutomationRuntime.swift").read_text()
+        ios_test = (REPO / "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift").read_text()
+        mac_test = (REPO / "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift").read_text()
+
+        self.assertIn("(1..<100).map { qualityHighUnreadNavigationMessage(index: $0) }", runtime)
+        self.assertIn('message["received_at"] = "2025-12-31T00:00:00Z"', runtime)
+        self.assertEqual(1, quality_test.count("testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen"))
+        self.assertEqual(1, mac_runner.count("testSidebarNavigationCoversPrimaryScreens"))
+        self.assertIn('messagesTab.value as? String,\n            "99+"', ios_test)
+        self.assertIn('unreadBadge.value as? String,\n            "99+"', mac_test)
+
     def test_macos_minimize_restore_reuses_the_existing_window_journey(self) -> None:
         runner = (REPO / "scripts/run_macos_ui_tests.sh").read_text()
         ui_test = (REPO / "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift").read_text()

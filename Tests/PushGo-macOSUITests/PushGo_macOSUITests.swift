@@ -1698,10 +1698,10 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertTrue(messagesTitle.waitForExistence(timeout: 8))
         XCTAssertTrue(unreadBadge.waitForExistence(timeout: 8))
         XCTAssertEqual(messagesTitle.value as? String, "消息")
-        XCTAssertGreaterThan(
-            Int(unreadBadge.value as? String ?? "") ?? 0,
-            0,
-            "The broad positive fixture must exercise navigation with a real unread count."
+        XCTAssertEqual(
+            unreadBadge.value as? String,
+            "99+",
+            "The broad positive fixture must exercise the real capped high-unread state."
         )
         XCTAssertGreaterThanOrEqual(
             messagesTitle.frame.width,

@@ -169,6 +169,7 @@ struct MainTabContainerView: View {
     @ViewBuilder
     private var tabLayout: some View {
         let unreadCount = environment.unreadMessageCount
+        let unreadBadgeText = unreadCount > 99 ? "99+" : "\(unreadCount)"
         TabView(selection: $selection) {
             if showsMessagesTab {
                 MessageListScreen(
@@ -181,7 +182,7 @@ struct MainTabContainerView: View {
                         .accessibilityIdentifier("tab.messages")
                 }
                 .tag(MainTab.messages)
-                .badge(unreadCount > 0 ? Text(verbatim: "\(unreadCount)") : nil)
+                .badge(unreadCount > 0 ? Text(verbatim: unreadBadgeText) : nil)
             }
 
             if showsEventsTab {

@@ -13,7 +13,7 @@ A product result passes only when the test uses a reachable user entry and verif
 | PR+ | Empty/content/workflow messages | Functional empty state; accurate list/detail; exact message URL handoff to Safari and return continuity; page-size boundary; read state; filters; relaunch |
 | PR+ | Search/delete/undo/commit | Exclusion and exact-result sets; accurate detail; immediate suppression; undo restore or real-deadline permanent removal; unrelated control preserved; relaunch |
 | PR+ | Slow/error/refresh | User-visible slow/error states; accurate snapshot retained; provider result persisted; real Retry recovery |
-| PR+ | Primary navigation | One real session reaches the unique Messages, Events, Things, Channels, and Settings destinations, then uses the production Getting Started action to hand off to Safari at `pushgo.dev` |
+| PR+ | Primary navigation | One real session proves a canonical 100+ unread Store renders the capped `99+` badge without hiding or disabling Messages, reaches the unique Messages, Events, Things, Channels, and Settings destinations, then uses the production Getting Started action to hand off to Safari at `pushgo.dev` |
 | Nightly+ | Event/Thing | Production ingestion/projection; accurate detail and relations; close/filter/back/relaunch outcomes |
 | Nightly+ | Channel | Create, rename, keep-history unsubscribe, delete-history unsubscribe, and relaunch through production UI/Store paths |
 | Nightly+ | Settings visibility | Real Event page control changes navigation, reaches the accurate destination, and survives both relaunch directions |

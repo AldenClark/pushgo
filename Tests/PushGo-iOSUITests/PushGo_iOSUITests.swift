@@ -1274,6 +1274,10 @@ final class PushGo_iOSUITests: XCTestCase {
     func testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen() throws {
         let context = configuredLaunchContext()
         let sessionID = "ios-navigation-\(UUID().uuidString.lowercased())"
+        context.app.launchArguments += [
+            "-AppleLanguages", "(en)",
+            "-AppleLocale", "en_US",
+        ]
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
             fixture: "core.positive",
@@ -1289,6 +1293,22 @@ final class PushGo_iOSUITests: XCTestCase {
         assertElementExists("screen.messages.list", in: context.app, timeout: 8)
         let tabs = context.app.tabBars.buttons
         XCTAssertGreaterThanOrEqual(tabs.count, 4, "The four primary product destinations must be reachable")
+        let messagesTab = context.app.buttons["tab.messages"]
+        XCTAssertTrue(
+            messagesTab.waitForExistence(timeout: 8) && messagesTab.isHittable,
+            "The real Messages tab must remain readable and actionable with a high unread badge."
+        )
+        XCTAssertEqual(messagesTab.label, "Messages")
+        XCTAssertEqual(
+            messagesTab.value as? String,
+            "99+",
+            "The broad positive fixture must expose the real capped high-unread state."
+        )
+        XCTAssertGreaterThanOrEqual(messagesTab.frame.width, 44, "The high badge compressed the tab target.")
+        XCTAssertTrue(
+            hasReadableLowerTitleContrast(in: messagesTab.screenshot()),
+            "The high unread badge may have hidden the Messages title."
+        )
 
         context.app.open(
             try XCTUnwrap(

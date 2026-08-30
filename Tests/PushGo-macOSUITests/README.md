@@ -6,7 +6,7 @@ The target now exposes twenty-five curated XCTest-discoverable, App-owned produc
 
 - App-owned empty-state launch and functional message-list readiness;
 - accurate standard message row/detail data and process-relaunch persistence;
-- selected Messages sidebar title remains visibly readable, non-overlapping, and navigable with a real unread badge;
+- selected Messages sidebar title remains visibly readable, non-overlapping, and navigable with a real canonical 100+ unread Store rendered as `99+`;
 - message deletion through the real detail action, immediate suppression, real Undo, exact-content restoration, and process-relaunch persistence;
 - deletion deadline commit that permanently removes only the target while preserving an accurate unrelated control message across relaunch;
 - a user-visible slow-load warning before delayed completion;
@@ -16,7 +16,7 @@ The target now exposes twenty-five curated XCTest-discoverable, App-owned produc
 - accurate Event row/detail data, confirmed close through the production-shaped delivery path, closed-state persistence, and no repeated close action;
 - Event close failure/retry with visible in-flight feedback, no duplicate action, detail-owned error, unchanged canonical ongoing state after rejection, production-shaped delivery on retry, and relaunch persistence;
 - accurate Thing identity/summary, real Event/Message/Update relation details, working Sheet return, and relaunch persistence;
-- one-start PR Sidebar navigation across accurate Message, Event, Thing, Channel, and Settings destinations, with the selected Simplified-Chinese Messages title still visibly readable, non-overlapping, and clickable beside a real unread badge;
+- one-start PR Sidebar navigation across accurate Message, Event, Thing, Channel, and Settings destinations, with the selected Simplified-Chinese Messages title still visibly readable, non-overlapping, and clickable beside a real `99+` unread badge;
 - decryption lifecycle through real Settings controls: invalid input stays in its Sheet, valid protected material persists without echo, blank Save preserves it, and explicit Delete survives relaunch;
 - protected-material persistence failure remains owned by the Sheet, does not expose configured state after restart, and only a real retry may configure it;
 - encrypted-message purpose outcomes: a wrong valid-length key preserves the safe fallback, the matching key recovers the exact canonical title/body across relaunch, and corrupt ciphertext remains safely unreadable;
