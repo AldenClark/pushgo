@@ -20,7 +20,7 @@ from typing import Iterable
 ENTRYPOINT_LITERAL = re.compile(
     r'["\']((?:action|screen|tab|toggle|button|row|banner)\.[A-Za-z0-9_.-]+)["\']'
 )
-SOURCE_SUFFIXES = {".swift", ".kt", ".kts"}
+SOURCE_SUFFIXES = {".swift", ".kt", ".kts", ".sh"}
 EXCLUDED_DIRECTORIES = {
     ".build",
     ".deriveddata-ui-tests",
@@ -114,6 +114,39 @@ def without_comments(source: str) -> str:
     return "".join(output)
 
 
+def without_shell_comments(source: str) -> str:
+    """Remove shell # comments while preserving quoted stable identifiers."""
+
+    output: list[str] = []
+    index = 0
+    quote = ""
+    while index < len(source):
+        current = source[index]
+        if quote:
+            output.append(current)
+            if current == "\\" and quote == '"' and index + 1 < len(source):
+                output.append(source[index + 1])
+                index += 2
+                continue
+            if current == quote:
+                quote = ""
+            index += 1
+            continue
+        if current in {'"', "'"}:
+            quote = current
+            output.append(current)
+            index += 1
+            continue
+        if current == "#":
+            while index < len(source) and source[index] != "\n":
+                output.append(" ")
+                index += 1
+            continue
+        output.append(current)
+        index += 1
+    return "".join(output)
+
+
 def display_path(path: Path, base_root: Path) -> str:
     try:
         return path.resolve().relative_to(base_root.resolve()).as_posix()
@@ -124,7 +157,8 @@ def display_path(path: Path, base_root: Path) -> str:
 def collect_literals(roots: Iterable[Path], base_root: Path) -> dict[str, list[dict[str, object]]]:
     occurrences: dict[str, list[dict[str, object]]] = {}
     for path in source_files(roots):
-        source = without_comments(path.read_text(encoding="utf-8"))
+        raw_source = path.read_text(encoding="utf-8")
+        source = without_shell_comments(raw_source) if path.suffix == ".sh" else without_comments(raw_source)
         for match in ENTRYPOINT_LITERAL.finditer(source):
             identifier = match.group(1)
             location = {

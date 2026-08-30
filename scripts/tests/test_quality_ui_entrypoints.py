@@ -15,11 +15,11 @@ SPEC.loader.exec_module(AUDIT)
 
 
 class QualityUIEntrypointAuditTests(unittest.TestCase):
-    def report(self, product_source: str, test_source: str):
+    def report(self, product_source: str, test_source: str, test_suffix: str = ".swift"):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             product = root / "Product.swift"
-            tests = root / "ProductTests.swift"
+            tests = root / f"ProductTests{test_suffix}"
             product.write_text(product_source, encoding="utf-8")
             tests.write_text(test_source, encoding="utf-8")
             return AUDIT.build_report("unit", [product], [tests], root)
@@ -69,6 +69,30 @@ class QualityUIEntrypointAuditTests(unittest.TestCase):
         self.assertEqual(
             "screen.messages",
             report["referenced_product_identifiers"][0]["identifier"],
+        )
+
+    def test_shell_host_journey_counts_real_references_but_not_comments(self):
+        report = self.report(
+            """
+            .testTag("action.delivery_guard.confirm")
+            .testTag("action.message.open_url")
+            .testTag("action.comment.only")
+            """,
+            """
+            # tap_node resource "action.comment.only"
+            tap_node resource "action.delivery_guard.confirm"
+            tap_node resource 'action.message.open_url'
+            """,
+            test_suffix=".sh",
+        )
+
+        self.assertEqual(
+            ["action.delivery_guard.confirm", "action.message.open_url"],
+            [item["identifier"] for item in report["referenced_product_identifiers"]],
+        )
+        self.assertEqual(
+            ["action.comment.only"],
+            [item["identifier"] for item in report["unreferenced_product_identifiers"]],
         )
 
 
