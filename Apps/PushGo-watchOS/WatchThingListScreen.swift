@@ -118,11 +118,17 @@ struct WatchThingListScreen: View {
 }
 
 private struct WatchLightThingRow: View {
+    @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
+
     let thing: WatchLightThing
 
     var body: some View {
         HStack(spacing: 8) {
-            WatchEntityAvatar(url: thing.imageURL)
+            WatchEntityAvatar(
+                url: thing.imageURL,
+                loadedImageAccessibilityIdentifier: "image.thing.row.\(thing.thingId)",
+                loadedImageAccessibilityLabel: localizationManager.localized("image")
+            )
 
             VStack(alignment: .leading, spacing: WatchEntityVisualTokens.sectionSpacing) {
                 Text(thing.title)

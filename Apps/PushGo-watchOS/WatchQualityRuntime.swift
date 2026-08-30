@@ -7,6 +7,11 @@ enum WatchQualityRuntime {
     private static let scenarioEnvironmentKey = "PUSHGO_QUALITY_SCENARIO"
     private static let sessionEnvironmentKey = "PUSHGO_QUALITY_SESSION_ID"
     private static let preparedSessionDefaultsKey = "io.ethan.pushgo.watch.quality.prepared-session"
+    private static let standardImageURL = URL(
+        string: "https://quality-media.pushgo.dev/watch-standard.png"
+    )!
+    private static let standardImagePNGBase64 =
+        "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFElEQVR42mNkYPj/n4GBgYGJAQoAHgQCAf2fP6sAAAAASUVORK5CYII="
 
     static var isHermeticRequested: Bool {
         normalizedEnvironmentValue(profileEnvironmentKey) == "hermetic"
@@ -145,6 +150,7 @@ enum WatchQualityRuntime {
             if scenario != "watch.migration" {
                 try await environment.dataStore.clearWatchLightStore()
             }
+            try await prepareStandardImage()
             let snapshot = standardSnapshot()
             try await environment.dataStore.mergeWatchMirrorSnapshot(snapshot)
             defaults.set(sessionID, forKey: preparedSessionDefaultsKey)
@@ -157,6 +163,15 @@ enum WatchQualityRuntime {
         await environment.refreshWatchLightCountsAndNotify()
     }
 
+    private static func prepareStandardImage() async throws {
+        guard let data = Data(base64Encoded: standardImagePNGBase64),
+              await SharedImageCache.store(data: data, for: standardImageURL) != nil,
+              await SharedImageCache.cachedData(for: standardImageURL) == data
+        else {
+            throw WatchQualityRuntimeError.mediaPreparationFailed
+        }
+    }
+
     private static func standardSnapshot() -> WatchMirrorSnapshot {
         let receivedAt = Date(timeIntervalSince1970: 1_788_000_000)
         let messages = [
@@ -164,8 +179,8 @@ enum WatchQualityRuntime {
                 messageId: "quality-watch-message-001",
                 title: "Gateway health warning",
                 body: "Primary API latency is above budget.",
-                imageURL: nil,
-                url: URL(string: "https://example.com/incidents/gateway"),
+                imageURL: standardImageURL,
+                url: URL(string: "https://pushgo.dev/quality-message"),
                 severity: "critical",
                 receivedAt: receivedAt,
                 isRead: false,
@@ -195,7 +210,7 @@ enum WatchQualityRuntime {
                 state: "ONGOING",
                 severity: "high",
                 decryptionState: nil,
-                imageURL: nil,
+                imageURL: standardImageURL,
                 updatedAt: receivedAt.addingTimeInterval(-120)
             ),
         ]
@@ -206,7 +221,7 @@ enum WatchQualityRuntime {
                 summary: "Degraded in eu-west.",
                 attrsJSON: #"{"region":"eu-west","version":"42"}"#,
                 decryptionState: nil,
-                imageURL: nil,
+                imageURL: standardImageURL,
                 updatedAt: receivedAt.addingTimeInterval(-180)
             ),
         ]
@@ -251,6 +266,7 @@ private enum WatchQualityRuntimeError: LocalizedError {
     case missingSession
     case unsupportedScenario(String)
     case legacyStorePreparationFailed(String)
+    case mediaPreparationFailed
 
     var errorDescription: String? {
         switch self {
@@ -260,6 +276,8 @@ private enum WatchQualityRuntimeError: LocalizedError {
             return "Unsupported hermetic watch quality scenario: \(scenario)."
         case let .legacyStorePreparationFailed(reason):
             return "Unable to prepare the App-owned legacy watch store: \(reason)."
+        case .mediaPreparationFailed:
+            return "Unable to prepare the App-owned watch media fixture."
         }
     }
 }

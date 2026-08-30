@@ -15,7 +15,12 @@ struct WatchThingDetailScreen: View {
             if let thing {
                 Section {
                     HStack(alignment: .top, spacing: 10) {
-                        WatchEntityAvatar(url: thing.imageURL, size: 44)
+                        WatchEntityAvatar(
+                            url: thing.imageURL,
+                            size: 44,
+                            loadedImageAccessibilityIdentifier: "image.thing.detail.\(thing.thingId)",
+                            loadedImageAccessibilityLabel: localizationManager.localized("image")
+                        )
                         VStack(alignment: .leading, spacing: WatchEntityVisualTokens.sectionSpacing) {
                             Text(thing.title)
                                 .font(.headline)

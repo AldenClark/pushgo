@@ -1,4 +1,49 @@
+import ImageIO
 import SwiftUI
+
+enum WatchCachedImagePhase {
+    case empty
+    case success(Image)
+    case failure
+}
+
+struct WatchCachedImage<Content: View>: View {
+    let url: URL
+    let accessibilityLabel: String
+    @ViewBuilder let content: (WatchCachedImagePhase) -> Content
+
+    @State private var phase: WatchCachedImagePhase = .empty
+
+    var body: some View {
+        ZStack {
+            content(phase)
+        }
+        .task(id: url) {
+            phase = .empty
+            do {
+                let data = try await SharedImageCache.fetchData(
+                    from: url,
+                    maxBytes: 8 * 1024 * 1024,
+                    timeout: 10
+                )
+                guard !Task.isCancelled,
+                      let source = CGImageSourceCreateWithData(data as CFData, nil),
+                      let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+                else {
+                    if !Task.isCancelled { phase = .failure }
+                    return
+                }
+                phase = .success(
+                    Image(image, scale: 1, label: Text(accessibilityLabel))
+                )
+            } catch is CancellationError {
+                return
+            } catch {
+                phase = .failure
+            }
+        }
+    }
+}
 
 enum WatchSemanticTone {
     case info
@@ -52,17 +97,22 @@ enum WatchEntityVisualTokens {
 struct WatchEntityAvatar: View {
     let url: URL?
     var size: CGFloat = 32
+    let loadedImageAccessibilityIdentifier: String
+    let loadedImageAccessibilityLabel: String
 
     var body: some View {
         Group {
             if let url {
-                AsyncImage(url: url) { phase in
+                WatchCachedImage(url: url, accessibilityLabel: loadedImageAccessibilityLabel) { phase in
                     switch phase {
                     case let .success(image):
                         image
                             .resizable()
                             .scaledToFill()
-                    default:
+                            .accessibilityElement()
+                            .accessibilityLabel(loadedImageAccessibilityLabel)
+                            .accessibilityIdentifier(loadedImageAccessibilityIdentifier)
+                    case .empty, .failure:
                         Image(systemName: "cube")
                             .font(.caption)
                             .foregroundStyle(Color.appTextSecondary)

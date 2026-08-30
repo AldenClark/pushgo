@@ -38,7 +38,7 @@ class Section25P0AuditContractTest(unittest.TestCase):
             self.assertTrue(cells[4], "purpose-level evidence or a precise closure gap is required")
             states.append(cells[3].strip("`"))
 
-        self.assertEqual(Counter({"V": 88, "P": 6, "N": 8, "NA": 1}), Counter(states))
+        self.assertEqual(Counter({"V": 90, "P": 4, "N": 8, "NA": 1}), Counter(states))
 
         ledger = (REPO_ROOT / "docs/quality/completion-gate-ledger.md").read_text()
         ledger_counts = re.search(
@@ -48,7 +48,7 @@ class Section25P0AuditContractTest(unittest.TestCase):
         )
         self.assertIsNotNone(ledger_counts, "completion ledger must publish machine-checkable audit counts")
         self.assertEqual(
-            (88, 1, 6, 8),
+            (90, 1, 4, 8),
             tuple(map(int, ledger_counts.groups())),
             "completion ledger counts must stay synchronized with the semantic audit",
         )

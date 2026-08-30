@@ -40,6 +40,15 @@ final class PushGo_watchOSUITests: XCTestCase {
         gatewayMessage.tap()
         XCTAssertTrue(app.staticTexts["Primary API latency is above budget."].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Critical"].exists)
+        let messageImage = app.descendants(matching: .any)["image.message.quality-watch-message-001"]
+        XCTAssertTrue(scrollToExistingElement(messageImage, in: app, maximumSwipes: 2))
+        XCTAssertEqual(messageImage.label, "Image")
+        XCTAssertGreaterThan(messageImage.frame.width, 0)
+        XCTAssertGreaterThan(messageImage.frame.height, 0)
+        let openLink = app.links["action.message.open_link"]
+        XCTAssertTrue(scrollToElement(openLink, in: app, maximumSwipes: 3))
+        XCTAssertEqual(openLink.label, "Open link")
+        XCTAssertTrue(openLink.isHittable)
 
         let deleteButton = app.buttons["Delete"]
         XCTAssertTrue(scrollToElement(deleteButton, in: app, maximumSwipes: 3))
@@ -47,7 +56,8 @@ final class PushGo_watchOSUITests: XCTestCase {
         let cancelButton = app.buttons["Cancel"]
         XCTAssertTrue(cancelButton.waitForExistence(timeout: 5))
         cancelButton.tap()
-        XCTAssertTrue(app.staticTexts["Primary API latency is above budget."].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["screen.message.detail"].exists)
+        XCTAssertTrue(deleteButton.isHittable)
 
         deleteButton.tap()
         let confirmDeleteButton = try XCTUnwrap(
@@ -86,6 +96,15 @@ final class PushGo_watchOSUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["screen.event.detail"].waitForExistence(timeout: 5))
         XCTAssertTrue(scrollToElement(app.staticTexts["Checkout errors exceeded threshold."], in: app, maximumSwipes: 2))
         XCTAssertTrue(app.staticTexts["ONGOING"].exists)
+        let eventImage = app.buttons["image.event.quality-watch-event-001"]
+        XCTAssertTrue(scrollToElement(eventImage, in: app, maximumSwipes: 2))
+        eventImage.tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["image.event.preview"].waitForExistence(timeout: 5)
+        )
+        XCTAssertEqual(app.descendants(matching: .any)["image.event.preview"].label, "Image")
+        app.swipeDown()
+        XCTAssertTrue(app.descendants(matching: .any)["screen.event.detail"].waitForExistence(timeout: 5))
 
         pressBack(in: app)
         let thing = app.buttons["row.thing.quality-watch-thing-001"]
@@ -93,8 +112,14 @@ final class PushGo_watchOSUITests: XCTestCase {
         XCTAssertEqual(thing.label, "Checkout API")
         XCTAssertEqual(thing.value as? String, "Degraded in eu-west.")
         XCTAssertTrue(thing.isHittable)
+        let thingRowImage = app.descendants(matching: .any)["image.thing.row.quality-watch-thing-001"]
+        XCTAssertTrue(thingRowImage.exists)
+        XCTAssertEqual(thingRowImage.label, "Image")
         thing.tap()
         XCTAssertTrue(app.descendants(matching: .any)["screen.thing.detail"].waitForExistence(timeout: 5))
+        let thingDetailImage = app.descendants(matching: .any)["image.thing.detail.quality-watch-thing-001"]
+        XCTAssertTrue(thingDetailImage.waitForExistence(timeout: 5))
+        XCTAssertEqual(thingDetailImage.label, "Image")
         XCTAssertTrue(app.staticTexts["Degraded in eu-west."].waitForExistence(timeout: 5))
         XCTAssertTrue(scrollToElement(app.staticTexts["eu-west"], in: app, maximumSwipes: 2))
         XCTAssertTrue(app.staticTexts["region"].exists)
@@ -271,6 +296,21 @@ final class PushGo_watchOSUITests: XCTestCase {
         for _ in 0..<maximumSwipes {
             app.swipeUp()
             if element.waitForExistence(timeout: 1), element.isHittable {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func scrollToExistingElement(
+        _ element: XCUIElement,
+        in app: XCUIApplication,
+        maximumSwipes: Int
+    ) -> Bool {
+        if element.exists { return true }
+        for _ in 0..<maximumSwipes {
+            app.swipeUp()
+            if element.waitForExistence(timeout: 1) {
                 return true
             }
         }
