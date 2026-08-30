@@ -46,7 +46,7 @@
 | 处置 | 当前测试 | 原因与替代终点 |
 | --- | --- | --- |
 | rewrite | `testLaunchesIntoMessageList` | 改为正确首屏状态、独有数据和可导航；不能只看 screen id。 |
-| keep（已迁移） | `testSidebarNavigationCoversPrimaryScreens` | 同一 App-owned 会话由真实 canonical 101 未读产生 `99+`，先裁决“消息”标题不被覆盖且可点击，再经 macOS 已注册 `pushgo://` 打开准确 Message 与 Event/Thing 详情并真实点击 Sidebar 完成五域准确内容。 |
+| keep（已迁移并覆盖最小窗口） | `testSidebarNavigationCoversPrimaryScreens` | 同一 App-owned 会话由真实 canonical 101 未读产生 `99+`；先经 macOS 系统 Accessibility API 把真实主窗口缩到产品 1100×640 最小值并反查实际 frame，随后裁决“消息”标题和未读徽标同时可见、标题完整可点击且不重叠，再经已注册 `pushgo://` 打开准确 Message 与 Event/Thing 详情并真实点击 Sidebar 完成五域准确内容。没有新增测试方法、fixture、启动或业务重试；当前结果 1/1、49.668 秒（`build/quality-results/macos-minimum-window/run-20260831-012420.xcresult`）。 |
 | keep（已迁移并扩成目的闭环） | `testEventDetailCloseAndRelaunchPreserveAccurateProjection` | 不新增方法或 App 启动；同一旅程验证取消无副作用、确认关闭、时间线更新、ongoing-only 筛选排除/恢复、Thing 关联详情同步、普通 relaunch 后 closed/时间线保持，最后删除当前 Event 并要求剩余控制事件的准确标题/摘要立即替换分栏详情。筛选缺失是真实产品缺陷；delete fallback 首轮即通过，归为证据补齐。 |
 | rewrite | `testAutomationRequestCanOpenChannelsScreen` | 删除 Runtime 导航，合入真实 Sidebar 旅程。 |
 | rewrite | `testImportedEventFixtureCanOpenEventDetailFromStartupRequest`、`testImportedThingFixtureCanOpenThingDetailFromStartupRequest` | 去宿主 Fixture 绝对路径和静默 return；从真实列表/系统路由打开并核对对象。 |
@@ -134,6 +134,8 @@ macOS Runner 不再把 App-owned 正向、故障旅程和真实系统边界无�
 本机 PushGo 通知权限开启后的 macOS 27 新鲜证据进一步划清了系统边界：唯一标题/正文已真实出现在横幅和通知中心，说明授权与调度完成；但通知卡片没有 XCTest AX 节点，XCUICoordinate 与 HID event 都未产生 `UNNotificationResponse`。两种替代输入收敛后停止，不继续增加坐标、等待或重试。当前 `macos-system-notification` 因而必须输出产品 `NOT_RUN`、测试系统 `BLOCKED`、`apple-quality-precondition`，而不是把视觉出现判为功能通过，也不是误报 App 产品失败。未来只有稳定可操作的系统节点或 Apple 提供的受控通知消费者出现后才恢复这条链；低层/App-owned response 合同不能替代真实系统点击。
 
 macOS 状态栏只保留真实产品语义：左键恢复主窗口，右键提供 Open Main Window 与 Quit。既有窗口正向旅程现于正式 Refresh slow/in-flight 时关闭主窗口，真实右键并点击本地化 Open Main Window，核对唯一窗口、同一 App-owned session、准确新旧消息，再次关闭并用左键恢复；1/1、29.132 秒、零重试。未挂载的 `MacMenuBarContentView` 及其用 `try?` 把数据库失败伪装为空态的 `MenuBarViewModel` 已删除，不再用死代码制造菜单栏未读“覆盖”。Quit 会终止测试主体，保留为受控 Release/人工动作，不以菜单项存在判通过。
+
+最小窗口与 Sidebar 不再只靠静态 `minWidth` 或元素存在判定：复用唯一 PR 主导航正向旅程，通过系统 Accessibility API 把真实窗口请求为 1100×640，并同时要求 XCU frame 确实进入最小尺寸、没有穿透产品下限；在该尺寸下继续核对真实 `99+` 徽标、“消息”标题值/可点击性/几何不重叠，以及 Message/Event/Thing/Channel/Settings 和三个准确详情终点。当前结果 1/1、49.668 秒、零重试（`build/quality-results/macos-minimum-window/run-20260831-012420.xcresult`）。系统辅助功能授权缺失会归为 `QUALITY_PRECONDITION`，不能降级为 Runtime 改 frame 或把大窗口冒充最小窗口。Quit 仍是该 P1 组唯一剩余批次，故账本保持 `DEFERRED`。
 
 macOS 标准消息正向方法同时承担最低充分的 migration UI：App 在隔离容器构造 v17 旧行后由普通 `GRDBStore` 正式迁移；同一方法核对旧标题/正文详情、新消息/图片预览共存以及唯一 relaunch 后两者都保留。它没有增加 discoverable 方法、fixture 名或启动次数，新增约 3 秒交互，替代单独的平台迁移方法；历史版本逐一升级、损坏库与 Watch 独立 Store 不从该代表例外推。
 

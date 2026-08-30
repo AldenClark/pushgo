@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import XCTest
 
 final class PushGo_macOSUITests: XCTestCase {
@@ -1780,10 +1781,29 @@ final class PushGo_macOSUITests: XCTestCase {
         ]
         launchQuality(context, sessionID: sessionID)
 
+        let minimumWindowFrame = resizeMainWindowThroughSystemAccessibility(
+            context.app,
+            requestedSize: CGSize(width: 1_100, height: 640)
+        )
+        XCTAssertLessThanOrEqual(
+            minimumWindowFrame.width,
+            1_120,
+            "The system resize must actually exercise the minimum-width layout, not a restored large window."
+        )
+        XCTAssertLessThanOrEqual(
+            minimumWindowFrame.height,
+            700,
+            "The system resize must actually exercise the minimum-height layout, including native title-bar chrome."
+        )
+
         let messagesTitle = context.app.staticTexts["sidebar-messages"]
         let unreadBadge = context.app.staticTexts["sidebar.messages.unread_badge"]
         XCTAssertTrue(messagesTitle.waitForExistence(timeout: 8))
         XCTAssertTrue(unreadBadge.waitForExistence(timeout: 8))
+        XCTAssertTrue(
+            messagesTitle.isHittable,
+            "The full Messages navigation target must remain actionable at the minimum window size."
+        )
         XCTAssertEqual(messagesTitle.value as? String, "消息")
         XCTAssertEqual(
             unreadBadge.value as? String,
@@ -3950,6 +3970,83 @@ final class PushGo_macOSUITests: XCTestCase {
         }
         return sharedBase
             .appendingPathComponent("PushGo-macOSUITests-\(UUID().uuidString)", isDirectory: true)
+    }
+
+    @MainActor
+    private func resizeMainWindowThroughSystemAccessibility(
+        _ app: XCUIApplication,
+        requestedSize: CGSize
+    ) -> CGRect {
+        let xcuiWindow = app.windows.firstMatch
+        guard xcuiWindow.waitForExistence(timeout: 8) else {
+            XCTFail("QUALITY_PRECONDITION: the PushGo main window was unavailable for the size journey.")
+            return .zero
+        }
+        guard AXIsProcessTrusted() else {
+            XCTFail("QUALITY_PRECONDITION: the UI-test runner lacks macOS Accessibility permission for a real window resize.")
+            return xcuiWindow.frame
+        }
+
+        let runningApps = NSRunningApplication
+            .runningApplications(withBundleIdentifier: "io.ethan.pushgo")
+            .filter { !$0.isTerminated }
+        guard runningApps.count == 1, let runningApp = runningApps.first else {
+            XCTFail("QUALITY_PRECONDITION: expected one PushGo process for window resize, found \(runningApps.count).")
+            return xcuiWindow.frame
+        }
+        let application = AXUIElementCreateApplication(runningApp.processIdentifier)
+        var windowValue: CFTypeRef?
+        let copyResult = AXUIElementCopyAttributeValue(
+            application,
+            kAXWindowsAttribute as CFString,
+            &windowValue
+        )
+        guard copyResult == .success,
+              let windows = windowValue as? [AXUIElement],
+              let window = windows.first
+        else {
+            XCTFail("QUALITY_PRECONDITION: the system Accessibility API could not resolve PushGo's main window (\(copyResult.rawValue)).")
+            return xcuiWindow.frame
+        }
+
+        var requestedSize = requestedSize
+        guard let sizeValue = AXValueCreate(.cgSize, &requestedSize) else {
+            XCTFail("QUALITY_PRECONDITION: the requested minimum window size could not be encoded.")
+            return xcuiWindow.frame
+        }
+        let setResult = AXUIElementSetAttributeValue(
+            window,
+            kAXSizeAttribute as CFString,
+            sizeValue
+        )
+        guard setResult == .success else {
+            XCTFail("QUALITY_PRECONDITION: the system rejected the PushGo window resize (\(setResult.rawValue)).")
+            return xcuiWindow.frame
+        }
+
+        let deadline = Date().addingTimeInterval(5)
+        var frame = xcuiWindow.frame
+        repeat {
+            frame = xcuiWindow.frame
+            if frame.width <= requestedSize.width + 20,
+               frame.height <= requestedSize.height + 60
+            {
+                break
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        } while Date() < deadline
+
+        XCTAssertGreaterThanOrEqual(
+            frame.width,
+            requestedSize.width - 10,
+            "The product minimum width must prevent the main layout from collapsing."
+        )
+        XCTAssertGreaterThanOrEqual(
+            frame.height,
+            requestedSize.height - 10,
+            "The product minimum height must prevent the main layout from collapsing."
+        )
+        return frame
     }
 
     @MainActor
