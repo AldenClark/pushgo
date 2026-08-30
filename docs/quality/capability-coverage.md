@@ -42,7 +42,7 @@
 | I/M Export candidate | 导出消息文件 | reachable/cancel/failure/large | JSON/file consumer | product reachability review | 删除候选；不投入本轮预算 | Settings export helpers |
 | M MenuBar content (removed) | 在菜单栏浏览未读 | mounted/loading/empty/error | MenuBar VM/Store | source reachability review | 已裁决删除：生产无挂载入口，且旧 ViewModel 用 `try?` 把数据库失败伪装成空态；不把死代码算能力，若未来重新引入必须先定义可达交互与目的 Oracle | 无当前 owner |
 
-Gateway 后续请求补充证据：iOS/macOS 既有正向 Gateway 旅程现在把生产 `ChannelMutationRoundTrip` 的 `baseURL/token` 纳入边界，并由 App-owned fake 对精确新 Gateway URL 做敏感裁决。用户完成候选验证/注册与提交后，旅程立即通过生产频道 UI 创建 `New Gateway Channel`，要求准确 canonical 行出现；普通进程重启后旧 Gateway 的频道仍不得回流，新频道必须继续存在。当前 macOS 1/1、53.550 秒（`build/quality-results/macos-gateway-post-commit/run-20260831-014545.xcresult`），iOS 专用 Simulator 1/1、108.439 秒（`build/quality-results/ios-gateway-post-commit/run-1-20260831-014803.xcresult`），均零重试。这证明 Apple 受控 transport boundary 的提交后请求归属，不外推真实公网 Gateway、Android parity 或物理设备网络。
+Gateway 后续请求补充证据：iOS/macOS 既有正向 Gateway 旅程现在把生产 `ChannelMutationRoundTrip` 的 `baseURL/token` 纳入边界，并由 App-owned fake 对精确新 Gateway URL 做敏感裁决。用户完成候选验证/注册与提交后，旅程立即通过生产频道 UI 创建 `New Gateway Channel`，要求准确 canonical 行出现；普通进程重启后旧 Gateway 的频道仍不得回流，新频道必须继续存在。当前 macOS 1/1、53.550 秒（`build/quality-results/macos-gateway-post-commit/run-20260831-014545.xcresult`），iOS 专用 Simulator 1/1、108.439 秒（`build/quality-results/ios-gateway-post-commit/run-1-20260831-014803.xcresult`），均零重试。Android 同构旅程也在 `Medium_Phone / emulator-5554` focused 1/1、零业务重试（`../pushgo-android/build/quality-results/android-focused-summary.json`），且未新增方法、fixture、启动或日常 scope。这证明三端受控 transport boundary 的提交后请求归属，不外推真实公网 Gateway、FCM/Private delivery 或物理设备网络。
 
 ## 增量规则
 
