@@ -151,6 +151,7 @@ final class MessageListViewModel {
     @ObservationIgnored private var unreadFilterSession: UnreadFilterSessionState?
 #if DEBUG
     @ObservationIgnored private var qualityDelayConsumed = false
+    @ObservationIgnored private var qualityPageDelayConsumed = false
     @ObservationIgnored private var remainingQualityFailures: Int
 #endif
 
@@ -689,6 +690,19 @@ final class MessageListViewModel {
         guard !isLoadingPage else { return }
         isLoadingPage = true
         defer { isLoadingPage = false }
+
+#if DEBUG
+        if !qualityPageDelayConsumed,
+           let delay = PushGoAutomationContext.qualitySession?.faults.messagePageLoadDelayMilliseconds,
+           delay > 0 {
+            qualityPageDelayConsumed = true
+            do {
+                try await Task.sleep(for: .milliseconds(delay))
+            } catch {
+                return
+            }
+        }
+#endif
 
         do {
             let page = try await loadVisiblePage(after: nextCursor, targetVisibleCount: pageSize)

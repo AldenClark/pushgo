@@ -730,7 +730,8 @@ final class PushGo_iOSUITests: XCTestCase {
         let context = configuredLaunchContext()
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
-            fixture: "messages.workflow"
+            fixture: "messages.workflow",
+            messagePageLoadDelayMilliseconds: 5_000
         )
 
         launch(context.app)
@@ -746,6 +747,20 @@ final class PushGo_iOSUITests: XCTestCase {
 
         let list = runtimeQualityScrollableList(in: context.app)
         XCTAssertTrue(list.waitForExistence(timeout: 5))
+        let pageLoading = element(in: context.app, identifier: "state.messages.page.loading")
+        for _ in 0..<12 where !pageLoading.exists {
+            list.swipeUp()
+        }
+        XCTAssertTrue(
+            pageLoading.waitForExistence(timeout: 5),
+            "A slow next page must expose bottom progress instead of looking frozen"
+        )
+        XCTAssertTrue(
+            context.app.staticTexts["Quality workflow 2"].exists,
+            "The last row from page 1 must remain usable while page 2 is loading"
+        )
+        list.swipeUp()
+        list.swipeUp()
         let secondPageTarget = context.app.staticTexts["Quality workflow 0"]
         for _ in 0..<12 where !secondPageTarget.exists {
             list.swipeUp()
@@ -753,6 +768,13 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(
             secondPageTarget.waitForExistence(timeout: 5),
             "The oldest canonical object from production page 2 was not reachable"
+        )
+        XCTAssertEqual(
+            context.app.staticTexts.matching(
+                NSPredicate(format: "label == %@", "Quality workflow 0")
+            ).count,
+            1,
+            "Repeated scroll pressure while loading must not append page 2 more than once"
         )
 
         let messagesTab = context.app.tabBars.firstMatch.buttons.element(boundBy: 0)
@@ -1776,7 +1798,7 @@ final class PushGo_iOSUITests: XCTestCase {
 
     func testSettingsServerRejectsInvalidAndUnregisteredCandidatesWithoutLeakingSheetError() {
         let context = configuredLaunchContext()
-        let sessionID = "ios-settings-server-rejection-\(UUID().uuidString.lowercased())"
+        let sessionID = "ios-server-reject-\(UUID().uuidString.lowercased())"
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
             fixture: "channels.standard",
@@ -4088,6 +4110,7 @@ final class PushGo_iOSUITests: XCTestCase {
         failLocalStoreInitialization: Bool = false,
         localStoreFailureStreakThreshold: Int? = nil,
         messageLoadDelayMilliseconds: Int? = nil,
+        messagePageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         messageSearchDelayMilliseconds: Int? = nil,
         legacyStore: String? = nil,
@@ -4111,6 +4134,9 @@ final class PushGo_iOSUITests: XCTestCase {
         ]
         if let messageLoadDelayMilliseconds {
             faults["message_load_delay_ms"] = messageLoadDelayMilliseconds
+        }
+        if let messagePageLoadDelayMilliseconds {
+            faults["message_page_load_delay_ms"] = messagePageLoadDelayMilliseconds
         }
         if let localStoreFailureStreakThreshold {
             faults["local_store_failure_streak_threshold"] = localStoreFailureStreakThreshold

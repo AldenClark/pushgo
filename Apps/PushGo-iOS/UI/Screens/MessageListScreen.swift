@@ -453,6 +453,17 @@ struct MessageListScreen: View {
                                 Task { await viewModel.loadMoreIfNeeded(currentItem: message) }
                             }
                     }
+                    if viewModel.isLoadingPage {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                            Spacer()
+                        }
+                        .listRowSeparator(.hidden)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("state.messages.page.loading")
+                    }
                 }
             }
             .modifier(MessageListSearchableModifier(searchViewModel: searchViewModel, enabled: hasMessages && !showsUnreadFilterEmptyState))

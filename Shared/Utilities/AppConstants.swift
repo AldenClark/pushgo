@@ -122,6 +122,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
     let failLocalStoreInitialization: Bool
     let localStoreFailureStreakThreshold: Int?
     let messageLoadDelayMilliseconds: Int?
+    let messagePageLoadDelayMilliseconds: Int?
     let messageRefreshDelayMilliseconds: Int?
     let messageSearchDelayMilliseconds: Int?
     let failMessageLoad: Bool
@@ -134,6 +135,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         failLocalStoreInitialization: Bool = false,
         localStoreFailureStreakThreshold: Int? = nil,
         messageLoadDelayMilliseconds: Int? = nil,
+        messagePageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         messageSearchDelayMilliseconds: Int? = nil,
         failMessageLoad: Bool = false,
@@ -145,6 +147,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         self.failLocalStoreInitialization = failLocalStoreInitialization
         self.localStoreFailureStreakThreshold = localStoreFailureStreakThreshold
         self.messageLoadDelayMilliseconds = messageLoadDelayMilliseconds
+        self.messagePageLoadDelayMilliseconds = messagePageLoadDelayMilliseconds
         self.messageRefreshDelayMilliseconds = messageRefreshDelayMilliseconds
         self.messageSearchDelayMilliseconds = messageSearchDelayMilliseconds
         self.failMessageLoad = failMessageLoad
@@ -158,6 +161,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         case failLocalStoreInitialization = "fail_local_store_initialization"
         case localStoreFailureStreakThreshold = "local_store_failure_streak_threshold"
         case messageLoadDelayMilliseconds = "message_load_delay_ms"
+        case messagePageLoadDelayMilliseconds = "message_page_load_delay_ms"
         case messageRefreshDelayMilliseconds = "message_refresh_delay_ms"
         case messageSearchDelayMilliseconds = "message_search_delay_ms"
         case failMessageLoad = "fail_message_load"
@@ -180,6 +184,10 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         messageLoadDelayMilliseconds = try container.decodeIfPresent(
             Int.self,
             forKey: .messageLoadDelayMilliseconds
+        )
+        messagePageLoadDelayMilliseconds = try container.decodeIfPresent(
+            Int.self,
+            forKey: .messagePageLoadDelayMilliseconds
         )
         messageRefreshDelayMilliseconds = try container.decodeIfPresent(
             Int.self,
@@ -305,6 +313,7 @@ enum PushGoQualitySessionError: Error, Equatable, LocalizedError {
     case invalidSchemaVersion(Int)
     case invalidSessionID
     case invalidMessageLoadDelay(Int)
+    case invalidMessagePageLoadDelay(Int)
     case invalidMessageRefreshDelay(Int)
     case invalidMessageSearchDelay(Int)
     case invalidLocalStoreFailureStreakThreshold(Int)
@@ -322,6 +331,8 @@ enum PushGoQualitySessionError: Error, Equatable, LocalizedError {
             return "Quality session ID must contain 1...64 ASCII letters, digits, underscores, or hyphens."
         case let .invalidMessageLoadDelay(delay):
             return "Message load delay must be between 0 and 30000 ms: \(delay)."
+        case let .invalidMessagePageLoadDelay(delay):
+            return "Message page load delay must be between 0 and 30000 ms: \(delay)."
         case let .invalidMessageRefreshDelay(delay):
             return "Message refresh delay must be between 0 and 30000 ms: \(delay)."
         case let .invalidMessageSearchDelay(delay):
@@ -512,6 +523,10 @@ enum PushGoAutomationContext {
         if let delay = descriptor.faults.messageLoadDelayMilliseconds,
            !(0 ... 30_000).contains(delay) {
             throw PushGoQualitySessionError.invalidMessageLoadDelay(delay)
+        }
+        if let delay = descriptor.faults.messagePageLoadDelayMilliseconds,
+           !(0 ... 30_000).contains(delay) {
+            throw PushGoQualitySessionError.invalidMessagePageLoadDelay(delay)
         }
         if let delay = descriptor.faults.messageRefreshDelayMilliseconds,
            !(0 ... 30_000).contains(delay) {

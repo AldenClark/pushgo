@@ -11,6 +11,7 @@ struct QualityRuntimeProfileTests {
             fixture: "messages.standard",
             faults: [
                 "local_store_failure_streak_threshold": 1,
+                "message_page_load_delay_ms": 1_500,
                 "message_refresh_delay_ms": 2_500,
                 "message_search_delay_ms": 2_000,
                 "fail_gateway_switch_validation_once": true,
@@ -26,6 +27,7 @@ struct QualityRuntimeProfileTests {
         #expect(descriptor.sessionID == "ios-pr-123_retry-1")
         #expect(descriptor.fixture == .messagesStandard)
         #expect(descriptor.faults.messageLoadDelayMilliseconds == nil)
+        #expect(descriptor.faults.messagePageLoadDelayMilliseconds == 1_500)
         #expect(descriptor.faults.localStoreFailureStreakThreshold == 1)
         #expect(descriptor.faults.messageRefreshDelayMilliseconds == 2_500)
         #expect(descriptor.faults.messageSearchDelayMilliseconds == 2_000)
@@ -218,6 +220,19 @@ struct QualityRuntimeProfileTests {
         )
 
         #expect(throws: PushGoQualitySessionError.invalidMessageLoadDelay(30_001)) {
+            try PushGoAutomationContext.decodeQualitySession(encoded)
+        }
+    }
+
+    @Test("rejects an unbounded next-page delay before app startup")
+    func rejectsUnboundedPageDelay() throws {
+        let encoded = try encodedSession(
+            sessionID: "slow-page-negative-control",
+            fixture: "messages.standard",
+            faults: ["message_page_load_delay_ms": 30_001]
+        )
+
+        #expect(throws: PushGoQualitySessionError.invalidMessagePageLoadDelay(30_001)) {
             try PushGoAutomationContext.decodeQualitySession(encoded)
         }
     }
