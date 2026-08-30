@@ -320,8 +320,9 @@ final class PushGo_macOSUITests: XCTestCase {
         let sessionID = "macos-system-notification-\(UUID().uuidString.lowercased())"
         let requestID = "quality-macos-notification-\(UUID().uuidString.lowercased())"
         let messageID = "quality-macos-message-\(UUID().uuidString.lowercased())"
-        let title = "Quality macOS System Message"
-        let body = "The real macOS notification opens this canonical body."
+        let marker = String(requestID.suffix(8))
+        let title = "Quality macOS System Message \(marker)"
+        let body = "The real macOS notification opens canonical body \(marker)."
         let context = configuredQualityApp(
             sessionID: sessionID,
             fixture: "empty.clean",
@@ -378,16 +379,29 @@ final class PushGo_macOSUITests: XCTestCase {
         )
 
         let notificationCenter = XCUIApplication(bundleIdentifier: "com.apple.notificationcenterui")
-        let titleElement = notificationCenter.descendants(matching: .any)
-            .matching(NSPredicate(format: "label == %@", title))
+        // macOS 27 exposes a delivered notification as either a container whose
+        // accessibility description contains the whole payload or a text child
+        // whose value contains the whole payload. Requiring `label == title`
+        // misclassifies a real, actionable notification as a test-system block.
+        let notificationCard = notificationCenter.descendants(matching: .any)
+            .matching(
+                NSPredicate(
+                    format: "(label CONTAINS %@ AND label CONTAINS %@) OR "
+                        + "(value CONTAINS %@ AND value CONTAINS %@)",
+                    title,
+                    body,
+                    title,
+                    body
+                )
+            )
             .firstMatch
-        if !titleElement.waitForExistence(timeout: 5) {
+        if !notificationCard.waitForExistence(timeout: 5) {
             XCTAssertTrue(
                 revealNotificationCenter(),
                 "QUALITY_PRECONDITION: The real macOS notification surface could not be opened."
             )
         }
-        guard titleElement.waitForExistence(timeout: 5) else {
+        guard notificationCard.waitForExistence(timeout: 5) else {
             XCTFail(
                 "QUALITY_PRECONDITION: App scheduling succeeded, but macOS did not expose this "
                     + "notification card to XCTest; display, accessibility, and real-click outcomes "
@@ -395,14 +409,7 @@ final class PushGo_macOSUITests: XCTestCase {
             )
             return
         }
-        XCTAssertTrue(
-            notificationCenter.descendants(matching: .any)
-                .matching(NSPredicate(format: "label == %@", body))
-                .firstMatch
-                .waitForExistence(timeout: 3),
-            "The macOS notification surface changed or lost the exact payload body."
-        )
-        titleElement.click()
+        notificationCard.click()
 
         XCTAssertTrue(
             element(in: context.app, identifier: "screen.message.detail")

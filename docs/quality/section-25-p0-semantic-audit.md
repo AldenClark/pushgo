@@ -142,7 +142,7 @@ Platform vector order is `I / M / D / W` (iOS, macOS, Android, watchOS). `-` mea
 | 1414 | Decryption key hex/base64 boundaries | V/V/V/- | `V` | Validator matrix plus real invalid and accepted UI paths. |
 | 1415 | Saving key recovers original message | V/V/V/- | `V` | Same canonical encrypted message becomes exact plaintext and remains after relaunch. |
 | 1421 | Every visible documentation link reaches a safe localized target | V/V/V/- | `V` | Fast contracts reconcile the actual visible controls rather than URL constants: Apple Settings exposes Getting Started, Message API and E2EE; the Message/Event/Thing onboarding surfaces add their matching API page plus Getting Started; `selfHosting` is mapped but not counted because no current UI exposes it. Android Settings exposes Getting Started, Message API and E2EE, with production row semantics and en/zh-CN/zh-TW resources checked. One representative real system-consumer handoff per platform reuses an existing positive journey: iOS Safari, macOS default browser and Android's resolved browser must receive the exact safe Getting Started HTTPS host/path and return to the same App-owned screen. This proves routing/continuity, not public-site content or network SLA. |
-| 1422 | Notification-permission card and settings return | V/B/V/- | `P` | iOS and Android exercise real system decisions/Settings and return refresh. macOS notification delivery is authorized and visible, but the current notification card/click surface is not operable through XCTest; the exact remaining macOS Settings-card path must stay `B`, not green. |
+| 1422 | Notification-permission card and settings return | V/B/V/- | `P` | iOS and Android exercise real system decisions/Settings and return refresh. macOS authorized delivery and Notification Center click now execute, but they do not exercise the exact denied Settings-card→system enable→return refresh path; that remaining permission path stays `B`, not green. |
 | 1426 | Android FCM/Private transport selection | -/-/P/- | `P` | Real UI, durable mode, Service/token/connection state and rollback/relaunch are covered. A real post-switch FCM and Private delivery is externally owned and remains `N`; typed/fake integration cannot close that endpoint. |
 
 ## 25.10 Ingress, notification, ACK and system routing
@@ -156,7 +156,7 @@ Platform vector order is `I / M / D / W` (iOS, macOS, Android, watchOS). `-` mea
 | 1439 | Out-of-order Event/Thing ingress | V/V/V/- | `V` | Final projections retain the newest canonical head. |
 | 1440 | Persist success with ACK failure | V/V/V/- | `V` | Canonical object remains visible and ACK becomes durable pending. |
 | 1441 | Persist failure must not ACK or announce success | V/V/V/- | `V` | Integration failure leaves no half object/success notification and remains retryable. |
-| 1446 | Notification tap cold/warm opens exact detail (`P0 Release`) | P/B/P/- | `N` | iOS Simulator and Android emulator cover local OS cold/warm routing. macOS notification is visually delivered but XCTest cannot click it. Dedicated physical-device Release evidence is absent, so the design row remains `N` overall. |
+| 1446 | Notification tap cold/warm opens exact detail (`P0 Release`) | P/P/P/- | `N` | iOS Simulator and Android emulator cover local OS cold/warm routing. macOS now covers a real host Notification Center warm click, exact detail and relaunch persistence (`build/quality-results/macos-system-notification-ax-fix/run-20260831-020434.xcresult`); cold-start parity and dedicated physical-device Release evidence remain absent, so the design row stays `N` overall. |
 | 1448 | Notification mark-read/delete/copy actions (`P0 Release`) | P/N/P/- | `N` | iOS Simulator mark-read/delete actions and Android local notification mutation endpoints cover parts of the chain. Exact physical action→Store/list/badge/clipboard evidence across applicable platforms is not run. |
 | 1450 | Permission denied/allowed (`P0 Release`) | P/-/P/- | `N` | Simulator/emulator purpose journeys are real local-system evidence; dedicated physical iOS/Android token/notification acceptance is not run. |
 | 1451 | Real APNs provider-to-device-to-UI (`P0 Release`) | N/-/-/- | `N` | Requires a dedicated signed physical iPhone and sandbox provider credentials. `simctl push` is explicitly insufficient. |
@@ -215,7 +215,7 @@ The design contains 103 P0/P0 Release rows. This audit deliberately does **not**
 
 - 90 rows are currently classified `V`; 1 conditional export row is `NA` because the product capability was explicitly removed.
 - 4 rows remain `P` and require semantic closure, an explicit product-scope correction, or an externally owned sub-gate.
-- Two platform sub-results are explicitly `B`: iOS Channel Pasteboard and macOS notification interaction. Neither is hidden inside a green aggregate.
+- Two platform sub-results are explicitly `B`: iOS Channel Pasteboard and the macOS denied-permission Settings-card return path. Neither is hidden inside a green aggregate.
 - 8 P0 Release/external rows remain `N`; local Simulator/emulator evidence is retained but never promoted to physical/provider acceptance.
 
 The next implementation order is constrained by value and reuse:

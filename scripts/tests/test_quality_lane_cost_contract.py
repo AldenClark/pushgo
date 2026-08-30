@@ -416,6 +416,13 @@ class QualityLaneCostContractTests(unittest.TestCase):
         self.assertIn('identifier: "quality-command.failed"', authorization)
         self.assertIn("while Date() < deadline", authorization)
         self.assertNotIn("alert.waitForExistence(timeout: 2)", authorization)
+        notification_journey = macos_source.split(
+            "func testSystemNotificationClickPersistsAccurateMessageAndSurvivesRelaunch",
+            1,
+        )[1].split("\n    @MainActor", 1)[0]
+        self.assertIn("label CONTAINS", notification_journey)
+        self.assertIn("value CONTAINS", notification_journey)
+        self.assertNotIn('label == %@", title', notification_journey)
 
     def test_macos_preparation_calibration_is_not_charged_to_ordinary_batches(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()
