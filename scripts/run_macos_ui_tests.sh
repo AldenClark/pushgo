@@ -5,6 +5,7 @@ repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 project_path="${PROJECT_PATH:-$repo_root/pushgo.xcodeproj}"
 scheme="${SCHEME:-PushGo-macOS}"
 test_scopes="${TEST_SCOPES:-${TEST_SCOPE:-}}"
+expected_test_count="${QUALITY_EXPECTED_TEST_COUNT:-}"
 max_retries="${MAX_RETRIES:-0}"
 derived_data_path="${DERIVED_DATA_PATH:-$repo_root/build/.deriveddata-macos-ui}"
 results_root="${RESULTS_ROOT:-$repo_root/build/quality-results/macos-ui}"
@@ -34,6 +35,11 @@ fi
 if [[ ! "$max_retries" =~ ^[0-9]+$ ]] || (( max_retries != 0 )); then
   echo "status=BLOCKED"
   echo "reason=macos_ui_retries_are_disabled:$max_retries"
+  exit 2
+fi
+if [[ -n "$expected_test_count" && ! "$expected_test_count" =~ ^[1-9][0-9]*$ ]]; then
+  echo "status=BLOCKED"
+  echo "reason=invalid_expected_macos_test_count:$expected_test_count"
   exit 2
 fi
 if [[ "$reuse_built_tests" != "0" && "$reuse_built_tests" != "1" ]]; then
@@ -242,6 +248,7 @@ fi
 if [[ $status -eq 0 ]]; then
   verify_execution_args=(--result-bundle "$result_bundle")
   [[ "$allow_expected_failures" == "0" ]] || verify_execution_args+=(--allow-expected-failures)
+  [[ -z "$expected_test_count" ]] || verify_execution_args+=(--expected-test-count "$expected_test_count")
   if ! python3 "$repo_root/scripts/verify_apple_test_execution.py" "${verify_execution_args[@]}"; then
     [[ -z "$runner_status_file" ]] || printf 'FAILED\n' > "$runner_status_file"
     echo "status=FAILED_TEST_SYSTEM"

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "platform": "apple",
-  "lane_order": ["not-run", "pr", "nightly", "performance", "release"],
+  "lane_order": ["not-run", "changed-tests", "pr", "nightly", "performance", "release"],
   "product_paths": [
     "Shared/**",
     "Apps/**",
@@ -30,12 +30,38 @@
     {
       "id": "quality-system",
       "paths": ["AGENTS.md", "Tests/**", "scripts/tests/**", "scripts/quality_*.py", "scripts/quality_*.sh", "scripts/require_unlocked_apple_ui_console.sh", "scripts/run_ios_ui_tests.sh", "scripts/run_macos_ui_tests.sh", "scripts/run_macos_startup_reliability.sh", "scripts/run_watchos_ui_tests.sh", ".github/workflows/apple-quality.yml", "config/quality-impact.json", "config/quality-ai-task-history.json", "config/quality-test-system-issues.json"],
-      "exclude_paths": ["scripts/quality_ui_entrypoints.py", "scripts/tests/test_quality_ui_entrypoints.py"],
+      "exclude_paths": ["scripts/quality_ui_entrypoints.py", "scripts/tests/test_quality_ui_entrypoints.py", "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift", "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift", "Tests/PushGo-watchOSUITests/PushGo_watchOSUITests.swift"],
       "capabilities": ["quality-system-trustworthiness"],
       "minimum_evidence": ["quality selector unit/negative controls", "Apple PR representative lane"],
       "lane": "pr",
-      "known_evidence_gaps": ["A changed test outside curated lanes may need an explicit focused invocation."],
       "escalation_reasons": ["Test infrastructure changes require one representative product journey; syntax alone is insufficient."]
+    },
+    {
+      "id": "ios-ui-test-source",
+      "paths": ["Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift"],
+      "capabilities": ["quality-system-trustworthiness", "ios-ui-purpose-evidence"],
+      "minimum_evidence": ["exact changed XCTest method when diff attribution is reliable, otherwise the runnable changed XCTestCase; removed, renamed, or unresolved tests block before execution"],
+      "lane": "changed-tests",
+      "known_evidence_gaps": ["Simulator execution does not prove physical-device, APNs, background, or Release behavior."],
+      "escalation_reasons": ["A changed UI Oracle must execute instead of being hidden behind a fixed curated scope list."]
+    },
+    {
+      "id": "macos-ui-test-source",
+      "paths": ["Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift"],
+      "capabilities": ["quality-system-trustworthiness", "macos-ui-purpose-evidence"],
+      "minimum_evidence": ["exact changed XCTest method when diff attribution is reliable, otherwise the runnable changed XCTestCase; removed, renamed, or unresolved tests block before execution"],
+      "lane": "changed-tests",
+      "known_evidence_gaps": ["Controlled local execution does not prove physical-device, real-provider, permission-denial, or signed-distribution behavior."],
+      "escalation_reasons": ["A changed UI Oracle must execute instead of being hidden behind a fixed curated scope list."]
+    },
+    {
+      "id": "watchos-ui-test-source",
+      "paths": ["Tests/PushGo-watchOSUITests/PushGo_watchOSUITests.swift"],
+      "capabilities": ["quality-system-trustworthiness", "watchos-ui-purpose-evidence"],
+      "minimum_evidence": ["exact changed XCTest method when diff attribution is reliable, otherwise the runnable changed XCTestCase; removed, renamed, or unresolved tests block before execution"],
+      "lane": "changed-tests",
+      "known_evidence_gaps": ["Watch Simulator execution does not prove paired physical Watch/iPhone notification, receiver, or complication behavior."],
+      "escalation_reasons": ["A changed Watch UI Oracle must execute instead of being hidden behind an unrelated fixed iOS PR scope list."]
     },
     {
       "id": "quality-ui-entrypoint-discovery",
@@ -85,7 +111,7 @@
     },
     {
       "id": "quality-preparation-contract",
-      "paths": ["Shared/UI/RootView.swift", "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift", "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift", "scripts/run_ios_ui_tests.sh", "scripts/run_macos_ui_tests.sh"],
+      "paths": ["Shared/UI/RootView.swift", "scripts/run_ios_ui_tests.sh", "scripts/run_macos_ui_tests.sh"],
       "capabilities": ["app-launch", "app-owned-quality-runtime", "quality-system-trustworthiness"],
       "minimum_evidence": ["invalid App-owned session stops before business UI within 10 seconds", "normal empty.clean reaches readiness and the accurate functional empty state on iOS and macOS", "zero product retries"],
       "required_checks": ["apple-preparation-contract"],

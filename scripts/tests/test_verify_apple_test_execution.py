@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from scripts.verify_apple_test_execution import executed_test_count
+from scripts.verify_apple_test_execution import executed_test_count, test_count_matches_selection
 
 
 class VerifyAppleTestExecutionTests(unittest.TestCase):
@@ -33,6 +33,11 @@ class VerifyAppleTestExecutionTests(unittest.TestCase):
     def test_rejects_non_integer_total(self) -> None:
         with self.assertRaises(ValueError):
             executed_test_count({"passedTests": "3", "failedTests": 0})
+
+    def test_exact_selection_requires_every_selected_method_to_execute(self) -> None:
+        self.assertTrue(test_count_matches_selection(2, 2))
+        self.assertFalse(test_count_matches_selection(1, 2))
+        self.assertTrue(test_count_matches_selection(7, None))
 
 
 if __name__ == "__main__":

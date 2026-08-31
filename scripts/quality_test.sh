@@ -103,6 +103,160 @@ run_impact_contracts() {
   local plan_path="${QUALITY_IMPACT_PLAN:-}"
   local check
   local checks_output
+  local scope_lines
+  local scope_platform
+  local scope_profile
+  local scope_list
+  local scope_expected_count
+  if [[ -n "$plan_path" ]]; then
+    if ! scope_lines="$(
+      python3 - "$plan_path" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+if not path.is_file():
+    raise SystemExit(f"impact plan is not a regular file: {path}")
+plan = json.loads(path.read_text())
+if plan.get("plan_status") == "BLOCKED" or plan.get("selection_blockers"):
+    raise SystemExit("impact plan contains unresolved selection blockers")
+scope_payload = plan.get("required_ui_test_scopes", {})
+if not isinstance(scope_payload, dict):
+    raise SystemExit("required_ui_test_scopes must be an object")
+profile_payload = plan.get("required_ui_test_profile_scopes", {})
+if not isinstance(profile_payload, dict):
+    raise SystemExit("required_ui_test_profile_scopes must be an object")
+prefixes = {
+    "ios": "PushGo-iOSUITests/",
+    "macos": "PushGo-macOSUITests/",
+    "watchos": "PushGo-watchOSUITests/",
+}
+allowed_profiles = {
+    "ios": {"default", "accessibility"},
+    "macos": {"default", "system"},
+    "watchos": {"default"},
+}
+if set(scope_payload) - set(prefixes) or set(profile_payload) - set(prefixes):
+    raise SystemExit("UI test scope plan contains an unsupported platform")
+impacts = plan.get("ui_test_impacts", {})
+if impacts and not isinstance(impacts, dict):
+    raise SystemExit("ui_test_impacts must be an object")
+for platform, scopes in sorted(scope_payload.items()):
+    if not isinstance(scopes, list) or any(
+        not isinstance(scope, str)
+        or not scope.startswith(prefixes[platform])
+        or scope.count("/") != 2
+        or any(character.isspace() for character in scope)
+        or "," in scope
+        for scope in scopes
+    ):
+        raise SystemExit(f"invalid {platform} UI test scopes")
+    if not scopes and profile_payload.get(platform):
+        raise SystemExit(f"{platform} execution profiles exist without selected scopes")
+    if scopes:
+        profiles = profile_payload.get(platform, {})
+        if not isinstance(profiles, dict) or set(profiles) - allowed_profiles[platform]:
+            raise SystemExit(f"invalid {platform} UI test execution profiles")
+        flattened = []
+        for profile, profile_scopes in sorted(profiles.items()):
+            if not isinstance(profile_scopes, list) or any(
+                scope not in scopes for scope in profile_scopes
+            ):
+                raise SystemExit(f"invalid {platform} {profile} profile scopes")
+            flattened.extend(profile_scopes)
+        if len(flattened) != len(set(flattened)) or set(flattened) != set(scopes):
+            raise SystemExit(f"{platform} profile scopes do not partition selected scopes")
+        platform_impacts = [
+            impact
+            for impact in impacts.values()
+            if isinstance(impact, dict) and impact.get("platform") == platform
+        ]
+        expected_counts = [impact.get("expected_test_count") for impact in platform_impacts]
+        counts_are_valid = all(
+            isinstance(count, int) and not isinstance(count, bool) and count > 0
+            for count in expected_counts
+        )
+        if not platform_impacts or not counts_are_valid or sum(expected_counts) != len(scopes):
+            raise SystemExit(f"invalid {platform} expected UI test count")
+        for profile, profile_scopes in sorted(profiles.items()):
+            if profile_scopes:
+                print(f"{platform}\t{profile}\t{','.join(profile_scopes)}\t{len(profile_scopes)}")
+PY
+    )"; then
+      echo "status=BLOCKED"
+      echo "reason=invalid_apple_impact_ui_test_scopes"
+      exit 2
+    fi
+    while IFS=$'\t' read -r scope_platform scope_profile scope_list scope_expected_count; do
+      [[ -n "$scope_platform" && -n "$scope_profile" && -n "$scope_list" ]] || continue
+      case "$scope_platform" in
+        ios)
+          selected_claims+=("impact-selected changed iOS UI tests ($scope_profile): $scope_list")
+          if [[ "$scope_profile" == "accessibility" ]]; then
+            QUALITY_EXPECTED_TEST_COUNT="$scope_expected_count" \
+              run_accessibility_localization
+          elif [[ "$scope_profile" == "default" ]]; then
+            TEST_SCOPES="$scope_list" \
+              QUALITY_EXPECTED_TEST_COUNT="$scope_expected_count" \
+              MAX_RETRIES=0 \
+              QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
+          else
+            echo "status=BLOCKED"
+            echo "reason=unsupported_ios_impact_ui_profile:$scope_profile"
+            exit 2
+          fi
+          claims+=("impact-selected changed iOS UI tests ($scope_profile): $scope_list")
+          ;;
+        macos)
+          selected_claims+=("impact-selected changed macOS UI tests ($scope_profile): $scope_list")
+          if [[ "$scope_profile" == "system" ]]; then
+            local -a remaining_not_run=()
+            local deferred_claim
+            for deferred_claim in "${not_run[@]}"; do
+              [[ "$deferred_claim" == "$macos_system_notification_not_run_claim" ]] \
+                || remaining_not_run+=("$deferred_claim")
+            done
+            not_run=("${remaining_not_run[@]}")
+            TEST_SCOPES="$scope_list" \
+              QUALITY_EXPECTED_TEST_COUNT="$scope_expected_count" \
+              MACOS_SCOPE_SET="system" \
+              MAX_RETRIES=0 \
+              QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_macos_ui_tests.sh"
+            macos_system_notification_completed=1
+          elif [[ "$scope_profile" == "default" ]]; then
+            MACOS_SCOPE_SET="default" \
+              TEST_SCOPES="$scope_list" \
+              QUALITY_EXPECTED_TEST_COUNT="$scope_expected_count" \
+              MAX_RETRIES=0 \
+              QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_macos_ui_tests.sh"
+          else
+            echo "status=BLOCKED"
+            echo "reason=unsupported_macos_impact_ui_profile:$scope_profile"
+            exit 2
+          fi
+          claims+=("impact-selected changed macOS UI tests ($scope_profile): $scope_list")
+          ;;
+        watchos)
+          [[ "$scope_profile" == "default" ]] || {
+            echo "status=BLOCKED"
+            echo "reason=unsupported_watchos_impact_ui_profile:$scope_profile"
+            exit 2
+          }
+          selected_claims+=("impact-selected changed watchOS UI tests ($scope_profile): $scope_list")
+          TEST_SCOPES="$scope_list" \
+            QUALITY_EXPECTED_TEST_COUNT="$scope_expected_count" \
+            QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_watchos_ui_tests.sh"
+          claims+=("impact-selected changed watchOS UI tests ($scope_profile): $scope_list")
+          ;;
+        *)
+          echo "status=BLOCKED"
+          echo "reason=unsupported_apple_impact_ui_platform:$scope_platform"
+          exit 2
+          ;;
+      esac
+    done <<< "$scope_lines"
+  fi
   if ! checks_output="$(
     python3 - "$plan_path" "$lane" <<'PY'
 import json
@@ -390,6 +544,13 @@ run_system_notification_journey() {
 run_impact_contracts
 
 case "$lane" in
+  changed-tests)
+    if (( ${#claims[@]} == 0 )); then
+      echo "status=BLOCKED"
+      echo "reason=changed_tests_lane_requires_resolved_impact_scopes"
+      exit 2
+    fi
+    ;;
   preparation)
     run_preparation_contract
     ;;

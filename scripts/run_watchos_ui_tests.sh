@@ -6,11 +6,18 @@ project_path="${PROJECT_PATH:-$repo_root/pushgo.xcodeproj}"
 scheme="${SCHEME:-PushGo-watchOS}"
 app_bundle_identifier="${APP_BUNDLE_IDENTIFIER:-io.ethan.pushgo.watchkitapp}"
 test_scopes="${TEST_SCOPES:-${TEST_SCOPE:-}}"
+expected_test_count="${QUALITY_EXPECTED_TEST_COUNT:-}"
 derived_data_path="${DERIVED_DATA_PATH:-$repo_root/.deriveddata-watch-ui-tests}"
 results_root="${RESULTS_ROOT:-$repo_root/build/quality-results/watchos}"
 runner_status_file="${QUALITY_RUNNER_STATUS_FILE:-}"
 runner_issue_file="${QUALITY_RUNNER_ISSUE_FILE:-}"
 test_execution_timeout_seconds="${WATCH_TEST_EXECUTION_TIMEOUT_SECONDS:-120}"
+
+if [[ -n "$expected_test_count" && ! "$expected_test_count" =~ ^[1-9][0-9]*$ ]]; then
+  echo "status=BLOCKED"
+  echo "reason=invalid_expected_watchos_test_count:$expected_test_count"
+  exit 2
+fi
 
 if [[ -n "$runner_status_file" && ! -f "$runner_status_file" ]]; then
   mkdir -p "$(dirname "$runner_status_file")"
@@ -127,7 +134,9 @@ status=${PIPESTATUS[0]}
 set -e
 
 if [[ $status -eq 0 ]]; then
-  if ! python3 "$repo_root/scripts/verify_apple_test_execution.py" --result-bundle "$result_bundle"; then
+  verify_execution_args=(--result-bundle "$result_bundle")
+  [[ -z "$expected_test_count" ]] || verify_execution_args+=(--expected-test-count "$expected_test_count")
+  if ! python3 "$repo_root/scripts/verify_apple_test_execution.py" "${verify_execution_args[@]}"; then
     [[ -z "$runner_status_file" ]] || printf 'FAILED\n' > "$runner_status_file"
     echo "status=FAILED_TEST_SYSTEM"
     echo "reason=selected_watchos_ui_scope_executed_zero_tests"

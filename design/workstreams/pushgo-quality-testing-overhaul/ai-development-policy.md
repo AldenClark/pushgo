@@ -113,7 +113,7 @@ Identifier 只负责稳定定位；readiness 只证明准备完成；Automation 
 ./scripts/quality_changed.sh
 ```
 
-也可以用 `--changed-file` 做修改前计划，或用 `--base/--head` 对提交范围计划。输出必须包含：受影响用户能力、确定性最低证据、推荐 Lane、已知证据缺口、路径命中和未映射产品路径。Apple 直接执行推荐 Lane；独立性能测试/runner 变更选择 `performance`，若同时命中真实产品规则则提升为包含功能与性能证据的 `release`。Android 本地执行完整推荐 Lane，CI 则把主机 `pr` 与 `pr-ui/device/nightly/release` 设备阶段拆开，避免重复构建。
+也可以用 `--changed-file` 做修改前计划，或用 `--base/--head` 对提交范围计划。输出必须包含：受影响用户能力、确定性最低证据、推荐 Lane、已知证据缺口、路径命中和未映射产品路径。Apple 直接执行推荐 Lane；独立性能测试/runner 变更选择 `performance`，若同时命中真实产品规则则提升为包含功能与性能证据的 `release`。普通 iOS/macOS/watchOS XCTest 旅程源码变化进入 `changed-tests`：可靠 diff 精确选择改动方法，共享 helper/fixture 变化扩到该类全部可运行方法，再按 default、accessibility、system 等执行 profile 分组，防止专用环境被默认 Runner 吞掉；删除、重命名、零可运行或无法安全归属的变化在执行前 `BLOCKED`。方法与整类计划都必须记录预期可运行方法数，并让每个 profile 的 xcresult 实际执行数完全相等，不能以“至少跑到一条”求绿。系统通知与性能测试仍使用各自专用 Lane/环境。Android 本地执行完整推荐 Lane，CI 则把主机 `pr` 与 `pr-ui/device/nightly/release` 设备阶段拆开，避免重复构建。
 
 该机制只负责**不可低于的下限**，不负责替 AI 作完整判断。任何产品路径未映射都 `BLOCKED`；共享 Store/Room、Runtime、Ingress、系统消费者和构建边界必须自动升级。即使命中为 `READY`，AI 仍必须沿 caller、状态/数据 owner、错误、配置、生成物和平台消费者追踪，并在现有 Oracle 无法击穿本次风险时新增或强化测试。文档或无关支持文件可以明确产生 `NOT RUN`，不得伪造产品绿色。
 

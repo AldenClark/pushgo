@@ -61,6 +61,8 @@ TEST_SCOPES='PushGo-iOSUITests/PushGo_iOSUITests/testSettingsServerUsesRealContr
 
 `scripts/quality_changed.sh` derives the deterministic minimum lane from `config/quality-impact.json`. That plan is a lower bound, not a coverage score.
 
+Changes inside the ordinary iOS, macOS, or watchOS XCTest journey source are selected from the diff instead of being hidden behind the fixed PR list. A hunk owned by one unchanged `test...` method produces an exact `Target/Class/testMethod` scope; a shared helper or fixture hunk expands to every runnable method in the changed `XCTestCase`. Those methods are partitioned by execution profile, so accessibility and real-system-notification journeys retain their required environment instead of being mixed into a default batch. Deleted, renamed, non-runnable, or ambiguous tests are `BLOCKED` before execution. The selector records the expected runnable-method count for both exact-method and whole-class selection; each profile's xcresult executed count must match its selected methods, so executing zero or only a subset is a test-system failure. Specialized system-notification and performance files retain their dedicated lanes and environments.
+
 ## Result rules
 
 - Business assertion failures are never retried.

@@ -23,10 +23,15 @@ def executed_test_count(
     return sum(values)
 
 
+def test_count_matches_selection(count: int, expected: int | None) -> bool:
+    return expected is None or count == expected
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--result-bundle", required=True, type=Path)
     parser.add_argument("--allow-expected-failures", action="store_true")
+    parser.add_argument("--expected-test-count", type=int)
     args = parser.parse_args()
 
     try:
@@ -58,6 +63,13 @@ def main() -> int:
     if count <= 0:
         print("status=FAILED_TEST_SYSTEM")
         print("reason=selected_apple_tests_executed_zero_tests")
+        return 1
+    if not test_count_matches_selection(count, args.expected_test_count):
+        print("status=FAILED_TEST_SYSTEM")
+        print(
+            "reason=selected_apple_test_count_mismatch:"
+            f"expected={args.expected_test_count}:executed={count}"
+        )
         return 1
 
     print("status=EXECUTED")

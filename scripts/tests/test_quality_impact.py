@@ -2,6 +2,8 @@ import importlib.util
 import re
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -18,6 +20,289 @@ class QualityImpactPlanTests(unittest.TestCase):
 
     def plan(self, *paths):
         return QUALITY_IMPACT.build_plan(list(paths), self.manifest, "unit-test")
+
+    @staticmethod
+    def swift_ui_test_source(value: str = "before", method: str = "testChangedPurpose") -> str:
+        return f"""import XCTest
+
+final class PushGo_iOSUITests: XCTestCase {{
+    func testStablePurpose() {{
+        XCTAssertTrue(true)
+    }}
+
+    func {method}() {{
+        XCTAssertEqual("{value}", "expected")
+    }}
+
+    private func sharedFixture() -> String {{
+        "fixture"
+    }}
+}}
+"""
+
+    def test_changed_ui_test_method_selects_exact_xctest_scope(self):
+        path = "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift"
+        old_source = self.swift_ui_test_source("before")
+        new_source = self.swift_ui_test_source("after")
+        changed_line = next(
+            index for index, line in enumerate(new_source.splitlines(), 1) if '"after"' in line
+        )
+        impact = QUALITY_IMPACT.resolve_swift_ui_test_change(
+            path,
+            old_source,
+            new_source,
+            f"@@ -{changed_line} +{changed_line} @@\n-old\n+new\n",
+        )
+
+        self.assertEqual("exact-method", impact["selection"])
+        self.assertEqual(1, impact["expected_test_count"])
+        self.assertEqual(
+            ["PushGo-iOSUITests/PushGo_iOSUITests/testChangedPurpose"],
+            impact["scopes"],
+        )
+        plan = QUALITY_IMPACT.build_plan(
+            [path], self.manifest, "unit-test", {path: impact}
+        )
+        self.assertEqual("READY", plan["plan_status"])
+        self.assertEqual("changed-tests", plan["recommended_lane"])
+        self.assertEqual("exact-method", plan["ui_test_scope_selection"])
+        self.assertEqual(impact["scopes"], plan["required_ui_test_scopes"]["ios"])
+        self.assertEqual([], plan["required_ui_test_scopes"]["macos"])
+
+    def test_changed_ui_test_helper_expands_to_runnable_changed_class(self):
+        path = "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift"
+        old_source = self.swift_ui_test_source()
+        new_source = old_source.replace('"fixture"', '"changed fixture"')
+        changed_line = next(
+            index for index, line in enumerate(new_source.splitlines(), 1) if "changed fixture" in line
+        )
+        impact = QUALITY_IMPACT.resolve_swift_ui_test_change(
+            path,
+            old_source,
+            new_source,
+            f"@@ -{changed_line} +{changed_line} @@\n-old\n+new\n",
+        )
+
+        self.assertEqual("changed-class", impact["selection"])
+        self.assertEqual(
+            [
+                "PushGo-iOSUITests/PushGo_iOSUITests/testChangedPurpose",
+                "PushGo-iOSUITests/PushGo_iOSUITests/testStablePurpose",
+            ],
+            impact["scopes"],
+        )
+        self.assertEqual({"default": impact["scopes"]}, impact["profile_scopes"])
+        self.assertEqual(2, impact["expected_test_count"])
+
+    def test_pure_assertion_insertion_inside_existing_method_stays_exact(self):
+        path = "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift"
+        old_source = self.swift_ui_test_source()
+        inserted = '        XCTAssertEqual("second", "second")\n'
+        new_source = old_source.replace(
+            '        XCTAssertEqual("before", "expected")\n',
+            '        XCTAssertEqual("before", "expected")\n' + inserted,
+        )
+        new_line = next(
+            index for index, line in enumerate(new_source.splitlines(), 1) if '"second"' in line
+        )
+        impact = QUALITY_IMPACT.resolve_swift_ui_test_change(
+            path,
+            old_source,
+            new_source,
+            f"@@ -{new_line - 1},0 +{new_line},1 @@\n+assertion\n",
+        )
+
+        self.assertEqual("exact-method", impact["selection"])
+        self.assertEqual(
+            ["PushGo-iOSUITests/PushGo_iOSUITests/testChangedPurpose"],
+            impact["scopes"],
+        )
+
+    def test_pure_assertion_deletion_inside_existing_method_stays_exact(self):
+        path = "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift"
+        extra = '        XCTAssertEqual("second", "second")\n'
+        new_source = self.swift_ui_test_source()
+        old_source = new_source.replace(
+            '        XCTAssertEqual("before", "expected")\n',
+            '        XCTAssertEqual("before", "expected")\n' + extra,
+        )
+        old_line = next(
+            index for index, line in enumerate(old_source.splitlines(), 1) if '"second"' in line
+        )
+        impact = QUALITY_IMPACT.resolve_swift_ui_test_change(
+            path,
+            old_source,
+            new_source,
+            f"@@ -{old_line},1 +{old_line - 1},0 @@\n-assertion\n",
+        )
+
+        self.assertEqual("exact-method", impact["selection"])
+        self.assertEqual(
+            ["PushGo-iOSUITests/PushGo_iOSUITests/testChangedPurpose"],
+            impact["scopes"],
+        )
+
+    def test_new_ui_test_method_selects_the_new_exact_xctest_scope(self):
+        path = "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift"
+        old_source = self.swift_ui_test_source()
+        insertion = """\n    func testNewPurpose() {\n        XCTAssertTrue(true)\n    }\n"""
+        new_source = old_source.replace("\n    private func sharedFixture", insertion + "\n    private func sharedFixture")
+        new_lines = new_source.splitlines()
+        new_start = next(
+            index for index, line in enumerate(new_lines, 1) if "func testNewPurpose" in line
+        )
+        impact = QUALITY_IMPACT.resolve_swift_ui_test_change(
+            path,
+            old_source,
+            new_source,
+            f"@@ -10,0 +{new_start},3 @@\n+new method\n",
+        )
+
+        self.assertEqual("exact-method", impact["selection"])
+        self.assertEqual(
+            ["PushGo-iOSUITests/PushGo_iOSUITests/testNewPurpose"],
+            impact["scopes"],
+        )
+
+    def test_deleted_ui_test_source_blocks_before_any_unrelated_scope_runs(self):
+        path = "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift"
+        impact = QUALITY_IMPACT.resolve_swift_ui_test_change(
+            path,
+            self.swift_ui_test_source(),
+            None,
+            "@@ -1,15 +0,0 @@\n",
+        )
+        plan = QUALITY_IMPACT.build_plan(
+            [path], self.manifest, "unit-test", {path: impact}
+        )
+
+        self.assertEqual("blocked", impact["selection"])
+        self.assertEqual("BLOCKED", plan["plan_status"])
+        self.assertIn("was deleted", plan["selection_blockers"][0])
+        self.assertEqual([], plan["required_ui_test_scopes"]["ios"])
+
+    def test_committed_ui_test_source_rename_blocks_until_mapping_is_updated(self):
+        old_path = "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift"
+        new_path = "Tests/PushGo-iOSUITests/RenamedUITests.swift"
+        args = SimpleNamespace(base=None, head="HEAD")
+        with mock.patch.object(
+            QUALITY_IMPACT,
+            "git_text",
+            return_value=f"R100\t{old_path}\t{new_path}\n",
+        ):
+            impacts = QUALITY_IMPACT.swift_ui_test_impacts(
+                args, REPO, [new_path], "working-tree"
+            )
+        plan = QUALITY_IMPACT.build_plan(
+            [new_path], self.manifest, "working-tree", impacts
+        )
+
+        self.assertEqual("BLOCKED", plan["plan_status"])
+        self.assertEqual("blocked", plan["ui_test_scope_selection"])
+        self.assertIn("was renamed", plan["selection_blockers"][0])
+
+    def test_whole_class_selection_partitions_special_execution_profiles(self):
+        cases = (
+            (
+                "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift",
+                "accessibility",
+                "testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation",
+                32,
+            ),
+            (
+                "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift",
+                "system",
+                "testSystemNotificationClickPersistsAccurateMessageAndSurvivesRelaunch",
+                27,
+            ),
+        )
+        for path, special_profile, method, expected_count in cases:
+            with self.subTest(path=path):
+                source = (REPO / path).read_text()
+                impact = QUALITY_IMPACT.resolve_swift_ui_test_change(
+                    path, None, source, None
+                )
+                plan = QUALITY_IMPACT.build_plan(
+                    [path], self.manifest, "unit-test", {path: impact}
+                )
+
+                self.assertEqual("changed-class", impact["selection"])
+                self.assertEqual(expected_count, impact["expected_test_count"])
+                self.assertEqual(expected_count, len(impact["scopes"]))
+                self.assertEqual(
+                    1, len(plan["required_ui_test_profile_scopes"][impact["platform"]][special_profile])
+                )
+                self.assertTrue(
+                    plan["required_ui_test_profile_scopes"][impact["platform"]][special_profile][0].endswith(method)
+                )
+
+    def test_removed_or_renamed_ui_test_blocks_instead_of_running_unrelated_fixed_scope(self):
+        path = "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift"
+        old_source = self.swift_ui_test_source()
+        new_source = self.swift_ui_test_source(method="testRenamedPurpose")
+        old_line = next(
+            index for index, line in enumerate(old_source.splitlines(), 1) if "testChangedPurpose" in line
+        )
+        new_line = next(
+            index for index, line in enumerate(new_source.splitlines(), 1) if "testRenamedPurpose" in line
+        )
+        impact = QUALITY_IMPACT.resolve_swift_ui_test_change(
+            path,
+            old_source,
+            new_source,
+            f"@@ -{old_line} +{new_line} @@\n-old\n+new\n",
+        )
+        plan = QUALITY_IMPACT.build_plan(
+            [path], self.manifest, "unit-test", {path: impact}
+        )
+
+        self.assertEqual("blocked", impact["selection"])
+        self.assertEqual("BLOCKED", plan["plan_status"])
+        self.assertEqual([], plan["required_ui_test_scopes"]["ios"])
+        self.assertIn("removed or renamed", plan["selection_blockers"][0])
+
+    def test_changed_ui_test_platforms_keep_separate_native_runner_scopes(self):
+        ios_path = "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift"
+        mac_path = "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift"
+        impacts = {
+            ios_path: {
+                "platform": "ios",
+                "selection": "exact-method",
+                "scopes": ["PushGo-iOSUITests/PushGo_iOSUITests/testOne"],
+                "blocker": None,
+            },
+            mac_path: {
+                "platform": "macos",
+                "selection": "changed-class",
+                "scopes": ["PushGo-macOSUITests/PushGo_macOSUITests"],
+                "blocker": None,
+            },
+        }
+        plan = QUALITY_IMPACT.build_plan(
+            [ios_path, mac_path], self.manifest, "unit-test", impacts
+        )
+
+        self.assertEqual("changed-tests", plan["recommended_lane"])
+        self.assertEqual("mixed", plan["ui_test_scope_selection"])
+        self.assertEqual(impacts[ios_path]["scopes"], plan["required_ui_test_scopes"]["ios"])
+        self.assertEqual(impacts[mac_path]["scopes"], plan["required_ui_test_scopes"]["macos"])
+
+    def test_changed_tests_lane_executes_resolved_platform_scopes_and_cannot_be_empty(self):
+        orchestrator = (REPO / "scripts/quality_test.sh").read_text()
+
+        self.assertIn('plan.get("required_ui_test_scopes", {})', orchestrator)
+        self.assertIn('TEST_SCOPES="$scope_list"', orchestrator)
+        self.assertIn('QUALITY_EXPECTED_TEST_COUNT="$scope_expected_count"', orchestrator)
+        self.assertIn('impact.get("expected_test_count")', orchestrator)
+        self.assertIn("impact plan contains unresolved selection blockers", orchestrator)
+        self.assertIn('scope.count("/") != 2', orchestrator)
+        self.assertIn('plan.get("required_ui_test_profile_scopes", {})', orchestrator)
+        self.assertIn("run_accessibility_localization", orchestrator)
+        self.assertIn("run_macos_system_notification", orchestrator)
+        self.assertIn('"$repo_root/scripts/run_ios_ui_tests.sh"', orchestrator)
+        self.assertIn('"$repo_root/scripts/run_macos_ui_tests.sh"', orchestrator)
+        self.assertIn('"$repo_root/scripts/run_watchos_ui_tests.sh"', orchestrator)
+        self.assertIn("changed_tests_lane_requires_resolved_impact_scopes", orchestrator)
 
     def test_message_ui_selects_real_pr_evidence(self):
         plan = self.plan("Apps/PushGo-iOS/UI/Screens/MessageListScreen.swift")
