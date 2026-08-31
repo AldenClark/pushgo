@@ -52,6 +52,8 @@ P1-NAV Events/Things 当前 Tab 证据（2026-08-31）：两端复用既有 Even
 
 P1-NAV 代表性已删除目标证据（2026-08-31）：两端继续复用既有 Thing 删除/搜索/三关系/relaunch 正向方法，不增加方法、fixture 类型、启动次数或 Lane。真实删除 distractor 并提交后，通过 App-owned cold route 再次请求同一 ID；必须显示准确“目标不存在或已过期”反馈、目标不得复活、canonical Things 列表仍可用，并从幸存 Thing 打开准确关联 Event。Android `thingFixtureShowsAccurateOverviewAndAllThreeRealRelationTabs` 在 `emulator-5554` focused 1/1，收据 `../pushgo-android/build/quality-results/android-focused-summary.json`；临时切断生产反馈后同例精确失败于 `feedback.entity.target_unavailable`，恢复前后目标文件 SHA-256 同为 `d70e2ffd243755a5c7d204dc4a24d1bafc75e202e793d4735d2ceef6049ecfa5`。iOS `testImportedThingFixtureCanOpenThingDetail` 在专用 Simulator 1/1、零重试，收据 `build/quality-results/ios/run-1-20260831-045040.xcresult`；失败结果的最终可访问性树先证明反馈和幸存数据真实可见，再定位到外层页面 ID 覆盖同级反馈 ID 的测试接入缺陷，修正语义边界后通过。该证据只关闭代表性 deleted Thing fallback，不外推任意非法 ID、Event/Message 删除路线、真实 URL handoff 或物理设备。
 
+2026-08-31 Android 当前字节修正（取代上表较早的 `274/274` 与旧 transport 描述）：clean full JVM 为 285/285、零跳过；refresh completion 已绑定目标 Paging 请求的 `Loading → terminal`，JVM 2/2，但修复后 instrumented UI 仍 `NOT RUN`。Gateway SQLite `route_transition_v2` 的 prepare/commit/abort/query、revision CAS、幂等重放、原子队列迁移与 superseded query 已实现并以 5/5 通过；PostgreSQL/MySQL 明确 unsupported。Android Room 31 durable coordinator 以 9/9 通过且 androidTest 编译成功；真实 Gateway 联调、Room migration 设备执行、真实 FCM/Private、系统通知/Service 与进程级设备恢复仍 `NOT RUN`，不得继承旧 selector 设备绿色。
+
 ## 增量规则
 
 新增或改变 Screen、Route、Action、持久字段、系统表面、后台任务、权限或性能敏感路径时，必须更新相应行并运行调用者/数据/平台消费者影响分析。`config/quality-impact.json` 只强制确定性最低 Lane；未映射产品路径阻断，命中路径也不能自动宣称覆盖。

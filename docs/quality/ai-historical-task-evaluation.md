@@ -160,3 +160,5 @@ Apple 与 Android 各 10 个历史任务已由四个隔离 reviewer 完成首次
 该轮证明隔离 reviewer 能稳定恢复用户目的、关键反例和六态边界，也反证了两个旧假设：AI 无法从 base 源码可靠猜出仓库治理 Lane；记录在 corpus 中的 `semantic_review` 也不能自证正确。Android 加密失败/ACK、刷新完成和 transport prepare 都被揭出实质缺口。
 
 因此本轮只关闭“缺少独立语义审查”这一子缺口，不关闭 gate 10：reviewer 未在隔离树实现和运行任务，14 天观察仍由 owner 暂停，原生产品状态全部保持 `NOT RUN`。两仓盲包的语义输入仅含任务、用户目的与可信反例，并删除会泄漏选择答案的 commit/Lane/能力/路径组，由各 10 条合同与回放验证；未来独立执行必须消费新 packet。揭盲发现的各产品缺口必须分别以当前修复和执行证据更新，不能用一次盲审统称为已经关闭。
+
+揭盲缺口的当前 resolution：Android refresh completion 已绑定目标 Paging `Loading → terminal`，JVM 2/2；加密 fail-closed 与 transport coordinator 均纳入 clean 285/285。SQLite Gateway V2 核心合同 5/5，Android coordinator 定向 9/9、androidTest 编译通过。修复后 UI、真实 Gateway/FCM/Private、Room migration 设备执行、系统通知/Service 与进程恢复仍 `NOT RUN`，所以这些结果修正产品源码缺口，但不把 gate 10 或原生执行状态提升为完成。

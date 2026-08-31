@@ -360,6 +360,13 @@
 - 归因收敛：Android 第一轮红灯源于新 Kotlin fixture 把多行插值放进 `trimIndent()`，意外把 task/table/link 缩进成代码块，既有 span Oracle 准确阻断；改为先独立规范基础 Markdown 再拼接长段。iOS 第一轮找不到未暴露的 ScrollView ID；macOS 两轮分别误把扁平 StaticText 当手势 owner、把移动标题 frame 当 viewport；最终直接以真实详情表面/右侧 ScrollView 固定 viewport 裁决。全部归测试接入/fixture，不记产品 flake。
 - 声明边界：代表性多屏长正文子项获得三端本地证据，但 26KB、单个超长不换行 token、20 次往返资源释放、物理无障碍和固定设备性能仍 `NOT RUN`；P1-MESSAGE-DETAIL 保持 `DEFERRED`，整体第 21.2 保持 `PARTIAL`。实现、负控和审查仍来自同一上下文，保留 `common-mode-risk`。
 
+# 2026-08-31 Android refresh 与 transport V2 当前字节修正
+
+- Refresh 已从“新数据出现即完成”改为目标 Paging 请求必须经历 `Loading → terminal`，duplicate/no-op/filtered/空集合不会卡死或假绿；JVM 2/2，修复后的设备 UI `NOT RUN`。
+- Gateway SQLite 新增持久化 `prepare/commit/abort/query`、operation 幂等、revision CAS、同事务队列迁移与 superseded query，核心 5/5；PostgreSQL/MySQL capability=false，未部署/真实联调 `NOT RUN`。
+- Android 新增 Room 31 durable coordinator 与 Keystore pending-token slot，所有真实选择入口统一编排；unknown commit 只 query，LOCAL_INTENT 崩溃窗、CAS loser、local finalize failure 与后继 supersede 均有目的级 Oracle。最终 coordinator 9/9、全 JVM 285/285、androidTest 编译通过。Room migration 设备执行、真实 FCM/Private、系统通知/Service 与进程恢复继续 `NOT RUN`。
+- 独立红蓝复核连续抓出并关闭 commit 自动重试、ViewModel 绕过、token/Room crash window、operation-id 幂等和 stale committed recovery 五类核心反例；未增加真实设备、14 天观察或低收益边缘矩阵。
+
 # 2026-08-31 独立 AI 历史揭盲与 macOS 窗口/通知刷新纵切
 
 - 四个隔离 reviewer 在各自无 Git parent snapshot 中完成 Apple/Android 各 10 项首次提交前语义设计；两个 reveal reviewer 随后才读取隐藏 corpus、目标 diff 和当前 owner。二十项均保持 runtime=`NOT RUN`，没有总分。`docs/quality/independent-ai-history-review-2026-08-31.md` 逐项记录 purpose、反例、最低 Oracle、Lane、目标行为与差距归因。

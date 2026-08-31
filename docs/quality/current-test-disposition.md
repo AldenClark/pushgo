@@ -191,6 +191,10 @@ macOS 标准消息正向方法同时承担最低充分的 migration UI：App 在
 - Event 失败恢复当前证据：iOS/macOS 用同一状态机 `ongoing → closing → rejected/ongoing → closing → canonical closed → relaunch closed`，首次拒绝不丢准确详情，错误留在详情 owner，提交中动作不可重复；重试只通过 production-shaped delivery 与正式持久化更新 canonical。真实执行发现并修复 quality scenario 误落入密码前置分支、macOS `active` 被误判 unknown、iOS 条件替换工具栏仍可点击三类产品/集成问题。临时删除 iOS `.disabled(isClosing)` 后，用例在防重复 Oracle 精确失败（`build/quality-results/ios/run-1-20260829-124750.xcresult`）；恢复哈希与通过版本一致。2.5 秒仅是 Debug 故障注入可观察窗口，不是性能证据。
 - 同上下文红蓝审查：实现、归因与审查仍由同一上下文完成，保留 `common-mode-risk`；当前默认 scope 包含二十二条明确旅程并已零重试 22/22，现已由 owner-focused 同一 Thing 主链补齐 iOS 频道+标签组合筛选，但仍不外推 macOS/Android 筛选、通知、性能、真实 Gateway 网络或物理可访问性。
 
+## Android transport V2 跨仓修正
+
+2026-08-31 的源码审计确认旧 Android “prepare”会立即改 Gateway active route，且客户端随后才写本地选择；测试 fake 在副作用前拒绝请求，因此可在真实事务分裂时假绿。当前 SQLite Gateway 已新增持久化 `prepare/commit/abort/query`、operation 幂等、revision CAS 与原子队列迁移，核心合同 5/5；只有 SQLite capability=true，PostgreSQL/MySQL 明确 unsupported。Android 生产选择入口统一进入 Room 31 durable coordinator；commit 未知只 query，崩溃恢复先按 operation 查询，后继 winner 不会被旧 operation 反向覆盖，最终 coordinator 9/9、全 JVM 285/285、androidTest 编译通过。旧 selector 设备旅程仅保留 UI 历史价值，不能作为 V2 设备证据；真实跨仓联调、migration 设备执行、FCM/Private、系统通知/Service 和设备进程恢复均 `NOT RUN`。
+
 ## watchOS 真实 UI 迁移、归因与攻击记录
 
 - 迁移边界：旧 `PushGo-watchOSAutomation` 已删除；新 `PushGo-watchOSUITests` 由 App 根据 profile/scenario/session 自行准备隔离 Store，Runner 不写 App 容器。历史报告里的旧脚本命令仅是归档证据，不再可执行，也不能声明当前 UI 功能通过。
