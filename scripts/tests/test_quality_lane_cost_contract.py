@@ -91,6 +91,28 @@ class QualityLaneCostContractTests(unittest.TestCase):
         self.assertIn('messagesTab.value as? String,\n            "99+"', ios_test)
         self.assertIn('unreadBadge.value as? String,\n            "99+"', mac_test)
 
+    def test_macos_large_window_reuses_existing_primary_navigation_journey(self) -> None:
+        mac_runner = (REPO / "scripts/run_macos_ui_tests.sh").read_text()
+        mac_test = (REPO / "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift").read_text()
+
+        self.assertEqual(1, mac_runner.count("testSidebarNavigationCoversPrimaryScreens"))
+        self.assertEqual(1, mac_test.count("func testSidebarNavigationCoversPrimaryScreens()"))
+        journey = mac_test.split(
+            "func testSidebarNavigationCoversPrimaryScreens()", 1
+        )[1].split("func testEventDetailCloseAndRelaunchPreserveAccurateProjection()", 1)[0]
+        large_window = journey.split("let largeWindowFrame", 1)[1]
+
+        self.assertIn("requestedSize: CGSize(width: 1_360, height: 840)", journey)
+        self.assertEqual(1, journey.count("configuredQualityApp("))
+        self.assertEqual(1, journey.count("launchQuality("))
+        self.assertIn("largeWindowFrame.width", large_window)
+        self.assertIn("minimumWindowFrame.width + 250", large_window)
+        self.assertIn('unreadBadge.value as? String, "99+"', large_window)
+        self.assertIn("unreadBadge.frame.minX", large_window)
+        self.assertIn("Persisted through the provider refresh ingress path.", large_window)
+        self.assertIn('identifier: "action.message.delete"', large_window)
+        self.assertNotIn('openSidebarTab("events", in: context.app)', large_window)
+
     def test_macos_minimize_restore_reuses_the_existing_window_journey(self) -> None:
         runner = (REPO / "scripts/run_macos_ui_tests.sh").read_text()
         ui_test = (REPO / "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift").read_text()

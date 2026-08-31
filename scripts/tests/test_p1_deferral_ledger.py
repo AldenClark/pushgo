@@ -74,8 +74,17 @@ class P1DeferralLedgerTests(unittest.TestCase):
         today = dt.date.today()
         rows = self.ledger_rows()
         self.assertEqual(23, len(rows), "Update the ledger summary after regrouping")
+        implemented = []
+        removed = []
         for group, scope, state, evidence, owner, due, trigger, oracle in rows:
-            self.assertEqual("`DEFERRED`", state, group)
+            self.assertIn(state, {"`DEFERRED`", "`IMPLEMENTED`", "`REMOVED/NA`"}, group)
+            if state == "`IMPLEMENTED`":
+                implemented.append(group)
+                self.assertIn("build/quality-results/", evidence, group)
+                self.assertRegex(evidence, r"\b\d+/\d+\b", group)
+            if state == "`REMOVED/NA`":
+                removed.append(group)
+                self.assertIn("reachability", evidence.lower(), group)
             self.assertGreaterEqual(len(evidence), 40, group)
             self.assertTrue(owner.endswith("owner"), group)
             deadline = dt.date.fromisoformat(due)
@@ -86,10 +95,13 @@ class P1DeferralLedgerTests(unittest.TestCase):
                 group,
             )
             self.assertGreaterEqual(len(oracle), 60, group)
+        self.assertEqual(["P1-EXPORT"], removed)
+        self.assertEqual([], implemented)
 
     def test_ledger_does_not_claim_product_pass(self):
         text = LEDGER.read_text()
         self.assertNotRegex(text, r"\| `PASSED` \|")
+        self.assertIn("must never be summarized as whole-product `PASSED`", text)
         self.assertIn("cannot satisfy a Release gate", text)
         self.assertIn("static quality check fails", text)
 

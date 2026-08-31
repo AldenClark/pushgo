@@ -1450,6 +1450,7 @@ final class AppEnvironment {
     private func applyAggregateScenePhase(_ phase: ScenePhase) {
         switch phase {
         case .active:
+            Task { await pushRegistrationService.applicationDidBecomeActive() }
             Task { await pendingLocalDeletionController.sceneBecameActive() }
             navigationState.setSceneActive(true)
             clearDeliveredSystemNotifications()

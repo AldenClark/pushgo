@@ -92,7 +92,7 @@ Platform vector order is `I / M / D / W` (iOS, macOS, Android, watchOS). `-` mea
 | 1327 | Major Markdown structures are semantic | V/V/V/- | `V` | Production renderers expose table/list/link/code/quote/task structures, not a fixture Text existence check. |
 | 1336 | Valid key decrypts to exact plaintext | V/V/V/- | `V` | Core/JVM plus real Settings-to-original-message recovery and relaunch. |
 | 1337 | Missing key explains cause and offers Settings entry | V/V/V/- | `V` | Real missing-key message/detail owner and actionable Settings route. |
-| 1338 | Wrong key/corrupt ciphertext fails safely and recovers | V/V/V/- | `V` | No garbage plaintext; same canonical ciphertext survives correction/relaunch. |
+| 1338 | Wrong key/corrupt ciphertext fails safely and recovers | V/V/P/- | `P` | Apple has purpose-level UI/relaunch evidence. Android production source and clean JVM 274/274 prove companion/reserved-field isolation, inline recovery and Entity fail-closed; emulator UI, system notification, real provider/ACK and Room-ledger lifecycle remain `NOT RUN`. |
 | 1340 | Detail delete, Undo and relaunch | V/V/V/- | `V` | `A-DELETE`, `D-DELETE`; same semantics as list deletion. |
 
 ## 25.6 Events
@@ -213,8 +213,8 @@ Platform vector order is `I / M / D / W` (iOS, macOS, Android, watchOS). `-` mea
 
 The design contains 103 P0/P0 Release rows. This audit deliberately does **not** declare section 21.2(1) complete:
 
-- 90 rows are currently classified `V`; 1 conditional export row is `NA` because the product capability was explicitly removed.
-- 4 rows remain `P` and require semantic closure, an explicit product-scope correction, or an externally owned sub-gate.
+- 89 rows are currently classified `V`; 1 conditional export row is `NA` because the product capability was explicitly removed.
+- 5 rows remain `P` and require semantic closure, an explicit product-scope correction, or an externally owned sub-gate.
 - Two platform sub-results are explicitly `B`: iOS Channel Pasteboard and the macOS denied-permission Settings-card return path. Neither is hidden inside a green aggregate.
 - 8 P0 Release/external rows remain `N`; local Simulator/emulator evidence is retained but never promoted to physical/provider acceptance.
 

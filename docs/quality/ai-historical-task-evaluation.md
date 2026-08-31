@@ -90,11 +90,13 @@ python3 scripts/quality_ai_history.py --check \
 月度、能力矩阵重构或选择器有实质改动时执行：
 
 1. 使用 packet 的 `materialize_command` 导出一个全新目录；工具通过 `git archive` 只导出 base commit 已跟踪内容，目录中没有 `.git`，并主动移除任务语料、本评估文档及历史评估结果，即使未来 base commit 已包含这些参考答案也不能泄漏；输出目录已存在时工具拒绝覆盖；
-2. 给评估 AI 仅提供该 packet 中基于真实任务归一化的需求，不提供目标 commit、预期能力、现有答案或本报告；
+2. 给评估 AI 提供 packet 中基于真实任务归一化的需求、`user_outcome` 和 `credible_counterexample`；不提供 base/target commit、目标 diff、`minimum_lane`、`required_capabilities`、`required_changed_path_groups`、`semantic_review`、现有实现答案或本报告。Lane、能力和 owner 选择正是 gate 10 要独立验证的结果，不能预先作为合同答案泄漏；
 3. 禁止先搜索后续 commit；保留第一次提交前分析，包括目的、影响链、可信反例、拟补测试、最低 Lane 和不能运行项；
 4. 允许 AI 在隔离树内实现和运行，但不能把 runner 绿色当语义正确；
 5. 揭盲后逐项对照目标 diff、生产行为和语料 semantic review；有争议时以可复现产品结果为准，而不是参考答案措辞；
 6. 输出逐任务结论，不输出总分。
+
+盲包只公开用户在任务发生前提供的目的和反例，不公开治理答案。独立审查者必须从 base snapshot 自行追踪真实 owner、选择能力/Lane、设计最小充分测试并报告执行边界；揭盲 evaluator 再用隐藏的 commit、Lane、能力、路径组和 semantic review 挑战首次答案。两端单元合同逐任务核对公开字段完整且与语料等值，同时拒绝 packet 出现 base/target commit、治理字段或 `semantic_review`；snapshot 仍移除语料、本文和历史结果。
 
 逐任务结论模板：
 
@@ -150,3 +152,11 @@ python3 scripts/quality_ai_history.py --check \
 - 同一规则连续造成过度升级时收窄到真实 owner，不能用预算压力删除目的级 Oracle；
 - 连续两次只修 runner 而没有新增产品证据，暂停扩建并重新归因；
 - WP7 只有在完成独立上下文盲测、两周观察、flake owner 和旧 Runtime 退役后才能从 `PARTIAL` 提升；本文件和当前自动回放本身不满足退出条件。
+
+## 10. 2026-08-31 独立盲审与揭盲
+
+Apple 与 Android 各 10 个历史任务已由四个隔离 reviewer 完成首次提交前语义设计，再由两个独立 reveal reviewer 对照隐藏 corpus、目标 diff 和当前 owner。逐任务结论、发现的历史过度陈述以及测试系统修正见 `independent-ai-history-review-2026-08-31.md`。
+
+该轮证明隔离 reviewer 能稳定恢复用户目的、关键反例和六态边界，也反证了两个旧假设：AI 无法从 base 源码可靠猜出仓库治理 Lane；记录在 corpus 中的 `semantic_review` 也不能自证正确。Android 加密失败/ACK、刷新完成和 transport prepare 都被揭出实质缺口。
+
+因此本轮只关闭“缺少独立语义审查”这一子缺口，不关闭 gate 10：reviewer 未在隔离树实现和运行任务，14 天观察仍由 owner 暂停，原生产品状态全部保持 `NOT RUN`。两仓盲包的语义输入仅含任务、用户目的与可信反例，并删除会泄漏选择答案的 commit/Lane/能力/路径组，由各 10 条合同与回放验证；未来独立执行必须消费新 packet。揭盲发现的各产品缺口必须分别以当前修复和执行证据更新，不能用一次盲审统称为已经关闭。

@@ -1,6 +1,69 @@
 import Foundation
 import Testing
+import UserNotifications
 @testable import PushGoAppleCore
+
+@MainActor
+private final class AuthorizationStatusStub {
+    var status: UNAuthorizationStatus
+    private(set) var readCount = 0
+
+    init(status: UNAuthorizationStatus) {
+        self.status = status
+    }
+
+    func read() -> UNAuthorizationStatus {
+        readCount += 1
+        return status
+    }
+}
+
+@MainActor
+private final class SuspendedAuthorizationStatusStub {
+    private var continuations: [CheckedContinuation<UNAuthorizationStatus, Never>] = []
+
+    var pendingReadCount: Int { continuations.count }
+
+    func read() async -> UNAuthorizationStatus {
+        await withCheckedContinuation { continuation in
+            continuations.append(continuation)
+        }
+    }
+
+    func resolveRead(at index: Int, with status: UNAuthorizationStatus) {
+        continuations[index].resume(returning: status)
+    }
+}
+
+@MainActor
+private final class SuspendedAuthorizationRequestStub {
+    enum Outcome {
+        case granted(Bool)
+        case failed
+    }
+
+    private var continuation: CheckedContinuation<Outcome, Never>?
+    private(set) var requestCount = 0
+    var isPending: Bool { continuation != nil }
+
+    func request(_: UNAuthorizationOptions) async throws -> Bool {
+        requestCount += 1
+        let outcome = await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+        switch outcome {
+        case let .granted(granted):
+            return granted
+        case .failed:
+            throw AppError.unknown("authorization request failed")
+        }
+    }
+
+    func resolve(_ outcome: Outcome) {
+        continuation?.resume(returning: outcome)
+        continuation = nil
+    }
+}
 
 @MainActor
 struct PushRegistrationServiceTests {
@@ -29,6 +92,120 @@ struct PushRegistrationServiceTests {
 
         #expect(service.authorizationState == .authorized)
         #expect(service.apnsToken == "provider-token-002")
+    }
+
+    @Test
+    func applicationBecomingActiveRefreshesDeniedAuthorizationToAuthorized() async {
+        let systemStatus = AuthorizationStatusStub(status: .denied)
+        let service = PushRegistrationService.testing(
+            bootstrapStateOverride: .init(
+                authorizationState: .notDetermined,
+                apnsToken: nil
+            ),
+            authorizationStatusProvider: { systemStatus.read() }
+        )
+
+        await service.applicationDidBecomeActive()
+        #expect(service.authorizationState == .denied)
+        #expect(systemStatus.readCount == 1)
+
+        systemStatus.status = .authorized
+        await service.applicationDidBecomeActive()
+        #expect(service.authorizationState == .authorized)
+        #expect(systemStatus.readCount == 2)
+    }
+
+    @Test
+    func latestAuthorizationRefreshWinsWhenOlderSystemQueryCompletesLast() async {
+        let systemStatus = SuspendedAuthorizationStatusStub()
+        let service = PushRegistrationService.testing(
+            bootstrapStateOverride: .init(
+                authorizationState: .notDetermined,
+                apnsToken: nil
+            ),
+            authorizationStatusProvider: { await systemStatus.read() }
+        )
+
+        let olderRefresh = Task { await service.applicationDidBecomeActive() }
+        while systemStatus.pendingReadCount < 1 { await Task.yield() }
+        let latestRefresh = Task { await service.applicationDidBecomeActive() }
+        while systemStatus.pendingReadCount < 2 { await Task.yield() }
+
+        systemStatus.resolveRead(at: 1, with: .authorized)
+        await latestRefresh.value
+        systemStatus.resolveRead(at: 0, with: .denied)
+        await olderRefresh.value
+
+        #expect(service.authorizationState == .authorized)
+    }
+
+    @Test
+    func olderRefreshCannotOverwriteSuccessfulAuthorizationRequest() async throws {
+        let systemStatus = SuspendedAuthorizationStatusStub()
+        let service = PushRegistrationService.testing(
+            bootstrapStateOverride: .init(
+                authorizationState: .notDetermined,
+                apnsToken: nil
+            ),
+            authorizationStatusProvider: { await systemStatus.read() },
+            authorizationRequestProvider: { _ in true }
+        )
+
+        let olderRefresh = Task { await service.applicationDidBecomeActive() }
+        while systemStatus.pendingReadCount < 1 { await Task.yield() }
+        try await service.requestAuthorization()
+        #expect(service.authorizationState == .authorized)
+
+        systemStatus.resolveRead(at: 0, with: .denied)
+        await olderRefresh.value
+        #expect(service.authorizationState == .authorized)
+    }
+
+    @Test
+    func deniedRequestIsNotSwallowedWhenActiveRefreshCompletesDuringPrompt() async {
+        let request = SuspendedAuthorizationRequestStub()
+        let service = PushRegistrationService.testing(
+            bootstrapStateOverride: .init(
+                authorizationState: .notDetermined,
+                apnsToken: nil
+            ),
+            authorizationStatusProvider: { .authorized },
+            authorizationRequestProvider: { try await request.request($0) }
+        )
+
+        let pendingRequest = Task { try await service.requestAuthorization() }
+        while !request.isPending { await Task.yield() }
+        await service.applicationDidBecomeActive()
+        #expect(service.authorizationState == .authorized)
+
+        request.resolve(.granted(false))
+        await #expect(throws: AppError.apnsDenied) {
+            try await pendingRequest.value
+        }
+        #expect(service.authorizationState == .denied)
+    }
+
+    @Test
+    func failedRequestIsNotSwallowedWhenActiveRefreshCompletesDuringPrompt() async {
+        let request = SuspendedAuthorizationRequestStub()
+        let service = PushRegistrationService.testing(
+            bootstrapStateOverride: .init(
+                authorizationState: .notDetermined,
+                apnsToken: nil
+            ),
+            authorizationStatusProvider: { .authorized },
+            authorizationRequestProvider: { try await request.request($0) }
+        )
+
+        let pendingRequest = Task { try await service.requestAuthorization() }
+        while !request.isPending { await Task.yield() }
+        await service.applicationDidBecomeActive()
+        request.resolve(.failed)
+
+        await #expect(throws: AppError.apnsDenied) {
+            try await pendingRequest.value
+        }
+        #expect(service.authorizationState == .denied)
     }
 
     @Test

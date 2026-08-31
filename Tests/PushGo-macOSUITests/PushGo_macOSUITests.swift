@@ -2188,6 +2188,54 @@ final class PushGo_macOSUITests: XCTestCase {
             .completed,
             "Opening the refreshed result must update that exact row to read semantics."
         )
+
+        let largeWindowFrame = resizeMainWindowThroughSystemAccessibility(
+            context.app,
+            requestedSize: CGSize(width: 1_360, height: 840)
+        )
+        XCTAssertGreaterThanOrEqual(
+            largeWindowFrame.width,
+            1_350,
+            "The large-window journey must exercise a genuinely expanded main window."
+        )
+        XCTAssertGreaterThanOrEqual(
+            largeWindowFrame.height,
+            820,
+            "The large-window journey must exercise representative vertical expansion."
+        )
+        XCTAssertGreaterThan(
+            largeWindowFrame.width,
+            minimumWindowFrame.width + 250,
+            "The second size phase must expand the same real window beyond its minimum layout."
+        )
+
+        XCTAssertTrue(messagesTitle.waitForExistence(timeout: 8))
+        XCTAssertTrue(unreadBadge.waitForExistence(timeout: 8))
+        XCTAssertEqual(messagesTitle.value as? String, "消息")
+        XCTAssertEqual(unreadBadge.value as? String, "99+")
+        XCTAssertTrue(
+            messagesTitle.isHittable,
+            "The complete Messages label must remain a functional navigation target in the large window."
+        )
+        XCTAssertGreaterThanOrEqual(
+            messagesTitle.frame.width,
+            24,
+            "The complete two-glyph Messages label must remain visible in the large window."
+        )
+        XCTAssertGreaterThan(
+            unreadBadge.frame.minX,
+            messagesTitle.frame.maxX + 4,
+            "The high-unread badge must not cover the Messages label in the large window."
+        )
+
+        XCTAssertTrue(
+            context.app.staticTexts["Persisted through the provider refresh ingress path."].exists,
+            "Resizing must preserve the already-open exact canonical detail."
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "action.message.delete").isHittable,
+            "The representative large-window detail toolbar must remain operable."
+        )
     }
 
     @MainActor
@@ -4384,14 +4432,14 @@ final class PushGo_macOSUITests: XCTestCase {
             return xcuiWindow.frame
         }
 
-        let runningApps = NSRunningApplication
-            .runningApplications(withBundleIdentifier: "io.ethan.pushgo")
-            .filter { !$0.isTerminated }
-        guard runningApps.count == 1, let runningApp = runningApps.first else {
-            XCTFail("QUALITY_PRECONDITION: expected one PushGo process for window resize, found \(runningApps.count).")
+        guard let frontmostApplication = NSWorkspace.shared.frontmostApplication,
+              frontmostApplication.bundleIdentifier == "io.ethan.pushgo",
+              !frontmostApplication.isTerminated
+        else {
+            XCTFail("QUALITY_PRECONDITION: PushGo was not the active foreground App for window resize.")
             return xcuiWindow.frame
         }
-        let application = AXUIElementCreateApplication(runningApp.processIdentifier)
+        let application = AXUIElementCreateApplication(frontmostApplication.processIdentifier)
         var windowValue: CFTypeRef?
         let copyResult = AXUIElementCopyAttributeValue(
             application,
@@ -4408,7 +4456,7 @@ final class PushGo_macOSUITests: XCTestCase {
 
         var requestedSize = requestedSize
         guard let sizeValue = AXValueCreate(.cgSize, &requestedSize) else {
-            XCTFail("QUALITY_PRECONDITION: the requested minimum window size could not be encoded.")
+            XCTFail("QUALITY_PRECONDITION: the requested window size could not be encoded.")
             return xcuiWindow.frame
         }
         let setResult = AXUIElementSetAttributeValue(
@@ -4425,7 +4473,9 @@ final class PushGo_macOSUITests: XCTestCase {
         var frame = xcuiWindow.frame
         repeat {
             frame = xcuiWindow.frame
-            if frame.width <= requestedSize.width + 20,
+            if frame.width >= requestedSize.width - 20,
+               frame.width <= requestedSize.width + 20,
+               frame.height >= requestedSize.height - 20,
                frame.height <= requestedSize.height + 60
             {
                 break
@@ -4435,13 +4485,13 @@ final class PushGo_macOSUITests: XCTestCase {
 
         XCTAssertGreaterThanOrEqual(
             frame.width,
-            requestedSize.width - 10,
-            "The product minimum width must prevent the main layout from collapsing."
+            requestedSize.width - 20,
+            "The real main window did not reach the requested width."
         )
         XCTAssertGreaterThanOrEqual(
             frame.height,
-            requestedSize.height - 10,
-            "The product minimum height must prevent the main layout from collapsing."
+            requestedSize.height - 20,
+            "The real main window did not reach the requested height."
         )
         return frame
     }
