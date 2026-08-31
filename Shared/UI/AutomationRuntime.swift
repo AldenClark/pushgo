@@ -3850,10 +3850,11 @@ final class PushGoAutomationRuntime {
             entityRecords = []
             channelSubscriptions = []
         case .messagesWorkflow:
-            // Fifty-two rows cross the production 50-row page boundary while
-            // keeping the device journey focused on pagination and read state.
-            // A larger data-volume matrix belongs to Store/performance tests.
-            messages = (0..<52).map(qualityWorkflowFixtureMessage)
+            // The P0 contract requires 125 canonical rows across all three
+            // production page-size=50 segments. Rows added above the original
+            // 52-row workflow stay read so this does not create a second badge
+            // or mutation matrix inside the same UI journey.
+            messages = (0..<125).map(qualityWorkflowFixtureMessage)
             entityRecords = []
             channelSubscriptions = []
         case .messagesFilters:
@@ -4106,7 +4107,7 @@ final class PushGoAutomationRuntime {
         let body = "Cross-page deterministic workflow row \(index)."
         let receivedAt = Date(timeIntervalSince1970: 1_768_464_000 + Double(index))
         // Keep the established 39-unread count while separating the navigation
-        // oracles: a reselect lands on row 39, whereas a double-tap lands on row 51.
+        // oracles: a reselect lands on row 39, whereas a double-tap lands on the newest row.
         let isRead = index >= 40 || (index.isMultiple(of: 4) && index > 32)
         return [
             "id": "00000000-0000-0000-0000-\(suffix)",
@@ -4314,6 +4315,7 @@ final class PushGoAutomationRuntime {
                 "delivery_id": "quality-delivery-thing-current",
                 "observed_at": "2026-01-15T08:02:00Z",
                 "state": "active",
+                "tags": ["filter-shared", "filter-target"],
                 "attrs": "{\"region\":\"cn-sh\",\"owner\":\"qa\"}",
                 "projection_destination": "things",
             ],
@@ -4354,7 +4356,7 @@ final class PushGoAutomationRuntime {
             "message_id": "quality-thing-distractor-message",
             "title": "Quality Pump Beta",
             "body": "Secondary fixture that must be excluded by the target search.",
-            "channel_id": "quality-secondary",
+            "channel_id": "quality",
             "is_read": false,
             "received_at": "2026-01-15T08:01:30Z",
             "raw_payload": [
@@ -4369,6 +4371,7 @@ final class PushGoAutomationRuntime {
                 "delivery_id": "quality-delivery-thing-distractor",
                 "observed_at": "2026-01-15T08:01:30Z",
                 "state": "active",
+                "tags": ["filter-control"],
                 "attrs": "{\"region\":\"eu-west\",\"owner\":\"operations\"}",
                 "projection_destination": "things",
             ],
@@ -4401,6 +4404,7 @@ final class PushGoAutomationRuntime {
                 "delivery_id": "quality-delivery-\(thingID)",
                 "observed_at": observedAt,
                 "state": "active",
+                "tags": index == 15 ? ["filter-shared", "filter-other-channel"] : ["navigation"],
                 "projection_destination": "things",
             ],
             "status": "normal",

@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Darwin
 import XCTest
 
 final class PushGo_macOSUITests: XCTestCase {
@@ -505,6 +506,9 @@ final class PushGo_macOSUITests: XCTestCase {
             legacyStore: "messages.v17",
             allowCrossAppDataAccess: true
         )
+        let savedImageReceiptURL = macOSQualitySessionRootURL(sessionID: sessionID)
+            .appendingPathComponent("artifacts", isDirectory: true)
+            .appendingPathComponent("saved-image-destination.txt")
         launchQuality(context, sessionID: sessionID)
 
         let legacyRow = element(
@@ -626,10 +630,38 @@ final class PushGo_macOSUITests: XCTestCase {
             shareImage.waitForExistence(timeout: 8) && shareImage.isHittable,
             "The preview must prepare a real file before enabling its native Share action."
         )
+
+        let saveImage = element(in: context.app, identifier: "action.image.preview.save")
+        XCTAssertTrue(
+            saveImage.waitForExistence(timeout: 5) && saveImage.isHittable,
+            "The decoded image preview must expose its production Save action."
+        )
+        saveImage.click()
+        saveImageThroughSystemPanel(in: context.app)
+        let savedImageURL = waitForSavedImageDestinationReceipt(at: savedImageReceiptURL)
+        assertSavedImageMatchesCanonicalPixels(at: savedImageURL)
+
         shareImage.click()
         XCTAssertTrue(
             context.app.menus.firstMatch.waitForExistence(timeout: 5),
             "The prepared image file must reach the native sharing service picker."
+        )
+        context.app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        let closePreview = element(in: context.app, identifier: "action.image.preview.close")
+        XCTAssertTrue(
+            closePreview.waitForExistence(timeout: 5) && closePreview.isHittable,
+            "The preview must remain closable after Save and native Share handoff."
+        )
+        closePreview.click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "dialog.image.preview")
+                .waitForNonExistence(timeout: 5),
+            "Closing the preview must dismiss the media surface before relaunch."
+        )
+        XCTAssertTrue(context.app.staticTexts["P2 Split Seed Message"].exists)
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."].exists,
+            "Save and Share must return to the same accurate canonical message detail."
         )
 
         context.app.terminate()
@@ -4159,6 +4191,21 @@ final class PushGo_macOSUITests: XCTestCase {
             .appendingPathComponent("PushGo-macOSUITests-\(UUID().uuidString)", isDirectory: true)
     }
 
+    private func macOSQualitySessionRootURL(sessionID: String) -> URL {
+        let hostHomePath = getpwuid(getuid()).map { String(cString: $0.pointee.pw_dir) }
+            ?? NSHomeDirectory()
+        return URL(fileURLWithPath: hostHomePath, isDirectory: true)
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Containers", isDirectory: true)
+            .appendingPathComponent("io.ethan.pushgo", isDirectory: true)
+            .appendingPathComponent("Data", isDirectory: true)
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Application Support", isDirectory: true)
+            .appendingPathComponent("PushGoQuality", isDirectory: true)
+            .appendingPathComponent("Sessions", isDirectory: true)
+            .appendingPathComponent(sessionID, isDirectory: true)
+    }
+
     @MainActor
     private func resizeMainWindowThroughSystemAccessibility(
         _ app: XCUIApplication,
@@ -4738,6 +4785,152 @@ final class PushGo_macOSUITests: XCTestCase {
             file: file,
             line: line
         )
+    }
+
+    @MainActor
+    private func saveImageThroughSystemPanel(
+        in app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let savePanel = app.dialogs["save-panel"]
+        XCTAssertTrue(
+            savePanel.waitForExistence(timeout: 5),
+            "The production Save action did not present the system Save panel.",
+            file: file,
+            line: line
+        )
+
+        let filenameField = savePanel.textFields["saveAsNameTextField"]
+        XCTAssertTrue(
+            filenameField.waitForExistence(timeout: 5),
+            "The system Save panel did not expose its filename field.",
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            filenameField.value as? String,
+            "pushgo-image.png",
+            "The system Save panel did not preserve the production default PNG filename.",
+            file: file,
+            line: line
+        )
+        let confirmSave = savePanel.buttons["OKButton"]
+        XCTAssertTrue(
+            confirmSave.waitForExistence(timeout: 5) && confirmSave.isHittable,
+            "The system Save panel did not expose its real confirmation action.",
+            file: file,
+            line: line
+        )
+        confirmSave.click()
+        let replacementSheet = savePanel.sheets.firstMatch
+        if replacementSheet.waitForExistence(timeout: 2) {
+            let replace = replacementSheet.buttons["Replace"].exists
+                ? replacementSheet.buttons["Replace"]
+                : replacementSheet.buttons["替换"]
+            XCTAssertTrue(
+                replace.waitForExistence(timeout: 3) && replace.isHittable,
+                "The system overwrite confirmation did not expose its real Replace action.",
+                file: file,
+                line: line
+            )
+            replace.click()
+        }
+        XCTAssertTrue(
+            savePanel.waitForNonExistence(timeout: 8),
+            "The system Save panel did not commit the selected destination.",
+            file: file,
+            line: line
+        )
+    }
+
+    private func assertSavedImageMatchesCanonicalPixels(
+        at savedImageURL: URL,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let canonicalPNGBase64 =
+            "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFElEQVR42mNkYPj/n4GBgYGJAQoAHgQCAf2fP6sAAAAASUVORK5CYII="
+        guard let canonicalData = Data(base64Encoded: canonicalPNGBase64),
+              let canonical = normalizedRGBA8Image(from: canonicalData)
+        else {
+            XCTFail("The canonical messages.standard image could not be decoded.", file: file, line: line)
+            return
+        }
+        guard let savedData = try? Data(contentsOf: savedImageURL),
+              let saved = normalizedRGBA8Image(from: savedData)
+        else {
+            XCTFail(
+                "The system-saved image was missing or could not be decoded at the file boundary.",
+                file: file,
+                line: line
+            )
+            return
+        }
+
+        XCTAssertEqual(saved.width, canonical.width, file: file, line: line)
+        XCTAssertEqual(saved.height, canonical.height, file: file, line: line)
+        XCTAssertEqual(
+            saved.pixels,
+            canonical.pixels,
+            "The system-saved image pixels did not exactly match the canonical messages.standard image.",
+            file: file,
+            line: line
+        )
+    }
+
+    private func waitForSavedImageDestinationReceipt(
+        at receiptURL: URL,
+        timeout: TimeInterval = 5,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> URL {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if let data = try? Data(contentsOf: receiptURL),
+               let path = String(data: data, encoding: .utf8),
+               !path.isEmpty
+            {
+                return URL(fileURLWithPath: path)
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        } while Date() < deadline
+        XCTFail(
+            "The production Save action did not publish its app-owned destination receipt.",
+            file: file,
+            line: line
+        )
+        return receiptURL
+    }
+
+    private func normalizedRGBA8Image(from data: Data) -> (width: Int, height: Int, pixels: Data)? {
+        guard let bitmap = NSBitmapImageRep(data: data),
+              let image = bitmap.cgImage,
+              let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)
+        else {
+            return nil
+        }
+        let width = image.width
+        let height = image.height
+        var pixels = Data(count: width * height * 4)
+        let rendered = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(
+                data: buffer.baseAddress,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: width * 4,
+                space: colorSpace,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                    | CGBitmapInfo.byteOrder32Big.rawValue
+            ) else {
+                return false
+            }
+            context.interpolationQuality = .none
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        return rendered ? (width, height, pixels) : nil
     }
 
     @MainActor

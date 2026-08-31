@@ -448,8 +448,22 @@ class QualityLaneCostContractTests(unittest.TestCase):
             1,
         )[0]
 
-        self.assertIn("messages = (0..<52).map(qualityWorkflowFixtureMessage)", runtime)
-        self.assertNotIn("messages = (0..<125).map(qualityWorkflowFixtureMessage)", runtime)
+        self.assertIn("messages = (0..<125).map(qualityWorkflowFixtureMessage)", runtime)
+        self.assertNotIn("messages = (0..<52).map(qualityWorkflowFixtureMessage)", runtime)
+        for title in (
+            "Quality workflow 124",
+            "Quality workflow 75",
+            "Quality workflow 74",
+            "Quality workflow 25",
+            "Quality workflow 1",
+            "Quality workflow 0",
+        ):
+            self.assertIn(title, test_source)
+        self.assertIn("production page 3", test_source)
+        self.assertIn("var observedWorkflowIndices = Set<Int>()", test_source)
+        self.assertIn("Set(0..<125)", test_source)
+        self.assertIn("must remain bound to Quality workflow", test_source)
+        self.assertIn("preserve contiguous newest-first order", test_source)
         self.assertIn("let tabBar = app.tabBars.firstMatch", badge_helper)
         self.assertIn("tabBar.buttons.element(boundBy: 0)", badge_helper)
         self.assertIn('["Messages", "消息", "訊息"]', badge_helper)

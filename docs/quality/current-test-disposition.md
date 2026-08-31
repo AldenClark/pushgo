@@ -27,7 +27,7 @@
 | keep（新增代表性 a11y/l10n/动态导航证据） | `testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation` | 先证明实际 SwiftUI Dynamic Type 为 accessibility5，并在真实 unread=1 下核对系统 Messages Tab 自己拥有“消息”标题和 badge、保留可点宽度、标题区域有可读像素对比度；再点击进入准确消息详情、填写真实频道表单并要求 accepted mutation 生成准确频道行。临时把生产 badge 改成 9 时精确红灯；资源全集由独立合同覆盖，物理 VoiceOver 仍单列。 |
 | delete（已被更强旅程替代） | `testPushSettingsCanOpenDecryptionScreen` | 新解密旅程从真实 Channels→Settings 入口操作 invalid/valid key，核对成功状态、不回显、清除和两种 relaunch；仅打开页面不再进入常规 lane。 |
 | delete（已被更强旅程替代） | `testInvalidServerAddressShowsInlineFeedbackInsteadOfToast` | 新 server 旅程同时覆盖 invalid 不 dismiss、标准化保存、数据换域和 relaunch；只验证错误呈现的弱重复已移出常规 lane。 |
-| rewrite；由新核心旅程替代 | `testFixtureSeedMessagesRefreshesMessageList` | `testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch` 已在同一次 App-owned 主链证明准确行/详情、生产 Open Link→Safari 展开地址栏后的精确 canonical path→返回同一准确详情、本地缓存图片真实解码→点击→生产预览/系统分享、搜索以及 relaunch；旧 seed count/state 用例应在后续删除。 |
+| rewrite；由新核心旅程替代 | `testFixtureSeedMessagesRefreshesMessageList` | `testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch` 已在同一次 App-owned 主链证明准确行/详情、复制终点、本地缓存图片真实解码、生产预览与系统分享，并通过真实 NSSavePanel 把系统实际目标文件解码为与 canonical 完全一致的 sRGB RGBA8 像素，最后继续搜索和 relaunch；当前 focused 1/1、59.930 秒、零重试，旧 seed count/state 用例应在后续删除。 |
 | rewrite | `testSubmittingPopulatedSearchResultsKeepsAppRunning` | “App 仍运行”过弱；改为目标集合、排除集合、最新 query 和打开准确详情。 |
 | rewrite | `testFixtureSeedEntityRecordsPublishesProjectionCounts`、`testFixtureSeedSubscriptionsPublishesImportState` | 改为真实 Event/Thing/Channel 内容与后续操作；内部 count 只诊断。 |
 | delete（已被更强旅程替代） | `testSettingsPageVisibilityCommandCanHideEventPage`、`testSettingsPageVisibilityCommandCanRoundTripEventPage` | `testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch` 已覆盖真实入口、动作、准确页面和双向 relaunch；旧 command/state 不再进入常规 lane。 |
@@ -189,7 +189,7 @@ macOS 标准消息正向方法同时承担最低充分的 migration UI：App 在
 
 - 用户可见秘密不再以“SecureField 类型存在”求绿：Gateway Token 和消息解密 Key 均被并入原有目的旅程，必须默认遮蔽、显示后逐字等于输入、再次遮蔽，并继续完成保存/拒绝/清除、业务数据结果和 relaunch。APNs/FCM 注册 token 没有用户编辑/揭示入口，明确不纳入这条 UI 结论。iOS Gateway 旅程真实发现显示 Token 后系统“保存密码？”弹层覆盖 Sheet；产品把 app-scoped secret 从网站密码自动填充语义中移除后，完整旅程 1/1 通过。iOS 解密通过保留在首次 2 条批次中，macOS 两条同语义旅程 2/2 通过；本切片没有新增测试方法或额外默认 App 启动。运行器继续强制单 worker、禁止 Simulator clone，并在普通批次关闭失败后的昂贵 `simctl diagnose`；失败断言和完整 xcresult 仍保留，发布级专项才单独收集深诊断。
 - Event 失败恢复当前证据：iOS/macOS 用同一状态机 `ongoing → closing → rejected/ongoing → closing → canonical closed → relaunch closed`，首次拒绝不丢准确详情，错误留在详情 owner，提交中动作不可重复；重试只通过 production-shaped delivery 与正式持久化更新 canonical。真实执行发现并修复 quality scenario 误落入密码前置分支、macOS `active` 被误判 unknown、iOS 条件替换工具栏仍可点击三类产品/集成问题。临时删除 iOS `.disabled(isClosing)` 后，用例在防重复 Oracle 精确失败（`build/quality-results/ios/run-1-20260829-124750.xcresult`）；恢复哈希与通过版本一致。2.5 秒仅是 Debug 故障注入可观察窗口，不是性能证据。
-- 同上下文红蓝审查：实现、归因与审查仍由同一上下文完成，保留 `common-mode-risk`；当前默认 scope 包含二十二条明确旅程并已零重试 22/22，但不扩张到 Thing 筛选/深链/删除、通知、性能、真实 Gateway 网络或物理可访问性。
+- 同上下文红蓝审查：实现、归因与审查仍由同一上下文完成，保留 `common-mode-risk`；当前默认 scope 包含二十二条明确旅程并已零重试 22/22，现已由 owner-focused 同一 Thing 主链补齐 iOS 频道+标签组合筛选，但仍不外推 macOS/Android 筛选、通知、性能、真实 Gateway 网络或物理可访问性。
 
 ## watchOS 真实 UI 迁移、归因与攻击记录
 

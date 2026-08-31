@@ -420,6 +420,7 @@ private struct PushgoImagePreviewOverlay: View {
                             .buttonStyle(.plain)
                             .pushgoMacPreviewActionChrome()
                             .accessibilityLabel(Text("save"))
+                            .accessibilityIdentifier("action.image.preview.save")
                             Button {
                                 dismiss()
                             } label: {
@@ -430,6 +431,7 @@ private struct PushgoImagePreviewOverlay: View {
                             .buttonStyle(.plain)
                             .pushgoMacPreviewActionChrome()
                             .accessibilityLabel(LocalizedStringKey("close"))
+                            .accessibilityIdentifier("action.image.preview.close")
                         }
                         .padding(.trailing, 16)
                         .padding(.top, 16)
@@ -747,9 +749,27 @@ private struct PushgoImagePreviewOverlay: View {
         panel.canCreateDirectories = true
         panel.nameFieldStringValue = "pushgo-image.\(contentType.preferredFilenameExtension ?? "png")"
         panel.allowedContentTypes = [contentType]
+        if let qualitySaveDirectory = PushGoAutomationContext.qualitySessionRootURL?
+            .appendingPathComponent("saved-image", isDirectory: true)
+        {
+            try? FileManager.default.createDirectory(
+                at: qualitySaveDirectory,
+                withIntermediateDirectories: true
+            )
+            panel.directoryURL = qualitySaveDirectory
+        }
         guard panel.runModal() == .OK, let destination = panel.url else { return }
         do {
             try data.write(to: destination, options: .atomic)
+            if let receiptURL = PushGoAutomationContext.qualityArtifactURL(
+                filename: "saved-image-destination.txt"
+            ) {
+                try? FileManager.default.createDirectory(
+                    at: receiptURL.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try? Data(destination.path.utf8).write(to: receiptURL, options: .atomic)
+            }
             showSaveSuccess()
         } catch {
             showSaveFailure(reason: environment.userFacingErrorMessage(error))
@@ -757,13 +777,13 @@ private struct PushgoImagePreviewOverlay: View {
     }
 
     private static func normalizedImageDataAndType(from image: NSImage) -> (Data, UTType)? {
+        if let png = PushGoMacImageExportEncoder.pngData(from: image) {
+            return (png, .png)
+        }
         guard let tiff = image.tiffRepresentation,
               let bitmap = NSBitmapImageRep(data: tiff)
         else {
             return nil
-        }
-        if let png = bitmap.representation(using: .png, properties: [:]) {
-            return (png, .png)
         }
         if let jpeg = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.94]) {
             return (jpeg, .jpeg)

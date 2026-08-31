@@ -364,6 +364,7 @@ struct ThingListScreen: View {
                 filterToolbarIcon(isHighlighted: isFilterMenuHighlighted)
             }
             .accessibilityLabel(localizationManager.localized("channel"))
+            .accessibilityIdentifier("action.things.filters")
             .popover(isPresented: $isFilterPopoverPresented, arrowEdge: .top) {
                 if #available(iOS 16.4, *) {
                     filterPopoverContent
@@ -514,6 +515,7 @@ struct ThingListScreen: View {
                     ) {
                         selectedChannelIDs.removeAll()
                     }
+                    .accessibilityIdentifier("filter.things.channel.all")
                     ForEach(allChannelIds, id: \.self) { channelId in
                         filterCloudChip(
                             title: environment.channelDisplayName(for: channelId) ?? channelId,
@@ -525,6 +527,7 @@ struct ThingListScreen: View {
                                 selectedChannelIDs.insert(channelId)
                             }
                         }
+                        .accessibilityIdentifier("filter.things.channel.\(channelId)")
                     }
                 }
             }
@@ -561,6 +564,7 @@ struct ThingListScreen: View {
                 selectedTags.insert(tag)
             }
         }
+        .accessibilityIdentifier("filter.things.tag.\(tag)")
     }
 
     private func filterCloudChip(
@@ -593,6 +597,7 @@ struct ThingListScreen: View {
                 )
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private func filterMenuSelectionRow(title: String, systemImage: String, isSelected: Bool) -> some View {

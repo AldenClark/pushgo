@@ -761,7 +761,7 @@ final class PushGo_iOSUITests: XCTestCase {
 
         assertQualityRuntimeReady(in: context.app, timeout: 15)
         XCTAssertTrue(
-            context.app.staticTexts["Quality workflow 51"].waitForExistence(timeout: 8),
+            context.app.staticTexts["Quality workflow 124"].waitForExistence(timeout: 8),
             "The first production page must start with the newest canonical object"
         )
         assertMessagesTabBadgeCount(39, in: context.app)
@@ -770,51 +770,118 @@ final class PushGo_iOSUITests: XCTestCase {
 
         let list = runtimeQualityScrollableList(in: context.app)
         XCTAssertTrue(list.waitForExistence(timeout: 5))
+        var observedWorkflowIndices = Set<Int>()
+        let recordVisibleWorkflowRows = {
+            let rows = context.app.buttons.matching(
+                NSPredicate(
+                    format: "identifier BEGINSWITH %@",
+                    "message.row.00000000-0000-0000-0000-"
+                )
+            )
+            var visibleRows: [(index: Int, identifier: String, minY: CGFloat)] = []
+            for offset in 0..<rows.count {
+                let row = rows.element(boundBy: offset)
+                let frame = row.frame
+                guard row.exists,
+                      frame.width > 0,
+                      frame.height > 0,
+                      frame.intersects(list.frame),
+                      let suffix = row.identifier.split(separator: "-").last,
+                      let encodedIndex = Int(suffix, radix: 16),
+                      encodedIndex > 0
+                else {
+                    continue
+                }
+
+                let index = encodedIndex - 1
+                XCTAssertTrue(
+                    row.label.contains("Quality workflow \(index)."),
+                    "Stable identity \(row.identifier) must remain bound to Quality workflow \(index)."
+                )
+                visibleRows.append((index, row.identifier, frame.minY))
+                observedWorkflowIndices.insert(index)
+            }
+
+            let orderedRows = visibleRows.sorted { $0.minY < $1.minY }
+            XCTAssertEqual(
+                Set(orderedRows.map(\.identifier)).count,
+                orderedRows.count,
+                "Every visible workflow row must have one stable identity."
+            )
+            for pair in zip(orderedRows, orderedRows.dropFirst()) {
+                XCTAssertEqual(
+                    pair.0.index - pair.1.index,
+                    1,
+                    "Every visible workflow viewport must preserve contiguous newest-first order."
+                )
+            }
+        }
+        let swipeUpAndRecord = {
+            recordVisibleWorkflowRows()
+            list.swipeUp()
+            recordVisibleWorkflowRows()
+        }
+        recordVisibleWorkflowRows()
         let pageLoading = element(in: context.app, identifier: "state.messages.page.loading")
         for _ in 0..<12 where !pageLoading.exists {
-            list.swipeUp()
+            swipeUpAndRecord()
         }
         XCTAssertTrue(
             pageLoading.waitForExistence(timeout: 5),
             "A slow next page must expose bottom progress instead of looking frozen"
         )
         XCTAssertTrue(
-            context.app.staticTexts["Quality workflow 2"].exists,
+            context.app.staticTexts["Quality workflow 75"].exists,
             "The last row from page 1 must remain usable while page 2 is loading"
         )
-        list.swipeUp()
-        list.swipeUp()
-        let secondPagePredecessor = element(
+        let secondPageHead = context.app.staticTexts["Quality workflow 74"]
+        for _ in 0..<12 where !secondPageHead.exists {
+            swipeUpAndRecord()
+        }
+        XCTAssertTrue(
+            secondPageHead.waitForExistence(timeout: 5),
+            "The first canonical object from production page 2 was not reachable."
+        )
+        let secondPageTail = context.app.staticTexts["Quality workflow 25"]
+        for _ in 0..<14 where !secondPageTail.exists {
+            swipeUpAndRecord()
+        }
+        XCTAssertTrue(
+            secondPageTail.waitForExistence(timeout: 5),
+            "The last canonical object from production page 2 was not reachable."
+        )
+
+        let finalPagePredecessor = element(
             in: context.app,
             identifier: "message.row.00000000-0000-0000-0000-000000000002"
         )
-        let secondPageTarget = element(
+        let finalPageTarget = element(
             in: context.app,
             identifier: "message.row.00000000-0000-0000-0000-000000000001"
         )
-        for _ in 0..<12 where !(secondPagePredecessor.exists && secondPageTarget.exists) {
-            list.swipeUp()
+        for _ in 0..<14 where !(finalPagePredecessor.exists && finalPageTarget.exists) {
+            swipeUpAndRecord()
         }
         XCTAssertTrue(
-            secondPageTarget.waitForExistence(timeout: 5),
-            "The oldest canonical object from production page 2 was not reachable"
+            finalPageTarget.waitForExistence(timeout: 5),
+            "The oldest canonical object from production page 3 was not reachable"
         )
         XCTAssertTrue(
-            secondPagePredecessor.waitForExistence(timeout: 5),
-            "Production page 2 must not silently drop its first canonical object."
+            finalPagePredecessor.waitForExistence(timeout: 5),
+            "Production page 3 must not silently drop its penultimate canonical object."
         )
         XCTAssertTrue(
-            secondPagePredecessor.label.contains("Quality workflow 1"),
-            "The first page-2 identity must remain bound to its accurate visible title."
+            finalPagePredecessor.label.contains("Quality workflow 1"),
+            "The penultimate identity must remain bound to its accurate visible title."
         )
         XCTAssertTrue(
-            secondPageTarget.label.contains("Quality workflow 0"),
-            "The oldest page-2 identity must remain bound to its accurate visible title."
+            finalPageTarget.label.contains("Quality workflow 0"),
+            "The oldest identity must remain bound to its accurate visible title."
         )
         XCTAssertTrue(
             context.app.staticTexts["Quality workflow 1"].exists &&
                 context.app.staticTexts["Quality workflow 0"].exists,
-            "Both canonical page-2 titles must be visibly rendered, not merely exposed as identifiers."
+            "Both canonical final-page titles must be visibly rendered, not merely exposed as identifiers."
         )
         for identifier in [
             "message.row.00000000-0000-0000-0000-000000000002",
@@ -823,13 +890,19 @@ final class PushGo_iOSUITests: XCTestCase {
             XCTAssertEqual(
                 context.app.descendants(matching: .any).matching(identifier: identifier).count,
                 1,
-                "Repeated scroll pressure must append every page-2 object exactly once."
+                "Repeated scroll pressure must append every final-page object exactly once."
             )
         }
         XCTAssertLessThan(
-            secondPagePredecessor.frame.minY,
-            secondPageTarget.frame.minY,
-            "Production page 2 must preserve canonical newest-first ordering."
+            finalPagePredecessor.frame.minY,
+            finalPageTarget.frame.minY,
+            "Production page 3 must preserve canonical newest-first ordering."
+        )
+        recordVisibleWorkflowRows()
+        XCTAssertEqual(
+            observedWorkflowIndices,
+            Set(0..<125),
+            "The production paging journey must render every canonical object exactly once without gaps."
         )
 
         let messagesTab = context.app.tabBars.firstMatch.buttons.element(boundBy: 0)
@@ -838,16 +911,16 @@ final class PushGo_iOSUITests: XCTestCase {
             context.app.staticTexts["Quality workflow 39"].waitForExistence(timeout: 5),
             "Reselecting Messages once must reach the nearest unread canonical object"
         )
-        XCTAssertFalse(context.app.staticTexts["Quality workflow 51"].exists)
+        XCTAssertFalse(context.app.staticTexts["Quality workflow 124"].exists)
 
         messagesTab.doubleTap()
         XCTAssertTrue(
-            context.app.staticTexts["Quality workflow 51"].waitForExistence(timeout: 5),
+            context.app.staticTexts["Quality workflow 124"].waitForExistence(timeout: 5),
             "Double-tapping Messages must reach the newest canonical object"
         )
         RunLoop.current.run(until: Date().addingTimeInterval(0.45))
         XCTAssertTrue(
-            context.app.staticTexts["Quality workflow 51"].exists,
+            context.app.staticTexts["Quality workflow 124"].exists,
             "The canceled single-tap task must not move the list after a double-tap"
         )
         XCTAssertFalse(context.app.staticTexts["Quality workflow 39"].exists)
@@ -941,7 +1014,7 @@ final class PushGo_iOSUITests: XCTestCase {
             XCTAssertTrue(unreadFilter.waitForExistence(timeout: 5))
         }
         unreadFilter.tap()
-        XCTAssertTrue(relaunched.app.staticTexts["Quality workflow 51"].waitForExistence(timeout: 8))
+        XCTAssertTrue(relaunched.app.staticTexts["Quality workflow 124"].waitForExistence(timeout: 8))
         XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.empty").exists)
     }
 
@@ -2656,6 +2729,72 @@ final class PushGo_iOSUITests: XCTestCase {
         )
         XCTAssertTrue(thingRow.waitForExistence(timeout: 8))
         XCTAssertTrue(distractorRow.waitForExistence(timeout: 8))
+        let crossChannelControl = element(
+            in: context.app,
+            identifier: "thing.row.quality-thing-navigation-15"
+        )
+        XCTAssertTrue(
+            crossChannelControl.waitForExistence(timeout: 8),
+            "The fixture must expose an other-channel Thing sharing the target tag."
+        )
+
+        let filters = element(in: context.app, identifier: "action.things.filters")
+        tapWhenHittable(filters, timeout: 5, message: "Thing filters must be actionable")
+        let qualityChannel = element(
+            in: context.app,
+            identifier: "filter.things.channel.quality"
+        )
+        tapWhenHittable(qualityChannel, timeout: 5)
+        let sharedTag = element(
+            in: context.app,
+            identifier: "filter.things.tag.filter-shared"
+        )
+        tapWhenHittable(sharedTag, timeout: 5)
+        context.app.swipeDown()
+        XCTAssertTrue(
+            sharedTag.waitForNonExistence(timeout: 5),
+            "The production Thing filter popover did not dismiss after the platform gesture."
+        )
+        XCTAssertTrue(
+            thingRow.waitForExistence(timeout: 8),
+            "Channel AND tag filters must retain the unique accurate Thing."
+        )
+        XCTAssertTrue(
+            distractorRow.waitForNonExistence(timeout: 5),
+            "The same-channel Thing with a different tag must not survive the combined filter."
+        )
+        XCTAssertTrue(
+            crossChannelControl.waitForNonExistence(timeout: 5),
+            "The same-tag Thing from a different channel must not survive the combined filter."
+        )
+
+        tapWhenHittable(filters, timeout: 5, message: "Thing filters must reopen for clearing")
+        tapWhenHittable(
+            element(in: context.app, identifier: "filter.things.channel.all"),
+            timeout: 5
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "filter.things.tag.filter-shared"),
+            timeout: 5
+        )
+        context.app.swipeDown()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "filter.things.tag.filter-shared")
+                .waitForNonExistence(timeout: 5),
+            "Clearing must dismiss through the same production filter surface."
+        )
+        XCTAssertTrue(
+            thingRow.waitForExistence(timeout: 8),
+            "Clearing the combined filter must retain the accurate target."
+        )
+        XCTAssertTrue(
+            distractorRow.waitForExistence(timeout: 8),
+            "Clearing must restore the same-channel control Thing."
+        )
+        XCTAssertTrue(
+            crossChannelControl.waitForExistence(timeout: 8),
+            "Clearing must restore the other-channel control Thing."
+        )
         let offscreenThing = element(
             in: context.app,
             identifier: "thing.row.quality-thing-navigation-08"

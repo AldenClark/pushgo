@@ -15,6 +15,53 @@ import UIKit
 import AppKit
 #endif
 
+#if os(macOS)
+enum PushGoMacImageExportEncoder {
+    static func pngData(from image: NSImage) -> Data? {
+        var proposedRect = CGRect(origin: .zero, size: image.size)
+        guard let cgImage = image.cgImage(
+            forProposedRect: &proposedRect,
+            context: nil,
+            hints: nil
+        ),
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+        let renderContext = CGContext(
+            data: nil,
+            width: cgImage.width,
+            height: cgImage.height,
+            bitsPerComponent: 8,
+            bytesPerRow: cgImage.width * 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                | CGBitmapInfo.byteOrder32Big.rawValue
+        ) else {
+            return nil
+        }
+        renderContext.interpolationQuality = .none
+        renderContext.draw(
+            cgImage,
+            in: CGRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height)
+        )
+        guard let normalizedImage = renderContext.makeImage() else { return nil }
+
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            output,
+            UTType.png.identifier as CFString,
+            1,
+            nil
+        ) else {
+            return nil
+        }
+        CGImageDestinationAddImage(destination, normalizedImage, nil)
+        guard CGImageDestinationFinalize(destination) else {
+            return nil
+        }
+        return output as Data
+    }
+}
+#endif
+
 enum PushGoAnimatedImageRuntime {
     static func bootstrapIfNeeded() {
 #if canImport(SDWebImage)
