@@ -363,7 +363,8 @@ final class PushGo_iOSUITests: XCTestCase {
         seeded.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
             fixture: "messages.standard",
-            legacyStore: "messages.v17"
+            legacyStore: "messages.v17",
+            messageRefreshScenario: "new_message"
         )
 
         launch(seeded.app)
@@ -384,6 +385,55 @@ final class PushGo_iOSUITests: XCTestCase {
             element(in: seeded.app, identifier: "action.message.close"),
             timeout: 5,
             message: "A migrated message must remain usable through the real detail flow."
+        )
+
+        let markAllRead = element(in: seeded.app, identifier: "action.messages.mark_all_read")
+        tapWhenHittable(
+            markAllRead,
+            timeout: 5,
+            message: "The real Messages bulk action must establish a known zero-unread baseline."
+        )
+        assertMessagesTabBadgeCount(
+            nil,
+            in: seeded.app,
+            message: "The provider refresh journey must begin from the persisted zero-unread state."
+        )
+        tapWhenHittable(
+            seeded.app.buttons["action.messages.refresh"],
+            timeout: 5,
+            message: "The production Refresh action must remain usable in the PR message journey."
+        )
+        let refreshedTitle = seeded.app.staticTexts["P2 Refresh Result"]
+        XCTAssertTrue(
+            refreshedTitle.waitForExistence(timeout: 8),
+            "A successful provider refresh must add the exact new canonical message to the real list."
+        )
+        XCTAssertTrue(
+            seeded.app.staticTexts["Persisted through the provider refresh ingress path."]
+                .waitForExistence(timeout: 5),
+            "The refreshed row must expose the provider body's accurate canonical value."
+        )
+        assertMessagesTabBadgeCount(
+            1,
+            in: seeded.app,
+            message: "The one persisted provider result must create exactly one unread message."
+        )
+        refreshedTitle.tap()
+        assertElementExists("sheet.message.detail", in: seeded.app, timeout: 8)
+        XCTAssertTrue(
+            seeded.app.staticTexts["Persisted through the provider refresh ingress path."]
+                .waitForExistence(timeout: 5),
+            "Opening the refreshed result must bind to its exact canonical detail."
+        )
+        assertMessagesTabBadgeCount(
+            nil,
+            in: seeded.app,
+            message: "Opening the only unread provider result must persist its read transition."
+        )
+        tapWhenHittable(
+            element(in: seeded.app, identifier: "action.message.close"),
+            timeout: 5,
+            message: "The refreshed canonical detail must return to the same Messages journey."
         )
         XCTAssertTrue(
             seeded.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8),
@@ -468,7 +518,8 @@ final class PushGo_iOSUITests: XCTestCase {
             sessionID: sessionID,
             fixture: "messages.standard",
             messageSearchDelayMilliseconds: 2_000,
-            legacyStore: "messages.v17"
+            legacyStore: "messages.v17",
+            messageRefreshScenario: "new_message"
         )
         launch(relaunched.app)
 
@@ -480,6 +531,28 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(
             relaunched.app.staticTexts["Legacy Upgrade Message"].exists,
             "The migrated canonical message must survive an ordinary process relaunch."
+        )
+        let relaunchedRefreshResult = relaunched.app.staticTexts["P2 Refresh Result"]
+        XCTAssertTrue(
+            relaunchedRefreshResult.waitForExistence(timeout: 8),
+            "The successful provider refresh result must survive the existing process relaunch."
+        )
+        relaunchedRefreshResult.tap()
+        assertElementExists("sheet.message.detail", in: relaunched.app, timeout: 8)
+        XCTAssertTrue(
+            relaunched.app.staticTexts["Persisted through the provider refresh ingress path."]
+                .waitForExistence(timeout: 5),
+            "Relaunch must preserve the refreshed result's exact canonical detail."
+        )
+        assertMessagesTabBadgeCount(
+            nil,
+            in: relaunched.app,
+            message: "The refreshed result's read state must remain accurate after relaunch."
+        )
+        tapWhenHittable(
+            element(in: relaunched.app, identifier: "action.message.close"),
+            timeout: 5,
+            message: "The persisted refresh detail must close before exercising search."
         )
         XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.empty").exists)
 
@@ -1336,52 +1409,6 @@ final class PushGo_iOSUITests: XCTestCase {
                 .waitForNonExistence(timeout: 5)
         )
         XCTAssertTrue(title.exists, "Successful refresh must end on accurate content")
-    }
-
-    func testMessageRefreshPersistsNewProviderResultAndOpensItsRealDetail() {
-        let context = configuredLaunchContext()
-        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
-            sessionID: "ios-refresh-result-\(UUID().uuidString.lowercased())",
-            fixture: "messages.standard",
-            messageRefreshScenario: "new_message"
-        )
-
-        launch(context.app)
-        assertQualityRuntimeReady(in: context.app, timeout: 15)
-        XCTAssertTrue(context.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8))
-        context.app.buttons["action.messages.refresh"].tap()
-
-        let refreshedTitle = context.app.staticTexts["P2 Refresh Result"]
-        XCTAssertTrue(refreshedTitle.waitForExistence(timeout: 8))
-        XCTAssertTrue(context.app.staticTexts["P2 Split Seed Message"].exists)
-        assertMessagesTabBadgeCount(
-            2,
-            in: context.app,
-            message: "The provider ingress result must increment the real navigation badge exactly once"
-        )
-        refreshedTitle.tap()
-        XCTAssertTrue(
-            context.app.staticTexts["Persisted through the provider refresh ingress path."]
-                .waitForExistence(timeout: 5)
-        )
-
-        context.app.terminate()
-        launch(context.app)
-        assertQualityRuntimeReady(in: context.app, timeout: 15)
-        let relaunchedRefreshResult = context.app.staticTexts["P2 Refresh Result"]
-        XCTAssertTrue(relaunchedRefreshResult.waitForExistence(timeout: 8))
-        assertMessagesTabBadgeCount(
-            1,
-            in: context.app,
-            message: "Opening the provider result must persist one remaining unread control message"
-        )
-        relaunchedRefreshResult.tap()
-        assertElementExists("sheet.message.detail", in: context.app, timeout: 8)
-        XCTAssertTrue(
-            context.app.staticTexts["Persisted through the provider refresh ingress path."]
-                .waitForExistence(timeout: 5),
-            "Relaunch must preserve the provider result's exact canonical body, not only its title."
-        )
     }
 
     func testMessageRefreshFailureKeepsSnapshotAndRetryRecoversPersistedResult() {

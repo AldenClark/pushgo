@@ -504,6 +504,7 @@ final class PushGo_macOSUITests: XCTestCase {
             sessionID: sessionID,
             fixture: "messages.standard",
             legacyStore: "messages.v17",
+            messageRefreshScenario: "new_message",
             allowCrossAppDataAccess: true
         )
         let savedImageReceiptURL = macOSQualitySessionRootURL(sessionID: sessionID)
@@ -667,12 +668,52 @@ final class PushGo_macOSUITests: XCTestCase {
             "Save and Share must return to the same accurate canonical message detail."
         )
 
+        let badge = context.app.staticTexts["sidebar.messages.unread_badge"]
+        XCTAssertFalse(
+            badge.exists,
+            "Opening both existing canonical messages must establish a zero-unread baseline."
+        )
+        let refresh = element(in: context.app, identifier: "action.messages.refresh")
+        XCTAssertTrue(
+            refresh.waitForExistence(timeout: 5) && refresh.isHittable,
+            "The production Refresh action must remain usable in the core positive message journey."
+        )
+        refresh.click()
+        let refreshedRow = context.app.buttons
+            .matching(NSPredicate(format: "label CONTAINS %@", "P2 Refresh Result"))
+            .firstMatch
+        XCTAssertTrue(
+            refreshedRow.waitForExistence(timeout: 8),
+            "A successful provider refresh must add the exact new canonical message to the real list."
+        )
+        XCTAssertTrue(
+            (refreshedRow.value as? String)?.contains(
+                "Persisted through the provider refresh ingress path."
+            ) == true,
+            "The refreshed row must expose the provider body's accurate canonical value."
+        )
+        XCTAssertTrue(
+            badge.waitForExistence(timeout: 8) && waitForValue("1", in: badge, timeout: 8),
+            "The one persisted provider result must create exactly one unread message."
+        )
+        refreshedRow.click()
+        XCTAssertTrue(
+            context.app.staticTexts["Persisted through the provider refresh ingress path."]
+                .waitForExistence(timeout: 5),
+            "Opening the refreshed result must bind to its exact canonical detail."
+        )
+        XCTAssertTrue(
+            badge.waitForNonExistence(timeout: 8),
+            "Opening the only unread provider result must persist its read transition."
+        )
+
         context.app.terminate()
         let relaunched = configuredQualityApp(
             sessionID: sessionID,
             fixture: "messages.standard",
             messageSearchDelayMilliseconds: 2_000,
             legacyStore: "messages.v17",
+            messageRefreshScenario: "new_message",
             allowCrossAppDataAccess: true
         )
         launchQuality(relaunched, sessionID: sessionID)
@@ -693,6 +734,29 @@ final class PushGo_macOSUITests: XCTestCase {
             relaunchedRow.waitForExistence(timeout: 8)
                 && relaunchedRow.label.contains("P2 Split Seed Message"),
             "The canonical message did not survive a real process relaunch."
+        )
+        let relaunchedRefreshResult = relaunched.app.buttons
+            .matching(NSPredicate(format: "label CONTAINS %@", "P2 Refresh Result"))
+            .firstMatch
+        XCTAssertTrue(
+            relaunchedRefreshResult.waitForExistence(timeout: 8),
+            "The successful provider refresh result must survive the existing process relaunch."
+        )
+        XCTAssertTrue(
+            (relaunchedRefreshResult.value as? String)?.contains(
+                "Persisted through the provider refresh ingress path."
+            ) == true,
+            "Relaunch must preserve the refreshed row's exact canonical body."
+        )
+        relaunchedRefreshResult.click()
+        XCTAssertTrue(
+            relaunched.app.staticTexts["Persisted through the provider refresh ingress path."]
+                .waitForExistence(timeout: 5),
+            "Relaunch must reopen the refreshed result's exact canonical detail."
+        )
+        XCTAssertFalse(
+            relaunched.app.staticTexts["sidebar.messages.unread_badge"].exists,
+            "The refreshed result's read state must remain accurate after relaunch."
         )
         XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.empty").exists)
         relaunchedLegacyRow.click()
@@ -1908,7 +1972,11 @@ final class PushGo_macOSUITests: XCTestCase {
     @MainActor
     func testSidebarNavigationCoversPrimaryScreens() throws {
         let sessionID = "macos-navigation-\(UUID().uuidString.lowercased())"
-        let context = configuredQualityApp(sessionID: sessionID, fixture: "core.positive")
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "core.positive",
+            messageRefreshScenario: "new_message"
+        )
         context.app.launchArguments += [
             "-AppleLanguages", "(zh-Hans)",
             "-AppleLocale", "zh_CN",
@@ -2028,6 +2096,53 @@ final class PushGo_macOSUITests: XCTestCase {
 
         openSidebarTab("settings", in: context.app)
         assertVisibleScreenThroughUI("screen.settings", in: context.app, timeout: 8)
+
+        openSidebarTab("messages", in: context.app)
+        assertVisibleScreenThroughUI("screen.messages.list", in: context.app, timeout: 8)
+        let refresh = element(in: context.app, identifier: "action.messages.refresh")
+        XCTAssertTrue(
+            refresh.waitForExistence(timeout: 5) && refresh.isHittable,
+            "The daily macOS core journey must exercise the real provider Refresh action."
+        )
+        refresh.click()
+        let refreshedRow = context.app.buttons
+            .matching(NSPredicate(format: "label CONTAINS %@", "P2 Refresh Result"))
+            .firstMatch
+        XCTAssertTrue(
+            refreshedRow.waitForExistence(timeout: 8),
+            "The daily core refresh must add its exact new canonical row to the real list."
+        )
+        XCTAssertTrue(
+            refreshedRow.label.contains("未读"),
+            "The newly persisted provider result must initially expose its unread row semantics."
+        )
+        XCTAssertTrue(
+            (refreshedRow.value as? String)?.contains(
+                "Persisted through the provider refresh ingress path."
+            ) == true,
+            "The daily core refresh row must expose the accurate canonical body."
+        )
+        XCTAssertEqual(
+            unreadBadge.value as? String,
+            "99+",
+            "The capped high-unread navigation state must remain readable after provider ingress."
+        )
+        refreshedRow.click()
+        assertVisibleScreenThroughUI("screen.message.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Persisted through the provider refresh ingress path."]
+                .waitForExistence(timeout: 5),
+            "The refreshed row must open its exact canonical detail in the daily core journey."
+        )
+        let markedRead = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "NOT label CONTAINS %@", "未读"),
+            object: refreshedRow
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [markedRead], timeout: 8),
+            .completed,
+            "Opening the refreshed result must update that exact row to read semantics."
+        )
     }
 
     @MainActor

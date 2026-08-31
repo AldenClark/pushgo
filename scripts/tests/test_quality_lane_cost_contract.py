@@ -357,7 +357,7 @@ class QualityLaneCostContractTests(unittest.TestCase):
 
         self.assertEqual(len(scopes), len(set(scopes)))
         self.assertLessEqual(len(scopes), 4)
-        self.assertEqual(13, len(scopes + extended_positive))
+        self.assertEqual(12, len(scopes + extended_positive))
         all_curated = scopes + extended_positive + nightly_scopes
         self.assertEqual(len(all_curated), len(set(all_curated)))
         self.assertFalse([scope for scope in all_curated if scope.rsplit("/", 1)[-1] not in discovered])
@@ -423,6 +423,27 @@ class QualityLaneCostContractTests(unittest.TestCase):
             pr_body,
         )
 
+    def test_successful_refresh_reuses_existing_cross_platform_relaunch_journeys(self) -> None:
+        runner = (REPO / "scripts/quality_test.sh").read_text()
+        ios_source = (REPO / "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift").read_text()
+        macos_source = (REPO / "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift").read_text()
+        standard = "testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch"
+        ios_standard = ios_source.split("func " + standard + "()", 1)[1].split("\n    func ", 1)[0]
+        macos_standard = macos_source.split("func " + standard + "()", 1)[1].split(
+            "\n    @MainActor", 1
+        )[0]
+
+        self.assertTrue(any(scope.endswith("/" + standard) for scope in self._scopes(runner, "pr_ui_scopes")))
+        self.assertNotIn("testMessageRefreshPersistsNewProviderResultAndOpensItsRealDetail", ios_source)
+        self.assertNotIn("testMessageRefreshPersistsNewProviderResultAndOpensItsRealDetail", runner)
+        for journey in (ios_standard, macos_standard):
+            self.assertGreaterEqual(journey.count('messageRefreshScenario: "new_message"'), 2)
+            self.assertIn('"action.messages.refresh"', journey)
+            self.assertIn('"P2 Refresh Result"', journey)
+            self.assertIn('"Persisted through the provider refresh ingress path."', journey)
+            self.assertIn("exactly one unread message", journey)
+            self.assertIn("read state must remain accurate after relaunch", journey)
+
     def test_primary_navigation_ui_reuses_existing_cross_platform_pr_oracles(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()
         pr_scopes = self._scopes(runner, "pr_ui_scopes")
@@ -456,6 +477,13 @@ class QualityLaneCostContractTests(unittest.TestCase):
             self.assertIn("Fixture thing summary", journey)
             self.assertNotIn("pushgo://open?kind=event&id=list", journey)
             self.assertNotIn("pushgo://open?kind=thing&id=list", journey)
+
+        self.assertIn('messageRefreshScenario: "new_message"', macos_journey)
+        self.assertIn('identifier: "action.messages.refresh"', macos_journey)
+        self.assertIn('"P2 Refresh Result"', macos_journey)
+        self.assertIn('"Persisted through the provider refresh ingress path."', macos_journey)
+        self.assertIn("newly persisted provider result must initially expose its unread row semantics", macos_journey)
+        self.assertIn("Opening the refreshed result must update that exact row to read semantics", macos_journey)
 
         self.assertIn('"pushgo.dev/guides/getting-started/"', ios_journey)
         self.assertIn('"https://pushgo.dev/guides/getting-started/"', ios_journey)
