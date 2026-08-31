@@ -3,7 +3,8 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 performance_scope="PushGo-iOSUITests/PushGo_iOSUITests/testSlowLargeMessageLoadTripsAccurateContentBudget"
-result_file="$repo_root/build/quality-results/apple-performance-slow-load-negative-control.json"
+results_root="${QUALITY_RESULTS_ROOT:-$repo_root/build/quality-results}"
+result_file="$results_root/apple-performance-slow-load-negative-control.json"
 run_dir="$(mktemp -d "${TMPDIR:-/tmp}/pushgo-ios-performance-negative.XXXXXX")"
 runner_log="$run_dir/runner.log"
 runner_status_file="$run_dir/runner-status.txt"
@@ -28,7 +29,7 @@ QUALITY_REUSE_BUILT_TESTS="${QUALITY_REUSE_BUILT_TESTS:-1}" \
   QUALITY_ALLOW_EXPECTED_FAILURES=1 \
   TEST_SCOPES="$performance_scope" \
   MAX_RETRIES=0 \
-  RESULTS_ROOT="$repo_root/build/quality-results/ios-performance-negative" \
+  RESULTS_ROOT="$results_root/ios-performance-negative" \
   QUALITY_RUNNER_STATUS_FILE="$runner_status_file" \
   "$repo_root/scripts/run_ios_ui_tests.sh" >"$runner_log" 2>&1
 runner_exit=$?

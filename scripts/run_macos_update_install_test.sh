@@ -2,7 +2,8 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-results_root="$repo_root/build/quality-results/macos-update-install"
+quality_results_root="${QUALITY_RESULTS_ROOT:-$repo_root/build/quality-results}"
+results_root="$quality_results_root/macos-update-install"
 timestamp="$(date +%Y%m%d-%H%M%S)"
 result_dir="$results_root/$timestamp"
 derived_data="${MACOS_UPDATE_DERIVED_DATA:-$repo_root/build/.deriveddata-macos-ui}"

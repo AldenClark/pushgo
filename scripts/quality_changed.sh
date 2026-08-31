@@ -9,8 +9,9 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 fi
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-results_root="$repo_root/build/quality-results"
+results_root="${QUALITY_RESULTS_ROOT:-$repo_root/build/quality-results}"
 impact_file="$results_root/apple-impact-plan.json"
+changed_result_file="${QUALITY_RESULT_FILE:-$results_root/apple-changed-summary.json}"
 impact_args=("$@")
 has_output=0
 for ((index = 0; index < ${#impact_args[@]}; index += 1)); do
@@ -34,7 +35,7 @@ done
 if [[ "$impact_file" != /* ]]; then
   impact_file="$PWD/$impact_file"
 fi
-mkdir -p "$results_root"
+mkdir -p "$results_root" "$(dirname "$impact_file")" "$(dirname "$changed_result_file")"
 
 python3 -m unittest discover -s "$repo_root/scripts/tests" -p 'test_*.py'
 if ((has_output == 0)); then
@@ -51,7 +52,7 @@ fi
 
 if [[ "$lane" == "not-run" ]]; then
   python3 "$repo_root/scripts/quality_result.py" \
-    --output "$results_root/apple-changed-summary.json" \
+    --output "$changed_result_file" \
     --platform apple \
     --lane changed \
     --product-status NOT_RUN \
@@ -65,4 +66,5 @@ fi
 
 echo "executing_recommended_lane=$lane"
 export QUALITY_IMPACT_PLAN="$impact_file"
+export QUALITY_RESULTS_ROOT="$results_root"
 exec "$repo_root/scripts/quality_test.sh" "$lane"

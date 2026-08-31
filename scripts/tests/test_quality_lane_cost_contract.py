@@ -276,7 +276,21 @@ class QualityLaneCostContractTests(unittest.TestCase):
 
     def test_changed_runner_reads_the_same_fresh_plan_path_it_writes(self) -> None:
         runner = (REPO / "scripts/quality_changed.sh").read_text()
+        lane_runner = (REPO / "scripts/quality_test.sh").read_text()
 
+        self.assertIn(
+            'results_root="${QUALITY_RESULTS_ROOT:-$repo_root/build/quality-results}"',
+            lane_runner,
+        )
+        self.assertIn(
+            'result_file="${QUALITY_RESULT_FILE:-$results_root/apple-$lane-summary.json}"',
+            lane_runner,
+        )
+        self.assertIn(
+            'results_root="${QUALITY_RESULTS_ROOT:-$repo_root/build/quality-results}"',
+            runner,
+        )
+        self.assertIn('export QUALITY_RESULTS_ROOT="$results_root"', runner)
         self.assertIn('impact_args=("$@")', runner)
         self.assertIn('impact_file="${impact_args[$((index + 1))]}"', runner)
         self.assertIn('impact_file="${argument#--output=}"', runner)
@@ -289,6 +303,24 @@ class QualityLaneCostContractTests(unittest.TestCase):
             'json.load(open(sys.argv[1]))["recommended_lane"]',
             runner,
         )
+
+    def test_dedicated_apple_evidence_runners_follow_the_lane_result_root(self) -> None:
+        runner_expectations = {
+            "run_ios_performance_negative_control.sh": "ios-performance-negative",
+            "run_macos_performance_negative_control.sh": "macos-performance-negative",
+            "run_ios_data_field_negative_control.sh": "ios-data-field-negative",
+            "run_macos_update_install_test.sh": "macos-update-install",
+        }
+
+        for runner_name, evidence_directory in runner_expectations.items():
+            with self.subTest(runner=runner_name):
+                runner = (REPO / "scripts" / runner_name).read_text()
+                self.assertIn("QUALITY_RESULTS_ROOT", runner)
+                self.assertIn(evidence_directory, runner)
+                self.assertNotIn(
+                    f'$repo_root/build/quality-results/{evidence_directory}',
+                    runner,
+                )
 
     def test_ci_receipts_outlive_the_full_observation_window(self) -> None:
         workflow = (REPO / ".github/workflows/apple-quality.yml").read_text()
