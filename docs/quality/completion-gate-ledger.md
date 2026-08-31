@@ -19,7 +19,7 @@ This ledger is the operational reading of design section 21.2. It prevents a gre
 
 ### 2026-08-31 current-byte correction
 
-上表 gate 10/11 中“refresh completion 与 transport prepare 仍 open”的描述已被当前源码修复取代，但证据等级不越界：Android refresh 仅有 JVM 2/2，修复后 UI `NOT RUN`；SQLite Gateway V2 合同 5/5，未部署且 PostgreSQL/MySQL unsupported；Android durable coordinator 9/9、全 JVM 285/285、androidTest 编译通过，真实 Gateway/FCM/Private、Room migration 设备执行、系统通知/Service 与进程恢复仍 `NOT RUN`。因此 gates 6/10/11 继续 `PARTIAL`，原因从“源码语义缺失”变为“原生/真实系统闭环尚未执行”。
+上表 gate 10/11 中“refresh completion 与 transport prepare 仍 open”的描述已被当前源码修复取代，但证据等级不越界：Android refresh 仅有 JVM 2/2，修复后 refresh UI `NOT RUN`；SQLite Gateway V2 合同 5/5，未部署且 PostgreSQL/MySQL unsupported；Android durable coordinator 9/9、全 JVM 285/285、androidTest 编译通过，V2 Settings UI/relaunch 代表旅程 1/1。真实 Gateway/FCM/Private、Room migration 设备执行、系统通知/Service 与进程恢复仍 `NOT RUN`。因此 gates 6/10/11 继续 `PARTIAL`，原因从“源码语义缺失”变为“真实跨仓/系统闭环尚未执行”。
 
 ## Next closure order
 

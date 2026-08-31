@@ -364,7 +364,7 @@
 
 - Refresh 已从“新数据出现即完成”改为目标 Paging 请求必须经历 `Loading → terminal`，duplicate/no-op/filtered/空集合不会卡死或假绿；JVM 2/2，修复后的设备 UI `NOT RUN`。
 - Gateway SQLite 新增持久化 `prepare/commit/abort/query`、operation 幂等、revision CAS、同事务队列迁移与 superseded query，核心 5/5；PostgreSQL/MySQL capability=false，未部署/真实联调 `NOT RUN`。
-- Android 新增 Room 31 durable coordinator 与 Keystore pending-token slot，所有真实选择入口统一编排；unknown commit 只 query，LOCAL_INTENT 崩溃窗、CAS loser、local finalize failure 与后继 supersede 均有目的级 Oracle。最终 coordinator 9/9、全 JVM 285/285、androidTest 编译通过。Room migration 设备执行、真实 FCM/Private、系统通知/Service 与进程恢复继续 `NOT RUN`。
+- Android 新增 Room 31 durable coordinator 与 Keystore pending-token slot，所有真实选择入口统一编排；unknown commit 只 query，LOCAL_INTENT 崩溃窗、CAS loser、local finalize failure 与后继 supersede 均有目的级 Oracle。最终 coordinator 9/9、全 JVM 285/285、androidTest 编译通过。随后只执行一条最低充分 Settings UI/relaunch 旅程：真实 Compose→ViewModel→Coordinator→stateful fake→准确 route→activity relaunch，API 37 为 1/1、4.941 秒、完整调用 35 秒且零重试；绕过 V2 coordinator 的旧 runtime 测试未运行。Room migration 设备执行、真实 FCM/Private、系统通知/Service 与进程恢复继续 `NOT RUN`。
 - 独立红蓝复核连续抓出并关闭 commit 自动重试、ViewModel 绕过、token/Room crash window、operation-id 幂等和 stale committed recovery 五类核心反例；未增加真实设备、14 天观察或低收益边缘矩阵。
 
 # 2026-08-31 独立 AI 历史揭盲与 macOS 窗口/通知刷新纵切

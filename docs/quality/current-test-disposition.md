@@ -193,7 +193,7 @@ macOS 标准消息正向方法同时承担最低充分的 migration UI：App 在
 
 ## Android transport V2 跨仓修正
 
-2026-08-31 的源码审计确认旧 Android “prepare”会立即改 Gateway active route，且客户端随后才写本地选择；测试 fake 在副作用前拒绝请求，因此可在真实事务分裂时假绿。当前 SQLite Gateway 已新增持久化 `prepare/commit/abort/query`、operation 幂等、revision CAS 与原子队列迁移，核心合同 5/5；只有 SQLite capability=true，PostgreSQL/MySQL 明确 unsupported。Android 生产选择入口统一进入 Room 31 durable coordinator；commit 未知只 query，崩溃恢复先按 operation 查询，后继 winner 不会被旧 operation 反向覆盖，最终 coordinator 9/9、全 JVM 285/285、androidTest 编译通过。旧 selector 设备旅程仅保留 UI 历史价值，不能作为 V2 设备证据；真实跨仓联调、migration 设备执行、FCM/Private、系统通知/Service 和设备进程恢复均 `NOT RUN`。
+2026-08-31 的源码审计确认旧 Android “prepare”会立即改 Gateway active route，且客户端随后才写本地选择；测试 fake 在副作用前拒绝请求，因此可在真实事务分裂时假绿。当前 SQLite Gateway 已新增持久化 `prepare/commit/abort/query`、operation 幂等、revision CAS 与原子队列迁移，核心合同 5/5；只有 SQLite capability=true，PostgreSQL/MySQL 明确 unsupported。Android 生产选择入口统一进入 Room 31 durable coordinator；commit 未知只 query，崩溃恢复先按 operation 查询，后继 winner 不会被旧 operation 反向覆盖，最终 coordinator 9/9、全 JVM 285/285、androidTest 编译通过。当前唯一 V2 Settings UI/relaunch 代表旅程 1/1、4.941 秒、零重试；旧 runtime 测试因绕过 UI/V2 coordinator 不计证据。真实跨仓联调、migration 设备执行、FCM/Private、系统通知/Service 和设备进程恢复均 `NOT RUN`。
 
 ## watchOS 真实 UI 迁移、归因与攻击记录
 
