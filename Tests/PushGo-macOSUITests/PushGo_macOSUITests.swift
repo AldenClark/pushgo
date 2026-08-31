@@ -637,7 +637,10 @@ final class PushGo_macOSUITests: XCTestCase {
             "The decoded image preview must expose its production Save action."
         )
         saveImage.click()
-        saveImageThroughSystemPanel(in: context.app)
+        saveImageThroughSystemPanel(
+            in: context.app,
+            expectedFilename: "pushgo-image-\(sessionID).png"
+        )
         let savedImageURL = waitForSavedImageDestinationReceipt(at: savedImageReceiptURL)
         assertSavedImageMatchesCanonicalPixels(at: savedImageURL)
 
@@ -4790,6 +4793,7 @@ final class PushGo_macOSUITests: XCTestCase {
     @MainActor
     private func saveImageThroughSystemPanel(
         in app: XCUIApplication,
+        expectedFilename: String,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
@@ -4810,8 +4814,8 @@ final class PushGo_macOSUITests: XCTestCase {
         )
         XCTAssertEqual(
             filenameField.value as? String,
-            "pushgo-image.png",
-            "The system Save panel did not preserve the production default PNG filename.",
+            expectedFilename,
+            "The system Save panel did not preserve the session-unique PNG filename.",
             file: file,
             line: line
         )
@@ -4823,19 +4827,12 @@ final class PushGo_macOSUITests: XCTestCase {
             line: line
         )
         confirmSave.click()
-        let replacementSheet = savePanel.sheets.firstMatch
-        if replacementSheet.waitForExistence(timeout: 2) {
-            let replace = replacementSheet.buttons["Replace"].exists
-                ? replacementSheet.buttons["Replace"]
-                : replacementSheet.buttons["替换"]
-            XCTAssertTrue(
-                replace.waitForExistence(timeout: 3) && replace.isHittable,
-                "The system overwrite confirmation did not expose its real Replace action.",
-                file: file,
-                line: line
-            )
-            replace.click()
-        }
+        XCTAssertFalse(
+            savePanel.sheets.firstMatch.waitForExistence(timeout: 2),
+            "A fresh App-owned session must choose a unique Save destination and never require overwrite confirmation.",
+            file: file,
+            line: line
+        )
         XCTAssertTrue(
             savePanel.waitForNonExistence(timeout: 8),
             "The system Save panel did not commit the selected destination.",

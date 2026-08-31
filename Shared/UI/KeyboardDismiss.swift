@@ -747,11 +747,14 @@ private struct PushgoImagePreviewOverlay: View {
 
         let panel = NSSavePanel()
         panel.canCreateDirectories = true
-        panel.nameFieldStringValue = "pushgo-image.\(contentType.preferredFilenameExtension ?? "png")"
+        let filenameExtension = contentType.preferredFilenameExtension ?? "png"
+        panel.nameFieldStringValue = "pushgo-image.\(filenameExtension)"
         panel.allowedContentTypes = [contentType]
-        if let qualitySaveDirectory = PushGoAutomationContext.qualitySessionRootURL?
-            .appendingPathComponent("saved-image", isDirectory: true)
-        {
+        if let qualitySession = PushGoAutomationContext.qualitySession {
+            panel.nameFieldStringValue = "pushgo-image-\(qualitySession.sessionID).\(filenameExtension)"
+            let qualitySaveDirectory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("PushGoQualitySavedImages", isDirectory: true)
+                .appendingPathComponent(qualitySession.sessionID, isDirectory: true)
             try? FileManager.default.createDirectory(
                 at: qualitySaveDirectory,
                 withIntermediateDirectories: true
