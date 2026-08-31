@@ -1967,6 +1967,51 @@ final class PushGo_macOSUITests: XCTestCase {
             originalRow.waitForExistence(timeout: 5) && originalRow.isHittable,
             "Keyboard navigation must return to the same accurate canonical Messages content."
         )
+
+        let quitStatusItem = pushGoStatusItem(in: context.app)
+        XCTAssertTrue(
+            quitStatusItem.waitForExistence(timeout: 5),
+            "The healthy functional session must still own its real status item before Quit."
+        )
+        quitStatusItem.rightClick()
+        let quitApplication = context.app.menuItems["Quit application"]
+        XCTAssertTrue(
+            quitApplication.waitForExistence(timeout: 5) && quitApplication.isHittable,
+            "The real status-item context menu must expose its localized Quit action."
+        )
+        quitApplication.click()
+
+        let terminated = XCTNSPredicateExpectation(
+            predicate: NSPredicate(
+                format: "state == %d",
+                XCUIApplication.State.notRunning.rawValue
+            ),
+            object: context.app
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [terminated], timeout: 5),
+            .completed,
+            "The production Quit action must terminate the whole App, not only hide its window."
+        )
+        RunLoop.current.run(until: Date().addingTimeInterval(0.35))
+        let survivingPushGoProcesses = NSWorkspace.shared.runningApplications.filter {
+            $0.bundleIdentifier == "io.ethan.pushgo" && !$0.isTerminated
+        }
+        XCTAssertTrue(
+            survivingPushGoProcesses.isEmpty,
+            "The production Quit action must leave no PushGo process owning a window or status item."
+        )
+        let crashDialogHosts = NSWorkspace.shared.runningApplications.filter {
+            guard let bundleIdentifier = $0.bundleIdentifier else { return false }
+            return [
+                "com.apple.ProblemReporter",
+                "com.apple.UserNotificationCenter",
+            ].contains(bundleIdentifier) && !$0.isTerminated
+        }
+        XCTAssertTrue(
+            crashDialogHosts.isEmpty,
+            "A normal status-item Quit must not leave a crash dialog that can block the next journey."
+        )
     }
 
     @MainActor

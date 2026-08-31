@@ -124,6 +124,12 @@ class QualityLaneCostContractTests(unittest.TestCase):
         self.assertIn("context.app.typeKey(.downArrow", method)
         self.assertIn("context.app.typeKey(.upArrow", method)
         self.assertIn("Keyboard navigation must return to the same accurate canonical Messages content", method)
+        self.assertIn('context.app.menuItems["Quit application"]', method)
+        self.assertIn("XCUIApplication.State.notRunning.rawValue", method)
+        self.assertIn('$0.bundleIdentifier == "io.ethan.pushgo"', method)
+        self.assertIn("survivingPushGoProcesses.isEmpty", method)
+        self.assertNotIn("context.app.windows.count", method.split("let terminated", 1)[1])
+        self.assertIn("A normal status-item Quit must not leave a crash dialog", method)
 
     def test_ios_slow_load_performance_negative_control_reuses_positive_build(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()
