@@ -13,6 +13,7 @@ struct MainTabContainerView: View {
     @State private var selectedMessageSnapshot: PushMessage?
     @State private var selectedEventId: String?
     @State private var selectedThingId: String?
+    @State private var unavailableThingTargetFeedback: String?
 
     @State private var didRefreshAuthorizationStatus: Bool = false
     @State private var dataRefreshTask: Task<Void, Never>?
@@ -266,6 +267,10 @@ struct MainTabContainerView: View {
                 viewModel: entityViewModel,
                 selection: $selectedThingId,
                 openThingId: environment.pendingThingToOpen,
+                unavailableTargetFeedback: unavailableThingTargetFeedback,
+                onUnavailableTargetFeedbackChanged: {
+                    unavailableThingTargetFeedback = $0
+                },
                 onOpenThingHandled: {
                     environment.pendingThingToOpen = nil
                 }

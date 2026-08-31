@@ -8,6 +8,8 @@ struct ThingSplitScreen: View {
     let viewModel: EntityProjectionViewModel
     @Binding var selection: String?
     var openThingId: String? = nil
+    var unavailableTargetFeedback: String? = nil
+    var onUnavailableTargetFeedbackChanged: ((String?) -> Void)? = nil
     var onOpenThingHandled: (() -> Void)? = nil
     @State private var searchQuery: String = ""
     @State private var selectedChannelIDs: Set<String> = []
@@ -69,32 +71,46 @@ struct ThingSplitScreen: View {
     @ViewBuilder
     private var thingListPane: some View {
         navigationContainer {
-            ThingListScreen(
-                things: filteredThings,
-                selection: $selection,
-                isLoadingMore: viewModel.isLoadingMoreThings,
-                onReachEnd: {
-                    Task { await viewModel.loadMoreThings() }
-                },
-                onOpenThing: { thing in
-                    selection = thing.id
-                },
-                onCopyThingIdentifier: { thing in
-                    PushGoSystemInteraction.copyTextToPasteboard(thing.id)
-                    environment.showToast(
-                        message: localizationManager.localized("copied"),
-                        style: .success,
-                        duration: 1.6
+            VStack(spacing: 0) {
+                if let unavailableTargetFeedback {
+                    AppInlineFeedbackBanner(
+                        message: unavailableTargetFeedback,
+                        tone: .danger,
+                        accessibilityID: "feedback.entity.target_unavailable",
+                        dismissAction: { onUnavailableTargetFeedbackChanged?(nil) }
                     )
-                },
-                onDeleteThing: { thing in
-                    Task { await scheduleDeletion(for: thing) }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
                 }
-            )
-            .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
-            .refreshable {
-                await handleProviderIngressPullRefresh()
+
+                ThingListScreen(
+                    things: filteredThings,
+                    selection: $selection,
+                    isLoadingMore: viewModel.isLoadingMoreThings,
+                    onReachEnd: {
+                        Task { await viewModel.loadMoreThings() }
+                    },
+                    onOpenThing: { thing in
+                        onUnavailableTargetFeedbackChanged?(nil)
+                        selection = thing.id
+                    },
+                    onCopyThingIdentifier: { thing in
+                        PushGoSystemInteraction.copyTextToPasteboard(thing.id)
+                        environment.showToast(
+                            message: localizationManager.localized("copied"),
+                            style: .success,
+                            duration: 1.6
+                        )
+                    },
+                    onDeleteThing: { thing in
+                        Task { await scheduleDeletion(for: thing) }
+                    }
+                )
+                .refreshable {
+                    await handleProviderIngressPullRefresh()
+                }
             }
+            .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
             .searchable(
                 text: $searchQuery,
                 placement: .toolbar,
@@ -306,14 +322,26 @@ struct ThingSplitScreen: View {
             if filteredThings.contains(where: { $0.id == target }) {
                 selection = target
                 hydrationRequestedThingIDs.remove(target)
+                onUnavailableTargetFeedbackChanged?(nil)
                 onOpenThingHandled?()
                 return
             }
             if !hydrationRequestedThingIDs.contains(target) {
                 hydrationRequestedThingIDs.insert(target)
                 Task { @MainActor in
-                    await viewModel.ensureThingDetailsLoaded(thingId: target, forceRefresh: true)
+                    let hydrated = await viewModel.ensureThingDetailsLoaded(
+                        thingId: target,
+                        forceRefresh: true
+                    )
                     hydrationRequestedThingIDs.remove(target)
+                    guard hydrated != nil else {
+                        guard viewModel.error == nil else { return }
+                        onUnavailableTargetFeedbackChanged?(
+                            localizationManager.localized("gateway_resource_not_found")
+                        )
+                        onOpenThingHandled?()
+                        return
+                    }
                     syncSelection()
                 }
                 return

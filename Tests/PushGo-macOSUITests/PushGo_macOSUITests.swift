@@ -2241,6 +2241,50 @@ final class PushGo_macOSUITests: XCTestCase {
             thingRow.waitForExistence(timeout: 8),
             "Deleting one Thing must preserve the independent control Thing across relaunch."
         )
+
+        guard let deletedThingURL = URL(
+            string: "pushgo://open?kind=thing&id=quality-thing-distractor"
+        ) else {
+            XCTFail("The registered deleted-Thing route fixture must be a valid URL.")
+            return
+        }
+        context.app.open(deletedThingURL)
+        assertVisibleScreenThroughUI("screen.things.list", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            distractorRow.waitForNonExistence(timeout: 8),
+            "Routing to a deleted Thing must not revive its committed projection."
+        )
+        let unavailableFeedback = element(
+            in: context.app,
+            identifier: "feedback.entity.target_unavailable"
+        )
+        XCTAssertTrue(
+            unavailableFeedback.waitForExistence(timeout: 5),
+            "Opening a deleted Thing must visibly explain the fallback instead of leaving a pending target."
+        )
+        let unavailableFeedbackText = [
+            unavailableFeedback.label,
+            unavailableFeedback.value as? String ?? "",
+        ].joined(separator: " ")
+        XCTAssertTrue(
+            [
+                "The requested item was not found or has expired.",
+                "目标不存在，或已失效。",
+                "目標不存在，或已失效。",
+            ].contains(where: unavailableFeedbackText.contains),
+            "The fallback must accurately explain that the routed Thing is unavailable."
+        )
+        XCTAssertFalse(
+            context.app.staticTexts["Quality Pump Beta"].exists,
+            "The deleted Thing title must not remain as a stale detail after route fallback."
+        )
+        XCTAssertFalse(
+            context.app.staticTexts[
+                "Secondary fixture that must be excluded by the target search."
+            ].exists,
+            "The deleted Thing summary must not remain as a stale detail after route fallback."
+        )
+
         let searchField = context.app.searchFields.firstMatch
         XCTAssertTrue(searchField.waitForExistence(timeout: 8))
         searchField.click()

@@ -784,20 +784,52 @@ final class PushGo_iOSUITests: XCTestCase {
         )
         list.swipeUp()
         list.swipeUp()
-        let secondPageTarget = context.app.staticTexts["Quality workflow 0"]
-        for _ in 0..<12 where !secondPageTarget.exists {
+        let secondPagePredecessor = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000002"
+        )
+        let secondPageTarget = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        for _ in 0..<12 where !(secondPagePredecessor.exists && secondPageTarget.exists) {
             list.swipeUp()
         }
         XCTAssertTrue(
             secondPageTarget.waitForExistence(timeout: 5),
             "The oldest canonical object from production page 2 was not reachable"
         )
-        XCTAssertEqual(
-            context.app.staticTexts.matching(
-                NSPredicate(format: "label == %@", "Quality workflow 0")
-            ).count,
-            1,
-            "Repeated scroll pressure while loading must not append page 2 more than once"
+        XCTAssertTrue(
+            secondPagePredecessor.waitForExistence(timeout: 5),
+            "Production page 2 must not silently drop its first canonical object."
+        )
+        XCTAssertTrue(
+            secondPagePredecessor.label.contains("Quality workflow 1"),
+            "The first page-2 identity must remain bound to its accurate visible title."
+        )
+        XCTAssertTrue(
+            secondPageTarget.label.contains("Quality workflow 0"),
+            "The oldest page-2 identity must remain bound to its accurate visible title."
+        )
+        XCTAssertTrue(
+            context.app.staticTexts["Quality workflow 1"].exists &&
+                context.app.staticTexts["Quality workflow 0"].exists,
+            "Both canonical page-2 titles must be visibly rendered, not merely exposed as identifiers."
+        )
+        for identifier in [
+            "message.row.00000000-0000-0000-0000-000000000002",
+            "message.row.00000000-0000-0000-0000-000000000001",
+        ] {
+            XCTAssertEqual(
+                context.app.descendants(matching: .any).matching(identifier: identifier).count,
+                1,
+                "Repeated scroll pressure must append every page-2 object exactly once."
+            )
+        }
+        XCTAssertLessThan(
+            secondPagePredecessor.frame.minY,
+            secondPageTarget.frame.minY,
+            "Production page 2 must preserve canonical newest-first ordering."
         )
 
         let messagesTab = context.app.tabBars.firstMatch.buttons.element(boundBy: 0)
@@ -1263,11 +1295,19 @@ final class PushGo_iOSUITests: XCTestCase {
         context.app.terminate()
         launch(context.app)
         assertQualityRuntimeReady(in: context.app, timeout: 15)
-        XCTAssertTrue(context.app.staticTexts["P2 Refresh Result"].waitForExistence(timeout: 8))
+        let relaunchedRefreshResult = context.app.staticTexts["P2 Refresh Result"]
+        XCTAssertTrue(relaunchedRefreshResult.waitForExistence(timeout: 8))
         assertMessagesTabBadgeCount(
             1,
             in: context.app,
             message: "Opening the provider result must persist one remaining unread control message"
+        )
+        relaunchedRefreshResult.tap()
+        assertElementExists("sheet.message.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Persisted through the provider refresh ingress path."]
+                .waitForExistence(timeout: 5),
+            "Relaunch must preserve the provider result's exact canonical body, not only its title."
         )
     }
 

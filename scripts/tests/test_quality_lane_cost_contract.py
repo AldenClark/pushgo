@@ -366,12 +366,30 @@ class QualityLaneCostContractTests(unittest.TestCase):
             'claims+=("iOS explicitly selected UI journeys: $requested_scopes")',
             runner,
         )
+        macos_function = runner.split("run_macos_ui() {", 1)[1].split("\n}", 1)[0]
+        self.assertIn('local requested_scopes="${TEST_SCOPES:-}"', macos_function)
+        self.assertIn(
+            'local claim="macOS ${scope_set} App-owned user-purpose journeys"',
+            macos_function,
+        )
+        self.assertIn('if [[ -n "$requested_scopes" ]]', macos_function)
+        self.assertIn(
+            'claim="macOS explicitly selected UI journeys: $requested_scopes"',
+            macos_function,
+        )
+        macos_lines = [line.strip() for line in macos_function.splitlines()]
+        self.assertEqual(1, macos_lines.count('selected_claims+=("$claim")'))
+        self.assertEqual(1, macos_lines.count('claims+=("$claim")'))
         self.assertIn(
             'macos_pr_ui_scope="PushGo-macOSUITests/PushGo_macOSUITests/testSidebarNavigationCoversPrimaryScreens"',
             runner,
         )
         pr_body = runner.split("  pr)\n", 1)[1].split("    ;;", 1)[0]
         self.assertEqual(1, pr_body.count('TEST_SCOPES="$macos_pr_ui_scope" run_macos_ui positive'))
+        self.assertNotIn(
+            "macOS one-start broad positive navigation with accurate objects and readable unread state",
+            pr_body,
+        )
 
     def test_primary_navigation_ui_reuses_existing_cross_platform_pr_oracles(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()

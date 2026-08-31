@@ -302,11 +302,16 @@ run_watch_ui() {
 
 run_macos_ui() {
   local scope_set="${1:-positive}"
-  selected_claims+=("macOS ${scope_set} App-owned user-purpose journeys")
+  local requested_scopes="${TEST_SCOPES:-}"
+  local claim="macOS ${scope_set} App-owned user-purpose journeys"
+  if [[ -n "$requested_scopes" ]]; then
+    claim="macOS explicitly selected UI journeys: $requested_scopes"
+  fi
+  selected_claims+=("$claim")
   MACOS_SCOPE_SET="$scope_set" \
     MAX_RETRIES=0 \
     QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_macos_ui_tests.sh"
-  claims+=("macOS ${scope_set} App-owned user-purpose journeys")
+  claims+=("$claim")
 }
 
 run_macos_update_install() {
@@ -427,9 +432,7 @@ case "$lane" in
       MAX_RETRIES="${MAX_RETRIES:-0}" \
       QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
     claims+=("iOS broad positive App-owned journeys across launch, Messages, navigation, Event, Thing, Channel, and Settings")
-    selected_claims+=("macOS one-start broad positive navigation with accurate objects and readable unread state")
     TEST_SCOPES="$macos_pr_ui_scope" run_macos_ui positive
-    claims+=("macOS one-start broad positive navigation with accurate objects and readable unread state")
     ;;
   nightly)
     run_core
