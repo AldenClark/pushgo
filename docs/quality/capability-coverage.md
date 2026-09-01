@@ -18,6 +18,8 @@ macOS 搜索失败恢复当前字节证据（2026-09-02）：`testMessageSearchF
 
 macOS Things 关系 P1 当前字节边界（2026-09-02）：`testThingRelationsOpenAccurateDetailsAndSurviveRelaunch` 的真实业务链完整执行 1/1、64.544 秒，覆盖删除干扰对象、普通 relaunch 后不复活、失效目标回退、幸存 Thing 搜索/详情及 Event、Message、Update 关联详情；但原生结果束仍包含未归因的 QoS priority-inversion runtime warning，严格 verifier 判为 `FAILED_TEST_SYSTEM`，因此不把 XCTest `Passed` 当作干净产品证据。结果束 `build/quality-results/macos-thing-relations-current-after-pr/run-20260902-005449.xcresult`；不放宽警告、不通过重跑求绿，待根因明确后再决定最小修复或保留边界。
 
+macOS 频道生命周期 P0 当前字节证据（2026-09-02）：`testUnreadBadgeAndChannelLifecyclePersistThroughRealUserActions` 在同一 App-owned 会话中从真实入口完成既有订阅、创建、改名、保留历史退订与删除历史退订，期间核对 canonical 频道/消息、未读徽标和准确名称，普通 relaunch 后再次确认状态不复活。原生 1/1、108.436 秒，严格 verifier=`EXECUTED`，`xcresulttool` 为 `Passed`、零失败/跳过/运行时告警，结果束 `build/quality-results/macos-channel-lifecycle-current-after-pr/run-20260902-005844.xcresult`。该证据只刷新 macOS P0 频道多终点正向链，不外推 Android Compose、真实 Gateway 或物理设备。
+
 该告警的只读归因（2026-09-02）已进一步收敛：结果束的 warning UUID 只关联到搜索后的 XCTest `waitForExistence` AX 轮询活动，当前使用 Cmd-A/Cmd-V/Return，未关联输入事件或产品动作；结果没有应用 source frame/stack，不能据此修改产品并发或 QoS。现保留 `FAILED_TEST_SYSTEM/BLOCKED`，不通过白名单、业务重试或弱化结果读取绕过；只有新增等语义的 App-owned search-settled 状态或更细框架栈证据后才重新评估。
 
 macOS 首屏加载失败恢复当前字节证据（2026-09-02）：`testMessageLoadFailureRetryRecoversToFunctionalState` 在真实 `empty.clean` 会话中注入一次首屏加载失败，要求页面级失败可见且不是伪造成功；用户点击生产 Retry 后回到准确可用空态，失败状态清除。1/1、9.193 秒，零失败/跳过/运行时告警，严格 verifier=`EXECUTED`，结果束为 `build/quality-results/macos-load-failure-recovery-after-lease/run-20260902-002843.xcresult`。这是最小恢复证据，不外推大规模性能、真实网络或其他平台。

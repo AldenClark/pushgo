@@ -4,6 +4,8 @@
 
 **体系改造进行中，不能宣称完成。** Runtime/环境底座及 Messages、Entity、Channel、Settings、数据层性能、代表性本地化/大字体任务已有多条高价值纵向证据，但设计第 21.2 节的完成条件尚未满足。WP3–WP6 仍有当前产品可达能力和真实平台证据未迁移。低价值边缘组合不进入日常门禁，但这不能用于延期高频 P0 功能。
 
+- 2026-09-02 macOS 频道生命周期 P0 当前字节回归：在同一 App-owned 会话中从真实频道入口完成既有订阅、创建、改名、保留历史退订与删除历史退订，核对每次 canonical 行/消息影响、未读徽标与准确名称；普通 relaunch 后再次确认保留/删除结果不复活。原生 XCTest 1/1、108.436 秒，严格 verifier=`EXECUTED`，零失败/跳过/运行时告警，结果束 `build/quality-results/macos-channel-lifecycle-current-after-pr/run-20260902-005844.xcresult`。该回归刷新的是多终点用户目的链，不以控件、文件或提示存在求绿，也不外推 Android Compose、真实 Gateway 或物理设备。
+
 - 2026-09-02 macOS Things 关系 P1 当前字节复验：真实删除干扰 Thing 后完成普通 relaunch、失效目标回退、幸存 Thing 搜索/详情及 Event、Message、Update 三类关联详情，native XCTest 业务断言 1/1、64.544 秒；但结果束包含一条未归因的 QoS priority-inversion runtime warning，严格 runner 归类 `FAILED_TEST_SYSTEM`（`apple_test_result_contains_runtime_warnings` / `unknown_apple_runtime_warning`），不是产品失败，也不把 1/1 业务结果记为干净通过。结果束 `build/quality-results/macos-thing-relations-current-after-pr/run-20260902-005449.xcresult`；既有多次复现保持原样，当前只做一次只读归因，不放宽 warning、不业务重试、不外推其他平台。
 
 - 2026-09-02 macOS Things 告警只读归因收敛：Terra 复核当前结果束的 Activities/TestIssues 关联，发现唯一 warning 精确挂在搜索输入后的 XCTest `waitForExistence` 可访问性轮询（等待 `thing.row.quality-thing-rich`），而非 Cmd-A/Cmd-V/Return 事件或产品动作；结果无应用 source frame/stack，也没有证据指向 `ThingSplitScreen`/`EntityProjectionViewModel` 产品并发。当前最可信解释是 User-interactive XCTest 线程等待 AX/被测应用 Default-QoS 响应，仍属于有边界的推论；不改产品 QoS、不改业务 Oracle、不放宽 warning、不重复重跑。P1 保持 `FAILED_TEST_SYSTEM/BLOCKED`，未来若要修只能先提供等语义的 App-owned search-settled 状态或更细框架栈证据。
