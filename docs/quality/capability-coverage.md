@@ -121,6 +121,7 @@ Runner 新增显式 `QUALITY_IOS_SIMULATOR_LIFECYCLE=cold|warm`，默认仍是�
 ### 2026-09-01 Gateway 保存取消安全收口
 
 `I/M Settings server` 的实现与证据新增一条事务边界：编辑器保存由 ViewModel 持有 Task，iOS/macOS 系统关闭在保存中请求取消；`validateAndUpdateServerConfig` 在候选注册成功但本地提交尚未完成时检查取消，并依靠 transition journal 回滚旧配置与旧 device identity，提交进入 `committed` 后保留新网关的 pending/relaunch 语义。静态合同覆盖两端 cancellation guard、macOS dismiss guard 与 Task ownership；两端 build-for-testing 及 Python 200/200 质量合同通过。macOS 正向换域 focused 1/1、53.036 秒，结果束 `build/quality-results/macos-gateway-cancel-regression/run-20260901-223156.xcresult`；iOS 同一真实换域/频道/重启终点 focused 1/1、94.628 秒，结果束 `build/quality-results/ios-gateway-cancel-regression/run-1-20260901-223332.xcresult`；均零重试、零跳过、零运行时告警并严格复核 `executed_test_count=1`。未引入暂停或等待伪造竞争窗口，pre-commit 主动取消 UI 仍 `NOT RUN`，不从上述正向结果外推。
+- 同一提交后的回滚复跑进一步证明本地提交失败不能覆盖旧作用域：iOS `testGatewayLocalCommitFailureRollsBackBeforeRetryCommits` 1/1、72.829 秒，macOS 同名旅程 1/1、52.315 秒，均零跳过、零运行时告警、零业务重试；结果束分别为 `build/quality-results/ios-gateway-commit-rollback-current/run-1-20260901-225504.xcresult` 和 `build/quality-results/macos-gateway-commit-rollback-current/run-20260901-225628.xcresult`，严格执行校验均为 `EXECUTED`。大字号中文代表任务也在提交后 1/1、38.311 秒通过（`build/quality-results/ios/run-1-20260901-225220.xcresult`），补充 Sheet/动作入口的可达性；物理 VoiceOver、Android Compose 和公网 Provider 仍不由此推断。
 
 ## 增量规则
 
