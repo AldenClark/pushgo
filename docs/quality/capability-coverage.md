@@ -212,3 +212,7 @@ Runner 新增显式 `QUALITY_IOS_SIMULATOR_LIFECYCLE=cold|warm`，默认仍是�
 ### 2026-09-01 Atomic message-batch rollback contract
 
 `LocalDataStoreTests.saveMessagesBatchRollsBackAllRowsWhenALaterPrimaryIdentityConflicts` injects a real SQLite primary-identity conflict after a valid row in the same canonical batch. The write must throw, preserve the previously stored Message byte-for-byte at the business-field level, and leave neither the earlier new row nor the conflicting row visible afterward. Targeted execution passed 1/1 in 0.032s; the subsequent full Apple Core run passed 442/442 across 41 suites. This closes the deterministic all-or-nothing write contract only; it does not claim physical disk-exhaustion or process-kill evidence.
+
+### 2026-09-02 Apple PR 核心正向当前字节
+
+`QUALITY_RESULTS_ROOT=build/quality-results/apple-pr-current-20260902 ./scripts/quality_test.sh pr` 在干净提交 `170ff23` 上严格执行 iOS 4 条核心用户目的旅程（主导航、标准消息内容/刷新/媒体/搜索/relaunch、分页/已读、Server 设置换域）与 macOS Sidebar 主导航 1 条旅程；iOS 结果束为 `build/quality-results/apple-pr-current-20260902/run-1-20260902-054332.xcresult`（4/4，471.270 秒），macOS 结果束为 `build/quality-results/apple-pr-current-20260902/run-20260902-055136.xcresult`（1/1，66.105 秒），无失败、跳过或运行时告警。最终 `apple-pr-summary.json` 为 `product_capability_status=PASSED`、`test_system_status=PASSED`、`source_dirty=false`、selected/executed claims 完整。该收据只覆盖受控 Simulator/macOS 本机核心正向路径；外部 Provider、物理设备、OEM 和长期观察仍不由此外推。
