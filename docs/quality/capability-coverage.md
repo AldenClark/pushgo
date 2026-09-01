@@ -102,6 +102,10 @@ Thing 搜索 A/B 的业务动作虽各为 1/1，但 Cmd-A/Cmd-V 与 `typeText` �
 
 `testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch` 在专用 Simulator 当前字节 1/1、93.649 秒、零重试、零 skip、零 runtime warning，结果束 `build/quality-results/ios-gateway-positive-current/run-1-20260901-215203.xcresult`。用户从真实 Settings/Server 控件揭示并再次遮蔽 token，输入候选地址后完成标准化保存；返回 Channels 后新增频道必须命中新 Gateway，旧 Gateway 频道不得出现，普通 relaunch 后新频道仍准确存在。该终点验证真实换域、数据范围和持久化，而非只检查配置字段或文件；与验证拒绝/错误归属、提交后同步失败旅程互补，不外推公网 Gateway、Provider、Android UI 或物理设备。
 
+### 2026-09-01 iOS Simulator 生命周期 A/B
+
+Runner 新增显式 `QUALITY_IOS_SIMULATOR_LIFECYCLE=cold|warm`，默认仍是专用设备的 scoped cold boot；warm 只接受已 Booted 的同一 PushGo UDID，安装、容器可观察性、App-owned readiness、定向 App terminate、单 worker、native executed-count 与真实业务 Oracle 全部不变，非 Booted 直接 `BLOCKED`，不回退重启。相同 Gateway 正向换域用例的 warm 样本 1/1、91.732 秒、零 skip/零 runtime warning，结果束 `build/quality-results/ios-gateway-positive-warm-ab/run-1-20260901-220301.xcresult`；样本前后 PosterBoard 报告文件总数均为 28。它只说明在本样本中避免 Simulator daemon 重启没有新增 PosterBoard 报告，不能单独建立因果，也不能替代 cold-start 或真机证据；默认日常 Lane 仍保持 cold，warm 仅用于受控诊断。
+
 ## 增量规则
 
 新增或改变 Screen、Route、Action、持久字段、系统表面、后台任务、权限或性能敏感路径时，必须更新相应行并运行调用者/数据/平台消费者影响分析。`config/quality-impact.json` 只强制确定性最低 Lane；未映射产品路径阻断，命中路径也不能自动宣称覆盖。

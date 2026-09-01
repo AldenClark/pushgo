@@ -14,6 +14,7 @@ runner_status_file="${QUALITY_RUNNER_STATUS_FILE:-}"
 runner_issue_file="${QUALITY_RUNNER_ISSUE_FILE:-}"
 reuse_built_tests="${QUALITY_REUSE_BUILT_TESTS:-0}"
 allow_expected_failures="${QUALITY_ALLOW_EXPECTED_FAILURES:-0}"
+simulator_lifecycle="${QUALITY_IOS_SIMULATOR_LIFECYCLE:-cold}"
 apple_ui_lease_file="${PUSHGO_APPLE_UI_LEASE_FILE:-$repo_root/build/.pushgo-apple-ui-tests.lock}"
 
 if [[ ! "$max_retries" =~ ^[0-9]+$ ]] || (( max_retries != 0 )); then
@@ -37,6 +38,14 @@ if [[ "$allow_expected_failures" != "0" && "$allow_expected_failures" != "1" ]];
   echo "reason=invalid_ios_allow_expected_failures:$allow_expected_failures"
   exit 2
 fi
+case "$simulator_lifecycle" in
+  cold|warm) ;;
+  *)
+    echo "status=BLOCKED"
+    echo "reason=invalid_ios_simulator_lifecycle:$simulator_lifecycle"
+    exit 2
+    ;;
+esac
 
 # These XCTest methods do not manufacture a notification themselves. Their
 # companion runner waits for the App-owned background readiness contract and
@@ -122,9 +131,30 @@ else
   done
 fi
 
-xcrun simctl shutdown "$target" >/dev/null 2>&1 || true
-xcrun simctl boot "$target" >/dev/null 2>&1 || true
-xcrun simctl bootstatus "$target" -b
+prepare_simulator() {
+  if [[ "$simulator_lifecycle" == "cold" ]]; then
+    # Cold boot remains the default hermetic boundary. It is intentionally
+    # scoped to the selected PushGo device; no global CoreSimulator operation is
+    # allowed here.
+    xcrun simctl shutdown "$target" >/dev/null 2>&1 || true
+    xcrun simctl boot "$target" >/dev/null 2>&1 || true
+    xcrun simctl bootstatus "$target" -b
+  else
+    # Warm mode is an explicit A/B diagnostic and never silently falls back to a
+    # cold boot. Reusing a booted dedicated device avoids restarting Apple
+    # Simulator daemons (including PosterBoard) while retaining app installation,
+    # App-owned readiness and all product-level Oracles below.
+    if ! xcrun simctl list devices | awk -v target="$target" '$0 ~ target && $0 ~ /Booted/ { found = 1 } END { exit(found ? 0 : 1) }'; then
+      echo "status=BLOCKED"
+      echo "reason=ios_warm_simulator_not_booted:$target"
+      exit 2
+    fi
+    xcrun simctl bootstatus "$target" -b
+  fi
+}
+
+prepare_simulator
+echo "ios_simulator_lifecycle=$simulator_lifecycle"
 
 requested_content_size="${QUALITY_CONTENT_SIZE:-}"
 original_content_size=""
@@ -312,9 +342,7 @@ until [[ $attempt -gt $((max_retries + 1)) ]]; do
       echo "result_bundle=$result_bundle"
       exit 2
     fi
-    xcrun simctl shutdown "$target" >/dev/null 2>&1 || true
-    xcrun simctl boot "$target" >/dev/null 2>&1 || true
-    xcrun simctl bootstatus "$target" -b
+    prepare_simulator
     rm -f "$log_file"
     attempt=$((attempt + 1))
     continue

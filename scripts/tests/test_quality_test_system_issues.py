@@ -174,6 +174,49 @@ class QualityTestSystemIssueTests(unittest.TestCase):
             "Pure argument validation must not contend for the shared Apple UI lease.",
         )
 
+    def test_ios_runner_rejects_unknown_simulator_lifecycle_before_using_simulator(self):
+        process = subprocess.run(
+            [str(REPO / "scripts/run_ios_ui_tests.sh")],
+            cwd=REPO,
+            env={
+                "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+                "QUALITY_IOS_SIMULATOR_LIFECYCLE": "reboot-all",
+            },
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+
+        self.assertEqual(2, process.returncode)
+        self.assertIn(
+            "invalid_ios_simulator_lifecycle:reboot-all",
+            process.stdout,
+        )
+        self.assertNotIn("simulator_id=", process.stdout)
+        runner = (REPO / "scripts/run_ios_ui_tests.sh").read_text()
+        self.assertLess(
+            runner.index("reason=invalid_ios_simulator_lifecycle"),
+            runner.index("reason=pushgo_apple_ui_lease_busy"),
+        )
+
+    def test_ios_warm_lifecycle_is_explicit_and_never_falls_back_to_cold_boot(self):
+        runner = (REPO / "scripts/run_ios_ui_tests.sh").read_text()
+
+        self.assertIn('simulator_lifecycle="${QUALITY_IOS_SIMULATOR_LIFECYCLE:-cold}"', runner)
+        self.assertIn("ios_warm_simulator_not_booted", runner)
+        self.assertIn('xcrun simctl list devices | awk -v target="$target"', runner)
+        lifecycle_function = runner.split("prepare_simulator() {", 1)[1].split(
+            "\n}\n\nprepare_simulator", 1
+        )[0]
+        cold_branch, warm_branch = lifecycle_function.split("\n  else\n", 1)
+        self.assertIn('if [[ "$simulator_lifecycle" == "cold" ]]', cold_branch)
+        self.assertIn('xcrun simctl shutdown "$target"', cold_branch)
+        self.assertIn("ios_warm_simulator_not_booted", warm_branch)
+        self.assertNotIn('xcrun simctl shutdown "$target"', warm_branch)
+        self.assertNotIn("killall Simulator", runner)
+        self.assertNotIn("killall CoreSimulator", runner)
+
     def test_ios_runner_rejects_system_notification_scope_before_using_simulator(self):
         process = subprocess.run(
             [str(REPO / "scripts/run_ios_ui_tests.sh")],
