@@ -12,6 +12,8 @@
 
 主导航证据时效更正（2026-09-01）：macOS `testSidebarNavigationCoversPrimaryScreens` 在 PushGo 专用本机 UI runner 以当前字节实际执行 1/1，零失败/跳过/运行时告警，结果为 `Passed`，严格执行校验 `executed_test_count=1`；结果束为 `build/quality-results/macos-sidebar-badge-after-lease/run-20260901-232354.xcresult`。该旅程从真实侧边栏入口核对完整“消息”标题与 `99+` 徽标不重叠且可点，再完成代表性页面导航和准确详情终点；不以徽标、Accessibility ID 或结果包存在单独求绿，也不外推 iOS/Android 或物理辅助功能。
 
+网关恢复证据时效更正（2026-09-01）：iOS `testSettingsGatewaySyncFailureReportsCommittedGatewayAndPendingRecovery` 在保存取消逻辑更新后于专用 Simulator 当前字节实际执行 1/1、零失败/跳过/运行时告警，结果束为 `build/quality-results/ios-gateway-pending-after-cancel/run-1-20260901-232654.xcresult`，严格执行校验为 `EXECUTED`。该旅程验证提交成功后同步失败显示待恢复反馈、新 Gateway 保持权威、普通重启后恢复并完成真实频道变更；不把地址字段、错误控件或构建成功单独视为通过，也不外推 Android UI、真实 Provider 或物理设备。
+
 | 平台/真实入口 | 用户目的 | 关键状态/分支 | 数据/系统终点 | 最低证据 | Lane/当前状态 | 主要 owner |
 | --- | --- | --- | --- | --- | --- | --- |
 | I Message external URL | 从准确消息打开并返回准确外部目标 | URL 存在/安全过滤/系统交接/返回连续性 | Message Detail、Safari 完整可见地址、原详情 | UI + system browser + return oracle | P0；iOS 不新增 fixture、测试方法、App 安装或启动，在既有 `messages.standard` PR 主链的准确 canonical 详情点击生产 Open Link；要求真实 Safari 前台，按用户动作展开 iOS 27 收起地址栏后从系统 TextField 仅接受省略 scheme 或完整 HTTPS 的精确目标，再激活 PushGo 并核对仍为同一详情与准确正文，随后原 migration、图片分享、搜索与 relaunch Oracle 全部继续。第一次当前字节运行真实拉起 Safari，但旧谓词在收起域名栏寻找完整 path 而失败（`build/quality-results/ios/run-1-20260830-163926.xcresult`）；xcresult 附件证明系统只暴露 `pushgo.dev`，修正读取方式而未改变产品 URL。最终严格相等当前字节 1/1、63.934 秒、零业务重试（`build/quality-results/ios/run-1-20260830-165818.xcresult`）。动作存在、fixture URL、浏览器前台或根域均不能单独求绿。公网内容/SLA、网络失败、第三方浏览器和 macOS handoff 不从本结果外推 | Message Detail/URLSanitizer/system browser |
