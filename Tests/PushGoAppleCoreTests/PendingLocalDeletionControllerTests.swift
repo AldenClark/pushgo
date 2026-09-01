@@ -296,6 +296,15 @@ struct PendingLocalDeletionControllerTests {
             #expect(secondClaim.leaseOwner == "second-executor")
             #expect(secondClaim.lastErrorCode == "execution_lease_expired")
 
+            await #expect(throws: (any Error).self) {
+                _ = try await store.commitClaimedPendingLocalDeletion(
+                    id: secondClaim.id,
+                    owner: "first-executor",
+                    now: recoveredAt
+                )
+            }
+            #expect(try await store.loadMessage(id: message.id) != nil)
+
             _ = try await store.commitClaimedPendingLocalDeletion(
                 id: secondClaim.id,
                 owner: "second-executor",
