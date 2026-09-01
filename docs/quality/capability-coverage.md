@@ -110,6 +110,10 @@ Runner 新增显式 `QUALITY_IOS_SIMULATOR_LIFECYCLE=cold|warm`，默认仍是�
 
 `testExistingChannelLocalFailureDoesNotCompensateBeforeRetry` 在 warm 专用 Simulator 当前字节 1/1、63.683 秒、零重试、零 skip、零 runtime warning，结果束 `build/quality-results/ios-existing-channel-compensation-current/run-1-20260901-220815.xcresult`。真实既有频道（`created=false`）订阅在本地持久化一次失败时，Sheet 保留输入与可用提交动作，错误不泄漏到宿主，也不生成部分频道行；关闭并重新进入后仍无假行，正式重试创建准确行，普通 relaunch 后该行仍准确存在。该结果直接验证“既有订阅失败不得错误 compensation/revoke”的事务目的，不以错误字符串、控件存在或文件状态替代终点；Android UI 当前因无 adb 保持 `NOT RUN`，公网 Gateway 不由此结果外推。
 
+### 2026-09-01 iOS 新建频道补偿复跑
+
+`testChannelCreateLocalFailureCompensatesRemoteBeforeRetry` 在 warm 专用 Simulator 当前字节原生 1/1（XCTest 56.336 秒，xcodebuild 58.953 秒）、零 runner 重试、零 skip、零 runtime warning，结果束 `build/quality-results/ios-channel-create-compensation-current/run-1-20260901-221008.xcresult`，并由 `verify_apple_test_execution.py --expected-test-count 1 --reject-runtime-warnings` 复核为 `EXECUTED`。真实新建频道（`created=true`）在本地持久化一次失败时，错误只留在 Channel Sheet，输入和提交动作仍可用，宿主无错误且没有部分频道行；关闭并重新进入仍无脏行，之后一次正式重试完成远端补偿后的创建，准确 canonical 频道行出现并在普通 relaunch 后保留。该结果直接验证“新建失败必须先补偿远端，再允许用户重试”的事务目的，不以错误字符串、控件存在或文件状态替代终点；Android UI 当前因无 adb 保持 `NOT RUN`，公网 Gateway 不由此结果外推。
+
 ## 增量规则
 
 新增或改变 Screen、Route、Action、持久字段、系统表面、后台任务、权限或性能敏感路径时，必须更新相应行并运行调用者/数据/平台消费者影响分析。`config/quality-impact.json` 只强制确定性最低 Lane；未映射产品路径阻断，命中路径也不能自动宣称覆盖。
