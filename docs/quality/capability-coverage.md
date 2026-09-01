@@ -126,3 +126,7 @@ Runner 新增显式 `QUALITY_IOS_SIMULATOR_LIFECYCLE=cold|warm`，默认仍是�
 ## 增量规则
 
 新增或改变 Screen、Route、Action、持久字段、系统表面、后台任务、权限或性能敏感路径时，必须更新相应行并运行调用者/数据/平台消费者影响分析。`config/quality-impact.json` 只强制确定性最低 Lane；未映射产品路径阻断，命中路径也不能自动宣称覆盖。
+
+### 2026-09-01 Gateway 提交前取消边界审计
+
+只读产品/runner 审计确认 iOS 与 macOS 编辑器在保存期间禁用取消按钮并禁止交互式关闭，因此当前不存在可由用户触发的提交前取消入口。不新增人工暂停、文件 barrier 或测试钩子；已实现的 Task ownership、系统关闭取消防御和提交前 cancellation guard 保留，候选验证、提交失败回滚、普通重启恢复及后续真实频道操作继续由目的级旅程覆盖。
