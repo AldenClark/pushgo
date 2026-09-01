@@ -8,8 +8,8 @@ The scanner only treats production `accessibilityIdentifier` / `testTag` attachm
 
 | Platform | Stable production identifiers | Test reference identifiers | Unreferenced production | Test-only | Unresolved | Stale dispositions |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Apple | 70 | 75 | 8 | 13 | 0 | 0 |
-| Android | 59 | 58 | 6 | 5 | 0 | 0 |
+| Apple | 76 | 82 | 7 | 13 | 0 | 0 |
+| Android | 58 | 59 | 7 | 8 | 0 | 0 |
 
 The raw counts are not a score. Every difference is reviewed in `config/quality-ui-entrypoint-dispositions.json` and falls into one of these purpose-based outcomes:
 
@@ -31,3 +31,5 @@ Current notable decisions:
 `scripts/quality_ui_entrypoints.py --dispositions config/quality-ui-entrypoint-dispositions.json` returns `REVIEW_REQUIRED` when a difference is new, a disposition becomes stale, or a review lacks a real reason. The static test runs this against the current Apple tree. The same scanner is also run against the sibling Android tree during this cross-platform overhaul; Android must carry the checker in its own repository before independent CI closure.
 
 `READY_FOR_SEMANTIC_REVIEW` means only that discovery differences have decisions. Identifier overlap remains `REFERENCE_FOUND_SEMANTIC_ORACLE_NOT_PROVEN`; actual closure still comes from `capability-coverage.md`, current test disposition, fresh executable receipts, and the P0/P1 ledgers.
+
+The 2026-09-02 current-byte scans used the Apple `Apps`/`Shared` versus `Tests`/`scripts` roots and the Android `app/src/main` versus `app/src/androidTest`/`app/src/test`/`scripts` roots. Apple and Android each have zero unresolved differences and zero stale dispositions in their respective disposition files. The reports are retained under `build/quality-results/apple-ui-entrypoints-current-20260902-with-dispositions.json` and `../pushgo-android/build/quality-results/android-ui-entrypoints-final-20260902.json`; they remain discovery evidence only, not product coverage or a release gate.
