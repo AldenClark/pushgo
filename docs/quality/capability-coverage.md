@@ -22,6 +22,8 @@ macOS 搜索失败恢复当前字节证据（2026-09-02）：`testMessageSearchF
 
 macOS Things 关系 P1 当前字节边界（2026-09-02）：`testThingRelationsOpenAccurateDetailsAndSurviveRelaunch` 的真实业务链完整执行 1/1、64.544 秒，覆盖删除干扰对象、普通 relaunch 后不复活、失效目标回退、幸存 Thing 搜索/详情及 Event、Message、Update 关联详情；但原生结果束仍包含未归因的 QoS priority-inversion runtime warning，严格 verifier 判为 `FAILED_TEST_SYSTEM`，因此不把 XCTest `Passed` 当作干净产品证据。结果束 `build/quality-results/macos-thing-relations-current-after-pr/run-20260902-005449.xcresult`；不放宽警告、不通过重跑求绿，待根因明确后再决定最小修复或保留边界。
 
+该告警的后续只读审计（2026-09-02）确认，当前 `ThingSplitScreen`/`PushGoAutomationState` 只发布页面、当前 Tab 与已打开实体，没有 query、filtered-count、revision 或搜索已收敛结果；`quality-runtime.ready` 只表示启动准备，也不能证明输入后的列表已完成过滤。因此没有不改产品接入、不弱化业务 Oracle 的低成本修复：不得改成等待启动 readiness、只检查 `.exists`、加白名单或重试求绿。若后续投入，应在实际 `searchQuery`/`filteredThings` 渲染完成处增加带 query/revision 与目标/干扰项结果的 App-owned settled marker，再用一次真实输入和原有准确详情断言复验；在此之前保持 `FAILED_TEST_SYSTEM/BLOCKED`。
+
 macOS 频道生命周期 P0 当前字节证据（2026-09-02）：`testUnreadBadgeAndChannelLifecyclePersistThroughRealUserActions` 在同一 App-owned 会话中从真实入口完成既有订阅、创建、改名、保留历史退订与删除历史退订，期间核对 canonical 频道/消息、未读徽标和准确名称，普通 relaunch 后再次确认状态不复活。原生 1/1、108.436 秒，严格 verifier=`EXECUTED`，`xcresulttool` 为 `Passed`、零失败/跳过/运行时告警，结果束 `build/quality-results/macos-channel-lifecycle-current-after-pr/run-20260902-005844.xcresult`。该证据只刷新 macOS P0 频道多终点正向链，不外推 Android Compose、真实 Gateway 或物理设备。
 
 该告警的只读归因（2026-09-02）已进一步收敛：结果束的 warning UUID 只关联到搜索后的 XCTest `waitForExistence` AX 轮询活动，当前使用 Cmd-A/Cmd-V/Return，未关联输入事件或产品动作；结果没有应用 source frame/stack，不能据此修改产品并发或 QoS。现保留 `FAILED_TEST_SYSTEM/BLOCKED`，不通过白名单、业务重试或弱化结果读取绕过；只有新增等语义的 App-owned search-settled 状态或更细框架栈证据后才重新评估。
