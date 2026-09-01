@@ -492,6 +492,43 @@ final class PushGo_iOSUITests: XCTestCase {{
         self.assertIn("apple-macos-settings-positive", plan["required_checks"])
         self.assertNotIn("apple-macos-system-notification", plan["required_checks"])
 
+    def test_provider_route_cross_semantic_prepare_selects_both_owners(self):
+        path = "Shared/Application/ProviderRouteController.swift"
+        plan = QUALITY_IMPACT.build_plan(
+            [path],
+            self.manifest,
+            "working-tree",
+            symbol_impacts={path: {"prepareProviderRoute"}},
+        )
+
+        self.assertIn("channels-settings-shared-owner", plan["selected_rule_ids"])
+        self.assertIn("ingress-notification-background", plan["selected_rule_ids"])
+
+    def test_provider_route_persistence_dependency_cannot_skip_notification_owner(self):
+        path = "Shared/Application/ProviderRouteController.swift"
+        plan = QUALITY_IMPACT.build_plan(
+            [path],
+            self.manifest,
+            "working-tree",
+            symbol_impacts={path: {"persistProviderDeviceKey"}},
+        )
+
+        self.assertIn("channels-settings-shared-owner", plan["selected_rule_ids"])
+        self.assertIn("ingress-notification-background", plan["selected_rule_ids"])
+        self.assertIn("apple-macos-system-notification", plan["required_checks"])
+
+    def test_provider_route_known_but_unmapped_helper_blocks_instead_of_silently_narrowing(self):
+        path = "Shared/Application/ProviderRouteController.swift"
+        plan = QUALITY_IMPACT.build_plan(
+            [path],
+            self.manifest,
+            "working-tree",
+            symbol_impacts={path: {"deviceKeySaveErrorDescription"}},
+        )
+
+        self.assertEqual("BLOCKED", plan["plan_status"])
+        self.assertEqual([path], plan["unmapped_product_paths"])
+
     def test_provider_route_unscoped_symbol_change_widens_to_both_owners(self):
         path = "Shared/Application/ProviderRouteController.swift"
         plan = QUALITY_IMPACT.build_plan(
