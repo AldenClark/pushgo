@@ -181,6 +181,10 @@ Runner 新增显式 `QUALITY_IOS_SIMULATOR_LIFECYCLE=cold|warm`，默认仍是�
 
 `testSystemNotificationClickPersistsAccurateMessageAndSurvivesRelaunch` 在提交 `661b9eb` 的干净工作树中重新执行 1/1（约 42.151 秒，零重试、零跳过、零运行时告警），结果束为 `build/quality-results/macos-system-notification-read-oracle-clean-20260902/run-20260902-033118.xcresult`，严格执行校验为 `EXECUTED`。在真实 Notification Center 点击后，测试除了核对准确详情和正文，还要求未读徽标消失；普通进程重启后再次核对准确正文与徽标仍不存在，避免只凭 AppDelegate 路径事实推断已读。该收据覆盖 macOS 本机 warm Notification Center 路由，不改变冷启动、权限拒绝往返、真实 Provider、签名 Release 或物理设备边界。
 
+### 2026-09-02 Apple 既有频道订阅补偿当前字节
+
+`testExistingChannelLocalFailureDoesNotCompensateBeforeRetry` 在专用 Apple 运行环境分别执行 iOS 与 macOS 当前字节，各为 1/1、零重试、零跳过、零运行时告警；iOS 结果束为 `build/quality-results/ios-existing-channel-compensation-current-20260902/run-1-20260902-035344.xcresult`，macOS 结果束为 `build/quality-results/macos-existing-channel-compensation-current-20260902/run-20260902-035507.xcresult`，两者均由 `verify_apple_test_execution.py --expected-test-count 1 --reject-runtime-warnings` 复核为 `EXECUTED`。真实既有频道（`created=false`）在本地持久化一次失败时，错误只留在频道 Sheet，输入/重试动作仍可用，宿主无错误且没有部分频道行；关闭后重新进入仍无假行，正式重试才生成准确 canonical 频道行，并在普通 relaunch 后保留。该双平台证据闭合的是“既有订阅失败不得错误撤销远端所有权”的用户目的，不以文件、控件存在或测试进程返回值替代业务终点；Android Compose、真实公网 Gateway、Provider 与物理设备仍按既有边界处置。
+
 ## 增量规则
 
 新增或改变 Screen、Route、Action、持久字段、系统表面、后台任务、权限或性能敏感路径时，必须更新相应行并运行调用者/数据/平台消费者影响分析。`config/quality-impact.json` 只强制确定性最低 Lane；未映射产品路径阻断，命中路径也不能自动宣称覆盖。
