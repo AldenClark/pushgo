@@ -4,6 +4,8 @@
 
 **体系改造进行中，不能宣称完成。** Runtime/环境底座及 Messages、Entity、Channel、Settings、数据层性能、代表性本地化/大字体任务已有多条高价值纵向证据，但设计第 21.2 节的完成条件尚未满足。WP3–WP6 仍有当前产品可达能力和真实平台证据未迁移。低价值边缘组合不进入日常门禁，但这不能用于延期高频 P0 功能。
 
+- 2026-09-02 当前字节 PR 正向门禁回归：Apple 在干净提交 `170ff23` 上执行 iOS 4 条核心用户目的旅程与 macOS 主导航 1 条旅程，分别 4/4（471.270 秒）与 1/1（66.105 秒），零失败/跳过/运行时告警；`build/quality-results/apple-pr-current-20260902/apple-pr-summary.json` 为 product/test-system=`PASSED/PASSED`、`source_dirty=false`。Android 在干净提交 `a9312d5` 上执行 JVM 298 项、本地化合同、`compileDebugAndroidTestKotlin` 与 Debug 构建，无 failure/error/skip；`build/quality-results/android-pr-current-20260902/android-pr-summary.json` 同为 product/test-system=`PASSED/PASSED`、`source_dirty=false`。这批证据只关闭当前受控 PR 主链，不外推 Compose 全量设备、真实 Provider、物理/OEM 或发布级性能；整体 Goal 仍为 `PARTIAL`。
+
 - 2026-09-02 双向 UI 入口反查当前字节：按既定 `Apps`/`Shared`（含现有平台扩展）、`Tests`、`scripts` 与 Android `app/src/main`/`androidTest`/`scripts` 范围重新扫描，Apple 发现 76 个生产入口、7 个未直接引用、13 个测试侧动态/平台差异；Android 发现 58、7、8。两端所有差异均由现行 disposition 覆盖，未解决项与过期 disposition 均为 0，报告状态 `READY_FOR_SEMANTIC_REVIEW`。该审计只防止入口漂移并驱动语义复核，不把标识符交集、数量或缺失直接当作产品覆盖；本轮没有新增无业务断言的测试，也没有启动设备。
 
 - 2026-09-02 iOS 频道生命周期 P0 当前字节回归：在 PushGo 专用 Simulator 的同一 App-owned 会话中从真实频道入口完成既有订阅、创建、改名校验与成功改名、保留历史退订、删除历史退订，核对 canonical 频道/消息影响、准确名称与系统剪贴板结果；普通 relaunch 后再次确认保留/删除状态不复活。原生 XCTest 1/1、166.114 秒，严格 verifier=`EXECUTED`，零失败/跳过/运行时告警，外部 Pasteboard oracle=`PASSED`，结果束 `build/quality-results/ios-channel-lifecycle-current-after-macos/run-1-20260902-010442.xcresult`。该回归刷新的是 iOS P0 多终点正向链，不以控件、文件或提示存在求绿，也不外推 Android Compose、真实 Gateway 或物理设备。
