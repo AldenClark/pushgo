@@ -6,6 +6,8 @@
 
 - 2026-09-02 iOS 频道生命周期 P0 当前字节回归：在 PushGo 专用 Simulator 的同一 App-owned 会话中从真实频道入口完成既有订阅、创建、改名校验与成功改名、保留历史退订、删除历史退订，核对 canonical 频道/消息影响、准确名称与系统剪贴板结果；普通 relaunch 后再次确认保留/删除状态不复活。原生 XCTest 1/1、166.114 秒，严格 verifier=`EXECUTED`，零失败/跳过/运行时告警，外部 Pasteboard oracle=`PASSED`，结果束 `build/quality-results/ios-channel-lifecycle-current-after-macos/run-1-20260902-010442.xcresult`。该回归刷新的是 iOS P0 多终点正向链，不以控件、文件或提示存在求绿，也不外推 Android Compose、真实 Gateway 或物理设备。
 
+- 2026-09-02 macOS Event 关闭与投影 P1 当前字节回归：从真实 Events 入口打开 ongoing Event，先取消关闭确认，再确认关闭并核对 closed 状态、时间线计数与 ongoing 筛选排除；从 Thing 关联入口再次确认已关闭 Event 的准确详情，随后普通 relaunch 后删除该 Event 并要求控制 Event 成为准确选中详情。原生 XCTest 1/1、59.736 秒，严格 verifier=`EXECUTED`，零失败/跳过/运行时告警，结果束 `build/quality-results/macos-event-positive-current-after-channel/run-20260902-010912.xcresult`。该回归验证状态转换、筛选投影、关联导航、删除后的准确回退与持久化用户终点，不外推 Android Compose、真实 Provider 或物理设备。
+
 - 2026-09-02 macOS 频道生命周期 P0 当前字节回归：在同一 App-owned 会话中从真实频道入口完成既有订阅、创建、改名、保留历史退订与删除历史退订，核对每次 canonical 行/消息影响、未读徽标与准确名称；普通 relaunch 后再次确认保留/删除结果不复活。原生 XCTest 1/1、108.436 秒，严格 verifier=`EXECUTED`，零失败/跳过/运行时告警，结果束 `build/quality-results/macos-channel-lifecycle-current-after-pr/run-20260902-005844.xcresult`。该回归刷新的是多终点用户目的链，不以控件、文件或提示存在求绿，也不外推 Android Compose、真实 Gateway 或物理设备。
 
 - 2026-09-02 macOS Things 关系 P1 当前字节复验：真实删除干扰 Thing 后完成普通 relaunch、失效目标回退、幸存 Thing 搜索/详情及 Event、Message、Update 三类关联详情，native XCTest 业务断言 1/1、64.544 秒；但结果束包含一条未归因的 QoS priority-inversion runtime warning，严格 runner 归类 `FAILED_TEST_SYSTEM`（`apple_test_result_contains_runtime_warnings` / `unknown_apple_runtime_warning`），不是产品失败，也不把 1/1 业务结果记为干净通过。结果束 `build/quality-results/macos-thing-relations-current-after-pr/run-20260902-005449.xcresult`；既有多次复现保持原样，当前只做一次只读归因，不放宽 warning、不业务重试、不外推其他平台。
