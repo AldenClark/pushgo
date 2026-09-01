@@ -177,6 +177,10 @@ Runner 新增显式 `QUALITY_IOS_SIMULATOR_LIFECYCLE=cold|warm`，默认仍是�
 `I/M Settings server` 的实现与证据新增一条事务边界：编辑器保存由 ViewModel 持有 Task，iOS/macOS 系统关闭在保存中请求取消；`validateAndUpdateServerConfig` 在候选注册成功但本地提交尚未完成时检查取消，并依靠 transition journal 回滚旧配置与旧 device identity，提交进入 `committed` 后保留新网关的 pending/relaunch 语义。静态合同覆盖两端 cancellation guard、macOS dismiss guard 与 Task ownership；两端 build-for-testing 及 Python 200/200 质量合同通过。macOS 正向换域 focused 1/1、53.036 秒，结果束 `build/quality-results/macos-gateway-cancel-regression/run-20260901-223156.xcresult`；iOS 同一真实换域/频道/重启终点 focused 1/1、94.628 秒，结果束 `build/quality-results/ios-gateway-cancel-regression/run-1-20260901-223332.xcresult`；均零重试、零跳过、零运行时告警并严格复核 `executed_test_count=1`。未引入暂停或等待伪造竞争窗口，pre-commit 主动取消 UI 仍 `NOT RUN`，不从上述正向结果外推。
 - 同一提交后的回滚复跑进一步证明本地提交失败不能覆盖旧作用域：iOS `testGatewayLocalCommitFailureRollsBackBeforeRetryCommits` 1/1、72.829 秒，macOS 同名旅程 1/1、52.315 秒，均零跳过、零运行时告警、零业务重试；结果束分别为 `build/quality-results/ios-gateway-commit-rollback-current/run-1-20260901-225504.xcresult` 和 `build/quality-results/macos-gateway-commit-rollback-current/run-20260901-225628.xcresult`，严格执行校验均为 `EXECUTED`。大字号中文代表任务也在提交后 1/1、38.311 秒通过（`build/quality-results/ios/run-1-20260901-225220.xcresult`），补充 Sheet/动作入口的可达性；物理 VoiceOver、Android Compose 和公网 Provider 仍不由此推断。
 
+### 2026-09-02 macOS 系统通知已读 Oracle 补强
+
+`testSystemNotificationClickPersistsAccurateMessageAndSurvivesRelaunch` 在 Apple 变更影响车道中以当前源码重新执行 1/1（约 42.326 秒，零重试、零跳过、零运行时告警），结果束为 `build/quality-results/macos-ui/run-20260902-032739.xcresult`，严格执行校验为 `EXECUTED`。在真实 Notification Center 点击后，测试除了核对准确详情和正文，还要求未读徽标消失；普通进程重启后再次核对准确正文与徽标仍不存在，避免只凭 AppDelegate 路径事实推断已读。该收据覆盖 macOS 本机 warm Notification Center 路由，不改变冷启动、权限拒绝往返、真实 Provider、签名 Release 或物理设备边界。
+
 ## 增量规则
 
 新增或改变 Screen、Route、Action、持久字段、系统表面、后台任务、权限或性能敏感路径时，必须更新相应行并运行调用者/数据/平台消费者影响分析。`config/quality-impact.json` 只强制确定性最低 Lane；未映射产品路径阻断，命中路径也不能自动宣称覆盖。

@@ -339,6 +339,11 @@ final class PushGo_macOSUITests: XCTestCase {
             context.app.staticTexts[body].waitForExistence(timeout: 5),
             "The routed detail did not display the exact notification body."
         )
+        let unreadBadge = context.app.staticTexts["sidebar.messages.unread_badge"]
+        XCTAssertTrue(
+            unreadBadge.waitForNonExistence(timeout: 8),
+            "Opening the system notification must persist the target as read and remove its unread badge."
+        )
 
         context.app.terminate()
         let relaunched = configuredQualityApp(sessionID: sessionID, fixture: "empty.clean")
@@ -357,6 +362,10 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertTrue(
             relaunched.app.staticTexts[body].waitForExistence(timeout: 5),
             "The persisted notification message changed after relaunch."
+        )
+        XCTAssertTrue(
+            relaunched.app.staticTexts["sidebar.messages.unread_badge"].waitForNonExistence(timeout: 8),
+            "The read state established by the system notification must survive process relaunch."
         )
     }
 
