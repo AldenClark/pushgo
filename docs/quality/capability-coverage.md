@@ -8,6 +8,8 @@ Apple UI 租约顺序交接证据（2026-09-02）：为避免连续 Apple lane �
 
 Apple PR 核心正向当前字节（2026-09-02）：复用已构建产物执行 Core/Store/集成与本地化 442 项（41 suites）及 iOS 四条核心 App-owned 旅程，iOS 4/4、411.057 秒，零失败/跳过/运行时告警（`build/quality-results/ios/run-1-20260902-001127.xcresult`）；随后 macOS 主导航、未读徽标、五域准确终点 1/1、67.147 秒，零失败/跳过/运行时告警（`build/quality-results/macos-ui/run-20260902-001828.xcresult`）。收据 `build/quality-results/pr-after-lease-fix/apple-pr-summary.json` 只声明这三个实际执行 claim 为 `PASSED/PASSED`，不外推未运行的设备或外部系统边界。
 
+macOS 窗口生命周期当前字节证据（2026-09-02）：`testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow` 在本机 App-owned session 中实际完成最小化→状态栏恢复、慢态刷新→关闭→状态栏菜单恢复、再次关闭→左键恢复及最终退出；每个阶段都以同一 session、唯一窗口和准确消息正文作为用户结果 Oracle。1/1、57.781 秒，零失败/跳过/运行时告警，严格 verifier=`EXECUTED`，结果束为 `build/quality-results/macos-window-lifecycle-after-lease/run-20260902-002244.xcresult`。该结果只关闭可执行的本地窗口恢复子项，窗口尺寸/工具栏焦点、签名 Release 和外部 Provider 仍保留各自边界。
+
 非法 Session 必须在 10 秒内进入专用准备失败根面，且不得挂载消息列表、业务空态或 `quality-runtime.ready`；同一批次必须再以正常 `empty.clean` 到达准确功能空态，防止 fail-fast 误杀正常启动。独立 `preparation` Lane 当前在 iOS Simulator 以 8.151 秒、macOS 本机以 5.981 秒完成非法反例，随后两端正向控制均通过，零重试、产品/测试系统双 `PASSED`（`build/quality-results/apple-preparation-summary.json`）。该 Lane 只由 Runtime/准备边界变更和定向验证触发，不进入普通 UI PR 固定成本，也不外推物理设备启动性能。
 
 证据时效更正（2026-09-01）：Messages append failure/Retry 的最新当前源码证据为 iOS 1/1、183.790 秒（`build/quality-results/ios-page-retry-optimized/run-1-20260831-235842.xcresult`）和 macOS 1/1、26.385 秒（`build/quality-results/macos-page-retry-current-byte/run-20260831-235045.xcresult`）。iOS 仍严格观测完整 `0..<125` 稳定身份集，只删除重复的滑动前窗口扫描；macOS 改为真实 `pageSize=50` 的 page1 `124…75`、page2 `74…25` 首尾/准确标题/唯一性。下表 Messages 长段中较早的 259.721/23.491 秒回执仅为历史中间态，不得冒充最新证据。
