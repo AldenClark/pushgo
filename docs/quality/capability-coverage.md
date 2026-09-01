@@ -94,6 +94,10 @@ Thing 搜索 A/B 的业务动作虽各为 1/1，但 Cmd-A/Cmd-V 与 `typeText` �
 
 `testEventCloseFailureKeepsAccurateDetailBlocksDuplicateAndRetryPersists` 当前字节在专用 Simulator 1/1、42.489 秒、零重试、零 runtime warning，结果束 `build/quality-results/ios-event-close-recovery-current/run-1-20260901-214819.xcresult`。首次真实关闭确认故障时，用户仍停留在准确 Event 详情，ongoing 状态和正文未被伪装成 closed，进度动作不可重复且错误只归 Event owner；第二次确认通过生产形状的 delivery 才关闭 Sheet，canonical 列表及普通 relaunch 后状态均为 closed。该结果是受控 iOS 状态机证据，不外推 Android Compose、真实网络或物理设备。
 
+### 2026-09-01 iOS 跨域主导航回归
+
+`testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen` 在本轮 iOS 页面状态改动后仍为 1/1、零重试、零 runtime warning，结果束 `build/quality-results/ios-primary-navigation-after-page-status/run-1-20260901-215001.xcresult`。同一 App-owned 会话经真实主导航打开准确 Message、Event、Thing、Channel 与 Settings 页面/详情，继续执行 Event 关闭、Settings 文档交接和 Thing 详情终点；没有通过元素存在或页面 ID 代替业务结果。它只关闭受控 iOS 导航回归，不外推 macOS/Android、系统 Spotlight/通知或物理设备。
+
 ## 增量规则
 
 新增或改变 Screen、Route、Action、持久字段、系统表面、后台任务、权限或性能敏感路径时，必须更新相应行并运行调用者/数据/平台消费者影响分析。`config/quality-impact.json` 只强制确定性最低 Lane；未映射产品路径阻断，命中路径也不能自动宣称覆盖。
