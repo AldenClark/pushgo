@@ -90,6 +90,10 @@ Thing 搜索 A/B 的业务动作虽各为 1/1，但 Cmd-A/Cmd-V 与 `typeText` �
 
 `testChannelRemoteRejectionStaysInSheetAndRetryPersists` 当前字节在专用 Simulator 1/1、57.287 秒、零重试、零 runtime warning，结果束 `build/quality-results/ios-channel-error-ownership-current/run-1-20260901-214620.xcresult`。用户从真实频道 Sheet 提交后，远端拒绝必须只在 Sheet 显示，输入和提交动作保留，宿主不出现错误且列表没有部分行；关闭 Sheet 后错误不回放，再从同一真实入口重试，准确 canonical 频道行须在普通 relaunch 后保留。该结果关闭受控 iOS 频道错误归属/重试边界，不把远端错误字符串、控件存在或文件状态当作功能通过。
 
+### 2026-09-01 iOS Event 关闭失败恢复复跑
+
+`testEventCloseFailureKeepsAccurateDetailBlocksDuplicateAndRetryPersists` 当前字节在专用 Simulator 1/1、42.489 秒、零重试、零 runtime warning，结果束 `build/quality-results/ios-event-close-recovery-current/run-1-20260901-214819.xcresult`。首次真实关闭确认故障时，用户仍停留在准确 Event 详情，ongoing 状态和正文未被伪装成 closed，进度动作不可重复且错误只归 Event owner；第二次确认通过生产形状的 delivery 才关闭 Sheet，canonical 列表及普通 relaunch 后状态均为 closed。该结果是受控 iOS 状态机证据，不外推 Android Compose、真实网络或物理设备。
+
 ## 增量规则
 
 新增或改变 Screen、Route、Action、持久字段、系统表面、后台任务、权限或性能敏感路径时，必须更新相应行并运行调用者/数据/平台消费者影响分析。`config/quality-impact.json` 只强制确定性最低 Lane；未映射产品路径阻断，命中路径也不能自动宣称覆盖。
