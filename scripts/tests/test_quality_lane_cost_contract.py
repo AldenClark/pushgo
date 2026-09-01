@@ -820,6 +820,8 @@ class QualityLaneCostContractTests(unittest.TestCase):
                 'PushGo-iOSUITests/PushGo_iOSUITests/'
                 'testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch,'
                 'PushGo-iOSUITests/PushGo_iOSUITests/'
+                'testSettingsGatewaySyncFailureReportsCommittedGatewayAndPendingRecovery,'
+                'PushGo-iOSUITests/PushGo_iOSUITests/'
                 'testEncryptedMessageRecoversAfterConfiguringKeyAndSurvivesRelaunch"'
             ),
         )
@@ -830,6 +832,8 @@ class QualityLaneCostContractTests(unittest.TestCase):
                 'testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch,'
                 'PushGo-macOSUITests/PushGo_macOSUITests/'
                 'testGatewayCandidateMustRegisterBeforeCommitAndPersistsAfterRelaunch,'
+                'PushGo-macOSUITests/PushGo_macOSUITests/'
+                'testGatewaySyncFailureReportsCommittedGatewayAndPendingRecovery,'
                 'PushGo-macOSUITests/PushGo_macOSUITests/'
                 'testSettingsDecryptionRejectsInvalidKeyPersistsAndClearsValidKey"'
             ),
