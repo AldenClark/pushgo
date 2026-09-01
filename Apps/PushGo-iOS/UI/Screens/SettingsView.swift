@@ -78,7 +78,10 @@ struct SettingsView: View {
                     .presentationDetents([.medium])
                     .presentationDragIndicator(.visible)
             case .serverManagement:
-                ServerManagementSheet(viewModel: viewModel)
+                ServerManagementSheet(
+                    viewModel: viewModel,
+                    onDismiss: { activeSheet = nil }
+                )
                     .toastOverlay(environment: environment, showsPendingDeletionBar: false)
                     .presentationDetents([.medium])
                     .presentationDragIndicator(.visible)

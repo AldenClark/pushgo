@@ -35,23 +35,31 @@ struct ManualKeySettingsSheet: View {
 
 struct ServerManagementSheet: View {
     @Bindable var viewModel: SettingsViewModel
+    let onDismiss: () -> Void
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         navigationContainer {
-            ServerManagementContentView(viewModel: viewModel)
+            ServerManagementContentView(
+                viewModel: viewModel,
+                onDismiss: onDismiss
+            )
                 .navigationTitle(localizationManager.localized("server_management"))
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button(localizationManager.localized("cancel")) {
                             viewModel.clearServerError()
-                            dismiss()
+                            onDismiss()
                         }
+                        .disabled(viewModel.isSavingServerConfig)
                         .accessibilityIdentifier("action.settings.server.cancel")
                     }
                 }
         }
+        // Gateway validation and registration continue across awaited work.
+        // Do not let a user dismiss the editor while that work can still
+        // commit a new active gateway in the background.
+        .interactiveDismissDisabled(viewModel.isSavingServerConfig)
     }
 }
 
