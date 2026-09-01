@@ -195,6 +195,7 @@ struct MessageDetailScreen: View {
                                 }
                                 .buttonStyle(.borderedProminent)
                                 .appButtonHeight()
+                                .accessibilityIdentifier("action.message.open_link")
                                 .frame(maxWidth: .infinity, alignment: .leading)
 
                                 Button {

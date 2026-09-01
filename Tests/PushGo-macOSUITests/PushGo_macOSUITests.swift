@@ -765,6 +765,65 @@ final class PushGo_macOSUITests: XCTestCase {
             purpose: "message URL"
         )
 
+        let openLink = element(in: context.app, identifier: "action.message.open_link")
+        for _ in 0..<3 where !(openLink.exists && openLink.isHittable) {
+            detailScroll.swipeUp()
+        }
+        XCTAssertTrue(
+            openLink.exists && openLink.isHittable,
+            "The canonical message URL open action remained unreachable in the real detail."
+        )
+        let expectedMessageURL = URL(string: "https://pushgo.dev/quality-message")!
+        guard let browserApplicationURL = NSWorkspace.shared.urlForApplication(
+            toOpen: expectedMessageURL
+        ),
+        let browserBundleIdentifier = Bundle(url: browserApplicationURL)?.bundleIdentifier
+        else {
+            XCTFail("QUALITY_PRECONDITION: no default browser can consume the canonical message URL.")
+            return
+        }
+        let browser = XCUIApplication(bundleIdentifier: browserBundleIdentifier)
+        openLink.click()
+        XCTAssertTrue(
+            browser.wait(for: .runningForeground, timeout: 10),
+            "Opening the canonical message URL must hand off to the default system browser."
+        )
+        browser.typeKey("l", modifierFlags: .command)
+        let browserAddress = browser.descendants(matching: .any).matching(
+            NSPredicate(
+                format: "value CONTAINS[c] %@ OR label CONTAINS[c] %@",
+                "pushgo.dev/quality-message",
+                "pushgo.dev/quality-message"
+            )
+        ).firstMatch
+        XCTAssertTrue(
+            browserAddress.waitForExistence(timeout: 8),
+            "The browser must expose the exact canonical message host and path."
+        )
+        let displayedMessageAddress = ((browserAddress.value as? String) ?? browserAddress.label)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedMessageAddress = displayedMessageAddress.contains("://")
+            ? displayedMessageAddress
+            : "https://\(displayedMessageAddress)"
+        let consumedMessageURL = URL(string: normalizedMessageAddress)
+        XCTAssertEqual(consumedMessageURL?.scheme, "https")
+        XCTAssertEqual(consumedMessageURL?.host, "pushgo.dev")
+        XCTAssertEqual(
+            consumedMessageURL?.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")),
+            "quality-message",
+            "A different pushgo.dev page must not satisfy the message URL handoff."
+        )
+        context.app.activate()
+        XCTAssertTrue(
+            context.app.wait(for: .runningForeground, timeout: 8),
+            "Returning from the browser must restore the same PushGo message detail."
+        )
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 5),
+            "Returning from the browser must preserve the exact canonical message body."
+        )
+
         let image = element(in: context.app, identifier: "message.image.0")
         for _ in 0..<3 where !(image.exists && image.isHittable) {
             detailScroll.swipeDown()
