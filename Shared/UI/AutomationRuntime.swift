@@ -699,6 +699,7 @@ final class PushGoAutomationRuntime {
     private var latestState: PushGoAutomationState?
     private var lastNotificationAction: String?
     private var lastNotificationTarget: String?
+    private var nextSearchResultsRevision = 0
     private var lastFixtureImportPath: String?
     private var lastFixtureImportMessageCount = 0
     private var lastFixtureImportEntityRecordCount = 0
@@ -1721,14 +1722,25 @@ final class PushGoAutomationRuntime {
         writeTraceAnnotation(type: type, command: command, details: details)
     }
 
-    func recordSearchResultsUpdated(query: String, resultCount: Int) {
+    func recordSearchResultsUpdated(
+        query: String,
+        resultCount: Int,
+        domain: String = "messages",
+        resultIDs: [String] = []
+    ) {
         configureFromProcessEnvironment()
+        nextSearchResultsRevision += 1
+        let normalizedResultIDs = resultIDs.compactMap(normalizedIdentifier)
         writeEvent(
             type: "search.results_updated",
             command: nil,
             details: [
+                "search_domain": domain,
                 "search_query": query,
                 "result_count": String(resultCount),
+                "result_ids": normalizedResultIDs.joined(separator: ","),
+                "search_revision": String(nextSearchResultsRevision),
+                "settled": "true",
             ]
         )
     }

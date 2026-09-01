@@ -2797,6 +2797,9 @@ final class PushGo_macOSUITests: XCTestCase {
         )
         launchQuality(routed, sessionID: sessionID)
         let app = routed.app
+        let qualityEventsURL = macOSQualitySessionRootURL(sessionID: sessionID)
+            .appendingPathComponent("artifacts", isDirectory: true)
+            .appendingPathComponent("automation-events.jsonl")
         openSidebarTab("things", in: app)
         let reopenedThingRow = element(in: app, identifier: "thing.row.quality-thing-rich")
         let reopenedDistractorRow = element(
@@ -2853,11 +2856,33 @@ final class PushGo_macOSUITests: XCTestCase {
         searchField.click()
         replaceTextUsingPasteboard(in: searchField, with: "thing-rich")
         searchField.typeKey(.return, modifierFlags: [])
-        XCTAssertTrue(reopenedThingRow.waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            reopenedDistractorRow.waitForNonExistence(timeout: 5),
+        let settledSearch = waitForAutomationEvent(
+            at: qualityEventsURL,
+            timeout: 8,
+            matching: { event in
+                guard (event["type"] as? String) == "search.results_updated",
+                      let details = event["details"] as? [String: Any],
+                      (details["search_domain"] as? String) == "things",
+                      (details["search_query"] as? String) == "thing-rich",
+                      (details["settled"] as? String) == "true",
+                      let rawCount = details["result_count"] as? String,
+                      let resultCount = Int(rawCount),
+                      let resultIDs = details["result_ids"] as? String,
+                      let revision = details["search_revision"] as? String,
+                      Int(revision) != nil
+                else { return false }
+                return resultCount == 1 && resultIDs == "quality-thing-rich"
+            }
+        )
+        XCTAssertNotNil(
+            settledSearch,
+            "Thing search must publish an App-owned settled result snapshot before the UI Oracle continues."
+        )
+        XCTAssertFalse(
+            reopenedDistractorRow.exists,
             "Thing search must keep the exact target while excluding a real distractor."
         )
+        XCTAssertTrue(reopenedThingRow.exists)
         XCTAssertTrue(reopenedThingRow.label.contains("P2 Thing Rich"))
         reopenedThingRow.click()
         assertVisibleScreenThroughUI("screen.things.detail", in: app, timeout: 8)

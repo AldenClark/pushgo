@@ -12,6 +12,8 @@ struct ThingSplitScreen: View {
     var onUnavailableTargetFeedbackChanged: ((String?) -> Void)? = nil
     var onOpenThingHandled: (() -> Void)? = nil
     @State private var searchQuery: String = ""
+    @State private var searchFieldText: String = ""
+    @State private var lastPublishedSearchResultsSignature: String?
     @State private var selectedChannelIDs: Set<String> = []
     @State private var selectedTags: Set<String> = []
     @State private var hydrationRequestedThingIDs: Set<String> = []
@@ -42,6 +44,9 @@ struct ThingSplitScreen: View {
         }
         .id(pendingLocalDeletionController.effectiveScope)
         .onAppear {
+            if searchFieldText != searchQuery {
+                searchFieldText = searchQuery
+            }
             syncSelection()
         }
         .onChange(of: viewModel.things) { _, _ in
@@ -49,6 +54,10 @@ struct ThingSplitScreen: View {
         }
         .onChange(of: searchQuery) { _, _ in
             syncSelection()
+        }
+        .onChange(of: searchFieldText) { _, newValue in
+            guard searchQuery != newValue else { return }
+            searchQuery = newValue
         }
         .onChange(of: openThingId) { _, _ in
             syncSelection()
@@ -112,7 +121,7 @@ struct ThingSplitScreen: View {
             }
             .frame(minWidth: fixedListWidth, idealWidth: fixedListWidth, maxWidth: fixedListWidth)
             .searchable(
-                text: $searchQuery,
+                text: $searchFieldText,
                 placement: .toolbar,
                 prompt: Text(localizationManager.localized("search_objects"))
             )
@@ -133,7 +142,8 @@ struct ThingSplitScreen: View {
         [
             selection ?? "",
             openThingId ?? "",
-            "\(filteredThings.count)",
+            searchQuery,
+            filteredThings.map(\.id).joined(separator: ","),
         ].joined(separator: "|")
     }
 
@@ -144,6 +154,16 @@ struct ThingSplitScreen: View {
             visibleScreen: selectedThing == nil ? "screen.things.list" : "screen.things.detail",
             openedEntityType: selectedThing == nil ? nil : "thing",
             openedEntityId: selectedThing?.id
+        )
+        let results = filteredThings
+        let resultsSignature = [searchQuery, results.map(\.id).joined(separator: ",")].joined(separator: "|")
+        guard lastPublishedSearchResultsSignature != resultsSignature else { return }
+        lastPublishedSearchResultsSignature = resultsSignature
+        PushGoAutomationRuntime.shared.recordSearchResultsUpdated(
+            query: searchQuery,
+            resultCount: results.count,
+            domain: "things",
+            resultIDs: results.map(\.id)
         )
     }
 #endif
