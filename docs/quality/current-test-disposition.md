@@ -241,4 +241,4 @@ Android transport Room migration 的独立边界：`PushGoDatabaseMigrationDevic
 
 ### 2026-09-02 macOS 系统通知已读 Oracle 补强
 
-`testSystemNotificationClickPersistsAccurateMessageAndSurvivesRelaunch` 由 `quality_changed.sh` 根据 macOS UI 影响选择器重新执行 1/1，原生耗时 42.326 秒，零重试、零跳过、零运行时告警；结果束 `build/quality-results/macos-ui/run-20260902-032739.xcresult`，`verify_apple_test_execution.py --expected-test-count 1 --reject-runtime-warnings` 为 `EXECUTED`。真实 Notification Center 点击后，测试现在同时核对准确详情/正文、未读徽标消失，以及普通进程重启后徽标仍不存在；这把“已读”从代码路径事实提升为用户可见业务 Oracle。该结果只覆盖本机 warm 系统通知路由，不外推冷启动、权限设置往返、真实 Provider 或物理设备。
+`testSystemNotificationClickPersistsAccurateMessageAndSurvivesRelaunch` 在提交 `661b9eb` 的干净工作树中重新执行 1/1，原生耗时 42.151 秒，零重试、零跳过、零运行时告警；结果束 `build/quality-results/macos-system-notification-read-oracle-clean-20260902/run-20260902-033118.xcresult`，`verify_apple_test_execution.py --expected-test-count 1 --reject-runtime-warnings` 为 `EXECUTED`。真实 Notification Center 点击后，测试现在同时核对准确详情/正文、未读徽标消失，以及普通进程重启后徽标仍不存在；这把“已读”从代码路径事实提升为用户可见业务 Oracle。该结果只覆盖本机 warm 系统通知路由，不外推冷启动、权限设置往返、真实 Provider 或物理设备。

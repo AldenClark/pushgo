@@ -179,7 +179,7 @@ Runner 新增显式 `QUALITY_IOS_SIMULATOR_LIFECYCLE=cold|warm`，默认仍是�
 
 ### 2026-09-02 macOS 系统通知已读 Oracle 补强
 
-`testSystemNotificationClickPersistsAccurateMessageAndSurvivesRelaunch` 在 Apple 变更影响车道中以当前源码重新执行 1/1（约 42.326 秒，零重试、零跳过、零运行时告警），结果束为 `build/quality-results/macos-ui/run-20260902-032739.xcresult`，严格执行校验为 `EXECUTED`。在真实 Notification Center 点击后，测试除了核对准确详情和正文，还要求未读徽标消失；普通进程重启后再次核对准确正文与徽标仍不存在，避免只凭 AppDelegate 路径事实推断已读。该收据覆盖 macOS 本机 warm Notification Center 路由，不改变冷启动、权限拒绝往返、真实 Provider、签名 Release 或物理设备边界。
+`testSystemNotificationClickPersistsAccurateMessageAndSurvivesRelaunch` 在提交 `661b9eb` 的干净工作树中重新执行 1/1（约 42.151 秒，零重试、零跳过、零运行时告警），结果束为 `build/quality-results/macos-system-notification-read-oracle-clean-20260902/run-20260902-033118.xcresult`，严格执行校验为 `EXECUTED`。在真实 Notification Center 点击后，测试除了核对准确详情和正文，还要求未读徽标消失；普通进程重启后再次核对准确正文与徽标仍不存在，避免只凭 AppDelegate 路径事实推断已读。该收据覆盖 macOS 本机 warm Notification Center 路由，不改变冷启动、权限拒绝往返、真实 Provider、签名 Release 或物理设备边界。
 
 ## 增量规则
 
