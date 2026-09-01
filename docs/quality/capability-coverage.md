@@ -12,6 +12,8 @@ Apple PR 重试接入后核心正向当前字节（2026-09-02）：在干净提�
 
 iOS 搜索恢复 P0 当前字节证据（2026-09-02）：`testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail` 从真实搜索入口输入目标词，注入一次边界失败后要求搜索 owner 的失败反馈，不得显示空结果或残留旧列表；点击真实 Retry 后只出现唯一 canonical 目标并打开准确正文详情。1/1、23.545 秒，严格 verifier=`EXECUTED`，`xcresulttool` 为 `Passed`、零失败/跳过/运行时告警，结果束 `build/quality-results/ios-search-recovery-current/run-1-20260902-005207.xcresult`。该证据只刷新 iOS P0 搜索失败→恢复用户目的，不外推索引规模、macOS/Android 或真实网络。
 
+iOS 频道生命周期 P0 当前字节证据（2026-09-02）：`testChannelCreateRenameAndBothUnsubscribeOutcomesPersist` 在 PushGo 专用 Simulator 的同一 App-owned 会话中从真实频道入口完成既有订阅、创建、改名校验与成功改名、保留历史退订、删除历史退订，期间核对 canonical 频道/消息影响、准确名称与系统剪贴板结果，普通 relaunch 后再次确认保留/删除状态不复活。原生 1/1、166.114 秒，严格 verifier=`EXECUTED`，`xcresulttool` 为 `Passed`、零失败/跳过/运行时告警，外部 Pasteboard oracle=`PASSED`，结果束 `build/quality-results/ios-channel-lifecycle-current-after-macos/run-1-20260902-010442.xcresult`。该证据只刷新 iOS P0 频道多终点正向链，不外推 Android Compose、真实 Gateway 或物理设备。
+
 macOS 窗口生命周期当前字节证据（2026-09-02）：`testClosingMainWindowKeepsAppRunningAndStatusItemRestoresOneFunctionalWindow` 在本机 App-owned session 中实际完成最小化→状态栏恢复、慢态刷新→关闭→状态栏菜单恢复、再次关闭→左键恢复及最终退出；每个阶段都以同一 session、唯一窗口和准确消息正文作为用户结果 Oracle。1/1、57.781 秒，零失败/跳过/运行时告警，严格 verifier=`EXECUTED`，结果束为 `build/quality-results/macos-window-lifecycle-after-lease/run-20260902-002244.xcresult`。该结果只关闭可执行的本地窗口恢复子项，窗口尺寸/工具栏焦点、签名 Release 和外部 Provider 仍保留各自边界。
 
 macOS 搜索失败恢复当前字节证据（2026-09-02）：`testMessageSearchFailureShowsOwnedRetryAndRecoversToExactDetail` 在另一条真实详情上下文中注入一次查询失败，要求页面 owner 显示失败而不是空结果或陈旧详情，点击生产 Retry 后仅打开准确 canonical 目标并匹配正文。1/1、20.030 秒，零失败/跳过/运行时告警，严格 verifier=`EXECUTED`，结果束为 `build/quality-results/macos-search-recovery-after-lease/run-20260902-002730.xcresult`；该结果只证明代表性失败恢复，不外推索引重建、大规模性能或其他平台。
