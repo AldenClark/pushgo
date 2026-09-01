@@ -3450,11 +3450,22 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
+    func testExistingChannelLocalFailureDoesNotCompensateBeforeRetry() {
+        assertChannelCreateFailureThenRetry(
+            sessionPrefix: "ios-existing-channel",
+            scenario: "existing_subscribe_must_not_compensate",
+            failLocalPersistenceOnce: true,
+            expectedFailureText: nil,
+            existingChannelID: "01H00000000000000000000004"
+        )
+    }
+
     private func assertChannelCreateFailureThenRetry(
         sessionPrefix: String,
         scenario: String,
         failLocalPersistenceOnce: Bool,
-        expectedFailureText: String?
+        expectedFailureText: String?,
+        existingChannelID: String? = nil
     ) {
         let context = configuredLaunchContext(
             launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
@@ -3471,19 +3482,34 @@ final class PushGo_iOSUITests: XCTestCase {
         tapWhenHittable(channelsTab(in: context.app), timeout: 8)
         tapWhenHittable(element(in: context.app, identifier: "action.channels.add"), timeout: 8)
 
-        let createName = element(in: context.app, identifier: "field.channels.create.name")
-        let createInput = element(in: context.app, identifier: "field.channels.create.password")
-        replaceText(in: createName, with: "Quality Retry Channel")
-        enterSecureText(in: createInput, with: String(repeating: "q", count: 8))
+        let isExistingSubscription = existingChannelID != nil
+        if isExistingSubscription {
+            tapWhenHittable(element(in: context.app, identifier: "mode.channels.entry.subscribe"), timeout: 5)
+        }
+        let identifierInput = element(
+            in: context.app,
+            identifier: isExistingSubscription
+                ? "field.channels.subscribe.id"
+                : "field.channels.create.name"
+        )
+        let passwordInput = element(
+            in: context.app,
+            identifier: isExistingSubscription
+                ? "field.channels.subscribe.password"
+                : "field.channels.create.password"
+        )
+        let expectedChannelID = existingChannelID ?? "01H00000000000000000000003"
+        replaceText(in: identifierInput, with: existingChannelID ?? "Quality Retry Channel")
+        enterSecureText(in: passwordInput, with: String(repeating: "q", count: 8))
         tapWhenHittable(element(in: context.app, identifier: "action.channels.entry.submit"), timeout: 8)
 
         let sheetFeedback = element(in: context.app, identifier: "feedback.channels.entry")
         XCTAssertTrue(sheetFeedback.waitForExistence(timeout: 8), "Failure must remain owned by the Channel sheet")
         XCTAssertTrue(element(in: context.app, identifier: "sheet.channels.entry").exists)
-        XCTAssertEqual(createName.value as? String, "Quality Retry Channel")
+        XCTAssertEqual(identifierInput.value as? String, existingChannelID ?? "Quality Retry Channel")
         XCTAssertTrue(element(in: context.app, identifier: "action.channels.entry.submit").isEnabled)
         XCTAssertFalse(element(in: context.app, identifier: "feedback.channels.entry-sync").exists)
-        XCTAssertFalse(element(in: context.app, identifier: "channel.row.01H00000000000000000000003").exists)
+        XCTAssertFalse(element(in: context.app, identifier: "channel.row.\(expectedChannelID)").exists)
         if let expectedFailureText {
             XCTAssertTrue(sheetFeedback.label.contains(expectedFailureText))
         }
@@ -3496,20 +3522,32 @@ final class PushGo_iOSUITests: XCTestCase {
         tapWhenHittable(element(in: context.app, identifier: "tab.messages"), timeout: 8)
         tapWhenHittable(channelsTab(in: context.app), timeout: 8)
         XCTAssertFalse(
-            element(in: context.app, identifier: "channel.row.01H00000000000000000000003").exists,
+            element(in: context.app, identifier: "channel.row.\(expectedChannelID)").exists,
             "Reloading Channels after the failed commit must not reveal a partially persisted row"
         )
         tapWhenHittable(element(in: context.app, identifier: "action.channels.add"), timeout: 8)
-        replaceText(in: element(in: context.app, identifier: "field.channels.create.name"), with: "Quality Retry Channel")
+        if isExistingSubscription {
+            tapWhenHittable(element(in: context.app, identifier: "mode.channels.entry.subscribe"), timeout: 5)
+        }
+        replaceText(
+            in: element(
+                in: context.app,
+                identifier: isExistingSubscription ? "field.channels.subscribe.id" : "field.channels.create.name"
+            ),
+            with: existingChannelID ?? "Quality Retry Channel"
+        )
         enterSecureText(
-            in: element(in: context.app, identifier: "field.channels.create.password"),
+            in: element(
+                in: context.app,
+                identifier: isExistingSubscription ? "field.channels.subscribe.password" : "field.channels.create.password"
+            ),
             with: String(repeating: "q", count: 8)
         )
         tapWhenHittable(element(in: context.app, identifier: "action.channels.entry.submit"), timeout: 8)
-        let createdRow = element(in: context.app, identifier: "channel.row.01H00000000000000000000003")
+        let createdRow = element(in: context.app, identifier: "channel.row.\(expectedChannelID)")
         XCTAssertTrue(
             createdRow.waitForExistence(timeout: 8),
-            "Retry must succeed only after remote rejection or compensated local failure"
+            "Retry must succeed after a rejected, compensated, or preserved existing remote subscription"
         )
 
         context.app.terminate()
@@ -3517,7 +3555,7 @@ final class PushGo_iOSUITests: XCTestCase {
         assertQualityRuntimeReady(in: context.app, timeout: 15)
         tapWhenHittable(channelsTab(in: context.app), timeout: 8)
         XCTAssertTrue(
-            element(in: context.app, identifier: "channel.row.01H00000000000000000000003")
+            element(in: context.app, identifier: "channel.row.\(expectedChannelID)")
                 .waitForExistence(timeout: 8),
             "The accepted retry must survive a real app relaunch"
         )

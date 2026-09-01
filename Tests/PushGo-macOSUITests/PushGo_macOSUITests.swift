@@ -4727,6 +4727,73 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
+    func testExistingChannelLocalFailureDoesNotCompensateBeforeRetry() {
+        let sessionID = "macos-existing-channel-\(UUID().uuidString.lowercased())"
+        let channelID = "01H00000000000000000000004"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            failChannelSubscriptionPersistenceOnce: true,
+            channelMutationScenario: "existing_subscribe_must_not_compensate"
+        )
+        launchQuality(context, sessionID: sessionID)
+        openSidebarTab("channels", in: context.app)
+        element(in: context.app, identifier: "action.channels.add").click()
+        let subscribeMode = element(in: context.app, identifier: "mode.channels.entry.subscribe")
+        XCTAssertTrue(subscribeMode.waitForExistence(timeout: 5))
+        subscribeMode.click()
+        let channelInput = element(in: context.app, identifier: "field.channels.subscribe.id")
+        let passwordInput = element(in: context.app, identifier: "field.channels.subscribe.password")
+        XCTAssertTrue(channelInput.waitForExistence(timeout: 5))
+        replaceTextUsingPasteboard(in: channelInput, with: channelID)
+        XCTAssertTrue(passwordInput.waitForExistence(timeout: 5))
+        replaceSecureText(in: passwordInput, with: "qualityx")
+        let submit = element(in: context.app, identifier: "action.channels.entry.submit")
+        submit.click()
+
+        let sheetFeedback = element(in: context.app, identifier: "feedback.channels.entry")
+        XCTAssertTrue(sheetFeedback.waitForExistence(timeout: 8))
+        XCTAssertEqual(channelInput.value as? String, channelID)
+        XCTAssertTrue(submit.isEnabled)
+        XCTAssertFalse(element(in: context.app, identifier: "feedback.channels.entry-sync").exists)
+        XCTAssertFalse(element(in: context.app, identifier: "channel.row.\(channelID)").exists)
+
+        element(in: context.app, identifier: "action.channels.entry.cancel").click()
+        XCTAssertFalse(element(in: context.app, identifier: "feedback.channels.entry-sync").exists)
+        openSidebarTab("messages", in: context.app)
+        openSidebarTab("channels", in: context.app)
+        XCTAssertFalse(element(in: context.app, identifier: "channel.row.\(channelID)").exists)
+
+        element(in: context.app, identifier: "action.channels.add").click()
+        element(in: context.app, identifier: "mode.channels.entry.subscribe").click()
+        let retryChannelInput = element(in: context.app, identifier: "field.channels.subscribe.id")
+        let retryPasswordInput = element(in: context.app, identifier: "field.channels.subscribe.password")
+        XCTAssertTrue(retryChannelInput.waitForExistence(timeout: 5))
+        replaceTextUsingPasteboard(in: retryChannelInput, with: channelID)
+        XCTAssertTrue(retryPasswordInput.waitForExistence(timeout: 5))
+        replaceSecureText(in: retryPasswordInput, with: "qualityx")
+        element(in: context.app, identifier: "action.channels.entry.submit").click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "channel.row.\(channelID)").waitForExistence(timeout: 8),
+            "Retry must succeed when the existing remote subscription was preserved."
+        )
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            channelMutationScenario: "existing_subscribe_must_not_compensate",
+            allowCrossAppDataAccess: false
+        )
+        launchQuality(relaunched, sessionID: sessionID)
+        openSidebarTab("channels", in: relaunched.app)
+        XCTAssertTrue(
+            element(in: relaunched.app, identifier: "channel.row.\(channelID)").waitForExistence(timeout: 8),
+            "The accepted existing-channel subscription must survive process relaunch."
+        )
+    }
+
+    @MainActor
     func configuredQualityApp(
         sessionID: String,
         fixture: String,
@@ -4744,6 +4811,7 @@ final class PushGo_macOSUITests: XCTestCase {
         failGatewaySwitchCommitOnce: Bool = false,
         failGatewayPostCommitSyncOnce: Bool = false,
         failNotificationMaterialPersistenceOnce: Bool = false,
+        failChannelSubscriptionPersistenceOnce: Bool = false,
         messageRefreshScenario: String? = nil,
         eventCloseScenario: String? = nil,
         channelMutationScenario: String? = nil,
@@ -4789,6 +4857,7 @@ final class PushGo_macOSUITests: XCTestCase {
                 failGatewaySwitchCommitOnce: failGatewaySwitchCommitOnce,
                 failGatewayPostCommitSyncOnce: failGatewayPostCommitSyncOnce,
                 failNotificationMaterialPersistenceOnce: failNotificationMaterialPersistenceOnce,
+                failChannelSubscriptionPersistenceOnce: failChannelSubscriptionPersistenceOnce,
                 messageRefreshScenario: messageRefreshScenario,
                 eventCloseScenario: eventCloseScenario,
                 channelMutationScenario: channelMutationScenario,
@@ -4946,6 +5015,7 @@ final class PushGo_macOSUITests: XCTestCase {
         failGatewaySwitchCommitOnce: Bool = false,
         failGatewayPostCommitSyncOnce: Bool = false,
         failNotificationMaterialPersistenceOnce: Bool = false,
+        failChannelSubscriptionPersistenceOnce: Bool = false,
         messageRefreshScenario: String? = nil,
         eventCloseScenario: String? = nil,
         channelMutationScenario: String? = nil,
@@ -4960,6 +5030,7 @@ final class PushGo_macOSUITests: XCTestCase {
             "fail_gateway_switch_commit_once": failGatewaySwitchCommitOnce,
             "fail_gateway_post_commit_sync_once": failGatewayPostCommitSyncOnce,
             "fail_notification_material_persistence_once": failNotificationMaterialPersistenceOnce,
+            "fail_channel_subscription_persistence_once": failChannelSubscriptionPersistenceOnce,
         ]
         if let messageLoadDelayMilliseconds {
             faults["message_load_delay_ms"] = messageLoadDelayMilliseconds

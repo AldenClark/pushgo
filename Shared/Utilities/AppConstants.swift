@@ -163,6 +163,7 @@ enum PushGoQualityChannelMutationScenario: String, Codable, Sendable {
     case renameRejectOnceThenAccepted = "rename_reject_once_then_accepted"
     case subscribeAndRenameRejectOnceThenAccepted = "subscribe_and_rename_reject_once_then_accepted"
     case requireCreateCompensation = "require_create_compensation"
+    case existingSubscribeMustNotCompensate = "existing_subscribe_must_not_compensate"
 }
 
 struct PushGoQualityFaults: Codable, Equatable, Sendable {

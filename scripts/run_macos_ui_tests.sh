@@ -85,6 +85,7 @@ risk_scopes=(
   "PushGo-macOSUITests/PushGo_macOSUITests/testInvalidServerAddressShowsInlineFeedbackInsteadOfToast"
   "PushGo-macOSUITests/PushGo_macOSUITests/testGatewayLocalCommitFailureRollsBackBeforeRetryCommits"
   "PushGo-macOSUITests/PushGo_macOSUITests/testGatewaySyncFailureReportsCommittedGatewayAndPendingRecovery"
+  "PushGo-macOSUITests/PushGo_macOSUITests/testExistingChannelLocalFailureDoesNotCompensateBeforeRetry"
 )
 
 # Real Notification Center delivery is a high-value positive system boundary,

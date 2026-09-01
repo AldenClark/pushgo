@@ -290,7 +290,7 @@ final class PushGo_iOSUITests: XCTestCase {{
                 (
                     "testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation",
                 ),
-                32,
+                33,
             ),
             (
                 "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift",
@@ -299,7 +299,7 @@ final class PushGo_iOSUITests: XCTestCase {{
                     "testDeniedNotificationSettingsCardRecoversAfterSystemEnable",
                     "testSystemNotificationClickPersistsAccurateMessageAndSurvivesRelaunch",
                 ),
-                31,
+                32,
             ),
         )
         for path, special_profile, methods, expected_count in cases:
@@ -635,9 +635,9 @@ final class PushGo_iOSUITests: XCTestCase {{
             "performance_sensitivity_scopes",
         )
 
-        self.assertEqual(33, len(discoverable))
+        self.assertEqual(34, len(discoverable))
         self.assertEqual(16, len(positive))
-        self.assertEqual(12, len(risk))
+        self.assertEqual(13, len(risk))
         self.assertEqual(2, len(system))
         self.assertEqual(1, len(preparation))
         self.assertEqual(1, len(performance))

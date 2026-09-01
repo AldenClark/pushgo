@@ -218,9 +218,9 @@
       "id": "channel-state-and-reconciliation",
       "paths": ["Shared/Application/Channel*.swift", "Shared/Repositories/ChannelSubscriptionStore.swift", "Shared/Services/ChannelSubscription*.swift", "Shared/Utilities/Channel*.swift"],
       "capabilities": ["channels"],
-      "minimum_evidence": ["channel validation and injectable service contract tests", "iOS and macOS real Channel local-validation/remote-rejection/create-compensation/reload/retry/rename/keep-history/delete-history/relaunch journeys"],
+      "minimum_evidence": ["channel validation and injectable service contract tests", "iOS and macOS real Channel local-validation/remote-rejection/create-compensation/reload/retry/rename/keep-history/delete-history/relaunch journeys", "iOS and macOS created=false local-commit-failure journeys prove an existing remote subscription is not compensated, keep the Sheet-only error actionable, and converge through retry and relaunch"],
       "lane": "nightly",
-      "known_evidence_gaps": ["Safe remote ownership/idempotency compensation after a created=false subscription's local commit fails remains incomplete."],
+      "known_evidence_gaps": ["Provider-backed ownership/idempotency under transport timeout, duplicate concurrent subscribe/unsubscribe, remote divergence, and physical-device credentials remains outside the App-owned Simulator/macOS boundary."],
       "escalation_reasons": ["Channel state ownership crosses credentials, remote mutation, local persistence, compensation, and relaunch reconciliation."]
     },
     {

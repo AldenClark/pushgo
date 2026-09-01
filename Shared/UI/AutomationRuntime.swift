@@ -18,6 +18,7 @@ final class QualityChannelAutomationRoundTrip: ChannelMutationRoundTrip, Channel
     private var subscribeAttempts = 0
     private var renameAttempts = 0
     private var activeCreatedChannelIDs = Set<String>()
+    private var existingSubscriptionWasCompensated = false
 
     init(scenario: PushGoQualityChannelMutationScenario, expectedGatewayURL: String? = nil) {
         self.scenario = scenario
@@ -51,6 +52,16 @@ final class QualityChannelAutomationRoundTrip: ChannelMutationRoundTrip, Channel
             )
         }
         let resolvedID = channelId ?? "01H00000000000000000000003"
+        if scenario == .existingSubscribeMustNotCompensate,
+           channelId != nil,
+           existingSubscriptionWasCompensated
+        {
+            throw AppError.typedLocal(
+                code: "existing_channel_subscription_was_compensated",
+                category: .conflict,
+                message: "The existing channel subscription was incorrectly revoked."
+            )
+        }
         if scenario == .requireCreateCompensation,
            channelId == nil,
            activeCreatedChannelIDs.contains(resolvedID)
@@ -113,6 +124,12 @@ final class QualityChannelAutomationRoundTrip: ChannelMutationRoundTrip, Channel
                 category: .validation,
                 message: "A channel identifier is required."
             )
+        }
+        if scenario == .existingSubscribeMustNotCompensate,
+           !activeCreatedChannelIDs.contains(channelId)
+        {
+            existingSubscriptionWasCompensated = true
+            return
         }
         activeCreatedChannelIDs.remove(channelId)
     }

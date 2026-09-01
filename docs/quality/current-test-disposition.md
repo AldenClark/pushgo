@@ -95,6 +95,8 @@
 - macOS `testUnreadBadgeAndChannelLifecyclePersistThroughRealUserActions`（复用原 badge→读取→Channel copy 方法和唯一 relaunch；既有频道订阅先经历一次 typed 密码拒绝，要求错误只属于 Channel Sheet、ID 与密码字段保留、提交仍可用且没有脏行，再在同一 Sheet 重试成功；随后继续创建、菜单改名、保留/删除历史退订，并从准确 Channel 行、消息正文、生产删除期限、relaunch 和系统剪贴板裁决。没有增加默认方法或启动；当前回执 `build/quality-results/macos-channel-recovery-final/run-20260831-000123.xcresult` 为 1/1、108.202 秒、零重试）
 - `testChannelRemoteRejectionStaysInSheetAndRetryPersists`
 - `testChannelCreateLocalFailureCompensatesRemoteBeforeRetry`
+- iOS/macOS `testExistingChannelLocalFailureDoesNotCompensateBeforeRetry`（以 `created=false` 的既有远端订阅为目标，先让本地持久化在真实 Sheet 提交后失败；Oracle 同时要求错误只留在 Sheet、输入和重试动作仍可用、宿主无错误且列表不出现脏行，并用受控负控让任何错误的远端撤销在下一次重试中精确失败，随后要求重试生成准确 Channel 行并在普通 relaunch 后保留。iOS 结果 `build/quality-results/ios-existing-channel-no-compensation/run-1-20260901-204837.xcresult` 为 1/1、0 跳过、0 runtime warning、零业务重试；macOS 结果 `build/quality-results/macos-existing-channel-no-compensation/run-20260901-205440.xcresult` 为 1/1、0 跳过、0 runtime warning、零业务重试；两份结果均以 expected count=1 的严格执行校验收口。）
+- Android 已加入同语义 `EXISTING_SUBSCRIBE_MUST_NOT_COMPENSATE` App-owned seam 与 JVM/编译合同，使生产 repository 的 `created=false` 分支不会触发撤销；当前没有可用 `adb` serial，Compose UI 旅程保持 `NOT RUN`，不把 seam、编译或 JVM 通过写成 Android UI 通过。
 - macOS `testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch`（复用原页面显隐旅程、fixture 和第三次既有 relaunch；末尾从真实 Settings Getting Started 控件交给系统默认浏览器，地址栏必须是准确安全 HTTPS host/path，返回后仍在同一 Settings。page×locale 全映射由 Core 快速合同负责，不新增测试方法、App 启动或页面×语言×浏览器矩阵；当前 1/1、100.450 秒、零重试，回执 `build/quality-results/macos-documentation-handoff/run-20260831-001201.xcresult`）
 - `testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch`
 - `testGatewayLocalCommitFailureRollsBackBeforeRetryCommits`
