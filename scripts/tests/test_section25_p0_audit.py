@@ -38,7 +38,8 @@ class Section25P0AuditContractTest(unittest.TestCase):
             self.assertTrue(cells[4], "purpose-level evidence or a precise closure gap is required")
             states.append(cells[3].strip("`"))
 
-        self.assertEqual(Counter({"V": 89, "P": 5, "N": 8, "NA": 1}), Counter(states))
+        audit_counts = Counter(states)
+        self.assertEqual(Counter({"V": 91, "P": 3, "N": 8, "NA": 1}), audit_counts)
 
         ledger = (REPO_ROOT / "docs/quality/completion-gate-ledger.md").read_text()
         ledger_counts = re.search(
@@ -48,9 +49,23 @@ class Section25P0AuditContractTest(unittest.TestCase):
         )
         self.assertIsNotNone(ledger_counts, "completion ledger must publish machine-checkable audit counts")
         self.assertEqual(
-            (89, 1, 5, 8),
+            (audit_counts["V"], audit_counts["NA"], audit_counts["P"], audit_counts["N"]),
             tuple(map(int, ledger_counts.groups())),
             "completion ledger counts must stay synchronized with the semantic audit",
+        )
+
+        audit_summary = re.search(
+            r"- (\d+) rows are currently classified `V`; (\d+) conditional export row is `NA`.*?\n"
+            r"- (\d+) rows remain `P`.*?\n.*?\n"
+            r"- (\d+) P0 Release/external rows remain `N`",
+            AUDIT.read_text(),
+            re.DOTALL,
+        )
+        self.assertIsNotNone(audit_summary, "semantic audit must publish machine-checkable summary counts")
+        self.assertEqual(
+            (audit_counts["V"], audit_counts["NA"], audit_counts["P"], audit_counts["N"]),
+            tuple(map(int, audit_summary.groups())),
+            "semantic audit summary counts must match its own table",
         )
 
 

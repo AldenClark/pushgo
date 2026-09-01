@@ -361,6 +361,150 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
+    func testDeniedNotificationSettingsCardRecoversAfterSystemEnable() {
+        continueAfterFailure = true
+        func toggleIsOn(_ toggle: XCUIElement) -> Bool {
+            if let number = toggle.value as? NSNumber {
+                return number.boolValue
+            }
+            let normalized = String(describing: toggle.value ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            return ["1", "on", "true", "yes", "开启", "打开"].contains(normalized)
+        }
+        func waitForToggle(
+            _ toggle: XCUIElement,
+            toBeOn expected: Bool,
+            timeout: TimeInterval
+        ) -> Bool {
+            let deadline = Date().addingTimeInterval(timeout)
+            while Date() < deadline {
+                if toggle.exists && toggleIsOn(toggle) == expected {
+                    return true
+                }
+                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+            }
+            return toggle.exists && toggleIsOn(toggle) == expected
+        }
+        func openPushGoNotificationSettings(in systemSettings: XCUIApplication) -> Bool {
+            if systemSettings.state == .notRunning {
+                systemSettings.launch()
+            }
+            guard let notificationsURL = URL(
+                string: "x-apple.systempreferences:com.apple.preference.notifications"
+            ) else {
+                return false
+            }
+            _ = NSWorkspace.shared.open(notificationsURL)
+            guard systemSettings.wait(for: .runningForeground, timeout: 10) else {
+                return false
+            }
+
+            let allowNotifications = systemSettings.descendants(matching: .any)
+                .matching(identifier: "allow-notifications")
+                .firstMatch
+            if allowNotifications.waitForExistence(timeout: 2) {
+                return true
+            }
+
+            let pushGoRow = systemSettings.buttons.matching(
+                NSPredicate(format: "label BEGINSWITH %@", "PushGo")
+            ).firstMatch
+            // System Settings can expose the application row before the split-view
+            // transition has made it actionable.  The user-purpose handoff needs an
+            // actual click into PushGo's settings, so wait for both facts rather than
+            // treating a transient non-hittable row as a missing settings page.
+            let rowDeadline = Date().addingTimeInterval(8)
+            while Date() < rowDeadline {
+                if pushGoRow.exists && pushGoRow.isHittable {
+                    break
+                }
+                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+            }
+            guard pushGoRow.exists && pushGoRow.isHittable else {
+                return false
+            }
+            pushGoRow.click()
+            return allowNotifications.waitForExistence(timeout: 8)
+        }
+
+        let sessionID = "macos-permission-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "empty.clean",
+            allowCrossAppDataAccess: true,
+            skipPushAuthorization: false
+        )
+        context.app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        launchQuality(context, sessionID: sessionID)
+
+        let systemSettings = XCUIApplication(bundleIdentifier: "com.apple.systempreferences")
+        let allowNotifications = systemSettings.descendants(matching: .any)
+            .matching(identifier: "allow-notifications")
+            .firstMatch
+        defer {
+            if allowNotifications.exists && !toggleIsOn(allowNotifications) {
+                allowNotifications.click()
+            }
+            context.app.activate()
+        }
+
+        guard openPushGoNotificationSettings(in: systemSettings) else {
+            XCTFail("QUALITY_PRECONDITION: PushGo's real macOS notification settings were unreachable.")
+            return
+        }
+        if toggleIsOn(allowNotifications) {
+            allowNotifications.click()
+        }
+        XCTAssertTrue(
+            waitForToggle(allowNotifications, toBeOn: false, timeout: 5),
+            "QUALITY_PRECONDITION: macOS did not enter the real denied notification state."
+        )
+
+        context.app.activate()
+        XCTAssertTrue(context.app.wait(for: .runningForeground, timeout: 8))
+        openSidebarTab("settings", in: context.app)
+        assertVisibleScreenThroughUI("screen.settings", in: context.app, timeout: 8)
+        let openSettings = element(
+            in: context.app,
+            identifier: "action.settings.notification.open_system_settings"
+        )
+        XCTAssertTrue(
+            openSettings.waitForExistence(timeout: 8)
+                && openSettings.isHittable
+                && openSettings.label.contains("Please enable notification permission in system settings first")
+                && openSettings.label.contains("You have turned off notification permission")
+                && openSettings.label.contains("Open Settings to enable notifications, then return to continue"),
+            "The real denied state must explain the user's recovery purpose."
+        )
+        guard openSettings.exists && openSettings.isHittable else { return }
+        openSettings.click()
+
+        XCTAssertTrue(
+            systemSettings.wait(for: .runningForeground, timeout: 10),
+            "The product recovery action did not reach the real System Settings app."
+        )
+        guard openPushGoNotificationSettings(in: systemSettings) else {
+            XCTFail("The product handoff did not expose PushGo's notification control.")
+            return
+        }
+        XCTAssertFalse(toggleIsOn(allowNotifications))
+        allowNotifications.click()
+        XCTAssertTrue(
+            waitForToggle(allowNotifications, toBeOn: true, timeout: 5),
+            "macOS did not accept the enabled notification setting."
+        )
+
+        context.app.activate()
+        XCTAssertTrue(context.app.wait(for: .runningForeground, timeout: 8))
+        assertVisibleScreenThroughUI("screen.settings", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            openSettings.waitForNonExistence(timeout: 8),
+            "Returning from System Settings must refresh the real authorization state and remove the denied card."
+        )
+    }
+
+    @MainActor
     private func revealNotificationCenter() -> Bool {
         let notificationCenter = XCUIApplication(bundleIdentifier: "com.apple.notificationcenterui")
         let systemMenuBar = notificationCenter.menuBars.firstMatch
@@ -772,7 +916,7 @@ final class PushGo_macOSUITests: XCTestCase {
             "The real macOS message search field must remain reachable after relaunch."
         )
         searchField.click()
-        searchField.typeText("P2 Split")
+        replaceTextUsingPasteboard(in: searchField, with: "P2 Split")
         let slowSearchFeedback = element(
             in: relaunched.app,
             identifier: "state.messages.search.loading"
@@ -813,6 +957,77 @@ final class PushGo_macOSUITests: XCTestCase {
         XCTAssertFalse(
             relaunched.app.staticTexts["Preserved through the production database migration."].exists,
             "Opening the search result must replace the previous message detail instead of leaving stale content."
+        )
+    }
+
+    @MainActor
+    func testMessageSearchFailureShowsOwnedRetryAndRecoversToExactDetail() {
+        let sessionID = "macos-search-recovery-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            failMessageSearchOnce: true,
+            legacyStore: "messages.v17"
+        )
+        launchQuality(context, sessionID: sessionID)
+
+        let legacyRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000017"
+        )
+        XCTAssertTrue(legacyRow.waitForExistence(timeout: 8) && legacyRow.isHittable)
+        legacyRow.click()
+        XCTAssertTrue(
+            context.app.staticTexts["Preserved through the production database migration."]
+                .waitForExistence(timeout: 8),
+            "The control detail must start on a different canonical message before the failed query."
+        )
+
+        let searchField = context.app.searchFields.firstMatch
+        XCTAssertTrue(searchField.waitForExistence(timeout: 8) && searchField.isHittable)
+        searchField.click()
+        replaceTextUsingPasteboard(in: searchField, with: "P2 Split")
+
+        XCTAssertTrue(
+            element(in: context.app, identifier: "state.messages.search.failed")
+                .waitForExistence(timeout: 8),
+            "A failed search must be visible as a failure, not silently presented as no results."
+        )
+        XCTAssertFalse(
+            element(in: context.app, identifier: "state.messages.search.empty").exists,
+            "A failed search must not masquerade as a genuine no-results state."
+        )
+        let target = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertFalse(
+            target.exists,
+            "The pre-search list must not remain visible as if it were a result for the failed query."
+        )
+        let retrySearch = element(in: context.app, identifier: "action.messages.search.retry")
+        XCTAssertTrue(
+            retrySearch.waitForExistence(timeout: 5) && retrySearch.isHittable,
+            "A search failure must offer a real retry action."
+        )
+        retrySearch.click()
+        XCTAssertTrue(
+            target.waitForExistence(timeout: 8) && target.label.contains("P2 Split Seed Message"),
+            "Retry must recover the exact canonical search result."
+        )
+        XCTAssertFalse(element(in: context.app, identifier: "state.messages.search.failed").exists)
+        target.click()
+        XCTAssertTrue(
+            element(in: context.app, identifier: "screen.message.detail").waitForExistence(timeout: 8)
+        )
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 8),
+            "Retry must open the exact target detail, not retain the pre-search detail."
+        )
+        XCTAssertFalse(
+            context.app.staticTexts["Preserved through the production database migration."].exists,
+            "The recovered search detail must replace the stale pre-search detail."
         )
     }
 
@@ -1170,7 +1385,7 @@ final class PushGo_macOSUITests: XCTestCase {
         let subscribePassword = element(in: context.app, identifier: "field.channels.subscribe.password")
         XCTAssertTrue(subscribeID.waitForExistence(timeout: 5))
         subscribeID.click()
-        subscribeID.typeText(subscribedChannelID)
+        replaceTextUsingPasteboard(in: subscribeID, with: subscribedChannelID)
         XCTAssertTrue(subscribePassword.waitForExistence(timeout: 5))
         replaceSecureText(in: subscribePassword, with: "qualityx")
         let subscribeSubmit = element(
@@ -1185,6 +1400,10 @@ final class PushGo_macOSUITests: XCTestCase {
             "A rejected existing-channel subscription must remain owned by the Channel sheet."
         )
         XCTAssertTrue(subscribeFeedback.label.contains("Channel password is incorrect"))
+        XCTAssertFalse(
+            element(in: context.app, identifier: "feedback.channels.entry-sync").exists,
+            "A Channel sheet failure must not also be rendered by the host Channel page."
+        )
         XCTAssertEqual(
             subscribeID.value as? String,
             subscribedChannelID,
@@ -1586,7 +1805,8 @@ final class PushGo_macOSUITests: XCTestCase {
             sessionID: sessionID,
             fixture: "messages.workflow",
             messageLoadDelayMilliseconds: 8_000,
-            messagePageLoadDelayMilliseconds: 8_000
+            messagePageLoadDelayMilliseconds: 5_000,
+            failMessagePageLoadOnce: true
         )
         launch(context)
 
@@ -1597,10 +1817,10 @@ final class PushGo_macOSUITests: XCTestCase {
         )
         let firstPageHead = element(
             in: context.app,
-            identifier: "message.row.00000000-0000-0000-0000-000000000034"
+            identifier: "message.row.00000000-0000-0000-0000-00000000007d"
         )
         XCTAssertTrue(
-            firstPageHead.waitForExistence(timeout: 6) && firstPageHead.isHittable,
+            firstPageHead.waitForExistence(timeout: 10) && firstPageHead.isHittable,
             "The delayed load did not complete into its accurate canonical collection."
         )
         XCTAssertFalse(element(in: context.app, identifier: "state.messages.load_failed").exists)
@@ -1616,31 +1836,62 @@ final class PushGo_macOSUITests: XCTestCase {
             firstPageHead.exists && firstPageHead.isHittable,
             "Already loaded page-1 content must remain usable while page 2 is loading."
         )
-        list.swipeUp()
-        list.swipeUp()
-        let secondPageTargetID = "message.row.00000000-0000-0000-0000-000000000002"
-        let secondPageTarget = element(in: context.app, identifier: secondPageTargetID)
-        func targetIsVisiblyInsideWindow() -> Bool {
-            guard secondPageTarget.exists, !secondPageTarget.frame.isEmpty else { return false }
-            let visibleHeight = context.app.windows.firstMatch.frame
-                .intersection(secondPageTarget.frame).height
-            return visibleHeight >= secondPageTarget.frame.height * 0.8
-        }
-        for _ in 0..<4 where !targetIsVisiblyInsideWindow() {
+        let pageFailure = element(in: context.app, identifier: "state.messages.page.failed")
+        XCTAssertTrue(
+            pageFailure.waitForExistence(timeout: 8),
+            "A failed next page must expose a page-owned recovery state instead of silently stopping."
+        )
+        XCTAssertTrue(
+            firstPageHead.exists && firstPageHead.isHittable,
+            "Accurate page-1 content must remain actionable while page 2 is failed."
+        )
+        let firstPageTail = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000004c"
+        )
+        for _ in 0..<6 where !firstPageTail.exists {
             list.swipeUp()
         }
         XCTAssertTrue(
-            secondPageTarget.waitForExistence(timeout: 5) && targetIsVisiblyInsideWindow(),
-            "The canonical page-2 boundary object was not reachable."
+            firstPageTail.waitForExistence(timeout: 5)
+                && firstPageTail.label.contains("Quality workflow 75"),
+            "A page failure must retain the accurate page-1 tail, not only its first row."
+        )
+        let pageRetry = element(in: context.app, identifier: "action.messages.page.retry")
+        XCTAssertTrue(
+            pageRetry.waitForExistence(timeout: 3) && pageRetry.isHittable,
+            "Page Retry must be a real user action on the failed append owner."
+        )
+        pageRetry.click()
+        let secondPageTargetID = "message.row.00000000-0000-0000-0000-00000000004b"
+        let secondPageTarget = element(in: context.app, identifier: secondPageTargetID)
+        XCTAssertTrue(
+            secondPageTarget.waitForExistence(timeout: 5),
+            "The canonical page-2 boundary object was not rendered after Retry."
         )
         XCTAssertTrue(
-            secondPageTarget.label.contains("Quality workflow 1"),
+            secondPageTarget.label.contains("Quality workflow 74"),
             "The reachable page-2 row did not expose the expected canonical content."
         )
         XCTAssertEqual(
             context.app.descendants(matching: .any).matching(identifier: secondPageTargetID).count,
             1,
             "Repeated scroll pressure while loading must not append page 2 more than once."
+        )
+        let secondPageTailID = "message.row.00000000-0000-0000-0000-00000000001a"
+        let secondPageTail = element(in: context.app, identifier: secondPageTailID)
+        for _ in 0..<8 where !secondPageTail.exists {
+            list.swipeUp()
+        }
+        XCTAssertTrue(
+            secondPageTail.waitForExistence(timeout: 5)
+                && secondPageTail.label.contains("Quality workflow 25"),
+            "Retry must recover the accurate page-2 tail instead of a one-row partial page."
+        )
+        XCTAssertEqual(
+            context.app.descendants(matching: .any).matching(identifier: secondPageTailID).count,
+            1,
+            "Retry must not duplicate the page-2 tail."
         )
     }
 
@@ -2444,6 +2695,53 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
+    func testUnavailableMessageRouteReturnsToListAndKeepsMessagesUsable() {
+        let sessionID = "macos-message-unavailable-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            requestName: "message.open",
+            requestArgs: ["message_id": "01H00000000000000000000002"]
+        )
+        launchQuality(context, sessionID: sessionID)
+
+        let canonicalRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertTrue(canonicalRow.waitForExistence(timeout: 8))
+        assertVisibleScreenThroughUI("screen.messages.list", in: context.app, timeout: 8)
+
+        let unavailableFeedback = element(
+            in: context.app,
+            identifier: "feedback.message.target_unavailable"
+        )
+        XCTAssertTrue(
+            unavailableFeedback.waitForExistence(timeout: 5),
+            "An unavailable Message route must explain its list fallback instead of leaving a hidden pending target."
+        )
+        let unavailableFeedbackText = [
+            unavailableFeedback.label,
+            unavailableFeedback.value as? String ?? "",
+        ].joined(separator: " ")
+        XCTAssertTrue(
+            [
+                "The requested item was not found or has expired.",
+                "目标不存在，或已失效。",
+                "目標不存在，或已失效。",
+            ].contains(where: unavailableFeedbackText.contains),
+            "The unavailable Message feedback must state the real outcome in the active localization."
+        )
+        canonicalRow.click()
+        assertVisibleScreenThroughUI("screen.message.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 5),
+            "The surviving canonical Message must remain actionable after the unavailable route."
+        )
+    }
+
+    @MainActor
     func testThingRelationsOpenAccurateDetailsAndSurviveRelaunch() {
         let sessionID = "macos-thing-relations-\(UUID().uuidString.lowercased())"
         let context = configuredQualityApp(sessionID: sessionID, fixture: "thing.standard")
@@ -2474,31 +2772,44 @@ final class PushGo_macOSUITests: XCTestCase {
         )
 
         context.app.terminate()
-        launchQuality(context, sessionID: sessionID)
-        openSidebarTab("things", in: context.app)
+        // The separate primary-navigation journey owns registered `pushgo://`
+        // URL-scheme coverage. This continuation instead exercises the same
+        // production target-resolution path as an in-app notification after a
+        // real deletion/relaunch, without making this data-lifecycle Oracle
+        // depend on XCTest's cross-process URL injector.
+        let routed = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "thing.standard",
+            requestName: "entity.open",
+            requestArgs: [
+                "entity_type": "thing",
+                "entity_id": "quality-thing-distractor",
+            ]
+        )
+        launchQuality(routed, sessionID: sessionID)
+        let app = routed.app
+        openSidebarTab("things", in: app)
+        let reopenedThingRow = element(in: app, identifier: "thing.row.quality-thing-rich")
+        let reopenedDistractorRow = element(
+            in: app,
+            identifier: "thing.row.quality-thing-distractor"
+        )
         XCTAssertTrue(
-            distractorRow.waitForNonExistence(timeout: 8),
+            reopenedDistractorRow.waitForNonExistence(timeout: 8),
             "The deleted Thing must not return after the production deadline commits and the App relaunches."
         )
         XCTAssertTrue(
-            thingRow.waitForExistence(timeout: 8),
+            reopenedThingRow.waitForExistence(timeout: 8),
             "Deleting one Thing must preserve the independent control Thing across relaunch."
         )
 
-        guard let deletedThingURL = URL(
-            string: "pushgo://open?kind=thing&id=quality-thing-distractor"
-        ) else {
-            XCTFail("The registered deleted-Thing route fixture must be a valid URL.")
-            return
-        }
-        context.app.open(deletedThingURL)
-        assertVisibleScreenThroughUI("screen.things.list", in: context.app, timeout: 8)
+        assertVisibleScreenThroughUI("screen.things.list", in: app, timeout: 8)
         XCTAssertTrue(
-            distractorRow.waitForNonExistence(timeout: 8),
+            reopenedDistractorRow.waitForNonExistence(timeout: 8),
             "Routing to a deleted Thing must not revive its committed projection."
         )
         let unavailableFeedback = element(
-            in: context.app,
+            in: app,
             identifier: "feedback.entity.target_unavailable"
         )
         XCTAssertTrue(
@@ -2518,30 +2829,30 @@ final class PushGo_macOSUITests: XCTestCase {
             "The fallback must accurately explain that the routed Thing is unavailable."
         )
         XCTAssertFalse(
-            context.app.staticTexts["Quality Pump Beta"].exists,
+            app.staticTexts["Quality Pump Beta"].exists,
             "The deleted Thing title must not remain as a stale detail after route fallback."
         )
         XCTAssertFalse(
-            context.app.staticTexts[
+            app.staticTexts[
                 "Secondary fixture that must be excluded by the target search."
             ].exists,
             "The deleted Thing summary must not remain as a stale detail after route fallback."
         )
 
-        let searchField = context.app.searchFields.firstMatch
+        let searchField = app.searchFields.firstMatch
         XCTAssertTrue(searchField.waitForExistence(timeout: 8))
         searchField.click()
-        searchField.typeText("thing-rich")
+        replaceTextUsingPasteboard(in: searchField, with: "thing-rich")
         searchField.typeKey(.return, modifierFlags: [])
-        XCTAssertTrue(thingRow.waitForExistence(timeout: 5))
+        XCTAssertTrue(reopenedThingRow.waitForExistence(timeout: 5))
         XCTAssertTrue(
-            distractorRow.waitForNonExistence(timeout: 5),
+            reopenedDistractorRow.waitForNonExistence(timeout: 5),
             "Thing search must keep the exact target while excluding a real distractor."
         )
-        XCTAssertTrue(thingRow.label.contains("P2 Thing Rich"))
-        thingRow.click()
-        assertVisibleScreenThroughUI("screen.things.detail", in: context.app, timeout: 8)
-        let identity = element(in: context.app, identifier: "field.thing.detail.identity")
+        XCTAssertTrue(reopenedThingRow.label.contains("P2 Thing Rich"))
+        reopenedThingRow.click()
+        assertVisibleScreenThroughUI("screen.things.detail", in: app, timeout: 8)
+        let identity = element(in: app, identifier: "field.thing.detail.identity")
         XCTAssertTrue(identity.waitForExistence(timeout: 5))
         XCTAssertTrue(
             identity.label.contains("P2 Thing Rich")
@@ -2549,7 +2860,7 @@ final class PushGo_macOSUITests: XCTestCase {
                 && identity.label.localizedCaseInsensitiveContains("quality"),
             "The Thing identity region must expose the accurate title, lifecycle state, and channel."
         )
-        let summary = element(in: context.app, identifier: "field.thing.detail.summary")
+        let summary = element(in: app, identifier: "field.thing.detail.summary")
         XCTAssertTrue(summary.waitForExistence(timeout: 5))
         XCTAssertTrue(
             summary.label.contains("Fixture thing summary")
@@ -2558,14 +2869,14 @@ final class PushGo_macOSUITests: XCTestCase {
         )
 
         let relatedEvent = element(
-            in: context.app,
+            in: app,
             identifier: "thing.related.event.quality-related-event"
         )
         XCTAssertTrue(relatedEvent.waitForExistence(timeout: 8) && relatedEvent.isHittable)
         relatedEvent.click()
-        assertVisibleScreenThroughUI("screen.events.detail", in: context.app, timeout: 8)
-        XCTAssertTrue(context.app.staticTexts["Quality Related Event"].waitForExistence(timeout: 5))
-        let relatedEventSummary = element(in: context.app, identifier: "field.event.detail.summary")
+        assertVisibleScreenThroughUI("screen.events.detail", in: app, timeout: 8)
+        XCTAssertTrue(app.staticTexts["Quality Related Event"].waitForExistence(timeout: 5))
+        let relatedEventSummary = element(in: app, identifier: "field.event.detail.summary")
         XCTAssertTrue(relatedEventSummary.waitForExistence(timeout: 5))
         XCTAssertTrue(
             relatedEventSummary.label.contains("A deterministic event associated with P2 Thing Rich.")
@@ -2573,40 +2884,40 @@ final class PushGo_macOSUITests: XCTestCase {
                     .contains("A deterministic event associated with P2 Thing Rich.") == true,
             "The related Event must display the canonical notification body as its accurate summary."
         )
-        element(in: context.app, identifier: "action.thing.related.close").click()
+        element(in: app, identifier: "action.thing.related.close").click()
 
-        let messagesTab = element(in: context.app, identifier: "tab.thing.detail.messages")
+        let messagesTab = element(in: app, identifier: "tab.thing.detail.messages")
         XCTAssertTrue(messagesTab.waitForExistence(timeout: 5) && messagesTab.isHittable)
         messagesTab.click()
         let relatedMessage = element(
-            in: context.app,
+            in: app,
             identifier: "thing.related.message.quality-related-message"
         )
         XCTAssertTrue(relatedMessage.waitForExistence(timeout: 8) && relatedMessage.isHittable)
         relatedMessage.click()
-        assertVisibleScreenThroughUI("screen.message.detail", in: context.app, timeout: 8)
-        XCTAssertTrue(context.app.staticTexts["Quality Related Message"].waitForExistence(timeout: 5))
+        assertVisibleScreenThroughUI("screen.message.detail", in: app, timeout: 8)
+        XCTAssertTrue(app.staticTexts["Quality Related Message"].waitForExistence(timeout: 5))
         XCTAssertTrue(
-            context.app.staticTexts["The linked Thing message opens its canonical detail."]
+            app.staticTexts["The linked Thing message opens its canonical detail."]
                 .waitForExistence(timeout: 5)
         )
-        element(in: context.app, identifier: "action.thing.related.close").click()
+        element(in: app, identifier: "action.thing.related.close").click()
         XCTAssertTrue(relatedMessage.waitForExistence(timeout: 5))
 
-        let updatesTab = element(in: context.app, identifier: "tab.thing.detail.updates")
+        let updatesTab = element(in: app, identifier: "tab.thing.detail.updates")
         XCTAssertTrue(updatesTab.waitForExistence(timeout: 5) && updatesTab.isHittable)
         updatesTab.click()
         let relatedUpdate = element(
-            in: context.app,
+            in: app,
             identifier: "thing.related.update.00000000-0000-0000-0000-00000000a000"
         )
         XCTAssertTrue(relatedUpdate.waitForExistence(timeout: 8) && relatedUpdate.isHittable)
         relatedUpdate.click()
-        assertVisibleScreenThroughUI("screen.thing.update.detail", in: context.app, timeout: 8)
+        assertVisibleScreenThroughUI("screen.thing.update.detail", in: app, timeout: 8)
         XCTAssertTrue(
-            context.app.staticTexts["Quality Initial Thing Snapshot"].waitForExistence(timeout: 5)
+            app.staticTexts["Quality Initial Thing Snapshot"].waitForExistence(timeout: 5)
         )
-        element(in: context.app, identifier: "action.thing.related.close").click()
+        element(in: app, identifier: "action.thing.related.close").click()
 
     }
 
@@ -3321,6 +3632,66 @@ final class PushGo_macOSUITests: XCTestCase {
             restoredField.value as? String,
             originalAddress,
             "A rejected candidate must not replace the previously saved gateway."
+        )
+    }
+
+    @MainActor
+    func testGatewaySyncFailureReportsCommittedGatewayAndPendingRecovery() {
+        let sessionID = "macos-server-sync-pending-\(UUID().uuidString.lowercased())"
+        let normalizedAddress = "https://quality-macos-sync-pending.invalid/api"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            failGatewayPostCommitSyncOnce: true,
+            channelMutationScenario: "accepted"
+        )
+        launchQuality(context, sessionID: sessionID)
+
+        openSidebarTab("settings", in: context.app)
+        let serverAction = element(in: context.app, identifier: "action.settings.server_management")
+        XCTAssertTrue(serverAction.waitForExistence(timeout: 8) && serverAction.isHittable)
+        serverAction.click()
+        let addressField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(addressField.waitForExistence(timeout: 8))
+        replaceText(in: addressField, with: "\(normalizedAddress)/")
+        element(in: context.app, identifier: "action.settings.server.save").click()
+
+        let pendingToast = element(in: context.app, identifier: "feedback.toast.success")
+        XCTAssertTrue(
+            pendingToast.waitForExistence(timeout: 8),
+            "A committed gateway with recoverable sync work must report a user-visible result."
+        )
+        let pendingText = pendingToast.label.lowercased()
+        XCTAssertTrue(
+            pendingText.contains("sync") || pendingToast.label.contains("同步"),
+            "The result must identify pending sync instead of reporting a false gateway failure."
+        )
+        XCTAssertTrue(
+            addressField.waitForNonExistence(timeout: 8),
+            "A committed gateway must close the editor after reporting pending reconciliation."
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "action.settings.server_management")
+                .label.contains(normalizedAddress),
+            "The Settings row must expose the newly committed gateway while sync is pending."
+        )
+        XCTAssertFalse(
+            element(in: context.app, identifier: "feedback.settings.root").exists,
+            "A post-commit sync failure must not leak into the host Settings page."
+        )
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            channelMutationScenario: "accepted"
+        )
+        launchQuality(relaunched, sessionID: sessionID)
+        openSidebarTab("settings", in: relaunched.app)
+        XCTAssertTrue(
+            element(in: relaunched.app, identifier: "action.settings.server_management")
+                .label.contains(normalizedAddress),
+            "The committed gateway must remain authoritative after relaunch for recovery retry."
         )
     }
 
@@ -4324,17 +4695,22 @@ final class PushGo_macOSUITests: XCTestCase {
         messagePageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         messageSearchDelayMilliseconds: Int? = nil,
+        failMessageSearchOnce: Bool = false,
         legacyStore: String? = nil,
         failMessageLoad: Bool = false,
+        failMessagePageLoadOnce: Bool = false,
         failGatewaySwitchValidationOnce: Bool = false,
         failGatewaySwitchCommitOnce: Bool = false,
+        failGatewayPostCommitSyncOnce: Bool = false,
         failNotificationMaterialPersistenceOnce: Bool = false,
         messageRefreshScenario: String? = nil,
         eventCloseScenario: String? = nil,
         channelMutationScenario: String? = nil,
         expectedChannelMutationGatewayURL: String? = nil,
         allowCrossAppDataAccess: Bool = false,
-        skipPushAuthorization: Bool = true
+        skipPushAuthorization: Bool = true,
+        requestName: String? = nil,
+        requestArgs: [String: String] = [:]
     ) -> LaunchContext {
         XCTAssertTrue(
             isValidQualitySessionID(sessionID),
@@ -4364,10 +4740,13 @@ final class PushGo_macOSUITests: XCTestCase {
                 messagePageLoadDelayMilliseconds: messagePageLoadDelayMilliseconds,
                 messageRefreshDelayMilliseconds: messageRefreshDelayMilliseconds,
                 messageSearchDelayMilliseconds: messageSearchDelayMilliseconds,
+                failMessageSearchOnce: failMessageSearchOnce,
                 legacyStore: legacyStore,
                 failMessageLoad: failMessageLoad,
+                failMessagePageLoadOnce: failMessagePageLoadOnce,
                 failGatewaySwitchValidationOnce: failGatewaySwitchValidationOnce,
                 failGatewaySwitchCommitOnce: failGatewaySwitchCommitOnce,
+                failGatewayPostCommitSyncOnce: failGatewayPostCommitSyncOnce,
                 failNotificationMaterialPersistenceOnce: failNotificationMaterialPersistenceOnce,
                 messageRefreshScenario: messageRefreshScenario,
                 eventCloseScenario: eventCloseScenario,
@@ -4377,6 +4756,9 @@ final class PushGo_macOSUITests: XCTestCase {
             for: "PUSHGO_QUALITY_SESSION_BASE64",
             in: app
         )
+        if let requestName {
+            setAutomationRequest(name: requestName, args: requestArgs, in: app)
+        }
         let diagnosticRoot = FileManager.default.temporaryDirectory
             .appendingPathComponent("PushGo-macOS-quality-\(sessionID)", isDirectory: true)
         return LaunchContext(
@@ -4515,10 +4897,13 @@ final class PushGo_macOSUITests: XCTestCase {
         messagePageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         messageSearchDelayMilliseconds: Int? = nil,
+        failMessageSearchOnce: Bool = false,
         legacyStore: String? = nil,
         failMessageLoad: Bool = false,
+        failMessagePageLoadOnce: Bool = false,
         failGatewaySwitchValidationOnce: Bool = false,
         failGatewaySwitchCommitOnce: Bool = false,
+        failGatewayPostCommitSyncOnce: Bool = false,
         failNotificationMaterialPersistenceOnce: Bool = false,
         messageRefreshScenario: String? = nil,
         eventCloseScenario: String? = nil,
@@ -4528,8 +4913,11 @@ final class PushGo_macOSUITests: XCTestCase {
         var faults: [String: Any] = [
             "fail_local_store_initialization": failLocalStoreInitialization,
             "fail_message_load": failMessageLoad,
+            "fail_message_page_load_once": failMessagePageLoadOnce,
+            "fail_message_search_once": failMessageSearchOnce,
             "fail_gateway_switch_validation_once": failGatewaySwitchValidationOnce,
             "fail_gateway_switch_commit_once": failGatewaySwitchCommitOnce,
+            "fail_gateway_post_commit_sync_once": failGatewayPostCommitSyncOnce,
             "fail_notification_material_persistence_once": failNotificationMaterialPersistenceOnce,
         ]
         if let messageLoadDelayMilliseconds {
@@ -4920,9 +5308,7 @@ final class PushGo_macOSUITests: XCTestCase {
 
     @MainActor
     private func replaceText(in field: XCUIElement, with text: String) {
-        field.click()
-        field.typeKey("a", modifierFlags: .command)
-        field.typeText(text)
+        replaceTextUsingPasteboard(in: field, with: text)
     }
 
     @MainActor

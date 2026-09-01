@@ -31,6 +31,20 @@ struct MainTabContainerView: View {
 
     var body: some View {
         tabLayout
+            .overlay(alignment: .top) {
+                if let feedback = environment.notificationOpenController.pendingMessageUnavailableFeedback {
+                    AppInlineFeedbackBanner(
+                        message: feedback,
+                        tone: .danger,
+                        accessibilityID: "feedback.message.target_unavailable",
+                        dismissAction: {
+                            environment.notificationOpenController.pendingMessageUnavailableFeedback = nil
+                        }
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                }
+            }
             .pushgoTabBarMinimizeOnScroll()
             .background(
                 WindowTabReselectionObserver(visibleTabs: visibleTabs) { tab in
@@ -296,7 +310,7 @@ struct MainTabContainerView: View {
 
     private func handleTabBarTap(for tappedTab: MainTab) {
         guard tappedTab == selection else { return }
-        tabReselectLogger.info("Observed single tab reselect for \(tappedTab.automationIdentifier, privacy: .public)")
+        tabReselectLogger.info("Observed single tab reselect for \(tappedTab.accessibilityIdentifier, privacy: .public)")
         pendingMessageReselectTask?.cancel()
 
         switch tappedTab {
@@ -320,7 +334,7 @@ struct MainTabContainerView: View {
 
     private func handleTabBarDoubleTap(for tappedTab: MainTab) {
         guard tappedTab == selection else { return }
-        tabReselectLogger.info("Observed double tab reselect for \(tappedTab.automationIdentifier, privacy: .public)")
+        tabReselectLogger.info("Observed double tab reselect for \(tappedTab.accessibilityIdentifier, privacy: .public)")
         pendingMessageReselectTask?.cancel()
         pendingMessageReselectTask = nil
 

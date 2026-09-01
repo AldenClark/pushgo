@@ -19,6 +19,7 @@ final class NotificationOpenController {
     @ObservationIgnored private let showToast: ToastPresenter
 
     var pendingMessageToOpen: UUID?
+    var pendingMessageUnavailableFeedback: String?
     var pendingEventToOpen: String?
     var pendingThingToOpen: String?
     var pendingListToOpen: MainTab?
@@ -66,6 +67,7 @@ final class NotificationOpenController {
     func openSystemTarget(_ target: PushGoSystemOpenTarget) async {
         if target.destination == .list {
             pendingMessageToOpen = nil
+            pendingMessageUnavailableFeedback = nil
             pendingEventToOpen = nil
             pendingThingToOpen = nil
             switch target.kind {
@@ -130,6 +132,7 @@ final class NotificationOpenController {
                 await handleEntityOpenTarget(entityTarget)
                 return
             }
+            handleUnavailableMessageTarget()
         } catch {
             let wrapped = AppError.wrap(
                 error,
@@ -158,6 +161,7 @@ final class NotificationOpenController {
                 await handleEntityOpenTarget(entityTarget)
                 return
             }
+            handleUnavailableMessageTarget()
         } catch {
             let wrapped = AppError.wrap(
                 error,
@@ -182,11 +186,7 @@ final class NotificationOpenController {
                 )
                 return
             }
-            autoEnableDataPage("message")
-            pendingListToOpen = nil
-            pendingEventToOpen = nil
-            pendingThingToOpen = nil
-            pendingMessageToOpen = localMessageID
+            handleUnavailableMessageTarget()
         } catch {
             let wrapped = AppError.wrap(
                 error,
@@ -208,6 +208,7 @@ final class NotificationOpenController {
         pendingListToOpen = nil
         pendingEventToOpen = nil
         pendingThingToOpen = nil
+        pendingMessageUnavailableFeedback = nil
         pendingMessageToOpen = targetId
 
         if markAsReadInStore {
@@ -231,9 +232,22 @@ final class NotificationOpenController {
         }
     }
 
+    private func handleUnavailableMessageTarget() {
+        // A stale notification or deep link must not leave an unresolvable pending
+        // message target. Return the user to the canonical Messages list and explain
+        // why the requested detail was not opened.
+        autoEnableDataPage("message")
+        pendingMessageToOpen = nil
+        pendingEventToOpen = nil
+        pendingThingToOpen = nil
+        pendingListToOpen = .messages
+        pendingMessageUnavailableFeedback = localizationManager.localized("gateway_resource_not_found")
+    }
+
     private func handleEntityOpenTarget(_ target: EntityOpenTarget) async {
         pendingListToOpen = nil
         pendingMessageToOpen = nil
+        pendingMessageUnavailableFeedback = nil
         if target.entityType == "event" {
             autoEnableDataPage("event")
             pendingThingToOpen = nil

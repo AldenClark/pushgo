@@ -77,7 +77,9 @@
 - 正确内容、Retry、旧内容保留和超预算负控；
 - Store/VM/UI milestone 与参考设备预算。
 
-分页 failure/retry、超预算性能阈值和参考真机证据仍开放；不得从已完成的慢分页正向子项外推。
+三端 append 分页 failure/retry 已在各自既有分页主链中关闭：一次性失败必须显示 page-owned error、保留准确旧页且可操作，真实 Retry 后只能唯一有序追加，并继续原有准确数据/已读/badge/relaunch 终点。当前证据为 Android `../pushgo-android/build/quality-results/android-page-retry-final/summary.json`、iOS `build/quality-results/ios-page-retry-optimized/run-1-20260831-235842.xcresult`、macOS `build/quality-results/macos-page-retry-current-byte/run-20260831-235045.xcresult`。iOS 删除每次滑动前的重复可视窗口扫描后仍核对完整 125-ID 集，单方法从 220.939 秒降至 183.790 秒；macOS 按真实 `pageSize=50` 核对第一页 `124…75` 与第二页 `74…25` 的首尾和唯一性。超预算性能阈值和参考真机证据仍开放；不得从受控 Simulator/emulator/host 结果外推。
+
+最终 cursor/remainder 修复后的动态回执为 iOS `build/quality-results/ios-page-retry-final/run-1-20260901-001535.xcresult`（1/1、183.171 秒）和 macOS `build/quality-results/macos-page-retry-final/run-20260901-001358.xcresult`（1/1、28.121 秒）。随后只把已执行的逐行消费 helper 从 Xcode-only ViewModel 文件移动到 App 与 SwiftPM 共编译的 model 文件，产品调用不变；当前源码 partial-overlap/remainder 行为测试 1/1、相关 Swift 33/33、两端 Release 构建和独立红队复审均通过。
 
 ### WP3–WP6 完整能力迁移
 

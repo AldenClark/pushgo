@@ -36,6 +36,12 @@ final class PushGoAppDelegate: NSObject, NSApplicationDelegate, UNUserNotificati
         }
     }
 
+    func applicationDidBecomeActive(_: Notification) {
+        Task {
+            await PushRegistrationService.shared.applicationDidBecomeActive()
+        }
+    }
+
     private func bootstrapAutomationRuntimeIfNeeded() {
 #if DEBUG
         Task { @MainActor in

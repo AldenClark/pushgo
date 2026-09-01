@@ -408,6 +408,7 @@ struct SettingsView: View {
                 }
             }
             .buttonStyle(.appPlain)
+            .accessibilityIdentifier("action.settings.notification.open_system_settings")
         }
     }
 

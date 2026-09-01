@@ -164,6 +164,87 @@ final class PushGo_iOSUITests: XCTestCase {{
             impact["scopes"],
         )
 
+    def test_existing_change_plus_new_ui_test_selects_only_both_exact_scopes(self):
+        path = "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift"
+        old_source = self.swift_ui_test_source("before")
+        insertion = """\n    func testNewPurpose() {\n        XCTAssertTrue(true)\n    }\n"""
+        new_source = self.swift_ui_test_source("after").replace(
+            "\n    private func sharedFixture",
+            insertion + "\n    private func sharedFixture",
+        )
+        old_changed_line = next(
+            index for index, line in enumerate(old_source.splitlines(), 1) if '"before"' in line
+        )
+        new_changed_line = next(
+            index for index, line in enumerate(new_source.splitlines(), 1) if '"after"' in line
+        )
+        new_method_line = next(
+            index for index, line in enumerate(new_source.splitlines(), 1) if "func testNewPurpose" in line
+        )
+        impact = QUALITY_IMPACT.resolve_swift_ui_test_change(
+            path,
+            old_source,
+            new_source,
+            (
+                f"@@ -{old_changed_line},1 +{new_changed_line},1 @@\n-old\n+new\n"
+                f"@@ -{new_method_line - 1},0 +{new_method_line},3 @@\n+new method\n"
+            ),
+        )
+
+        self.assertEqual("exact-method", impact["selection"])
+        self.assertEqual(
+            [
+                "PushGo-iOSUITests/PushGo_iOSUITests/testChangedPurpose",
+                "PushGo-iOSUITests/PushGo_iOSUITests/testNewPurpose",
+            ],
+            impact["scopes"],
+        )
+
+    def test_existing_change_plus_new_test_and_helper_change_expands_to_class(self):
+        path = "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift"
+        old_source = self.swift_ui_test_source("before")
+        insertion = """\n    func testNewPurpose() {\n        XCTAssertTrue(true)\n    }\n"""
+        new_source = self.swift_ui_test_source("after").replace(
+            "\n    private func sharedFixture",
+            insertion + "\n    private func sharedFixture",
+        ).replace('"fixture"', '"changed fixture"')
+        old_changed_line = next(
+            index for index, line in enumerate(old_source.splitlines(), 1) if '"before"' in line
+        )
+        new_changed_line = next(
+            index for index, line in enumerate(new_source.splitlines(), 1) if '"after"' in line
+        )
+        new_method_line = next(
+            index for index, line in enumerate(new_source.splitlines(), 1) if "func testNewPurpose" in line
+        )
+        old_helper_line = next(
+            index for index, line in enumerate(old_source.splitlines(), 1) if '"fixture"' in line
+        )
+        new_helper_line = next(
+            index for index, line in enumerate(new_source.splitlines(), 1) if '"changed fixture"' in line
+        )
+        impact = QUALITY_IMPACT.resolve_swift_ui_test_change(
+            path,
+            old_source,
+            new_source,
+            (
+                f"@@ -{old_changed_line},1 +{new_changed_line},1 @@\n-old\n+new\n"
+                f"@@ -{new_method_line - 1},0 +{new_method_line},3 @@\n+new method\n"
+                f"@@ -{old_helper_line},1 +{new_helper_line},1 @@\n-old helper\n+new helper\n"
+            ),
+        )
+
+        self.assertEqual("changed-class", impact["selection"])
+        self.assertEqual(3, impact["expected_test_count"])
+        self.assertEqual(
+            {
+                "PushGo-iOSUITests/PushGo_iOSUITests/testChangedPurpose",
+                "PushGo-iOSUITests/PushGo_iOSUITests/testNewPurpose",
+                "PushGo-iOSUITests/PushGo_iOSUITests/testStablePurpose",
+            },
+            set(impact["scopes"]),
+        )
+
     def test_deleted_ui_test_source_blocks_before_any_unrelated_scope_runs(self):
         path = "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift"
         impact = QUALITY_IMPACT.resolve_swift_ui_test_change(
@@ -206,17 +287,22 @@ final class PushGo_iOSUITests: XCTestCase {{
             (
                 "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift",
                 "accessibility",
-                "testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation",
-                31,
+                (
+                    "testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation",
+                ),
+                32,
             ),
             (
                 "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift",
                 "system",
-                "testSystemNotificationClickPersistsAccurateMessageAndSurvivesRelaunch",
-                27,
+                (
+                    "testDeniedNotificationSettingsCardRecoversAfterSystemEnable",
+                    "testSystemNotificationClickPersistsAccurateMessageAndSurvivesRelaunch",
+                ),
+                31,
             ),
         )
-        for path, special_profile, method, expected_count in cases:
+        for path, special_profile, methods, expected_count in cases:
             with self.subTest(path=path):
                 source = (REPO / path).read_text()
                 impact = QUALITY_IMPACT.resolve_swift_ui_test_change(
@@ -230,10 +316,15 @@ final class PushGo_iOSUITests: XCTestCase {{
                 self.assertEqual(expected_count, impact["expected_test_count"])
                 self.assertEqual(expected_count, len(impact["scopes"]))
                 self.assertEqual(
-                    1, len(plan["required_ui_test_profile_scopes"][impact["platform"]][special_profile])
+                    len(methods),
+                    len(plan["required_ui_test_profile_scopes"][impact["platform"]][special_profile]),
                 )
-                self.assertTrue(
-                    plan["required_ui_test_profile_scopes"][impact["platform"]][special_profile][0].endswith(method)
+                self.assertEqual(
+                    set(methods),
+                    {
+                        scope.rsplit("/", 1)[-1]
+                        for scope in plan["required_ui_test_profile_scopes"][impact["platform"]][special_profile]
+                    },
                 )
 
     def test_removed_or_renamed_ui_test_blocks_instead_of_running_unrelated_fixed_scope(self):
@@ -311,13 +402,45 @@ final class PushGo_iOSUITests: XCTestCase {{
         self.assertEqual("pr", plan["recommended_lane"])
         self.assertIn("messages", plan["impacted_capabilities"])
         self.assertIn("iOS accurate content/search/delete/relaunch UI journeys", plan["minimum_evidence"])
+        self.assertIn("apple-ios-message-unavailable-route", plan["required_checks"])
         self.assertTrue(plan["manual_impact_review_required"])
+
+    def test_search_ui_selects_exact_cross_platform_recovery_oracles(self):
+        plan = self.plan("Apps/PushGo-iOS/UI/Screens/MessageSearchScreen.swift")
+
+        self.assertEqual("READY", plan["plan_status"])
+        self.assertEqual("pr", plan["recommended_lane"])
+        self.assertIn("search-filter", plan["impacted_capabilities"])
+        self.assertEqual(
+            {"apple-ios-message-search-recovery", "apple-macos-message-search-recovery"},
+            set(plan["required_checks"]),
+        )
+        self.assertIn(
+            "iOS and macOS failed search must not masquerade as empty or stale results; Retry reaches one exact canonical result and matching detail",
+            plan["minimum_evidence"],
+        )
+
+    def test_shared_deletion_owner_selects_exact_restore_and_commit_lifecycles(self):
+        plan = self.plan("Shared/Application/PendingLocalDeletionController.swift")
+
+        self.assertEqual("READY", plan["plan_status"])
+        self.assertEqual("pr", plan["recommended_lane"])
+        self.assertIn("delete-undo", plan["impacted_capabilities"])
+        self.assertEqual(
+            {
+                "apple-ios-message-delete-undo",
+                "apple-ios-message-delete-commit",
+                "apple-macos-message-delete-lifecycle",
+            },
+            set(plan["required_checks"]),
+        )
 
     def test_shared_store_expands_across_capabilities_and_escalates(self):
         plan = self.plan("Shared/Repositories/LocalDataStore.swift")
 
-        self.assertEqual("nightly", plan["recommended_lane"])
+        self.assertEqual("pr", plan["recommended_lane"])
         self.assertTrue({"messages", "events", "things", "ingress-recovery"}.issubset(plan["impacted_capabilities"]))
+        self.assertEqual(["apple-store-migration-reopen"], plan["required_checks"])
         self.assertTrue(plan["known_evidence_gaps"])
 
     def test_entity_screen_change_prefers_positive_pr_evidence(self):
@@ -422,10 +545,10 @@ final class PushGo_iOSUITests: XCTestCase {{
             "performance_sensitivity_scopes",
         )
 
-        self.assertEqual(29, len(discoverable))
+        self.assertEqual(33, len(discoverable))
         self.assertEqual(16, len(positive))
-        self.assertEqual(9, len(risk))
-        self.assertEqual(1, len(system))
+        self.assertEqual(12, len(risk))
+        self.assertEqual(2, len(system))
         self.assertEqual(1, len(preparation))
         self.assertEqual(1, len(performance))
         self.assertEqual(1, len(performance_sensitivity))
@@ -611,7 +734,10 @@ final class PushGo_iOSUITests: XCTestCase {{
         self.assertEqual("READY", plan["plan_status"])
         self.assertEqual("pr", plan["recommended_lane"])
         self.assertEqual(["channels"], plan["impacted_capabilities"])
-        self.assertEqual(["apple-ios-channel-positive"], plan["required_checks"])
+        self.assertEqual(
+            ["apple-ios-channel-positive", "apple-ios-channel-sheet-error-owner"],
+            plan["required_checks"],
+        )
         self.assertNotIn("gateway-settings", plan["impacted_capabilities"])
         self.assertNotIn("decryption-settings", plan["impacted_capabilities"])
 
@@ -664,17 +790,37 @@ final class PushGo_iOSUITests: XCTestCase {{
 
         self.assertEqual("READY", plan["plan_status"])
         self.assertEqual("pr", plan["recommended_lane"])
-        self.assertEqual(["app-launch", "primary-navigation"], plan["impacted_capabilities"])
+        self.assertEqual(
+            [
+                "app-launch",
+                "message-detail",
+                "messages",
+                "notification-route-actions",
+                "primary-navigation",
+            ],
+            plan["impacted_capabilities"],
+        )
         self.assertNotIn("mac-window-status-item", plan["impacted_capabilities"])
+        self.assertEqual(["apple-ios-message-unavailable-route"], plan["required_checks"])
 
     def test_macos_main_tab_ui_uses_pr_dynamic_sidebar_evidence_without_window_risk(self):
         plan = self.plan("Apps/PushGo-macOS/UI/Screens/MainTabContainerView.swift")
 
         self.assertEqual("READY", plan["plan_status"])
         self.assertEqual("pr", plan["recommended_lane"])
-        self.assertEqual(["app-launch", "primary-navigation"], plan["impacted_capabilities"])
+        self.assertEqual(
+            [
+                "app-launch",
+                "message-detail",
+                "messages",
+                "notification-route-actions",
+                "primary-navigation",
+            ],
+            plan["impacted_capabilities"],
+        )
         self.assertNotIn("mac-window-status-item", plan["impacted_capabilities"])
         self.assertIn("unread title/badge", " ".join(plan["minimum_evidence"]))
+        self.assertEqual(["apple-macos-message-unavailable-route"], plan["required_checks"])
 
     def test_macos_window_presenter_retains_nightly_window_lifecycle_evidence(self):
         plan = self.plan("Shared/Application/MacMainWindowPresenter.swift")

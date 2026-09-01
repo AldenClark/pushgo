@@ -119,6 +119,47 @@ struct NotificationOpenControllerTests {
     }
 
     @Test
+    func unavailableMessageTargetClearsPendingDetailAndReturnsToMessagesWithFeedback() async {
+        await withIsolatedLocalDataStore { store, _ in
+            let state = await Task { @MainActor in
+                var enabledPages: [String] = []
+                var feedback: [String] = []
+                let controller = NotificationOpenController(
+                    dataStore: store,
+                    localizationManager: LocalizationManager(),
+                    messageStateCoordinatorProvider: { nil },
+                    refreshCountsAndNotify: {},
+                    removeDeliveredNotificationIfNeeded: { _ in },
+                    autoEnableDataPage: { enabledPages.append($0) },
+                    showToast: { feedback.append($0) }
+                )
+                controller.pendingMessageToOpen = UUID()
+                controller.pendingEventToOpen = "event-stale"
+                controller.pendingThingToOpen = "thing-stale"
+
+                await controller.handleNotificationOpen(messageId: "message-already-deleted")
+                return (
+                    controller.pendingMessageToOpen,
+                    controller.pendingEventToOpen,
+                    controller.pendingThingToOpen,
+                    controller.pendingListToOpen,
+                    controller.pendingMessageUnavailableFeedback,
+                    enabledPages,
+                    feedback
+                )
+            }.value
+
+            #expect(state.0 == nil)
+            #expect(state.1 == nil)
+            #expect(state.2 == nil)
+            #expect(state.3 == .messages)
+            #expect(state.4?.isEmpty == false)
+            #expect(state.5 == ["message"])
+            #expect(state.6.isEmpty)
+        }
+    }
+
+    @Test
     func openingSystemEntityTargetsRouteThroughPendingEntities() async {
         await withIsolatedLocalDataStore { store, _ in
             let opened = await Task { @MainActor in

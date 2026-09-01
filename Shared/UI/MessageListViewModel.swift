@@ -128,6 +128,7 @@ final class MessageListViewModel {
     private(set) var unreadSessionRetainedReadCount: Int = 0
     private(set) var hasMorePages: Bool = false
     private(set) var isLoadingPage: Bool = false
+    private(set) var pageLoadError: AppError?
     var error: AppError?
 
     private let environment: AppEnvironment
@@ -153,6 +154,7 @@ final class MessageListViewModel {
     @ObservationIgnored private var qualityDelayConsumed = false
     @ObservationIgnored private var qualityPageDelayConsumed = false
     @ObservationIgnored private var remainingQualityFailures: Int
+    @ObservationIgnored private var remainingQualityPageFailures: Int
 #endif
 
     private struct RefreshSnapshot {
@@ -176,6 +178,7 @@ final class MessageListViewModel {
         dataStore = self.environment.dataStore
 #if DEBUG
         remainingQualityFailures = PushGoAutomationContext.qualitySession?.faults.failMessageLoad == true ? 1 : 0
+        remainingQualityPageFailures = PushGoAutomationContext.qualitySession?.faults.failMessagePageLoadOnce == true ? 1 : 0
 #endif
     }
 
@@ -192,6 +195,12 @@ final class MessageListViewModel {
         remainingQualityFailures = 0
 #endif
         await refresh()
+    }
+
+    func retryPageAfterFailure() async {
+        guard pageLoadError != nil else { return }
+        pageLoadError = nil
+        await loadNextPage()
     }
 
     func reconcileUnreadFilterSession() async {
@@ -460,7 +469,7 @@ final class MessageListViewModel {
     }
 
     func loadMoreIfNeeded(currentItem: PushMessageSummary) async {
-        guard hasMorePages, !isLoadingPage else { return }
+        guard hasMorePages, !isLoadingPage, pageLoadError == nil else { return }
         guard filteredMessages.last?.id == currentItem.id else { return }
         await loadNextPage()
     }
@@ -558,6 +567,7 @@ final class MessageListViewModel {
     private func beginObservedReload() {
         slowLoadTask?.cancel()
         error = nil
+        pageLoadError = nil
         loadState = .loading
         slowLoadTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(1))
@@ -688,6 +698,7 @@ final class MessageListViewModel {
 
     private func loadNextPage() async {
         guard !isLoadingPage else { return }
+        pageLoadError = nil
         isLoadingPage = true
         defer { isLoadingPage = false }
 
@@ -702,10 +713,24 @@ final class MessageListViewModel {
                 return
             }
         }
+        if remainingQualityPageFailures > 0 {
+            remainingQualityPageFailures -= 1
+            pageLoadError = AppError.wrap(
+                PushGoQualityInjectedMessageLoadError.requestedFailure,
+                fallbackMessage: LocalizationProvider.localized("message_load_failed"),
+                code: "quality_message_page_load_failure"
+            )
+            return
+        }
 #endif
 
         do {
-            let page = try await loadVisiblePage(after: nextCursor, targetVisibleCount: pageSize)
+            let existingIDs = Set(filteredMessages.map(\.id))
+            let page = try await loadVisiblePage(
+                after: nextCursor,
+                targetVisibleCount: pageSize,
+                excludingMessageIDs: existingIDs
+            )
             if resetStaleSelectionIfNeeded() {
                 return
             }
@@ -714,9 +739,9 @@ final class MessageListViewModel {
             hasMorePages = page.hasMorePages
             trimCachedMessagesIfNeeded()
         } catch let appError as AppError {
-            self.error = appError
+            pageLoadError = appError
         } catch {
-            self.error = AppError.wrap(
+            pageLoadError = AppError.wrap(
                 error,
                 fallbackMessage: LocalizationProvider.localized("operation_failed"),
                 code: "message_page_load_failed"
@@ -989,7 +1014,8 @@ final class MessageListViewModel {
 
     private func loadVisiblePage(
         after cursor: MessagePageCursor?,
-        targetVisibleCount: Int
+        targetVisibleCount: Int,
+        excludingMessageIDs: Set<UUID> = []
     ) async throws -> VisiblePageSnapshot {
         guard targetVisibleCount > 0 else {
             return VisiblePageSnapshot(messages: [], nextCursor: cursor, hasMorePages: false)
@@ -997,6 +1023,7 @@ final class MessageListViewModel {
 
         var results: [PushMessageSummary] = []
         var currentCursor = cursor
+        var seenMessageIDs = excludingMessageIDs
 
         while results.count < targetVisibleCount {
             let page = try await dataStore.loadMessageSummariesPage(
@@ -1012,13 +1039,26 @@ final class MessageListViewModel {
                 return VisiblePageSnapshot(messages: results, nextCursor: currentCursor, hasMorePages: false)
             }
 
-            currentCursor = page.last.map {
-                MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
+            let visibleMessageIDs = Set(applyFacetSelections(to: page).map(\.id))
+            let consumed = try consumeUniqueMessagePage(
+                page,
+                targetRemaining: targetVisibleCount - results.count,
+                seenIDs: &seenMessageIDs,
+                currentCursor: &currentCursor,
+                id: \.id,
+                cursor: {
+                    MessagePageCursor(receivedAt: $0.receivedAt, id: $0.id, isRead: $0.isRead)
+                },
+                isVisible: { visibleMessageIDs.contains($0.id) }
+            )
+            results.append(contentsOf: consumed.appended)
+            if consumed.reachedTarget {
+                return VisiblePageSnapshot(
+                    messages: results,
+                    nextCursor: currentCursor,
+                    hasMorePages: true
+                )
             }
-
-            let visiblePage = applyFacetSelections(to: page)
-            let needed = targetVisibleCount - results.count
-            results.append(contentsOf: visiblePage.prefix(needed))
 
             if page.count < pageSize {
                 return VisiblePageSnapshot(messages: results, nextCursor: currentCursor, hasMorePages: false)

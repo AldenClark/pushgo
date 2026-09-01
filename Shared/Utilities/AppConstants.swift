@@ -172,9 +172,12 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
     let messagePageLoadDelayMilliseconds: Int?
     let messageRefreshDelayMilliseconds: Int?
     let messageSearchDelayMilliseconds: Int?
+    let failMessageSearchOnce: Bool
     let failMessageLoad: Bool
+    let failMessagePageLoadOnce: Bool
     let failGatewaySwitchValidationOnce: Bool
     let failGatewaySwitchCommitOnce: Bool
+    let failGatewayPostCommitSyncOnce: Bool
     let failNotificationMaterialPersistenceOnce: Bool
     let failChannelSubscriptionPersistenceOnce: Bool
 
@@ -185,9 +188,12 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         messagePageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         messageSearchDelayMilliseconds: Int? = nil,
+        failMessageSearchOnce: Bool = false,
         failMessageLoad: Bool = false,
+        failMessagePageLoadOnce: Bool = false,
         failGatewaySwitchValidationOnce: Bool = false,
         failGatewaySwitchCommitOnce: Bool = false,
+        failGatewayPostCommitSyncOnce: Bool = false,
         failNotificationMaterialPersistenceOnce: Bool = false,
         failChannelSubscriptionPersistenceOnce: Bool = false
     ) {
@@ -197,9 +203,12 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         self.messagePageLoadDelayMilliseconds = messagePageLoadDelayMilliseconds
         self.messageRefreshDelayMilliseconds = messageRefreshDelayMilliseconds
         self.messageSearchDelayMilliseconds = messageSearchDelayMilliseconds
+        self.failMessageSearchOnce = failMessageSearchOnce
         self.failMessageLoad = failMessageLoad
+        self.failMessagePageLoadOnce = failMessagePageLoadOnce
         self.failGatewaySwitchValidationOnce = failGatewaySwitchValidationOnce
         self.failGatewaySwitchCommitOnce = failGatewaySwitchCommitOnce
+        self.failGatewayPostCommitSyncOnce = failGatewayPostCommitSyncOnce
         self.failNotificationMaterialPersistenceOnce = failNotificationMaterialPersistenceOnce
         self.failChannelSubscriptionPersistenceOnce = failChannelSubscriptionPersistenceOnce
     }
@@ -211,9 +220,12 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         case messagePageLoadDelayMilliseconds = "message_page_load_delay_ms"
         case messageRefreshDelayMilliseconds = "message_refresh_delay_ms"
         case messageSearchDelayMilliseconds = "message_search_delay_ms"
+        case failMessageSearchOnce = "fail_message_search_once"
         case failMessageLoad = "fail_message_load"
+        case failMessagePageLoadOnce = "fail_message_page_load_once"
         case failGatewaySwitchValidationOnce = "fail_gateway_switch_validation_once"
         case failGatewaySwitchCommitOnce = "fail_gateway_switch_commit_once"
+        case failGatewayPostCommitSyncOnce = "fail_gateway_post_commit_sync_once"
         case failNotificationMaterialPersistenceOnce = "fail_notification_material_persistence_once"
         case failChannelSubscriptionPersistenceOnce = "fail_channel_subscription_persistence_once"
     }
@@ -244,7 +256,15 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
             Int.self,
             forKey: .messageSearchDelayMilliseconds
         )
+        failMessageSearchOnce = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .failMessageSearchOnce
+        ) ?? false
         failMessageLoad = try container.decodeIfPresent(Bool.self, forKey: .failMessageLoad) ?? false
+        failMessagePageLoadOnce = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .failMessagePageLoadOnce
+        ) ?? false
         failGatewaySwitchValidationOnce = try container.decodeIfPresent(
             Bool.self,
             forKey: .failGatewaySwitchValidationOnce
@@ -252,6 +272,10 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         failGatewaySwitchCommitOnce = try container.decodeIfPresent(
             Bool.self,
             forKey: .failGatewaySwitchCommitOnce
+        ) ?? false
+        failGatewayPostCommitSyncOnce = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .failGatewayPostCommitSyncOnce
         ) ?? false
         failNotificationMaterialPersistenceOnce = try container.decodeIfPresent(
             Bool.self,

@@ -10,6 +10,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+try:
+    from scripts import quality_result
+except ModuleNotFoundError:
+    import quality_result
+
 
 REQUIRED_FIELDS = {
     "recorded_at",
@@ -17,7 +22,7 @@ REQUIRED_FIELDS = {
     "product_capability_status",
     "test_system_status",
 }
-VALID_STATUSES = {"PASSED", "FAILED", "FLAKY", "BLOCKED", "NOT_RUN", "WAIVED"}
+VALID_STATUSES = quality_result.STATUSES
 
 
 def parse_args() -> argparse.Namespace:
@@ -87,15 +92,14 @@ def load_receipts(inputs: list[str], output: Path) -> list[dict[str, Any]]:
             if formal_candidate:
                 raise ValueError(f"{source}: formal quality receipt is missing required fields")
             continue
+        recorded_at = parse_recorded_at(payload["recorded_at"], source)
+        try:
+            quality_result.validate_receipt_payload(payload, as_of=recorded_at.date())
+        except (OSError, json.JSONDecodeError, ValueError) as error:
+            raise ValueError(f"{source}: invalid receipt contract: {error}") from error
         lane = payload["lane"]
         product_status = payload["product_capability_status"]
         test_system_status = payload["test_system_status"]
-        if not isinstance(lane, str) or not lane:
-            raise ValueError(f"{source}: lane must be a non-empty string")
-        if product_status not in VALID_STATUSES:
-            raise ValueError(f"{source}: invalid product_capability_status: {product_status}")
-        if test_system_status not in VALID_STATUSES:
-            raise ValueError(f"{source}: invalid test_system_status: {test_system_status}")
         selected = string_list(payload, "selected_claims", source)
         executed = string_list(payload, "executed_claims", source)
         incomplete = string_list(payload, "incomplete_selected_claims", source)
@@ -112,7 +116,7 @@ def load_receipts(inputs: list[str], output: Path) -> list[dict[str, Any]]:
         receipts.append(
             {
                 "source": str(source),
-                "recorded_at": parse_recorded_at(payload["recorded_at"], source),
+                "recorded_at": recorded_at,
                 "lane": lane,
                 "product_status": product_status,
                 "test_system_status": test_system_status,

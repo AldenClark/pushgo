@@ -39,6 +39,8 @@ final class AppEnvironment {
         PushGoAutomationContext.qualitySession?.faults.failGatewaySwitchValidationOnce == true ? 1 : 0
     @ObservationIgnored private var remainingQualityGatewaySwitchCommitFailures =
         PushGoAutomationContext.qualitySession?.faults.failGatewaySwitchCommitOnce == true ? 1 : 0
+    @ObservationIgnored private var remainingQualityGatewayPostCommitSyncFailures =
+        PushGoAutomationContext.qualitySession?.faults.failGatewayPostCommitSyncOnce == true ? 1 : 0
     @ObservationIgnored private var qualityEventCloseAttemptCount = 0
     @ObservationIgnored private var isQualityEventCloseRoundTripInFlight = false
 #endif
@@ -1084,6 +1086,17 @@ final class AppEnvironment {
     }
 
     func syncSubscriptionsIfNeeded() async throws {
+#if DEBUG
+        if remainingQualityGatewayPostCommitSyncFailures > 0 {
+            remainingQualityGatewayPostCommitSyncFailures -= 1
+            throw AppError.typedLocal(
+                code: "quality_gateway_post_commit_sync_failed",
+                category: .network,
+                message: localizationManager.localized("operation_failed"),
+                detail: "quality gateway switch committed but subscription sync failed"
+            )
+        }
+#endif
         if isQualityChannelMutationSession {
             await refreshChannelSubscriptions(syncProviderRoute: false)
             return

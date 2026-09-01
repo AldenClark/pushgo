@@ -35,6 +35,20 @@ struct MainTabContainerView: View {
     @ViewBuilder
     private func configuredRootView<Content: View>(_ content: Content) -> some View {
         content
+            .overlay(alignment: .top) {
+                if let feedback = environment.notificationOpenController.pendingMessageUnavailableFeedback {
+                    AppInlineFeedbackBanner(
+                        message: feedback,
+                        tone: .danger,
+                        accessibilityID: "feedback.message.target_unavailable",
+                        dismissAction: {
+                            environment.notificationOpenController.pendingMessageUnavailableFeedback = nil
+                        }
+                    )
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+                }
+            }
             .task {
                 guard !didRefreshAuthorizationStatus else { return }
                 didRefreshAuthorizationStatus = true

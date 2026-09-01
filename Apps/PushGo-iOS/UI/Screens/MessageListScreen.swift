@@ -72,6 +72,13 @@ struct MessageListScreen: View {
                 publishAutomationState()
 #endif
             }
+            .onChange(of: environment.notificationOpenController.pendingMessageUnavailableFeedback) { _, feedback in
+                // A stale notification/deep link has an explicit list fallback. Do
+                // not leave a previously selected Message sheet covering that result.
+                if feedback != nil {
+                    selectedMessage = nil
+                }
+            }
             .onChange(of: scenePhase) { _, newValue in
                 if newValue == .active {
                     openPendingMessageIfNeeded()
@@ -393,6 +400,8 @@ struct MessageListScreen: View {
                     if searchResults.isEmpty {
                         if searchViewModel.isSearching {
                             searchProgressRow
+                        } else if searchViewModel.searchFailed {
+                            searchFailureRow
                         } else {
                             searchPlaceholderRow
                         }
@@ -463,6 +472,8 @@ struct MessageListScreen: View {
                         .listRowSeparator(.hidden)
                         .accessibilityElement(children: .combine)
                         .accessibilityIdentifier("state.messages.page.loading")
+                    } else if viewModel.pageLoadError != nil {
+                        messagePageFailureRow
                     }
                 }
             }
@@ -497,6 +508,25 @@ struct MessageListScreen: View {
                 scrollToTopIfNeeded(proxy)
             }
         }
+    }
+
+    private var messagePageFailureRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.secondary)
+            Text(localizationManager.localized("message_load_failed"))
+                .font(.callout)
+            Spacer(minLength: 8)
+            Button(localizationManager.localized("retry")) {
+                Task { await viewModel.retryPageAfterFailure() }
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("action.messages.page.retry")
+        }
+        .padding(.vertical, 8)
+        .listRowSeparator(.hidden)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("state.messages.page.failed")
     }
 
     @ViewBuilder
@@ -639,6 +669,28 @@ struct MessageListScreen: View {
         .listRowInsets(EdgeInsets())
         .listRowBackground(Group { Color.clear })
         .hideListSeparator()
+    }
+
+    private var searchFailureRow: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+            Text(localizationManager.localized("operation_failed"))
+                .font(.headline)
+            Button(localizationManager.localized("retry")) {
+                searchViewModel.retrySearch()
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("action.messages.search.retry")
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.vertical, 60)
+        .listRowInsets(EdgeInsets())
+        .listRowBackground(Group { Color.clear })
+        .hideListSeparator()
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("state.messages.search.failed")
     }
 }
 

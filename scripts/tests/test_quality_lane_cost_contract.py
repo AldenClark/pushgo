@@ -7,6 +7,60 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 class QualityLaneCostContractTests(unittest.TestCase):
+    def test_apple_runners_do_not_silently_promote_native_runtime_warnings(self) -> None:
+        for runner_name in (
+            "run_ios_ui_tests.sh",
+            "run_macos_ui_tests.sh",
+            "run_ios_system_notification_test.sh",
+        ):
+            with self.subTest(runner=runner_name):
+                runner = (REPO / "scripts" / runner_name).read_text()
+                self.assertIn("--reject-runtime-warnings", runner)
+                self.assertIn("registered_apple_runtime_warning", runner)
+                self.assertIn("unknown_apple_runtime_warning", runner)
+                self.assertIn("status=FLAKY", runner)
+
+    def test_macos_ui_text_entry_uses_the_real_paste_command_not_xctest_typing(self) -> None:
+        source = (REPO / "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift").read_text()
+
+        self.assertNotIn(".typeText(", source)
+        self.assertIn("field.typeKey(\"v\", modifierFlags: .command)", source)
+
+    def test_search_recovery_impact_checks_run_only_the_exact_user_journeys(self) -> None:
+        runner = (REPO / "scripts/quality_test.sh").read_text()
+
+        checks = {
+            "apple-ios-message-search-recovery": (
+                "PushGo-iOSUITests/PushGo_iOSUITests/"
+                "testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail"
+            ),
+            "apple-macos-message-search-recovery": (
+                "PushGo-macOSUITests/PushGo_macOSUITests/"
+                "testMessageSearchFailureShowsOwnedRetryAndRecoversToExactDetail"
+            ),
+        }
+        for check, scope in checks.items():
+            with self.subTest(check=check):
+                body = runner.split(f"      {check})", 1)[1].split("        ;;", 1)[0]
+                self.assertIn(scope, body)
+                self.assertIn("MAX_RETRIES=0", body)
+                self.assertNotIn("nightly_negative_ui_scopes", body)
+
+    def test_ios_performance_lane_persists_user_outcome_metrics_from_xcresult(self) -> None:
+        runner = (REPO / "scripts/quality_test.sh").read_text()
+        extractor = (REPO / "scripts/extract_ios_performance_evidence.py").read_text()
+        performance_function = runner.split("run_performance() {", 1)[1].split("\n}", 1)[0]
+
+        self.assertIn("apple-ios-performance-runner.log", performance_function)
+        self.assertIn("ios_performance_result_bundle_missing", performance_function)
+        self.assertIn("extract_ios_performance_evidence.py", performance_function)
+        self.assertIn("apple-ios-performance-evidence.json", performance_function)
+        self.assertIn("testPreparedLargeMessageStoreColdLaunchReachesAccurateContent", extractor)
+        self.assertIn("simulator_launch_to_accurate_content_seconds", extractor)
+        self.assertIn("matching detail", extractor)
+        self.assertIn('"simulator_only": True', extractor)
+        self.assertIn('"physical_release_baseline": "NOT_RUN"', extractor)
+
     def test_entity_tab_reselection_reuses_existing_positive_journeys(self) -> None:
         runtime = (REPO / "Shared/UI/AutomationRuntime.swift").read_text()
         source = (REPO / "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift").read_text()
@@ -16,11 +70,11 @@ class QualityLaneCostContractTests(unittest.TestCase):
             "func testEventCloseFailureKeepsAccurateDetailBlocksDuplicateAndRetryPersists()", 1
         )[0]
         thing_method = source.split(
-            "func testImportedThingFixtureCanOpenThingDetail()", 1
+            "func testThingLifecycleFiltersRelationsAndUnavailableTargetFallback()", 1
         )[1].split("\n    @MainActor", 1)[0]
 
         self.assertEqual(1, source.count("func testEventClosePersistsAndOngoingFilterReflectsRealProjection()"))
-        self.assertEqual(1, source.count("func testImportedThingFixtureCanOpenThingDetail()"))
+        self.assertEqual(1, source.count("func testThingLifecycleFiltersRelationsAndUnavailableTargetFallback()"))
         self.assertEqual(2, runtime.count("(0..<16).map(quality"))
         self.assertIn('identifier: "event.row.quality-event-navigation-08"', event_method)
         self.assertIn('identifier: "thing.row.quality-thing-navigation-08"', thing_method)
@@ -66,8 +120,11 @@ class QualityLaneCostContractTests(unittest.TestCase):
     def test_apple_ui_runners_share_one_pushgo_local_nonblocking_host_lease(self) -> None:
         ios_runner = (REPO / "scripts/run_ios_ui_tests.sh").read_text()
         mac_runner = (REPO / "scripts/run_macos_ui_tests.sh").read_text()
+        ios_system_notification_runner = (
+            REPO / "scripts/run_ios_system_notification_test.sh"
+        ).read_text()
 
-        for runner in (ios_runner, mac_runner):
+        for runner in (ios_runner, mac_runner, ios_system_notification_runner):
             self.assertIn("build/.pushgo-apple-ui-tests.lock", runner)
             self.assertIn("/usr/bin/lockf -s -t 0 9", runner)
             self.assertIn("reason=pushgo_apple_ui_lease_busy", runner)
@@ -76,6 +133,24 @@ class QualityLaneCostContractTests(unittest.TestCase):
             self.assertIn("-collect-test-diagnostics never", runner)
             self.assertNotIn("killall Simulator", runner)
             self.assertNotIn("killall CoreSimulator", runner)
+
+    def test_ios_channel_copy_reuses_existing_lifecycle_and_external_system_oracle(self) -> None:
+        ios_runner = (REPO / "scripts/run_ios_ui_tests.sh").read_text()
+        ios_source = (REPO / "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift").read_text()
+        method_name = "testChannelCreateRenameAndBothUnsubscribeOutcomesPersist"
+        method = ios_source.split(f"func {method_name}()", 1)[1].split(
+            "func testChannelRemoteRejectionStaysInSheetAndRetryPersists()", 1
+        )[0]
+
+        self.assertEqual(1, ios_source.count(f"func {method_name}()"))
+        self.assertIn('let copiedChannelID = "01H00000000000000000000003"', method)
+        self.assertIn("tapWhenHittable(\n            createdRow", method)
+        self.assertNotIn("waitForExistence(timeout: 5)", method.split("let copiedChannelID", 1)[1])
+        self.assertIn(f'channel_copy_scope="PushGo-iOSUITests/PushGo_iOSUITests/{method_name}"', ios_runner)
+        self.assertIn('xcrun simctl pbcopy "$target"', ios_runner)
+        self.assertIn('xcrun simctl pbpaste "$target"', ios_runner)
+        self.assertIn('external_pasteboard_oracle=PASSED', ios_runner)
+        self.assertNotIn("func testChannelCopy", ios_source)
 
     def test_high_unread_navigation_reuses_both_core_positive_journeys(self) -> None:
         quality_test = (REPO / "scripts/quality_test.sh").read_text()
@@ -595,6 +670,7 @@ class QualityLaneCostContractTests(unittest.TestCase):
         runner = (REPO / "scripts/quality_test.sh").read_text()
         macos_runner = (REPO / "scripts/run_macos_ui_tests.sh").read_text()
         macos_source = (REPO / "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift").read_text()
+        app_delegate_source = (REPO / "Apps/PushGo-macOS/App/PushGoAppDelegate.swift").read_text()
 
         self.assertIn("macos-system-notification)\n    run_macos_system_notification", runner)
         release_body = runner.split("  release)\n", 1)[1].split("  *)\n", 1)[0]
@@ -606,6 +682,8 @@ class QualityLaneCostContractTests(unittest.TestCase):
         system = self._array_scopes(macos_runner, "system_scopes")
         self.assertEqual(
             [
+                "PushGo-macOSUITests/PushGo_macOSUITests/"
+                "testDeniedNotificationSettingsCardRecoversAfterSystemEnable",
                 "PushGo-macOSUITests/PushGo_macOSUITests/"
                 "testSystemNotificationClickPersistsAccurateMessageAndSurvivesRelaunch"
             ],
@@ -629,6 +707,22 @@ class QualityLaneCostContractTests(unittest.TestCase):
         self.assertIn("value CONTAINS", notification_journey)
         self.assertNotIn('label == %@", title', notification_journey)
 
+        permission_recovery = macos_source.split(
+            "func testDeniedNotificationSettingsCardRecoversAfterSystemEnable",
+            1,
+        )[1].split("\n    @MainActor", 1)[0]
+        self.assertIn("skipPushAuthorization: false", permission_recovery)
+        self.assertIn("allowCrossAppDataAccess: true", permission_recovery)
+        self.assertIn('let sessionID = "macos-permission-', permission_recovery)
+        self.assertIn('identifier: "allow-notifications"', permission_recovery)
+        self.assertIn('identifier: "action.settings.notification.open_system_settings"', permission_recovery)
+        self.assertNotIn("skipPushAuthorization: true", permission_recovery)
+        activation = app_delegate_source.split(
+            "func applicationDidBecomeActive(_: Notification)",
+            1,
+        )[1].split("\n    }", 1)[0]
+        self.assertIn("PushRegistrationService.shared.applicationDidBecomeActive()", activation)
+
     def test_macos_preparation_calibration_is_not_charged_to_ordinary_batches(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()
         macos_runner = (REPO / "scripts/run_macos_ui_tests.sh").read_text()
@@ -649,6 +743,7 @@ class QualityLaneCostContractTests(unittest.TestCase):
         runner = (REPO / "scripts/quality_test.sh").read_text()
 
         self.assertEqual(1, runner.count("apple-ios-channel-positive)"))
+        self.assertEqual(1, runner.count("apple-ios-channel-sheet-error-owner)"))
         self.assertEqual(1, runner.count("apple-macos-channel-positive)"))
         self.assertEqual(
             1,
@@ -665,6 +760,51 @@ class QualityLaneCostContractTests(unittest.TestCase):
             ),
         )
 
+    def test_store_impact_check_runs_the_real_migration_and_reopen_oracle(self) -> None:
+        runner = (REPO / "scripts/quality_test.sh").read_text()
+
+        self.assertEqual(1, runner.count("apple-store-migration-reopen)"))
+        store_check = runner.split("apple-store-migration-reopen)", 1)[1].split(
+            "        ;;", 1
+        )[0]
+        self.assertIn(
+            "swift test --package-path \"$repo_root\" --filter "
+            "currentV24StorePreservesPendingDeletionThroughV25AndReopen",
+            store_check,
+        )
+        self.assertIn("identity, state, deadline, and Undo semantics", store_check)
+
+    def test_core_only_store_impact_uses_a_bounded_disk_reserve_without_weakening_ui_reserve(self) -> None:
+        runner = (REPO / "scripts/quality_test.sh").read_text()
+
+        self.assertIn('"$lane" == "changed-tests"', runner)
+        self.assertIn('checks == {"apple-store-migration-reopen"}', runner)
+        self.assertIn("all(isinstance(items, list) and not items for items in scopes.values())", runner)
+        self.assertIn("print(1073741824)", runner)
+        self.assertIn("print(5368709120)", runner)
+        self.assertIn('QUALITY_MIN_FREE_BYTES:-5368709120', runner)
+
+    def test_message_unavailable_route_impact_checks_run_only_the_owning_journeys(self) -> None:
+        runner = (REPO / "scripts/quality_test.sh").read_text()
+
+        self.assertEqual(1, runner.count("apple-ios-message-unavailable-route)"))
+        self.assertEqual(1, runner.count("apple-macos-message-unavailable-route)"))
+        unavailable_body = runner.split("apple-ios-message-unavailable-route)", 1)[1].split(
+            "        ;;", 1
+        )[0]
+        self.assertIn(
+            'TEST_SCOPES="PushGo-iOSUITests/PushGo_iOSUITests/'
+            'testQualityMessageDeleteWithoutUndoPermanentlyRemovesOnlyTargetAcrossRelaunch"',
+            unavailable_body,
+        )
+        self.assertEqual(
+            1,
+            runner.count(
+                'TEST_SCOPES="PushGo-macOSUITests/PushGo_macOSUITests/'
+                'testUnavailableMessageRouteReturnsToListAndKeepsMessagesUsable"'
+            ),
+        )
+
     def test_settings_ui_impact_checks_reuse_minimum_platform_purpose_journeys(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()
         ios_source = (REPO / "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift").read_text()
@@ -677,6 +817,8 @@ class QualityLaneCostContractTests(unittest.TestCase):
             runner.count(
                 'TEST_SCOPES="PushGo-iOSUITests/PushGo_iOSUITests/'
                 'testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch,'
+                'PushGo-iOSUITests/PushGo_iOSUITests/'
+                'testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch,'
                 'PushGo-iOSUITests/PushGo_iOSUITests/'
                 'testEncryptedMessageRecoversAfterConfiguringKeyAndSurvivesRelaunch"'
             ),
@@ -708,6 +850,10 @@ class QualityLaneCostContractTests(unittest.TestCase):
             "func testGatewayCandidateMustRegisterBeforeCommitAndPersistsAfterRelaunch()",
             1,
         )[1].split("\n    @MainActor\n    func ", 1)[0]
+        ios_gateway_positive = ios_source.split(
+            "func testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch()",
+            1,
+        )[1].split("\n    func test", 1)[0]
         macos_gateway_risk = macos_source.split(
             "func testInvalidServerAddressShowsInlineFeedbackInsteadOfToast()",
             1,
@@ -727,6 +873,9 @@ class QualityLaneCostContractTests(unittest.TestCase):
         self.assertIn('identifier: "action.channels.add"', macos_gateway_positive)
         self.assertIn('identifier: "channel.row.01H00000000000000000000003"', macos_gateway_positive)
         self.assertIn("The exact post-switch Channel result must remain", macos_gateway_positive)
+        self.assertIn('channelMutationScenario: "accepted"', ios_gateway_positive)
+        self.assertIn("A post-commit Channel operation must use", ios_gateway_positive)
+        self.assertIn("Relaunch must not reload channel data owned by the previous gateway", ios_gateway_positive)
         self.assertIn("failGatewaySwitchValidationOnce: true", macos_gateway_risk)
         self.assertIn("invalidAddressFeedback", macos_gateway_risk)
         self.assertIn('predicate: NSPredicate(format: "label != %@"', macos_gateway_risk)

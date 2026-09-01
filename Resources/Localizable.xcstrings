@@ -7616,6 +7616,29 @@
         }
       }
     },
+    "server_configuration_saved_sync_pending" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gateway switched; channel sync is pending and will retry automatically."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "网关已切换，频道同步待完成，稍后会自动重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "網關已切換，頻道同步待完成，稍後會自動重試。"
+          }
+        }
+      }
+    },
     "server_management" : {
       "extractionState" : "manual",
       "localizations" : {

@@ -141,6 +141,27 @@ class QualityResultTests(unittest.TestCase):
         self.assertIsNone(receipt)
         self.assertIn("unknown or inactive", process.stdout)
 
+    def test_contradictory_product_and_test_system_status_is_rejected(self):
+        process, receipt = self.run_result(
+            "--product-status", "PASSED",
+            "--test-system-status", "BLOCKED",
+        )
+
+        self.assertNotEqual(0, process.returncode)
+        self.assertIsNone(receipt)
+        self.assertIn("invalid product/test-system status pair", process.stdout)
+
+    def test_waived_status_requires_version_controlled_authorization(self):
+        process, receipt = self.run_result(
+            "--product-status", "WAIVED",
+            "--test-system-status", "PASSED",
+            "--selected-claim", "waived-purpose",
+        )
+
+        self.assertNotEqual(0, process.returncode)
+        self.assertIsNone(receipt)
+        self.assertIn("requires a version-controlled active waiver id", process.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

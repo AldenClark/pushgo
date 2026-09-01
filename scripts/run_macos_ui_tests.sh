@@ -75,6 +75,8 @@ positive_scopes=(
 risk_scopes=(
   "PushGo-macOSUITests/PushGo_macOSUITests/testFatalStoreInitializationStopsReadWriteAndRecoversAfterRelaunch"
   "PushGo-macOSUITests/PushGo_macOSUITests/testMessageLoadFailureRetryRecoversToFunctionalState"
+  "PushGo-macOSUITests/PushGo_macOSUITests/testMessageSearchFailureShowsOwnedRetryAndRecoversToExactDetail"
+  "PushGo-macOSUITests/PushGo_macOSUITests/testUnavailableMessageRouteReturnsToListAndKeepsMessagesUsable"
   "PushGo-macOSUITests/PushGo_macOSUITests/testMessageRefreshFailureKeepsSnapshotAndRetryPersistsAccurateResult"
   "PushGo-macOSUITests/PushGo_macOSUITests/testEventCloseFailureKeepsAccurateDetailBlocksDuplicateAndRetryPersists"
   "PushGo-macOSUITests/PushGo_macOSUITests/testDecryptionProtectedStoreFailureDoesNotConfigureBeforeRetry"
@@ -82,6 +84,7 @@ risk_scopes=(
   "PushGo-macOSUITests/PushGo_macOSUITests/testCorruptEncryptedMessageFailsSafelyAndSurvivesRelaunch"
   "PushGo-macOSUITests/PushGo_macOSUITests/testInvalidServerAddressShowsInlineFeedbackInsteadOfToast"
   "PushGo-macOSUITests/PushGo_macOSUITests/testGatewayLocalCommitFailureRollsBackBeforeRetryCommits"
+  "PushGo-macOSUITests/PushGo_macOSUITests/testGatewaySyncFailureReportsCommittedGatewayAndPendingRecovery"
 )
 
 # Real Notification Center delivery is a high-value positive system boundary,
@@ -89,6 +92,7 @@ risk_scopes=(
 # precondition profile from App-owned UI. Keep it discoverable and independently
 # runnable without charging every ordinary macOS batch.
 system_scopes=(
+  "PushGo-macOSUITests/PushGo_macOSUITests/testDeniedNotificationSettingsCardRecoversAfterSystemEnable"
   "PushGo-macOSUITests/PushGo_macOSUITests/testSystemNotificationClickPersistsAccurateMessageAndSurvivesRelaunch"
 )
 
@@ -253,6 +257,25 @@ if [[ $status -eq 0 ]]; then
     [[ -z "$runner_status_file" ]] || printf 'FAILED\n' > "$runner_status_file"
     echo "status=FAILED_TEST_SYSTEM"
     echo "reason=selected_macos_ui_scope_executed_zero_tests"
+    echo "result_bundle=$result_bundle"
+    exit 3
+  fi
+  if ! python3 "$repo_root/scripts/verify_apple_test_execution.py" "${verify_execution_args[@]}" --reject-runtime-warnings; then
+    if classification="$(python3 "$repo_root/scripts/quality_test_system_issues.py" --match-file "$log_file")"; then
+      printf '%s\n' "$classification"
+      issue_ids="$(printf '%s\n' "$classification" | sed -n 's/^classification_issue_ids=//p')"
+      if [[ -n "$runner_issue_file" && -n "$issue_ids" ]]; then
+        printf '%s\n' "$issue_ids" | tr ',' '\n' >> "$runner_issue_file"
+      fi
+      [[ -z "$runner_status_file" ]] || printf 'FLAKY\n' > "$runner_status_file"
+      echo "status=FLAKY"
+      echo "reason=registered_apple_runtime_warning"
+      echo "result_bundle=$result_bundle"
+      exit 0
+    fi
+    [[ -z "$runner_status_file" ]] || printf 'FAILED\n' > "$runner_status_file"
+    echo "status=FAILED_TEST_SYSTEM"
+    echo "reason=unknown_apple_runtime_warning"
     echo "result_bundle=$result_bundle"
     exit 3
   fi

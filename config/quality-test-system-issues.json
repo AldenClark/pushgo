@@ -40,6 +40,23 @@
       "rationale": "This is a permanent attribution boundary, not a waiver: session, Simulator, fixture, permission, or readiness preparation must stop before product actions and cannot become product green.",
       "exit_criteria": "Keep the category while App-owned preparation exists; fix each concrete precondition failure at its source and never retry it as a product assertion.",
       "evidence": ["Tests/PushGo-iOSUITests/QualityRuntimeSupport.swift", "scripts/run_ios_system_notification_test.sh"]
+    },
+    {
+      "id": "apple-xctest-main-thread-warning",
+      "kind": "flake",
+      "status": "resolved",
+      "owner": "apple-quality-runtime",
+      "opened_on": "2026-09-01",
+      "last_seen_on": "2026-09-01",
+      "expires_on": "2026-09-15",
+      "scope": ["macOS XCTest UI input emits a framework main-thread warning after a product journey has executed"],
+      "signatures": ["This method should not be called on the main thread as it may lead to UI unresponsiveness\\."],
+      "allowed_retries": 0,
+      "quarantined": false,
+      "rationale": "The warning was emitted by XCTest UI typeText after the user-purpose Oracle had begun. macOS journeys now use the same real Cmd-V input path already used by reliable secure/form fields; native results remain warning-free while preserving the product outcomes.",
+      "exit_criteria": "Identify and remove the XCTest/main-thread call path, then observe targeted macOS UI journeys without the native xcresult warning before resolving the issue.",
+      "evidence": ["build/quality-results/macos-search-recovery-current/run-20260901-090206.xcresult", "build/quality-results/macos-search-warning-remediation/run-20260901-092352.xcresult", "build/quality-results/macos-channel-warning-remediation/run-20260901-092433.xcresult"],
+      "resolved_on": "2026-09-01"
     }
   ]
 }

@@ -38,6 +38,23 @@ if [[ "$allow_expected_failures" != "0" && "$allow_expected_failures" != "1" ]];
   exit 2
 fi
 
+# These XCTest methods do not manufacture a notification themselves. Their
+# companion runner waits for the App-owned background readiness contract and
+# injects the exact payload through the Simulator before it evaluates the user
+# route. Running them here produces a false product failure (no card was ever
+# delivered), so reject the invalid harness selection before taking the Apple
+# UI lease or touching the dedicated Simulator.
+if [[ -n "$test_scopes" ]]; then
+  IFS=',' read -r -a requested_scope_list <<< "$test_scopes"
+  for requested_scope in "${requested_scope_list[@]}"; do
+    if [[ "$requested_scope" == PushGo-iOSUITests/PushGo_iOSSystemNotificationTests* ]]; then
+      echo "status=BLOCKED"
+      echo "reason=ios_system_notification_scope_requires_dedicated_runner"
+      exit 2
+    fi
+  done
+fi
+
 # iOS and macOS UI builds can saturate the same host and make macOS launch hit
 # the scene-create watchdog. Fail as a test-system resource conflict instead of
 # manufacturing a product crash. This lease is PushGo-local and never touches
@@ -87,6 +104,21 @@ if [[ -n "$test_scopes" ]]; then
   IFS=',' read -r -a scope_list <<< "$test_scopes"
   for scope in "${scope_list[@]}"; do
     [[ -n "$scope" ]] && common_args+=("-only-testing:${scope}")
+  done
+fi
+
+channel_copy_scope="PushGo-iOSUITests/PushGo_iOSUITests/testChannelCreateRenameAndBothUnsubscribeOutcomesPersist"
+channel_copy_expected="01H00000000000000000000003"
+observe_channel_copy=0
+if [[ -z "$test_scopes" ]]; then
+  observe_channel_copy=1
+else
+  for scope in "${scope_list[@]}"; do
+    case "$scope" in
+      PushGo-iOSUITests|PushGo-iOSUITests/PushGo_iOSUITests|"$channel_copy_scope")
+        observe_channel_copy=1
+        ;;
+    esac
   done
 fi
 
@@ -172,14 +204,43 @@ fi
 run_test_once() {
   local logfile="$1"
   local result_bundle="$2"
+  local pasteboard_oracle_dir=""
+  local pasteboard_oracle_pid=""
   # Xcode otherwise races its own terminate-and-relaunch operation when a prior
   # UI-test process is still registered with CoreSimulator. Terminate it as an
   # explicit preparation step; absence is already the desired state.
   xcrun simctl terminate "$target" "$app_bundle_identifier" >/dev/null 2>&1 || true
+  if [[ "$observe_channel_copy" == "1" ]]; then
+    pasteboard_oracle_dir="$(mktemp -d -t pushgo-ios-pasteboard-oracle.XXXXXX)"
+    printf '%s' "pushgo-quality-sentinel-$(uuidgen)" | xcrun simctl pbcopy "$target"
+    (
+      while [[ ! -f "$pasteboard_oracle_dir/stop" ]]; do
+        if [[ "$(xcrun simctl pbpaste "$target" 2>/dev/null || true)" == "$channel_copy_expected" ]]; then
+          printf 'PASSED\n' > "$pasteboard_oracle_dir/passed"
+          exit 0
+        fi
+        sleep 0.2
+      done
+    ) &
+    pasteboard_oracle_pid=$!
+  fi
   set +e
   xcodebuild "${common_args[@]}" -resultBundlePath "$result_bundle" test-without-building 2>&1 | tee "$logfile"
   local status=${PIPESTATUS[0]}
   set -e
+  if [[ "$observe_channel_copy" == "1" ]]; then
+    touch "$pasteboard_oracle_dir/stop"
+    wait "$pasteboard_oracle_pid" 2>/dev/null || true
+    if [[ $status -eq 0 && ! -f "$pasteboard_oracle_dir/passed" ]]; then
+      printf '%s\n' \
+        "FAILED: the real Channel copy action never exposed its exact canonical ID through the Simulator system pasteboard" \
+        | tee -a "$logfile"
+      status=1
+    elif [[ $status -eq 0 ]]; then
+      echo "external_pasteboard_oracle=PASSED"
+    fi
+    rm -rf "$pasteboard_oracle_dir"
+  fi
   return "$status"
 }
 
@@ -197,6 +258,25 @@ until [[ $attempt -gt $((max_retries + 1)) ]]; do
       [[ -z "$runner_status_file" ]] || printf 'FAILED\n' > "$runner_status_file"
       echo "status=FAILED_TEST_SYSTEM"
       echo "reason=apple_test_execution_receipt_rejected"
+      echo "result_bundle=$result_bundle"
+      exit 3
+    fi
+    if ! python3 "$repo_root/scripts/verify_apple_test_execution.py" "${verify_execution_args[@]}" --reject-runtime-warnings; then
+      if classification="$(python3 "$repo_root/scripts/quality_test_system_issues.py" --match-file "$log_file")"; then
+        printf '%s\n' "$classification"
+        issue_ids="$(printf '%s\n' "$classification" | sed -n 's/^classification_issue_ids=//p')"
+        if [[ -n "$runner_issue_file" && -n "$issue_ids" ]]; then
+          printf '%s\n' "$issue_ids" | tr ',' '\n' >> "$runner_issue_file"
+        fi
+        [[ -z "$runner_status_file" ]] || printf 'FLAKY\n' > "$runner_status_file"
+        echo "status=FLAKY"
+        echo "reason=registered_apple_runtime_warning"
+        echo "result_bundle=$result_bundle"
+        exit 0
+      fi
+      [[ -z "$runner_status_file" ]] || printf 'FAILED\n' > "$runner_status_file"
+      echo "status=FAILED_TEST_SYSTEM"
+      echo "reason=unknown_apple_runtime_warning"
       echo "result_bundle=$result_bundle"
       exit 3
     fi

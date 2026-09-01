@@ -669,18 +669,31 @@ final class SettingsViewModel {
             // A candidate gateway is not configuration until remote device
             // registration and provider-route setup have both succeeded.
             try await environment.validateAndUpdateServerConfig(newConfig)
-            try await environment.syncSubscriptionsIfNeeded()
-            successMessage = localizationManager.localized("server_configuration_saved")
-            shouldDismissServerManagement = true
         } catch let appError as AppError {
             serverError = appError
+            return
         } catch let underlying {
             serverError = AppError.wrap(
                 underlying,
                 fallbackMessage: localizationManager.localized("operation_failed"),
                 code: "server_config_save_failed"
             )
+            return
         }
+
+        do {
+            try await environment.syncSubscriptionsIfNeeded()
+            successMessage = localizationManager.localized("server_configuration_saved")
+        } catch {
+            // The gateway is already active and durable at this point. A
+            // subscription-sync failure is recoverable work for launch and
+            // channel-entry reconciliation, not a failed gateway save. Keep
+            // the user-facing result truthful and let those paths retry.
+            successMessage = localizationManager.localized(
+                "server_configuration_saved_sync_pending"
+            )
+        }
+        shouldDismissServerManagement = true
     }
 
     private func validatedServerURL(from raw: String) -> URL? {

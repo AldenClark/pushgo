@@ -13,6 +13,7 @@ runner_issue_file="${QUALITY_RUNNER_ISSUE_FILE:-}"
 test_scope="${SYSTEM_NOTIFICATION_TEST_SCOPE:-PushGo-iOSUITests/PushGo_iOSSystemNotificationTests/testSystemNotificationTapOpensAccurateReadDetailAndPersists}"
 preserve_install="${PRESERVE_SYSTEM_NOTIFICATION_INSTALL:-0}"
 readiness_filename="pushgo-system-notification-ready"
+apple_ui_lease_file="${PUSHGO_APPLE_UI_LEASE_FILE:-$repo_root/build/.pushgo-apple-ui-tests.lock}"
 
 set_runner_status() {
   [[ -z "$runner_status_file" ]] || printf '%s\n' "$1" >"$runner_status_file"
@@ -22,6 +23,19 @@ if [[ "$preserve_install" != "0" && "$preserve_install" != "1" ]]; then
   set_runner_status BLOCKED
   echo "status=BLOCKED"
   echo "reason=invalid_preserve_system_notification_install"
+  exit 2
+fi
+
+# This runner boots/shuts down only PushGo's dedicated Simulator, but it still
+# competes with the ordinary iOS and macOS UI runners for host scene resources.
+# Share their non-blocking PushGo-local lease so a collision is an explicit
+# test-system BLOCKED result rather than a spuriously failed notification route.
+mkdir -p "$(dirname "$apple_ui_lease_file")"
+exec 9>"$apple_ui_lease_file"
+if ! /usr/bin/lockf -s -t 0 9; then
+  set_runner_status BLOCKED
+  echo "status=BLOCKED"
+  echo "reason=pushgo_apple_ui_lease_busy"
   exit 2
 fi
 
@@ -217,6 +231,22 @@ if ! python3 "$repo_root/scripts/verify_apple_test_execution.py" --result-bundle
   set_runner_status FAILED
   echo "status=FAILED_TEST_SYSTEM"
   echo "reason=selected_ios_system_notification_scope_executed_zero_tests"
+  echo "result_bundle=$result_bundle"
+  exit 3
+fi
+
+if ! python3 "$repo_root/scripts/verify_apple_test_execution.py" --result-bundle "$result_bundle" --reject-runtime-warnings; then
+  if classification="$(python3 "$repo_root/scripts/quality_test_system_issues.py" --match-file "$log_file")"; then
+    record_classification "$classification"
+    set_runner_status FLAKY
+    echo "status=FLAKY"
+    echo "reason=registered_apple_runtime_warning"
+    echo "result_bundle=$result_bundle"
+    exit 0
+  fi
+  set_runner_status FAILED
+  echo "status=FAILED_TEST_SYSTEM"
+  echo "reason=unknown_apple_runtime_warning"
   echo "result_bundle=$result_bundle"
   exit 3
 fi

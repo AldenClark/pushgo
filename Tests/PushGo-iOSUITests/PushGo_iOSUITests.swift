@@ -827,7 +827,8 @@ final class PushGo_iOSUITests: XCTestCase {
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
             fixture: "messages.workflow",
-            messagePageLoadDelayMilliseconds: 5_000
+            messagePageLoadDelayMilliseconds: 5_000,
+            failMessagePageLoadOnce: true
         )
 
         launch(context.app)
@@ -890,7 +891,6 @@ final class PushGo_iOSUITests: XCTestCase {
             }
         }
         let swipeUpAndRecord = {
-            recordVisibleWorkflowRows()
             list.swipeUp()
             recordVisibleWorkflowRows()
         }
@@ -907,6 +907,25 @@ final class PushGo_iOSUITests: XCTestCase {
             context.app.staticTexts["Quality workflow 75"].exists,
             "The last row from page 1 must remain usable while page 2 is loading"
         )
+        let pageFailure = element(in: context.app, identifier: "state.messages.page.failed")
+        XCTAssertTrue(
+            pageFailure.waitForExistence(timeout: 8),
+            "A failed next page must expose a page-owned recovery state instead of silently stopping."
+        )
+        let retainedPageOneTail = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000004c"
+        )
+        XCTAssertTrue(
+            retainedPageOneTail.exists && retainedPageOneTail.isHittable,
+            "The accurate page-1 tail must remain actionable while page 2 is failed."
+        )
+        let pageRetry = element(in: context.app, identifier: "action.messages.page.retry")
+        XCTAssertTrue(
+            pageRetry.waitForExistence(timeout: 3) && pageRetry.isHittable,
+            "Page Retry must be a real user action on the failed append owner."
+        )
+        pageRetry.tap()
         let secondPageHead = context.app.staticTexts["Quality workflow 74"]
         for _ in 0..<12 where !secondPageHead.exists {
             swipeUpAndRecord()
@@ -1210,7 +1229,8 @@ final class PushGo_iOSUITests: XCTestCase {
         let context = configuredLaunchContext()
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: "ios-search-\(UUID().uuidString.lowercased())",
-            fixture: "messages.standard"
+            fixture: "messages.standard",
+            failMessageSearchOnce: true
         )
 
         launch(context.app)
@@ -1218,15 +1238,25 @@ final class PushGo_iOSUITests: XCTestCase {
         assertQualityRuntimeReady(in: context.app, timeout: 15)
         let searchField = runtimeQualitySearchField(in: context.app)
         XCTAssertTrue(searchField.waitForExistence(timeout: 8))
-        replaceText(in: searchField, with: "not-present-in-any-message")
-        XCTAssertEqual(searchField.value as? String, "not-present-in-any-message")
-        assertElementExists("state.messages.search.empty", in: context.app, timeout: 8)
-        XCTAssertFalse(context.app.staticTexts["P2 Split Seed Message"].exists)
-
         replaceText(in: searchField, with: "P2 Split")
         XCTAssertEqual(searchField.value as? String, "P2 Split")
         let target = context.app.staticTexts["P2 Split Seed Message"]
+        assertElementExists("state.messages.search.failed", in: context.app, timeout: 8)
+        XCTAssertFalse(
+            element(in: context.app, identifier: "state.messages.search.empty").exists,
+            "A failed search must not masquerade as a genuine no-results state."
+        )
+        XCTAssertFalse(
+            target.exists,
+            "The pre-search list must not remain visible as if it were a result for the failed query."
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.messages.search.retry"),
+            timeout: 5,
+            message: "A search failure must offer a real retry action."
+        )
         XCTAssertTrue(target.waitForExistence(timeout: 8))
+        XCTAssertFalse(element(in: context.app, identifier: "state.messages.search.failed").exists)
         XCTAssertFalse(element(in: context.app, identifier: "state.messages.search.empty").exists)
         target.tap()
         assertElementExists("sheet.message.detail", in: context.app, timeout: 8)
@@ -1366,6 +1396,61 @@ final class PushGo_iOSUITests: XCTestCase {
                 "Deterministic history owned by 01H00000000000000000000001."
             ].exists,
             "The unrelated canonical message must remain accurate after relaunch"
+        )
+        relaunched.app.terminate()
+
+        let unavailableTarget = configuredLaunchContext(
+            runtimeRoot: context.runtimeRoot,
+            requestName: "message.open",
+            args: ["message_id": "01H00000000000000000000002"]
+        )
+        unavailableTarget.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "channels.standard"
+        )
+        launch(unavailableTarget.app)
+        assertQualityRuntimeReady(in: unavailableTarget.app, timeout: 15)
+        assertElementExists("screen.messages.list", in: unavailableTarget.app, timeout: 8)
+        let unavailableFeedback = element(
+            in: unavailableTarget.app,
+            identifier: "feedback.message.target_unavailable"
+        )
+        XCTAssertTrue(
+            unavailableFeedback.waitForExistence(timeout: 5),
+            "Opening a deleted Message must visibly explain the fallback instead of leaving a pending target."
+        )
+        let unavailableTargetMessages = [
+            "The requested item was not found or has expired.",
+            "目标不存在，或已失效。",
+            "目標不存在，或已失效。",
+        ]
+        let unavailableTargetText = [
+            unavailableFeedback.label,
+            unavailableFeedback.value as? String ?? "",
+        ].joined(separator: " ")
+        XCTAssertTrue(
+            unavailableTargetMessages.contains(where: { message in
+                unavailableTargetText.contains(message)
+                    || unavailableTarget.app.staticTexts[message].exists
+            }),
+            "The fallback must explain that the exact Message target is unavailable."
+        )
+        XCTAssertFalse(
+            unavailableTarget.app.staticTexts["Quality Delete History Message"].exists,
+            "Routing to the deleted Message must not revive its committed record or stale detail."
+        )
+        let survivingMessage = unavailableTarget.app.staticTexts["Quality Keep History Message"]
+        XCTAssertTrue(
+            survivingMessage.waitForExistence(timeout: 5),
+            "After the deleted-target fallback, the canonical Messages list must remain usable."
+        )
+        survivingMessage.tap()
+        assertElementExists("sheet.message.detail", in: unavailableTarget.app, timeout: 8)
+        XCTAssertTrue(
+            unavailableTarget.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000001."
+            ].waitForExistence(timeout: 5),
+            "The surviving Message must still open its exact canonical detail after fallback."
         )
     }
 
@@ -2073,6 +2158,75 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
+    func testSettingsGatewaySyncFailureReportsCommittedGatewayAndPendingRecovery() {
+        let context = configuredLaunchContext()
+        let sessionID = "ios-server-sync-pending-\(UUID().uuidString.lowercased())"
+        let encodedSession = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            failGatewayPostCommitSyncOnce: true,
+            channelMutationScenario: "accepted"
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+
+        openSettingsFromChannels(in: context.app)
+        let serverAction = element(
+            in: context.app,
+            identifier: "action.settings.server_management"
+        )
+        tapWhenHittable(serverAction, timeout: 8)
+        let addressField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(addressField.waitForExistence(timeout: 8))
+        let normalizedAddress = "https://quality-sync-pending.invalid/api"
+        replaceText(in: addressField, with: "\(normalizedAddress)/")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server.save"),
+            timeout: 8
+        )
+
+        let pendingToast = element(in: context.app, identifier: "feedback.toast.success")
+        XCTAssertTrue(
+            pendingToast.waitForExistence(timeout: 8),
+            "A committed gateway with recoverable sync work must still report a user-visible result."
+        )
+        let pendingText = pendingToast.label.lowercased()
+        XCTAssertTrue(
+            pendingText.contains("sync") || pendingToast.label.contains("同步"),
+            "The result must say that gateway sync is pending, not claim an atomic failure."
+        )
+        XCTAssertTrue(
+            addressField.waitForNonExistence(timeout: 8),
+            "A committed gateway must close the editor after reporting pending reconciliation."
+        )
+        XCTAssertTrue(
+            element(in: context.app, identifier: "action.settings.server_management")
+                .label.contains(normalizedAddress),
+            "The settings row must expose the newly committed gateway, even when sync is pending."
+        )
+        XCTAssertFalse(
+            element(in: context.app, identifier: "feedback.settings.root").exists,
+            "A post-commit sync failure must not be surfaced as a host-page form failure."
+        )
+
+        context.app.terminate()
+        let relaunchedSession = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            channelMutationScenario: "accepted"
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = relaunchedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        ensureSettingsVisible(in: context.app)
+        XCTAssertTrue(
+            element(in: context.app, identifier: "action.settings.server_management")
+                .label.contains(normalizedAddress),
+            "The committed gateway must remain authoritative after relaunch for recovery retry."
+        )
+    }
+
     func testSettingsDecryptionRejectsInvalidKeyPersistsAndClearsValidKey() {
         let context = configuredLaunchContext()
         let sessionID = "ios-settings-decryption-\(UUID().uuidString.lowercased())"
@@ -2734,7 +2888,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
     }
 
-    func testImportedThingFixtureCanOpenThingDetail() {
+    func testThingLifecycleFiltersRelationsAndUnavailableTargetFallback() {
         let context = configuredLaunchContext(
             launchArguments: ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         )
@@ -3215,12 +3369,18 @@ final class PushGo_iOSUITests: XCTestCase {
         launch(context.app)
         assertQualityRuntimeReady(in: context.app, timeout: 15)
         tapWhenHittable(channelsTab(in: context.app), timeout: 8)
+        let copiedChannelID = "01H00000000000000000000003"
         createdRow = element(
             in: context.app,
-            identifier: "channel.row.01H00000000000000000000003"
+            identifier: "channel.row.\(copiedChannelID)"
         )
         XCTAssertTrue(createdRow.waitForExistence(timeout: 8))
         XCTAssertFalse(deleteRow.exists)
+        tapWhenHittable(
+            createdRow,
+            timeout: 8,
+            message: "The canonical Channel row must remain a real copy action after relaunch"
+        )
         tapWhenHittable(element(in: context.app, identifier: "tab.messages"), timeout: 8)
         XCTAssertTrue(context.app.staticTexts["Quality Keep History Message"].waitForExistence(timeout: 8))
         XCTAssertFalse(context.app.staticTexts["Quality Delete History Message"].exists)
@@ -3283,6 +3443,10 @@ final class PushGo_iOSUITests: XCTestCase {
         }
 
         tapWhenHittable(element(in: context.app, identifier: "action.channels.entry.cancel"), timeout: 5)
+        XCTAssertFalse(
+            element(in: context.app, identifier: "feedback.channels.entry-sync").exists,
+            "Closing the Channel sheet must not replay its business error on the host page"
+        )
         tapWhenHittable(element(in: context.app, identifier: "tab.messages"), timeout: 8)
         tapWhenHittable(channelsTab(in: context.app), timeout: 8)
         XCTAssertFalse(
@@ -4380,10 +4544,13 @@ final class PushGo_iOSUITests: XCTestCase {
         messagePageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         messageSearchDelayMilliseconds: Int? = nil,
+        failMessageSearchOnce: Bool = false,
         legacyStore: String? = nil,
         failMessageLoad: Bool = false,
+        failMessagePageLoadOnce: Bool = false,
         failGatewaySwitchValidationOnce: Bool = false,
         failGatewaySwitchCommitOnce: Bool = false,
+        failGatewayPostCommitSyncOnce: Bool = false,
         failNotificationMaterialPersistenceOnce: Bool = false,
         failChannelSubscriptionPersistenceOnce: Bool = false,
         messageRefreshScenario: String? = nil,
@@ -4394,8 +4561,11 @@ final class PushGo_iOSUITests: XCTestCase {
         var faults: [String: Any] = [
             "fail_local_store_initialization": failLocalStoreInitialization,
             "fail_message_load": failMessageLoad,
+            "fail_message_page_load_once": failMessagePageLoadOnce,
+            "fail_message_search_once": failMessageSearchOnce,
             "fail_gateway_switch_validation_once": failGatewaySwitchValidationOnce,
             "fail_gateway_switch_commit_once": failGatewaySwitchCommitOnce,
+            "fail_gateway_post_commit_sync_once": failGatewayPostCommitSyncOnce,
             "fail_notification_material_persistence_once": failNotificationMaterialPersistenceOnce,
             "fail_channel_subscription_persistence_once": failChannelSubscriptionPersistenceOnce,
         ]

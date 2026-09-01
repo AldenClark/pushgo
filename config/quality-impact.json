@@ -29,7 +29,7 @@
   "rules": [
     {
       "id": "quality-system",
-      "paths": ["AGENTS.md", "Tests/**", "scripts/tests/**", "scripts/quality_*.py", "scripts/quality_*.sh", "scripts/require_unlocked_apple_ui_console.sh", "scripts/run_ios_ui_tests.sh", "scripts/run_macos_ui_tests.sh", "scripts/run_macos_startup_reliability.sh", "scripts/run_watchos_ui_tests.sh", ".github/workflows/apple-quality.yml", "config/quality-impact.json", "config/quality-ai-task-history.json", "config/quality-test-system-issues.json"],
+      "paths": ["AGENTS.md", "Tests/**", "scripts/tests/**", "scripts/quality_*.py", "scripts/quality_*.sh", "scripts/require_unlocked_apple_ui_console.sh", "scripts/run_ios_ui_tests.sh", "scripts/run_macos_ui_tests.sh", "scripts/run_macos_startup_reliability.sh", "scripts/run_watchos_ui_tests.sh", ".github/workflows/apple-quality.yml", "config/quality-impact.json", "config/quality-ai-task-history.json", "config/quality-test-system-issues.json", "config/quality-waivers.json"],
       "exclude_paths": ["scripts/quality_ui_entrypoints.py", "scripts/tests/test_quality_ui_entrypoints.py", "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift", "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift", "Tests/PushGo-watchOSUITests/PushGo_watchOSUITests.swift"],
       "capabilities": ["quality-system-trustworthiness"],
       "minimum_evidence": ["quality selector unit/negative controls", "Apple PR representative lane"],
@@ -101,6 +101,16 @@
       "escalation_reasons": ["The macOS notification delegate owns system presentation, response routing, canonical persistence, and relaunch behavior."]
     },
     {
+      "id": "macos-notification-permission-recovery-owner",
+      "paths": ["Apps/PushGo-macOS/App/PushGoAppDelegate.swift"],
+      "capabilities": ["notification-permission", "macos-ui-purpose-evidence"],
+      "minimum_evidence": ["real denied Settings card opens PushGo's macOS notification setting, enable-on-return refresh removes the denied state, then the existing real Notification Center route persists exact canonical data"],
+      "required_checks": ["apple-macos-system-notification"],
+      "lane": "nightly",
+      "known_evidence_gaps": ["Local host permission recovery does not prove signed distribution, APNs network delivery, or physical-device parity."],
+      "escalation_reasons": ["The Settings card and application activation own recovery from a real OS-level denial; an App-only state assertion cannot prove the system round trip."]
+    },
+    {
       "id": "quality-runtime-release-isolation",
       "paths": ["Shared/UI/AutomationRuntime.swift", "Shared/Utilities/AppConstants.swift", "Apps/*/App/AppEnvironment.swift", "Apps/*/App/AppContext.swift", "Apps/PushGo-watchOS/AppEnvironment.swift", "Apps/PushGo-watchOS/WatchQualityRuntime.swift"],
       "capabilities": ["app-owned-quality-runtime", "release-runtime-isolation", "app-launch"],
@@ -124,7 +134,8 @@
       "paths": ["Shared/Repositories/LocalDataStore.swift", "Shared/Repositories/SwiftDataModels.swift", "Shared/Application/LocalStoreRecovery*.swift"],
       "capabilities": ["app-launch", "messages", "events", "things", "channels", "ingress-recovery"],
       "minimum_evidence": ["Swift Store/recovery suite", "old-store reopen/migration evidence", "representative iOS UI content/relaunch journeys"],
-      "lane": "nightly",
+      "required_checks": ["apple-store-migration-reopen"],
+      "lane": "pr",
       "known_evidence_gaps": ["iOS controlled App-owned startup reliability is proven 50/50; macOS App-owned readiness and ten core journeys execute on the controlled local runner, but a repeated macOS startup campaign and physical-device startup evidence are not inferred."],
       "escalation_reasons": ["The canonical Store is a shared state/data owner with cross-capability consumers."]
     },
@@ -144,6 +155,26 @@
       "minimum_evidence": ["Swift message/search/deletion tests", "iOS accurate content/search/delete/relaunch UI journeys", "iOS provider refresh new-result/failure-recovery UI journeys"],
       "lane": "pr",
       "known_evidence_gaps": ["representative iOS/macOS local-cached media decode/click/preview, pagination/read, and slow, new-result, and failure-recovery refresh workflows are protected; multi-image, animation, share, cache eviction, and media performance remain incomplete."]
+    },
+    {
+      "id": "message-search-recovery-ui",
+      "paths": ["Shared/UI/MessageSearchViewModel.swift", "Apps/*/UI/Screens/MessageSearchScreen.swift"],
+      "capabilities": ["search-filter"],
+      "minimum_evidence": ["iOS and macOS failed search must not masquerade as empty or stale results; Retry reaches one exact canonical result and matching detail"],
+      "required_checks": ["apple-ios-message-search-recovery", "apple-macos-message-search-recovery"],
+      "lane": "pr",
+      "known_evidence_gaps": ["This focused recovery path does not claim index-rebuild integrity, 10k/100k search latency, physical-device behavior, or every query-normalization permutation."],
+      "escalation_reasons": ["Search presentation and query-owner changes can otherwise ship a plausible empty or stale list while the user cannot recover to the requested canonical message."]
+    },
+    {
+      "id": "message-deletion-lifecycle",
+      "paths": ["Shared/Application/PendingLocalDeletionController.swift", "Shared/UI/PendingLocalDeletionBar.swift"],
+      "capabilities": ["messages", "message-detail", "delete-undo"],
+      "minimum_evidence": ["a real deletion immediately suppresses only its target", "Undo restores the exact canonical object", "deadline commit and relaunch keep the target absent while an unrelated message remains readable"],
+      "required_checks": ["apple-ios-message-delete-undo", "apple-ios-message-delete-commit", "apple-macos-message-delete-lifecycle"],
+      "lane": "pr",
+      "known_evidence_gaps": ["This representative lifecycle does not claim multiple pending deletions, process death during claim, remote deletion conflicts, or backoff behavior."],
+      "escalation_reasons": ["Deletion ownership is irreversible after its deadline and must protect both restoration and durable commit, not merely the visible undo bar."]
     },
     {
       "id": "events-things-core",
@@ -168,7 +199,7 @@
       "paths": ["Apps/PushGo-iOS/UI/Screens/Channel*.swift"],
       "capabilities": ["channels"],
       "minimum_evidence": ["iOS real Channel subscribe/create/rename/keep-history/delete-history/relaunch positive journey", "Apple PR broad positive representative set"],
-      "required_checks": ["apple-ios-channel-positive"],
+      "required_checks": ["apple-ios-channel-positive", "apple-ios-channel-sheet-error-owner"],
       "lane": "pr",
       "known_evidence_gaps": ["Pure iOS Channel presentation/action-entry changes do not automatically run remote rejection, compensation, or corruption matrices; run the owning focused risk journey when the diff changes those contracts."],
       "escalation_reasons": ["A real Channel lifecycle journey is required, but unrelated Settings and fault matrices are not a minimum for a pure iOS screen change."]
@@ -196,7 +227,7 @@
       "id": "ios-settings-ui",
       "paths": ["Apps/PushGo-iOS/UI/Screens/Settings*.swift"],
       "capabilities": ["gateway-settings", "decryption-settings", "page-visibility", "notification-sound"],
-      "minimum_evidence": ["Apple PR Gateway candidate registration-before-commit positive journey", "iOS real Settings page-visibility, built-in notification-sound selection, and valid-key message-recovery/relaunch positive journeys"],
+      "minimum_evidence": ["Apple PR Gateway candidate registration-before-commit positive journey", "iOS real Settings page-visibility, built-in notification-sound selection, and valid-key message-recovery/relaunch positive journeys", "iOS post-commit sync failure keeps the new gateway authoritative, reports pending recovery, and preserves it after relaunch"],
       "required_checks": ["apple-ios-settings-positive-extension"],
       "lane": "pr",
       "known_evidence_gaps": ["Pure iOS Settings presentation/action-entry changes do not automatically run protected-write, rollback, corrupt-ciphertext, or remote-rejection matrices; run the owning focused risk journey when the diff changes those contracts."],
@@ -206,7 +237,7 @@
       "id": "macos-settings-ui",
       "paths": ["Apps/PushGo-macOS/UI/Screens/Settings*.swift"],
       "capabilities": ["gateway-settings", "decryption-settings", "page-visibility", "notification-sound"],
-      "minimum_evidence": ["macOS real Gateway candidate registration-before-commit, Settings page-visibility, valid-key recovery/relaunch, and notification-sound editor entry/content/return purpose journeys", "Apple PR broad positive representative set"],
+      "minimum_evidence": ["macOS real Gateway candidate registration-before-commit, Settings page-visibility, valid-key recovery/relaunch, and notification-sound editor entry/content/return purpose journeys", "macOS post-commit sync failure keeps the new gateway authoritative, reports pending recovery, and preserves it after relaunch", "Apple PR broad positive representative set"],
       "required_checks": ["apple-macos-settings-positive"],
       "lane": "pr",
       "known_evidence_gaps": ["Pure macOS Settings presentation/action-entry changes do not automatically run protected-write, rollback, corrupt-ciphertext, or remote-rejection matrices; actual sound selection, Sounds-directory authorization, import, preview, and playback remain separate real-system evidence."],
@@ -216,7 +247,7 @@
       "id": "settings-state",
       "paths": ["Shared/Application/DataPageVisibilityController.swift", "Shared/Models/ServerConfig.swift", "Shared/Models/SystemIntegrationSettings.swift", "Shared/UI/SettingsViewModel.swift", "Shared/Utilities/ManualNotificationKeyValidator.swift"],
       "capabilities": ["gateway-settings", "decryption-settings", "page-visibility", "notification-sound"],
-      "minimum_evidence": ["Settings validation and injectable gateway service contract tests", "real Settings page-visibility control and accurate destination journey", "real server invalid/candidate-registration-failure/no-commit/retry/normalize/data-scope/relaunch journey", "real decryption invalid/status/no-echo/clear/relaunch journey", "notification-sound persistence/parser contract and iOS built-in selection/relaunch journey"],
+      "minimum_evidence": ["Settings validation and injectable gateway service contract tests", "real Settings page-visibility control and accurate destination journey", "real server invalid/candidate-registration-failure/no-commit/retry/normalize/data-scope/relaunch journey", "real server post-commit sync failure/pending-recovery/relaunch journey", "real decryption invalid/status/no-echo/clear/relaunch journey", "notification-sound persistence/parser contract and iOS built-in selection/relaunch journey"],
       "lane": "nightly",
       "known_evidence_gaps": ["Rollback-storage failure UI and notification-sound system behavior remain incomplete."],
       "escalation_reasons": ["Settings changes can alter protected material, gateway activation, persisted visibility, and restart behavior."]
@@ -268,6 +299,16 @@
       "escalation_reasons": ["A real iOS navigation journey is required, while unrelated platform failure matrices are not a minimum for a pure MainTab UI change."]
     },
     {
+      "id": "ios-message-unavailable-target-route",
+      "paths": ["Apps/PushGo-iOS/UI/Screens/MainTabContainerView.swift", "Apps/PushGo-iOS/UI/Screens/MessageListScreen.swift"],
+      "capabilities": ["messages", "message-detail", "notification-route-actions"],
+      "minimum_evidence": ["after a committed local deletion, an App-owned stale Message route visibly returns to the usable Messages list", "the deleted record must not revive or leave an empty detail, while an unrelated canonical Message remains openable with its exact body"],
+      "required_checks": ["apple-ios-message-unavailable-route"],
+      "lane": "pr",
+      "known_evidence_gaps": ["This controlled App-owned stale-route journey does not prove APNs delivery, notification permissions, terminated-process behavior, or physical-device notification behavior."],
+      "escalation_reasons": ["The feedback host and Message sheet jointly decide whether a stale route leaves the user on a usable declared fallback rather than hiding it behind obsolete detail state."]
+    },
+    {
       "id": "macos-primary-navigation-ui",
       "paths": ["Apps/PushGo-macOS/UI/Screens/MainTabContainerView.swift"],
       "capabilities": ["app-launch", "primary-navigation"],
@@ -275,6 +316,16 @@
       "lane": "pr",
       "known_evidence_gaps": ["Pure macOS primary-navigation presentation changes do not automatically run fatal-startup, close/reopen, background-ingress, notification, or window-identity risk matrices; promote when the diff changes one of those owners."],
       "escalation_reasons": ["A real macOS dynamic sidebar navigation journey is required, while status-item and window lifecycle are not owned by MainTabContainerView."]
+    },
+    {
+      "id": "macos-message-unavailable-target-route",
+      "paths": ["Apps/PushGo-macOS/UI/Screens/MainTabContainerView.swift"],
+      "capabilities": ["messages", "message-detail", "notification-route-actions"],
+      "minimum_evidence": ["an App-owned stale Message route visibly returns to the usable Messages list", "the unavailable-target explanation is visible and an unrelated canonical Message remains actionable with its exact detail"],
+      "required_checks": ["apple-macos-message-unavailable-route"],
+      "lane": "pr",
+      "known_evidence_gaps": ["This controlled App-owned route does not prove macOS Notification Center delivery, permissions, or physical-device behavior."],
+      "escalation_reasons": ["The feedback host must keep the declared missing-target result visible instead of allowing stale navigation state to obscure it."]
     },
     {
       "id": "app-shell-window-navigation",

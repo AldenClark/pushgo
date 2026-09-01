@@ -174,6 +174,35 @@ class QualityTestSystemIssueTests(unittest.TestCase):
             "Pure argument validation must not contend for the shared Apple UI lease.",
         )
 
+    def test_ios_runner_rejects_system_notification_scope_before_using_simulator(self):
+        process = subprocess.run(
+            [str(REPO / "scripts/run_ios_ui_tests.sh")],
+            cwd=REPO,
+            env={
+                "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+                "TEST_SCOPES": (
+                    "PushGo-iOSUITests/PushGo_iOSSystemNotificationTests/"
+                    "testSystemNotificationTapColdLaunchesAccurateReadDetailAndPersists"
+                ),
+            },
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+
+        self.assertEqual(2, process.returncode)
+        self.assertIn(
+            "ios_system_notification_scope_requires_dedicated_runner",
+            process.stdout,
+        )
+        self.assertNotIn("simulator_id=", process.stdout)
+        runner = (REPO / "scripts/run_ios_ui_tests.sh").read_text()
+        self.assertLess(
+            runner.index("reason=ios_system_notification_scope_requires_dedicated_runner"),
+            runner.index("reason=pushgo_apple_ui_lease_busy"),
+        )
+
     def test_startup_reliability_rejects_invalid_iterations_before_doctor(self):
         process = subprocess.run(
             [str(REPO / "scripts/run_ios_startup_reliability.sh")],

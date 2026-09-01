@@ -14,8 +14,11 @@ struct QualityRuntimeProfileTests {
                 "message_page_load_delay_ms": 1_500,
                 "message_refresh_delay_ms": 2_500,
                 "message_search_delay_ms": 2_000,
+                "fail_message_page_load_once": true,
+                "fail_message_search_once": true,
                 "fail_gateway_switch_validation_once": true,
                 "fail_gateway_switch_commit_once": true,
+                "fail_gateway_post_commit_sync_once": true,
                 "fail_notification_material_persistence_once": true,
                 "fail_channel_subscription_persistence_once": true,
             ]
@@ -32,8 +35,11 @@ struct QualityRuntimeProfileTests {
         #expect(descriptor.faults.messageRefreshDelayMilliseconds == 2_500)
         #expect(descriptor.faults.messageSearchDelayMilliseconds == 2_000)
         #expect(descriptor.faults.failMessageLoad == false)
+        #expect(descriptor.faults.failMessagePageLoadOnce)
+        #expect(descriptor.faults.failMessageSearchOnce)
         #expect(descriptor.faults.failGatewaySwitchValidationOnce)
         #expect(descriptor.faults.failGatewaySwitchCommitOnce)
+        #expect(descriptor.faults.failGatewayPostCommitSyncOnce)
         #expect(descriptor.faults.failNotificationMaterialPersistenceOnce)
         #expect(descriptor.faults.failChannelSubscriptionPersistenceOnce)
         #expect(descriptor.messageRefreshScenario == .none)

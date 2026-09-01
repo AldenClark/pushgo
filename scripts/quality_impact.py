@@ -137,6 +137,10 @@ SPECIAL_UI_TEST_PROFILES = {
     ): "accessibility",
     (
         "macos",
+        "testDeniedNotificationSettingsCardRecoversAfterSystemEnable",
+    ): "system",
+    (
+        "macos",
         "testSystemNotificationClickPersistsAccurateMessageAndSurvivesRelaunch",
     ): "system",
 }
@@ -305,6 +309,14 @@ def resolve_swift_ui_test_change(
         and not old_unowned
         and not new_unowned
     )
+    existing_plus_added_methods = (
+        bool(old_selected)
+        and old_selected < new_selected
+        and not old_unowned
+        and not new_unowned
+        and all(name in new_methods for name in old_selected)
+        and all(name not in old_methods for name in new_selected - old_selected)
+    )
     one_sided_existing_method_change = (
         (
             bool(new_selected)
@@ -319,7 +331,12 @@ def resolve_swift_ui_test_change(
             and all(name in new_methods for name in old_selected)
         )
     )
-    if added_methods_only or same_existing_methods or one_sided_existing_method_change:
+    if (
+        added_methods_only
+        or same_existing_methods
+        or existing_plus_added_methods
+        or one_sided_existing_method_change
+    ):
         selected_methods = new_selected or old_selected
         profile_scopes = profiled_method_scopes(platform, class_scope, selected_methods)
         return {
@@ -330,7 +347,11 @@ def resolve_swift_ui_test_change(
             "expected_test_count": len(selected_methods),
             "blocker": None,
         }
-    if old_selected != new_selected and (old_selected or new_selected):
+    if (
+        old_selected != new_selected
+        and (old_selected or new_selected)
+        and not (old_unowned or new_unowned)
+    ):
         return {
             "platform": platform,
             "selection": "blocked",

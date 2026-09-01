@@ -1,5 +1,7 @@
 # 2026-08-31 cross-platform independent AI history review
 
+> Historical snapshot: this document records the blind/reveal review at the time it ran. Current closure and evidence boundaries are maintained in `completion-gate-ledger.md`, `capability-coverage.md`, and the workstream progress log; later fixes must not rewrite these historical findings into retroactive passes.
+
 ## Evidence boundary
 
 Four reviewers were split into Apple A/B and Android A/B. Each received only five task prompts plus a newly materialized parent snapshot without `.git`, target commit, task corpus, semantic answer, evaluation document or prior review. They wrote purpose, forbidden states, caller-to-platform chain, credible counterexamples, minimum purpose-level Oracles, focused and delivery lanes, and six-state boundaries before any reveal. All twenty runtime states stayed `NOT RUN`; no score or pass rate was produced.

@@ -1,5 +1,46 @@
 import Foundation
 
+enum MessagePaginationError: Error {
+    case cursorDidNotAdvance
+}
+
+struct UniqueMessagePageConsumption<Element> {
+    let appended: [Element]
+    let reachedTarget: Bool
+}
+
+func consumeUniqueMessagePage<Element, ID: Hashable, Cursor: Equatable>(
+    _ page: [Element],
+    targetRemaining: Int,
+    seenIDs: inout Set<ID>,
+    currentCursor: inout Cursor?,
+    id: (Element) -> ID,
+    cursor: (Element) -> Cursor,
+    isVisible: (Element) -> Bool
+) throws -> UniqueMessagePageConsumption<Element> {
+    precondition(targetRemaining > 0)
+    var appended: [Element] = []
+
+    for element in page {
+        let advancedCursor = cursor(element)
+        guard advancedCursor != currentCursor else {
+            throw MessagePaginationError.cursorDidNotAdvance
+        }
+        currentCursor = advancedCursor
+
+        let elementID = id(element)
+        guard isVisible(element), seenIDs.insert(elementID).inserted else {
+            continue
+        }
+        appended.append(element)
+        if appended.count == targetRemaining {
+            return UniqueMessagePageConsumption(appended: appended, reachedTarget: true)
+        }
+    }
+
+    return UniqueMessagePageConsumption(appended: appended, reachedTarget: false)
+}
+
 struct PushMessageSummary: Identifiable, Hashable, Sendable {
     let id: UUID
     let messageId: String?

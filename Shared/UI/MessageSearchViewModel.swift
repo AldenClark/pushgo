@@ -1,6 +1,12 @@
 import Foundation
 import Observation
 
+#if DEBUG
+private enum PushGoQualityInjectedMessageSearchError: Error {
+    case requestedFailure
+}
+#endif
+
 @MainActor
 @Observable
 final class MessageSearchViewModel {
@@ -18,6 +24,7 @@ final class MessageSearchViewModel {
     private(set) var totalResults: Int = 0
     private(set) var hasSearched: Bool = false
     private(set) var isSearching: Bool = false
+    private(set) var searchFailed: Bool = false
 
     private let pageSize: Int = 20
     private let maxCachedResults: Int = 200
@@ -33,10 +40,17 @@ final class MessageSearchViewModel {
     private var loadMoreTask: Task<Void, Never>?
     private var searchRequestRevision: UInt64 = 0
     private var shouldApplyQualitySearchDelay = true
+#if DEBUG
+    private var remainingQualitySearchFailures: Int
+#endif
 
     init(environment: AppEnvironment? = nil) {
         self.environment = environment ?? AppEnvironment.shared
         dataStore = self.environment.dataStore
+#if DEBUG
+        remainingQualitySearchFailures = PushGoAutomationContext.qualitySession?.faults
+            .failMessageSearchOnce == true ? 1 : 0
+#endif
     }
     func updateQuery(_ text: String) {
         query = text
@@ -63,6 +77,12 @@ final class MessageSearchViewModel {
     }
 
     func refreshMessagesImmediatelyIfNeeded() {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        performSearchImmediately(with: trimmed)
+    }
+
+    func retrySearch() {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         performSearchImmediately(with: trimmed)
@@ -138,6 +158,7 @@ final class MessageSearchViewModel {
         loadMoreTask?.cancel()
         loadMoreTask = nil
         isLoadingMore = false
+        searchFailed = false
         isSearching = true
         return searchRequestRevision
     }
@@ -151,6 +172,7 @@ final class MessageSearchViewModel {
         loadMoreTask?.cancel()
         loadMoreTask = nil
         hasSearched = false
+        searchFailed = false
         isSearching = false
         isLoadingMore = false
         displayedQuery = ""
@@ -171,6 +193,7 @@ final class MessageSearchViewModel {
 
         do {
             try await applyQualitySearchDelayIfNeeded()
+            try consumeQualitySearchFailureIfNeeded()
             let count = try await dataStore.searchMessagesCount(query: trimmedQuery)
             try Task.checkCancellation()
             let page = try await loadVisiblePage(
@@ -186,6 +209,7 @@ final class MessageSearchViewModel {
             nextCursor = page.nextCursor
             hasMoreResults = page.hasMoreResults
             hasSearched = true
+            searchFailed = false
             completedSearchRevision &+= 1
         } catch {
             guard isCurrentSearchRequest(requestRevision, query: trimmedQuery) else { return }
@@ -195,6 +219,7 @@ final class MessageSearchViewModel {
             nextCursor = nil
             hasMoreResults = false
             hasSearched = true
+            searchFailed = true
             completedSearchRevision &+= 1
         }
     }
@@ -208,6 +233,14 @@ final class MessageSearchViewModel {
         else { return }
         shouldApplyQualitySearchDelay = false
         try await Task.sleep(for: .milliseconds(delay))
+        #endif
+    }
+
+    private func consumeQualitySearchFailureIfNeeded() throws {
+        #if DEBUG
+        guard remainingQualitySearchFailures > 0 else { return }
+        remainingQualitySearchFailures -= 1
+        throw PushGoQualityInjectedMessageSearchError.requestedFailure
         #endif
     }
 

@@ -175,6 +175,8 @@ struct MessageListScreen: View {
                     .padding(.bottom, 10)
                     .accessibilityElement(children: .combine)
                     .accessibilityIdentifier("state.messages.page.loading")
+                } else if viewModel.pageLoadError != nil {
+                    messagePageFailureOverlay
                 }
             }
             .onAppear { scrollToSelectionIfNeeded(proxy) }
@@ -188,12 +190,35 @@ struct MessageListScreen: View {
         }
     }
 
+    private var messagePageFailureOverlay: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.secondary)
+            Text(localizationManager.localized("message_load_failed"))
+                .font(.caption)
+            Button(localizationManager.localized("retry")) {
+                Task { await viewModel.retryPageAfterFailure() }
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .accessibilityIdentifier("action.messages.page.retry")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.regularMaterial, in: Capsule())
+        .padding(.bottom, 10)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("state.messages.page.failed")
+    }
+
     private var searchResultsList: some View {
         ScrollViewReader { proxy in
             List {
                 if searchResults.isEmpty {
                     if searchViewModel.isSearching {
                         searchProgressRow
+                    } else if searchViewModel.searchFailed {
+                        searchFailureRow
                     } else {
                         searchPlaceholderRow
                     }
@@ -320,6 +345,26 @@ struct MessageListScreen: View {
         .listRowInsets(EdgeInsets())
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("state.messages.search.loading")
+    }
+
+    private var searchFailureRow: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+            Text(localizationManager.localized("operation_failed"))
+                .font(.headline)
+            Button(localizationManager.localized("retry")) {
+                searchViewModel.retrySearch()
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("action.messages.search.retry")
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.vertical, 60)
+        .listRowInsets(EdgeInsets())
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("state.messages.search.failed")
     }
 
     private func scrollToSelectionIfNeeded(_ proxy: ScrollViewProxy) {

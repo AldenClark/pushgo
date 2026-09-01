@@ -25,15 +25,20 @@ class QualityObservationTests(unittest.TestCase):
         run_identity: str | None = None,
     ) -> None:
         recorded = datetime(2026, 8, 1, tzinfo=timezone.utc) + timedelta(days=day)
+        selected_claims = selected or [f"claim-{day}"]
+        executed_claims = executed if executed is not None else selected_claims
         payload = {
-            "schema_version": 1,
+            "schema_version": 2,
             "recorded_at": recorded.isoformat(),
+            "platform": "apple",
             "lane": lane,
             "product_capability_status": product,
             "test_system_status": test_system,
-            "selected_claims": selected or [f"claim-{day}"],
-            "executed_claims": executed if executed is not None else (selected or [f"claim-{day}"]),
-            "incomplete_selected_claims": [],
+            "selected_claims": selected_claims,
+            "executed_claims": executed_claims,
+            "incomplete_selected_claims": [
+                claim for claim in selected_claims if claim not in executed_claims
+            ],
             "test_system_issue_ids": issues or [],
             "source_revision": f"revision-{day}",
             "source_dirty": False,
@@ -89,6 +94,7 @@ class QualityObservationTests(unittest.TestCase):
                 root,
                 14,
                 "pr",
+                product="FAILED",
                 selected=["p0-visible-purpose"],
                 executed=[],
             )
@@ -154,6 +160,50 @@ class QualityObservationTests(unittest.TestCase):
             self.assertEqual(2, process.returncode)
             self.assertIn("unreadable formal quality receipt", process.stdout)
             self.assertFalse(output.exists())
+
+    def test_invalid_status_pair_and_unauthorized_waiver_are_rejected(self) -> None:
+        for product, test_system in (("PASSED", "BLOCKED"), ("WAIVED", "PASSED")):
+            with self.subTest(product=product, test_system=test_system):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    self.write_receipt(root, 0, "release", product=product, test_system=test_system)
+                    output = root / "observation.json"
+                    process = subprocess.run(
+                        ["python3", str(SCRIPT), "--input", str(root), "--output", str(output)],
+                        cwd=REPO,
+                        text=True,
+                        capture_output=True,
+                    )
+                    self.assertEqual(2, process.returncode)
+                    self.assertIn("invalid receipt contract", process.stdout)
+                    self.assertFalse(output.exists())
+
+    def test_import_rejects_old_schema_and_passed_receipt_without_claims(self) -> None:
+        for mutation in ("old-schema", "empty-claims", "non-string-waiver"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                self.write_receipt(root, 0, "release")
+                receipt = next(root.glob("*.json"))
+                payload = json.loads(receipt.read_text(encoding="utf-8"))
+                if mutation == "old-schema":
+                    payload["schema_version"] = 1
+                elif mutation == "empty-claims":
+                    payload["selected_claims"] = []
+                    payload["executed_claims"] = []
+                    payload["incomplete_selected_claims"] = []
+                else:
+                    payload["waiver_id"] = 1
+                receipt.write_text(json.dumps(payload), encoding="utf-8")
+                output = root / "observation.json"
+                process = subprocess.run(
+                    ["python3", str(SCRIPT), "--input", str(root), "--output", str(output)],
+                    cwd=REPO,
+                    text=True,
+                    capture_output=True,
+                )
+                self.assertEqual(2, process.returncode)
+                self.assertIn("invalid receipt contract", process.stdout)
+                self.assertFalse(output.exists())
 
 
 if __name__ == "__main__":
