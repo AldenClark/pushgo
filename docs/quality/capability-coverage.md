@@ -70,6 +70,10 @@ Android Room migration 补充证据：精确方法 `PushGoDatabaseMigrationDevic
 
 Gateway 设置的用户目的不是“地址写进存储”就算成功，而是候选网关完成验证/注册后，提交的新配置成为唯一有效配置；提交后的频道同步若暂时失败，用户必须知道新网关已经生效且同步会恢复，不能看到与事实相反的旧值回滚。iOS 和 macOS 新增的 `testSettingsGatewaySyncFailureReportsCommittedGatewayAndPendingRecovery` / `testGatewaySyncFailureReportsCommittedGatewayAndPendingRecovery` 通过一次性 App-owned fault 打在真实 `syncSubscriptionsIfNeeded` 边界，要求真实 Sheet 关闭、pending 反馈出现、设置中的新地址仍准确，并在普通 relaunch 后保持。Android 对应 `QualitySettingsJourneyInstrumentedTest#gatewaySyncFailureReportsCommittedGatewayAndPendingRecovery` 复用同一目的，但当前无可用 `adb` serial，严格为 `NOT RUN`；`QualityRuntimeTest`、Kotlin 编译和 androidTest 编译只证明接入边界，不替代 Compose UI。三端当前均不宣称真实公网 Gateway、FCM/Private delivery 或进程死亡恢复；transport/private capability、后续 cleanup 的失败语义和 Apple Keychain 写后读回分裂仍是后续高价值边界。
 
+### 2026-09-01 Android 频道错误归属证据更新
+
+Android 的频道远端拒绝与本地持久化失败已在既有 `QualityChannelJourneyInstrumentedTest` 中补上宿主级负控：失败必须保留 `sheet.channels.entry`、原始输入和可用重试，且 `QualityRuntime.globalErrorPresentationCount` 不得增加，从而直接验证错误没有泄漏为宿主 Toast。`ChannelListScreen` 仅在真正的宿主 `errorMessage` Toast 路径记录该计数；频道 Sheet 的 `channelEntryErrorMessage` 保持独立。源码/JVM 298/298/androidTest 编译当前通过，但无 `adb` serial，Compose UI 仍 `NOT RUN`，不以静态接入或编译替代真实 Android UI 结果。
+
 ## 增量规则
 
 新增或改变 Screen、Route、Action、持久字段、系统表面、后台任务、权限或性能敏感路径时，必须更新相应行并运行调用者/数据/平台消费者影响分析。`config/quality-impact.json` 只强制确定性最低 Lane；未映射产品路径阻断，命中路径也不能自动宣称覆盖。
