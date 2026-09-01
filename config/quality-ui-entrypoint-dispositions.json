@@ -27,10 +27,6 @@
           "disposition": "DEFERRED",
           "reason": "Real Ready, degraded, recovery and transport convergence are residual P1-WATCH scope owned by the watchOS quality owner, due 2026-11-30."
         },
-        "tab.events": {
-          "disposition": "SEMANTICALLY_COVERED_NON_LITERAL_QUERY",
-          "reason": "The iOS primary-navigation journey and Watch core journey reach Events through real controls and require exact canonical rows and details; neither relies on this identifier as its success Oracle."
-        },
         "toggle.settings.beta_channel": {
           "disposition": "DEFERRED",
           "reason": "Beta selection and its real update candidate effect are residual P1-APPLE-SETTINGS scope owned by the Apple platform-settings quality owner, due 2026-11-09."

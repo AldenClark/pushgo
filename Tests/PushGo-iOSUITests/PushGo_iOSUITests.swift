@@ -2721,12 +2721,7 @@ final class PushGo_iOSUITests: XCTestCase {
         launch(context.app)
 
         assertQualityRuntimeReady(in: context.app, timeout: 15)
-        // Event is the second visible tab for an event fixture. Use the real tab
-        // bar position as a fallback because iOS 27 currently drops this one
-        // tab-item identifier while exposing the neighboring identifiers.
-        let eventsTab = context.app.tabBars.buttons.element(boundBy: 1)
-        XCTAssertTrue(eventsTab.waitForExistence(timeout: 8))
-        eventsTab.tap()
+        openEventsTab(in: context.app)
         let eventRow = element(in: context.app, identifier: "event.row.quality-event-active")
         XCTAssertTrue(eventRow.waitForExistence(timeout: 8))
         let offscreenEvent = element(
@@ -2831,9 +2826,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
         launch(context.app)
         assertQualityRuntimeReady(in: context.app, timeout: 15)
-        let relaunchedEventsTab = context.app.tabBars.buttons.element(boundBy: 1)
-        XCTAssertTrue(relaunchedEventsTab.waitForExistence(timeout: 8))
-        relaunchedEventsTab.tap()
+        openEventsTab(in: context.app)
         let persistedRow = element(in: context.app, identifier: "event.row.quality-event-active")
         XCTAssertTrue(persistedRow.waitForExistence(timeout: 8))
         let persistedRowActionable = XCTNSPredicateExpectation(
@@ -2876,9 +2869,7 @@ final class PushGo_iOSUITests: XCTestCase {
         launch(context.app)
 
         assertQualityRuntimeReady(in: context.app, timeout: 15)
-        let eventsTab = context.app.tabBars.buttons.element(boundBy: 1)
-        XCTAssertTrue(eventsTab.waitForExistence(timeout: 8))
-        eventsTab.tap()
+        openEventsTab(in: context.app)
         let eventRow = element(in: context.app, identifier: "event.row.quality-event-active")
         XCTAssertTrue(eventRow.waitForExistence(timeout: 8))
         eventRow.tap()
@@ -2932,9 +2923,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
         launch(context.app)
         assertQualityRuntimeReady(in: context.app, timeout: 15)
-        let relaunchedEventsTab = context.app.tabBars.buttons.element(boundBy: 1)
-        XCTAssertTrue(relaunchedEventsTab.waitForExistence(timeout: 8))
-        relaunchedEventsTab.tap()
+        openEventsTab(in: context.app)
         let persistedRow = element(in: context.app, identifier: "event.row.quality-event-active")
         XCTAssertTrue(persistedRow.waitForExistence(timeout: 8))
         XCTAssertTrue(
@@ -5062,6 +5051,53 @@ final class PushGo_iOSUITests: XCTestCase {
 
     func element(in app: XCUIApplication, identifier: String) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+    }
+
+    private func eventsTab(in app: XCUIApplication) -> XCUIElement {
+        let identifiedTab = app.buttons["tab.events"]
+        if identifiedTab.exists {
+            return identifiedTab
+        }
+        // Keep a narrow compatibility fallback for iOS releases that omit the
+        // tab-item identifier from the accessibility tree. The post-tap screen
+        // assertion below prevents a positional match from being treated as a
+        // successful navigation when it did not actually switch pages.
+        return app.tabBars.buttons.element(boundBy: 1)
+    }
+
+    private func openEventsTab(
+        in app: XCUIApplication,
+        timeout: TimeInterval = 8,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let target = eventsTab(in: app)
+        XCTAssertTrue(
+            target.waitForExistence(timeout: timeout),
+            "The real Events tab must exist before opening the Events page",
+            file: file,
+            line: line
+        )
+        let actionable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND hittable == true"),
+            object: target
+        )
+        let result = XCTWaiter.wait(for: [actionable], timeout: timeout)
+        XCTAssertEqual(
+            result,
+            .completed,
+            "The real Events tab must be actionable before opening the Events page",
+            file: file,
+            line: line
+        )
+        guard result == .completed else { return }
+        target.tap()
+        XCTAssertTrue(
+            element(in: app, identifier: "screen.events.list").waitForExistence(timeout: timeout),
+            "The Events tab tap must reach the production Events list",
+            file: file,
+            line: line
+        )
     }
 
     private func storageRecoveryButton(
