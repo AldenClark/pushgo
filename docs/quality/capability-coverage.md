@@ -138,3 +138,7 @@ Runner 新增显式 `QUALITY_IOS_SIMULATOR_LIFECYCLE=cold|warm`，默认仍是�
 ### 2026-09-01 iOS Gateway validation current-byte replay
 
 `testSettingsServerRejectsInvalidAndUnregisteredCandidatesWithoutLeakingSheetError` ran once on the dedicated iOS Simulator after the lease-recovery change: 1/1 in 49.704s, zero skips/retries/runtime warnings, result bundle `build/quality-results/ios-gateway-validation-after-lease/run-1-20260901-231836.xcresult`, and strict execution verification reported `EXECUTED`. The real Settings Sheet kept both invalid and unregistered-candidate failures inside the Sheet, retained the old gateway before successful validation/registration, and left the persisted configuration unchanged after Cancel. This is a current-byte regression receipt for the controlled simulator path, not evidence for external gateways or physical devices.
+
+### 2026-09-01 Atomic message-batch rollback contract
+
+`LocalDataStoreTests.saveMessagesBatchRollsBackAllRowsWhenALaterPrimaryIdentityConflicts` injects a real SQLite primary-identity conflict after a valid row in the same canonical batch. The write must throw, preserve the previously stored Message byte-for-byte at the business-field level, and leave neither the earlier new row nor the conflicting row visible afterward. Targeted execution passed 1/1 in 0.032s; the subsequent full Apple Core run passed 442/442 across 41 suites. This closes the deterministic all-or-nothing write contract only; it does not claim physical disk-exhaustion or process-kill evidence.

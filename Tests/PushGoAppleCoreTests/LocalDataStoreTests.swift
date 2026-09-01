@@ -1952,6 +1952,46 @@ struct LocalDataStoreTests {
     }
 
     @Test
+    func saveMessagesBatchRollsBackAllRowsWhenALaterPrimaryIdentityConflicts() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let existingID = UUID(uuidString: "40000000-0000-0000-0000-000000000101")!
+            let existing = makeMessage(
+                id: existingID,
+                messageId: "msg-batch-existing-001",
+                notificationRequestId: "req-batch-existing-001",
+                title: "Existing canonical row",
+                body: "Must remain unchanged"
+            )
+            try await store.saveMessage(existing)
+
+            let newRow = makeMessage(
+                messageId: "msg-batch-new-001",
+                notificationRequestId: "req-batch-new-001",
+                title: "New row",
+                body: "Must not partially commit"
+            )
+            let conflictingRow = makeMessage(
+                id: existingID,
+                messageId: "msg-batch-conflict-001",
+                notificationRequestId: "req-batch-conflict-001",
+                title: "Conflicting row",
+                body: "Must not overwrite existing data"
+            )
+
+            await #expect(throws: (any Error).self) {
+                try await store.saveMessagesBatch([newRow, conflictingRow])
+            }
+
+            let persistedExisting = try await store.loadMessage(id: existingID)
+            #expect(persistedExisting?.messageId == "msg-batch-existing-001")
+            #expect(persistedExisting?.title == "Existing canonical row")
+            #expect(persistedExisting?.body == "Must remain unchanged")
+            #expect(try await store.loadMessage(messageId: "msg-batch-new-001") == nil)
+            #expect(try await store.loadMessage(messageId: "msg-batch-conflict-001") == nil)
+        }
+    }
+
+    @Test
     func saveEntityRecordsTreatsEventHeadWithinThingScopeAsTopLevelAndThingRelated() async throws {
         try await withIsolatedLocalDataStore { store, _ in
             let thingParent = makeMessage(

@@ -42,6 +42,10 @@ A read-only product/runner audit confirms both Apple editors disable Cancel and 
 
 The Apple Core contract `expiredDeletionLeaseIsReclaimedByNextExecutorWithoutDuplicateIntent` now covers the lowest-cost durable recovery boundary: an expired executor lease is reclaimed by the next executor, the same intent advances exactly once, a stale owner is fenced from committing, and the canonical message reaches deletion with no pending intent left. Focused execution passed 1/1, followed by the full 441/441 Apple Core run. Actual process death, backoff, conflict handling and multiple-pending concurrency remain deferred; the `P1-PENDING-DELETE` group therefore stays `DEFERRED`.
 
+### 2026-09-01 Atomic batch rollback contract
+
+`LocalDataStoreTests.saveMessagesBatchRollsBackAllRowsWhenALaterPrimaryIdentityConflicts` adds the lowest-cost P1-STORE durability boundary: a later SQLite identity conflict rolls back the entire canonical batch, leaves the prior row unchanged, and exposes no partial new data. Focused execution passed 1/1, followed by the full 442/442 Apple Core run. Real storage exhaustion and process interruption remain deferred, so `P1-STORE` stays `DEFERRED`.
+
 1. Close the highest-value positive Oracle inside an existing fixture/journey first; add a new UI method or startup only when ownership, lifecycle or system consumer is genuinely different.
 2. A group may move from `DEFERRED` to `IMPLEMENTED` only when every referenced P1 row is backed by a fresh executable receipt. It may move to `REMOVED/NA` only when every row is inapplicable under a documented product-reachability decision. Partial evidence is recorded in `capability-coverage.md`, not promoted here; neither terminal state waives a separate physical/provider Release gate.
 3. A due-date edit must state the newly learned dependency or capacity fact in the same change. Repeatedly moving dates without new evidence is a failed gate, not progress.
