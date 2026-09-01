@@ -81,6 +81,9 @@ final class SettingsViewModel {
     private let localizationManager: LocalizationManager
     private let dataStore: LocalDataStore
     @ObservationIgnored private let notificationSoundManager = NotificationSoundManager.shared
+    /// The editor owns this task so every dismissal path can request
+    /// cancellation without allowing a second gateway save to start first.
+    @ObservationIgnored private var serverSaveTask: Task<Void, Never>?
     @ObservationIgnored private var isInitializing = true
     @ObservationIgnored private var isRefreshingLaunchAtLogin = false
     var launchAtLoginEnabled: Bool = false {
@@ -626,7 +629,20 @@ final class SettingsViewModel {
         }
     }
 
-    func saveServerConfig() async {
+    func startServerSave() {
+        guard serverSaveTask == nil, !isSavingServerConfig else { return }
+        serverSaveTask = Task { [weak self] in
+            guard let self else { return }
+            defer { self.serverSaveTask = nil }
+            await self.saveServerConfig()
+        }
+    }
+
+    func cancelServerSaveIfNeeded() {
+        serverSaveTask?.cancel()
+    }
+
+    private func saveServerConfig() async {
         serverError = nil
         let trimmedAddress = gatewayInput.address.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedAddress.isEmpty else {
@@ -675,6 +691,8 @@ final class SettingsViewModel {
             // A candidate gateway is not configuration until remote device
             // registration and provider-route setup have both succeeded.
             try await environment.validateAndUpdateServerConfig(newConfig)
+        } catch is CancellationError {
+            return
         } catch let appError as AppError {
             serverError = appError
             return

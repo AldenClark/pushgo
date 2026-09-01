@@ -230,6 +230,25 @@ class QualityTestSystemIssueTests(unittest.TestCase):
         self.assertNotIn("killall Simulator", runner)
         self.assertNotIn("killall CoreSimulator", runner)
 
+    def test_gateway_save_cancellation_is_guarded_before_local_commit_on_both_apple_targets(self):
+        view_model = (REPO / "Shared/UI/SettingsViewModel.swift").read_text(encoding="utf-8")
+        ios_environment = (REPO / "Apps/PushGo-iOS/App/AppEnvironment.swift").read_text(encoding="utf-8")
+        macos_environment = (REPO / "Apps/PushGo-macOS/App/AppEnvironment.swift").read_text(encoding="utf-8")
+        macos_settings = (REPO / "Apps/PushGo-macOS/UI/Screens/SettingsView.swift").read_text(encoding="utf-8")
+
+        self.assertIn("serverSaveTask: Task<Void, Never>?", view_model)
+        self.assertIn("func startServerSave()", view_model)
+        self.assertIn("func cancelServerSaveIfNeeded()", view_model)
+        self.assertIn("catch is CancellationError", view_model)
+        for source in (ios_environment, macos_environment):
+            self.assertIn("try Task.checkCancellation()", source)
+            self.assertIn("try await environment.validateAndUpdateServerConfig(newConfig)", view_model)
+            self.assertIn("try await dataStore.saveServerConfig(normalized)", source)
+            self.assertIn("try await providerRouteController.persistProviderDeviceKey", source)
+
+        self.assertIn(".interactiveDismissDisabled(viewModel.isSavingServerConfig)", macos_settings)
+        self.assertIn("viewModel.cancelServerSaveIfNeeded()", macos_settings)
+
     def test_ios_runner_rejects_system_notification_scope_before_using_simulator(self):
         process = subprocess.run(
             [str(REPO / "scripts/run_ios_ui_tests.sh")],

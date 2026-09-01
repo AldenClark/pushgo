@@ -48,6 +48,7 @@ struct ServerManagementSheet: View {
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button(localizationManager.localized("cancel")) {
+                            viewModel.cancelServerSaveIfNeeded()
                             viewModel.clearServerError()
                             onDismiss()
                         }
@@ -197,7 +198,7 @@ private struct ServerManagementContentView: View {
                 isLoading: viewModel.isSavingServerConfig
             ) {
                 focusedField = nil
-                Task { await viewModel.saveServerConfig() }
+                viewModel.startServerSave()
             }
             .disabled(viewModel.isSavingServerConfig)
             .accessibilityIdentifier("action.settings.server.save")

@@ -597,9 +597,11 @@ final class AppEnvironment {
     /// issue a fresh device identity and accept the current APNs route before
     /// any locally active gateway state is changed.
     func validateAndUpdateServerConfig(_ config: ServerConfig) async throws {
+        try Task.checkCancellation()
         let normalized = config.normalized()
         let previousConfig = serverConfig
         if gatewayIdentity(previousConfig) == gatewayIdentity(normalized) {
+            try Task.checkCancellation()
             try await updateServerConfig(normalized)
             return
         }
@@ -608,12 +610,17 @@ final class AppEnvironment {
         // and the new candidate out of the active identity rather than silently
         // forgetting the old remote route.
         try await reconcileCommittedGatewayTransitionCleanup()
+        try Task.checkCancellation()
         let previousDeviceKey = await dataStore.cachedDeviceKey(
             for: platformIdentifier(),
             channelType: "apns"
         )?
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        try Task.checkCancellation()
         let preparedDeviceKey = try await prepareCandidateGateway(normalized)
+        // The candidate has been validated, but no local identity has been
+        // changed yet. Cancellation here must leave the old gateway active.
+        try Task.checkCancellation()
 
         var transition = GatewayTransitionJournal.Record(
             platform: platformIdentifier(),
@@ -627,7 +634,9 @@ final class AppEnvironment {
         // has an unambiguous old identity to restore on the next bootstrap.
         try gatewayTransitionJournal.save(transition)
         do {
+            try Task.checkCancellation()
             try await dataStore.saveServerConfig(normalized)
+            try Task.checkCancellation()
             try gatewayTransitionJournal.advance(&transition, to: .configPersisted)
 #if DEBUG
             if remainingQualityGatewaySwitchCommitFailures > 0 {
@@ -644,6 +653,7 @@ final class AppEnvironment {
                 preparedDeviceKey,
                 source: "provider.device_key.gateway_switch"
             )
+            try Task.checkCancellation()
             try gatewayTransitionJournal.advance(&transition, to: .deviceKeyPersisted)
         } catch {
             do {

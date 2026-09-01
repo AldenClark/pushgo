@@ -118,6 +118,10 @@ Runner 新增显式 `QUALITY_IOS_SIMULATOR_LIFECYCLE=cold|warm`，默认仍是�
 
 `run_ios_ui_tests.sh` 现沿用精确 `Problem Reporter`/`UserNotificationCenter` 清理器，在专用 iOS Simulator 批次开始前、运行中（200ms watcher）和退出时清除延迟出现的宿主崩溃窗口；清理失败直接 `BLOCKED`，不重试原始业务结果，也不执行全局 Simulator/CoreSimulator kill/reset。改动后的 `testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen` warm 当前字节原生 1/1（XCTest 66.177 秒，xcodebuild 68.755 秒）、零 skip、零 runtime warning，结果束 `build/quality-results/ios-primary-navigation-after-runner-cleanup/run-1-20260901-221710.xcresult`，严格执行校验为 `EXECUTED`；PosterBoard 报告文件数保持 28→28，本批未新增报告。该回归只证明清理接入未阻断真实导航，不把“没有弹窗”当作产品通过；PosterBoard 本身仍单列 Apple Simulator `FAILED_TEST_SYSTEM`/环境观察。
 
+### 2026-09-01 Gateway 保存取消安全收口
+
+`I/M Settings server` 的实现与证据新增一条事务边界：编辑器保存由 ViewModel 持有 Task，iOS/macOS 系统关闭在保存中请求取消；`validateAndUpdateServerConfig` 在候选注册成功但本地提交尚未完成时检查取消，并依靠 transition journal 回滚旧配置与旧 device identity，提交进入 `committed` 后保留新网关的 pending/relaunch 语义。静态合同覆盖两端 cancellation guard、macOS dismiss guard 与 Task ownership；两端 build-for-testing 及 Python 200/200 质量合同通过。macOS 正向换域 focused 1/1、53.036 秒，结果束 `build/quality-results/macos-gateway-cancel-regression/run-20260901-223156.xcresult`；iOS 同一真实换域/频道/重启终点 focused 1/1、94.628 秒，结果束 `build/quality-results/ios-gateway-cancel-regression/run-1-20260901-223332.xcresult`；均零重试、零跳过、零运行时告警并严格复核 `executed_test_count=1`。未引入暂停或等待伪造竞争窗口，pre-commit 主动取消 UI 仍 `NOT RUN`，不从上述正向结果外推。
+
 ## 增量规则
 
 新增或改变 Screen、Route、Action、持久字段、系统表面、后台任务、权限或性能敏感路径时，必须更新相应行并运行调用者/数据/平台消费者影响分析。`config/quality-impact.json` 只强制确定性最低 Lane；未映射产品路径阻断，命中路径也不能自动宣称覆盖。

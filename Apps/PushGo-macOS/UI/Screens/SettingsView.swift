@@ -17,7 +17,9 @@ struct SettingsView: View {
                 .navigationTitle(localizationManager.localized("settings"))
         }
         .accessibilityIdentifier("screen.settings")
-        .sheet(item: $macOverlay) { overlay in
+        .sheet(item: $macOverlay, onDismiss: {
+            viewModel.cancelServerSaveIfNeeded()
+        }) { overlay in
             macOverlaySheet(for: overlay)
         }
         .task {
@@ -78,6 +80,7 @@ struct SettingsView: View {
                 .frame(width: 520)
                 .toastOverlay(environment: environment)
                 .transientPresentationRoot()
+                .interactiveDismissDisabled(viewModel.isSavingServerConfig)
         case .notificationSounds:
             NotificationSoundSettingsContentView(
                 viewModel: viewModel,
@@ -555,6 +558,7 @@ private struct ServerManagementContentView: View {
                         variant: .secondary,
                         fullWidth: false
                     ) {
+                        viewModel.cancelServerSaveIfNeeded()
                         closeSheet()
                     }
                     .disabled(viewModel.isSavingServerConfig)
@@ -568,7 +572,7 @@ private struct ServerManagementContentView: View {
                         fullWidth: false
                     ) {
                         focusedField = nil
-                        Task { await viewModel.saveServerConfig() }
+                        viewModel.startServerSave()
                     }
                     .disabled(viewModel.isSavingServerConfig)
                     .accessibilityIdentifier("action.settings.server.save")
@@ -590,6 +594,7 @@ private struct ServerManagementContentView: View {
             }
         }
         .onDisappear {
+            viewModel.cancelServerSaveIfNeeded()
             viewModel.clearError()
         }
     }
