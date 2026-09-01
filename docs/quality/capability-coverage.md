@@ -98,6 +98,10 @@ Thing 搜索 A/B 的业务动作虽各为 1/1，但 Cmd-A/Cmd-V 与 `typeText` �
 
 `testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen` 在本轮 iOS 页面状态改动后仍为 1/1、零重试、零 runtime warning，结果束 `build/quality-results/ios-primary-navigation-after-page-status/run-1-20260901-215001.xcresult`。同一 App-owned 会话经真实主导航打开准确 Message、Event、Thing、Channel 与 Settings 页面/详情，继续执行 Event 关闭、Settings 文档交接和 Thing 详情终点；没有通过元素存在或页面 ID 代替业务结果。它只关闭受控 iOS 导航回归，不外推 macOS/Android、系统 Spotlight/通知或物理设备。
 
+### 2026-09-01 iOS Gateway 正向换域复跑
+
+`testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch` 在专用 Simulator 当前字节 1/1、93.649 秒、零重试、零 skip、零 runtime warning，结果束 `build/quality-results/ios-gateway-positive-current/run-1-20260901-215203.xcresult`。用户从真实 Settings/Server 控件揭示并再次遮蔽 token，输入候选地址后完成标准化保存；返回 Channels 后新增频道必须命中新 Gateway，旧 Gateway 频道不得出现，普通 relaunch 后新频道仍准确存在。该终点验证真实换域、数据范围和持久化，而非只检查配置字段或文件；与验证拒绝/错误归属、提交后同步失败旅程互补，不外推公网 Gateway、Provider、Android UI 或物理设备。
+
 ## 增量规则
 
 新增或改变 Screen、Route、Action、持久字段、系统表面、后台任务、权限或性能敏感路径时，必须更新相应行并运行调用者/数据/平台消费者影响分析。`config/quality-impact.json` 只强制确定性最低 Lane；未映射产品路径阻断，命中路径也不能自动宣称覆盖。
