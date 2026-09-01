@@ -73,4 +73,89 @@ struct ProviderRouteControllerTests {
             #expect(await store.cachedDeviceKey(for: "ios") == oldDeviceKey)
         }
     }
+
+    @Test("old gateway route cleanup exposes failure for durable retry")
+    func previousGatewayRouteCleanupDoesNotSwallowFailure() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let host = "cleanup-route-\(UUID().uuidString.lowercased()).example"
+            let baseURL = try #require(URL(string: "https://\(host)/Gateway"))
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.protocolClasses = [ChannelServiceURLProtocol.self]
+            let session = URLSession(configuration: configuration)
+            defer {
+                session.invalidateAndCancel()
+                ChannelServiceURLProtocol.unregister(host: host)
+            }
+            ChannelServiceURLProtocol.register(host: host) { _ in
+                throw URLError(.cannotConnectToHost)
+            }
+
+            let controller = await Task { @MainActor in
+                ProviderRouteController(
+                    platform: "ios",
+                    dataStore: store,
+                    channelSubscriptionService: ChannelSubscriptionService(session: session),
+                    localizationManager: LocalizationManager(),
+                    refreshAutomationState: {},
+                    runtimeMessageRecorder: { _, _, _, _ in }
+                )
+            }.value
+
+            await #expect(throws: Error.self) {
+                try await controller.cleanupPreviousGatewayDeviceRoute(
+                    previousConfig: ServerConfig(baseURL: baseURL, token: "old-token"),
+                    previousDeviceKey: "old-device-key",
+                    nextConfig: ServerConfig(
+                        baseURL: try #require(URL(string: "https://new-gateway.example/Gateway")),
+                        token: "new-token"
+                    )
+                )
+            }
+        }
+    }
+
+    @Test("already absent old gateway route completes cleanup idempotently")
+    func alreadyAbsentPreviousGatewayRouteCompletesCleanup() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let host = "cleanup-idempotent-\(UUID().uuidString.lowercased()).example"
+            let baseURL = try #require(URL(string: "https://\(host)/Gateway"))
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.protocolClasses = [ChannelServiceURLProtocol.self]
+            let session = URLSession(configuration: configuration)
+            defer {
+                session.invalidateAndCancel()
+                ChannelServiceURLProtocol.unregister(host: host)
+            }
+            ChannelServiceURLProtocol.register(host: host) { request in
+                let payload = #"{"success":false,"error_code":"route_not_found","problem":{"code":"route_not_found","category":"not_found","status":404,"title":"Not found","retryable":false}}"#
+                let response = HTTPURLResponse(
+                    url: try #require(request.url),
+                    statusCode: 404,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!
+                return (response, Data(payload.utf8))
+            }
+
+            let controller = await Task { @MainActor in
+                ProviderRouteController(
+                    platform: "ios",
+                    dataStore: store,
+                    channelSubscriptionService: ChannelSubscriptionService(session: session),
+                    localizationManager: LocalizationManager(),
+                    refreshAutomationState: {},
+                    runtimeMessageRecorder: { _, _, _, _ in }
+                )
+            }.value
+
+            try await controller.cleanupPreviousGatewayDeviceRoute(
+                previousConfig: ServerConfig(baseURL: baseURL, token: "old-token"),
+                previousDeviceKey: "old-device-key",
+                nextConfig: ServerConfig(
+                    baseURL: try #require(URL(string: "https://new-gateway.example/Gateway")),
+                    token: "new-token"
+                )
+            )
+        }
+    }
 }

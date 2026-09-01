@@ -170,6 +170,11 @@ struct MainTabContainerView: View {
         case .things:
             await entityViewModel.reloadThings()
         case .channels:
+            // A Channels selection is the user-visible recovery boundary.  Do
+            // the production sync/reconciliation here rather than in the
+            // child screen's onAppear, which may run during TabView
+            // preconstruction or be skipped when the child is reused.
+            await environment.syncSubscriptionsOnChannelListEntry()
             await messageListViewModel.refreshChannelSummaries()
         }
         ensureSelectionIsVisible()

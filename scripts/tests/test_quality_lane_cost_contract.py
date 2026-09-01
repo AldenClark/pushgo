@@ -407,6 +407,16 @@ class QualityLaneCostContractTests(unittest.TestCase):
             runner,
         )
 
+    def test_impact_selected_channel_sheet_claim_is_identical_to_executed_claim(self) -> None:
+        runner = (REPO / "scripts/quality_test.sh").read_text()
+        body = runner.split("      apple-ios-channel-sheet-error-owner)", 1)[1].split(
+            "        ;;", 1
+        )[0]
+        claim = "iOS impact-selected Channel Sheet error stays with its failed action"
+        self.assertEqual(1, body.count(f'        selected_claims+=("{claim}")'))
+        self.assertEqual(1, body.count(f'        claims+=("{claim}")'))
+        self.assertNotIn("iOS Channel rejection stays in its Sheet", body)
+
     def test_dedicated_apple_evidence_runners_follow_the_lane_result_root(self) -> None:
         runner_expectations = {
             "run_ios_performance_negative_control.sh": "ios-performance-negative",

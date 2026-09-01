@@ -129,6 +129,11 @@ SWIFT_MEMBER_PATTERN = re.compile(
     r"^(?:(?:public|internal|private|fileprivate|open|final|static|class|nonisolated|override)\s+)*"
     r"(?:func|var|let|init|deinit|subscript)\b"
 )
+SWIFT_FUNCTION_PATTERN = re.compile(
+    r"^(?P<indent>\s*)"
+    r"(?:(?:public|internal|private|fileprivate|open|final|static|class|nonisolated|override|mutating|async|throws|nonisolated)\s+)*"
+    r"func\s+(?P<name>[A-Za-z_]\w*)\s*\("
+)
 HUNK_PATTERN = re.compile(r"^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@")
 SPECIAL_UI_TEST_PROFILES = {
     (
@@ -207,6 +212,128 @@ def changed_hunk_ranges(patch: str) -> tuple[list[tuple[int, int]], list[tuple[i
         if new_count:
             new_ranges.append((new_start, new_start + new_count - 1))
     return (old_ranges, new_ranges) if old_ranges or new_ranges else None
+
+
+def swift_function_ranges(source: str) -> dict[str, tuple[int, int]] | None:
+    """Resolve ordinary Swift function bodies for conservative impact selection.
+
+    This is intentionally narrower than a parser: it only provides a safe
+    lower-bound selector for changed hunks. If a declaration or body cannot be
+    resolved unambiguously, callers must fall back to all matching rules.
+    """
+    lines = source.splitlines()
+    functions: dict[str, tuple[int, int]] = {}
+    matches: list[tuple[int, str, int]] = []
+    for index, line in enumerate(lines):
+        match = SWIFT_FUNCTION_PATTERN.match(line)
+        if match:
+            matches.append((index, match.group("name"), len(match.group("indent").replace("\t", "    "))))
+    if not matches:
+        return None
+    for index, name, indent in matches:
+        if name in functions:
+            return None
+        end_line = len(lines)
+        for candidate_index in range(index + 1, len(lines)):
+            candidate = lines[candidate_index]
+            stripped = candidate.strip()
+            if not stripped:
+                continue
+            candidate_indent = len(candidate) - len(candidate.lstrip(" \t"))
+            if candidate_indent < indent:
+                end_line = candidate_index
+                break
+            if candidate_indent == indent and (
+                stripped == "}" or SWIFT_MEMBER_PATTERN.match(stripped)
+            ):
+                end_line = candidate_index + (1 if stripped == "}" else 0)
+                break
+        functions[name] = (index + 1, end_line)
+    return functions
+
+
+def symbols_covering_changes(
+    ranges: list[tuple[int, int]],
+    symbols: dict[str, tuple[int, int]] | None,
+) -> tuple[set[str], bool]:
+    """Return changed function names and whether any hunk is unowned."""
+    if symbols is None:
+        return set(), True
+    selected: set[str] = set()
+    unowned = False
+    for changed_start, changed_end in ranges:
+        covering = {
+            name
+            for name, (symbol_start, symbol_end) in symbols.items()
+            if changed_start <= symbol_end and changed_end >= symbol_start
+        }
+        if len(covering) > 1:
+            return set(), True
+        if not covering:
+            unowned = True
+        selected.update(covering)
+    return selected, unowned
+
+
+def swift_symbol_impacts(
+    args: argparse.Namespace,
+    repo: Path,
+    files: list[str],
+    source: str,
+    manifest: dict[str, Any],
+) -> dict[str, set[str]] | None:
+    """Resolve changed Swift symbols for rules that opt into symbol scopes.
+
+    ``None`` means the change source does not provide a trustworthy diff (for
+    example an explicit path or a whole-tree audit); build_plan then retains
+    every path rule. A set containing ``__unscoped__`` deliberately widens the
+    selection when a hunk touches a class/import/unknown region.
+    """
+    scoped_paths = {
+        path
+        for path in files
+        if any(
+            rule.get("symbols")
+            and matches_any(path, rule.get("symbol_paths", rule["paths"]))
+            and not matches_any(path, rule.get("exclude_paths", []))
+            for rule in manifest.get("rules", [])
+        )
+    }
+    if not scoped_paths or source in {"explicit", "tracked-product-tree"}:
+        return None
+    impacts: dict[str, set[str]] = {}
+    for path in sorted(scoped_paths):
+        current_path = repo / path
+        new_source = current_path.read_text(encoding="utf-8") if current_path.is_file() else None
+        old_source: str | None = None
+        patch: str | None = None
+        if source == "working-tree":
+            old_source = git_text(repo, ["show", f"HEAD:{path}"], allow_missing=True)
+            patch = git_text(repo, ["diff", "--unified=0", "HEAD", "--", path])
+        elif args.base:
+            merge_base_lines = git_lines(repo, ["merge-base", args.base, args.head])
+            merge_base = merge_base_lines[0] if merge_base_lines else args.base
+            old_source = git_text(repo, ["show", f"{merge_base}:{path}"], allow_missing=True)
+            new_source = git_text(repo, ["show", f"{args.head}:{path}"], allow_missing=True)
+            patch = git_text(repo, ["diff", "--unified=0", f"{args.base}...{args.head}", "--", path])
+        if not new_source or not patch:
+            impacts[path] = {"__unscoped__"}
+            continue
+        ranges = changed_hunk_ranges(patch)
+        if not ranges:
+            impacts[path] = {"__unscoped__"}
+            continue
+        old_symbols, old_unowned = symbols_covering_changes(
+            ranges[0], swift_function_ranges(old_source or "")
+        )
+        new_symbols, new_unowned = symbols_covering_changes(
+            ranges[1], swift_function_ranges(new_source)
+        )
+        selected = old_symbols | new_symbols
+        if old_unowned or new_unowned or not selected:
+            selected.add("__unscoped__")
+        impacts[path] = selected
+    return impacts
 
 
 def methods_covering_changes(
@@ -457,6 +584,18 @@ def load_manifest(path: Path) -> dict[str, Any]:
             checks = rule["required_checks"]
             if not isinstance(checks, list) or any(not isinstance(item, str) or not item for item in checks):
                 raise ValueError(f"rule {rule_id} required_checks must be a list of non-empty strings")
+        if "symbols" in rule:
+            symbols = rule["symbols"]
+            if not isinstance(symbols, list) or any(
+                not isinstance(item, str) or not item for item in symbols
+            ):
+                raise ValueError(f"rule {rule_id} symbols must be a list of non-empty strings")
+        if "symbol_paths" in rule:
+            symbol_paths = rule["symbol_paths"]
+            if not isinstance(symbol_paths, list) or any(
+                not isinstance(item, str) or not item for item in symbol_paths
+            ):
+                raise ValueError(f"rule {rule_id} symbol_paths must be a list of non-empty strings")
     return manifest
 
 
@@ -465,6 +604,7 @@ def build_plan(
     manifest: dict[str, Any],
     source: str,
     ui_test_impacts: dict[str, dict[str, Any]] | None = None,
+    symbol_impacts: dict[str, set[str]] | None = None,
 ) -> dict[str, Any]:
     lane_order = manifest["lane_order"]
     lane_rank = {lane: index for index, lane in enumerate(lane_order)}
@@ -477,12 +617,22 @@ def build_plan(
     matched_rules: dict[str, dict[str, Any]] = {}
 
     for path in files:
-        matching = [
-            rule
-            for rule in rules
-            if matches_any(path, rule["paths"])
-            and not matches_any(path, rule.get("exclude_paths", []))
-        ]
+        matching = []
+        for rule in rules:
+            if not matches_any(path, rule["paths"]):
+                continue
+            if matches_any(path, rule.get("exclude_paths", [])):
+                continue
+            scoped_symbols = rule.get("symbols")
+            symbol_paths = rule.get("symbol_paths", rule["paths"])
+            symbol_scope_applies = scoped_symbols and matches_any(path, symbol_paths)
+            if symbol_scope_applies and symbol_impacts is not None and path in symbol_impacts:
+                changed_symbols = symbol_impacts[path]
+                if "__unscoped__" not in changed_symbols and not (
+                    set(scoped_symbols) & changed_symbols
+                ):
+                    continue
+            matching.append(rule)
         path_matches[path] = [rule["id"] for rule in matching]
         for rule in matching:
             matched_rules[rule["id"]] = rule
@@ -567,6 +717,10 @@ def build_plan(
         "changed_files": files,
         "changed_product_paths": changed_product_paths,
         "path_matches": path_matches,
+        "symbol_impacts": {
+            path: sorted(symbols)
+            for path, symbols in (symbol_impacts or {}).items()
+        },
         "selected_rule_ids": sorted(matched_rules),
         "impacted_capabilities": sorted({item for rule in selected for item in rule["capabilities"]}),
         "minimum_evidence": sorted({item for rule in selected for item in rule["minimum_evidence"]}),
@@ -619,7 +773,8 @@ def main() -> int:
     manifest = load_manifest(manifest_path)
     files, source = changed_files(args, repo)
     impacts = swift_ui_test_impacts(args, repo, files, source)
-    plan = build_plan(files, manifest, source, impacts)
+    symbols = swift_symbol_impacts(args, repo, files, source, manifest)
+    plan = build_plan(files, manifest, source, impacts, symbols)
     output = Path(args.output)
     if not output.is_absolute():
         output = repo / output

@@ -138,6 +138,20 @@ struct SettingsView: View {
         @Bindable var bindableEnvironment = environment
         let rowInsets = EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)
         List {
+            if activeSheet == nil, let feedback = viewModel.serverSaveFeedbackMessage {
+                AppInlineFeedbackBanner(
+                    message: feedback,
+                    tone: .warning,
+                    accessibilityID: "feedback.settings.gateway.result",
+                    dismissAction: {
+                        viewModel.clearServerSaveFeedback()
+                    }
+                )
+                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 0, trailing: 16))
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+            }
+
             // A form error belongs to the presented editor. Keeping the same
             // banner alive in the host list makes one failure look like two
             // unrelated failures when a medium-height sheet is visible.
@@ -163,6 +177,7 @@ struct SettingsView: View {
 
             Button {
                 viewModel.clearError()
+                viewModel.clearServerSaveFeedback()
                 viewModel.prepareServerEditor()
                 activeSheet = .serverManagement
             } label: {

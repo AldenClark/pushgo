@@ -462,6 +462,59 @@ final class PushGo_iOSUITests: XCTestCase {{
         self.assertIn("release-runtime-isolation", plan["impacted_capabilities"])
         self.assertIn("apple-preparation-contract", plan["required_checks"])
 
+    def test_provider_route_notification_symbol_selects_notification_owner(self):
+        path = "Shared/Application/ProviderRouteController.swift"
+        plan = QUALITY_IMPACT.build_plan(
+            [path],
+            self.manifest,
+            "working-tree",
+            symbol_impacts={path: {"ensureProviderRoute"}},
+        )
+
+        self.assertIn("ingress-notification-background", plan["selected_rule_ids"])
+        self.assertNotIn("channels-settings-shared-owner", plan["selected_rule_ids"])
+        self.assertIn("notification-route-actions", plan["impacted_capabilities"])
+        self.assertIn("apple-macos-system-notification", plan["required_checks"])
+
+    def test_provider_route_gateway_symbol_selects_gateway_owner_without_notification_ui(self):
+        path = "Shared/Application/ProviderRouteController.swift"
+        plan = QUALITY_IMPACT.build_plan(
+            [path],
+            self.manifest,
+            "working-tree",
+            symbol_impacts={path: {"cleanupPreviousGatewayDeviceRoute"}},
+        )
+
+        self.assertIn("channels-settings-shared-owner", plan["selected_rule_ids"])
+        self.assertNotIn("ingress-notification-background", plan["selected_rule_ids"])
+        self.assertIn("gateway-settings", plan["impacted_capabilities"])
+        self.assertIn("apple-ios-settings-positive-extension", plan["required_checks"])
+        self.assertIn("apple-macos-settings-positive", plan["required_checks"])
+        self.assertNotIn("apple-macos-system-notification", plan["required_checks"])
+
+    def test_provider_route_unscoped_symbol_change_widens_to_both_owners(self):
+        path = "Shared/Application/ProviderRouteController.swift"
+        plan = QUALITY_IMPACT.build_plan(
+            [path],
+            self.manifest,
+            "working-tree",
+            symbol_impacts={path: {"__unscoped__"}},
+        )
+
+        self.assertIn("channels-settings-shared-owner", plan["selected_rule_ids"])
+        self.assertIn("ingress-notification-background", plan["selected_rule_ids"])
+
+    def test_notification_owner_symbol_scope_does_not_filter_other_ingress_files(self):
+        path = "Shared/Application/NotificationOpenController.swift"
+        plan = QUALITY_IMPACT.build_plan(
+            [path],
+            self.manifest,
+            "working-tree",
+            symbol_impacts={path: {"openMessage"}},
+        )
+
+        self.assertIn("ingress-notification-background", plan["selected_rule_ids"])
+
     def test_preparation_surface_change_selects_the_dedicated_contract(self):
         plan = self.plan("Shared/UI/RootView.swift")
 

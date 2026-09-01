@@ -4,6 +4,7 @@ import Observation
 @MainActor
 protocol ChannelSubscriptionSyncRoundTrip {
     func sync(
+        baseURL: URL,
         channels: [ChannelSubscriptionService.SyncItem]
     ) async throws -> ChannelSubscriptionService.SyncPayload
 }
@@ -233,8 +234,17 @@ final class ChannelSyncController {
         let gatewayKey = config.gatewayKey
 
         let credentials = try await dataStore.activeChannelCredentials(gateway: gatewayKey)
-        let token = try await ensureActivePushToken(serverConfig: config)
-        let normalizedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        // An app-owned quality round trip is the provider boundary for this
+        // lane.  Do not contact APNs or mutate a real provider route merely to
+        // prepare the local sync call; the round trip itself still validates
+        // the gateway and returns the business results consumed below.
+        let normalizedToken: String
+        if subscriptionSyncRoundTrip != nil {
+            normalizedToken = "quality-round-trip"
+        } else {
+            let token = try await ensureActivePushToken(serverConfig: config)
+            normalizedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
         guard !normalizedToken.isEmpty else {
             throw AppError.typedLocal(
                 code: "provider_token_missing",
@@ -308,7 +318,10 @@ final class ChannelSyncController {
 
         let payload: ChannelSubscriptionService.SyncPayload
         if let subscriptionSyncRoundTrip {
-            payload = try await subscriptionSyncRoundTrip.sync(channels: channels)
+            payload = try await subscriptionSyncRoundTrip.sync(
+                baseURL: config.baseURL,
+                channels: channels
+            )
         } else {
             payload = try await channelSubscriptionService.sync(
                 baseURL: config.baseURL,
@@ -327,13 +340,13 @@ final class ChannelSyncController {
                     .trimmingCharacters(in: .whitespacesAndNewlines),
                    !channelName.isEmpty
                 {
-                    try? await dataStore.updateChannelDisplayName(
+                    try await dataStore.updateChannelDisplayName(
                         gateway: gatewayKey,
                         channelId: result.channelId,
                         displayName: channelName
                     )
                 }
-                try? await dataStore.updateChannelLastSynced(
+                try await dataStore.updateChannelLastSynced(
                     gateway: gatewayKey,
                     channelId: result.channelId,
                     date: syncedAt

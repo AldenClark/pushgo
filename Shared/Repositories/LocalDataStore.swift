@@ -1319,21 +1319,22 @@ actor LocalDataStore {
             gatewayKey: trimmedGateway
         )
         let trimmedChannelId = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let index = items.firstIndex(where: { $0.channelId == trimmedChannelId }) else { return }
         let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedName = trimmedName.isEmpty ? trimmedChannelId : trimmedName
-        var item = items[index]
-        item.displayName = resolvedName
-        item.updatedAt = Date()
-        if item.isDeleted {
-            item.isDeleted = false
-            item.deletedAt = nil
+        if let index = items.firstIndex(where: { $0.channelId == trimmedChannelId }) {
+            var item = items[index]
+            item.displayName = resolvedName
+            item.updatedAt = Date()
+            if item.isDeleted {
+                item.isDeleted = false
+                item.deletedAt = nil
+            }
+            items[index] = item
+            try channelSubscriptionStore.saveSubscriptions(
+                gatewayKey: trimmedGateway,
+                subscriptions: items
+            )
         }
-        items[index] = item
-        try channelSubscriptionStore.saveSubscriptions(
-            gatewayKey: trimmedGateway,
-            subscriptions: items
-        )
         if let backend {
             try await backend.updateChannelDisplayName(
                 gateway: trimmedGateway,
@@ -1354,14 +1355,15 @@ actor LocalDataStore {
             gatewayKey: trimmedGateway
         )
         let trimmedChannelId = channelId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let index = items.firstIndex(where: { $0.channelId == trimmedChannelId }) else { return }
-        var item = items[index]
-        item.lastSyncedAt = date
-        items[index] = item
-        try channelSubscriptionStore.saveSubscriptions(
-            gatewayKey: trimmedGateway,
-            subscriptions: items
-        )
+        if let index = items.firstIndex(where: { $0.channelId == trimmedChannelId }) {
+            var item = items[index]
+            item.lastSyncedAt = date
+            items[index] = item
+            try channelSubscriptionStore.saveSubscriptions(
+                gatewayKey: trimmedGateway,
+                subscriptions: items
+            )
+        }
         if let backend {
             try await backend.updateChannelLastSynced(
                 gateway: trimmedGateway,

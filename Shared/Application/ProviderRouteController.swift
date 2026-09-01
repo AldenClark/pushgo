@@ -39,26 +39,31 @@ final class ProviderRouteController {
         self.runtimeMessageRecorder = runtimeMessageRecorder
     }
 
-    func schedulePreviousGatewayDeviceCleanup(
+    /// Deletes the old remote route only after the caller has durably committed
+    /// the new local gateway identity.  The caller owns persistence/retry of a
+    /// failure so this method must not turn an operational error into a silent
+    /// success.
+    func cleanupPreviousGatewayDeviceRoute(
         previousConfig: ServerConfig?,
         previousDeviceKey: String?,
         nextConfig: ServerConfig?
-    ) {
+    ) async throws {
         guard let previousConfig else { return }
         let trimmedDeviceKey = previousDeviceKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !trimmedDeviceKey.isEmpty else { return }
         guard gatewayIdentity(previousConfig) != gatewayIdentity(nextConfig) else { return }
-        let service = channelSubscriptionService
-        let channelType = channelType
-        Task(priority: .utility) {
-            do {
-                try await service.deleteDeviceChannel(
-                    baseURL: previousConfig.baseURL,
-                    token: previousConfig.token,
-                    deviceKey: trimmedDeviceKey,
-                    channelType: channelType
-                )
-            } catch {}
+        do {
+            try await channelSubscriptionService.deleteDeviceChannel(
+                baseURL: previousConfig.baseURL,
+                token: previousConfig.token,
+                deviceKey: trimmedDeviceKey,
+                channelType: channelType
+            )
+        } catch let error as AppError where Self.isAlreadyRetiredGatewayRoute(error) {
+            // Delete is idempotent at the business boundary: a route/device
+            // already absent (or no longer of this channel type) satisfies the
+            // cleanup obligation and must not keep the durable journal pending.
+            return
         }
     }
 
@@ -210,6 +215,46 @@ final class ProviderRouteController {
         try requireProviderDeviceKeyPersistence(result, source: source)
     }
 
+    /// Restores a previously protected key during a failed gateway transition.
+    /// Nil is a valid old value and means that the protected keychain entry must
+    /// be removed; a non-nil value must round-trip through the canonical store.
+    func restoreProviderDeviceKey(_ deviceKey: String?, source: String) async throws {
+        let normalized = deviceKey?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = normalized?.isEmpty == false ? normalized : nil
+        let result = await dataStore.saveCachedDeviceKey(
+            value,
+            for: platform,
+            channelType: channelType
+        )
+        try requireProviderDeviceKeyPersistence(
+            result,
+            source: source,
+            allowDeletion: value == nil
+        )
+        if value == nil {
+            guard await dataStore.cachedDeviceKey(
+                for: platform,
+                channelType: channelType
+            ) == nil else {
+                runtimeMessageRecorder(
+                    "provider_device_key_restore_failed platform=\(platform)",
+                    source,
+                    "keychain",
+                    "E_PROVIDER_DEVICE_KEY_RESTORE_FAILED"
+                )
+                throw AppError.typedLocal(
+                    code: "provider_device_key_restore_failed",
+                    category: .local,
+                    message: localizationManager.localized("operation_failed"),
+                    detail: "provider device key remained after rollback"
+                )
+            }
+        }
+        lastProviderRouteResultKey = nil
+        lastProviderRouteDeviceKey = nil
+        lastProviderRouteResolvedAt = .distantPast
+    }
+
     func cachedProviderPullDeviceKey() async -> String? {
         if Date().timeIntervalSince(lastProviderRouteResolvedAt) < providerRouteResultReuseInterval,
            let recentDeviceKey = lastProviderRouteDeviceKey?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -237,7 +282,8 @@ final class ProviderRouteController {
 
     private func requireProviderDeviceKeyPersistence(
         _ result: ProviderDeviceKeyStore.SaveResult?,
-        source: String
+        source: String,
+        allowDeletion: Bool = false
     ) throws {
         guard let result else {
             runtimeMessageRecorder(
@@ -253,7 +299,7 @@ final class ProviderRouteController {
                 detail: "provider_device_key_save_failed platform=invalid"
             )
         }
-        guard result.error == nil, result.didPersist else {
+        guard result.error == nil, result.didPersist || allowDeletion else {
             runtimeMessageRecorder(
                 Self.deviceKeySaveErrorDescription(result),
                 source,
@@ -301,6 +347,15 @@ final class ProviderRouteController {
             parts.append("error=not_persisted")
         }
         return parts.joined(separator: " ")
+    }
+
+    private static func isAlreadyRetiredGatewayRoute(_ error: AppError) -> Bool {
+        [
+            "device_key_not_found",
+            "device_not_found",
+            "route_not_found",
+            "channel_type_mismatch",
+        ].contains { error.matchesGatewayCode($0) }
     }
 
     private func gatewayIdentity(_ config: ServerConfig?) -> String {

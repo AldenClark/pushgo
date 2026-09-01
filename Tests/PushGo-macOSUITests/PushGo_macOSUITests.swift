@@ -3643,7 +3643,8 @@ final class PushGo_macOSUITests: XCTestCase {
             sessionID: sessionID,
             fixture: "channels.standard",
             failGatewayPostCommitSyncOnce: true,
-            channelMutationScenario: "accepted"
+            channelMutationScenario: "accepted",
+            expectedChannelMutationGatewayURL: normalizedAddress
         )
         launchQuality(context, sessionID: sessionID)
 
@@ -3656,14 +3657,14 @@ final class PushGo_macOSUITests: XCTestCase {
         replaceText(in: addressField, with: "\(normalizedAddress)/")
         element(in: context.app, identifier: "action.settings.server.save").click()
 
-        let pendingToast = element(in: context.app, identifier: "feedback.toast.success")
+        let pendingFeedback = element(in: context.app, identifier: "feedback.settings.gateway.result")
         XCTAssertTrue(
-            pendingToast.waitForExistence(timeout: 8),
+            pendingFeedback.waitForExistence(timeout: 8),
             "A committed gateway with recoverable sync work must report a user-visible result."
         )
-        let pendingText = pendingToast.label.lowercased()
+        let pendingText = pendingFeedback.label.lowercased()
         XCTAssertTrue(
-            pendingText.contains("sync") || pendingToast.label.contains("同步"),
+            pendingText.contains("sync") || pendingFeedback.label.contains("同步"),
             "The result must identify pending sync instead of reporting a false gateway failure."
         )
         XCTAssertTrue(
@@ -3684,14 +3685,54 @@ final class PushGo_macOSUITests: XCTestCase {
         let relaunched = configuredQualityApp(
             sessionID: sessionID,
             fixture: "channels.standard",
-            channelMutationScenario: "accepted"
+            channelMutationScenario: "accepted",
+            expectedChannelMutationGatewayURL: normalizedAddress
         )
         launchQuality(relaunched, sessionID: sessionID)
+        // Channels entry is the recovery point.  It must execute the real
+        // controller reconciliation before a new-gateway mutation is allowed
+        // to establish its canonical result.
+        openSidebarTab("channels", in: relaunched.app)
+        XCTAssertTrue(
+            element(in: relaunched.app, identifier: "channel.row.01H00000000000000000000001")
+                .waitForNonExistence(timeout: 8),
+            "Recovery must retain the newly committed gateway's data scope."
+        )
+        let recoveredSyncRow = element(
+            in: relaunched.app,
+            identifier: "channel.row.01H00000000000000000000004"
+        )
+        XCTAssertTrue(
+            recoveredSyncRow.waitForExistence(timeout: 8),
+            "Recovery must sync a candidate-scoped subscription, not only reload the list."
+        )
+        XCTAssertTrue(
+            recoveredSyncRow.label.contains("Quality Recovery Sync Completed"),
+            "The recovery sync must produce the expected business update."
+        )
+        element(in: relaunched.app, identifier: "action.channels.add").click()
+        let createName = element(in: relaunched.app, identifier: "field.channels.create.name")
+        let createPassword = element(in: relaunched.app, identifier: "field.channels.create.password")
+        XCTAssertTrue(createName.waitForExistence(timeout: 8))
+        replaceTextUsingPasteboard(in: createName, with: "Recovered Gateway Channel")
+        XCTAssertTrue(createPassword.waitForExistence(timeout: 5))
+        replaceSecureText(in: createPassword, with: "qualityx")
+        element(in: relaunched.app, identifier: "action.channels.entry.submit").click()
+        let recoveredChannel = element(
+            in: relaunched.app,
+            identifier: "channel.row.01H00000000000000000000003"
+        )
+        XCTAssertTrue(
+            recoveredChannel.waitForExistence(timeout: 8),
+            "Channels-entry recovery must permit a real mutation on the committed gateway."
+        )
+        XCTAssertTrue(recoveredChannel.label.contains("Recovered Gateway Channel"))
+
         openSidebarTab("settings", in: relaunched.app)
         XCTAssertTrue(
             element(in: relaunched.app, identifier: "action.settings.server_management")
                 .label.contains(normalizedAddress),
-            "The committed gateway must remain authoritative after relaunch for recovery retry."
+            "The committed gateway must remain authoritative after recovery and a real mutation."
         )
     }
 

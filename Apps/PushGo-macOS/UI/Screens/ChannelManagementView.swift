@@ -96,11 +96,6 @@ struct ChannelManagementView: View {
             .sheet(isPresented: $isShowingRenameAlert, onDismiss: resetRenameState) {
                 renameSheet
             }
-            .onAppear {
-                Task { @MainActor in
-                    await environment.syncSubscriptionsOnChannelListEntry()
-                }
-            }
             .onChange(of: isShowingRemovalConfirmation) { _, isPresented in
                 if !isPresented {
                     pendingRemoval = nil

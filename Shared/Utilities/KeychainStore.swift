@@ -686,6 +686,133 @@ struct LocalKeychainConfigStore {
     }
 }
 
+/// A protected, restart-safe hand-off record for the two independently durable
+/// pieces of gateway identity: the server configuration and the provider device
+/// key.  The record intentionally lives in the same protected storage class as
+/// those values (and in the session-scoped automation keychain when quality
+/// automation is active); it must never be represented by a regular preference
+/// or a diagnostic plist because it contains credentials and device identity.
+struct GatewayTransitionJournal {
+    enum Phase: String, Codable, Sendable {
+        /// The protected old identity has been persisted, but no active value
+        /// may have changed yet.
+        case prepared
+        /// The candidate server config was written. A restart must restore the
+        /// old config and device identity.
+        case configPersisted
+        /// Both active values were written, but the commit record was not yet
+        /// durably completed. A restart still restores the old identity.
+        case deviceKeyPersisted
+        /// The new identity is authoritative. The old remote device route may
+        /// still need cleanup and is retried from this record.
+        case committed
+    }
+
+    struct Record: Codable, Equatable, Sendable {
+        let transitionID: UUID
+        let platform: String
+        var phase: Phase
+        let previousConfig: ServerConfig?
+        let previousDeviceKey: String?
+        let nextConfig: ServerConfig
+        let nextDeviceKey: String
+
+        init(
+            platform: String,
+            previousConfig: ServerConfig?,
+            previousDeviceKey: String?,
+            nextConfig: ServerConfig,
+            nextDeviceKey: String,
+            phase: Phase = .prepared
+        ) {
+            transitionID = UUID()
+            self.platform = platform.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            self.phase = phase
+            self.previousConfig = previousConfig?.normalized()
+            self.previousDeviceKey = Self.normalizedDeviceKey(previousDeviceKey)
+            self.nextConfig = nextConfig.normalized()
+            self.nextDeviceKey = nextDeviceKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        private static func normalizedDeviceKey(_ value: String?) -> String? {
+            let normalized = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return normalized.isEmpty ? nil : normalized
+        }
+    }
+
+    private static let service = "io.ethan.pushgo.gateway-transition"
+    private static let accountPrefix = "gateway.transition.v1."
+    private static let accessGroupSuffix = "io.ethan.pushgo.shared"
+
+    private let keychain: KeychainStore
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
+
+    init() {
+        keychain = KeychainStore(
+            service: Self.service,
+            accessGroup: KeychainStore.accessGroup(matchingSuffix: Self.accessGroupSuffix),
+            synchronizable: false
+        )
+    }
+
+    func load(platform: String) throws -> Record? {
+        let account = try accountName(for: platform)
+        guard let data = try keychain.read(account: account) else { return nil }
+        let record = try decoder.decode(Record.self, from: data)
+        guard record.platform == normalizedPlatform(platform) else {
+            throw KeychainStoreError.unexpectedData
+        }
+        return record
+    }
+
+    func save(_ record: Record) throws {
+        let account = try accountName(for: record.platform)
+        let data = try encoder.encode(record)
+        try keychain.write(account: account, data: data)
+        guard try keychain.read(account: account) == data else {
+            throw KeychainStoreError.unexpectedData
+        }
+    }
+
+    func advance(_ record: inout Record, to phase: Phase) throws {
+        record.phase = phase
+        try save(record)
+    }
+
+    func clear(platform: String) throws {
+        try keychain.delete(account: try accountName(for: platform))
+    }
+
+    /// Clears a record only when it is still the transition that the caller
+    /// observed before an asynchronous cleanup operation.  A newer gateway
+    /// switch may have replaced the journal while the old cleanup awaited a
+    /// remote response; in that case the stale operation must leave the newer
+    /// record untouched.
+    @discardableResult
+    func clear(platform: String, expectedTransitionID: UUID) throws -> Bool {
+        let normalizedPlatform = normalizedPlatform(platform)
+        guard let current = try load(platform: normalizedPlatform) else {
+            return false
+        }
+        guard current.transitionID == expectedTransitionID else {
+            return false
+        }
+        try keychain.delete(account: try accountName(for: normalizedPlatform))
+        return true
+    }
+
+    private func accountName(for platform: String) throws -> String {
+        let normalized = normalizedPlatform(platform)
+        guard !normalized.isEmpty else { throw KeychainStoreError.unexpectedData }
+        return Self.accountPrefix + normalized
+    }
+
+    private func normalizedPlatform(_ platform: String) -> String {
+        platform.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+}
+
 struct ProviderGatewayTokenStore {
     private static let service = "io.ethan.pushgo.provider.gateway-token"
     private static let accountPrefix = "provider.gateway_token."
@@ -866,7 +993,33 @@ struct ProviderDeviceKeyStore {
         guard !trimmed.isEmpty else {
             do {
                 try keychain.delete(account: account)
-                try? legacyKeychain?.delete(account: account)
+                if let legacyKeychain {
+                    // The legacy store is a real fallback read path.  A
+                    // rollback is not complete when deletion there fails or
+                    // leaves an item behind, otherwise the next launch can
+                    // resurrect the old device identity.
+                    try legacyKeychain.delete(account: account)
+                }
+                guard try keychain.read(account: account) == nil else {
+                    return SaveResult(
+                        platform: platform,
+                        account: account,
+                        accessGroup: keychain.accessGroup,
+                        didPersist: false,
+                        error: .unexpectedData
+                    )
+                }
+                if let legacyKeychain,
+                   try legacyKeychain.read(account: account) != nil
+                {
+                    return SaveResult(
+                        platform: platform,
+                        account: account,
+                        accessGroup: keychain.accessGroup,
+                        didPersist: false,
+                        error: .unexpectedData
+                    )
+                }
                 return SaveResult(
                     platform: platform,
                     account: account,

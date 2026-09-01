@@ -581,6 +581,43 @@ struct LocalDataStoreTests {
     }
 
     @Test
+    func backendOnlyChannelSubscriptionReceivesSyncPresentationUpdates() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let gateway = "https://backend-only.pushgo.dev"
+            let channelId = "backend-only-channel"
+            try await store.upsertChannelSubscription(
+                gateway: gateway,
+                channelId: channelId,
+                displayName: "Pending",
+                password: nil,
+                lastSyncedAt: nil,
+                updatedAt: Date(timeIntervalSince1970: 1_742_000_000),
+                isDeleted: false,
+                deletedAt: nil
+            )
+
+            try await store.updateChannelDisplayName(
+                gateway: gateway,
+                channelId: channelId,
+                displayName: "Completed"
+            )
+            let syncedAt = Date(timeIntervalSince1970: 1_742_000_100)
+            try await store.updateChannelLastSynced(
+                gateway: gateway,
+                channelId: channelId,
+                date: syncedAt
+            )
+
+            let subscription = try await store.loadChannelSubscriptions(
+                gateway: gateway,
+                includeDeleted: false
+            ).first
+            #expect(subscription?.displayName == "Completed")
+            #expect(subscription?.lastSyncedAt == syncedAt)
+        }
+    }
+
+    @Test
     func invalidChannelSubscriptionUpsertDoesNotPolluteFallbackCredentialStore() async throws {
         await withIsolatedAutomationStorage { root, appGroupIdentifier in
             let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)

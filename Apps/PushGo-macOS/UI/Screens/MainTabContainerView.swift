@@ -339,6 +339,16 @@ struct MainTabContainerView: View {
     private func applySidebarSelection(previous _: SidebarSelection?, current: SidebarSelection?) {
         let nextTab = current?.mainTab ?? .messages
         environment.updateActiveTab(nextTab)
+        if nextTab == .channels {
+            // Recovery belongs to the actual sidebar selection event.  A
+            // NavigationSplitView detail may be constructed before it is
+            // selected, so ChannelManagementView.onAppear is not a reliable
+            // user-entry boundary.
+            Task { @MainActor in
+                await environment.syncSubscriptionsOnChannelListEntry()
+                await messageListViewModel.refreshChannelSummaries()
+            }
+        }
         guard nextTab == .messages else { return }
         switch current ?? .messagesAll {
         case .messagesAll:

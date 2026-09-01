@@ -112,6 +112,17 @@ struct SettingsView: View {
         @Bindable var bindableEnvironment = environment
         return ScrollView {
             VStack(spacing: 16) {
+            if macOverlay == nil, let feedback = viewModel.serverSaveFeedbackMessage {
+                AppInlineFeedbackBanner(
+                    message: feedback,
+                    tone: .warning,
+                    accessibilityID: "feedback.settings.gateway.result",
+                    dismissAction: {
+                        viewModel.clearServerSaveFeedback()
+                    }
+                )
+            }
+
             if let errorMessage = viewModel.errorMessage {
                 AppInlineFeedbackBanner(
                     message: errorMessage,
@@ -154,6 +165,7 @@ struct SettingsView: View {
                     SettingsRowDivider()
                     Button {
                         viewModel.clearError()
+                        viewModel.clearServerSaveFeedback()
                         viewModel.prepareServerEditor()
                         macOverlay = .serverManagement
                     } label: {

@@ -131,12 +131,22 @@ final class QualityChannelAutomationRoundTrip: ChannelMutationRoundTrip, Channel
     }
 
     func sync(
+        baseURL: URL,
         channels: [ChannelSubscriptionService.SyncItem]
     ) async throws -> ChannelSubscriptionService.SyncPayload {
+        // Keep the recovery Oracle on the same business boundary as the
+        // production controller: a sync that reaches another Gateway must fail
+        // even when the channel mutation itself would still be accepted.
+        try requireExpectedGateway(baseURL)
         let results = channels.map { item in
             ChannelSubscriptionService.SyncResult(
                 channelId: item.channelId,
-                channelName: nil,
+                // The candidate-scoped fixture uses this rename as its
+                // observable business result.  A row that merely exists proves
+                // fixture loading; this changed name proves reconciliation ran.
+                channelName: item.channelId == "01H00000000000000000000004"
+                    ? "Quality Recovery Sync Completed"
+                    : nil,
                 subscribed: true,
                 error: nil,
                 errorCode: nil,
@@ -3838,7 +3848,15 @@ final class PushGoAutomationRuntime {
                     channelID: "01H00000000000000000000002",
                     displayName: "Quality Delete History"
                 ),
-            ]
+            ] + (PushGoAutomationContext.qualitySession?.expectedChannelMutationGatewayURL
+                .flatMap { normalizedIdentifier($0) }
+                .map {
+                    [qualityChannelFixtureSubscription(
+                        channelID: "01H00000000000000000000004",
+                        displayName: "Quality Recovery Sync Pending",
+                        gateway: $0
+                    )]
+                } ?? [])
         case .messagesStandard:
             messages = [qualityFixtureMessage(index: 0, includesMedia: true)]
             entityRecords = []
@@ -4089,15 +4107,20 @@ final class PushGoAutomationRuntime {
 
     private func qualityChannelFixtureSubscription(
         channelID: String,
-        displayName: String
+        displayName: String,
+        gateway: String? = nil
     ) -> [String: Any] {
-        [
+        var payload: [String: Any] = [
             "channel_id": channelID,
             "display_name": displayName,
             "password": "quality-channel-fixture-value",
             "last_synced_at": "2026-01-15T08:00:00Z",
             "updated_at": "2026-01-15T08:00:00Z",
         ]
+        if let gateway {
+            payload["gateway"] = gateway
+        }
+        return payload
     }
 
     private func qualityWorkflowFixtureMessage(index: Int) -> [String: Any] {

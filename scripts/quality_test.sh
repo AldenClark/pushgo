@@ -402,7 +402,7 @@ PY
         TEST_SCOPES="PushGo-iOSUITests/PushGo_iOSUITests/testChannelRemoteRejectionStaysInSheetAndRetryPersists" \
           MAX_RETRIES=0 \
           QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
-        claims+=("iOS Channel rejection stays in its Sheet and does not replay on the host")
+        claims+=("iOS impact-selected Channel Sheet error stays with its failed action")
         ;;
       apple-macos-channel-positive)
         selected_claims+=("macOS impact-selected Channel positive lifecycle")

@@ -83,11 +83,6 @@ struct ChannelManagementScreen: View {
                 pendingRemoval = nil
             }
         }
-        .onAppear {
-            Task { @MainActor in
-                await environment.syncSubscriptionsOnChannelListEntry()
-            }
-        }
     }
 
     private var channelManagementScaffold: some View {

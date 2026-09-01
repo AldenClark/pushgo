@@ -2161,11 +2161,13 @@ final class PushGo_iOSUITests: XCTestCase {
     func testSettingsGatewaySyncFailureReportsCommittedGatewayAndPendingRecovery() {
         let context = configuredLaunchContext()
         let sessionID = "ios-server-sync-pending-\(UUID().uuidString.lowercased())"
+        let normalizedAddress = "https://quality-sync-pending.invalid/api"
         let encodedSession = qualitySessionPayload(
             sessionID: sessionID,
             fixture: "channels.standard",
             failGatewayPostCommitSyncOnce: true,
-            channelMutationScenario: "accepted"
+            channelMutationScenario: "accepted",
+            expectedChannelMutationGatewayURL: normalizedAddress
         )
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
         launch(context.app)
@@ -2179,21 +2181,20 @@ final class PushGo_iOSUITests: XCTestCase {
         tapWhenHittable(serverAction, timeout: 8)
         let addressField = element(in: context.app, identifier: "field.settings.server.address")
         XCTAssertTrue(addressField.waitForExistence(timeout: 8))
-        let normalizedAddress = "https://quality-sync-pending.invalid/api"
         replaceText(in: addressField, with: "\(normalizedAddress)/")
         tapWhenHittable(
             element(in: context.app, identifier: "action.settings.server.save"),
             timeout: 8
         )
 
-        let pendingToast = element(in: context.app, identifier: "feedback.toast.success")
+        let pendingFeedback = element(in: context.app, identifier: "feedback.settings.gateway.result")
         XCTAssertTrue(
-            pendingToast.waitForExistence(timeout: 8),
+            pendingFeedback.waitForExistence(timeout: 8),
             "A committed gateway with recoverable sync work must still report a user-visible result."
         )
-        let pendingText = pendingToast.label.lowercased()
+        let pendingText = pendingFeedback.label.lowercased()
         XCTAssertTrue(
-            pendingText.contains("sync") || pendingToast.label.contains("同步"),
+            pendingText.contains("sync") || pendingFeedback.label.contains("同步"),
             "The result must say that gateway sync is pending, not claim an atomic failure."
         )
         XCTAssertTrue(
@@ -2214,16 +2215,61 @@ final class PushGo_iOSUITests: XCTestCase {
         let relaunchedSession = qualitySessionPayload(
             sessionID: sessionID,
             fixture: "channels.standard",
-            channelMutationScenario: "accepted"
+            channelMutationScenario: "accepted",
+            expectedChannelMutationGatewayURL: normalizedAddress
         )
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = relaunchedSession
         launch(context.app)
         assertQualityRuntimeReady(in: context.app, timeout: 15)
-        ensureSettingsVisible(in: context.app)
+        // Channels entry is the recovery point.  It must execute the real
+        // controller reconciliation before a new-gateway mutation is allowed
+        // to establish its canonical result.
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
+        XCTAssertTrue(
+            element(in: context.app, identifier: "channel.row.01H00000000000000000000001")
+                .waitForNonExistence(timeout: 8),
+            "Recovery must retain the newly committed gateway's data scope."
+        )
+        let recoveredSyncRow = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000004"
+        )
+        XCTAssertTrue(
+            recoveredSyncRow.waitForExistence(timeout: 8),
+            "Recovery must sync a candidate-scoped subscription, not only reload the list."
+        )
+        XCTAssertTrue(
+            recoveredSyncRow.label.contains("Quality Recovery Sync Completed"),
+            "The recovery sync must produce the expected business update."
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channels.add"),
+            timeout: 8
+        )
+        let createName = element(in: context.app, identifier: "field.channels.create.name")
+        let createPassword = element(in: context.app, identifier: "field.channels.create.password")
+        XCTAssertTrue(createName.waitForExistence(timeout: 8))
+        replaceText(in: createName, with: "Recovered Gateway Channel")
+        enterSecureText(in: createPassword, with: "qualityx")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channels.entry.submit"),
+            timeout: 8
+        )
+        let recoveredChannel = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000003"
+        )
+        XCTAssertTrue(
+            recoveredChannel.waitForExistence(timeout: 8),
+            "Channels-entry recovery must permit a real mutation on the committed gateway."
+        )
+        XCTAssertTrue(recoveredChannel.label.contains("Recovered Gateway Channel"))
+
+        openSettingsFromChannels(in: context.app)
         XCTAssertTrue(
             element(in: context.app, identifier: "action.settings.server_management")
                 .label.contains(normalizedAddress),
-            "The committed gateway must remain authoritative after relaunch for recovery retry."
+            "The committed gateway must remain authoritative after recovery and a real mutation."
         )
     }
 

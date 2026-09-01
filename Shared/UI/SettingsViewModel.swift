@@ -55,6 +55,11 @@ final class SettingsViewModel {
     var error: AppError?
     private(set) var serverError: AppError?
     private(set) var manualKeyError: AppError?
+    /// A committed gateway may still have recoverable channel-sync work.  Keep
+    /// that outcome on the Settings host until the user dismisses it (or opens
+    /// the editor again), instead of relying on a short-lived toast racing the
+    /// sheet dismissal.
+    var serverSaveFeedbackMessage: String?
     var successMessage: String?
 
     var errorMessage: String? {
@@ -269,6 +274,7 @@ final class SettingsViewModel {
     }
 
     func prepareServerEditor() {
+        serverSaveFeedbackMessage = nil
         let config = environment.serverConfig
         gatewayInput.address = config?.baseURL.absoluteString ?? AppConstants.defaultServerAddress
         gatewayInput.token = config?.token ?? ""
@@ -683,17 +689,39 @@ final class SettingsViewModel {
 
         do {
             try await environment.syncSubscriptionsIfNeeded()
-            successMessage = localizationManager.localized("server_configuration_saved")
+            presentServerSaveResult(
+                localizationManager.localized("server_configuration_saved"),
+                isPending: false
+            )
         } catch {
             // The gateway is already active and durable at this point. A
             // subscription-sync failure is recoverable work for launch and
             // channel-entry reconciliation, not a failed gateway save. Keep
             // the user-facing result truthful and let those paths retry.
-            successMessage = localizationManager.localized(
-                "server_configuration_saved_sync_pending"
+            presentServerSaveResult(
+                localizationManager.localized("server_configuration_saved_sync_pending"),
+                isPending: true
             )
         }
         shouldDismissServerManagement = true
+    }
+
+    /// Publish the server-save result before the editor dismisses.  Pending
+    /// reconciliation is kept on the Settings host so the user can read the
+    /// exact outcome after the sheet closes; ordinary saves remain a transient
+    /// success toast.
+    private func presentServerSaveResult(_ message: String, isPending: Bool) {
+        successMessage = nil
+        if isPending {
+            serverSaveFeedbackMessage = message
+        } else {
+            serverSaveFeedbackMessage = nil
+            environment.showToast(message: message, style: .success, duration: 3)
+        }
+    }
+
+    func clearServerSaveFeedback() {
+        serverSaveFeedbackMessage = nil
     }
 
     private func validatedServerURL(from raw: String) -> URL? {
