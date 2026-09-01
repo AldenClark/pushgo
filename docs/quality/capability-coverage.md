@@ -82,6 +82,10 @@ iOS 分页 loading/failure 现在由消息页自己的 `safeAreaInset` 承载，
 
 Thing 搜索 A/B 的业务动作虽各为 1/1，但 Cmd-A/Cmd-V 与 `typeText` 均产生原生 QoS/主线程 runtime warning，严格结果保持 `FAILED_TEST_SYSTEM`，未通过重跑、等待或白名单求绿。专用 iOS Simulator 同期的 PosterBoard 崩溃来自 Apple `launchd_sim`/`SimulatorTrampoline` 私有框架，未见 PushGo 栈帧；runner 定向关闭崩溃窗口并保留事件，不执行全局 Simulator/CoreSimulator 重置。两者均是环境/runner 证据，不能外推或覆盖产品功能结论。
 
+### 2026-09-01 iOS Gateway 验证前置复跑
+
+`testSettingsServerRejectsInvalidAndUnregisteredCandidatesWithoutLeakingSheetError` 当前字节在专用 Simulator 1/1、零重试、零 runtime warning，结果束 `build/quality-results/ios-gateway-validation-ownership-current/run-1-20260901-214421.xcresult`。用户从真实 Settings/Server Sheet 输入无效地址和可解析但注册拒绝的候选；两种错误都必须由 Sheet 自己显示并保留输入，宿主 Settings 不得出现同一错误，候选未完成验证/注册前旧 Gateway label 不得改变，取消后再次回到 Settings 仍为旧配置。该结果只关闭受控 iOS 验证前置与错误归属，不外推 Android Compose（当前无 adb）、真实公网 Gateway 或物理设备。
+
 ## 增量规则
 
 新增或改变 Screen、Route、Action、持久字段、系统表面、后台任务、权限或性能敏感路径时，必须更新相应行并运行调用者/数据/平台消费者影响分析。`config/quality-impact.json` 只强制确定性最低 Lane；未映射产品路径阻断，命中路径也不能自动宣称覆盖。
