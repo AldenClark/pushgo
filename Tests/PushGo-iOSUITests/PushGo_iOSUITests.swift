@@ -1549,9 +1549,15 @@ final class PushGo_iOSUITests: XCTestCase {
         launch(context.app)
 
         assertElementExists("state.messages.load_failed", in: context.app, timeout: 5)
-        let retry = element(in: context.app, identifier: "action.messages.retry")
-        XCTAssertTrue(retry.isHittable, "Retry must be a usable interaction, not a marker-only assertion")
-        retry.tap()
+        let retryCandidates = context.app.descendants(matching: .any)
+            .matching(identifier: "action.messages.retry")
+            .allElementsBoundByIndex
+        let retry = retryCandidates.first(where: { $0.exists && $0.isHittable })
+        XCTAssertNotNil(
+            retry,
+            "Retry must expose at least one visible, hittable production interaction"
+        )
+        retry?.tap()
         assertElementExists("state.messages.empty", in: context.app, timeout: 5)
         XCTAssertFalse(element(in: context.app, identifier: "state.messages.load_failed").exists)
     }
