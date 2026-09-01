@@ -22,6 +22,8 @@ macOS 慢刷新正向当前字节证据（2026-09-02）：`testSlowMessageRefres
 
 iOS 刷新失败恢复当前字节证据（2026-09-02）：`testMessageRefreshFailureKeepsSnapshotAndRetryRecoversPersistedResult` 在准确旧消息上下文中注入一次性 Provider 刷新失败，要求旧快照继续可用、失败由 Messages owner 展示且真实 Refresh 控件可重试；重试后新 canonical 消息/正文、未读徽标和详情均准确，并在普通 relaunch 后保留。1/1、15.246 秒，零失败/跳过/运行时告警，严格 verifier=`EXECUTED`，结果束 `build/quality-results/ios-refresh-failure-current/run-1-20260902-003850.xcresult`；不外推真实网络或设备。
 
+macOS 刷新失败恢复当前字节证据（2026-09-02）：`testMessageRefreshFailureKeepsSnapshotAndRetryPersistsAccurateResult` 在准确旧消息上下文中注入一次性 Provider 刷新失败，要求旧快照继续可用、失败由 Messages owner 展示且真实 Refresh 控件可重试；重试后新 canonical 消息/正文、未读徽标和详情均准确，并在普通 relaunch 后保留。1/1、25.552 秒，零失败/跳过/运行时告警，严格 verifier=`EXECUTED`，结果束 `build/quality-results/macos-refresh-failure-current/run-20260902-003944.xcresult`；不外推真实网络或设备。
+
 非法 Session 必须在 10 秒内进入专用准备失败根面，且不得挂载消息列表、业务空态或 `quality-runtime.ready`；同一批次必须再以正常 `empty.clean` 到达准确功能空态，防止 fail-fast 误杀正常启动。独立 `preparation` Lane 当前在 iOS Simulator 以 8.151 秒、macOS 本机以 5.981 秒完成非法反例，随后两端正向控制均通过，零重试、产品/测试系统双 `PASSED`（`build/quality-results/apple-preparation-summary.json`）。该 Lane 只由 Runtime/准备边界变更和定向验证触发，不进入普通 UI PR 固定成本，也不外推物理设备启动性能。
 
 证据时效更正（2026-09-01）：Messages append failure/Retry 的最新当前源码证据为 iOS 1/1、183.790 秒（`build/quality-results/ios-page-retry-optimized/run-1-20260831-235842.xcresult`）和 macOS 1/1、26.385 秒（`build/quality-results/macos-page-retry-current-byte/run-20260831-235045.xcresult`）。iOS 仍严格观测完整 `0..<125` 稳定身份集，只删除重复的滑动前窗口扫描；macOS 改为真实 `pageSize=50` 的 page1 `124…75`、page2 `74…25` 首尾/准确标题/唯一性。下表 Messages 长段中较早的 259.721/23.491 秒回执仅为历史中间态，不得冒充最新证据。
