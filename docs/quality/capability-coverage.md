@@ -86,6 +86,10 @@ Thing 搜索 A/B 的业务动作虽各为 1/1，但 Cmd-A/Cmd-V 与 `typeText` �
 
 `testSettingsServerRejectsInvalidAndUnregisteredCandidatesWithoutLeakingSheetError` 当前字节在专用 Simulator 1/1、零重试、零 runtime warning，结果束 `build/quality-results/ios-gateway-validation-ownership-current/run-1-20260901-214421.xcresult`。用户从真实 Settings/Server Sheet 输入无效地址和可解析但注册拒绝的候选；两种错误都必须由 Sheet 自己显示并保留输入，宿主 Settings 不得出现同一错误，候选未完成验证/注册前旧 Gateway label 不得改变，取消后再次回到 Settings 仍为旧配置。该结果只关闭受控 iOS 验证前置与错误归属，不外推 Android Compose（当前无 adb）、真实公网 Gateway 或物理设备。
 
+### 2026-09-01 iOS 频道远端拒绝复跑
+
+`testChannelRemoteRejectionStaysInSheetAndRetryPersists` 当前字节在专用 Simulator 1/1、57.287 秒、零重试、零 runtime warning，结果束 `build/quality-results/ios-channel-error-ownership-current/run-1-20260901-214620.xcresult`。用户从真实频道 Sheet 提交后，远端拒绝必须只在 Sheet 显示，输入和提交动作保留，宿主不出现错误且列表没有部分行；关闭 Sheet 后错误不回放，再从同一真实入口重试，准确 canonical 频道行须在普通 relaunch 后保留。该结果关闭受控 iOS 频道错误归属/重试边界，不把远端错误字符串、控件存在或文件状态当作功能通过。
+
 ## 增量规则
 
 新增或改变 Screen、Route、Action、持久字段、系统表面、后台任务、权限或性能敏感路径时，必须更新相应行并运行调用者/数据/平台消费者影响分析。`config/quality-impact.json` 只强制确定性最低 Lane；未映射产品路径阻断，命中路径也不能自动宣称覆盖。
