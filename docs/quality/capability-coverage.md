@@ -207,6 +207,8 @@ Runner 新增显式 `QUALITY_IOS_SIMULATOR_LIFECYCLE=cold|warm`，默认仍是�
 
 2026-09-02 macOS 通知权限恢复路径准备边界：`testDeniedNotificationSettingsCardRecoversAfterSystemEnable` 在本机执行 1 次、18.820 秒，结果束 `build/quality-results/macos-notification-permission-current-20260902/run-20260902-053437.xcresult`；App-owned 启动与 readiness 已通过，但真实 System Settings 中 PushGo 权限行无法被当前 XCUI 自动化稳定定位/点击，runner 以 `classification_issue_ids=apple-quality-precondition`、`status=BLOCKED` 收口。该结果不产生产品通过/失败结论；不通过重试、默认权限或静态存在性绕过。系统通知 warm 路由已有独立正向证据，权限设置往返待系统自动化可观测性改善后再重开。
 
+2026-09-02 iOS 系统通知动作当前字节：`testSystemNotificationMarkReadActionPersistsAccurateReadTarget` 1/1、45.944 秒，及 `testSystemNotificationDeleteActionRemovesOnlyTargetAndPersists` 1/1、41.005 秒，均零重试/零跳过/零运行时告警，结果束分别为 `build/quality-results/ios-system-notification-mark-read-current-20260902/system-notification-20260902-053643.xcresult` 与 `build/quality-results/ios-system-notification-delete-current-20260902/system-notification-20260902-053805.xcresult`，严格执行数各为 1。真实系统通知长按动作分别核对准确 canonical 已读结果、删除目标不影响控制消息、普通进程重启后数据仍准确；受控 Simulator 证据不外推 APNs 公网投递、物理设备或 OEM 行为。
+
 ### 2026-09-01 Atomic message-batch rollback contract
 
 `LocalDataStoreTests.saveMessagesBatchRollsBackAllRowsWhenALaterPrimaryIdentityConflicts` injects a real SQLite primary-identity conflict after a valid row in the same canonical batch. The write must throw, preserve the previously stored Message byte-for-byte at the business-field level, and leave neither the earlier new row nor the conflicting row visible afterward. Targeted execution passed 1/1 in 0.032s; the subsequent full Apple Core run passed 442/442 across 41 suites. This closes the deterministic all-or-nothing write contract only; it does not claim physical disk-exhaustion or process-kill evidence.
