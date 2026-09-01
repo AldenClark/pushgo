@@ -4,6 +4,8 @@
 
 **体系改造进行中，不能宣称完成。** Runtime/环境底座及 Messages、Entity、Channel、Settings、数据层性能、代表性本地化/大字体任务已有多条高价值纵向证据，但设计第 21.2 节的完成条件尚未满足。WP3–WP6 仍有当前产品可达能力和真实平台证据未迁移。低价值边缘组合不进入日常门禁，但这不能用于延期高频 P0 功能。
 
+- 2026-09-01 macOS 事件关闭失败恢复回归：本机 UI runner 单独执行 `testEventCloseFailureKeepsAccurateDetailBlocksDuplicateAndRetryPersists`，真实事件详情在一次关闭失败后保持准确 ongoing 状态、显示归属正确的失败反馈并阻止重复提交；随后从同一生产入口重试成功，关闭状态准确且普通重启后仍保持。当前 1/1、40.263 秒、零失败/跳过/运行时告警、零业务重试；结果束 `build/quality-results/macos-event-close-failure-current/run-20260901-233755.xcresult`，严格 verifier 为 `EXECUTED`。这是状态转换、重复动作保护和持久化用户终点的 macOS 当前字节证据，不外推 Android Compose、真实 Provider 或物理设备。
+
 - 2026-09-01 P1-PENDING-DELETE 租约接管最小合同：新增 Core 用例 `expiredDeletionLeaseIsReclaimedByNextExecutorWithoutDuplicateIntent`，复用既有隔离 Store 和删除意图，先由首个执行者取得短租约，再由第二个执行者在租约过期后接管同一意图；断言尝试次数只前进一次、过期原因保留、旧执行者不能提交、canonical Message 真正删除且队列为空。定向测试 1/1，随后 Apple Core 全量 441/441（41 suites）通过；这是持久租约恢复与执行者围栏合同，不伪装成进程被杀、真机恢复或完整 P1-PENDING-DELETE 关闭，实际进程终止、退避、冲突和多 pending 并发继续延期。
 
 - 2026-09-01 iOS Gateway 验证前置当前字节复跑：在租约恢复测试提交后，使用专用 Simulator、单 worker 和零业务重试复跑 `testSettingsServerRejectsInvalidAndUnregisteredCandidatesWithoutLeakingSheetError`，1/1、49.704 秒、零跳过/零运行时告警；结果束为 `build/quality-results/ios-gateway-validation-after-lease/run-1-20260901-231836.xcresult`，`verify_apple_test_execution.py --expected-test-count 1 --reject-runtime-warnings` 报告 `EXECUTED`。真实 Sheet 错误归属、验证/注册前旧网关保护和取消后配置不变均再次成立；这是受控 Simulator 当前字节回归，不外推公网 Gateway 或物理设备。
