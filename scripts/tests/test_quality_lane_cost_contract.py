@@ -134,6 +134,23 @@ class QualityLaneCostContractTests(unittest.TestCase):
             self.assertNotIn("killall Simulator", runner)
             self.assertNotIn("killall CoreSimulator", runner)
 
+    def test_apple_ui_runner_background_helpers_do_not_retain_shared_lease(self) -> None:
+        ios_runner = (REPO / "scripts/run_ios_ui_tests.sh").read_text()
+        mac_runner = (REPO / "scripts/run_macos_ui_tests.sh").read_text()
+
+        # The host lease is held by descriptor 9. Background cleanup/keep-awake
+        # helpers must close that descriptor so a sequential lane can hand the
+        # lease to the next Apple runner immediately after the current runner
+        # exits.
+        expected_watcher = (
+            '"$problem_reporter_cleaner" --watch-pid "$$" \\\n'
+            '  >>"$problem_reporter_monitor_log" 2>&1 9>&- &'
+        )
+        self.assertIn(expected_watcher, ios_runner)
+        self.assertIn(") 9>&- &", ios_runner)
+        self.assertIn("/usr/bin/caffeinate -dimsu -w $$ 9>&- &", mac_runner)
+        self.assertIn(expected_watcher, mac_runner)
+
     def test_ios_channel_copy_reuses_existing_lifecycle_and_external_system_oracle(self) -> None:
         ios_runner = (REPO / "scripts/run_ios_ui_tests.sh").read_text()
         ios_source = (REPO / "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift").read_text()

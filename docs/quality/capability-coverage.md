@@ -4,6 +4,8 @@
 
 ## App-owned 准备合同
 
+Apple UI 租约顺序交接证据（2026-09-02）：为避免连续 Apple lane 在前一 runner 退出后被后台辅助进程短暂持锁，iOS/macOS runner 的后台进程均关闭共享租约描述符，并由静态合同守住。实际同一 shell 先执行 iOS 空态用户旅程 1/1、9.252 秒（`build/quality-results/lease-handoff-ios/run-1-20260902-000636.xcresult`），紧接执行 macOS 主导航用户旅程 1/1、67.070 秒（`build/quality-results/lease-handoff-macos/run-20260902-000650.xcresult`），无租约阻断、失败、跳过或运行时告警；这只证明测试系统交接与既有业务终点可执行，不外推 Android、物理设备或外部 Provider。
+
 非法 Session 必须在 10 秒内进入专用准备失败根面，且不得挂载消息列表、业务空态或 `quality-runtime.ready`；同一批次必须再以正常 `empty.clean` 到达准确功能空态，防止 fail-fast 误杀正常启动。独立 `preparation` Lane 当前在 iOS Simulator 以 8.151 秒、macOS 本机以 5.981 秒完成非法反例，随后两端正向控制均通过，零重试、产品/测试系统双 `PASSED`（`build/quality-results/apple-preparation-summary.json`）。该 Lane 只由 Runtime/准备边界变更和定向验证触发，不进入普通 UI PR 固定成本，也不外推物理设备启动性能。
 
 证据时效更正（2026-09-01）：Messages append failure/Retry 的最新当前源码证据为 iOS 1/1、183.790 秒（`build/quality-results/ios-page-retry-optimized/run-1-20260831-235842.xcresult`）和 macOS 1/1、26.385 秒（`build/quality-results/macos-page-retry-current-byte/run-20260831-235045.xcresult`）。iOS 仍严格观测完整 `0..<125` 稳定身份集，只删除重复的滑动前窗口扫描；macOS 改为真实 `pageSize=50` 的 page1 `124…75`、page2 `74…25` 首尾/准确标题/唯一性。下表 Messages 长段中较早的 259.721/23.491 秒回执仅为历史中间态，不得冒充最新证据。

@@ -158,14 +158,15 @@ fi
 # Keep a long UI lane from reaching the login screen after a successful
 # preflight. This changes only idle-sleep behavior for the lifetime of this
 # runner and is always released by the exit trap.
-/usr/bin/caffeinate -dimsu -w $$ &
+/usr/bin/caffeinate -dimsu -w $$ 9>&- &
 caffeinate_pid=$!
 
 "$problem_reporter_cleaner"
 close_stale_test_processes
 mkdir -p "$results_root"
 problem_reporter_monitor_log="$(mktemp -t pushgo-problem-reporter-monitor.XXXXXX.log)"
-"$problem_reporter_cleaner" --watch-pid "$$" >>"$problem_reporter_monitor_log" 2>&1 &
+"$problem_reporter_cleaner" --watch-pid "$$" \
+  >>"$problem_reporter_monitor_log" 2>&1 9>&- &
 problem_reporter_monitor_pid=$!
 
 common_args=(

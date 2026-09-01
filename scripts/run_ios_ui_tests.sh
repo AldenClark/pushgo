@@ -144,7 +144,8 @@ trap finish EXIT INT TERM
 # service (for example PosterBoard) is closed before the following test starts.
 "$problem_reporter_cleaner" || true
 problem_reporter_monitor_log="$(mktemp -t pushgo-ios-problem-reporter-monitor.XXXXXX.log)"
-"$problem_reporter_cleaner" --watch-pid "$$" >>"$problem_reporter_monitor_log" 2>&1 &
+"$problem_reporter_cleaner" --watch-pid "$$" \
+  >>"$problem_reporter_monitor_log" 2>&1 9>&- &
 problem_reporter_monitor_pid=$!
 
 common_args=(
@@ -275,7 +276,7 @@ run_test_once() {
         fi
         sleep 0.2
       done
-    ) &
+    ) 9>&- &
     pasteboard_oracle_pid=$!
   fi
   set +e
