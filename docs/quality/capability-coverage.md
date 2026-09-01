@@ -236,3 +236,7 @@ Runner 新增显式 `QUALITY_IOS_SIMULATOR_LIFECYCLE=cold|warm`，默认仍是�
 ### 2026-09-02 Android 消息详情真实浏览器交接
 
 Android 提交 `2fe9bb0` 的干净工作树上，`QualityMessageJourneyInstrumentedTest#standardFixtureShowsAccurateContentAndSurvivesActivityRelaunch` 在受控 `Medium_Phone / emulator-5554` fresh 执行 1/1；收据 `../pushgo-android/build/quality-results/android-standard-open-url-current-20260902-r4/android-focused-summary.json` 为 product/test-system=`PASSED/PASSED`、`source_dirty=false`、`incomplete_selected_claims=[]`，原生 failure/error/skip=0。真实生产打开 URL 后核对浏览器地址栏中的 `pushgo.dev/quality-message`，再返回并复核原消息详情准确正文；这只关闭受控 Android emulator 的系统交接/返回 claim，不外推其他浏览器/OEM、网络内容或物理设备。
+
+### 2026-09-02 macOS 消息详情真实浏览器交接
+
+提交 `d30c41d` 的干净工作树上，`testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch` 在本机 macOS 专用 runner fresh 执行 1/1，XCTest 68.925 秒、failure/error/skip=0；结果束 `build/quality-results/macos-standard-open-url-current-20260902-r2/run-20260902-075403.xcresult` 经 `verify_apple_test_execution.py --expected-test-count 1 --reject-runtime-warnings` 校验为 `status=EXECUTED`。旅程从生产 `action.message.open_link` Link 进入默认浏览器，核对地址栏解析出的 `https://pushgo.dev/quality-message`（scheme、host、path 均准确），再激活 PushGo 并复核原消息详情正文；新增的 App-owned accessibility identifier 只用于稳定定位真实入口，没有替代系统交接或放宽 Oracle。该证据仅关闭受控 macOS 本机的浏览器交接/返回 claim，不外推其他浏览器、网络内容、物理设备或整个平台 Gate。
