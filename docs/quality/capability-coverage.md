@@ -24,6 +24,8 @@
 
 同一受保护材料失败恢复的 iOS 当前字节回归为 1/1、53.885 秒，零失败/跳过/运行时告警；结果束为 `build/quality-results/ios-decryption-store-failure-current/run-1-20260901-233449.xcresult`，严格执行校验为 `EXECUTED`。iOS 真实 Sheet/重启/重试终点与 macOS 一致；不外推物理 Keychain、Android UI 或真实 Provider。
 
+频道既有订阅本地失败补偿的 macOS 当前字节回归为 1/1、39.435 秒，零失败/跳过/运行时告警；`testExistingChannelLocalFailureDoesNotCompensateBeforeRetry` 结果束为 `build/quality-results/macos-existing-channel-local-failure-current/run-20260901-233631.xcresult`，严格执行校验为 `EXECUTED`。真实 `created=false` 订阅在本地失败时保持既有远端关系、Sheet 输入可重试且无脏行，正式重试后才出现准确频道并在重启后保留；不以错误文字、行存在或文件状态单独求绿，也不外推 Android UI 或公网 Gateway。
+
 | 平台/真实入口 | 用户目的 | 关键状态/分支 | 数据/系统终点 | 最低证据 | Lane/当前状态 | 主要 owner |
 | --- | --- | --- | --- | --- | --- | --- |
 | I Message external URL | 从准确消息打开并返回准确外部目标 | URL 存在/安全过滤/系统交接/返回连续性 | Message Detail、Safari 完整可见地址、原详情 | UI + system browser + return oracle | P0；iOS 不新增 fixture、测试方法、App 安装或启动，在既有 `messages.standard` PR 主链的准确 canonical 详情点击生产 Open Link；要求真实 Safari 前台，按用户动作展开 iOS 27 收起地址栏后从系统 TextField 仅接受省略 scheme 或完整 HTTPS 的精确目标，再激活 PushGo 并核对仍为同一详情与准确正文，随后原 migration、图片分享、搜索与 relaunch Oracle 全部继续。第一次当前字节运行真实拉起 Safari，但旧谓词在收起域名栏寻找完整 path 而失败（`build/quality-results/ios/run-1-20260830-163926.xcresult`）；xcresult 附件证明系统只暴露 `pushgo.dev`，修正读取方式而未改变产品 URL。最终严格相等当前字节 1/1、63.934 秒、零业务重试（`build/quality-results/ios/run-1-20260830-165818.xcresult`）。动作存在、fixture URL、浏览器前台或根域均不能单独求绿。公网内容/SLA、网络失败、第三方浏览器和 macOS handoff 不从本结果外推 | Message Detail/URLSanitizer/system browser |
