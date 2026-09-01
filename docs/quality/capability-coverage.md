@@ -74,6 +74,14 @@ Gateway 设置的用户目的不是“地址写进存储”就算成功，而是
 
 Android 的频道远端拒绝与本地持久化失败已在既有 `QualityChannelJourneyInstrumentedTest` 中补上宿主级负控：失败必须保留 `sheet.channels.entry`、原始输入和可用重试，且 `QualityRuntime.globalErrorPresentationCount` 不得增加，从而直接验证错误没有泄漏为宿主 Toast。`ChannelListScreen` 仅在真正的宿主 `errorMessage` Toast 路径记录该计数；频道 Sheet 的 `channelEntryErrorMessage` 保持独立。源码/JVM 298/298/androidTest 编译当前通过，但无 `adb` serial，Compose UI 仍 `NOT RUN`，不以静态接入或编译替代真实 Android UI 结果。
 
+### 2026-09-01 iOS 分页反馈可见性与 Oracle 收口
+
+iOS 分页 loading/failure 现在由消息页自己的 `safeAreaInset` 承载，用户在慢加载期间可看到并可查询“正在加载更早的消息…”，失败期间可看到准确错误正文并点击 Retry；不再依赖 `List` 尾端是否被懒加载。真实 workflow 仍从 125 条 canonical 数据出发，要求 page-1 尾行在加载/失败时保持可操作，Retry 后到达 page-2 的准确 `74…25`，全量保持 newest-first、无重复，并继续完成已读、筛选和普通 relaunch。专用 iOS Simulator 当前字节 focused 1/1、零重试、零 runtime warning，收据 `build/quality-results/ios-message-page-progress-safearea-oracle2/run-1-20260901-212956.xcresult`；标准消息回归 focused 1/1、零重试，收据 `build/quality-results/ios-standard-messages-after-page-status/run-1-20260901-213330.xcresult`，均以 expected count=1 和 `--reject-runtime-warnings` 严格复核。首轮增强断言读到 `.contain` 容器空 label 后曾按 Oracle 缺陷失败，改为校验其直接静态文本；这次修正提高了对真实用户文案的敏感性，没有把 identifier、文件或 fixture 存在当成功终点。Android UI、物理设备、真实 APNs/FCM 与生产 Provider 仍不由该证据覆盖。
+
+### 2026-09-01 macOS 测试系统告警与 PosterBoard 事件
+
+Thing 搜索 A/B 的业务动作虽各为 1/1，但 Cmd-A/Cmd-V 与 `typeText` 均产生原生 QoS/主线程 runtime warning，严格结果保持 `FAILED_TEST_SYSTEM`，未通过重跑、等待或白名单求绿。专用 iOS Simulator 同期的 PosterBoard 崩溃来自 Apple `launchd_sim`/`SimulatorTrampoline` 私有框架，未见 PushGo 栈帧；runner 定向关闭崩溃窗口并保留事件，不执行全局 Simulator/CoreSimulator 重置。两者均是环境/runner 证据，不能外推或覆盖产品功能结论。
+
 ## 增量规则
 
 新增或改变 Screen、Route、Action、持久字段、系统表面、后台任务、权限或性能敏感路径时，必须更新相应行并运行调用者/数据/平台消费者影响分析。`config/quality-impact.json` 只强制确定性最低 Lane；未映射产品路径阻断，命中路径也不能自动宣称覆盖。

@@ -462,19 +462,11 @@ struct MessageListScreen: View {
                                 Task { await viewModel.loadMoreIfNeeded(currentItem: message) }
                             }
                     }
-                    if viewModel.isLoadingPage {
-                        HStack {
-                            Spacer()
-                            ProgressView()
-                                .progressViewStyle(.circular)
-                            Spacer()
-                        }
-                        .listRowSeparator(.hidden)
-                        .accessibilityElement(children: .combine)
-                        .accessibilityIdentifier("state.messages.page.loading")
-                    } else if viewModel.pageLoadError != nil {
-                        messagePageFailureRow
-                    }
+                }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if !isShowingSearchResults {
+                    messagePageStatusInset
                 }
             }
             .modifier(MessageListSearchableModifier(searchViewModel: searchViewModel, enabled: hasMessages && !showsUnreadFilterEmptyState))
@@ -510,7 +502,27 @@ struct MessageListScreen: View {
         }
     }
 
-    private var messagePageFailureRow: some View {
+    @ViewBuilder
+    private var messagePageStatusInset: some View {
+        if viewModel.isLoadingPage {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                Text(localizationManager.localized("message_page_loading"))
+                    .font(.callout)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(.regularMaterial)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("state.messages.page.loading")
+        } else if viewModel.pageLoadError != nil {
+            messagePageFailureInset
+        }
+    }
+
+    private var messagePageFailureInset: some View {
         HStack(spacing: 12) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.secondary)
@@ -523,8 +535,10 @@ struct MessageListScreen: View {
             .buttonStyle(.borderedProminent)
             .accessibilityIdentifier("action.messages.page.retry")
         }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .listRowSeparator(.hidden)
+        .background(.regularMaterial)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("state.messages.page.failed")
     }

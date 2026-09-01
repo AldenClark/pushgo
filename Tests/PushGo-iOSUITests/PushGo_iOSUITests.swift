@@ -827,7 +827,7 @@ final class PushGo_iOSUITests: XCTestCase {
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
             fixture: "messages.workflow",
-            messagePageLoadDelayMilliseconds: 5_000,
+            messagePageLoadDelayMilliseconds: 10_000,
             failMessagePageLoadOnce: true
         )
 
@@ -900,8 +900,12 @@ final class PushGo_iOSUITests: XCTestCase {
             swipeUpAndRecord()
         }
         XCTAssertTrue(
-            pageLoading.waitForExistence(timeout: 5),
-            "A slow next page must expose bottom progress instead of looking frozen"
+            pageLoading.waitForExistence(timeout: 5) && pageLoading.isHittable,
+            "A slow next page must expose a visible, reachable bottom progress state instead of looking frozen"
+        )
+        XCTAssertTrue(
+            pageLoading.label.contains("正在加载更早的消息"),
+            "The bottom progress state must explain that earlier messages are loading"
         )
         XCTAssertTrue(
             context.app.staticTexts["Quality workflow 75"].exists,
@@ -909,8 +913,13 @@ final class PushGo_iOSUITests: XCTestCase {
         )
         let pageFailure = element(in: context.app, identifier: "state.messages.page.failed")
         XCTAssertTrue(
-            pageFailure.waitForExistence(timeout: 8),
-            "A failed next page must expose a page-owned recovery state instead of silently stopping."
+            pageFailure.waitForExistence(timeout: 8) && pageFailure.isHittable,
+            "A failed next page must expose a visible, reachable page-owned recovery state instead of silently stopping."
+        )
+        let pageFailureMessage = context.app.staticTexts["无法加载消息，请稍后重试。"]
+        XCTAssertTrue(
+            pageFailureMessage.waitForExistence(timeout: 3) && pageFailureMessage.isHittable,
+            "The page-owned failure state must expose a visible, reachable explanation of the load failure."
         )
         let retainedPageOneTail = element(
             in: context.app,
