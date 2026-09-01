@@ -20,6 +20,8 @@
 
 - 2026-09-02 macOS 慢刷新正向 P0 当前字节回归：复用 `messages.standard` App-owned session，在真实刷新入口注入一次性 2.5 秒延迟；准确旧消息在慢态期间保持可见/可用，出现真实慢态提示，完成后提示消失且准确内容仍保留。当前 1/1、13.438 秒，零失败/跳过/运行时告警，严格 verifier=`EXECUTED`，结果束 `build/quality-results/macos-refresh-slow-current/run-20260902-003752.xcresult`；不新增 fixture、方法或 Lane，不外推大规模性能、真实网络或设备。
 
+- 2026-09-02 iOS 刷新失败恢复 P0 当前字节回归：在准确旧消息可见时注入一次性 Provider 刷新失败，要求旧快照仍可用、失败反馈由 Messages owner 持有，同一真实 Refresh 控件可重试；重试后出现准确新消息/正文，未读徽标精确变化，详情可打开且结果在普通 relaunch 后保留。当前 1/1、15.246 秒，零失败/跳过/运行时告警，严格 verifier=`EXECUTED`，结果束 `build/quality-results/ios-refresh-failure-current/run-1-20260902-003850.xcresult`；不新增 fixture、方法或 Lane，不外推真实网络或设备。
+
 - 2026-09-01 macOS 事件关闭失败恢复回归：本机 UI runner 单独执行 `testEventCloseFailureKeepsAccurateDetailBlocksDuplicateAndRetryPersists`，真实事件详情在一次关闭失败后保持准确 ongoing 状态、显示归属正确的失败反馈并阻止重复提交；随后从同一生产入口重试成功，关闭状态准确且普通重启后仍保持。当前 1/1、40.263 秒、零失败/跳过/运行时告警、零业务重试；结果束 `build/quality-results/macos-event-close-failure-current/run-20260901-233755.xcresult`，严格 verifier 为 `EXECUTED`。这是状态转换、重复动作保护和持久化用户终点的 macOS 当前字节证据，不外推 Android Compose、真实 Provider 或物理设备。
 
 - 2026-09-01 iOS 事件关闭导航接入修正与回归：首次复跑在事件详情前因序号 Tab 点击没有可操作命中点而失败，归类为 `FAILED_TEST_SYSTEM`，不计产品失败；测试现优先使用语义 Events 控件，点击后立即要求真实 Events 列表，再保留窄序号兼容回退。修正后失败恢复旅程 1/1、46.324 秒，正向投影旅程 1/1、80.004 秒，均零失败/跳过/运行时告警、零业务重试，严格 verifier 均为 `EXECUTED`；结果束分别为 `build/quality-results/ios-event-close-failure-current/run-1-20260901-234601.xcresult` 与 `build/quality-results/ios-event-close-positive-current/run-1-20260901-234705.xcresult`。两条旅程都继续验证准确详情、取消/确认、ongoing 筛选、错误归属、重复动作保护、Thing 关联和普通 relaunch 持久化；未修改产品代码，不外推 Android、真实 Provider 或物理设备。
