@@ -130,3 +130,7 @@ Runner 新增显式 `QUALITY_IOS_SIMULATOR_LIFECYCLE=cold|warm`，默认仍是�
 ### 2026-09-01 Gateway 提交前取消边界审计
 
 只读产品/runner 审计确认 iOS 与 macOS 编辑器在保存期间禁用取消按钮并禁止交互式关闭，因此当前不存在可由用户触发的提交前取消入口。不新增人工暂停、文件 barrier 或测试钩子；已实现的 Task ownership、系统关闭取消防御和提交前 cancellation guard 保留，候选验证、提交失败回滚、普通重启恢复及后续真实频道操作继续由目的级旅程覆盖。
+
+### 2026-09-01 Pending deletion lease recovery
+
+`PendingLocalDeletionControllerTests.expiredDeletionLeaseIsReclaimedByNextExecutorWithoutDuplicateIntent` is a focused Core contract: after one executor's durable lease expires, the next executor claims the same intent exactly once, attempt count advances to 2, the expired-lease reason is retained, and the canonical Message is deleted with no pending intent left. Targeted `swift test -q --filter expiredDeletionLeaseIsReclaimedByNextExecutorWithoutDuplicateIntent` passed 1/1 in 0.046s; the subsequent full Apple Core run passed 441/441 across 41 suites. This closes only the deterministic lease-reclaim contract; it is not evidence of an actual process kill, physical device, or full P1-PENDING-DELETE closure.

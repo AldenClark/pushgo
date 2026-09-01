@@ -4,6 +4,8 @@
 
 **体系改造进行中，不能宣称完成。** Runtime/环境底座及 Messages、Entity、Channel、Settings、数据层性能、代表性本地化/大字体任务已有多条高价值纵向证据，但设计第 21.2 节的完成条件尚未满足。WP3–WP6 仍有当前产品可达能力和真实平台证据未迁移。低价值边缘组合不进入日常门禁，但这不能用于延期高频 P0 功能。
 
+- 2026-09-01 P1-PENDING-DELETE 租约接管最小合同：新增 Core 用例 `expiredDeletionLeaseIsReclaimedByNextExecutorWithoutDuplicateIntent`，复用既有隔离 Store 和删除意图，先由首个执行者取得短租约，再由第二个执行者在租约过期后接管同一意图；断言尝试次数只前进一次、过期原因保留、canonical Message 真正删除且队列为空。定向测试 1/1（0.046 秒），随后 Apple Core 全量 441/441（41 suites）通过；这是持久租约恢复合同，不伪装成进程被杀、真机恢复或完整 P1-PENDING-DELETE 关闭，实际进程终止、退避、冲突和多 pending 并发继续延期。
+
 - 2026-09-01 Gateway 提交前取消审计：Terra 只读复核 `SettingsViewModel`、iOS/macOS Sheet 和 `validateAndUpdateServerConfig` 后确认，当前 UX 在保存期间禁用 Cancel 且禁止交互式关闭，用户没有可触发的提交前取消入口；因此不新增暂停信号、文件 barrier 或测试专用 UI，用以避免验证不存在的交互。已实现的 Task ownership、系统关闭取消防御和提交前 cancellation guard 保留，现有候选验证、提交失败回滚、普通重启恢复及后续真实频道操作继续作为目的级证据。P1-GATEWAY 仍因其他清理/失败/外部 Provider 边界保持 `DEFERRED`，本审计未启动设备或修改源码。
 
 - 2026-09-01 P1-NAV Message 不可用目标跨平台收口：iOS 的“删除已提交 Message 后重新打开准确 ID”已证明持久化回退；macOS 补一条最小 Nightly risk 旅程，在同一 Quality session 的生产 `message.open → NotificationOpenController` 链路中请求不存在的 ID，必须回到 Messages、显示 root-owned 且可关闭的 unavailable banner，随后仍能打开准确幸存 Message。首次用 `XCUIApplication.open(URL)` 红灯，不将其误报为产品缺陷：该 API 为测试目标冷启动新进程且不带 Quality session 注入，因此只保留为 harness 边界证据；改走与 App 运行时同一 controller 的受控启动请求后 1/1、13.545 秒、零重试（`build/quality-results/macos-message-unavailable-route-final/run-20260901-082445.xcresult`）。复核又发现 iOS 已切换根 Tab 但现有 Message Sheet 可能遮住回退结果，故 List owner 仅在该 unavailable-feedback 出现时清除自己的 selection（错误仍只由 root banner 展示）；同一删除→回退完整 iOS Simulator 回归在重新编译后 1/1、56.638 秒、零失败且无运行时 warning（`build/quality-results/ios-message-deleted-route-final4/run-1-20260901-082740.xcresult`）。这不替代 macOS 已删除 Message 的真实 URL/UI 链，也不外推其他 invalid/Event/真机路由，P1-NAV 仍为 `DEFERRED`。

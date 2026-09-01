@@ -38,6 +38,10 @@ The 130 P1 rows in design section 25 are grouped only where they share a user-pu
 
 A read-only product/runner audit confirms both Apple editors disable Cancel and interactive dismissal while saving, so there is no current user-triggered pre-commit cancellation entry. No artificial barrier or UI test hook is added; the existing cancellation guards remain defensive coverage, while candidate validation, commit rollback and relaunch evidence continue to cover the reachable user purpose. Remaining cleanup/failure cells stay deferred.
 
+### 2026-09-01 Pending deletion lease-reclaim contract
+
+The Apple Core contract `expiredDeletionLeaseIsReclaimedByNextExecutorWithoutDuplicateIntent` now covers the lowest-cost durable recovery boundary: an expired executor lease is reclaimed by the next executor, the same intent advances exactly once, and the canonical message reaches deletion with no pending intent left. Focused execution passed 1/1, followed by the full 441/441 Apple Core run. Actual process death, backoff, conflict handling and multiple-pending concurrency remain deferred; the `P1-PENDING-DELETE` group therefore stays `DEFERRED`.
+
 1. Close the highest-value positive Oracle inside an existing fixture/journey first; add a new UI method or startup only when ownership, lifecycle or system consumer is genuinely different.
 2. A group may move from `DEFERRED` to `IMPLEMENTED` only when every referenced P1 row is backed by a fresh executable receipt. It may move to `REMOVED/NA` only when every row is inapplicable under a documented product-reachability decision. Partial evidence is recorded in `capability-coverage.md`, not promoted here; neither terminal state waives a separate physical/provider Release gate.
 3. A due-date edit must state the newly learned dependency or capacity fact in the same change. Repeatedly moving dates without new evidence is a failed gate, not progress.
