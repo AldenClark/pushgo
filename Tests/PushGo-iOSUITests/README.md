@@ -76,6 +76,13 @@ result-count checks, and product-purpose Oracles. It is therefore an
 investigation/control mode, not permission to skip isolation or to treat the
 absence of a crash dialog as a product result.
 
+The iOS runner also starts the exact host `Problem Reporter`/
+`UserNotificationCenter` cleaner before the batch, watches it during the batch
+for delayed Simulator/App crash dialogs, and runs it again on exit. A cleanup
+failure is `BLOCKED`; a crashed product or Simulator process remains classified
+from its original result bundle and is never retried into green. The cleaner
+does not kill Simulator/CoreSimulator or perform a global reset.
+
 `scripts/quality_changed.sh` derives the deterministic minimum lane from `config/quality-impact.json`. That plan is a lower bound, not a coverage score.
 
 Changes inside the ordinary iOS, macOS, or watchOS XCTest journey source are selected from the diff instead of being hidden behind the fixed PR list. A hunk owned by one unchanged `test...` method produces an exact `Target/Class/testMethod` scope; a shared helper or fixture hunk expands to every runnable method in the changed `XCTestCase`. Those methods are partitioned by execution profile, so accessibility and real-system-notification journeys retain their required environment instead of being mixed into a default batch. Deleted, renamed, non-runnable, or ambiguous tests are `BLOCKED` before execution. The selector records the expected runnable-method count for both exact-method and whole-class selection; each profile's xcresult executed count must match its selected methods, so executing zero or only a subset is a test-system failure. Specialized system-notification and performance files retain their dedicated lanes and environments.

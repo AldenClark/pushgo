@@ -217,6 +217,19 @@ class QualityTestSystemIssueTests(unittest.TestCase):
         self.assertNotIn("killall Simulator", runner)
         self.assertNotIn("killall CoreSimulator", runner)
 
+    def test_ios_runner_keeps_crash_dialog_cleanup_alive_for_delayed_simulator_reports(self):
+        runner = (REPO / "scripts/run_ios_ui_tests.sh").read_text()
+
+        self.assertIn(
+            'problem_reporter_cleaner="$repo_root/scripts/close_macos_problem_reporter.sh"',
+            runner,
+        )
+        self.assertIn('"$problem_reporter_cleaner" --watch-pid "$$"', runner)
+        self.assertIn("ios_problem_reporter_cleanup_failed", runner)
+        self.assertIn("original result/log has", runner)
+        self.assertNotIn("killall Simulator", runner)
+        self.assertNotIn("killall CoreSimulator", runner)
+
     def test_ios_runner_rejects_system_notification_scope_before_using_simulator(self):
         process = subprocess.run(
             [str(REPO / "scripts/run_ios_ui_tests.sh")],

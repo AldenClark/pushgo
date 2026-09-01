@@ -16,6 +16,11 @@ reuse_built_tests="${QUALITY_REUSE_BUILT_TESTS:-0}"
 allow_expected_failures="${QUALITY_ALLOW_EXPECTED_FAILURES:-0}"
 simulator_lifecycle="${QUALITY_IOS_SIMULATOR_LIFECYCLE:-cold}"
 apple_ui_lease_file="${PUSHGO_APPLE_UI_LEASE_FILE:-$repo_root/build/.pushgo-apple-ui-tests.lock}"
+problem_reporter_cleaner="$repo_root/scripts/close_macos_problem_reporter.sh"
+problem_reporter_monitor_pid=""
+problem_reporter_monitor_log=""
+requested_content_size="${QUALITY_CONTENT_SIZE:-}"
+original_content_size=""
 
 if [[ ! "$max_retries" =~ ^[0-9]+$ ]] || (( max_retries != 0 )); then
   echo "status=BLOCKED"
@@ -95,6 +100,53 @@ fi
 
 mkdir -p "$results_root"
 
+finish() {
+  local command_status=$?
+  trap - EXIT INT TERM
+  local restored_content_size=""
+  local restore_failed=0
+  if [[ -n "$original_content_size" ]]; then
+    if ! xcrun simctl ui "$target" content_size "$original_content_size" >/dev/null 2>&1; then
+      restore_failed=1
+    else
+      restored_content_size="$(xcrun simctl ui "$target" content_size 2>/dev/null || true)"
+      [[ "$restored_content_size" == "$original_content_size" ]] || restore_failed=1
+    fi
+  fi
+  if [[ $restore_failed -ne 0 ]]; then
+    echo "status=BLOCKED"
+    echo "reason=ios_content_size_restore_failed:${restored_content_size:-unreadable}"
+    if [[ -n "$runner_status_file" ]]; then
+      printf 'BLOCKED\n' > "$runner_status_file"
+    fi
+    if [[ $command_status -eq 0 ]]; then
+      command_status=2
+    fi
+  fi
+  if [[ -n "$problem_reporter_monitor_pid" ]]; then
+    kill "$problem_reporter_monitor_pid" >/dev/null 2>&1 || true
+    wait "$problem_reporter_monitor_pid" 2>/dev/null || true
+  fi
+  # Close only the exact host crash-reporter processes. This removes a
+  # blocking dialog after an App/Simulator crash without killing Simulator,
+  # CoreSimulator, or any unrelated application; the original result/log has
+  # already been retained and remains the source of the failure classification.
+  "$problem_reporter_cleaner" || true
+  if [[ -n "$problem_reporter_monitor_log" ]]; then
+    rm -f "$problem_reporter_monitor_log"
+  fi
+  exit "$command_status"
+}
+trap finish EXIT INT TERM
+
+# A stale host crash dialog must not cover the next iOS journey. Keep the
+# watcher alive for the whole batch so a delayed report created by a simulator
+# service (for example PosterBoard) is closed before the following test starts.
+"$problem_reporter_cleaner" || true
+problem_reporter_monitor_log="$(mktemp -t pushgo-ios-problem-reporter-monitor.XXXXXX.log)"
+"$problem_reporter_cleaner" --watch-pid "$$" >>"$problem_reporter_monitor_log" 2>&1 &
+problem_reporter_monitor_pid=$!
+
 common_args=(
   -project "$project_path"
   -scheme "$scheme"
@@ -156,33 +208,6 @@ prepare_simulator() {
 prepare_simulator
 echo "ios_simulator_lifecycle=$simulator_lifecycle"
 
-requested_content_size="${QUALITY_CONTENT_SIZE:-}"
-original_content_size=""
-restore_content_size() {
-  local command_status=$?
-  local restored_content_size=""
-  local restore_failed=0
-  trap - EXIT
-  if [[ -n "$original_content_size" ]]; then
-    if ! xcrun simctl ui "$target" content_size "$original_content_size" >/dev/null 2>&1; then
-      restore_failed=1
-    else
-      restored_content_size="$(xcrun simctl ui "$target" content_size 2>/dev/null || true)"
-      [[ "$restored_content_size" == "$original_content_size" ]] || restore_failed=1
-    fi
-  fi
-  if [[ $restore_failed -ne 0 ]]; then
-    echo "status=BLOCKED"
-    echo "reason=ios_content_size_restore_failed:${restored_content_size:-unreadable}"
-    if [[ -n "$runner_status_file" ]]; then
-      printf 'BLOCKED\n' > "$runner_status_file"
-    fi
-    if [[ $command_status -eq 0 ]]; then
-      command_status=2
-    fi
-  fi
-  exit "$command_status"
-}
 if [[ -n "$requested_content_size" ]]; then
   case "$requested_content_size" in
     extra-small|small|medium|large|extra-large|extra-extra-large|extra-extra-extra-large|accessibility-medium|accessibility-large|accessibility-extra-large|accessibility-extra-extra-large|accessibility-extra-extra-extra-large) ;;
@@ -201,7 +226,6 @@ if [[ -n "$requested_content_size" ]]; then
       exit 2
       ;;
   esac
-  trap restore_content_size EXIT
   xcrun simctl ui "$target" content_size "$requested_content_size"
   applied_content_size="$(xcrun simctl ui "$target" content_size)"
   [[ "$applied_content_size" == "$requested_content_size" ]] || {
@@ -258,6 +282,7 @@ run_test_once() {
   xcodebuild "${common_args[@]}" -resultBundlePath "$result_bundle" test-without-building 2>&1 | tee "$logfile"
   local status=${PIPESTATUS[0]}
   set -e
+
   if [[ "$observe_channel_copy" == "1" ]]; then
     touch "$pasteboard_oracle_dir/stop"
     wait "$pasteboard_oracle_pid" 2>/dev/null || true
@@ -270,6 +295,18 @@ run_test_once() {
       echo "external_pasteboard_oracle=PASSED"
     fi
     rm -rf "$pasteboard_oracle_dir"
+  fi
+
+  if ! kill -0 "$problem_reporter_monitor_pid" >/dev/null 2>&1; then
+    local monitor_status=0
+    wait "$problem_reporter_monitor_pid" || monitor_status=$?
+    [[ -z "$runner_status_file" ]] || printf 'BLOCKED\n' > "$runner_status_file"
+    echo "status=BLOCKED"
+    echo "reason=ios_problem_reporter_cleanup_failed:${monitor_status}"
+    echo "monitor_log=$problem_reporter_monitor_log"
+    echo "log=$logfile"
+    echo "result_bundle=$result_bundle"
+    exit 2
   fi
   return "$status"
 }
