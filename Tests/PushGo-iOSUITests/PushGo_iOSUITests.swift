@@ -245,7 +245,7 @@ final class PushGo_iOSUITests: XCTestCase {
         // to Channels first.  Continue through the production Messages tab
         // before asserting the empty-state business endpoint.
         tapWhenHittable(
-            element(in: context.app, identifier: "tab.messages"),
+            messagesTab(in: context.app),
             timeout: 8,
             message: "Messages must remain reachable after returning from Settings"
         )
@@ -815,7 +815,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
         let tabBar = context.app.tabBars.firstMatch
         XCTAssertTrue(tabBar.waitForExistence(timeout: 8), "The production tab bar must be visible.")
-        let messagesTab = context.app.buttons["tab.messages"]
+        let messagesTab = messagesTab(in: context.app)
         XCTAssertTrue(
             messagesTab.waitForExistence(timeout: 8) && messagesTab.isHittable,
             "The real Messages tab title must remain visible and actionable with an unread badge."
@@ -1067,7 +1067,7 @@ final class PushGo_iOSUITests: XCTestCase {
             "The production paging journey must render every canonical object exactly once without gaps."
         )
 
-        let messagesTab = context.app.tabBars.firstMatch.buttons.element(boundBy: 0)
+        let messagesTab = messagesTab(in: context.app)
         messagesTab.tap()
         XCTAssertTrue(
             context.app.staticTexts["Quality workflow 39"].waitForExistence(timeout: 5),
@@ -1698,7 +1698,7 @@ final class PushGo_iOSUITests: XCTestCase {
         assertElementExists("screen.messages.list", in: context.app, timeout: 8)
         let tabs = context.app.tabBars.buttons
         XCTAssertGreaterThanOrEqual(tabs.count, 4, "The four primary product destinations must be reachable")
-        let messagesTab = context.app.buttons["tab.messages"]
+        let messagesTab = messagesTab(in: context.app)
         XCTAssertTrue(
             messagesTab.waitForExistence(timeout: 8) && messagesTab.isHittable,
             "The real Messages tab must remain readable and actionable with a high unread badge."
@@ -1961,7 +1961,7 @@ final class PushGo_iOSUITests: XCTestCase {
             in: context.app
         )
         XCTAssertFalse(
-            context.app.tabBars.buttons["tab.messages"].exists,
+            messagesTab(in: context.app).exists,
             "Hiding Messages must remove the badge-owning navigation destination, not orphan its unread state"
         )
         assertElementExists("screen.channels", in: context.app, timeout: 8)
@@ -1977,7 +1977,7 @@ final class PushGo_iOSUITests: XCTestCase {
             in: context.app
         )
         XCTAssertFalse(
-            context.app.tabBars.buttons["tab.messages"].exists,
+            messagesTab(in: context.app).exists,
             "The hidden Messages badge owner must not return after process relaunch"
         )
 
@@ -3568,7 +3568,7 @@ final class PushGo_iOSUITests: XCTestCase {
             timeout: 5
         )
         XCTAssertTrue(keepRow.waitForNonExistence(timeout: 8))
-        tapWhenHittable(element(in: context.app, identifier: "tab.messages"), timeout: 8)
+        tapWhenHittable(messagesTab(in: context.app), timeout: 8)
         XCTAssertTrue(context.app.staticTexts["Quality Keep History Message"].waitForExistence(timeout: 8))
 
         context.app.terminate()
@@ -3577,7 +3577,7 @@ final class PushGo_iOSUITests: XCTestCase {
         assertQualityRuntimeReady(in: context.app, timeout: 15)
         tapWhenHittable(channelsTab(in: context.app), timeout: 8)
         XCTAssertFalse(keepRow.exists)
-        tapWhenHittable(element(in: context.app, identifier: "tab.messages"), timeout: 8)
+        tapWhenHittable(messagesTab(in: context.app), timeout: 8)
         XCTAssertTrue(context.app.staticTexts["Quality Keep History Message"].waitForExistence(timeout: 8))
 
         tapWhenHittable(channelsTab(in: context.app), timeout: 8)
@@ -3603,7 +3603,7 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(pendingDeletion.waitForExistence(timeout: 5))
         XCTAssertTrue(pendingDeletion.waitForNonExistence(timeout: 15))
 
-        tapWhenHittable(element(in: context.app, identifier: "tab.messages"), timeout: 8)
+        tapWhenHittable(messagesTab(in: context.app), timeout: 8)
         XCTAssertTrue(context.app.staticTexts["Quality Keep History Message"].waitForExistence(timeout: 8))
         XCTAssertFalse(context.app.staticTexts["Quality Delete History Message"].exists)
 
@@ -3624,7 +3624,7 @@ final class PushGo_iOSUITests: XCTestCase {
             timeout: 8,
             message: "The canonical Channel row must remain a real copy action after relaunch"
         )
-        tapWhenHittable(element(in: context.app, identifier: "tab.messages"), timeout: 8)
+        tapWhenHittable(messagesTab(in: context.app), timeout: 8)
         XCTAssertTrue(context.app.staticTexts["Quality Keep History Message"].waitForExistence(timeout: 8))
         XCTAssertFalse(context.app.staticTexts["Quality Delete History Message"].exists)
     }
@@ -3716,7 +3716,7 @@ final class PushGo_iOSUITests: XCTestCase {
             element(in: context.app, identifier: "feedback.channels.entry-sync").exists,
             "Closing the Channel sheet must not replay its business error on the host page"
         )
-        tapWhenHittable(element(in: context.app, identifier: "tab.messages"), timeout: 8)
+        tapWhenHittable(messagesTab(in: context.app), timeout: 8)
         tapWhenHittable(channelsTab(in: context.app), timeout: 8)
         XCTAssertFalse(
             element(in: context.app, identifier: "channel.row.\(expectedChannelID)").exists,
@@ -4959,10 +4959,7 @@ final class PushGo_iOSUITests: XCTestCase {
             file: file,
             line: line
         )
-        let identifiedMessagesTab = tabBar.buttons["tab.messages"]
-        let messagesTab = identifiedMessagesTab.exists
-            ? identifiedMessagesTab
-            : tabBar.buttons.element(boundBy: 0)
+        let messagesTab = messagesTab(in: app)
         XCTAssertTrue(
             messagesTab.waitForExistence(timeout: timeout),
             "The production Messages tab must exist before its badge can be verified",
@@ -5084,6 +5081,36 @@ final class PushGo_iOSUITests: XCTestCase {
         // Channels is the only mandatory destination and is always the final
         // tab, even when optional data pages are hidden.
         return tabBar.buttons.element(boundBy: tabBar.buttons.count - 1)
+    }
+
+    private func messagesTab(in app: XCUIApplication) -> XCUIElement {
+        let tabBar = app.tabBars.firstMatch
+        let identified = tabBar.buttons["tab.messages"]
+        if identified.exists {
+            return identified
+        }
+        guard tabBar.waitForExistence(timeout: 8) else { return identified }
+
+        // iOS 27 may omit an identifier attached to a custom SwiftUI tab item
+        // from the final UITabBarButton. Resolve the same user-facing
+        // destination by its localized title, scoped to the production tab
+        // bar. Do not fall back to an ordinal: optional tabs can change order.
+        let labels = Set(["Messages", "消息", "訊息"])
+        let deadline = Date().addingTimeInterval(2)
+        repeat {
+            let candidates = tabBar.buttons.allElementsBoundByIndex.filter {
+                labels.contains($0.label)
+            }
+            if candidates.count == 1 {
+                return candidates[0]
+            }
+            // More than one localized title would make the semantic selector
+            // ambiguous; keep the identifier query so the caller fails closed
+            // instead of tapping an arbitrary tab.
+            if candidates.count > 1 { return identified }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        } while Date() < deadline
+        return identified
     }
 
     private func openSettingsFromChannels(in app: XCUIApplication) {
