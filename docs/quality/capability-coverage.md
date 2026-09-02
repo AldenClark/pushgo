@@ -2,7 +2,7 @@
 
 此索引防遗漏，不计算覆盖分，不是测试 Oracle。入口或类型存在不能让能力通过；最终判定以真实用户结果和必要数据/系统终点为准。
 
-- 2026-09-03 Release 隔离车道：Apple `release-isolation` 在隔离 DerivedData 中构建 iOS/watchOS Release 并核对产物 bundle、Release 配置及 Quality Runtime 编译期 guard；Android 同车道构建 Release APK 并执行 profile、fixture-provider、BuildConfig 隔离合同。当前证据仅覆盖测试接入与产物隔离，不能替代真实 UI/功能、Provider、签名分发、真机/OEM、动态 Release 启动或整体平台完成。
+- 2026-09-03 Release 隔离车道：Apple `release-isolation` 在隔离 DerivedData 中构建 iOS/watchOS Release 并核对产物 bundle、Release 配置及 Quality Runtime 编译期 guard；Android 同车道构建 Release APK 并执行 profile、fixture-provider、BuildConfig 隔离合同。提交 Apple `3762111`、Android `d6dbdac` 后的干净收据为 `build/quality-results/apple-release-isolation-lane-current-20260903/apple-release-isolation-summary.json` 与 `../pushgo-android/build/quality-results/android-release-isolation-lane-current-20260903/android-release-isolation-summary.json`，均 `source_dirty=false`。当前证据仅覆盖测试接入与产物隔离，不能替代真实 UI/功能、Provider、签名分发、真机/OEM、动态 Release 启动或整体平台完成。
 
 - 2026-09-03 macOS 未读导航当前字节：干净 Apple 提交 `9b1ef6b` 的专用 My Mac runner（`00008142-001A11121E09401C`）精确执行 `testUnreadBadgeAndChannelLifecyclePersistThroughRealUserActions` 1/1；结果束 `build/quality-results/macos-ui/run-20260903-051319.xcresult` 原生 1 passed/0 failed/0 skipped、无 runtime warning，收据 `build/quality-results/macos-unread-badge-current-20260903/apple-focused-summary.json` 双 `PASSED`、`source_dirty=false`、选择/执行一致。真实 Oracle 同时证明侧边栏“消息”标题与未读数字可见且入口可点击、准确详情/已读、频道创建/改名拒绝/保留与删除历史退订、普通重开后的状态一致；不以元素存在替代业务终点。该证据只更新受控 macOS 导航/未读徽标与频道生命周期子 claim，不外推物理无障碍、Provider、Release 或完整平台覆盖，`P1-NAV` 继续 `DEFERRED`。
 
