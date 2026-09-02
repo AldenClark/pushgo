@@ -6,6 +6,8 @@ macOS 通知权限跨应用往返当前字节（2026-09-02）：`testDeniedNotif
 
 changed-tests 选择器最小化回归（2026-09-02）：新增的 macOS 通知设置滚动 helper 曾因位于 XCTest 方法外而触发整类 32 条用例的保守选择；该宽选运行被主动停止，`summary.json` 的 `executed_claims=[]`，不形成产品结论。选择器现在仅在 helper 的直接调用者可唯一解析时收窄，否则继续整类回退；65 项选择器单测与 202 项脚本合同通过。以 helper 变更前为 base 的新计划为 `READY/changed-tests`，只选择 `testDeniedNotificationSettingsCardRecoversAfterSystemEnable`（expected=1，system profile），将后续回归成本限制在真实受影响的用户目的，不用重跑无关页面来求绿。
 
+changed-tests 端到端验证（2026-09-02）：上述单方法计划实际经 `quality_test.sh changed-tests` 执行，原生 macOS XCTest 1/1、18.993 秒、Passed、0 failure/skip/runtime warning；结果束 `build/quality-results/macos-ui/run-20260902-105826.xcresult` 严格 verifier=`EXECUTED`，收据 `build/quality-results/impact-selector-helper-e2e-20260902/apple-changed-tests-summary.json` 的 selected/executed claims 完全一致、无 incomplete claim、`source_dirty=false`。这只验证影响选择与受控本机权限用户目的，不外推物理设备、真实 Provider 或签名 Release。
+
 ## App-owned 准备合同
 
 Apple UI 租约顺序交接证据（2026-09-02）：为避免连续 Apple lane 在前一 runner 退出后被后台辅助进程短暂持锁，iOS/macOS runner 的后台进程均关闭共享租约描述符，并由静态合同守住。实际同一 shell 先执行 iOS 空态用户旅程 1/1、9.252 秒（`build/quality-results/lease-handoff-ios/run-1-20260902-000636.xcresult`），紧接执行 macOS 主导航用户旅程 1/1、67.070 秒（`build/quality-results/lease-handoff-macos/run-20260902-000650.xcresult`），无租约阻断、失败、跳过或运行时告警；这只证明测试系统交接与既有业务终点可执行，不外推 Android、物理设备或外部 Provider。
