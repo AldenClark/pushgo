@@ -40,6 +40,7 @@ BLIND_REVIEW_ONLY_PATHS = (
     "build/quality-results/apple-ai-history-blind.json",
     "build/quality-results/android-ai-history-audit.json",
     "build/quality-results/android-ai-history-blind.json",
+    "build/quality-results/ai-native-acceptance",
 )
 
 BLIND_PACKET_CONTRACT_FIELDS = (
