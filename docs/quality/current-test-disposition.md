@@ -1,6 +1,6 @@
 # Apple 当前 UI 测试处置清单
 
-- 2026-09-03 独立覆盖与账本新鲜度审计：当前本地/模拟器可达 P0 核心正向目的均已有真实用户终点与新鲜证据，不再重复跑 iOS/Android 已通过的标准消息、主导航、accessibility、pr-ui/device/nightly 或 Gateway save 旅程。审计将历史 hermetic 49/50 和 Release 隔离记录与后续 Quality Runtime 组合根改动区分开，completion ledger 已把当前状态校准为 `PARTIAL`/current-head `NOT RUN`；P1-GATEWAY 主表和 Android 产品/文档提交归属也已纠正。只有在新增“索引损坏后 UI 可见恢复”的产品状态与真实查询终点后，才值得启动下一条设备测试；Provider、物理/OEM、Release 与长期观察继续 `NOT RUN/BLOCKED`。
+- 2026-09-03 独立覆盖与账本新鲜度审计：当前本地/模拟器可达 P0 核心正向目的均已有真实用户终点与新鲜证据，不再重复跑 iOS/Android 已通过的标准消息、主导航、accessibility、pr-ui/device/nightly 或 Gateway save 旅程。审计将历史 hermetic 49/50 和 Release 隔离记录与后续 Quality Runtime 组合根改动区分开，completion ledger 已把当前状态校准为 `PARTIAL`/current-head `NOT RUN`；P1-GATEWAY 主表和 Android 产品/文档提交归属也已纠正。源码复核确认当前索引修复是后台系统搜索维护，没有产品可见的重建/恢复状态或入口；在产品需求定义真实用户终点前，不启动新的 UI 测试去断言内部状态。Provider、物理/OEM、Release 与长期观察继续 `NOT RUN/BLOCKED`。
 
 - 2026-09-03 Apple iOS 标准消息当前字节回归：执行字节 `6da7dd2`（记录提交随后为 `101a8c5`）的专用 `PushGo Quality iPhone / 51A91D22-BF62-4D63-8AA2-B00E6F513F8B` 精确执行 `testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch` 1/1（XCTest 92.819 秒）；结果束 `build/quality-results/ios/run-1-20260903-054706.xcresult` 原生 1 passed/0 failed/0 skipped、无 runtime warning，收据 `build/quality-results/ios-standard-messages-current-20260903/apple-focused-summary.json` 为 product/test-system=`PASSED/PASSED`、`source_dirty=false`、选择与执行一致。真实终点核对准确消息正文/详情、链接系统浏览器往返、图片预览与原生分享，以及普通重开后的准确搜索和空结果；该结果只刷新受控 iOS 标准消息子 claim，不外推 Provider、物理/OEM、Release 或整体 21.2。
 
