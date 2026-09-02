@@ -5,6 +5,56 @@ import Testing
 
 struct LocalDataStoreTests {
     @Test
+    func transientStorageBootstrapFailureDoesNotPoisonTheNextOpen() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            // Model the real preparation failure where the app-local container
+            // is temporarily inaccessible (for example a permission/locking
+            // problem). The next process must be able to recover after the
+            // path is repaired; an unavailable result must not stay cached.
+            let appLocalRoot = root.appendingPathComponent("app-local", isDirectory: true)
+            try Data("temporarily-blocked".utf8).write(to: appLocalRoot)
+
+            let unavailable = LocalDataStore(
+                appGroupIdentifier: appGroupIdentifier,
+                spotlightIndexer: nil
+            )
+            #expect(unavailable.storageState.mode == .unavailable)
+            #expect(!(unavailable.storageState.reason ?? "").isEmpty)
+            await #expect(throws: (any Error).self) {
+                _ = try await unavailable.loadMessage(id: UUID())
+            }
+
+            try FileManager.default.removeItem(at: appLocalRoot)
+
+            let recovered = LocalDataStore(
+                appGroupIdentifier: appGroupIdentifier,
+                spotlightIndexer: nil
+            )
+            #expect(recovered.storageState.mode == .persistent)
+
+            let message = PushMessage(
+                messageId: "bootstrap-recovery-message",
+                title: "Recovered storage",
+                body: "The next open can persist a real message.",
+                channel: "quality"
+            )
+            try await recovered.saveMessage(message)
+
+            // Drop the shared cache to force the same ordinary reopen path a
+            // subsequent app process would use, then verify the business row.
+            LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: root)
+            let reopened = LocalDataStore(
+                appGroupIdentifier: appGroupIdentifier,
+                spotlightIndexer: nil
+            )
+            let persisted = try #require(try await reopened.loadMessage(id: message.id))
+            #expect(persisted.title == message.title)
+            #expect(persisted.body == message.body)
+            #expect(persisted.channel == message.channel)
+        }
+    }
+
+    @Test
     func recoveryRebuildDeletesEveryCurrentAndLegacySQLiteFileFamily() async throws {
         try await withIsolatedLocalDataStore { store, appGroupIdentifier in
             try await store.saveMessagesBatch([
