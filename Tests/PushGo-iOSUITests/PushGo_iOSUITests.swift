@@ -4739,8 +4739,13 @@ final class PushGo_iOSUITests: XCTestCase {
                 "state.storage.unavailable"
             ))
             .firstMatch
+        // Fixture-backed sessions may spend the first few seconds opening the
+        // isolated store and applying migrations before publishing their
+        // readiness marker. Keep this bounded by the same finite budget used
+        // by the explicit readiness oracle instead of failing a valid session
+        // at an arbitrary shorter boundary.
         XCTAssertTrue(
-            runtimeHandshake.waitForExistence(timeout: 5),
+            runtimeHandshake.waitForExistence(timeout: 15),
             "QUALITY_PRECONDITION: App-owned runtime handshake did not become observable after one launch."
         )
     }
