@@ -36,6 +36,7 @@ struct ManualKeySettingsSheet: View {
 struct ServerManagementSheet: View {
     @Bindable var viewModel: SettingsViewModel
     let onDismiss: () -> Void
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
 
     var body: some View {
@@ -55,6 +56,18 @@ struct ServerManagementSheet: View {
                         .disabled(viewModel.isSavingServerConfig)
                         .accessibilityIdentifier("action.settings.server.cancel")
                     }
+#if DEBUG
+                    if environment.isQualityGatewaySwitchPreCommitPaused {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Continue") {
+                                environment.continueQualityGatewaySwitchPreCommitPhase()
+                            }
+                            .accessibilityIdentifier("action.quality.gateway_switch.continue")
+                            .accessibilityLabel("Continue quality gateway switch")
+                            .accessibilityHint("DEBUG quality-session control")
+                        }
+                    }
+#endif
                 }
         }
         // Gateway validation and registration continue across awaited work.
@@ -82,6 +95,7 @@ struct NotificationSoundSettingsSheet: View {
 
 private struct ServerManagementContentView: View {
     @Bindable var viewModel: SettingsViewModel
+    @Environment(AppEnvironment.self) private var environment: AppEnvironment
     @Environment(LocalizationManager.self) private var localizationManager: LocalizationManager
     @Environment(\.dismiss) private var dismiss
     @FocusState private var focusedField: ServerField?
@@ -95,6 +109,15 @@ private struct ServerManagementContentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
+#if DEBUG
+            if environment.isQualityGatewaySwitchPreCommitPaused {
+                Text("Gateway switch pre-commit paused")
+                    .font(.system(size: 1))
+                    .foregroundStyle(.clear)
+                    .frame(width: 1, height: 1)
+                    .accessibilityIdentifier("quality-runtime.gateway_switch_precommit_paused")
+            }
+#endif
             if let errorMessage = viewModel.serverErrorMessage {
                 AppInlineFeedbackBanner(
                     message: errorMessage,

@@ -314,7 +314,7 @@ final class PushGo_iOSUITests: XCTestCase {{
                 (
                     "testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation",
                 ),
-                33,
+                34,
             ),
             (
                 "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift",
@@ -910,7 +910,10 @@ final class PushGo_iOSUITests: XCTestCase {{
         self.assertNotIn("channels", plan["impacted_capabilities"])
         self.assertIn("gateway-settings", plan["impacted_capabilities"])
         self.assertIn("notification-sound", plan["impacted_capabilities"])
-        self.assertEqual(["apple-ios-settings-positive-extension"], plan["required_checks"])
+        self.assertEqual(
+            ["apple-ios-gateway-save-dismiss", "apple-ios-settings-positive-extension"],
+            plan["required_checks"],
+        )
 
     def test_macos_settings_screen_selects_platform_purpose_evidence(self):
         plan = self.plan("Apps/PushGo-macOS/UI/Screens/SettingsView.swift")

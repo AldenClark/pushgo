@@ -899,6 +899,7 @@ class QualityLaneCostContractTests(unittest.TestCase):
         macos_source = (REPO / "Tests/PushGo-macOSUITests/PushGo_macOSUITests.swift").read_text()
 
         self.assertEqual(1, runner.count("apple-ios-settings-positive-extension)"))
+        self.assertEqual(1, runner.count("apple-ios-gateway-save-dismiss)"))
         self.assertEqual(1, runner.count("apple-macos-settings-positive)"))
         self.assertEqual(
             1,
@@ -923,6 +924,13 @@ class QualityLaneCostContractTests(unittest.TestCase):
             ios_settings_body.count(
                 "testSettingsServerRejectsInvalidAndUnregisteredCandidatesWithoutLeakingSheetError"
             ),
+        )
+        ios_save_dismiss_body = runner.split("apple-ios-gateway-save-dismiss)", 1)[1].split(
+            "        ;;", 1
+        )[0]
+        self.assertIn(
+            "testSavingGatewayKeepsEditorOpenUntilPreparedSwitchCommitsAndPersists",
+            ios_save_dismiss_body,
         )
         self.assertEqual(
             1,
@@ -979,6 +987,15 @@ class QualityLaneCostContractTests(unittest.TestCase):
         self.assertIn('channelMutationScenario: "accepted"', ios_gateway_positive)
         self.assertIn("A post-commit Channel operation must use", ios_gateway_positive)
         self.assertIn("Relaunch must not reload channel data owned by the previous gateway", ios_gateway_positive)
+        ios_gateway_save_dismiss = ios_source.split(
+            "func testSavingGatewayKeepsEditorOpenUntilPreparedSwitchCommitsAndPersists()",
+            1,
+        )[1].split("\n    func test", 1)[0]
+        self.assertIn("pauseGatewaySwitchBeforeCommit: true", ios_gateway_save_dismiss)
+        self.assertIn("quality-runtime.gateway_switch_precommit_paused", ios_gateway_save_dismiss)
+        self.assertIn("context.app.swipeDown()", ios_gateway_save_dismiss)
+        self.assertIn("The old gateway must remain authoritative before local commit", ios_gateway_save_dismiss)
+        self.assertIn("Prepared Gateway Channel", ios_gateway_save_dismiss)
         self.assertIn("failGatewaySwitchValidationOnce: true", macos_gateway_risk)
         self.assertIn("invalidAddressFeedback", macos_gateway_risk)
         self.assertIn('predicate: NSPredicate(format: "label != %@"', macos_gateway_risk)

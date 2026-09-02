@@ -8,6 +8,32 @@ import UserNotifications
 import UIKit
 
 #if DEBUG
+private actor QualityGatewaySwitchPreCommitGate {
+    private var continuation: CheckedContinuation<Void, Error>?
+
+    func wait() async throws {
+        try await withTaskCancellationHandler(operation: {
+            try await withCheckedThrowingContinuation { continuation in
+                self.continuation = continuation
+            }
+        }, onCancel: {
+            Task { await self.cancel() }
+        })
+    }
+
+    func release() {
+        continuation?.resume()
+        continuation = nil
+    }
+
+    private func cancel() {
+        continuation?.resume(throwing: CancellationError())
+        continuation = nil
+    }
+}
+#endif
+
+#if DEBUG
 private let pushGoIngressPerformanceProcessStartUptime = ProcessInfo.processInfo.systemUptime
 
 private struct PushGoIngressPerformanceMeasurement {
@@ -116,6 +142,8 @@ final class AppEnvironment {
         PushGoAutomationContext.qualitySession?.faults.failGatewaySwitchValidationOnce == true ? 1 : 0
     @ObservationIgnored private var remainingQualityGatewaySwitchCommitFailures =
         PushGoAutomationContext.qualitySession?.faults.failGatewaySwitchCommitOnce == true ? 1 : 0
+    @ObservationIgnored private let qualityGatewaySwitchPreCommitGate = QualityGatewaySwitchPreCommitGate()
+    private(set) var isQualityGatewaySwitchPreCommitPaused = false
     @ObservationIgnored private var qualityGatewayPostCommitSyncFailurePending =
         PushGoAutomationContext.qualitySession?.faults.failGatewayPostCommitSyncOnce == true
     @ObservationIgnored private var remainingQualityGatewayPostCommitSyncFailures = 0
@@ -684,6 +712,9 @@ final class AppEnvironment {
         // The candidate has been validated, but no local identity has been
         // changed yet. Cancellation here must leave the old gateway active.
         try Task.checkCancellation()
+#if DEBUG
+        try await pauseQualityGatewaySwitchBeforeCommitIfRequested()
+#endif
 
         var transition = GatewayTransitionJournal.Record(
             platform: platformIdentifier(),
@@ -753,6 +784,29 @@ final class AppEnvironment {
             }
         }
     }
+
+#if DEBUG
+    /// A quality-only barrier makes the candidate-registration/local-commit
+    /// boundary observable to UI tests without a timing delay or production
+    /// behavior. It is reachable only from a typed quality session.
+    private func pauseQualityGatewaySwitchBeforeCommitIfRequested() async throws {
+        guard PushGoAutomationContext.qualitySession?.faults.pauseGatewaySwitchBeforeCommit == true else {
+            return
+        }
+        isQualityGatewaySwitchPreCommitPaused = true
+        defer { isQualityGatewaySwitchPreCommitPaused = false }
+        try await qualityGatewaySwitchPreCommitGate.wait()
+    }
+
+    func continueQualityGatewaySwitchPreCommitPhase() {
+        guard PushGoAutomationContext.qualitySession?.faults.pauseGatewaySwitchBeforeCommit == true else {
+            return
+        }
+        Task {
+            await qualityGatewaySwitchPreCommitGate.release()
+        }
+    }
+#endif
 
     private func activatePersistedServerConfig(
         _ normalized: ServerConfig?,

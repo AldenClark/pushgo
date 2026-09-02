@@ -178,6 +178,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
     let failMessagePageLoadOnce: Bool
     let failGatewaySwitchValidationOnce: Bool
     let failGatewaySwitchCommitOnce: Bool
+    let pauseGatewaySwitchBeforeCommit: Bool
     let failGatewayPostCommitSyncOnce: Bool
     let failNotificationMaterialPersistenceOnce: Bool
     let failChannelSubscriptionPersistenceOnce: Bool
@@ -194,6 +195,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         failMessagePageLoadOnce: Bool = false,
         failGatewaySwitchValidationOnce: Bool = false,
         failGatewaySwitchCommitOnce: Bool = false,
+        pauseGatewaySwitchBeforeCommit: Bool = false,
         failGatewayPostCommitSyncOnce: Bool = false,
         failNotificationMaterialPersistenceOnce: Bool = false,
         failChannelSubscriptionPersistenceOnce: Bool = false
@@ -209,6 +211,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         self.failMessagePageLoadOnce = failMessagePageLoadOnce
         self.failGatewaySwitchValidationOnce = failGatewaySwitchValidationOnce
         self.failGatewaySwitchCommitOnce = failGatewaySwitchCommitOnce
+        self.pauseGatewaySwitchBeforeCommit = pauseGatewaySwitchBeforeCommit
         self.failGatewayPostCommitSyncOnce = failGatewayPostCommitSyncOnce
         self.failNotificationMaterialPersistenceOnce = failNotificationMaterialPersistenceOnce
         self.failChannelSubscriptionPersistenceOnce = failChannelSubscriptionPersistenceOnce
@@ -226,6 +229,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         case failMessagePageLoadOnce = "fail_message_page_load_once"
         case failGatewaySwitchValidationOnce = "fail_gateway_switch_validation_once"
         case failGatewaySwitchCommitOnce = "fail_gateway_switch_commit_once"
+        case pauseGatewaySwitchBeforeCommit = "pause_gateway_switch_before_commit"
         case failGatewayPostCommitSyncOnce = "fail_gateway_post_commit_sync_once"
         case failNotificationMaterialPersistenceOnce = "fail_notification_material_persistence_once"
         case failChannelSubscriptionPersistenceOnce = "fail_channel_subscription_persistence_once"
@@ -273,6 +277,10 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         failGatewaySwitchCommitOnce = try container.decodeIfPresent(
             Bool.self,
             forKey: .failGatewaySwitchCommitOnce
+        ) ?? false
+        pauseGatewaySwitchBeforeCommit = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .pauseGatewaySwitchBeforeCommit
         ) ?? false
         failGatewayPostCommitSyncOnce = try container.decodeIfPresent(
             Bool.self,

@@ -2182,6 +2182,114 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertEqual(revealedCredentialField.value as? String, gatewayCredential)
     }
 
+    func testSavingGatewayKeepsEditorOpenUntilPreparedSwitchCommitsAndPersists() {
+        let context = configuredLaunchContext()
+        let sessionID = "ios-gateway-save-dismiss-\(UUID().uuidString.lowercased())"
+        let normalizedAddress = "https://quality-saving-dismiss.invalid/api"
+        let encodedSession = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            pauseGatewaySwitchBeforeCommit: true,
+            channelMutationScenario: "accepted",
+            expectedChannelMutationGatewayURL: normalizedAddress
+        )
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
+        let originalChannel = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000001"
+        )
+        XCTAssertTrue(originalChannel.waitForExistence(timeout: 8))
+        openSettingsFromChannels(in: context.app)
+        let serverManagementAction = element(
+            in: context.app,
+            identifier: "action.settings.server_management"
+        )
+        let originalGatewayLabel = serverManagementAction.label
+        XCTAssertFalse(originalGatewayLabel.isEmpty)
+        tapWhenHittable(serverManagementAction, timeout: 8)
+
+        let addressField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(addressField.waitForExistence(timeout: 8))
+        replaceText(in: addressField, with: "\(normalizedAddress)/")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.settings.server.save"),
+            timeout: 8
+        )
+
+        let paused = element(
+            in: context.app,
+            identifier: "quality-runtime.gateway_switch_precommit_paused"
+        )
+        XCTAssertTrue(
+            paused.waitForExistence(timeout: 8),
+            "QUALITY_PRECONDITION: candidate registration did not reach the pre-commit observation point"
+        )
+        context.app.swipeDown()
+        XCTAssertTrue(
+            addressField.waitForExistence(timeout: 3),
+            "Interactive dismissal during a prepared gateway switch must keep the editor open"
+        )
+        XCTAssertFalse(
+            element(in: context.app, identifier: "action.settings.server.save").isEnabled,
+            "A prepared gateway switch must not accept a second Save"
+        )
+        XCTAssertFalse(
+            element(in: context.app, identifier: "action.settings.server.cancel").isEnabled,
+            "A prepared gateway switch must not allow cancellation through the editor"
+        )
+        XCTAssertTrue(
+            serverManagementAction.label == originalGatewayLabel,
+            "The old gateway must remain authoritative before local commit"
+        )
+        let continueAction = element(
+            in: context.app,
+            identifier: "action.quality.gateway_switch.continue"
+        )
+        XCTAssertTrue(
+            continueAction.waitForExistence(timeout: 3),
+            "QUALITY_PRECONDITION: the typed session did not expose its explicit pre-commit release control"
+        )
+        continueAction.tap()
+        XCTAssertTrue(addressField.waitForNonExistence(timeout: 10))
+        XCTAssertTrue(serverManagementAction.label.contains(normalizedAddress))
+
+        leaveSettings(in: context.app)
+        XCTAssertTrue(originalChannel.waitForNonExistence(timeout: 8))
+        tapWhenHittable(element(in: context.app, identifier: "action.channels.add"), timeout: 8)
+        let createName = element(in: context.app, identifier: "field.channels.create.name")
+        let createPassword = element(in: context.app, identifier: "field.channels.create.password")
+        XCTAssertTrue(createName.waitForExistence(timeout: 8))
+        replaceText(in: createName, with: "Prepared Gateway Channel")
+        enterSecureText(in: createPassword, with: "qualityx")
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.channels.entry.submit"),
+            timeout: 8
+        )
+        let createdChannel = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000003"
+        )
+        XCTAssertTrue(createdChannel.waitForExistence(timeout: 8))
+        XCTAssertTrue(createdChannel.label.contains("Prepared Gateway Channel"))
+
+        context.app.terminate()
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = encodedSession
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        tapWhenHittable(channelsTab(in: context.app), timeout: 8)
+        XCTAssertTrue(originalChannel.waitForNonExistence(timeout: 8))
+        XCTAssertTrue(createdChannel.waitForExistence(timeout: 8))
+        openSettingsFromChannels(in: context.app)
+        tapWhenHittable(serverManagementAction, timeout: 8)
+        let restoredAddressField = element(in: context.app, identifier: "field.settings.server.address")
+        XCTAssertTrue(restoredAddressField.waitForExistence(timeout: 8))
+        XCTAssertEqual(restoredAddressField.value as? String, normalizedAddress)
+    }
+
     func testSettingsServerRejectsInvalidAndUnregisteredCandidatesWithoutLeakingSheetError() {
         let context = configuredLaunchContext()
         let sessionID = "ios-server-reject-\(UUID().uuidString.lowercased())"
@@ -4723,6 +4831,7 @@ final class PushGo_iOSUITests: XCTestCase {
         failMessagePageLoadOnce: Bool = false,
         failGatewaySwitchValidationOnce: Bool = false,
         failGatewaySwitchCommitOnce: Bool = false,
+        pauseGatewaySwitchBeforeCommit: Bool = false,
         failGatewayPostCommitSyncOnce: Bool = false,
         failNotificationMaterialPersistenceOnce: Bool = false,
         failChannelSubscriptionPersistenceOnce: Bool = false,
@@ -4738,6 +4847,7 @@ final class PushGo_iOSUITests: XCTestCase {
             "fail_message_search_once": failMessageSearchOnce,
             "fail_gateway_switch_validation_once": failGatewaySwitchValidationOnce,
             "fail_gateway_switch_commit_once": failGatewaySwitchCommitOnce,
+            "pause_gateway_switch_before_commit": pauseGatewaySwitchBeforeCommit,
             "fail_gateway_post_commit_sync_once": failGatewayPostCommitSyncOnce,
             "fail_notification_material_persistence_once": failNotificationMaterialPersistenceOnce,
             "fail_channel_subscription_persistence_once": failChannelSubscriptionPersistenceOnce,

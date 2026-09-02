@@ -115,7 +115,7 @@
       "paths": ["Shared/UI/AutomationRuntime.swift", "Shared/Utilities/AppConstants.swift", "Apps/*/App/AppEnvironment.swift", "Apps/*/App/AppContext.swift", "Apps/PushGo-watchOS/AppEnvironment.swift", "Apps/PushGo-watchOS/WatchQualityRuntime.swift"],
       "capabilities": ["app-owned-quality-runtime", "release-runtime-isolation", "app-launch"],
       "minimum_evidence": ["QualityRuntime profile tests", "invalid App-owned session stops before business UI within 10 seconds plus normal empty.clean recovery on iOS and macOS", "one App-owned UI journey for each changed runtime", "iOS/watchOS Release isolation builds and negative controls"],
-      "required_checks": ["apple-preparation-contract"],
+      "required_checks": ["apple-preparation-contract", "apple-ios-gateway-save-dismiss"],
       "lane": "release",
       "escalation_reasons": ["Composition-root or Runtime changes cross storage and Release boundaries."]
     },
@@ -237,8 +237,8 @@
       "id": "ios-settings-ui",
       "paths": ["Apps/PushGo-iOS/UI/Screens/Settings*.swift"],
       "capabilities": ["gateway-settings", "decryption-settings", "page-visibility", "notification-sound"],
-      "minimum_evidence": ["Apple PR Gateway candidate registration-before-commit positive journey", "iOS real Settings candidate validation/registration rejection stays in the owning Sheet and never overwrites the old Gateway", "iOS real Settings page-visibility, built-in notification-sound selection, and valid-key message-recovery/relaunch positive journeys", "iOS post-commit sync failure keeps the new gateway authoritative, reports pending recovery, and preserves it after relaunch"],
-      "required_checks": ["apple-ios-settings-positive-extension"],
+      "minimum_evidence": ["Apple PR Gateway candidate registration-before-commit positive journey", "iOS real Settings candidate validation/registration rejection stays in the owning Sheet and never overwrites the old Gateway", "iOS real Settings prepared-candidate swipe dismissal remains in the editor until explicit pre-commit release, then commits and persists the new scoped Channel result", "iOS real Settings page-visibility, built-in notification-sound selection, and valid-key message-recovery/relaunch positive journeys", "iOS post-commit sync failure keeps the new gateway authoritative, reports pending recovery, and preserves it after relaunch"],
+      "required_checks": ["apple-ios-settings-positive-extension", "apple-ios-gateway-save-dismiss"],
       "lane": "pr",
       "known_evidence_gaps": ["Pure iOS Settings presentation/action-entry changes do not automatically run protected-write, rollback, or corrupt-ciphertext matrices; run the owning focused risk journey when the diff changes those contracts."],
       "escalation_reasons": ["The current iOS Settings purposes require real UI outcomes, while unrelated system-notification, Watch, and macOS fault matrices are not a minimum for a pure iOS screen change."]
