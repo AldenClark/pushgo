@@ -192,9 +192,15 @@ def swift_test_method_ranges(source: str) -> dict[str, tuple[int, int]] | None:
     return methods if methods else None
 
 
-def changed_hunk_ranges(patch: str) -> tuple[list[tuple[int, int]], list[tuple[int, int]]] | None:
-    old_ranges: list[tuple[int, int]] = []
-    new_ranges: list[tuple[int, int]] = []
+def changed_hunk_details(patch: str) -> list[tuple[int, int, int, int]] | None:
+    """Return ``(old_start, old_count, new_start, new_count)`` for each hunk.
+
+    Keeping the counts is important for conservative UI-test attribution: a
+    hunk that only adds a complete helper can be treated differently from a
+    hunk that edits an existing helper.  Callers still must prove ownership
+    before narrowing a runnable scope.
+    """
+    details: list[tuple[int, int, int, int]] = []
     for line in patch.splitlines():
         if not line.startswith("@@"):
             continue
@@ -207,11 +213,31 @@ def changed_hunk_ranges(patch: str) -> tuple[list[tuple[int, int]], list[tuple[i
             int(match.group(3)),
             int(match.group(4) or "1"),
         )
+        details.append((old_start, old_count, new_start, new_count))
+    return details or None
+
+
+def changed_hunk_ranges(patch: str) -> tuple[list[tuple[int, int]], list[tuple[int, int]]] | None:
+    old_ranges: list[tuple[int, int]] = []
+    new_ranges: list[tuple[int, int]] = []
+    details = changed_hunk_details(patch)
+    if not details:
+        return None
+    for old_start, old_count, new_start, new_count in details:
         if old_count:
             old_ranges.append((old_start, old_start + old_count - 1))
         if new_count:
             new_ranges.append((new_start, new_start + new_count - 1))
     return (old_ranges, new_ranges) if old_ranges or new_ranges else None
+
+
+def pure_added_new_ranges(patch: str) -> set[tuple[int, int]]:
+    """Return new-side ranges whose diff hunk has no old-side lines."""
+    return {
+        (new_start, new_start + new_count - 1)
+        for _, old_count, new_start, new_count in changed_hunk_details(patch) or []
+        if old_count == 0 and new_count > 0
+    }
 
 
 def swift_function_ranges(source: str) -> dict[str, tuple[int, int]] | None:
@@ -417,10 +443,65 @@ def function_ranges_for_attribution(source: str) -> list[tuple[str, int, int]]:
     return ranges
 
 
+def pure_added_helper_callers(
+    source: str,
+    old_source: str,
+    methods: dict[str, tuple[int, int]],
+    functions: list[tuple[str, int, int]],
+    changed_start: int,
+    changed_end: int,
+) -> set[str] | None:
+    """Resolve a complete pure-add hunk containing adjacent helper functions.
+
+    A zero-old-line hunk can legitimately add several adjacent helpers.  The
+    generic attribution below intentionally treats that shape as ambiguous;
+    this narrower path only accepts helpers that are wholly contained in the
+    hunk, absent from the old source, and each directly called by a concrete
+    XCTest method.  Any non-blank line between helper ranges or an unresolved
+    caller keeps the conservative changed-class fallback.
+    """
+    overlapping = [
+        (name, function_start, function_end)
+        for name, function_start, function_end in functions
+        if name not in methods
+        and changed_start <= function_start
+        and changed_end >= function_end
+    ]
+    if len(overlapping) < 2:
+        return None
+
+    old_function_names = {
+        name for name, _, _ in function_ranges_for_attribution(old_source)
+    }
+    if any(name in old_function_names for name, _, _ in overlapping):
+        return None
+
+    lines = source.splitlines()
+    covered: set[int] = set()
+    for _, function_start, function_end in overlapping:
+        covered.update(range(function_start, function_end + 1))
+    for line_number in range(changed_start, changed_end + 1):
+        if line_number in covered:
+            continue
+        if line_number < 1 or line_number > len(lines) or lines[line_number - 1].strip():
+            return None
+
+    callers: set[str] = set()
+    for helper_name, _, _ in overlapping:
+        helper_callers = test_method_callers(source, methods, {helper_name})
+        if not helper_callers:
+            return None
+        callers.update(helper_callers)
+    return callers
+
+
 def methods_or_helper_callers_covering_changes(
     source: str,
     methods: dict[str, tuple[int, int]],
     changed_ranges: list[tuple[int, int]],
+    *,
+    old_source: str | None = None,
+    pure_added_ranges: set[tuple[int, int]] | None = None,
 ) -> tuple[set[str], bool]:
     """Attribute changed ranges to tests, or to their direct helper callers.
 
@@ -465,6 +546,22 @@ def methods_or_helper_callers_covering_changes(
             }
         if len(helpers) == 1:
             callers = test_method_callers(source, methods, helpers)
+            if callers:
+                selected.update(callers)
+                continue
+        elif (
+            len(helpers) > 1
+            and old_source is not None
+            and (changed_start, changed_end) in (pure_added_ranges or set())
+        ):
+            callers = pure_added_helper_callers(
+                source,
+                old_source,
+                methods,
+                functions,
+                changed_start,
+                changed_end,
+            )
             if callers:
                 selected.update(callers)
                 continue
@@ -529,10 +626,17 @@ def resolve_swift_ui_test_change(
         }
 
     old_selected, old_unowned = methods_or_helper_callers_covering_changes(
-        old_source, old_methods, ranges[0]
+        old_source,
+        old_methods,
+        ranges[0],
+        old_source=old_source,
     )
     new_selected, new_unowned = methods_or_helper_callers_covering_changes(
-        new_source, new_methods, ranges[1]
+        new_source,
+        new_methods,
+        ranges[1],
+        old_source=old_source,
+        pure_added_ranges=pure_added_new_ranges(patch or ""),
     )
     removed_methods = old_selected - set(new_methods)
     if removed_methods:

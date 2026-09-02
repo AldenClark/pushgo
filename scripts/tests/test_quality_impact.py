@@ -1,3 +1,4 @@
+import difflib
 import importlib.util
 import re
 import unittest
@@ -117,6 +118,171 @@ final class PushGo_iOSUITests: XCTestCase {{
             ["PushGo-iOSUITests/PushGo_iOSUITests/testChangedPurpose"],
             impact["scopes"],
         )
+
+    def test_adjacent_pure_added_helpers_select_only_all_direct_callers(self):
+        path = "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift"
+        old_source = """import XCTest
+
+final class PushGo_iOSUITests: XCTestCase {
+    func testFirstPurpose() {
+        XCTAssertTrue(true)
+    }
+
+    func testSecondPurpose() {
+        XCTAssertTrue(true)
+    }
+}
+"""
+        new_source = """import XCTest
+
+final class PushGo_iOSUITests: XCTestCase {
+    func testFirstPurpose() {
+        _ = newHelperA()
+        XCTAssertTrue(true)
+    }
+
+    func testSecondPurpose() {
+        _ = newHelperB()
+        XCTAssertTrue(true)
+    }
+
+    private func newHelperA() -> String {
+        "a"
+    }
+
+    private func newHelperB() -> String {
+        "b"
+    }
+}
+"""
+        patch = "\n".join(
+            line
+            for line in difflib.unified_diff(
+                old_source.splitlines(), new_source.splitlines(), n=0
+            )
+            if line.startswith(("@@", "+", "-"))
+        )
+        impact = QUALITY_IMPACT.resolve_swift_ui_test_change(
+            path, old_source, new_source, patch
+        )
+
+        self.assertEqual("exact-method", impact["selection"])
+        self.assertEqual(2, impact["expected_test_count"])
+        self.assertEqual(
+            [
+                "PushGo-iOSUITests/PushGo_iOSUITests/testFirstPurpose",
+                "PushGo-iOSUITests/PushGo_iOSUITests/testSecondPurpose",
+            ],
+            impact["scopes"],
+        )
+
+    def test_adjacent_pure_added_helper_without_a_caller_stays_changed_class(self):
+        path = "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift"
+        old_source = """import XCTest
+
+final class PushGo_iOSUITests: XCTestCase {
+    func testFirstPurpose() {
+        XCTAssertTrue(true)
+    }
+
+    func testSecondPurpose() {
+        XCTAssertTrue(true)
+    }
+}
+"""
+        new_source = """import XCTest
+
+final class PushGo_iOSUITests: XCTestCase {
+    func testFirstPurpose() {
+        _ = newHelperA()
+        XCTAssertTrue(true)
+    }
+
+    func testSecondPurpose() {
+        XCTAssertTrue(true)
+    }
+
+    private func newHelperA() -> String {
+        "a"
+    }
+
+    private func newHelperB() -> String {
+        "b"
+    }
+}
+"""
+        patch = "\n".join(
+            line
+            for line in difflib.unified_diff(
+                old_source.splitlines(), new_source.splitlines(), n=0
+            )
+            if line.startswith(("@@", "+", "-"))
+        )
+        impact = QUALITY_IMPACT.resolve_swift_ui_test_change(
+            path, old_source, new_source, patch
+        )
+
+        self.assertEqual("changed-class", impact["selection"])
+        self.assertEqual(2, impact["expected_test_count"])
+        self.assertEqual(
+            {
+                "PushGo-iOSUITests/PushGo_iOSUITests/testFirstPurpose",
+                "PushGo-iOSUITests/PushGo_iOSUITests/testSecondPurpose",
+            },
+            set(impact["scopes"]),
+        )
+
+    def test_adjacent_pure_added_helpers_with_unowned_class_line_stay_changed_class(self):
+        path = "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift"
+        old_source = """import XCTest
+
+final class PushGo_iOSUITests: XCTestCase {
+    func testFirstPurpose() {
+        XCTAssertTrue(true)
+    }
+
+    func testSecondPurpose() {
+        XCTAssertTrue(true)
+    }
+}
+"""
+        new_source = """import XCTest
+
+final class PushGo_iOSUITests: XCTestCase {
+    func testFirstPurpose() {
+        _ = newHelperA()
+        XCTAssertTrue(true)
+    }
+
+    func testSecondPurpose() {
+        _ = newHelperB()
+        XCTAssertTrue(true)
+    }
+
+    private func newHelperA() -> String {
+        "a"
+    }
+
+    private var unrelatedClassState = false
+
+    private func newHelperB() -> String {
+        "b"
+    }
+}
+"""
+        patch = "\n".join(
+            line
+            for line in difflib.unified_diff(
+                old_source.splitlines(), new_source.splitlines(), n=0
+            )
+            if line.startswith(("@@", "+", "-"))
+        )
+        impact = QUALITY_IMPACT.resolve_swift_ui_test_change(
+            path, old_source, new_source, patch
+        )
+
+        self.assertEqual("changed-class", impact["selection"])
+        self.assertEqual(2, impact["expected_test_count"])
 
     def test_pure_assertion_insertion_inside_existing_method_stays_exact(self):
         path = "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift"
