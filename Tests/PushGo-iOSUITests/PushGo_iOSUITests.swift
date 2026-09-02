@@ -826,9 +826,9 @@ final class PushGo_iOSUITests: XCTestCase {
             "The system tab itself must own the localized Messages title, not a page-title lookalike."
         )
         XCTAssertEqual(
-            messagesTab.value as? String,
-            "1项",
-            "The messages.standard fixture must expose its real unread count in the system tab badge."
+            messagesTabBadgeCount(messagesTab),
+            1,
+            "The messages.standard fixture must expose its exact canonical unread count in the system tab value."
         )
         XCTAssertGreaterThanOrEqual(messagesTab.frame.width, 44, "The Messages tab lost its actionable width.")
         let messagesTabScreenshot = messagesTab.screenshot()
