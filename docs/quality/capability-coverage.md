@@ -36,6 +36,8 @@ macOS 频道生命周期 P0 当前字节证据（2026-09-02）：`testUnreadBadg
 
 该告警的只读归因（2026-09-02）已进一步收敛：结果束的 warning UUID 只关联到搜索后的 XCTest `waitForExistence` AX 轮询活动，当前使用 Cmd-A/Cmd-V/Return，未关联输入事件或产品动作；结果没有应用 source frame/stack，不能据此修改产品并发或 QoS。现保留 `FAILED_TEST_SYSTEM/BLOCKED`，不通过白名单、业务重试或弱化结果读取绕过；只有新增等语义的 App-owned search-settled 状态或更细框架栈证据后才重新评估。
 
+2026-09-02 macOS Things QoS 区分性快照实验：把搜索后的多次行等待替换为一次 `allElementsBoundByIndex` 真实 UI 行快照后，目标/干扰项/准确标题以及后续真实关系详情、删除、relaunch 仍全部通过，但 warning 仍挂在该单次 AX 快照活动；结果束 `build/quality-results/macos-thing-qos-snapshot-experiment-20260902/run-20260902-220702.xcresult` 原生 1/1、零业务失败/跳过。实验代码已回退，不能把此方向当成修复；继续保留 `FAILED_TEST_SYSTEM/BLOCKED`、零重试、无白名单。
+
 macOS 首屏加载失败恢复当前字节证据（2026-09-02）：`testMessageLoadFailureRetryRecoversToFunctionalState` 在真实 `empty.clean` 会话中注入一次首屏加载失败，要求页面级失败可见且不是伪造成功；用户点击生产 Retry 后回到准确可用空态，失败状态清除。1/1、9.193 秒，零失败/跳过/运行时告警，严格 verifier=`EXECUTED`，结果束为 `build/quality-results/macos-load-failure-recovery-after-lease/run-20260902-002843.xcresult`。这是最小恢复证据，不外推大规模性能、真实网络或其他平台。
 
 iOS 首屏加载失败恢复当前字节证据（2026-09-02）：首轮失败包 `build/quality-results/ios-load-failure-recovery-after-lease/run-1-20260902-002939.xcresult` 在业务结果前暴露测试系统 Oracle 缺陷：同一生产 Retry action 以两个同坐标 accessibility 节点出现，`firstMatch` 取到不可交互别名；不计产品失败。测试现从同一候选集合选择真实存在且 hittable 的节点，仍必须真实点击后回到准确功能空态并清除失败。修正构建 1/1、10.212 秒，提交字节复用产物回归 1/1、8.558 秒，均零失败/跳过/运行时告警；最终结果束 `build/quality-results/ios-load-failure-recovery-committed/run-1-20260902-003527.xcresult`，影响选择/合同 201/201 与收据 `build/quality-results/apple-changed-tests-summary.json` 均通过。该修正只增强测试接入，不放宽用户目的 Oracle，不外推 Android、真机或真实网络。

@@ -72,7 +72,7 @@
       "quarantined": false,
       "rationale": "The same native QoS warning was reproduced in independent macOS Thing relationship result bundles after all business assertions passed, while representative Message search and deletion controls stayed warning-free. The current evidence does not prove a product data or UI failure, so the runner must preserve product PASSED but surface test-system FLAKY with an expiring issue ID instead of treating it as an unknown warning or silently accepting it.",
       "exit_criteria": "Identify and remove the lower-QoS wait or obtain an upstream Xcode/runtime fix, then record two independent clean native Thing relationship runs with the same real search, relation, deletion, and relaunch oracles before resolving the issue. No product retry or assertion waiver is allowed.",
-      "evidence": ["build/quality-results/macos-thing-search-settled-current-20260902-r6/run-20260902-071825.xcresult", "build/quality-results/macos-thing-search-settled-current-20260902-r8/run-20260902-072906.xcresult", "build/quality-results/macos-thing-search-unavailable-detail-fix-20260902-r13/run-20260902-101759.xcresult", "build/quality-results/macos-ui/run-20260902-120603.xcresult"]
+      "evidence": ["build/quality-results/macos-thing-search-settled-current-20260902-r6/run-20260902-071825.xcresult", "build/quality-results/macos-thing-search-settled-current-20260902-r8/run-20260902-072906.xcresult", "build/quality-results/macos-thing-search-unavailable-detail-fix-20260902-r13/run-20260902-101759.xcresult", "build/quality-results/macos-ui/run-20260902-120603.xcresult", "build/quality-results/macos-thing-qos-snapshot-experiment-20260902/run-20260902-220702.xcresult"]
     }
   ]
 }
