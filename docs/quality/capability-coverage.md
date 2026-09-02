@@ -4,6 +4,8 @@
 
 macOS 通知权限跨应用往返当前字节（2026-09-02）：`testDeniedNotificationSettingsCardRecoversAfterSystemEnable` 先以真实 PushGo Settings 入口进入系统通知设置，利用 System Settings 通知内容滚动容器的语义 `AXIncrementPage` 动作处理虚拟化列表，再点击真实 PushGo 行并完成关闭→拒绝说明归属→产品入口重新开启→返回卡片消失的完整用户目的。重启 System Settings 后仍原生执行 1/1、24.113 秒，结果束 `build/quality-results/macos-notification-permission-current-20260902-r7/run-20260902-104339.xcresult`；严格 verifier=`EXECUTED`、`executed_test_count=1`，原生结果 `Passed`、0 failure/skip/runtime warning。该修复只解决跨应用测试系统的可达性与虚拟化边界，不把行存在、权限命令或结果包当作通过，也不外推物理设备、真实 Provider、签名 Release 或其他平台；先前 BLOCKED 收据仍作为历史测试系统证据保留。
 
+changed-tests 选择器最小化回归（2026-09-02）：新增的 macOS 通知设置滚动 helper 曾因位于 XCTest 方法外而触发整类 32 条用例的保守选择；该宽选运行被主动停止，`summary.json` 的 `executed_claims=[]`，不形成产品结论。选择器现在仅在 helper 的直接调用者可唯一解析时收窄，否则继续整类回退；65 项选择器单测与 202 项脚本合同通过。以 helper 变更前为 base 的新计划为 `READY/changed-tests`，只选择 `testDeniedNotificationSettingsCardRecoversAfterSystemEnable`（expected=1，system profile），将后续回归成本限制在真实受影响的用户目的，不用重跑无关页面来求绿。
+
 ## App-owned 准备合同
 
 Apple UI 租约顺序交接证据（2026-09-02）：为避免连续 Apple lane 在前一 runner 退出后被后台辅助进程短暂持锁，iOS/macOS runner 的后台进程均关闭共享租约描述符，并由静态合同守住。实际同一 shell 先执行 iOS 空态用户旅程 1/1、9.252 秒（`build/quality-results/lease-handoff-ios/run-1-20260902-000636.xcresult`），紧接执行 macOS 主导航用户旅程 1/1、67.070 秒（`build/quality-results/lease-handoff-macos/run-20260902-000650.xcresult`），无租约阻断、失败、跳过或运行时告警；这只证明测试系统交接与既有业务终点可执行，不外推 Android、物理设备或外部 Provider。

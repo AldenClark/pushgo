@@ -355,6 +355,123 @@ def methods_covering_changes(
     return selected, has_unowned_change
 
 
+def test_method_callers(
+    source: str,
+    methods: dict[str, tuple[int, int]],
+    helper_names: set[str],
+) -> set[str]:
+    """Return XCTest methods that directly call changed private helpers.
+
+    A helper outside an XCTest method is not itself runnable.  We may narrow the
+    impact only when its call site is visible in one or more concrete test
+    methods; unresolved or indirect calls remain conservatively unscoped.
+    """
+    if not helper_names:
+        return set()
+    lines = source.splitlines()
+    callers: set[str] = set()
+    for method_name, (method_start, method_end) in methods.items():
+        body = "\n".join(lines[method_start - 1 : method_end])
+        if any(re.search(rf"\b{re.escape(helper)}\s*\(", body) for helper in helper_names):
+            callers.add(method_name)
+    return callers
+
+
+def function_ranges_for_attribution(source: str) -> list[tuple[str, int, int]]:
+    """Resolve function ranges while retaining duplicate local function names.
+
+    ``swift_function_ranges`` intentionally fails closed on duplicate names for
+    symbol ownership.  UI-test helper attribution needs a location-aware view so
+    local functions with common names do not make an otherwise unique helper
+    change look like a whole-class change.
+    """
+    lines = source.splitlines()
+    matches: list[tuple[int, str, int]] = []
+    for index, line in enumerate(lines):
+        match = SWIFT_FUNCTION_PATTERN.match(line)
+        if match:
+            matches.append((index, match.group("name"), len(match.group("indent").replace("\t", "    "))))
+    ranges: list[tuple[str, int, int]] = []
+    for index, name, indent in matches:
+        start_line = index + 1
+        while start_line > 1 and lines[start_line - 2].strip().startswith("@"):
+            start_line -= 1
+        end_line = len(lines)
+        for candidate_index in range(index + 1, len(lines)):
+            candidate = lines[candidate_index]
+            stripped = candidate.strip()
+            if not stripped:
+                continue
+            candidate_indent = len(candidate) - len(candidate.lstrip(" \t"))
+            if candidate_indent < indent:
+                end_line = candidate_index
+                break
+            if candidate_indent == indent and (
+                stripped == "}" or SWIFT_MEMBER_PATTERN.match(stripped)
+            ):
+                end_line = candidate_index + (1 if stripped == "}" else 0)
+                break
+        while end_line < len(lines) and not lines[end_line].strip():
+            end_line += 1
+        ranges.append((name, start_line, end_line))
+    return ranges
+
+
+def methods_or_helper_callers_covering_changes(
+    source: str,
+    methods: dict[str, tuple[int, int]],
+    changed_ranges: list[tuple[int, int]],
+) -> tuple[set[str], bool]:
+    """Attribute changed ranges to tests, or to their direct helper callers.
+
+    This is deliberately fail-closed: a range outside a test method is narrowed
+    only when it belongs to exactly one non-test function and that function is
+    directly called by a discoverable XCTest method.  Any ambiguity stays
+    unowned and therefore preserves the existing changed-class fallback.
+    """
+    functions = function_ranges_for_attribution(source)
+    selected: set[str] = set()
+    has_unowned_change = False
+    for changed_start, changed_end in changed_ranges:
+        direct = {
+            name
+            for name, (method_start, method_end) in methods.items()
+            if changed_start <= method_end and changed_end >= method_start
+        }
+        if len(direct) > 1:
+            return set(), True
+        if direct:
+            selected.update(direct)
+            continue
+
+        containing = [
+            (name, function_start, function_end)
+            for name, function_start, function_end in functions
+            if changed_start >= function_start and changed_end <= function_end
+        ]
+        if containing:
+            # Prefer the innermost function when a changed line is inside a
+            # nested local function; a hunk spanning an entire outer helper has
+            # no nested range that contains its end and therefore stays unique.
+            name, _, _ = min(containing, key=lambda item: item[2] - item[1])
+            helpers = {name} if name not in methods else set()
+        else:
+            helpers = {
+                name
+                for name, function_start, function_end in functions
+                if name not in methods
+                and changed_start <= function_end
+                and changed_end >= function_start
+            }
+        if len(helpers) == 1:
+            callers = test_method_callers(source, methods, helpers)
+            if callers:
+                selected.update(callers)
+                continue
+        has_unowned_change = True
+    return selected, has_unowned_change
+
+
 def profiled_method_scopes(
     platform: str, class_scope: str, method_names: set[str]
 ) -> dict[str, list[str]]:
@@ -411,8 +528,12 @@ def resolve_swift_ui_test_change(
             "blocker": f"unable to attribute changed UI test source safely: {path}",
         }
 
-    old_selected, old_unowned = methods_covering_changes(old_methods, ranges[0])
-    new_selected, new_unowned = methods_covering_changes(new_methods, ranges[1])
+    old_selected, old_unowned = methods_or_helper_callers_covering_changes(
+        old_source, old_methods, ranges[0]
+    )
+    new_selected, new_unowned = methods_or_helper_callers_covering_changes(
+        new_source, new_methods, ranges[1]
+    )
     removed_methods = old_selected - set(new_methods)
     if removed_methods:
         return {

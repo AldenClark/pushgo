@@ -94,6 +94,30 @@ final class PushGo_iOSUITests: XCTestCase {{
         self.assertEqual({"default": impact["scopes"]}, impact["profile_scopes"])
         self.assertEqual(2, impact["expected_test_count"])
 
+    def test_changed_ui_test_helper_selects_only_direct_callers(self):
+        path = "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift"
+        old_source = self.swift_ui_test_source().replace(
+            '        XCTAssertEqual("before", "expected")\n',
+            '        _ = sharedFixture()\n        XCTAssertEqual("before", "expected")\n',
+        )
+        new_source = old_source.replace('        "fixture"', '        "changed fixture"')
+        changed_line = next(
+            index for index, line in enumerate(new_source.splitlines(), 1) if "changed fixture" in line
+        )
+        impact = QUALITY_IMPACT.resolve_swift_ui_test_change(
+            path,
+            old_source,
+            new_source,
+            f"@@ -{changed_line} +{changed_line} @@\n-old\n+new\n",
+        )
+
+        self.assertEqual("exact-method", impact["selection"])
+        self.assertEqual(1, impact["expected_test_count"])
+        self.assertEqual(
+            ["PushGo-iOSUITests/PushGo_iOSUITests/testChangedPurpose"],
+            impact["scopes"],
+        )
+
     def test_pure_assertion_insertion_inside_existing_method_stays_exact(self):
         path = "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift"
         old_source = self.swift_ui_test_source()
