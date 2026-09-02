@@ -260,3 +260,6 @@ Android 提交 `2fe9bb0` 的干净工作树上，`QualityMessageJourneyInstrumen
 2026-09-02 Android 通知权限 runner 隔离加固：破坏性 `POST_NOTIFICATIONS` 旅程现先取得 serial-scoped device lease，忙碌设备在有界超时内严格 `BLOCKED`，租约未取得时不会执行任何设备清理；仅在已捕获原始权限基线后才允许恢复，避免竞争/早期失败把权限改成猜测值。改动后 `Medium_Phone / emulator-5554` 真实拒绝→App 说明→系统设置开启→返回刷新旅程执行 1/1、`status=PASSED`，权限恢复为运行前 `granted=false`，租约已释放；相关 lane 合同 34/34。另以占用同一 serial 租约的一秒争用负控验证返回 `status=BLOCKED` 且保留占用者租约。该证据只强化测试系统隔离，不改变通知权限用户目的或其受控 emulator 边界。
 
 2026-09-02 Android 通知权限 runner ADB 有界化：该破坏性旅程的全部设备操作均经 `adb_with_timeout`，默认超时 8 秒，lane 合同拒绝未封装的 `adb -s`；设备失联或 ADB 卡住会在测试系统层明确结束，不会无限占用资源。改动后同一 `Medium_Phone / emulator-5554` 真实拒绝→说明→系统设置开启→返回刷新旅程再次 1/1、`status=PASSED`，权限恢复为 `granted=false` 且租约释放。该证据强化测试系统可执行性，不改变用户目的或受控 emulator 边界。
+### 2026-09-02 Android 顶层设备执行隔离
+
+提交 `3697d8f` 将 `scripts/quality_test.sh` 的全部直接设备 Gradle 调用统一包在 serial-scoped、有界等待的 Android 设备租约内，并在 `EXIT` trap 中 fail-closed 释放；性能 lane 的 100k、Macrobenchmark 与慢加载负控也处于同一租约范围。脚本合同与全量脚本测试 163/163 通过。干净提交上的核心消息 focused 旅程实际执行 1/1，收据 `../pushgo-android/build/quality-results/android-quality-test-lock-regression-clean-20260902/android-focused-summary.json` 双 `PASSED`、`source_dirty=false`、无 incomplete claim；同 serial 一秒争用负控返回 `NOT_RUN/BLOCKED` 且不清理占用者。该改动防止并行 lane 互相修改同一 emulator，不把租约、设备在线或 Gradle 成功单独当作产品通过。
