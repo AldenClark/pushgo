@@ -578,25 +578,56 @@ final class PushGo_iOSUITests: XCTestCase {
         let searchField = runtimeQualitySearchField(in: relaunched.app)
         XCTAssertTrue(searchField.waitForExistence(timeout: 8))
         searchField.tap()
-        searchField.typeText("not-present-in-any-message")
-        assertElementExists("state.messages.search.loading", in: relaunched.app, timeout: 2)
-        assertElementExists("state.messages.search.empty", in: relaunched.app, timeout: 8)
-        XCTAssertFalse(relaunched.app.staticTexts["P2 Split Seed Message"].exists)
+        searchField.typeText("P2 Split")
+        assertElementExists("state.messages.search.loading", in: relaunched.app, timeout: 1)
+        let slowSearchFeedback = element(
+            in: relaunched.app,
+            identifier: "state.messages.search.loading.slow"
+        )
+        XCTAssertTrue(
+            slowSearchFeedback.waitForExistence(timeout: 2),
+            "A deliberately slow search must warn the user before its result is available."
+        )
+        XCTAssertTrue(
+            slowSearchFeedback.label.contains("Messages are still loading")
+                || slowSearchFeedback.label.contains("消息仍在加载")
+                || slowSearchFeedback.label.contains("訊息仍在載入"),
+            "The slow-search warning must explain that data is still loading."
+        )
+        let searchTarget = relaunched.app.staticTexts["P2 Split Seed Message"]
+        XCTAssertTrue(searchTarget.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            relaunched.app.descendants(matching: .any)
+                .matching(identifier: "message.row.00000000-0000-0000-0000-000000000001")
+                .count,
+            1,
+            "The completed search must render one canonical target, not duplicate rows."
+        )
+        XCTAssertFalse(
+            element(in: relaunched.app, identifier: "state.messages.search.loading.slow").exists
+        )
+        XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.search.empty").exists)
+        searchTarget.tap()
+        assertElementExists("sheet.message.detail", in: relaunched.app, timeout: 8)
+        XCTAssertTrue(
+            relaunched.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 5),
+            "The slow search must open the exact canonical detail it found."
+        )
+        tapWhenHittable(
+            element(in: relaunched.app, identifier: "action.message.close"),
+            timeout: 5,
+            message: "The slow-search detail must close before exercising the empty-result state."
+        )
         tapWhenHittable(
             searchField.buttons.firstMatch,
             timeout: 5,
             message: "The native search clear action must reset the known fresh query"
         )
         searchField.tap()
-        searchField.typeText("P2 Split")
-        let searchTarget = relaunched.app.staticTexts["P2 Split Seed Message"]
-        XCTAssertTrue(searchTarget.waitForExistence(timeout: 8))
-        XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.search.empty").exists)
-        searchTarget.tap()
-        assertElementExists("sheet.message.detail", in: relaunched.app, timeout: 8)
-        XCTAssertTrue(
-            relaunched.app.staticTexts["Seeded from fixture.seed_messages for UI validation."].exists
-        )
+        searchField.typeText("not-present-in-any-message")
+        assertElementExists("state.messages.search.empty", in: relaunched.app, timeout: 8)
+        XCTAssertFalse(relaunched.app.staticTexts["P2 Split Seed Message"].exists)
     }
 
     func testHistoryCleanupRemovesOnlyOldMessagesAndPersistsAcrossRelaunch() {

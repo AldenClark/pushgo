@@ -3936,6 +3936,29 @@
         }
       }
     },
+    "message_loading_slow" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Messages are still loading. Please wait…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "消息仍在加载，请稍候…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "訊息仍在載入，請稍候…"
+          }
+        }
+      }
+    },
     "message_ingress_waiting_retry" : {
       "extractionState" : "manual",
       "localizations" : {
