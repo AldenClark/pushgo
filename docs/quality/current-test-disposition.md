@@ -299,3 +299,5 @@ Android transport Room migration 的独立边界：`PushGoDatabaseMigrationDevic
 2026-09-02 Android 网关提交后同步恢复当前字节：干净提交 `6e30cb9` 上专用 `Medium_Phone / emulator-5554` 精确执行 `QualitySettingsJourneyInstrumentedTest#gatewaySyncFailureReportsCommittedGatewayAndPendingRecovery` 1/1，零 failure/error/skip；收据 `build/quality-results/android-gateway-sync-current-20260902/android-focused-summary.json` 双 `PASSED`、`source_dirty=false`、无 incomplete claim。旅程核对新网关权威、同步待恢复状态、普通重启恢复及后续频道业务终点；不外推真实 Provider、物理设备或 OEM。
 
 2026-09-02 Apple 测试系统合同当前字节复验：在提交 `39aa8c6` 上运行 `python3 -m unittest discover -s scripts/tests -p 'test_*.py'`，202 项脚本/合同测试在 5.955s 内全部通过；该结果只证明入口发现、影响选择、六态收据、准备边界与 runner 约束没有回归，不将静态合同数量当作产品 UI 通过。
+
+2026-09-02 Apple 测试系统合同再验证：当前干净提交 `a9c8c32` 上重新运行 `python3 -m unittest discover -s scripts/tests -p 'test_*.py'`，202 项在 6.212s 内全部通过；这是对文档提交后的当前 runner/选择器/六态收据合同复验，不新增产品能力结论，也不把合同数量当作 UI 通过。
