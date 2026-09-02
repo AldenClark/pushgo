@@ -295,3 +295,9 @@ clean commit `f00ad40` 上，顶层 focused lane 经过 bounded `quality_doctor`
 ### 2026-09-02 Apple Core/Store 当前字节复验（7d6a3ce）
 
 在干净提交 `7d6a3ce` 上运行 `swift test --package-path /Users/ethan/Repo/PushGo/pushgo --disable-sandbox`，Swift Testing 实际执行 442 项、41 个 suite，全部通过，耗时 11.563 秒；原生 XCTest 子集的 25 项也全部通过。4 个显式 opt-in 的 100k Store、10k Watch/并发性能用例按规则 skipped，未计入产品通过。原始日志保留于 `build/quality-results/apple-core-current-byte-20260902/swift-test.log`。该证据仅证明 Apple Core/Store/状态与合同语义当前字节健康，不替代 iOS/macOS UI 真实入口、系统权限、物理设备或发布性能证据。
+
+### 2026-09-02 Apple PR UI 当前字节复验（9c97ea8）
+
+在干净提交 `9c97ea8` 上执行 `QUALITY_RESULTS_ROOT=build/quality-results/apple-pr-current-byte-20260902 QUALITY_RESULT_FILE=build/quality-results/apple-pr-current-byte-20260902/apple-pr-summary.json ./scripts/quality_test.sh pr`。专用 `PushGo Quality iPhone`（UDID `51A91D22-BF62-4D63-8AA2-B00E6F513F8B`）的四条 P0/P1 主链精确执行 4/4：分页与已读持久化（178.273s）、五域主导航与实体详情（67.880s）、标准消息准确内容/刷新/媒体/搜索/分享与重开（74.283s）、Settings 真实控件与数据隔离/重开（92.478s），iOS 合计 412.914s，零 failure/error/skip；结果束为 `build/quality-results/ios/run-1-20260902-113028.xcresult`。macOS 主导航精确执行 1/1（68.327s），结果束为 `build/quality-results/macos-ui/run-20260902-113733.xcresult`，零 failure/error/skip。顶层收据 `build/quality-results/apple-pr-current-byte-20260902/apple-pr-summary.json` 为 `product_capability_status=PASSED`、`test_system_status=PASSED`、`source_dirty=false`、`incomplete_selected_claims=[]`。
+
+这次 PR UI 直接验证真实入口、准确业务内容、分页/已读状态变化、普通重开、浏览器/分享交接、Settings 表单/数据隔离，以及 macOS 五域导航与未读徽标文字共存；每条都以业务终点作为 Oracle，不以控件存在或构建成功代替功能通过。证据仅限受控 iOS Simulator 与本机 macOS，不外推物理设备、真实 Provider、发布性能或长期观察。
