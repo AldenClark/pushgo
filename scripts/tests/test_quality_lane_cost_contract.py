@@ -772,6 +772,7 @@ class QualityLaneCostContractTests(unittest.TestCase):
         self.assertEqual(1, runner.count("apple-ios-channel-positive)"))
         self.assertEqual(1, runner.count("apple-ios-channel-sheet-error-owner)"))
         self.assertEqual(1, runner.count("apple-macos-channel-positive)"))
+        self.assertEqual(1, runner.count("apple-macos-channel-sheet-error-owner)"))
         self.assertEqual(
             1,
             runner.count(
@@ -784,6 +785,13 @@ class QualityLaneCostContractTests(unittest.TestCase):
             runner.count(
                 'TEST_SCOPES="PushGo-macOSUITests/PushGo_macOSUITests/'
                 'testUnreadBadgeAndChannelLifecyclePersistThroughRealUserActions"'
+            ),
+        )
+        self.assertEqual(
+            1,
+            runner.count(
+                'TEST_SCOPES="PushGo-macOSUITests/PushGo_macOSUITests/'
+                'testChannelCreateRemoteRejectionStaysInSheetAndRetryPersists"'
             ),
         )
 

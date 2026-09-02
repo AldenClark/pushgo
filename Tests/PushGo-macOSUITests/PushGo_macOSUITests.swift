@@ -1954,6 +1954,87 @@ final class PushGo_macOSUITests: XCTestCase {
     }
 
     @MainActor
+    func testChannelCreateRemoteRejectionStaysInSheetAndRetryPersists() {
+        let sessionID = "macos-channel-rejected-\(UUID().uuidString.lowercased())"
+        let context = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            channelMutationScenario: "reject_once_then_accepted"
+        )
+        launchQuality(context, sessionID: sessionID)
+
+        openSidebarTab("channels", in: context.app)
+        element(in: context.app, identifier: "action.channels.add").click()
+        let createName = element(in: context.app, identifier: "field.channels.create.name")
+        let createPassword = element(in: context.app, identifier: "field.channels.create.password")
+        XCTAssertTrue(createName.waitForExistence(timeout: 8))
+        replaceTextUsingPasteboard(in: createName, with: "Quality Rejected Channel")
+        XCTAssertTrue(createPassword.waitForExistence(timeout: 5))
+        replaceSecureText(in: createPassword, with: "qualityx")
+
+        let submit = element(in: context.app, identifier: "action.channels.entry.submit")
+        XCTAssertTrue(submit.waitForExistence(timeout: 5) && submit.isEnabled)
+        submit.click()
+
+        let sheetFeedback = element(in: context.app, identifier: "feedback.channels.entry")
+        XCTAssertTrue(
+            sheetFeedback.waitForExistence(timeout: 8),
+            "A rejected new-channel request must remain owned by the Channel sheet."
+        )
+        XCTAssertTrue(
+            sheetFeedback.label.contains("Channel password is incorrect"),
+            "The Sheet must expose the actionable remote rejection, not a generic success or empty state."
+        )
+        XCTAssertFalse(
+            element(in: context.app, identifier: "feedback.channels.entry-sync").exists,
+            "A new-channel Sheet failure must not also be rendered by the host Channel page."
+        )
+        XCTAssertEqual(createName.value as? String, "Quality Rejected Channel")
+        XCTAssertTrue(
+            createName.exists,
+            "The owning Channel sheet must remain open with the original input available for correction."
+        )
+        XCTAssertTrue(createPassword.exists)
+        XCTAssertTrue(submit.isEnabled)
+        XCTAssertFalse(
+            element(
+                in: context.app,
+                identifier: "channel.row.01H00000000000000000000003"
+            ).exists,
+            "A rejected create must not publish a partial canonical Channel row."
+        )
+
+        submit.click()
+        let createdRow = element(
+            in: context.app,
+            identifier: "channel.row.01H00000000000000000000003"
+        )
+        XCTAssertTrue(
+            createdRow.waitForExistence(timeout: 8),
+            "Retry must complete the real Channel creation after the one-time rejection."
+        )
+        XCTAssertTrue(createdRow.label.contains("Quality Rejected Channel"))
+
+        context.app.terminate()
+        let relaunched = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            channelMutationScenario: "accepted"
+        )
+        launchQuality(relaunched, sessionID: sessionID)
+        openSidebarTab("channels", in: relaunched.app)
+        let persistedRow = element(
+            in: relaunched.app,
+            identifier: "channel.row.01H00000000000000000000003"
+        )
+        XCTAssertTrue(
+            persistedRow.waitForExistence(timeout: 8),
+            "The accepted retry must survive a real process relaunch."
+        )
+        XCTAssertTrue(persistedRow.label.contains("Quality Rejected Channel"))
+    }
+
+    @MainActor
     func testMessageDeletionRestoresThenCommitsAccurateCanonicalStateAcrossRelaunch() {
         let sessionID = "macos-delete-lifecycle-\(UUID().uuidString.lowercased())"
         let context = configuredQualityApp(sessionID: sessionID, fixture: "channels.standard")

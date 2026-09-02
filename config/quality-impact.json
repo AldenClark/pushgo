@@ -209,9 +209,9 @@
       "paths": ["Apps/PushGo-macOS/UI/Screens/Channel*.swift"],
       "capabilities": ["channels"],
       "minimum_evidence": ["macOS real Channel subscribe/create/rename/keep-history/delete-history/relaunch positive journey", "Apple PR broad positive representative set"],
-      "required_checks": ["apple-macos-channel-positive"],
+      "required_checks": ["apple-macos-channel-positive", "apple-macos-channel-sheet-error-owner"],
       "lane": "pr",
-      "known_evidence_gaps": ["Pure macOS Channel presentation/action-entry changes do not automatically run remote rejection, compensation, or corruption matrices; run the owning focused risk journey when the diff changes those contracts."],
+      "known_evidence_gaps": ["Pure macOS Channel presentation/action-entry changes select the representative positive lifecycle and the one high-value new-create remote-rejection ownership journey; compensation, corruption, provider timeout, concurrency, and other negative matrices remain deferred unless their contracts change."],
       "escalation_reasons": ["A real Channel lifecycle journey is required, but unrelated Settings and fault matrices are not a minimum for a pure macOS screen change."]
     },
     {

@@ -323,7 +323,7 @@ final class PushGo_iOSUITests: XCTestCase {{
                     "testDeniedNotificationSettingsCardRecoversAfterSystemEnable",
                     "testSystemNotificationClickPersistsAccurateMessageAndSurvivesRelaunch",
                 ),
-                32,
+                33,
             ),
         )
         for path, special_profile, methods, expected_count in cases:
@@ -669,9 +669,9 @@ final class PushGo_iOSUITests: XCTestCase {{
             "performance_sensitivity_scopes",
         )
 
-        self.assertEqual(34, len(discoverable))
+        self.assertEqual(35, len(discoverable))
         self.assertEqual(16, len(positive))
-        self.assertEqual(13, len(risk))
+        self.assertEqual(14, len(risk))
         self.assertEqual(2, len(system))
         self.assertEqual(1, len(preparation))
         self.assertEqual(1, len(performance))
@@ -865,13 +865,16 @@ final class PushGo_iOSUITests: XCTestCase {{
         self.assertNotIn("gateway-settings", plan["impacted_capabilities"])
         self.assertNotIn("decryption-settings", plan["impacted_capabilities"])
 
-    def test_macos_channel_screen_selects_only_macos_positive_owner_evidence(self):
+    def test_macos_channel_screen_selects_positive_and_sheet_error_owner_evidence(self):
         plan = self.plan("Apps/PushGo-macOS/UI/Screens/ChannelManagementView.swift")
 
         self.assertEqual("READY", plan["plan_status"])
         self.assertEqual("pr", plan["recommended_lane"])
         self.assertEqual(["channels"], plan["impacted_capabilities"])
-        self.assertEqual(["apple-macos-channel-positive"], plan["required_checks"])
+        self.assertEqual(
+            ["apple-macos-channel-positive", "apple-macos-channel-sheet-error-owner"],
+            plan["required_checks"],
+        )
 
     def test_shared_channel_controller_retains_reconciliation_lane(self):
         plan = self.plan("Shared/Application/ChannelSubscriptionController.swift")
