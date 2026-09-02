@@ -847,9 +847,20 @@ class QualityLaneCostContractTests(unittest.TestCase):
                 'PushGo-iOSUITests/PushGo_iOSUITests/'
                 'testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch,'
                 'PushGo-iOSUITests/PushGo_iOSUITests/'
+                'testSettingsServerRejectsInvalidAndUnregisteredCandidatesWithoutLeakingSheetError,'
+                'PushGo-iOSUITests/PushGo_iOSUITests/'
                 'testSettingsGatewaySyncFailureReportsCommittedGatewayAndPendingRecovery,'
                 'PushGo-iOSUITests/PushGo_iOSUITests/'
                 'testEncryptedMessageRecoversAfterConfiguringKeyAndSurvivesRelaunch"'
+            ),
+        )
+        ios_settings_body = runner.split("apple-ios-settings-positive-extension)", 1)[1].split(
+            "        ;;", 1
+        )[0]
+        self.assertEqual(
+            1,
+            ios_settings_body.count(
+                "testSettingsServerRejectsInvalidAndUnregisteredCandidatesWithoutLeakingSheetError"
             ),
         )
         self.assertEqual(

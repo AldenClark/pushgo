@@ -227,10 +227,10 @@
       "id": "ios-settings-ui",
       "paths": ["Apps/PushGo-iOS/UI/Screens/Settings*.swift"],
       "capabilities": ["gateway-settings", "decryption-settings", "page-visibility", "notification-sound"],
-      "minimum_evidence": ["Apple PR Gateway candidate registration-before-commit positive journey", "iOS real Settings page-visibility, built-in notification-sound selection, and valid-key message-recovery/relaunch positive journeys", "iOS post-commit sync failure keeps the new gateway authoritative, reports pending recovery, and preserves it after relaunch"],
+      "minimum_evidence": ["Apple PR Gateway candidate registration-before-commit positive journey", "iOS real Settings candidate validation/registration rejection stays in the owning Sheet and never overwrites the old Gateway", "iOS real Settings page-visibility, built-in notification-sound selection, and valid-key message-recovery/relaunch positive journeys", "iOS post-commit sync failure keeps the new gateway authoritative, reports pending recovery, and preserves it after relaunch"],
       "required_checks": ["apple-ios-settings-positive-extension"],
       "lane": "pr",
-      "known_evidence_gaps": ["Pure iOS Settings presentation/action-entry changes do not automatically run protected-write, rollback, corrupt-ciphertext, or remote-rejection matrices; run the owning focused risk journey when the diff changes those contracts."],
+      "known_evidence_gaps": ["Pure iOS Settings presentation/action-entry changes do not automatically run protected-write, rollback, or corrupt-ciphertext matrices; run the owning focused risk journey when the diff changes those contracts."],
       "escalation_reasons": ["The current iOS Settings purposes require real UI outcomes, while unrelated system-notification, Watch, and macOS fault matrices are not a minimum for a pure iOS screen change."]
     },
     {
