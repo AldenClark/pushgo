@@ -5312,7 +5312,7 @@ final class PushGo_iOSUITests: XCTestCase {
             .first { element(in: app, identifier: "quality-runtime.\($0)").exists }
             ?? "missing"
         XCTFail(
-            "App-owned quality session did not become ready; observed status: \(observedStatus)",
+            "QUALITY_PRECONDITION: App-owned quality session did not become ready; observed status: \(observedStatus)",
             file: file,
             line: line
         )

@@ -7,6 +7,17 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 class QualityLaneCostContractTests(unittest.TestCase):
+    def test_ios_readiness_oracle_uses_registered_precondition_marker(self) -> None:
+        source = (REPO / "Tests/PushGo-iOSUITests/PushGo_iOSUITests.swift").read_text()
+        helper = source.split("func assertQualityRuntimeReady(", 1)[1].split(
+            "    private func localizationFixtureIDs", 1
+        )[0]
+
+        self.assertIn(
+            '"QUALITY_PRECONDITION: App-owned quality session did not become ready;',
+            helper,
+        )
+
     def test_apple_runners_do_not_silently_promote_native_runtime_warnings(self) -> None:
         for runner_name in (
             "run_ios_ui_tests.sh",
