@@ -93,8 +93,13 @@ if ! python3 "$repo_root/scripts/quality_test_system_issues.py" --check; then
   exit 2
 fi
 
-minimum_free_bytes="${QUALITY_MIN_FREE_BYTES:-5368709120}"
-# A changed-tests plan normally inherits the Simulator-sized 5 GiB reserve.  The
+minimum_free_bytes="${QUALITY_MIN_FREE_BYTES:-10737418240}"
+# A changed-tests plan normally inherits the Apple cold-build 10 GiB reserve.
+# An empty iOS DerivedData build can transiently materialize several GiB of
+# Swift/SDK modules before pruning them; a 5 GiB gate allowed a multi-test batch
+# to enter execution and then fail its last product journey when the volume
+# filled. Keep a reserve that covers the observed peak plus result/fixture
+# writes, while still allowing an explicit CI override for a larger machine.
 # one exception is the Store compatibility probe below: it is a host SwiftPM
 # test, carries no UI scope, and cannot create an xcresult/Simulator artifact.
 # Keep the exception deliberately closed rather than inferring it from a name or
@@ -118,7 +123,7 @@ if (
 ):
     print(1073741824)
 else:
-    print(5368709120)
+    print(10737418240)
 PY
   )"; then
     echo "status=BLOCKED"
@@ -347,6 +352,13 @@ PY
           MAX_RETRIES=0 \
           QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
         claims+=("iOS stale Message route returns to a usable declared fallback")
+        ;;
+      apple-ios-primary-navigation)
+        selected_claims+=("iOS primary navigation keeps the real high-unread Messages control actionable")
+        TEST_SCOPES="PushGo-iOSUITests/PushGo_iOSUITests/testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen" \
+          MAX_RETRIES=0 \
+          QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
+        claims+=("iOS primary navigation keeps the real high-unread Messages control actionable")
         ;;
       apple-macos-message-unavailable-route)
         selected_claims+=("macOS stale Message route returns to a usable declared fallback")

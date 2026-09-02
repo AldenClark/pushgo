@@ -299,6 +299,7 @@
       "paths": ["Apps/PushGo-iOS/UI/Screens/MainTabContainerView.swift"],
       "capabilities": ["app-launch", "primary-navigation"],
       "minimum_evidence": ["iOS real primary controls reach accurate Message/Event/Thing/Channel/Settings destinations", "Apple PR broad positive representative set"],
+      "required_checks": ["apple-ios-primary-navigation"],
       "lane": "pr",
       "known_evidence_gaps": ["Pure iOS primary-navigation presentation changes do not automatically run fatal-startup, background, system-notification, Watch, or macOS window matrices; promote when the diff changes one of those owners."],
       "escalation_reasons": ["A real iOS navigation journey is required, while unrelated platform failure matrices are not a minimum for a pure MainTab UI change."]

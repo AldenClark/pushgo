@@ -925,7 +925,10 @@ final class PushGo_iOSUITests: XCTestCase {{
             plan["impacted_capabilities"],
         )
         self.assertNotIn("mac-window-status-item", plan["impacted_capabilities"])
-        self.assertEqual(["apple-ios-message-unavailable-route"], plan["required_checks"])
+        self.assertEqual(
+            ["apple-ios-message-unavailable-route", "apple-ios-primary-navigation"],
+            plan["required_checks"],
+        )
 
     def test_macos_main_tab_ui_uses_pr_dynamic_sidebar_evidence_without_window_risk(self):
         plan = self.plan("Apps/PushGo-macOS/UI/Screens/MainTabContainerView.swift")

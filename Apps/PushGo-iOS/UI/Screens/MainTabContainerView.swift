@@ -195,7 +195,6 @@ struct MainTabContainerView: View {
     @ViewBuilder
     private var tabLayout: some View {
         let unreadCount = environment.unreadMessageCount
-        let unreadBadgeText = unreadCount > 99 ? "99+" : "\(unreadCount)"
         TabView(selection: $selection) {
             if showsMessagesTab {
                 MessageListScreen(
@@ -204,11 +203,9 @@ struct MainTabContainerView: View {
                     scrollToTopToken: messageScrollToTopToken
                 )
                 .tabItem {
-                    Label(LocalizationManager.localizedSync("messages"), systemImage: "tray.full")
-                        .accessibilityIdentifier("tab.messages")
+                    messagesTabItem(unreadCount: unreadCount)
                 }
                 .tag(MainTab.messages)
-                .badge(unreadCount > 0 ? Text(verbatim: unreadBadgeText) : nil)
             }
 
             if showsEventsTab {
@@ -261,6 +258,40 @@ struct MainTabContainerView: View {
                 }
                 .tag(MainTab.channels)
         }
+    }
+
+    /// The system TabView badge can cover the title and make the tab button
+    /// unhittable when its capped value is `99+`. Keep the unread count in the
+    /// same accessible tab element, but render the visual badge inside the
+    /// icon so the title and the full-width target remain available.
+    @ViewBuilder
+    private func messagesTabItem(unreadCount: Int) -> some View {
+        let title = LocalizationManager.localizedSync("messages")
+        let badgeText = unreadCount > 99 ? "99+" : "\(unreadCount)"
+
+        Label {
+            Text(verbatim: title)
+        } icon: {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: "tray.full")
+                if unreadCount > 0 {
+                    Text(verbatim: badgeText)
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(Color.red))
+                        .fixedSize()
+                        .offset(x: 10, y: -7)
+                        .accessibilityHidden(true)
+                }
+            }
+            .frame(width: 24, height: 24)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: title))
+        .accessibilityValue(unreadCount > 0 ? Text(verbatim: badgeText) : Text(verbatim: ""))
+        .accessibilityIdentifier("tab.messages")
     }
 
     private var showsMessagesTab: Bool {

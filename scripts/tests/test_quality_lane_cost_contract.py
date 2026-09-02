@@ -178,7 +178,7 @@ class QualityLaneCostContractTests(unittest.TestCase):
 
         self.assertIn("(1..<100).map { qualityHighUnreadNavigationMessage(index: $0) }", runtime)
         self.assertIn('message["received_at"] = "2025-12-31T00:00:00Z"', runtime)
-        self.assertEqual(1, quality_test.count("testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen"))
+        self.assertEqual(2, quality_test.count("testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen"))
         self.assertEqual(1, mac_runner.count("testSidebarNavigationCoversPrimaryScreens"))
         self.assertIn('messagesTab.value as? String,\n            "99+"', ios_test)
         self.assertIn('unreadBadge.value as? String,\n            "99+"', mac_test)
@@ -808,8 +808,8 @@ class QualityLaneCostContractTests(unittest.TestCase):
         self.assertIn('checks == {"apple-store-migration-reopen"}', runner)
         self.assertIn("all(isinstance(items, list) and not items for items in scopes.values())", runner)
         self.assertIn("print(1073741824)", runner)
-        self.assertIn("print(5368709120)", runner)
-        self.assertIn('QUALITY_MIN_FREE_BYTES:-5368709120', runner)
+        self.assertIn("print(10737418240)", runner)
+        self.assertIn('QUALITY_MIN_FREE_BYTES:-10737418240', runner)
 
     def test_message_unavailable_route_impact_checks_run_only_the_owning_journeys(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()
@@ -830,6 +830,19 @@ class QualityLaneCostContractTests(unittest.TestCase):
                 'TEST_SCOPES="PushGo-macOSUITests/PushGo_macOSUITests/'
                 'testUnavailableMessageRouteReturnsToListAndKeepsMessagesUsable"'
             ),
+        )
+
+    def test_ios_primary_navigation_impact_check_runs_the_real_high_unread_journey(self) -> None:
+        runner = (REPO / "scripts/quality_test.sh").read_text()
+
+        self.assertEqual(1, runner.count("apple-ios-primary-navigation)"))
+        primary_body = runner.split("apple-ios-primary-navigation)", 1)[1].split(
+            "        ;;", 1
+        )[0]
+        self.assertIn(
+            'TEST_SCOPES="PushGo-iOSUITests/PushGo_iOSUITests/'
+            'testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen"',
+            primary_body,
         )
 
     def test_settings_ui_impact_checks_reuse_minimum_platform_purpose_journeys(self) -> None:
