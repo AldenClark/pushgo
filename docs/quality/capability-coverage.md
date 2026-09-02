@@ -263,3 +263,7 @@ Android 提交 `2fe9bb0` 的干净工作树上，`QualityMessageJourneyInstrumen
 ### 2026-09-02 Android 顶层设备执行隔离
 
 提交 `3697d8f` 将 `scripts/quality_test.sh` 的全部直接设备 Gradle 调用统一包在 serial-scoped、有界等待的 Android 设备租约内，并在 `EXIT` trap 中 fail-closed 释放；性能 lane 的 100k、Macrobenchmark 与慢加载负控也处于同一租约范围。脚本合同与全量脚本测试 163/163 通过。干净提交上的核心消息 focused 旅程实际执行 1/1，收据 `../pushgo-android/build/quality-results/android-quality-test-lock-regression-clean-20260902/android-focused-summary.json` 双 `PASSED`、`source_dirty=false`、无 incomplete claim；同 serial 一秒争用负控返回 `NOT_RUN/BLOCKED` 且不清理占用者。该改动防止并行 lane 互相修改同一 emulator，不把租约、设备在线或 Gradle 成功单独当作产品通过。
+
+### 2026-09-02 Android preparation runner 执行边界
+
+提交 `13d798b` 为 `run_android_preparation_contract.sh` 的安装、App-owned session 准备、启动和 UI dump 全部接入 serial-scoped 租约及默认 15 秒 ADB 超时；忙设备在安装前返回 `BLOCKED`，退出路径释放租约。干净 `preparation` lane 在 `Medium_Phone / emulator-5554` 以真实 invalid session、storage.open 故障和有效空态三段 Oracle 执行通过，顶层收据 `../pushgo-android/build/quality-results/android-preparation-lock-regression-clean-20260902/android-preparation-summary.json` 双 `PASSED`、`source_dirty=false`；准备合同 163/163 通过。该改动只保证准备失败不会污染后续测试或无限等待，不把 readiness、安装或文件存在单独当作产品结果。
