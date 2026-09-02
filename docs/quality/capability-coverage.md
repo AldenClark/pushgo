@@ -267,3 +267,6 @@ Android 提交 `2fe9bb0` 的干净工作树上，`QualityMessageJourneyInstrumen
 ### 2026-09-02 Android preparation runner 执行边界
 
 提交 `13d798b` 为 `run_android_preparation_contract.sh` 的安装、App-owned session 准备、启动和 UI dump 全部接入 serial-scoped 租约及默认 15 秒 ADB 超时；忙设备在安装前返回 `BLOCKED`，退出路径释放租约。干净 `preparation` lane 在 `Medium_Phone / emulator-5554` 以真实 invalid session、storage.open 故障和有效空态三段 Oracle 执行通过，顶层收据 `../pushgo-android/build/quality-results/android-preparation-lock-regression-clean-20260902/android-preparation-summary.json` 双 `PASSED`、`source_dirty=false`；准备合同 163/163 通过。该改动只保证准备失败不会污染后续测试或无限等待，不把 readiness、安装或文件存在单独当作产品结果。
+### 2026-09-02 Android `pr-ui` 六条核心链当前字节
+
+在 clean commit `13d798b` 上，`scripts/quality_test.sh pr-ui` 于 `Medium_Phone / emulator-5554` 精确执行 6/6 条固定正向目的链，零 failure/error/skip/runtime warning，耗时约 49 秒；收据 `../pushgo-android/build/quality-results/android-pr-ui-lock-regression-clean-20260902/android-pr-ui-summary.json` 双 `PASSED`、`source_dirty=false`、`incomplete_selected_claims=[]`。一条受控启动覆盖主导航、标准消息内容与重启、分页/已读持久化、Event 投影关闭、Channel 生命周期和 Gateway 验证/换域；这是设备租约接入后的代表性回归，不把租约、控件存在或 Gradle 成功当作产品结果，也不外推 Provider、物理/OEM 或整体 Gate。
