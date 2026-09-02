@@ -2988,6 +2988,14 @@ final class PushGo_macOSUITests: XCTestCase {
             ].exists,
             "The deleted Thing summary must not remain as a stale detail after route fallback."
         )
+        let unavailableDetailIdentity = element(
+            in: app,
+            identifier: "field.thing.detail.identity"
+        )
+        XCTAssertTrue(
+            unavailableDetailIdentity.waitForNonExistence(timeout: 5),
+            "An unavailable Thing route must leave the detail pane empty until the user explicitly selects a surviving Thing."
+        )
 
         let searchField = app.searchFields.firstMatch
         XCTAssertTrue(searchField.waitForExistence(timeout: 8))

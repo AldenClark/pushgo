@@ -18,6 +18,7 @@ struct ThingSplitScreen: View {
     @State private var selectedTags: Set<String> = []
     @State private var hydrationRequestedThingIDs: Set<String> = []
     @State private var isFilterPopoverPresented = false
+    @State private var keepsDetailEmptyAfterUnavailableTarget = false
     private let fixedListWidth: CGFloat = 300
 
     var body: some View {
@@ -64,6 +65,7 @@ struct ThingSplitScreen: View {
         }
         .onChange(of: selection) { _, id in
             guard let id else { return }
+            keepsDetailEmptyAfterUnavailableTarget = false
             Task { @MainActor in
                 let hydrated = await viewModel.ensureThingDetailsLoaded(thingId: id, forceRefresh: true)
                 if hydrated == nil, selection == id {
@@ -86,7 +88,10 @@ struct ThingSplitScreen: View {
                         message: unavailableTargetFeedback,
                         tone: .danger,
                         accessibilityID: "feedback.entity.target_unavailable",
-                        dismissAction: { onUnavailableTargetFeedbackChanged?(nil) }
+                        dismissAction: {
+                            keepsDetailEmptyAfterUnavailableTarget = false
+                            onUnavailableTargetFeedbackChanged?(nil)
+                        }
                     )
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
@@ -100,6 +105,7 @@ struct ThingSplitScreen: View {
                         Task { await viewModel.loadMoreThings() }
                     },
                     onOpenThing: { thing in
+                        keepsDetailEmptyAfterUnavailableTarget = false
                         onUnavailableTargetFeedbackChanged?(nil)
                         selection = thing.id
                     },
@@ -340,32 +346,41 @@ struct ThingSplitScreen: View {
                 return
             }
             if filteredThings.contains(where: { $0.id == target }) {
+                keepsDetailEmptyAfterUnavailableTarget = false
                 selection = target
                 hydrationRequestedThingIDs.remove(target)
                 onUnavailableTargetFeedbackChanged?(nil)
                 onOpenThingHandled?()
                 return
             }
-            if !hydrationRequestedThingIDs.contains(target) {
-                hydrationRequestedThingIDs.insert(target)
-                Task { @MainActor in
-                    let hydrated = await viewModel.ensureThingDetailsLoaded(
-                        thingId: target,
-                        forceRefresh: true
-                    )
-                    hydrationRequestedThingIDs.remove(target)
-                    guard hydrated != nil else {
-                        guard viewModel.error == nil else { return }
-                        onUnavailableTargetFeedbackChanged?(
-                            localizationManager.localized("gateway_resource_not_found")
-                        )
-                        onOpenThingHandled?()
-                        return
-                    }
-                    syncSelection()
-                }
+            if hydrationRequestedThingIDs.contains(target) {
                 return
             }
+            hydrationRequestedThingIDs.insert(target)
+            Task { @MainActor in
+                let hydrated = await viewModel.ensureThingDetailsLoaded(
+                    thingId: target,
+                    forceRefresh: true
+                )
+                hydrationRequestedThingIDs.remove(target)
+                guard hydrated != nil else {
+                    guard viewModel.error == nil else { return }
+                    keepsDetailEmptyAfterUnavailableTarget = true
+                    selection = nil
+                    onUnavailableTargetFeedbackChanged?(
+                        localizationManager.localized("gateway_resource_not_found")
+                    )
+                    onOpenThingHandled?()
+                    return
+                }
+                syncSelection()
+            }
+            return
+        }
+
+        if keepsDetailEmptyAfterUnavailableTarget {
+            selection = nil
+            return
         }
 
         if selection != nil,
