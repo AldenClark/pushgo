@@ -4,6 +4,8 @@
 
 基线日期：2026-08-27。此文件是 WP0 迁移清单，迁移完成后归档；它不作为产品通过 Oracle。
 
+2026-09-03 Apple iOS 网关保存中生命周期与正向回归：干净提交 `59fa1d7` 的专用 `PushGo Quality iPhone / 51A91D22-BF62-4D63-8AA2-B00E6F513F8B` 精确执行 `testSavingGatewayKeepsEditorOpenUntilPreparedSwitchCommitsAndPersists` 1/1（原生 95.394 秒）及既有 `testSettingsServerUsesRealControlsAndScopesDataAfterRelaunch` 1/1（原生 94.608 秒），结果束分别为 `build/quality-results/ios/run-1-20260903-050205.xcresult` 与 `build/quality-results/ios/run-1-20260903-050543.xcresult`，均 1 passed/0 failed/0 skipped、无 runtime warning；收据 `build/quality-results/ios-gateway-save-dismiss-20260903-warm-r5/apple-focused-summary.json` 与 `build/quality-results/ios-gateway-positive-after-save-lifecycle-20260903/apple-focused-summary.json` 均 product/test-system=`PASSED/PASSED`、`source_dirty=false`、选择与执行一致。真实链证明候选注册至本地提交期间编辑器防下滑/Back 关闭且旧 Gateway 保持，继续后真实提交/自动关闭，候选域频道动作与普通重开持久化准确；既有验证/注册、提交、新域频道和重开链未回归。该证据只更新受控 iOS Simulator 子 claim，公网 Gateway/Provider、进程终止、物理/OEM、Release、14 天和整体 21.2 仍未关闭。
+
 ## 处置含义
 
 - `keep`：当前 Oracle 已保护真实行为；允许迁移公共 Launcher/Waiter。
