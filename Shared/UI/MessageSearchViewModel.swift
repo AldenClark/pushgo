@@ -15,6 +15,14 @@ final class MessageSearchViewModel {
     private(set) var displayedQuery: String = ""
     private(set) var completedSearchRevision: UInt64 = 0
     private(set) var displayedResultsIdentityRevision: UInt64 = 0
+    /// Identifies the search request after debounce has actually launched.
+    /// UI loading feedback must be timed from this point, not from each
+    /// character-level query update.
+    private(set) var activeSearchRequestRevision: UInt64?
+    /// Request-local slow state owned by the search state machine. Keeping
+    /// this state here prevents view lifecycle or list virtualization races
+    /// from dropping the only user-visible indication before results commit.
+    private(set) var isSearchLoadSlow: Bool = false
     private(set) var displayedResults: [PushMessageSummary] = [] {
         didSet {
             guard messageIDsChanged(from: oldValue, to: displayedResults) else { return }
@@ -38,6 +46,7 @@ final class MessageSearchViewModel {
     private var searchTask: Task<Void, Never>?
     private var debounceTask: Task<Void, Never>?
     private var loadMoreTask: Task<Void, Never>?
+    private var slowSearchTask: Task<Void, Never>?
     private var searchRequestRevision: UInt64 = 0
     private var shouldApplyQualitySearchDelay = true
 #if DEBUG
@@ -121,6 +130,24 @@ final class MessageSearchViewModel {
 
     private func launchSearch(with trimmedQuery: String, requestRevision: UInt64) {
         guard requestRevision == searchRequestRevision else { return }
+        activeSearchRequestRevision = requestRevision
+        isSearchLoadSlow = false
+        slowSearchTask?.cancel()
+        slowSearchTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(1))
+                try Task.checkCancellation()
+                guard let self,
+                      self.isSearching,
+                      self.activeSearchRequestRevision == requestRevision else {
+                    return
+                }
+                self.isSearchLoadSlow = true
+            } catch {
+                // Query replacement or request completion cancels this task;
+                // the next request owns a fresh timer.
+            }
+        }
         searchTask = Task(priority: .userInitiated) { @MainActor [weak self] in
             await self?.loadFirstPage(
                 trimmedQuery: trimmedQuery,
@@ -157,6 +184,10 @@ final class MessageSearchViewModel {
         searchTask = nil
         loadMoreTask?.cancel()
         loadMoreTask = nil
+        slowSearchTask?.cancel()
+        slowSearchTask = nil
+        activeSearchRequestRevision = nil
+        isSearchLoadSlow = false
         isLoadingMore = false
         searchFailed = false
         isSearching = true
@@ -171,6 +202,10 @@ final class MessageSearchViewModel {
         searchTask = nil
         loadMoreTask?.cancel()
         loadMoreTask = nil
+        slowSearchTask?.cancel()
+        slowSearchTask = nil
+        activeSearchRequestRevision = nil
+        isSearchLoadSlow = false
         hasSearched = false
         searchFailed = false
         isSearching = false
@@ -188,6 +223,10 @@ final class MessageSearchViewModel {
             if requestRevision == searchRequestRevision {
                 isSearching = false
                 searchTask = nil
+                slowSearchTask?.cancel()
+                slowSearchTask = nil
+                activeSearchRequestRevision = nil
+                isSearchLoadSlow = false
             }
         }
 

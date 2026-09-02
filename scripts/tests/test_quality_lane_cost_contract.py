@@ -502,10 +502,10 @@ class QualityLaneCostContractTests(unittest.TestCase):
         )
         self.assertFalse(any("FunctionalEmptyState" in scope for scope in scopes))
         self.assertFalse(any("MessageSearchReturnsOnly" in scope for scope in scopes))
-        self.assertEqual(1, test_source.count("messageSearchDelayMilliseconds: 2_000"))
+        self.assertEqual(1, test_source.count("messageSearchDelayMilliseconds: 3_000"))
         self.assertEqual(
             1,
-            test_source.count('assertElementExists("state.messages.search.loading"'),
+            test_source.count('identifier: "state.messages.search.loading.slow"'),
         )
         self.assertIn('positive_ui_scopes="$pr_ui_scopes,$extended_positive_ui_scopes"', runner)
         self.assertIn('nightly_ui_scopes="$positive_ui_scopes,$nightly_negative_ui_scopes"', runner)

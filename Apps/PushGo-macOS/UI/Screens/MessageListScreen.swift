@@ -336,9 +336,16 @@ struct MessageListScreen: View {
                 .progressViewStyle(.circular)
                 .controlSize(.large)
 
-            Text(localizationManager.localized("searching_messages"))
+            Text(localizationManager.localized(
+                searchViewModel.isSearchLoadSlow ? "message_loading_slow" : "searching_messages"
+            ))
                 .font(.subheadline)
                 .foregroundStyle(Color.appTextSecondary)
+                .accessibilityIdentifier(
+                    searchViewModel.isSearchLoadSlow
+                        ? "state.messages.search.loading.slow"
+                        : "state.messages.search.loading"
+                )
         }
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.vertical, 60)

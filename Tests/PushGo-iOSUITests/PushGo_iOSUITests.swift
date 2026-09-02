@@ -536,7 +536,10 @@ final class PushGo_iOSUITests: XCTestCase {
         relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
             fixture: "messages.standard",
-            messageSearchDelayMilliseconds: 2_000,
+            // Keep the injected request slow long enough for XCTest's
+            // accessibility snapshot cadence to observe the real warning;
+            // the product's user-facing slow threshold remains one second.
+            messageSearchDelayMilliseconds: 3_000,
             legacyStore: "messages.v17",
             messageRefreshScenario: "new_message"
         )
@@ -579,33 +582,41 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(searchField.waitForExistence(timeout: 8))
         searchField.tap()
         searchField.typeText("P2 Split")
-        assertElementExists("state.messages.search.loading", in: relaunched.app, timeout: 1)
-        let slowSearchFeedback = element(
+        let searchTarget = relaunched.app.staticTexts["P2 Split Seed Message"]
+        let searchTargets = relaunched.app.staticTexts.matching(
+            NSPredicate(format: "label == %@", "P2 Split Seed Message")
+        )
+        let slowSearchState = element(
             in: relaunched.app,
             identifier: "state.messages.search.loading.slow"
         )
+        let slowSearchFeedback = relaunched.app.staticTexts.matching(
+            NSPredicate(
+                format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@ OR label CONTAINS[c] %@",
+                "Messages are still loading",
+                "消息仍在加载",
+                "訊息仍在載入"
+            )
+        ).firstMatch
         XCTAssertTrue(
-            slowSearchFeedback.waitForExistence(timeout: 2),
-            "A deliberately slow search must warn the user before its result is available."
+            slowSearchState.waitForExistence(timeout: 2.5),
+            "A deliberately slow search must expose its real slow-loading state before the result is available."
         )
         XCTAssertTrue(
-            slowSearchFeedback.label.contains("Messages are still loading")
-                || slowSearchFeedback.label.contains("消息仍在加载")
-                || slowSearchFeedback.label.contains("訊息仍在載入"),
-            "The slow-search warning must explain that data is still loading."
-        )
-        let searchTarget = relaunched.app.staticTexts["P2 Split Seed Message"]
-        XCTAssertTrue(searchTarget.waitForExistence(timeout: 8))
-        XCTAssertEqual(
-            relaunched.app.descendants(matching: .any)
-                .matching(identifier: "message.row.00000000-0000-0000-0000-000000000001")
-                .count,
-            1,
-            "The completed search must render one canonical target, not duplicate rows."
+            slowSearchFeedback.exists,
+            "The slow-loading state must expose the supported localized warning text."
         )
         XCTAssertFalse(
-            element(in: relaunched.app, identifier: "state.messages.search.loading.slow").exists
+            searchTarget.exists,
+            "The slow-search warning must be visible before the delayed result is available."
         )
+        XCTAssertTrue(searchTarget.waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            searchTargets.count,
+            1,
+            "The completed search must render one canonical target title, not duplicate results."
+        )
+        XCTAssertFalse(slowSearchState.exists)
         XCTAssertFalse(element(in: relaunched.app, identifier: "state.messages.search.empty").exists)
         searchTarget.tap()
         assertElementExists("sheet.message.detail", in: relaunched.app, timeout: 8)

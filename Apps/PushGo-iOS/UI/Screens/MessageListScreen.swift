@@ -22,7 +22,6 @@ struct MessageListScreen: View {
     @State private var isHistoryCleanupPresented = false
     @State private var isPullRefreshing = false
     @State private var isPullRefreshSlow = false
-    @State private var isSearchLoadSlow = false
     @State private var didPullRefreshFail = false
 
     private struct MessageTagSummary: Identifiable, Hashable {
@@ -87,11 +86,6 @@ struct MessageListScreen: View {
 #if DEBUG
                 publishAutomationState()
 #endif
-            }
-            .onChange(of: searchViewModel.isSearching) { _, isSearching in
-                if !isSearching {
-                    isSearchLoadSlow = false
-                }
             }
             .onChange(of: searchViewModel.completedSearchRevision) { _, _ in
 #if DEBUG
@@ -505,20 +499,6 @@ struct MessageListScreen: View {
             .onChange(of: scrollToTopToken) { _, _ in
                 scrollToTopIfNeeded(proxy)
             }
-            .task(id: searchViewModel.query) {
-                isSearchLoadSlow = false
-                let trimmedQuery = searchViewModel.query.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmedQuery.isEmpty, searchViewModel.isSearching else { return }
-                do {
-                    try await Task.sleep(for: .seconds(1))
-                    try Task.checkCancellation()
-                    guard searchViewModel.isSearching else { return }
-                    isSearchLoadSlow = true
-                } catch {
-                    // Query changes and completed searches cancel this task; the
-                    // current query must never inherit a stale slow indicator.
-                }
-            }
         }
     }
 
@@ -695,11 +675,11 @@ struct MessageListScreen: View {
                 .progressViewStyle(.circular)
                 .controlSize(.large)
             Text(localizationManager.localized(
-                isSearchLoadSlow ? "message_loading_slow" : "searching_messages"
+                searchViewModel.isSearchLoadSlow ? "message_loading_slow" : "searching_messages"
             ))
                 .foregroundStyle(.secondary)
                 .accessibilityIdentifier(
-                    isSearchLoadSlow
+                    searchViewModel.isSearchLoadSlow
                         ? "state.messages.search.loading.slow"
                         : "state.messages.search.loading"
                 )
@@ -709,6 +689,13 @@ struct MessageListScreen: View {
         .listRowInsets(EdgeInsets())
         .listRowBackground(Group { Color.clear })
         .hideListSeparator()
+        // Keep the loading container stable while the copy changes to the
+        // slow-progress warning.  The stable container proves that the real
+        // search is still in flight; the nested state identifier below lets
+        // the UI Oracle distinguish the user-visible slow phase without
+        // racing a transient identifier swap.
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("state.messages.search.loading")
     }
 
     private var searchFailureRow: some View {
