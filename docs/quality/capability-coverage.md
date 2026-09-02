@@ -2,6 +2,8 @@
 
 此索引防遗漏，不计算覆盖分，不是测试 Oracle。入口或类型存在不能让能力通过；最终判定以真实用户结果和必要数据/系统终点为准。
 
+macOS 通知权限跨应用往返当前字节（2026-09-02）：`testDeniedNotificationSettingsCardRecoversAfterSystemEnable` 先以真实 PushGo Settings 入口进入系统通知设置，利用 System Settings 通知内容滚动容器的语义 `AXIncrementPage` 动作处理虚拟化列表，再点击真实 PushGo 行并完成关闭→拒绝说明归属→产品入口重新开启→返回卡片消失的完整用户目的。重启 System Settings 后仍原生执行 1/1、24.113 秒，结果束 `build/quality-results/macos-notification-permission-current-20260902-r7/run-20260902-104339.xcresult`；严格 verifier=`EXECUTED`、`executed_test_count=1`，原生结果 `Passed`、0 failure/skip/runtime warning。该修复只解决跨应用测试系统的可达性与虚拟化边界，不把行存在、权限命令或结果包当作通过，也不外推物理设备、真实 Provider、签名 Release 或其他平台；先前 BLOCKED 收据仍作为历史测试系统证据保留。
+
 ## App-owned 准备合同
 
 Apple UI 租约顺序交接证据（2026-09-02）：为避免连续 Apple lane 在前一 runner 退出后被后台辅助进程短暂持锁，iOS/macOS runner 的后台进程均关闭共享租约描述符，并由静态合同守住。实际同一 shell 先执行 iOS 空态用户旅程 1/1、9.252 秒（`build/quality-results/lease-handoff-ios/run-1-20260902-000636.xcresult`），紧接执行 macOS 主导航用户旅程 1/1、67.070 秒（`build/quality-results/lease-handoff-macos/run-20260902-000650.xcresult`），无租约阻断、失败、跳过或运行时告警；这只证明测试系统交接与既有业务终点可执行，不外推 Android、物理设备或外部 Provider。

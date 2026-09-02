@@ -506,11 +506,15 @@ final class PushGo_macOSUITests: XCTestCase {
             ).firstMatch
             // System Settings can expose the application row before the split-view
             // transition has made it actionable.  The user-purpose handoff needs an
-            // actual click into PushGo's settings, so wait for both facts rather than
-            // treating a transient non-hittable row as a missing settings page.
+            // actual click into PushGo's settings, so first use the real notification
+            // list's scroll owner to bring the semantic row into view, then wait for
+            // both facts rather than treating a transient non-hittable row as missing.
             let rowDeadline = Date().addingTimeInterval(8)
             while Date() < rowDeadline {
                 if pushGoRow.exists && pushGoRow.isHittable {
+                    break
+                }
+                guard pressSystemSettingsNotificationPageDown(in: systemSettings) else {
                     break
                 }
                 RunLoop.current.run(until: Date().addingTimeInterval(0.1))
@@ -596,6 +600,117 @@ final class PushGo_macOSUITests: XCTestCase {
             openSettings.waitForNonExistence(timeout: 8),
             "Returning from System Settings must refresh the real authorization state and remove the denied card."
         )
+    }
+
+    @MainActor
+    private func pressSystemSettingsNotificationPageDown(in systemSettings: XCUIApplication) -> Bool {
+        guard systemSettings.state == .runningForeground,
+              let settingsApplication = NSWorkspace.shared.runningApplications.first(where: {
+                  $0.bundleIdentifier == "com.apple.systempreferences"
+                      && !$0.isTerminated
+              })
+        else {
+            return false
+        }
+
+        func attribute(_ element: AXUIElement, _ key: CFString) -> CFTypeRef? {
+            var value: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(element, key, &value) == .success else {
+                return nil
+            }
+            return value
+        }
+
+        func stringAttribute(_ element: AXUIElement, _ key: CFString) -> String {
+            attribute(element, key) as? String ?? ""
+        }
+
+        func pointAttribute(_ element: AXUIElement, _ key: CFString) -> CGPoint? {
+            guard let rawValue = attribute(element, key),
+                  CFGetTypeID(rawValue) == AXValueGetTypeID()
+            else {
+                return nil
+            }
+            var point = CGPoint.zero
+            guard AXValueGetValue(rawValue as! AXValue, .cgPoint, &point) else {
+                return nil
+            }
+            return point
+        }
+
+        func sizeAttribute(_ element: AXUIElement, _ key: CFString) -> CGSize? {
+            guard let rawValue = attribute(element, key),
+                  CFGetTypeID(rawValue) == AXValueGetTypeID()
+            else {
+                return nil
+            }
+            var size = CGSize.zero
+            guard AXValueGetValue(rawValue as! AXValue, .cgSize, &size) else {
+                return nil
+            }
+            return size
+        }
+
+        func children(of element: AXUIElement) -> [AXUIElement] {
+            guard let rawValue = attribute(element, kAXChildrenAttribute as CFString) else {
+                return []
+            }
+            return rawValue as? [AXUIElement] ?? []
+        }
+
+        func descendants(of root: AXUIElement, limit: Int = 2048) -> [AXUIElement] {
+            var result: [AXUIElement] = []
+            var queue = children(of: root)
+            while !queue.isEmpty && result.count < limit {
+                let element = queue.removeFirst()
+                result.append(element)
+                queue.append(contentsOf: children(of: element))
+            }
+            return result
+        }
+
+        let application = AXUIElementCreateApplication(settingsApplication.processIdentifier)
+        guard let windows = attribute(application, kAXWindowsAttribute as CFString) as? [AXUIElement] else {
+            return false
+        }
+        for window in windows {
+            let allElements = [window] + descendants(of: window)
+            guard let notificationScroll = allElements.first(where: { element in
+                      guard stringAttribute(element, kAXRoleAttribute as CFString) == "AXScrollArea",
+                            let origin = pointAttribute(element, kAXPositionAttribute as CFString),
+                            let size = sizeAttribute(element, kAXSizeAttribute as CFString)
+                      else {
+                          return false
+                      }
+                      let frame = CGRect(origin: origin, size: size)
+                      return frame.width > 400 && frame.height > 400
+                  })
+            else {
+                continue
+            }
+            guard let scrollOrigin = pointAttribute(notificationScroll, kAXPositionAttribute as CFString),
+                  let scrollSize = sizeAttribute(notificationScroll, kAXSizeAttribute as CFString)
+            else {
+                continue
+            }
+            let scrollFrame = CGRect(origin: scrollOrigin, size: scrollSize)
+            let pageDown = descendants(of: notificationScroll).first(where: { element in
+                guard stringAttribute(element, kAXRoleAttribute as CFString) == "AXButton",
+                      stringAttribute(element, kAXSubroleAttribute as CFString) == "AXIncrementPage",
+                      let origin = pointAttribute(element, kAXPositionAttribute as CFString),
+                      let size = sizeAttribute(element, kAXSizeAttribute as CFString)
+                else {
+                    return false
+                }
+                let frame = CGRect(origin: origin, size: size)
+                return frame.width > 0
+                    && frame.height > 0
+                    && frame.minX >= scrollFrame.maxX - 50
+            })
+            guard let pageDown else { continue }
+            return AXUIElementPerformAction(pageDown, kAXPressAction as CFString) == .success
+        }
+        return false
     }
 
     @MainActor
