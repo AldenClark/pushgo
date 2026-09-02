@@ -180,7 +180,7 @@ Platform vector order is `I / M / D / W` (iOS, macOS, Android, watchOS). `-` mea
 | 1473 | Export JSON shape, only if export retained | NA/NA/NA/- | `NA` | Conditional gate is inactive because export was explicitly removed as a product candidate. Reintroduction reactivates this row before UI work. |
 | 1489 | Android update candidate/ABI/rollout | -/-/V/- | `V` | JVM policy matrix checks version/channel/SDK/ABI/rollout exact candidate selection. |
 | 1490 | Feed signature and canonical JSON | -/-/V/- | `V` | Valid signed canonical feed accepts; mutation/re-encoding attacks reject. |
-| 1491 | Install permission/download/verify/install state (`P0 Release`) | -/-/P/- | `N` | Controlled emulator performs the real download/hash/archive signer/PackageInstaller/version/data-retention mechanism. Dedicated physical unknown-sources/OEM policy evidence is not run, so this physical row remains open. |
+| 1491 | Install permission/download/verify/install state (`P0 Release`) | -/-/P/- | `N` | Controlled emulator current byte performs one real `v1.3.0`→`v1.3.1` update through download, SHA-256/package/version/signer checks, `PackageInstaller` replacement, original-path relaunch and exact canonical message retention (`../pushgo-android/build/quality-results/android-update-install-current-20260902/android-update-install/20260902-055743-19960/evidence.json`). Dedicated physical unknown-sources/OEM policy, production signing/feed, interruption and manual-fallback evidence is not run, so this Release row remains open. |
 
 ## 25.13 watchOS current UI and standalone receiving
 
