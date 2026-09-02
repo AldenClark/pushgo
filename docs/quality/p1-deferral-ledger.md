@@ -32,6 +32,10 @@ The 130 P1 rows in design section 25 are grouped only where they share a user-pu
 | P1-IOS-BACKGROUND | 25.15:iOS BGTask 注册/调度/执行..iOS BGTask expiration/取消/重启 | `DEFERRED` | Registration/configuration contracts exist; scheduled execution, expiration, cancellation and durable restart recovery are not closed on a device. | iOS background-work quality owner | 2026-11-30 | BGTask/ingress change; Nightly, Release | A real scheduled task performs the exact eligible work and completes once; expiration cancels active work, durable work resumes after restart, and ACK/projection cannot duplicate. |
 | P1-ANDROID-LIFECYCLE | 25.15:Android Private Channel Service 启停..Update Check Worker | `DEFERRED` | Service/Worker contracts and selected emulator flows exist; reboot, process death, notification dismissal, audio arbitration and cleanup/update worker endpoints remain open. | Android background-work quality owner | 2026-11-30 | Service/Worker/Receiver change; Nightly, Release | Actual service, notification, audio, Store and scheduler state converge after start, stop, reboot, death or retry; work is idempotent, respects constraints, and never deletes referenced data or reports enqueue as completion. |
 
+### 2026-09-02 iOS accessibility representative evidence
+
+The dedicated `accessibility` lane ran `testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation` 1/1 on the controlled iOS Simulator. The real zh-Hans maximum-size journey kept the Messages title and unread badge readable, opened and returned from exact Message detail, reached the Channel form, entered localized name/password, and verified the accurate created row; the receipt is product/test-system=`PASSED/PASSED` with no incomplete selected claim and no native runtime warning. This updates only the representative iOS accessibility/localization subclaim; physical VoiceOver, other language/size combinations, macOS/watchOS and the full page/input matrix remain deferred, so `P1-ACCESSIBILITY` stays `DEFERRED`.
+
 ## Operating rule
 
 ### 2026-09-01 Gateway cancellation audit
