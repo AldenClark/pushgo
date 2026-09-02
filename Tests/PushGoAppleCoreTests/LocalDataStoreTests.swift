@@ -2042,6 +2042,155 @@ struct LocalDataStoreTests {
     }
 
     @Test
+    func sqlitePageQuotaRejectsBatchWithoutPartialCommitAndRecoversAfterRestore() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            let store = LocalDataStore(
+                appGroupIdentifier: appGroupIdentifier,
+                spotlightIndexer: nil
+            )
+            let sentinel = makeMessage(
+                id: UUID(uuidString: "40000000-0000-0000-0000-000000000111")!,
+                messageId: "msg-quota-sentinel-001",
+                notificationRequestId: "req-quota-sentinel-001",
+                title: "Quota sentinel",
+                body: "This canonical row must survive a failed batch."
+            )
+            try await store.saveMessage(sentinel)
+
+            let originalMetrics = try await store.qualitySQLitePageMetrics()
+            guard originalMetrics.pageCount > 0,
+                  originalMetrics.pageSize > 0,
+                  originalMetrics.maxPageCount >= originalMetrics.pageCount
+            else {
+                Issue.record("SQLite page metrics were not usable for a bounded write-failure test.")
+                return
+            }
+
+            let candidate = makeMessage(
+                id: UUID(uuidString: "40000000-0000-0000-0000-000000000112")!,
+                messageId: "msg-quota-candidate-001",
+                notificationRequestId: "req-quota-candidate-001",
+                title: "Quota candidate",
+                body: "This row must not partially commit."
+            )
+            let (pageCountPlusOne, pageCountOverflow) = originalMetrics.pageCount
+                .addingReportingOverflow(1)
+            let (payloadByteCount, payloadOverflow) = pageCountPlusOne
+                .multipliedReportingOverflow(by: originalMetrics.pageSize)
+            guard !pageCountOverflow, !payloadOverflow,
+                  payloadByteCount > 0,
+                  payloadByteCount <= 64 * 1024 * 1024
+            else {
+                Issue.record("SQLite test payload size was outside the bounded test budget.")
+                return
+            }
+            let oversized = makeMessage(
+                id: UUID(uuidString: "40000000-0000-0000-0000-000000000113")!,
+                messageId: "msg-quota-oversized-001",
+                notificationRequestId: "req-quota-oversized-001",
+                title: "Quota oversized candidate",
+                body: String(repeating: "x", count: payloadByteCount)
+            )
+
+            do {
+                let constrainedMetrics = try await store.setQualitySQLiteMaxPageCount(
+                    originalMetrics.pageCount
+                )
+                try #require(constrainedMetrics.maxPageCount == originalMetrics.pageCount)
+                #expect(constrainedMetrics.pageSize == originalMetrics.pageSize)
+
+                var writeError: (any Error)?
+                do {
+                    try await store.saveMessagesBatch([candidate, oversized])
+                    Issue.record("A batch larger than the production SQLite quota unexpectedly succeeded.")
+                } catch {
+                    writeError = error
+                }
+
+                let rowsAfterFailure = try await store.loadMessages()
+                #expect(rowsAfterFailure.count == 1)
+                let sentinelAfterFailure = try #require(
+                    try await store.loadMessage(id: sentinel.id)
+                )
+                #expect(sentinelAfterFailure.title == sentinel.title)
+                #expect(sentinelAfterFailure.body == sentinel.body)
+                #expect(try await store.loadMessage(id: candidate.id) == nil)
+                #expect(try await store.loadMessage(id: oversized.id) == nil)
+
+                let restoredMetrics = try await store.setQualitySQLiteMaxPageCount(
+                    originalMetrics.maxPageCount
+                )
+                #expect(restoredMetrics.maxPageCount == originalMetrics.maxPageCount)
+
+                guard let writeError else {
+                    return
+                }
+                guard let appError = writeError as? AppError else {
+                    Issue.record("Quota write failure did not surface through AppError.localStore.")
+                    return
+                }
+                guard case let .localStore(message) = appError else {
+                    Issue.record("Quota write failure used an unexpected AppError case: \(appError).")
+                    return
+                }
+                #expect(message.contains("saveMessagesBatch"))
+
+                // Once the quota is restored, the same production batch path
+                // must succeed and remain accurate after an ordinary reopen.
+                try await store.saveMessagesBatch([candidate, oversized])
+                let recoveredRows = try await store.loadMessages()
+                #expect(recoveredRows.count == 3)
+                let recoveredCandidate = try #require(
+                    try await store.loadMessage(id: candidate.id)
+                )
+                #expect(recoveredCandidate.title == candidate.title)
+                #expect(recoveredCandidate.body == candidate.body)
+                let recoveredOversized = try #require(
+                    try await store.loadMessage(id: oversized.id)
+                )
+                #expect(recoveredOversized.title == oversized.title)
+                #expect(recoveredOversized.body == oversized.body)
+
+                LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: root)
+                let reopened = LocalDataStore(
+                    appGroupIdentifier: appGroupIdentifier,
+                    spotlightIndexer: nil
+                )
+                let reopenedRows = try await reopened.loadMessages()
+                #expect(reopenedRows.count == 3)
+                let reopenedSentinel = try #require(
+                    try await reopened.loadMessage(id: sentinel.id)
+                )
+                #expect(reopenedSentinel.title == sentinel.title)
+                #expect(reopenedSentinel.body == sentinel.body)
+                let reopenedCandidate = try #require(
+                    try await reopened.loadMessage(id: candidate.id)
+                )
+                #expect(reopenedCandidate.title == candidate.title)
+                #expect(reopenedCandidate.body == candidate.body)
+                let reopenedOversized = try #require(
+                    try await reopened.loadMessage(id: oversized.id)
+                )
+                #expect(reopenedOversized.title == oversized.title)
+                #expect(reopenedOversized.body == oversized.body)
+                #expect(
+                    reopenedRows.filter { $0.messageId == candidate.messageId }.count == 1
+                )
+                #expect(
+                    reopenedRows.filter { $0.messageId == oversized.messageId }.count == 1
+                )
+            } catch {
+                // max_page_count is connection-local; never let a failed
+                // assertion leave the shared test connection constrained.
+                _ = try? await store.setQualitySQLiteMaxPageCount(
+                    originalMetrics.maxPageCount
+                )
+                throw error
+            }
+        }
+    }
+
+    @Test
     func saveEntityRecordsTreatsEventHeadWithinThingScopeAsTopLevelAndThingRelated() async throws {
         try await withIsolatedLocalDataStore { store, _ in
             let thingParent = makeMessage(

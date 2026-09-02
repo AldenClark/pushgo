@@ -554,6 +554,12 @@ actor LocalDataStore {
     }
 
     #if DEBUG
+    struct QualitySQLitePageMetrics: Sendable, Equatable {
+        let pageCount: Int
+        let pageSize: Int
+        let maxPageCount: Int
+    }
+
     static func releaseSharedResourcesForTesting(storageRootURL: URL) {
         let rootPath = storageRootURL.standardizedFileURL.path
         let rootPrefix = rootPath.hasSuffix("/") ? rootPath : rootPath + "/"
@@ -563,6 +569,26 @@ actor LocalDataStore {
                 return path != rootPath && !path.hasPrefix(rootPrefix)
             }
         }
+    }
+
+    /// Returns page metrics from the production GRDB writer connection. This
+    /// is intentionally a narrow DEBUG-only seam for deterministic lower-layer
+    /// write-failure tests; callers cannot access the database path or execute
+    /// arbitrary SQL.
+    func qualitySQLitePageMetrics() async throws -> QualitySQLitePageMetrics {
+        try await requireBackend().qualitySQLitePageMetrics()
+    }
+
+    /// Applies a bounded SQLite page quota on the production writer
+    /// connection and returns the effective metrics. The quota is connection
+    /// local and must be restored by the owning test before it exits.
+    func setQualitySQLiteMaxPageCount(
+        _ maxPageCount: Int
+    ) async throws -> QualitySQLitePageMetrics {
+        guard maxPageCount > 0 else {
+            throw AppError.localStore("SQLite max page count must be positive.")
+        }
+        return try await requireBackend().setQualitySQLiteMaxPageCount(maxPageCount)
     }
     #endif
 
@@ -4249,6 +4275,36 @@ private actor GRDBStore {
     }
 
     #if DEBUG
+    func qualitySQLitePageMetrics() throws -> LocalDataStore.QualitySQLitePageMetrics {
+        try dbQueue.writeWithoutTransaction { db in
+            try Self.qualitySQLitePageMetrics(in: db)
+        }
+    }
+
+    func setQualitySQLiteMaxPageCount(
+        _ maxPageCount: Int
+    ) throws -> LocalDataStore.QualitySQLitePageMetrics {
+        guard maxPageCount > 0 else {
+            throw AppError.localStore("SQLite max page count must be positive.")
+        }
+        return try dbQueue.writeWithoutTransaction { db in
+            // PRAGMA max_page_count does not accept a bound argument. The
+            // value is validated above and interpolated as an integer only.
+            try db.execute(sql: "PRAGMA max_page_count = \(maxPageCount);")
+            return try Self.qualitySQLitePageMetrics(in: db)
+        }
+    }
+
+    private static func qualitySQLitePageMetrics(
+        in db: Database
+    ) throws -> LocalDataStore.QualitySQLitePageMetrics {
+        LocalDataStore.QualitySQLitePageMetrics(
+            pageCount: try Int.fetchOne(db, sql: "PRAGMA page_count;") ?? 0,
+            pageSize: try Int.fetchOne(db, sql: "PRAGMA page_size;") ?? 0,
+            maxPageCount: try Int.fetchOne(db, sql: "PRAGMA max_page_count;") ?? 0
+        )
+    }
+
     /// Builds a single representative old store inside the App-owned quality
     /// container. The UI runner never receives the database path and never
     /// reads this store; the next normal `GRDBStore` open must run production
