@@ -301,3 +301,5 @@ Android transport Room migration 的独立边界：`PushGoDatabaseMigrationDevic
 2026-09-02 Apple 测试系统合同当前字节复验：在提交 `39aa8c6` 上运行 `python3 -m unittest discover -s scripts/tests -p 'test_*.py'`，202 项脚本/合同测试在 5.955s 内全部通过；该结果只证明入口发现、影响选择、六态收据、准备边界与 runner 约束没有回归，不将静态合同数量当作产品 UI 通过。
 
 2026-09-02 Apple 测试系统合同再验证：当前干净提交 `a9c8c32` 上重新运行 `python3 -m unittest discover -s scripts/tests -p 'test_*.py'`，202 项在 6.212s 内全部通过；这是对文档提交后的当前 runner/选择器/六态收据合同复验，不新增产品能力结论，也不把合同数量当作 UI 通过。
+
+2026-09-02 macOS focused 平台路由与 Thing 关系当前字节：首次把 macOS scope 交给 focused lane 时，旧入口错误使用 iOS scheme，在产品动作前以 `BLOCKED` 结束（结果束 `build/quality-results/ios/run-20260902-120349.xcresult`）；现已由提交 `65d8ef1` 按 scope 平台感知路由到 macOS runner，并在 clean source 上实际执行 `testThingRelationsOpenAccurateDetailsAndSurviveRelaunch` 1/1、63.635s，所有业务断言通过。原生结果仍含已登记、零重试的 QoS priority-inversion warning，故收据 `build/quality-results/macos-thing-relations-current-20260902-v3/macos-focused-summary.json` 明确为 `product_capability_status=PASSED`、`test_system_status=FLAKY`、`source_dirty=false`、`incomplete_selected_claims=[]`，issue=`apple-xctest-qos-priority-inversion`；不把该旅程写成干净系统通过，也不放宽 Thing 搜索、删除、关系详情或 relaunch Oracle。
