@@ -733,6 +733,15 @@ class QualityLaneCostContractTests(unittest.TestCase):
         self.assertIn("label CONTAINS", notification_journey)
         self.assertIn("value CONTAINS", notification_journey)
         self.assertNotIn('label == %@", title', notification_journey)
+        self.assertIn(
+            'let coldLaunchReady = element(in: context.app, identifier: "quality-runtime.ready")',
+            notification_journey,
+        )
+        self.assertLess(
+            notification_journey.index("let coldLaunchReady"),
+            notification_journey.index('identifier: "screen.message.detail"'),
+            "System-click business assertions must follow current-session identity verification.",
+        )
 
         permission_recovery = macos_source.split(
             "func testDeniedNotificationSettingsCardRecoversAfterSystemEnable",

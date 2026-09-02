@@ -414,6 +414,20 @@ final class PushGo_macOSUITests: XCTestCase {
         }
         notificationCard.click()
 
+        // A same-bundle stale macOS build can still receive the system click.
+        // Prove that the process handling it belongs to this App-owned quality
+        // session before evaluating business state; otherwise a runner identity
+        // failure would be misreported as missing persistence or bad UI data.
+        let coldLaunchReady = element(in: context.app, identifier: "quality-runtime.ready")
+        XCTAssertTrue(
+            coldLaunchReady.waitForExistence(timeout: 15),
+            "QUALITY_PRECONDITION: system notification click did not attach to the current App-owned quality session."
+        )
+        XCTAssertEqual(
+            coldLaunchReady.value as? String,
+            sessionID,
+            "QUALITY_PRECONDITION: system notification click attached to a different quality session."
+        )
         XCTAssertTrue(
             element(in: context.app, identifier: "screen.message.detail")
                 .waitForExistence(timeout: 12),
