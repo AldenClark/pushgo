@@ -276,3 +276,6 @@ Android 提交 `2fe9bb0` 的干净工作树上，`QualityMessageJourneyInstrumen
 ### 2026-09-02 Android performance probe timeout boundary
 
 提交 `05fd59f` 为顶层受控 emulator qemu 检查与独立 slow-load 负控的 ADB 调用增加默认 8 秒硬超时；负控复用调用方持有的 serial 租约，不重复加锁，避免嵌套死锁。脚本合同与全量测试 165/165 通过；本轮没有重跑已通过的 100k/Macrobenchmark 产品样本，因此不产生新的性能通过结论。该改动只限制测试系统等待时间，物理设备/真实网络性能仍未运行。
+### 2026-09-02 Android 共用 quality doctor 有界化
+
+提交 `f00ad40` 将 `quality_doctor.sh` 的设备枚举、API/qemu、电源和锁屏查询统一接入 bounded ADB；`dumpsys` 大输出先完整收取后解析，避免 Python wrapper 与提前结束管道导致假阻断。修复前真实 doctor 会误报 `device_power_query_failed`，修复后 `emulator-5554` 输出 `READY / awake_unlocked`；fake-ADB 交互、非法超时负控及全量脚本合同 166/166 均通过。该证据只证明共用准备层可执行性，不把 ready 或设备状态当作产品通过。
