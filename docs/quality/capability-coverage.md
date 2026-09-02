@@ -313,3 +313,5 @@ clean commit `f00ad40` 上，顶层 focused lane 经过 bounded `quality_doctor`
 ### 2026-09-02 Android 网关提交后同步恢复当前字节
 
 在干净提交 `6e30cb9` 上，专用 `Medium_Phone / emulator-5554` 精确执行 `QualitySettingsJourneyInstrumentedTest#gatewaySyncFailureReportsCommittedGatewayAndPendingRecovery` 1/1；Gradle 原生执行与选择器均匹配，零 failure/error/skip，收据 `build/quality-results/android-gateway-sync-current-20260902/android-focused-summary.json` 为 `product_capability_status=PASSED`、`test_system_status=PASSED`、`source_dirty=false`、`incomplete_selected_claims=[]`。真实 Compose 旅程核对提交后新网关保持权威、同步待恢复状态可见、普通重启恢复并完成后续频道业务；证据仅限受控 Android emulator，不外推真实 Provider、物理设备或 OEM。
+
+2026-09-02 macOS Thing 关系旅程复核：focused lane 在干净源码上精确执行 1/1，搜索、删除、关系详情和普通重开均以真实业务终点通过；结果束含已登记的 XCTest QoS priority-inversion warning，严格结果解释为产品 `PASSED`、测试系统 `FAILED_TEST_SYSTEM`/`FLAKY`，不作为干净 Gate 通过。warning 仍限于搜索后 XCTest Accessibility 轮询，issue `apple-xctest-qos-priority-inversion` 保持零重试；不削弱搜索结果、关系或持久化断言。
