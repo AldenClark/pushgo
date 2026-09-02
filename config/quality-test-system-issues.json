@@ -57,6 +57,22 @@
       "exit_criteria": "Identify and remove the XCTest/main-thread call path, then observe targeted macOS UI journeys without the native xcresult warning before resolving the issue.",
       "evidence": ["build/quality-results/macos-search-recovery-current/run-20260901-090206.xcresult", "build/quality-results/macos-search-warning-remediation/run-20260901-092352.xcresult", "build/quality-results/macos-channel-warning-remediation/run-20260901-092433.xcresult"],
       "resolved_on": "2026-09-01"
+    },
+    {
+      "id": "apple-xctest-qos-priority-inversion",
+      "kind": "flake",
+      "status": "active",
+      "owner": "apple-quality-runtime",
+      "opened_on": "2026-09-02",
+      "last_seen_on": "2026-09-02",
+      "expires_on": "2026-09-16",
+      "scope": ["macOS Thing relationship/search UI after a real product journey has started"],
+      "signatures": ["Thread running at User-interactive quality-of-service class waiting on a lower QoS thread running at Default quality-of-service class\\. Investigate ways to avoid priority inversions"],
+      "allowed_retries": 0,
+      "quarantined": false,
+      "rationale": "The same native QoS warning was reproduced in independent macOS Thing relationship result bundles after all business assertions passed, while representative Message search and deletion controls stayed warning-free. The current evidence does not prove a product data or UI failure, so the runner must preserve product PASSED but surface test-system FLAKY with an expiring issue ID instead of treating it as an unknown warning or silently accepting it.",
+      "exit_criteria": "Identify and remove the lower-QoS wait or obtain an upstream Xcode/runtime fix, then record two independent clean native Thing relationship runs with the same real search, relation, deletion, and relaunch oracles before resolving the issue. No product retry or assertion waiver is allowed.",
+      "evidence": ["build/quality-results/macos-thing-search-settled-current-20260902-r6/run-20260902-071825.xcresult", "build/quality-results/macos-thing-search-settled-current-20260902-r8/run-20260902-072906.xcresult", "build/quality-results/macos-thing-search-unavailable-detail-fix-20260902-r13/run-20260902-101759.xcresult", "build/quality-results/macos-ui/run-20260902-120603.xcresult"]
     }
   ]
 }

@@ -86,6 +86,21 @@ class QualityTestSystemIssueTests(unittest.TestCase):
             [issue["id"] for issue in precondition],
         )
 
+    def test_qos_priority_inversion_has_expiring_owned_attribution(self):
+        matches = ISSUES.active_matches(
+            self.registry,
+            "[Internal] Thread running at User-interactive quality-of-service class "
+            "waiting on a lower QoS thread running at Default quality-of-service class. "
+            "Investigate ways to avoid priority inversions",
+        )
+
+        self.assertEqual(
+            ["apple-xctest-qos-priority-inversion"],
+            [issue["id"] for issue in matches],
+        )
+        self.assertEqual(0, matches[0]["allowed_retries"])
+        self.assertEqual("active", matches[0]["status"])
+
     def test_runner_signature_after_product_test_started_is_not_classified(self):
         with tempfile.TemporaryDirectory() as directory:
             log = Path(directory) / "mixed.log"

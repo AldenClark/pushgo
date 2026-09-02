@@ -419,6 +419,16 @@ final class PushGo_iOSUITests: XCTestCase {{
         self.assertIn('"$repo_root/scripts/run_watchos_ui_tests.sh"', orchestrator)
         self.assertIn("changed_tests_lane_requires_resolved_impact_scopes", orchestrator)
 
+    def test_focused_lane_routes_scope_to_matching_apple_runner(self):
+        orchestrator = (REPO / "scripts/quality_test.sh").read_text()
+
+        self.assertIn('focused_lane_requires_single_platform', orchestrator)
+        self.assertIn('focused_lane_invalid_apple_scope', orchestrator)
+        self.assertIn('selected_claims+=("focused macOS UI: $focused_scopes")', orchestrator)
+        self.assertIn('MACOS_SCOPE_SET=default', orchestrator)
+        self.assertIn('"$repo_root/scripts/run_macos_ui_tests.sh"', orchestrator)
+        self.assertIn('"$repo_root/scripts/run_ios_ui_tests.sh"', orchestrator)
+
     def test_message_ui_selects_real_pr_evidence(self):
         plan = self.plan("Apps/PushGo-iOS/UI/Screens/MessageListScreen.swift")
 

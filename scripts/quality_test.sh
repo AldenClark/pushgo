@@ -677,9 +677,58 @@ case "$lane" in
       echo "reason=focused_lane_requires_TEST_SCOPES"
       exit 2
     }
-    selected_claims+=("focused iOS UI: $focused_scopes")
-    QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
-    claims+=("focused iOS UI: $focused_scopes")
+    focused_scope_platform=""
+    focused_scope_item=""
+    IFS=',' read -r -a focused_scope_items <<< "$focused_scopes"
+    for focused_scope_item in "${focused_scope_items[@]}"; do
+      [[ -n "$focused_scope_item" ]] || {
+        echo "status=BLOCKED"
+        echo "reason=focused_lane_contains_empty_scope"
+        exit 2
+      }
+      case "$focused_scope_item" in
+        PushGo-iOSUITests/*)
+          candidate_focused_platform="ios"
+          ;;
+        PushGo-macOSUITests/*)
+          candidate_focused_platform="macos"
+          ;;
+        PushGo-watchOSUITests/*)
+          echo "status=BLOCKED"
+          echo "reason=focused_lane_watchos_requires_watch_runner"
+          exit 2
+          ;;
+        *)
+          echo "status=BLOCKED"
+          echo "reason=focused_lane_invalid_apple_scope:$focused_scope_item"
+          exit 2
+          ;;
+      esac
+      if [[ -n "$focused_scope_platform" && "$focused_scope_platform" != "$candidate_focused_platform" ]]; then
+        echo "status=BLOCKED"
+        echo "reason=focused_lane_requires_single_platform"
+        exit 2
+      fi
+      focused_scope_platform="$candidate_focused_platform"
+    done
+    case "$focused_scope_platform" in
+      ios)
+        selected_claims+=("focused iOS UI: $focused_scopes")
+        QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
+        claims+=("focused iOS UI: $focused_scopes")
+        ;;
+      macos)
+        selected_claims+=("focused macOS UI: $focused_scopes")
+        MACOS_SCOPE_SET=default \
+          QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_macos_ui_tests.sh"
+        claims+=("focused macOS UI: $focused_scopes")
+        ;;
+      *)
+        echo "status=BLOCKED"
+        echo "reason=focused_lane_missing_platform"
+        exit 2
+        ;;
+    esac
     ;;
   performance)
     run_performance
