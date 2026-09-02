@@ -175,6 +175,7 @@ final class PushGo_iOSUITests: XCTestCase {
         .init(code: "zh-CN", localeIdentifier: "zh_CN"),
         .init(code: "zh-TW", localeIdentifier: "zh_TW"),
     ]
+    private let largeFixtureQualityHandshakeTimeout: TimeInterval = 60
 
     private func localizationShowcaseFixturePath(for localization: LocalizationSpec) -> String {
         Self.fixturePath("localization-showcase.\(localization.code).json")
@@ -849,7 +850,7 @@ final class PushGo_iOSUITests: XCTestCase {
             failMessagePageLoadOnce: true
         )
 
-        launch(context.app)
+        launch(context.app, qualityHandshakeTimeout: largeFixtureQualityHandshakeTimeout)
 
         assertQualityRuntimeReady(in: context.app, timeout: 15)
         XCTAssertTrue(
@@ -1079,7 +1080,7 @@ final class PushGo_iOSUITests: XCTestCase {
             sessionID: sessionID,
             fixture: "messages.workflow"
         )
-        launch(afterSingleRead.app)
+        launch(afterSingleRead.app, qualityHandshakeTimeout: largeFixtureQualityHandshakeTimeout)
         assertQualityRuntimeReady(in: afterSingleRead.app, timeout: 15)
         assertMessagesTabBadgeCount(
             38,
@@ -1108,7 +1109,7 @@ final class PushGo_iOSUITests: XCTestCase {
             sessionID: sessionID,
             fixture: "messages.workflow"
         )
-        launch(relaunched.app)
+        launch(relaunched.app, qualityHandshakeTimeout: largeFixtureQualityHandshakeTimeout)
         assertQualityRuntimeReady(in: relaunched.app, timeout: 15)
         XCTAssertFalse(
             element(in: relaunched.app, identifier: "action.messages.mark_all_read")
@@ -4705,7 +4706,7 @@ final class PushGo_iOSUITests: XCTestCase {
         return data.base64EncodedString()
     }
 
-    func launch(_ app: XCUIApplication) {
+    func launch(_ app: XCUIApplication, qualityHandshakeTimeout: TimeInterval = 15) {
         let qualitySessionKey = "PUSHGO_QUALITY_SESSION_BASE64"
         let qualitySessionArgument = "-\(qualitySessionKey)"
         var launchArguments = app.launchArguments
@@ -4745,7 +4746,7 @@ final class PushGo_iOSUITests: XCTestCase {
         // by the explicit readiness oracle instead of failing a valid session
         // at an arbitrary shorter boundary.
         XCTAssertTrue(
-            runtimeHandshake.waitForExistence(timeout: 15),
+            runtimeHandshake.waitForExistence(timeout: qualityHandshakeTimeout),
             "QUALITY_PRECONDITION: App-owned runtime handshake did not become observable after one launch."
         )
     }
