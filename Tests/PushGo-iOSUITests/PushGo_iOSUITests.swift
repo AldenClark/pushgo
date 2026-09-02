@@ -240,6 +240,14 @@ final class PushGo_iOSUITests: XCTestCase {
         openSettingsFromChannels(in: context.app)
         assertElementExists("screen.settings", in: context.app, timeout: 5)
         leaveSettings(in: context.app)
+        // Settings is presented from Channels, so the real back action returns
+        // to Channels first.  Continue through the production Messages tab
+        // before asserting the empty-state business endpoint.
+        tapWhenHittable(
+            element(in: context.app, identifier: "tab.messages"),
+            timeout: 8,
+            message: "Messages must remain reachable after returning from Settings"
+        )
         assertElementExists("screen.messages.list", in: context.app, timeout: 5)
         assertElementExists("state.messages.empty", in: context.app, timeout: 5)
     }
