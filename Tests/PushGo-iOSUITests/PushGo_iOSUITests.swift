@@ -232,6 +232,16 @@ final class PushGo_iOSUITests: XCTestCase {
         )
         assertElementExists("screen.messages.list", in: context.app, timeout: 5)
         assertElementExists("state.messages.empty", in: context.app, timeout: 5)
+
+        // A rendered empty marker is only a preparation fact.  Exercise the
+        // real Channels -> Settings -> Messages path and require the same
+        // functional empty state after returning, so a frozen or one-way
+        // launch cannot satisfy this journey.
+        openSettingsFromChannels(in: context.app)
+        assertElementExists("screen.settings", in: context.app, timeout: 5)
+        leaveSettings(in: context.app)
+        assertElementExists("screen.messages.list", in: context.app, timeout: 5)
+        assertElementExists("state.messages.empty", in: context.app, timeout: 5)
     }
 
     func testFatalStoreInitializationStopsReadWriteAndRecoversAfterRelaunch() {
