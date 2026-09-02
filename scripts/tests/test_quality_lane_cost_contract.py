@@ -212,6 +212,18 @@ class QualityLaneCostContractTests(unittest.TestCase):
         self.assertEqual(2, quality_test.count("testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen"))
         self.assertEqual(1, mac_runner.count("testSidebarNavigationCoversPrimaryScreens"))
         self.assertIn('messagesTab.value as? String,\n            "99+"', ios_test)
+        for method_name in (
+            "testSimplifiedChineseAtAccessibility5CompletesMessageDetailAndChannelCreation",
+            "testQualityPrimaryNavigationUsesRealControlsAndReachesEachProductScreen",
+        ):
+            with self.subTest(method=method_name):
+                method = ios_test.split(f"func {method_name}()", 1)[1].split(
+                    "\n    func ", 1
+                )[0]
+                self.assertIn(
+                    'predicate: NSPredicate(format: "exists == true AND hittable == true")',
+                    method,
+                )
         self.assertIn('unreadBadge.value as? String,\n            "99+"', mac_test)
 
     def test_macos_large_window_reuses_existing_primary_navigation_journey(self) -> None:

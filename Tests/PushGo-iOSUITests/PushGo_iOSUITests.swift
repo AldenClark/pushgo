@@ -800,8 +800,13 @@ final class PushGo_iOSUITests: XCTestCase {
         let tabBar = context.app.tabBars.firstMatch
         XCTAssertTrue(tabBar.waitForExistence(timeout: 8), "The production tab bar must be visible.")
         let messagesTab = messagesTab(in: context.app)
-        XCTAssertTrue(
-            messagesTab.waitForExistence(timeout: 8) && messagesTab.isHittable,
+        let messagesTabActionable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND hittable == true"),
+            object: messagesTab
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [messagesTabActionable], timeout: 8),
+            .completed,
             "The real Messages tab title must remain visible and actionable with an unread badge."
         )
         XCTAssertEqual(
@@ -1683,8 +1688,13 @@ final class PushGo_iOSUITests: XCTestCase {
         let tabs = context.app.tabBars.buttons
         XCTAssertGreaterThanOrEqual(tabs.count, 4, "The four primary product destinations must be reachable")
         let messagesTab = messagesTab(in: context.app)
-        XCTAssertTrue(
-            messagesTab.waitForExistence(timeout: 8) && messagesTab.isHittable,
+        let messagesTabActionable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND hittable == true"),
+            object: messagesTab
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [messagesTabActionable], timeout: 8),
+            .completed,
             "The real Messages tab must remain readable and actionable with a high unread badge."
         )
         XCTAssertEqual(messagesTab.label, "Messages")
