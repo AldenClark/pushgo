@@ -244,3 +244,7 @@ Android 提交 `2fe9bb0` 的干净工作树上，`QualityMessageJourneyInstrumen
 ### 2026-09-02 macOS 侧边栏未读徽标当前字节
 
 在干净 Apple 提交 `afc30b8` 上，`testUnreadBadgeAndChannelLifecyclePersistThroughRealUserActions` 由专用 macOS runner 实际执行 1/1（109.026 秒），failure/error/skip=0 且无 runtime warning；结果束为 `build/quality-results/macos-sidebar-badge-current-20260902/run-20260902-083202.xcresult`，严格校验 `verify_apple_test_execution.py --expected-test-count 1 --reject-runtime-warnings` 返回 `status=EXECUTED`。真实入口播种未读状态后，旅程同时核对生产侧边栏的“消息”标题与未读数字均可读、互不覆盖，随后完成准确消息打开/已读、频道生命周期动作及普通 relaunch 后状态。该证据只关闭受控 macOS 的代表性动态导航可读性子 claim，不外推大字体/物理无障碍、其他语言、外部通知、Release 设备或整体 Gate。
+
+### 2026-09-02 macOS 页面显隐当前字节
+
+在干净 Apple 提交 `afc30b8` 上，`testSettingsPageVisibilityUsesRealControlsAndPersistsAcrossRelaunch` 由专用 macOS runner 实际执行 1/1（99.645 秒），failure/error/skip=0 且无 runtime warning；结果束为 `build/quality-results/macos-page-visibility-current-20260902/run-20260902-083752.xcresult`，严格校验 `verify_apple_test_execution.py --expected-test-count 1 --reject-runtime-warnings` 返回 `status=EXECUTED`。真实 Settings 控件隐藏 Messages、Events、Things 后，Channels 仍可作为有效兜底；普通 relaunch 后隐藏状态保持，恢复 Messages 后从真实入口打开准确 canonical 详情，并完成文档浏览器交接与返回。该证据只刷新受控 macOS 的 P0 页面显隐/导航子 claim，不外推物理无障碍、外部通知、Release 设备或整体 Gate。
