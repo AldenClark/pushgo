@@ -240,3 +240,7 @@ Android 提交 `2fe9bb0` 的干净工作树上，`QualityMessageJourneyInstrumen
 ### 2026-09-02 macOS 消息详情真实浏览器交接
 
 提交 `d30c41d` 的干净工作树上，`testQualityStandardMessagesShowAccurateContentAndSurviveRelaunch` 在本机 macOS 专用 runner fresh 执行 1/1，XCTest 68.925 秒、failure/error/skip=0；结果束 `build/quality-results/macos-standard-open-url-current-20260902-r2/run-20260902-075403.xcresult` 经 `verify_apple_test_execution.py --expected-test-count 1 --reject-runtime-warnings` 校验为 `status=EXECUTED`。旅程从生产 `action.message.open_link` Link 进入默认浏览器，核对地址栏解析出的 `https://pushgo.dev/quality-message`（scheme、host、path 均准确），再激活 PushGo 并复核原消息详情正文；新增的 App-owned accessibility identifier 只用于稳定定位真实入口，没有替代系统交接或放宽 Oracle。该证据仅关闭受控 macOS 本机的浏览器交接/返回 claim，不外推其他浏览器、网络内容、物理设备或整个平台 Gate。
+
+### 2026-09-02 macOS 侧边栏未读徽标当前字节
+
+在干净 Apple 提交 `afc30b8` 上，`testUnreadBadgeAndChannelLifecyclePersistThroughRealUserActions` 由专用 macOS runner 实际执行 1/1（109.026 秒），failure/error/skip=0 且无 runtime warning；结果束为 `build/quality-results/macos-sidebar-badge-current-20260902/run-20260902-083202.xcresult`，严格校验 `verify_apple_test_execution.py --expected-test-count 1 --reject-runtime-warnings` 返回 `status=EXECUTED`。真实入口播种未读状态后，旅程同时核对生产侧边栏的“消息”标题与未读数字均可读、互不覆盖，随后完成准确消息打开/已读、频道生命周期动作及普通 relaunch 后状态。该证据只关闭受控 macOS 的代表性动态导航可读性子 claim，不外推大字体/物理无障碍、其他语言、外部通知、Release 设备或整体 Gate。
