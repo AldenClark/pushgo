@@ -648,7 +648,8 @@ class QualityLaneCostContractTests(unittest.TestCase):
 
         self.assertIn('"pushgo.dev/guides/getting-started/"', ios_journey)
         self.assertIn('"https://pushgo.dev/guides/getting-started/"', ios_journey)
-        self.assertIn("safari.textFields.matching", ios_journey)
+        self.assertIn("resetSafariBeforeExternalRoute()", ios_journey)
+        self.assertIn("assertSafariDestination(", ios_journey)
         self.assertIn(
             "exact Getting Started destination, not merely any pushgo.dev page",
             ios_journey,
@@ -1050,9 +1051,12 @@ class QualityLaneCostContractTests(unittest.TestCase):
         self.assertIn('"quality-fixture"', macos_standard_body)
         self.assertIn('"https://pushgo.dev/quality-message"', macos_standard_body)
         self.assertIn('identifier: "action.message.open_link"', ios_standard_body)
-        self.assertIn('bundleIdentifier: "com.apple.mobilesafari"', ios_standard_body)
+        self.assertIn('bundleIdentifier: "com.apple.mobilesafari"', ios_source)
+        self.assertIn("private func assertSafariDestination(", ios_source)
         self.assertIn('"pushgo.dev/quality-message"', ios_standard_body)
         self.assertIn('assertElementExists("sheet.message.detail"', ios_standard_body)
+        self.assertIn("resetSafariBeforeExternalRoute()", ios_standard_body)
+        self.assertIn("assertSafariDestination(", ios_standard_body)
         self.assertIn('rawPayload["metadata"] = ["environment": "quality-fixture"]', runtime)
         self.assertIn('message["url"] = "https://pushgo.dev/quality-message"', runtime)
 
