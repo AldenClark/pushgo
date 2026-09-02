@@ -273,3 +273,6 @@ Android 提交 `2fe9bb0` 的干净工作树上，`QualityMessageJourneyInstrumen
 ### 2026-09-02 Android 启动可靠性 runner 隔离
 
 提交 `3bad981` 为 `run_android_startup_reliability.sh` 的安装、Instrumentation、force-stop 和日志采集统一接入 serial-scoped 租约与默认 8 秒 ADB 超时；同 serial 忙碌时在安装前明确 `BLOCKED`，退出时释放租约。clean commit 的 1 次校准在 `Medium_Phone / emulator-5554` 真实执行 `empty.clean` 功能空态 1/1（`elapsed_ms=1393`），汇总 `../pushgo-android/build/quality-results/android-startup-reliability-lock-regression-clean-20260902/20260902-094721/summary.json` 为 product/test-system=`PASSED/PASSED`、无 issue ID。该校准只证明 runner 不会无限等待或并发污染设备，不把 1 次运行冒充 50/50 长样本或物理性能证据。
+### 2026-09-02 Android performance probe timeout boundary
+
+提交 `05fd59f` 为顶层受控 emulator qemu 检查与独立 slow-load 负控的 ADB 调用增加默认 8 秒硬超时；负控复用调用方持有的 serial 租约，不重复加锁，避免嵌套死锁。脚本合同与全量测试 165/165 通过；本轮没有重跑已通过的 100k/Macrobenchmark 产品样本，因此不产生新的性能通过结论。该改动只限制测试系统等待时间，物理设备/真实网络性能仍未运行。
