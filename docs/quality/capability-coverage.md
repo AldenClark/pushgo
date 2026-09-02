@@ -2,6 +2,8 @@
 
 此索引防遗漏，不计算覆盖分，不是测试 Oracle。入口或类型存在不能让能力通过；最终判定以真实用户结果和必要数据/系统终点为准。
 
+- 2026-09-03 iOS 未读导航命中点复核：`c3c8eb6` 的最小影响计划准确选择主导航与标准消息两个直接受影响旅程；首次 2-scope 运行保留了高未读入口一次 `VisiblePoint=(-1,-1)` 的瞬时 Simulator AX 命中失败，系统元素本身仍有真实 `Messages` 标题、`99+` 值和 95×54 frame。`7642d75` 对 accessibility5 与主导航加入有界 `exists && hittable` 等待，不改变真实标题/未读值/宽度/像素可读性/详情和重开断言。当前干净字节主导航执行 1/1，结果束 `build/quality-results/ios/run-1-20260903-073636.xcresult`，收据 `build/quality-results/ios-primary-stable-hit-regression-20260903/apple-focused-summary.json` 双 `PASSED`、`source_dirty=false`、选择/执行一致。该证据只刷新受控 iOS 未读主导航子 claim；冷诊断后续 Safari 私有 AX 失败仍是测试系统边界，不外推到产品或完整平台。
+
 - 2026-09-03 Release 隔离车道：Apple `release-isolation` 在隔离 DerivedData 中构建 iOS/watchOS Release 并核对产物 bundle、Release 配置及 Quality Runtime 编译期 guard；Android 同车道构建 Release APK 并执行 profile、fixture-provider、BuildConfig 隔离合同。提交 Apple `3762111`、Android `d6dbdac` 后的干净收据为 `build/quality-results/apple-release-isolation-lane-current-20260903/apple-release-isolation-summary.json` 与 `../pushgo-android/build/quality-results/android-release-isolation-lane-current-20260903/android-release-isolation-summary.json`，均 `source_dirty=false`。当前证据仅覆盖测试接入与产物隔离，不能替代真实 UI/功能、Provider、签名分发、真机/OEM、动态 Release 启动或整体平台完成。
 
 - 2026-09-03 iOS 外部浏览器交接：首次 warm Safari 快照失败经专用 Simulator 定向终止区分为测试系统状态问题；`840ba47` 复用统一的 Safari 停止与精确 URL 值断言。干净主导航结果束 `build/quality-results/ios/run-1-20260903-065820.xcresult` 执行 1/1，收据 `build/quality-results/ios-safari-handoff-helper-clean-20260903/apple-focused-summary.json` 为双 `PASSED`、`source_dirty=false`。这只更新受控 iOS 消息/设置外链交接子 claim，不以浏览器前台、页面标题或控件存在替代真实 URL 终点，也不外推 Provider、真机或完整平台覆盖。
