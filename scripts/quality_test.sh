@@ -381,6 +381,20 @@ PY
           QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_macos_ui_tests.sh"
         claims+=("macOS failed Message search recovers to the requested canonical detail")
         ;;
+      apple-ios-message-load-recovery)
+        selected_claims+=("iOS initial Message-load failure recovers to the requested canonical detail")
+        TEST_SCOPES="PushGo-iOSUITests/PushGo_iOSUITests/testMessageLoadFailureShowsRetryAndRecoversToRealDataState" \
+          MAX_RETRIES=0 \
+          QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_ios_ui_tests.sh"
+        claims+=("iOS initial Message-load failure recovers to the requested canonical detail")
+        ;;
+      apple-macos-message-load-recovery)
+        selected_claims+=("macOS initial Message-load failure recovers to the requested canonical detail")
+        TEST_SCOPES="PushGo-macOSUITests/PushGo_macOSUITests/testMessageLoadFailureRetryRecoversToFunctionalState" \
+          MAX_RETRIES=0 \
+          QUALITY_RUNNER_STATUS_FILE="$runner_status_file" "$repo_root/scripts/run_macos_ui_tests.sh"
+        claims+=("macOS initial Message-load failure recovers to the requested canonical detail")
+        ;;
       apple-ios-message-delete-undo)
         selected_claims+=("iOS Message deletion Undo restores the exact canonical object after relaunch")
         TEST_SCOPES="PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch" \

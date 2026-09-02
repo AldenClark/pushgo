@@ -57,6 +57,26 @@ class QualityLaneCostContractTests(unittest.TestCase):
                 self.assertIn("MAX_RETRIES=0", body)
                 self.assertNotIn("nightly_negative_ui_scopes", body)
 
+    def test_initial_message_load_recovery_checks_run_only_the_exact_user_journeys(self) -> None:
+        runner = (REPO / "scripts/quality_test.sh").read_text()
+
+        checks = {
+            "apple-ios-message-load-recovery": (
+                "PushGo-iOSUITests/PushGo_iOSUITests/"
+                "testMessageLoadFailureShowsRetryAndRecoversToRealDataState"
+            ),
+            "apple-macos-message-load-recovery": (
+                "PushGo-macOSUITests/PushGo_macOSUITests/"
+                "testMessageLoadFailureRetryRecoversToFunctionalState"
+            ),
+        }
+        for check, scope in checks.items():
+            with self.subTest(check=check):
+                body = runner.split(f"      {check})", 1)[1].split("        ;;", 1)[0]
+                self.assertIn(scope, body)
+                self.assertIn("MAX_RETRIES=0", body)
+                self.assertNotIn("nightly_negative_ui_scopes", body)
+
     def test_ios_performance_lane_persists_user_outcome_metrics_from_xcresult(self) -> None:
         runner = (REPO / "scripts/quality_test.sh").read_text()
         extractor = (REPO / "scripts/extract_ios_performance_evidence.py").read_text()

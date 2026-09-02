@@ -2263,10 +2263,10 @@ final class PushGo_macOSUITests: XCTestCase {
         let sessionID = "macos-retry-\(UUID().uuidString.lowercased())"
         let context = configuredQualityApp(
             sessionID: sessionID,
-            fixture: "empty.clean",
+            fixture: "messages.standard",
             failMessageLoad: true
         )
-        launch(context)
+        launchQuality(context, sessionID: sessionID)
 
         XCTAssertTrue(
             element(in: context.app, identifier: "state.messages.load_failed")
@@ -2279,12 +2279,28 @@ final class PushGo_macOSUITests: XCTestCase {
             "Retry must be a usable control, not a diagnostic marker."
         )
         retry.click()
+        let restoredRow = messageRow(containing: "P2 Split Seed Message", in: context.app)
         XCTAssertTrue(
-            element(in: context.app, identifier: "state.messages.empty")
-                .waitForExistence(timeout: 5),
-            "Retry did not recover to the accurate functional empty state."
+            restoredRow.waitForExistence(timeout: 8),
+            "Retry must restore the canonical non-empty Message result, not only clear the error state."
+        )
+        XCTAssertEqual(
+            context.app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "P2 Split Seed Message")).count,
+            1,
+            "Retry must restore exactly one canonical target row."
         )
         XCTAssertFalse(element(in: context.app, identifier: "state.messages.load_failed").exists)
+        XCTAssertFalse(element(in: context.app, identifier: "state.messages.empty").exists)
+        XCTAssertTrue(
+            (restoredRow.value as? String)?.contains("Seeded from fixture.seed_messages for UI validation.") == true,
+            "Retry must restore the canonical row body, not just its title."
+        )
+        restoredRow.click()
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 5),
+            "Retry must open the restored canonical Message and expose its exact body."
+        )
     }
 
     @MainActor

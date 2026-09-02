@@ -437,7 +437,26 @@ final class PushGo_iOSUITests: XCTestCase {{
         self.assertIn("messages", plan["impacted_capabilities"])
         self.assertIn("iOS accurate content/search/delete/relaunch UI journeys", plan["minimum_evidence"])
         self.assertIn("apple-ios-message-unavailable-route", plan["required_checks"])
+        self.assertIn("apple-ios-message-load-recovery", plan["required_checks"])
+        self.assertIn("apple-macos-message-load-recovery", plan["required_checks"])
         self.assertTrue(plan["manual_impact_review_required"])
+
+    def test_message_load_owner_selects_exact_cross_platform_retry_oracles(self):
+        plan = self.plan("Shared/UI/MessageListViewModel.swift")
+
+        self.assertEqual("READY", plan["plan_status"])
+        self.assertEqual("pr", plan["recommended_lane"])
+        self.assertEqual(
+            {
+                "apple-ios-message-load-recovery",
+                "apple-macos-message-load-recovery",
+            },
+            set(plan["required_checks"]),
+        )
+        self.assertIn(
+            "iOS and macOS initial Message-load failure shows page-owned Retry; Retry reaches one exact canonical Message and matching detail rather than an empty state",
+            plan["minimum_evidence"],
+        )
 
     def test_search_ui_selects_exact_cross_platform_recovery_oracles(self):
         plan = self.plan("Apps/PushGo-iOS/UI/Screens/MessageSearchScreen.swift")

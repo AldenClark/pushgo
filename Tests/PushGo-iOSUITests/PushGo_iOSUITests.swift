@@ -1601,13 +1601,19 @@ final class PushGo_iOSUITests: XCTestCase {
 
     func testMessageLoadFailureShowsRetryAndRecoversToRealDataState() {
         let context = configuredLaunchContext()
+        let sessionID = "ios-retry-\(UUID().uuidString.lowercased())"
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
-            sessionID: "ios-retry-\(UUID().uuidString.lowercased())",
-            fixture: "empty.clean",
+            sessionID: sessionID,
+            fixture: "messages.standard",
             failMessageLoad: true
         )
 
         launch(context.app)
+        assertQualityRuntimeReady(
+            in: context.app,
+            timeout: 15,
+            expectedSessionID: sessionID
+        )
 
         assertElementExists("state.messages.load_failed", in: context.app, timeout: 5)
         let retryCandidates = context.app.descendants(matching: .any)
@@ -1619,8 +1625,26 @@ final class PushGo_iOSUITests: XCTestCase {
             "Retry must expose at least one visible, hittable production interaction"
         )
         retry?.tap()
-        assertElementExists("state.messages.empty", in: context.app, timeout: 5)
+        let targetTitle = context.app.staticTexts["P2 Split Seed Message"]
+        XCTAssertTrue(
+            targetTitle.waitForExistence(timeout: 8),
+            "Retry must restore the canonical non-empty Message result, not only clear the error state."
+        )
+        XCTAssertEqual(
+            context.app.staticTexts.matching(
+                NSPredicate(format: "label == %@", "P2 Split Seed Message")
+            ).count,
+            1,
+            "Retry must restore exactly one canonical target row."
+        )
         XCTAssertFalse(element(in: context.app, identifier: "state.messages.load_failed").exists)
+        XCTAssertFalse(element(in: context.app, identifier: "state.messages.empty").exists)
+        targetTitle.tap()
+        XCTAssertTrue(
+            context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
+                .waitForExistence(timeout: 5),
+            "Retry must open the restored canonical Message and expose its exact body."
+        )
     }
 
     func legacyDiagnosticAutomationRequestCanOpenChannelsScreen() {
@@ -5277,10 +5301,21 @@ final class PushGo_iOSUITests: XCTestCase {
     func assertQualityRuntimeReady(
         in app: XCUIApplication,
         timeout: TimeInterval,
+        expectedSessionID: String? = nil,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        if element(in: app, identifier: "quality-runtime.ready").waitForExistence(timeout: timeout) {
+        let ready = element(in: app, identifier: "quality-runtime.ready")
+        if ready.waitForExistence(timeout: timeout) {
+            if let expectedSessionID {
+                XCTAssertEqual(
+                    ready.value as? String,
+                    expectedSessionID,
+                    "QUALITY_PRECONDITION: App-owned quality session identity did not match the requested session.",
+                    file: file,
+                    line: line
+                )
+            }
             return
         }
         let observedStatus = [

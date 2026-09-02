@@ -167,6 +167,16 @@
       "escalation_reasons": ["Search presentation and query-owner changes can otherwise ship a plausible empty or stale list while the user cannot recover to the requested canonical message."]
     },
     {
+      "id": "message-list-load-recovery-ui",
+      "paths": ["Shared/UI/MessageListViewModel.swift", "Apps/*/UI/Screens/MessageListScreen.swift"],
+      "capabilities": ["messages", "message-detail"],
+      "minimum_evidence": ["iOS and macOS initial Message-load failure shows page-owned Retry; Retry reaches one exact canonical Message and matching detail rather than an empty state"],
+      "required_checks": ["apple-ios-message-load-recovery", "apple-macos-message-load-recovery"],
+      "lane": "pr",
+      "known_evidence_gaps": ["This focused recovery path does not claim pagination, provider-refresh, search, real external delivery, or physical-device behavior."],
+      "escalation_reasons": ["Message load/error/retry ownership can otherwise clear a visible failure while silently dropping the canonical rows the user opened the app to read."]
+    },
+    {
       "id": "message-deletion-lifecycle",
       "paths": ["Shared/Application/PendingLocalDeletionController.swift", "Shared/UI/PendingLocalDeletionBar.swift"],
       "capabilities": ["messages", "message-detail", "delete-undo"],
