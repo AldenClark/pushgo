@@ -305,3 +305,7 @@ clean commit `f00ad40` 上，顶层 focused lane 经过 bounded `quality_doctor`
 ### 2026-09-02 Apple iOS 网关与频道错误归属当前字节复验
 
 在干净提交 `640014f` 上，专用 `PushGo Quality iPhone`（UDID `51A91D22-BF62-4D63-8AA2-B00E6F513F8B`）精确执行两条 P0/P1 旅程 2/2（总计 105.971s），零 failure/error/skip/runtime warning；结果束为 `build/quality-results/ios/run-1-20260902-114406.xcresult`，严格 verifier `--expected-test-count 2 --reject-runtime-warnings` 返回 `status=EXECUTED`。`testChannelRemoteRejectionStaysInSheetAndRetryPersists` 证明远端拒绝只显示在频道 Sheet，宿主页面无同一错误，重试后形成准确频道并可重开；`testSettingsServerRejectsInvalidAndUnregisteredCandidatesWithoutLeakingSheetError` 证明非法/未注册网关候选不会覆盖旧配置，取消后宿主无错误泄漏。收据 `build/quality-results/apple-focused-summary.json` 为 `product_capability_status=PASSED`、`test_system_status=PASSED`、`source_dirty=false`、`incomplete_selected_claims=[]`。该证据只覆盖受控 iOS Simulator 的真实错误归属与网关保护，不外推公网 Gateway、物理设备或其他平台。
+
+### 2026-09-02 Apple iOS 网关提交后同步恢复当前字节
+
+在干净提交 `dd7e6ca` 上复用已验证的 iOS UI 构建产物，专用 `PushGo Quality iPhone` 精确执行 `testSettingsGatewaySyncFailureReportsCommittedGatewayAndPendingRecovery` 1/1（65.726s），零 failure/error/skip/runtime warning；结果束为 `build/quality-results/ios/run-1-20260902-115316.xcresult`，严格 verifier `--expected-test-count 1 --reject-runtime-warnings` 返回 `status=EXECUTED`。真实旅程完成候选提交→一次同步失败→待恢复反馈→普通重开恢复→新频道业务动作，并核对新网关在整个恢复过程中保持权威。收据 `build/quality-results/apple-ios-gateway-sync-current-20260902/apple-focused-summary.json` 为 `product_capability_status=PASSED`、`test_system_status=PASSED`、`source_dirty=false`、`incomplete_selected_claims=[]`。证据仅覆盖受控 iOS Simulator，不外推公网 Gateway、物理设备或其他平台。
