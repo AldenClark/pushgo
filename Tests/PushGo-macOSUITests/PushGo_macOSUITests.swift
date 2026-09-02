@@ -153,18 +153,11 @@ final class PushGo_macOSUITests: XCTestCase {
     private func closeProblemReporter(waitForDelayedAppearance: Bool) throws {
         // macOS has used both the dedicated Problem Reporter process and
         // UserNotificationCenter to own the "app quit unexpectedly" dialog.
-        // Treat either host as a blocking crash surface; checking only the legacy
-        // bundle identifier leaves a real dialog covering the next journey.
-        let crashDialogHostBundleIdentifiers = [
-            "com.apple.ProblemReporter",
-            "com.apple.UserNotificationCenter",
-        ]
+        // UserNotificationCenter is also a long-lived system daemon, so its
+        // process existence alone is not evidence of a visible blocking dialog.
         let deadline = Date().addingTimeInterval(waitForDelayedAppearance ? 0.35 : 0)
         repeat {
-            let reporters = NSWorkspace.shared.runningApplications.filter {
-                guard let bundleIdentifier = $0.bundleIdentifier else { return false }
-                return crashDialogHostBundleIdentifiers.contains(bundleIdentifier) && !$0.isTerminated
-            }
+            let reporters = NSWorkspace.shared.runningApplications.filter(isCrashDialogHost)
             if !reporters.isEmpty {
                 for reporter in reporters {
                     _ = reporter.terminate()
@@ -175,10 +168,7 @@ final class PushGo_macOSUITests: XCTestCase {
                 }
                 Thread.sleep(forTimeInterval: 0.1)
             }
-            let remaining = NSWorkspace.shared.runningApplications.filter {
-                guard let bundleIdentifier = $0.bundleIdentifier else { return false }
-                return crashDialogHostBundleIdentifiers.contains(bundleIdentifier) && !$0.isTerminated
-            }
+            let remaining = NSWorkspace.shared.runningApplications.filter(isCrashDialogHost)
             if !remaining.isEmpty && Date() >= deadline {
                 throw NSError(
                     domain: "macos_problem_reporter_cleanup_failed",
@@ -195,6 +185,101 @@ final class PushGo_macOSUITests: XCTestCase {
                 break
             }
         } while true
+    }
+
+    private func isCrashDialogHost(_ application: NSRunningApplication) -> Bool {
+        guard !application.isTerminated, let bundleIdentifier = application.bundleIdentifier else {
+            return false
+        }
+        switch bundleIdentifier {
+        case "com.apple.ProblemReporter":
+            // The dedicated host is only launched for the report surface.
+            return true
+        case "com.apple.UserNotificationCenter":
+            // UserNotificationCenter normally stays alive with no windows. Only
+            // treat it as a blocker when its accessibility tree exposes the
+            // actionable crash dialog itself.
+            return hasVisibleCrashDialog(in: application)
+        default:
+            return false
+        }
+    }
+
+    private func hasVisibleCrashDialog(in application: NSRunningApplication) -> Bool {
+        let appElement = AXUIElementCreateApplication(application.processIdentifier)
+        var windowsValue: CFTypeRef?
+        guard
+            AXUIElementCopyAttributeValue(
+                appElement,
+                kAXWindowsAttribute as CFString,
+                &windowsValue
+            ) == .success,
+            let windows = windowsValue as? [AXUIElement]
+        else {
+            return false
+        }
+
+        let crashActions = Set([
+            "relaunch", "reopen", "ignore", "report", "report…", "report...",
+            "重新打开", "忽略", "报告…", "报告...",
+        ])
+        let crashTextMarkers = [
+            "quit unexpectedly", "unexpectedly", "意外退出", "意外地退出",
+        ]
+
+        func descendants(of root: AXUIElement, limit: Int = 512) -> [AXUIElement] {
+            var result: [AXUIElement] = []
+            var queue: [AXUIElement] = []
+            var childrenValue: CFTypeRef?
+            if AXUIElementCopyAttributeValue(root, kAXChildrenAttribute as CFString, &childrenValue) == .success,
+               let children = childrenValue as? [AXUIElement]
+            {
+                queue = children
+            }
+            while !queue.isEmpty && result.count < limit {
+                let element = queue.removeFirst()
+                result.append(element)
+                var nestedValue: CFTypeRef?
+                if AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &nestedValue) == .success,
+                   let nested = nestedValue as? [AXUIElement]
+                {
+                    queue.append(contentsOf: nested)
+                }
+            }
+            return result
+        }
+
+        func stringValue(_ attribute: CFString, _ element: AXUIElement) -> String {
+            var value: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success else {
+                return ""
+            }
+            return value as? String ?? ""
+        }
+
+        return windows.contains { window in
+            var hiddenValue: CFTypeRef?
+            if AXUIElementCopyAttributeValue(window, kAXHiddenAttribute as CFString, &hiddenValue) == .success,
+               let hidden = hiddenValue as? Bool,
+               hidden
+            {
+                return false
+            }
+            let elements = [window] + descendants(of: window)
+            let strings = elements.flatMap { element in
+                [
+                    stringValue(kAXTitleAttribute as CFString, element),
+                    stringValue(kAXDescriptionAttribute as CFString, element),
+                    stringValue(kAXValueAttribute as CFString, element),
+                ]
+            }.filter { !$0.isEmpty }
+            let normalizedStrings = strings.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            let hasCrashAction = normalizedStrings.contains { crashActions.contains($0) }
+            let hasCrashText = normalizedStrings.contains { value in
+                crashTextMarkers.contains { value.contains($0) }
+            }
+            return hasCrashAction && hasCrashText
+        }
     }
 
     @MainActor
@@ -2320,13 +2405,7 @@ final class PushGo_macOSUITests: XCTestCase {
             survivingPushGoProcesses.isEmpty,
             "The production Quit action must leave no PushGo process owning a window or status item."
         )
-        let crashDialogHosts = NSWorkspace.shared.runningApplications.filter {
-            guard let bundleIdentifier = $0.bundleIdentifier else { return false }
-            return [
-                "com.apple.ProblemReporter",
-                "com.apple.UserNotificationCenter",
-            ].contains(bundleIdentifier) && !$0.isTerminated
-        }
+        let crashDialogHosts = NSWorkspace.shared.runningApplications.filter(isCrashDialogHost)
         XCTAssertTrue(
             crashDialogHosts.isEmpty,
             "A normal status-item Quit must not leave a crash dialog that can block the next journey."
