@@ -291,3 +291,7 @@ Android 提交 `2fe9bb0` 的干净工作树上，`QualityMessageJourneyInstrumen
 ### 2026-09-02 Android doctor 集成回归
 
 clean commit `f00ad40` 上，顶层 focused lane 经过 bounded `quality_doctor`、serial lease、Gradle 与真实消息内容/重启用户终点，`QualityMessageJourneyInstrumentedTest#standardFixtureShowsAccurateContentAndSurvivesActivityRelaunch` 在 `Medium_Phone / emulator-5554` 精确执行 1/1，收据 `../pushgo-android/build/quality-results/android-quality-test-doctor-regression-clean-20260902/android-focused-summary.json` 双 `PASSED`、`source_dirty=false`、无 incomplete claim。该回归只确认共用 doctor 修复不改变业务 Oracle，仍不外推其他平台或外部系统。
+
+### 2026-09-02 Apple Core/Store 当前字节复验（7d6a3ce）
+
+在干净提交 `7d6a3ce` 上运行 `swift test --package-path /Users/ethan/Repo/PushGo/pushgo --disable-sandbox`，Swift Testing 实际执行 442 项、41 个 suite，全部通过，耗时 11.563 秒；原生 XCTest 子集的 25 项也全部通过。4 个显式 opt-in 的 100k Store、10k Watch/并发性能用例按规则 skipped，未计入产品通过。原始日志保留于 `build/quality-results/apple-core-current-byte-20260902/swift-test.log`。该证据仅证明 Apple Core/Store/状态与合同语义当前字节健康，不替代 iOS/macOS UI 真实入口、系统权限、物理设备或发布性能证据。
