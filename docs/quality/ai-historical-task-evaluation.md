@@ -32,17 +32,6 @@
 
 最低 10 条是防止语料退化成一两个容易通过的样板，不是覆盖率指标。新增任务只有在对应高频能力、历史事故、数据损坏/丢失、错误成功态、不可逆动作、性能或独有平台边界时才进入；风险等价的长尾不扩张。
 
-## 3.1 独立 AI 原生交付的实际验收
-
-历史语料回放只验证选择下限，不能回答 AI 是否真的完成了实现和原生验证。一次独立盲任务在揭盲后必须生成一个 AI-native acceptance bundle，并由两端的 `scripts/quality_ai_native_acceptance.py` 校验：
-
-- 盲包字节哈希与任务绑定，且递归拒绝提交、Lane、能力、路径组和语义答案等泄漏；
-- base/target 提交的真实 diff 同时含有产品实现与测试/质量接入，Oracle 写明真实入口、动作、准确结果、持久化/系统边界和可信反例；
-- 原生 schema v2 收据绑定 target revision、干净源码、唯一 run identity，并要求 selected/executed 完全一致；产品失败、测试系统失败、`BLOCKED` 或 `NOT_RUN` 保持原状态；
-- AI 与复核者身份不同，复核先盲后揭盲，分别审查目的、Oracle、Lane、执行和边界；复核支持后再以不同的后续真实提交做校准。
-
-校验器的 `SUPPORTED` 仅表示这四类交付证据闭合，不是 PushGo App 产品通过，也不外推真机、真实 Provider 或物理性能。没有后续校准时返回 `READY_FOR_LONGITUDINAL_CALIBRATION`；当前 Gate 10 的历史回放仍保持 `PARTIAL`，因为本项目尚未产生一条在隔离上下文完成实现、原生执行和后续校准的真实 bundle。
-
 ## 4. 日常开发流程
 
 ### 4.1 修改前

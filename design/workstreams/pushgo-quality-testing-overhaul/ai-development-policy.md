@@ -10,26 +10,6 @@ AI 是否能持续完成“理解真实用户目的→修改正确的产品/测�
 
 Gate 10 至少需要四类相互独立的证据：隔离且不泄露答案的真实任务；AI 实际提交的实现与测试差异；对应平台原生测试的真实执行及业务/测试系统六态解释；未预读实现结论的语义复核和后续真实改动校准。历史任务回放若只验证路径、Lane 或字段完整性，只能记为 `READY_FOR_RECORDED_SEMANTIC_REVIEW`，不能写成 AI 能力通过。当前该目标保持 `PARTIAL`，直到独立盲任务完成真实实现、原生执行和语义复核。
 
-### Gate 10 的可执行证据契约
-
-为避免“独立目标”停留在口头要求，两端都提供 `scripts/quality_ai_native_acceptance.py`。它不代替 AI，也不把字段数量当作能力评分；它只在一次真实盲任务完成后核对四类证据是否属于同一任务、同一提交和同一原生执行：
-
-1. `packet_path` 指向不含 `commit`、目标 diff、Lane/能力答案或 `semantic_review` 的盲包，并用 `packet_sha256` 绑定实际字节；
-2. `base_commit→target_commit` 的真实差异同时包含产品路径和测试/质量路径，且实现说明包含真实入口、动作、准确终点、持久化/系统边界和可击穿的负控；
-3. `native_execution.receipt` 必须是 schema v2 原生收据，`source_revision=target_commit`、`source_dirty=false`、`run_identity` 一致，并逐项证明 selected claims 已实际执行；失败、阻断或未运行不会被改写成支持；
-4. 语义复核者必须与 AI 身份不同，先完成盲评再揭盲，逐项判断目的、Oracle、Lane、执行和边界；复核支持后仍需一条后续不同提交的真实改动校准。
-
-执行命令（`<bundle>` 和输出均为仓库内相对路径）：
-
-```bash
-python3 scripts/quality_ai_native_acceptance.py \
-  --bundle build/quality-results/ai-native-acceptance/<task>.json \
-  --output build/quality-results/ai-native-acceptance/<task>-assessment.json \
-  --check
-```
-
-结果只有在独立复核和后续校准都存在且原生收据干净时才为 `SUPPORTED`；缺校准为 `READY_FOR_LONGITUDINAL_CALIBRATION`，原生失败或复核未支持为 `PARTIAL`，契约不可信为 `FAILED`。任何非 `SUPPORTED` 都应保留 Gate 10 未闭合状态，不能由历史回放或普通 `quality_changed.sh` 的绿色替代。
-
 ## 每次变更的闭环
 
 1. **定位用户目的**：从 `docs/quality/capability-coverage.md` 找到受影响能力；新能力先补一行。说明真实入口、用户动作、正确结果、数据/系统终点和至少一个可信反例。
