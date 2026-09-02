@@ -279,3 +279,7 @@ Android 提交 `2fe9bb0` 的干净工作树上，`QualityMessageJourneyInstrumen
 ### 2026-09-02 Android 共用 quality doctor 有界化
 
 提交 `f00ad40` 将 `quality_doctor.sh` 的设备枚举、API/qemu、电源和锁屏查询统一接入 bounded ADB；`dumpsys` 大输出先完整收取后解析，避免 Python wrapper 与提前结束管道导致假阻断。修复前真实 doctor 会误报 `device_power_query_failed`，修复后 `emulator-5554` 输出 `READY / awake_unlocked`；fake-ADB 交互、非法超时负控及全量脚本合同 166/166 均通过。该证据只证明共用准备层可执行性，不把 ready 或设备状态当作产品通过。
+
+### 2026-09-02 Android doctor 集成回归
+
+clean commit `f00ad40` 上，顶层 focused lane 经过 bounded `quality_doctor`、serial lease、Gradle 与真实消息内容/重启用户终点，`QualityMessageJourneyInstrumentedTest#standardFixtureShowsAccurateContentAndSurvivesActivityRelaunch` 在 `Medium_Phone / emulator-5554` 精确执行 1/1，收据 `../pushgo-android/build/quality-results/android-quality-test-doctor-regression-clean-20260902/android-focused-summary.json` 双 `PASSED`、`source_dirty=false`、无 incomplete claim。该回归只确认共用 doctor 修复不改变业务 Oracle，仍不外推其他平台或外部系统。
