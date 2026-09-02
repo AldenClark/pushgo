@@ -56,3 +56,6 @@ Apple 的 focused journey 正好覆盖 `apple-simulator-xctest-runner-launch` �
 - Android 受控 `emulator-5554`：50/50，双状态通过、issue ID 为空；p50=1901.5ms、p95=9073ms、max=15226ms；`../pushgo-android/build/quality-results/android-startup-reliability/20260828-205052/summary.json`。
 
 上述时长包含各平台测试框架/Instrumentation 与完整功能空态旅程，只是受控环境观测，不与物理设备用户 SLO 混用。随后当前差异的自动选择仍为普通 PR：Apple 11/11 核心 UI、Android JVM/编译/本地化均在不重复 50 次的情况下通过。
+## 2026-09-02 Android runner isolation recheck
+
+提交 `3bad981` 为独立 Android 启动可靠性 runner 的安装、Instrumentation、force-stop 和日志采集统一接入 serial-scoped 租约与默认 8 秒 ADB 超时；忙设备在安装前 `BLOCKED`，退出路径释放租约。clean commit 上以 `ITERATIONS=1` 做命令校准，`Medium_Phone / emulator-5554` 的真实 `empty.clean` 会话执行 1/1、`elapsed_ms=1393`，product/test-system=`PASSED/PASSED`，`test_system_issue_ids=[]`；逐轮证据与汇总在 `../pushgo-android/build/quality-results/android-startup-reliability-lock-regression-clean-20260902/20260902-094721/summary.json`。该样本只验证 runner 接入和真实功能空态，不满足 50/50 连续稳定退出条件；既有 clean 50/50 基线继续作为长期候选证据，物理设备与多旅程聚合边界不变。

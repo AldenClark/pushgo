@@ -270,3 +270,6 @@ Android 提交 `2fe9bb0` 的干净工作树上，`QualityMessageJourneyInstrumen
 ### 2026-09-02 Android `pr-ui` 六条核心链当前字节
 
 在 clean commit `13d798b` 上，`scripts/quality_test.sh pr-ui` 于 `Medium_Phone / emulator-5554` 精确执行 6/6 条固定正向目的链，零 failure/error/skip/runtime warning，耗时约 49 秒；收据 `../pushgo-android/build/quality-results/android-pr-ui-lock-regression-clean-20260902/android-pr-ui-summary.json` 双 `PASSED`、`source_dirty=false`、`incomplete_selected_claims=[]`。一条受控启动覆盖主导航、标准消息内容与重启、分页/已读持久化、Event 投影关闭、Channel 生命周期和 Gateway 验证/换域；这是设备租约接入后的代表性回归，不把租约、控件存在或 Gradle 成功当作产品结果，也不外推 Provider、物理/OEM 或整体 Gate。
+### 2026-09-02 Android 启动可靠性 runner 隔离
+
+提交 `3bad981` 为 `run_android_startup_reliability.sh` 的安装、Instrumentation、force-stop 和日志采集统一接入 serial-scoped 租约与默认 8 秒 ADB 超时；同 serial 忙碌时在安装前明确 `BLOCKED`，退出时释放租约。clean commit 的 1 次校准在 `Medium_Phone / emulator-5554` 真实执行 `empty.clean` 功能空态 1/1（`elapsed_ms=1393`），汇总 `../pushgo-android/build/quality-results/android-startup-reliability-lock-regression-clean-20260902/20260902-094721/summary.json` 为 product/test-system=`PASSED/PASSED`、无 issue ID。该校准只证明 runner 不会无限等待或并发污染设备，不把 1 次运行冒充 50/50 长样本或物理性能证据。
