@@ -2,6 +2,8 @@
 
 此索引防遗漏，不计算覆盖分，不是测试 Oracle。入口或类型存在不能让能力通过；最终判定以真实用户结果和必要数据/系统终点为准。
 
+2026-09-02 Apple side-index recovery current byte：Core `LocalDataStoreTests` 在干净提交 `5576cf600d2ea54f8dd97dba8f99f2381edbdb7e` 精确执行 7/7、0.871 秒，覆盖缺失、空文件、搜索表/元数据表 schema 损坏、双表损坏、旧 metadata fallback 与索引初始化失败降级。每个用例都从 canonical 主库比较准确行、计数、标签/查询结果，并在缺失索引代表场景普通重载后再次核对；原生无 failure/skip/runtime warning。收据 `build/quality-results/apple-search-index-rebuild-current-20260902/apple-search-index-summary.json`，日志 `build/quality-results/apple-search-index-rebuild-current-20260902/swift-test.log`。这是受控 Apple lower-layer recovery 证据，不把索引文件存在、建表成功或 Core 通过外推为 UI rebuild 可见性、Android 对等、10k/100k 性能或 Provider/物理通过；`P1-SEARCH` 继续 `DEFERRED`。
+
 macOS 通知权限跨应用往返当前字节（2026-09-02）：`testDeniedNotificationSettingsCardRecoversAfterSystemEnable` 先以真实 PushGo Settings 入口进入系统通知设置，利用 System Settings 通知内容滚动容器的语义 `AXIncrementPage` 动作处理虚拟化列表，再点击真实 PushGo 行并完成关闭→拒绝说明归属→产品入口重新开启→返回卡片消失的完整用户目的。重启 System Settings 后仍原生执行 1/1、24.113 秒，结果束 `build/quality-results/macos-notification-permission-current-20260902-r7/run-20260902-104339.xcresult`；严格 verifier=`EXECUTED`、`executed_test_count=1`，原生结果 `Passed`、0 failure/skip/runtime warning。该修复只解决跨应用测试系统的可达性与虚拟化边界，不把行存在、权限命令或结果包当作通过，也不外推物理设备、真实 Provider、签名 Release 或其他平台；先前 BLOCKED 收据仍作为历史测试系统证据保留。
 
 changed-tests 选择器最小化回归（2026-09-02）：新增的 macOS 通知设置滚动 helper 曾因位于 XCTest 方法外而触发整类 32 条用例的保守选择；该宽选运行被主动停止，`summary.json` 的 `executed_claims=[]`，不形成产品结论。选择器现在仅在 helper 的直接调用者可唯一解析时收窄，否则继续整类回退；65 项选择器单测与 202 项脚本合同通过。以 helper 变更前为 base 的新计划为 `READY/changed-tests`，只选择 `testDeniedNotificationSettingsCardRecoversAfterSystemEnable`（expected=1，system profile），将后续回归成本限制在真实受影响的用户目的，不用重跑无关页面来求绿。

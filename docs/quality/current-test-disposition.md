@@ -1,5 +1,7 @@
 # Apple 当前 UI 测试处置清单
 
+2026-09-02 Apple side-index recovery current byte：Core `LocalDataStoreTests` 在干净提交 `5576cf600d2ea54f8dd97dba8f99f2381edbdb7e` 精确执行 7/7、0.871 秒，覆盖缺失、空文件、搜索表/元数据表 schema 损坏、双表损坏、旧 metadata fallback 与索引初始化失败降级。每个用例都从 canonical 主库比较准确行、计数、标签/查询结果，并在缺失索引代表场景普通重载后再次核对；原生无 failure/skip/runtime warning。收据 `build/quality-results/apple-search-index-rebuild-current-20260902/apple-search-index-summary.json`，日志 `build/quality-results/apple-search-index-rebuild-current-20260902/swift-test.log`。该证据只关闭受控 Apple lower-layer recovery 子 claim，UI 可见 rebuild、Android 对等、10k/100k 性能与 Provider/物理边界仍未运行。
+
 基线日期：2026-08-27。此文件是 WP0 迁移清单，迁移完成后归档；它不作为产品通过 Oracle。
 
 ## 处置含义
