@@ -20,6 +20,7 @@ on:
           - nightly
           - accessibility
           - performance
+          - release-isolation
           - release
 
 permissions:

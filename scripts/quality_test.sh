@@ -33,6 +33,9 @@ fi
 if [[ "$lane" != "macos-system-notification" && "$lane" != "release" ]]; then
   not_run+=("$macos_system_notification_not_run_claim")
 fi
+if [[ "$lane" == "release-isolation" ]]; then
+  not_run+=("iOS/watchOS functional UI, notification, Provider, physical-device, and signed update evidence")
+fi
 physical_performance_requested=0
 not_run+=("physical-device frame/hitch and release trace evidence")
 if [[ ( "$lane" == "performance" || "$lane" == "release" ) && -n "${IOS_PERFORMANCE_DEVICE_ID:-}" ]]; then
@@ -578,6 +581,76 @@ run_performance() {
   fi
 }
 
+run_release_isolation_checks() {
+  local isolation_root="${QUALITY_RELEASE_ISOLATION_ROOT:-$results_root/apple-release-isolation}"
+  local derived_root="$isolation_root/derived-data"
+  local ios_derived_data="$derived_root/ios"
+  local watch_derived_data="$derived_root/watch"
+  local ios_build_log="$isolation_root/ios-release-build.log"
+  local watch_build_log="$isolation_root/watchos-release-build.log"
+  local ios_settings="$isolation_root/ios-release-settings.log"
+  local watch_settings="$isolation_root/watchos-release-settings.log"
+  mkdir -p "$isolation_root" "$derived_root"
+
+  xcodebuild \
+    -project "$repo_root/pushgo.xcodeproj" \
+    -scheme PushGo-iOS \
+    -configuration Release \
+    -destination 'generic/platform=iOS Simulator' \
+    -derivedDataPath "$ios_derived_data" \
+    -onlyUsePackageVersionsFromResolvedFile \
+    -disableAutomaticPackageResolution \
+    -skipPackageUpdates \
+    build 2>&1 | tee "$ios_build_log"
+  xcodebuild \
+    -project "$repo_root/pushgo.xcodeproj" \
+    -scheme PushGo-iOS \
+    -configuration Release \
+    -destination 'generic/platform=iOS Simulator' \
+    -derivedDataPath "$ios_derived_data" \
+    -onlyUsePackageVersionsFromResolvedFile \
+    -disableAutomaticPackageResolution \
+    -skipPackageUpdates \
+    -showBuildSettings 2>&1 | tee "$ios_settings"
+
+  xcodebuild \
+    -project "$repo_root/pushgo.xcodeproj" \
+    -scheme PushGo-watchOS \
+    -configuration Release \
+    -destination 'generic/platform=watchOS Simulator' \
+    -derivedDataPath "$watch_derived_data" \
+    -onlyUsePackageVersionsFromResolvedFile \
+    -disableAutomaticPackageResolution \
+    -skipPackageUpdates \
+    CODE_SIGNING_ALLOWED=NO \
+    build 2>&1 | tee "$watch_build_log"
+  xcodebuild \
+    -project "$repo_root/pushgo.xcodeproj" \
+    -scheme PushGo-watchOS \
+    -configuration Release \
+    -destination 'generic/platform=watchOS Simulator' \
+    -derivedDataPath "$watch_derived_data" \
+    -onlyUsePackageVersionsFromResolvedFile \
+    -disableAutomaticPackageResolution \
+    -skipPackageUpdates \
+    CODE_SIGNING_ALLOWED=NO \
+    -showBuildSettings 2>&1 | tee "$watch_settings"
+
+  python3 "$repo_root/scripts/verify_apple_release_isolation.py" \
+    --source-root "$repo_root" \
+    --ios-derived-data "$ios_derived_data" \
+    --watch-derived-data "$watch_derived_data" \
+    --ios-build-settings "$ios_settings" \
+    --watch-build-settings "$watch_settings" \
+    --output "$isolation_root/apple-release-isolation.json"
+}
+
+run_release_isolation() {
+  selected_claims+=("Apple iOS/watchOS Release artifacts and compile-time Quality Runtime activation exclusion")
+  run_release_isolation_checks
+  claims+=("Apple iOS/watchOS Release artifacts and compile-time Quality Runtime activation exclusion")
+}
+
 run_accessibility_localization() {
   selected_claims+=("iOS zh-Hans accessibility5 real message-detail and channel-creation journey")
   python3 "$repo_root/scripts/verify_apple_localizations.py"
@@ -773,6 +846,9 @@ case "$lane" in
   performance)
     run_performance
     ;;
+  release-isolation)
+    run_release_isolation
+    ;;
   accessibility)
     run_accessibility_localization
     ;;
@@ -809,27 +885,7 @@ case "$lane" in
     run_macos_ui full
     run_macos_update_install
     run_performance
-    selected_claims+=("iOS/watchOS Release builds and Quality Runtime isolation")
-    xcodebuild \
-      -project "$repo_root/pushgo.xcodeproj" \
-      -scheme PushGo-iOS \
-      -configuration Release \
-      -destination 'generic/platform=iOS Simulator' \
-      -onlyUsePackageVersionsFromResolvedFile \
-      -disableAutomaticPackageResolution \
-      -skipPackageUpdates \
-      build
-    xcodebuild \
-      -project "$repo_root/pushgo.xcodeproj" \
-      -scheme PushGo-watchOS \
-      -configuration Release \
-      -destination 'generic/platform=watchOS Simulator' \
-      -onlyUsePackageVersionsFromResolvedFile \
-      -disableAutomaticPackageResolution \
-      -skipPackageUpdates \
-      CODE_SIGNING_ALLOWED=NO \
-      build
-    claims+=("iOS/watchOS Release builds and Quality Runtime isolation")
+    run_release_isolation
     ;;
   *)
     echo "status=BLOCKED"
