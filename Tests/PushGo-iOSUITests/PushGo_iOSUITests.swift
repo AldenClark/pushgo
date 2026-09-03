@@ -1361,9 +1361,10 @@ final class PushGo_iOSUITests: XCTestCase {
     func testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch() {
         let sessionID = "ios-delete-undo-\(UUID().uuidString.lowercased())"
         let context = configuredLaunchContext()
-        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = pendingDeletionQualitySessionPayload(
             sessionID: sessionID,
-            fixture: "messages.standard"
+            fixture: "messages.standard",
+            timeoutMilliseconds: 30_000
         )
 
         launch(context.app)
@@ -1381,16 +1382,47 @@ final class PushGo_iOSUITests: XCTestCase {
         )
         XCTAssertTrue(row.waitForNonExistence(timeout: 2))
         assertElementExists("state.pending_deletion", in: context.app, timeout: 5)
-        let undo = element(in: context.app, identifier: "action.pending_deletion.undo")
-        XCTAssertTrue(undo.isHittable)
-        undo.tap()
-        XCTAssertTrue(title.waitForExistence(timeout: 8))
         context.app.terminate()
 
-        let relaunched = configuredLaunchContext()
-        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+        let afterTermination = configuredLaunchContext(runtimeRoot: context.runtimeRoot)
+        afterTermination.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = pendingDeletionQualitySessionPayload(
             sessionID: sessionID,
-            fixture: "messages.standard"
+            fixture: "messages.standard",
+            timeoutMilliseconds: 30_000
+        )
+        launch(afterTermination.app)
+        assertQualityRuntimeReady(in: afterTermination.app, timeout: 15)
+        let restoredPendingDeletion = element(
+            in: afterTermination.app,
+            identifier: "state.pending_deletion"
+        )
+        XCTAssertTrue(
+            restoredPendingDeletion.waitForExistence(timeout: 8),
+            "A pending deletion must remain undoable after the original process terminates"
+        )
+        XCTAssertFalse(
+            element(
+                in: afterTermination.app,
+                identifier: "message.row.00000000-0000-0000-0000-000000000001"
+            ).exists,
+            "The restored pending scope must continue suppressing the target until Undo"
+        )
+        tapWhenHittable(
+            element(in: afterTermination.app, identifier: "action.pending_deletion.undo"),
+            timeout: 8,
+            message: "A restored pending deletion must expose a real Undo action"
+        )
+        XCTAssertTrue(
+            afterTermination.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8),
+            "Undo after process termination must restore the canonical object"
+        )
+        afterTermination.app.terminate()
+
+        let relaunched = configuredLaunchContext()
+        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = pendingDeletionQualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            timeoutMilliseconds: 30_000
         )
         launch(relaunched.app)
         assertQualityRuntimeReady(in: relaunched.app, timeout: 15)
@@ -4960,14 +4992,18 @@ final class PushGo_iOSUITests: XCTestCase {
         return data.base64EncodedString()
     }
 
-    private func pendingDeletionQualitySessionPayload(sessionID: String, fixture: String) -> String {
+    private func pendingDeletionQualitySessionPayload(
+        sessionID: String,
+        fixture: String,
+        timeoutMilliseconds: Int = 15_000
+    ) -> String {
         let encoded = qualitySessionPayload(sessionID: sessionID, fixture: fixture)
         let data = try! XCTUnwrap(Data(base64Encoded: encoded))
         var payload = try! XCTUnwrap(
             try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
         )
         var faults = try! XCTUnwrap(payload["faults"] as? [String: Any])
-        faults["pending_deletion_timeout_ms"] = 15_000
+        faults["pending_deletion_timeout_ms"] = timeoutMilliseconds
         payload["faults"] = faults
         let updatedData = try! JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
         return updatedData.base64EncodedString()
