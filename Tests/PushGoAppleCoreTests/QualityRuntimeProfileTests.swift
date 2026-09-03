@@ -14,6 +14,7 @@ struct QualityRuntimeProfileTests {
                 "message_page_load_delay_ms": 1_500,
                 "message_refresh_delay_ms": 2_500,
                 "message_search_delay_ms": 2_000,
+                "pending_deletion_timeout_ms": 12_000,
                 "fail_message_page_load_once": true,
                 "fail_message_search_once": true,
                 "fail_gateway_switch_validation_once": true,
@@ -35,6 +36,7 @@ struct QualityRuntimeProfileTests {
         #expect(descriptor.faults.localStoreFailureStreakThreshold == 1)
         #expect(descriptor.faults.messageRefreshDelayMilliseconds == 2_500)
         #expect(descriptor.faults.messageSearchDelayMilliseconds == 2_000)
+        #expect(descriptor.faults.pendingDeletionTimeoutMilliseconds == 12_000)
         #expect(descriptor.faults.failMessageLoad == false)
         #expect(descriptor.faults.failMessagePageLoadOnce)
         #expect(descriptor.faults.failMessageSearchOnce)
@@ -59,6 +61,7 @@ struct QualityRuntimeProfileTests {
         let descriptor = try PushGoAutomationContext.decodeQualitySession(encoded)
 
         #expect(descriptor.fixture == .corePositive)
+        #expect(descriptor.faults.pendingDeletionTimeoutMilliseconds == nil)
     }
 
     @Test("decodes the typed provider refresh scenario")
@@ -267,6 +270,32 @@ struct QualityRuntimeProfileTests {
         )
 
         #expect(throws: PushGoQualitySessionError.invalidMessageSearchDelay(30_001)) {
+            try PushGoAutomationContext.decodeQualitySession(encoded)
+        }
+    }
+
+    @Test("rejects an unbounded pending deletion timeout before app startup")
+    func rejectsUnboundedPendingDeletionTimeout() throws {
+        let encoded = try encodedSession(
+            sessionID: "pending-deletion-timeout-negative-control",
+            fixture: "messages.standard",
+            faults: ["pending_deletion_timeout_ms": 30_001]
+        )
+
+        #expect(throws: PushGoQualitySessionError.invalidPendingDeletionTimeout(30_001)) {
+            try PushGoAutomationContext.decodeQualitySession(encoded)
+        }
+    }
+
+    @Test("rejects a zero pending deletion timeout before app startup")
+    func rejectsZeroPendingDeletionTimeout() throws {
+        let encoded = try encodedSession(
+            sessionID: "pending-deletion-timeout-zero-negative-control",
+            fixture: "messages.standard",
+            faults: ["pending_deletion_timeout_ms": 0]
+        )
+
+        #expect(throws: PushGoQualitySessionError.invalidPendingDeletionTimeout(0)) {
             try PushGoAutomationContext.decodeQualitySession(encoded)
         }
     }

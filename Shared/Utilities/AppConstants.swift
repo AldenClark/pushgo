@@ -173,6 +173,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
     let messagePageLoadDelayMilliseconds: Int?
     let messageRefreshDelayMilliseconds: Int?
     let messageSearchDelayMilliseconds: Int?
+    let pendingDeletionTimeoutMilliseconds: Int?
     let failMessageSearchOnce: Bool
     let failMessageLoad: Bool
     let failMessagePageLoadOnce: Bool
@@ -190,6 +191,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         messagePageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         messageSearchDelayMilliseconds: Int? = nil,
+        pendingDeletionTimeoutMilliseconds: Int? = nil,
         failMessageSearchOnce: Bool = false,
         failMessageLoad: Bool = false,
         failMessagePageLoadOnce: Bool = false,
@@ -206,6 +208,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         self.messagePageLoadDelayMilliseconds = messagePageLoadDelayMilliseconds
         self.messageRefreshDelayMilliseconds = messageRefreshDelayMilliseconds
         self.messageSearchDelayMilliseconds = messageSearchDelayMilliseconds
+        self.pendingDeletionTimeoutMilliseconds = pendingDeletionTimeoutMilliseconds
         self.failMessageSearchOnce = failMessageSearchOnce
         self.failMessageLoad = failMessageLoad
         self.failMessagePageLoadOnce = failMessagePageLoadOnce
@@ -224,6 +227,7 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         case messagePageLoadDelayMilliseconds = "message_page_load_delay_ms"
         case messageRefreshDelayMilliseconds = "message_refresh_delay_ms"
         case messageSearchDelayMilliseconds = "message_search_delay_ms"
+        case pendingDeletionTimeoutMilliseconds = "pending_deletion_timeout_ms"
         case failMessageSearchOnce = "fail_message_search_once"
         case failMessageLoad = "fail_message_load"
         case failMessagePageLoadOnce = "fail_message_page_load_once"
@@ -260,6 +264,10 @@ struct PushGoQualityFaults: Codable, Equatable, Sendable {
         messageSearchDelayMilliseconds = try container.decodeIfPresent(
             Int.self,
             forKey: .messageSearchDelayMilliseconds
+        )
+        pendingDeletionTimeoutMilliseconds = try container.decodeIfPresent(
+            Int.self,
+            forKey: .pendingDeletionTimeoutMilliseconds
         )
         failMessageSearchOnce = try container.decodeIfPresent(
             Bool.self,
@@ -396,6 +404,7 @@ enum PushGoQualitySessionError: Error, Equatable, LocalizedError {
     case invalidMessagePageLoadDelay(Int)
     case invalidMessageRefreshDelay(Int)
     case invalidMessageSearchDelay(Int)
+    case invalidPendingDeletionTimeout(Int)
     case invalidLocalStoreFailureStreakThreshold(Int)
     case systemColdLaunchNotAllowed
 
@@ -417,6 +426,8 @@ enum PushGoQualitySessionError: Error, Equatable, LocalizedError {
             return "Message refresh delay must be between 0 and 30000 ms: \(delay)."
         case let .invalidMessageSearchDelay(delay):
             return "Message search delay must be between 0 and 30000 ms: \(delay)."
+        case let .invalidPendingDeletionTimeout(timeout):
+            return "Pending deletion timeout must be between 1 and 30000 ms: \(timeout)."
         case let .invalidLocalStoreFailureStreakThreshold(threshold):
             return "Local Store failure streak threshold must be between 1 and 3: \(threshold)."
         case .systemColdLaunchNotAllowed:
@@ -615,6 +626,10 @@ enum PushGoAutomationContext {
         if let delay = descriptor.faults.messageSearchDelayMilliseconds,
            !(0 ... 30_000).contains(delay) {
             throw PushGoQualitySessionError.invalidMessageSearchDelay(delay)
+        }
+        if let timeout = descriptor.faults.pendingDeletionTimeoutMilliseconds,
+           !(1 ... 30_000).contains(timeout) {
+            throw PushGoQualitySessionError.invalidPendingDeletionTimeout(timeout)
         }
         if let threshold = descriptor.faults.localStoreFailureStreakThreshold,
            !(1 ... 3).contains(threshold) {

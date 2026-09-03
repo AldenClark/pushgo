@@ -247,6 +247,9 @@ final class AppEnvironment {
     )
     @ObservationIgnored private(set) lazy var pendingLocalDeletionController = PendingLocalDeletionController(
         dataStore: dataStore,
+        timeout: PushGoAutomationContext.qualitySession?.faults.pendingDeletionTimeoutMilliseconds.map {
+            TimeInterval($0) / 1_000
+        } ?? 5,
         channelCommitHandler: { [weak self] record, owner in
             guard let self else { throw CancellationError() }
             return try await self.channelSubscriptionController.commitPendingChannelRemoval(

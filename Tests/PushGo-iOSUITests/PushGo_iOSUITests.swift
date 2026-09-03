@@ -1371,7 +1371,8 @@ final class PushGo_iOSUITests: XCTestCase {
         let context = configuredLaunchContext()
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
-            fixture: "channels.standard"
+            fixture: "channels.standard",
+            pendingDeletionTimeoutMilliseconds: 15_000
         )
 
         launch(context.app)
@@ -1388,7 +1389,11 @@ final class PushGo_iOSUITests: XCTestCase {
             "The exact target row must exist before its later absence can prove deletion"
         )
         XCTAssertTrue(controlTitle.exists, "The unrelated control message must exist before deletion")
-        targetTitle.tap()
+        tapWhenHittable(
+            targetRow,
+            timeout: 8,
+            message: "The exact target row must be a real actionable message entry"
+        )
         assertElementExists("sheet.message.detail", in: context.app, timeout: 8)
         XCTAssertTrue(
             context.app.staticTexts[
@@ -1408,33 +1413,74 @@ final class PushGo_iOSUITests: XCTestCase {
             element(in: context.app, identifier: "action.pending_deletion.undo").isHittable,
             "The test must observe a real undo opportunity before deliberately letting it expire"
         )
+
+        // An explicit XCTest process termination is the cheapest real
+        // interruption boundary available to this UI lane. The durable pending record must
+        // survive the termination, remain visible/suppressed after the next
+        // launch, and then complete exactly once at its original deadline.
+        context.app.terminate()
+        let afterTermination = configuredLaunchContext(runtimeRoot: context.runtimeRoot)
+        afterTermination.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            pendingDeletionTimeoutMilliseconds: 15_000
+        )
+        launch(afterTermination.app)
+        assertQualityRuntimeReady(in: afterTermination.app, timeout: 15)
+        let restoredPendingDeletion = element(
+            in: afterTermination.app,
+            identifier: "state.pending_deletion"
+        )
         XCTAssertTrue(
-            pendingDeletion.waitForNonExistence(timeout: 15),
+            restoredPendingDeletion.waitForExistence(timeout: 8),
+            "A pending deletion must survive a process termination before its deadline"
+        )
+        XCTAssertFalse(
+            element(
+                in: afterTermination.app,
+                identifier: "message.row.00000000-0000-0000-0000-00000000c002"
+            ).exists,
+            "The restored pending scope must continue suppressing the target row"
+        )
+        XCTAssertTrue(
+            restoredPendingDeletion.waitForNonExistence(timeout: 15),
             "The real undo deadline did not commit and clear the pending deletion"
         )
-        XCTAssertFalse(targetTitle.exists, "The committed target must stay absent")
+        XCTAssertFalse(
+            afterTermination.app.staticTexts["Quality Delete History Message"].exists,
+            "The committed target must stay absent"
+        )
         XCTAssertTrue(
-            controlTitle.waitForExistence(timeout: 5),
+            afterTermination.app.staticTexts["Quality Keep History Message"].waitForExistence(timeout: 5),
             "Committing one deletion must not remove an unrelated message"
         )
-        controlTitle.tap()
-        assertElementExists("sheet.message.detail", in: context.app, timeout: 5)
+        let afterTerminationControlRow = element(
+            in: afterTermination.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c001"
+        )
+        tapWhenHittable(
+            afterTerminationControlRow,
+            timeout: 5,
+            message: "The unrelated canonical message must remain a real actionable row after commit"
+        )
+        assertElementExists("sheet.message.detail", in: afterTermination.app, timeout: 5)
         XCTAssertTrue(
-            context.app.staticTexts[
+            afterTermination.app.staticTexts[
                 "Deterministic history owned by 01H00000000000000000000001."
             ].exists,
             "The control message must retain its exact canonical content"
         )
         tapWhenHittable(
-            element(in: context.app, identifier: "action.message.close"),
+            element(in: afterTermination.app, identifier: "action.message.close"),
             timeout: 5
         )
-        context.app.terminate()
+        afterTermination.app.terminate()
 
         let relaunched = configuredLaunchContext()
         relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
-            fixture: "channels.standard"
+            fixture: "channels.standard",
+            pendingDeletionTimeoutMilliseconds: 15_000
         )
         launch(relaunched.app)
         assertQualityRuntimeReady(in: relaunched.app, timeout: 15)
@@ -1446,9 +1492,17 @@ final class PushGo_iOSUITests: XCTestCase {
             "A committed deletion must not revive when the App rebuilds its canonical list"
         )
         XCTAssertFalse(relaunched.app.staticTexts["Quality Delete History Message"].exists)
+        let relaunchedControlRow = element(
+            in: relaunched.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c001"
+        )
         let relaunchedControl = relaunched.app.staticTexts["Quality Keep History Message"]
         XCTAssertTrue(relaunchedControl.waitForExistence(timeout: 8))
-        relaunchedControl.tap()
+        tapWhenHittable(
+            relaunchedControlRow,
+            timeout: 5,
+            message: "The unrelated canonical message must remain a real actionable row after relaunch"
+        )
         assertElementExists("sheet.message.detail", in: relaunched.app, timeout: 5)
         XCTAssertTrue(
             relaunched.app.staticTexts[
@@ -1465,7 +1519,8 @@ final class PushGo_iOSUITests: XCTestCase {
         )
         unavailableTarget.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
-            fixture: "channels.standard"
+            fixture: "channels.standard",
+            pendingDeletionTimeoutMilliseconds: 15_000
         )
         launch(unavailableTarget.app)
         assertQualityRuntimeReady(in: unavailableTarget.app, timeout: 15)
@@ -4803,6 +4858,7 @@ final class PushGo_iOSUITests: XCTestCase {
         messagePageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         messageSearchDelayMilliseconds: Int? = nil,
+        pendingDeletionTimeoutMilliseconds: Int? = nil,
         failMessageSearchOnce: Bool = false,
         legacyStore: String? = nil,
         failMessageLoad: Bool = false,
@@ -4844,6 +4900,9 @@ final class PushGo_iOSUITests: XCTestCase {
         }
         if let messageSearchDelayMilliseconds {
             faults["message_search_delay_ms"] = messageSearchDelayMilliseconds
+        }
+        if let pendingDeletionTimeoutMilliseconds {
+            faults["pending_deletion_timeout_ms"] = pendingDeletionTimeoutMilliseconds
         }
         let payload: [String: Any] = [
             "schema_version": 1,
