@@ -2,6 +2,10 @@
 
 此索引防遗漏，不计算覆盖分，不是测试 Oracle。入口或类型存在不能让能力通过；最终判定以真实用户结果和必要数据/系统终点为准。
 
+2026-09-03 iOS 永久删除 helper 回归：提交 `217cf4b` 后，`testQualityMessageDeleteWithoutUndoPermanentlyRemovesOnlyTargetAcrossRelaunch` 在专用 Simulator 精确执行 1/1（79.330 秒），结果束 `build/quality-results/ios-pending-delete-commit-after-helper-clean-20260903/run-1-20260903-115627.xcresult` 严格 `EXECUTED`，收据为双 `PASSED`、源码干净。它继续以目标永久消失、独立控制消息准确可读、重开不复活和失效路由反馈作为真实终点，确认共享 readiness/timeout helper 回归安全；不外推完整 P1 删除生命周期。
+
+2026-09-03 macOS Thing 关系 QoS 告警审计：Terra 复核两份独立结果和既有区分实验后，业务终点仍通过，但 warning 没有可证实的产品低 QoS 根因；严格测试系统继续 `FLAKY/FAILED_TEST_SYSTEM`，P1 Thing 关系保持 `PARTIAL/BLOCKED`。不修改产品调度、不白名单、不重跑求绿；未来若有授权，仅做一次带线程栈的有界诊断。
+
 2026-09-03 iOS 删除 Undo 跨进程恢复：提交 `8ee69ca` 的 `testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch` 现在覆盖真实 XCTest 进程终止后新进程继续显示 pending、目标保持隐藏、点击生产 Undo 恢复同一 canonical 标题，以及再次重开仍保留。提交 `217cf4b` 将这条三次启动旅程的 fixture readiness 上限限定为 30 秒；提交后 clean focused 结果束 `build/quality-results/ios-pending-delete-undo-after-process-clean-r2-20260903/run-1-20260903-114726.xcresult` 原生 1/1、零 failure/skip，runner=`PASSED`。首次 clean 15 秒准备超时按测试系统 `BLOCKED` 保留，不计产品失败；该条只证明受控 iOS Simulator/App-owned Store 的显式进程终止边界，低内存/系统重启/后台 Worker/claim 中点/多 pending/真实 Provider/物理设备仍未运行。
 
 2026-09-03 首屏加载失败行身份 Oracle 收紧：Apple 提交 `bd5d7aa` 的 iOS/macOS Retry 旅程均要求唯一 canonical 行 `message.row.00000000-0000-0000-0000-000000000001`，并继续核对准确标题、正文和详情；干净专用运行各 1/1 通过（结果束 `build/quality-results/ios-load-retry-stable-id-clean-20260903/run-1-20260903-111852.xcresult`、`build/quality-results/macos-load-retry-stable-id-clean-20260903/run-20260903-112017.xcresult`）。这是业务行选择敏感性增强，不是 identifier 存在性通过，也不外推 Provider、真机/OEM 或整体覆盖。
