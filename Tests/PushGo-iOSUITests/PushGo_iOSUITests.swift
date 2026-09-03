@@ -975,9 +975,43 @@ final class PushGo_iOSUITests: XCTestCase {
             in: context.app,
             identifier: "message.row.00000000-0000-0000-0000-00000000004c"
         )
+        // The failure inset is intentionally outside the List. Its appearance
+        // reduces the viewport, so the row that triggered pagination can remain
+        // in the data set while being just below the visible edge. Scroll it
+        // into the normal content area before judging the real user action;
+        // an existence check alone would not prove that the retained message
+        // can still be opened.
+        for _ in 0..<6 where !(retainedPageOneTail.exists && retainedPageOneTail.isHittable) {
+            list.swipeUp()
+        }
         XCTAssertTrue(
-            retainedPageOneTail.exists && retainedPageOneTail.isHittable,
-            "The accurate page-1 tail must remain actionable while page 2 is failed."
+            retainedPageOneTail.waitForExistence(timeout: 5) && retainedPageOneTail.isHittable,
+            "The accurate page-1 tail must remain reachable while page 2 is failed."
+        )
+        XCTAssertTrue(
+            retainedPageOneTail.label.contains("Quality workflow 75"),
+            "The retained page-1 tail must keep its canonical visible content while page 2 is failed."
+        )
+        tapWhenHittable(
+            retainedPageOneTail,
+            timeout: 5,
+            message: "The retained page-1 tail must open its real message detail while page 2 is failed."
+        )
+        assertElementExists("sheet.message.detail", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            context.app.staticTexts["Cross-page deterministic workflow row 75."]
+                .waitForExistence(timeout: 5),
+            "Opening the retained page-1 tail must expose its exact canonical body."
+        )
+        tapWhenHittable(
+            element(in: context.app, identifier: "action.message.close"),
+            timeout: 5,
+            message: "The retained page-1 detail must close through its real action."
+        )
+        assertElementExists("screen.messages.list", in: context.app, timeout: 8)
+        XCTAssertTrue(
+            pageFailure.waitForExistence(timeout: 3),
+            "Returning from the retained page-1 detail must preserve the page-owned failure state."
         )
         let pageRetry = element(in: context.app, identifier: "action.messages.page.retry")
         XCTAssertTrue(

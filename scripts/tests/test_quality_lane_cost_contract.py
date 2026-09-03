@@ -681,6 +681,12 @@ class QualityLaneCostContractTests(unittest.TestCase):
             "func testSettingsServerRejectsInvalidAndUnregisteredCandidatesWithoutLeakingSheetError()",
             1,
         )[0]
+        workflow = test_source.split(
+            "func testQualityMessageWorkflowLoadsSecondPageAndPersistsReadActions()", 1
+        )[1].split(
+            "func testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail()",
+            1,
+        )[0]
 
         self.assertIn("messages = (0..<125).map(qualityWorkflowFixtureMessage)", runtime)
         self.assertNotIn("messages = (0..<52).map(qualityWorkflowFixtureMessage)", runtime)
@@ -698,6 +704,15 @@ class QualityLaneCostContractTests(unittest.TestCase):
         self.assertIn("Set(0..<125)", test_source)
         self.assertIn("must remain bound to Quality workflow", test_source)
         self.assertIn("preserve contiguous newest-first order", test_source)
+        self.assertIn(
+            "tapWhenHittable(\n            retainedPageOneTail",
+            workflow,
+        )
+        self.assertIn("Cross-page deterministic workflow row 75.", workflow)
+        self.assertIn(
+            "Returning from the retained page-1 detail must preserve the page-owned failure state.",
+            workflow,
+        )
         self.assertIn("let tabBar = app.tabBars.firstMatch", badge_helper)
         self.assertIn("private func messagesTab(in app: XCUIApplication)", test_source)
         self.assertIn("tabBar.buttons.allElementsBoundByIndex.filter", test_source)
