@@ -1369,10 +1369,9 @@ final class PushGo_iOSUITests: XCTestCase {
     func testQualityMessageDeleteWithoutUndoPermanentlyRemovesOnlyTargetAcrossRelaunch() {
         let sessionID = "ios-delete-commit-\(UUID().uuidString.lowercased())"
         let context = configuredLaunchContext()
-        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+        context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = pendingDeletionQualitySessionPayload(
             sessionID: sessionID,
-            fixture: "channels.standard",
-            pendingDeletionTimeoutMilliseconds: 15_000
+            fixture: "channels.standard"
         )
 
         launch(context.app)
@@ -1420,10 +1419,9 @@ final class PushGo_iOSUITests: XCTestCase {
         // launch, and then complete exactly once at its original deadline.
         context.app.terminate()
         let afterTermination = configuredLaunchContext(runtimeRoot: context.runtimeRoot)
-        afterTermination.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+        afterTermination.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = pendingDeletionQualitySessionPayload(
             sessionID: sessionID,
-            fixture: "channels.standard",
-            pendingDeletionTimeoutMilliseconds: 15_000
+            fixture: "channels.standard"
         )
         launch(afterTermination.app)
         assertQualityRuntimeReady(in: afterTermination.app, timeout: 15)
@@ -1477,10 +1475,9 @@ final class PushGo_iOSUITests: XCTestCase {
         afterTermination.app.terminate()
 
         let relaunched = configuredLaunchContext()
-        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = pendingDeletionQualitySessionPayload(
             sessionID: sessionID,
-            fixture: "channels.standard",
-            pendingDeletionTimeoutMilliseconds: 15_000
+            fixture: "channels.standard"
         )
         launch(relaunched.app)
         assertQualityRuntimeReady(in: relaunched.app, timeout: 15)
@@ -1517,10 +1514,9 @@ final class PushGo_iOSUITests: XCTestCase {
             requestName: "message.open",
             args: ["message_id": "01H00000000000000000000002"]
         )
-        unavailableTarget.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+        unavailableTarget.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = pendingDeletionQualitySessionPayload(
             sessionID: sessionID,
-            fixture: "channels.standard",
-            pendingDeletionTimeoutMilliseconds: 15_000
+            fixture: "channels.standard"
         )
         launch(unavailableTarget.app)
         assertQualityRuntimeReady(in: unavailableTarget.app, timeout: 15)
@@ -4858,7 +4854,6 @@ final class PushGo_iOSUITests: XCTestCase {
         messagePageLoadDelayMilliseconds: Int? = nil,
         messageRefreshDelayMilliseconds: Int? = nil,
         messageSearchDelayMilliseconds: Int? = nil,
-        pendingDeletionTimeoutMilliseconds: Int? = nil,
         failMessageSearchOnce: Bool = false,
         legacyStore: String? = nil,
         failMessageLoad: Bool = false,
@@ -4901,9 +4896,6 @@ final class PushGo_iOSUITests: XCTestCase {
         if let messageSearchDelayMilliseconds {
             faults["message_search_delay_ms"] = messageSearchDelayMilliseconds
         }
-        if let pendingDeletionTimeoutMilliseconds {
-            faults["pending_deletion_timeout_ms"] = pendingDeletionTimeoutMilliseconds
-        }
         let payload: [String: Any] = [
             "schema_version": 1,
             "session_id": sessionID,
@@ -4917,6 +4909,19 @@ final class PushGo_iOSUITests: XCTestCase {
             .merging(expectedChannelMutationGatewayURL.map { ["expected_channel_mutation_gateway_url": $0] } ?? [:]) { _, new in new }
         let data = try! JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
         return data.base64EncodedString()
+    }
+
+    private func pendingDeletionQualitySessionPayload(sessionID: String, fixture: String) -> String {
+        let encoded = qualitySessionPayload(sessionID: sessionID, fixture: fixture)
+        let data = try! XCTUnwrap(Data(base64Encoded: encoded))
+        var payload = try! XCTUnwrap(
+            try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
+        )
+        var faults = try! XCTUnwrap(payload["faults"] as? [String: Any])
+        faults["pending_deletion_timeout_ms"] = 15_000
+        payload["faults"] = faults
+        let updatedData = try! JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+        return updatedData.base64EncodedString()
     }
 
     func launch(_ app: XCUIApplication, qualityHandshakeTimeout: TimeInterval = 15) {
