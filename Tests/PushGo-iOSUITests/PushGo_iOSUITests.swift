@@ -1704,6 +1704,21 @@ final class PushGo_iOSUITests: XCTestCase {
             targetTitle.waitForExistence(timeout: 8),
             "Retry must restore the canonical non-empty Message result, not only clear the error state."
         )
+        let targetRow = element(
+            in: context.app,
+            identifier: "message.row.00000000-0000-0000-0000-000000000001"
+        )
+        XCTAssertTrue(
+            targetRow.waitForExistence(timeout: 5) && targetRow.isHittable,
+            "Retry must restore the stable canonical Message row, not a title-only lookalike."
+        )
+        XCTAssertEqual(
+            context.app.descendants(matching: .any)
+                .matching(identifier: "message.row.00000000-0000-0000-0000-000000000001")
+                .count,
+            1,
+            "Retry must expose exactly one stable canonical Message row."
+        )
         XCTAssertEqual(
             context.app.staticTexts.matching(
                 NSPredicate(format: "label == %@", "P2 Split Seed Message")
@@ -1713,7 +1728,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
         XCTAssertFalse(element(in: context.app, identifier: "state.messages.load_failed").exists)
         XCTAssertFalse(element(in: context.app, identifier: "state.messages.empty").exists)
-        targetTitle.tap()
+        targetRow.tap()
         XCTAssertTrue(
             context.app.staticTexts["Seeded from fixture.seed_messages for UI validation."]
                 .waitForExistence(timeout: 5),
