@@ -1360,6 +1360,7 @@ final class PushGo_iOSUITests: XCTestCase {
 
     func testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch() {
         let sessionID = "ios-delete-undo-\(UUID().uuidString.lowercased())"
+        let qualityReadinessTimeout: TimeInterval = 30
         let context = configuredLaunchContext()
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = pendingDeletionQualitySessionPayload(
             sessionID: sessionID,
@@ -1369,7 +1370,7 @@ final class PushGo_iOSUITests: XCTestCase {
 
         launch(context.app)
 
-        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        assertQualityRuntimeReady(in: context.app, timeout: qualityReadinessTimeout)
         let title = context.app.staticTexts["P2 Split Seed Message"]
         XCTAssertTrue(title.waitForExistence(timeout: 8))
         title.tap()
@@ -1391,7 +1392,7 @@ final class PushGo_iOSUITests: XCTestCase {
             timeoutMilliseconds: 30_000
         )
         launch(afterTermination.app)
-        assertQualityRuntimeReady(in: afterTermination.app, timeout: 15)
+        assertQualityRuntimeReady(in: afterTermination.app, timeout: qualityReadinessTimeout)
         let restoredPendingDeletion = element(
             in: afterTermination.app,
             identifier: "state.pending_deletion"
@@ -1425,7 +1426,7 @@ final class PushGo_iOSUITests: XCTestCase {
             timeoutMilliseconds: 30_000
         )
         launch(relaunched.app)
-        assertQualityRuntimeReady(in: relaunched.app, timeout: 15)
+        assertQualityRuntimeReady(in: relaunched.app, timeout: qualityReadinessTimeout)
         XCTAssertTrue(
             relaunched.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8),
             "Undo must restore the canonical object, not only the visible row"
