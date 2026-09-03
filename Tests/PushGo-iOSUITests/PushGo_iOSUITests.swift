@@ -4956,7 +4956,21 @@ final class PushGo_iOSUITests: XCTestCase {
                 fullURL
             )
         ).firstMatch
-        if !exactAddress.waitForExistence(timeout: 2) {
+        // Give the real browser a bounded settling window before reaching for
+        // any system-private accessibility node. In a multi-test batch Safari
+        // can report a foreground process while its web snapshot is still
+        // being rebuilt; refreshing the foreground snapshot is cheaper and
+        // more reliable than immediately relying on `TabBarItemTitle`.
+        if !exactAddress.waitForExistence(timeout: 5) {
+            safari.activate()
+            XCTAssertTrue(
+                safari.wait(for: .runningForeground, timeout: 3),
+                "Safari must remain foreground while its exact URL field settles",
+                file: file,
+                line: line
+            )
+        }
+        if !exactAddress.exists && !exactAddress.waitForExistence(timeout: 5) {
             // iOS may initially keep Safari's address bar compact. This is the
             // only system-private interaction we permit; the exact URL field
             // below remains the decisive business oracle. A fresh Safari launch
