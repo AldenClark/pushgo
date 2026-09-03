@@ -180,7 +180,7 @@
       "id": "message-deletion-lifecycle",
       "paths": ["Shared/Application/PendingLocalDeletionController.swift", "Shared/UI/PendingLocalDeletionBar.swift"],
       "capabilities": ["messages", "message-detail", "delete-undo"],
-      "minimum_evidence": ["a real deletion immediately suppresses only its target", "Undo restores the exact canonical object", "deadline commit and relaunch keep the target absent while an unrelated message remains readable"],
+      "minimum_evidence": ["a real deletion immediately suppresses only its target", "Undo restores the exact canonical object", "an explicit iOS XCTest process termination preserves the pending scope for a new process, where a real Undo restores the exact canonical object", "deadline commit and relaunch keep the target absent while an unrelated message remains readable"],
       "required_checks": ["apple-ios-message-delete-undo", "apple-ios-message-delete-commit", "apple-macos-message-delete-lifecycle"],
       "lane": "pr",
       "known_evidence_gaps": ["This representative lifecycle does not claim multiple pending deletions, process death during claim, remote deletion conflicts, or backoff behavior."],
