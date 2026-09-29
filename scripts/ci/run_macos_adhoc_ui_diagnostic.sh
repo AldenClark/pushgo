@@ -46,7 +46,7 @@ payload = {
     "trial": int(trial) if trial in {"1", "2"} else trial,
     "first_clean_run_id": first_run_id or None,
     "selected_test": test_scope,
-    "signing_mode": "temporary_sandbox_only_ad_hoc",
+    "signing_mode": "temporary_sandboxed_ad_hoc_with_xctest_exceptions",
     "product_status": product_status,
     "test_system_status": test_system_status,
     "reason": reason,
@@ -170,18 +170,50 @@ process = subprocess.run(
     check=True,
 )
 entitlements = plistlib.loads(process.stdout)
+Path(output).write_text(json.dumps(entitlements, indent=2, sort_keys=True) + "\n")
 allowed = {
     "com.apple.security.app-sandbox",
     "com.apple.security.network.client",
     "com.apple.security.get-task-allow",
+    # Xcode adds these to the ad-hoc UI test host on macOS 26.4; their values
+    # remain checked below. App Group, keychain and other production rights fail.
+    "com.apple.security.files.user-selected.read-write",
+    "com.apple.security.temporary-exception.files.absolute-path.read-only",
+    "com.apple.security.temporary-exception.mach-lookup.global-name",
 }
 if entitlements.get("com.apple.security.app-sandbox") is not True:
     raise SystemExit("the ad-hoc App lost its required sandbox container")
+for key in ("com.apple.security.network.client", "com.apple.security.get-task-allow"):
+    if entitlements.get(key) is not True:
+        raise SystemExit(f"the ad-hoc App lost required test entitlement: {key}")
+production_rights = {
+    "com.apple.security.application-groups",
+    "keychain-access-groups",
+    "aps-environment",
+    "com.apple.developer.aps-environment",
+}
+if set(entitlements) & production_rights:
+    raise SystemExit(f"production entitlement in ad-hoc App: {sorted(set(entitlements) & production_rights)}")
 unexpected = sorted(set(entitlements) - allowed)
 if unexpected:
     raise SystemExit(f"unexpected entitlement claims: {unexpected}")
-Path(output).write_text(json.dumps(entitlements, indent=2, sort_keys=True) + "\n")
-print("sandbox_only_entitlements=verified")
+if entitlements.get("com.apple.security.files.user-selected.read-write") not in (None, True):
+    raise SystemExit("unexpected user-selected file entitlement value")
+read_only_paths = entitlements.get("com.apple.security.temporary-exception.files.absolute-path.read-only")
+if read_only_paths is not None and read_only_paths != ["/"]:
+    raise SystemExit(f"unexpected XCTest read-only path exception: {read_only_paths!r}")
+mach_services = entitlements.get("com.apple.security.temporary-exception.mach-lookup.global-name")
+test_services = {
+    "com.apple.testmanagerd",
+    "com.apple.dt.testmanagerd.runner",
+    "com.apple.coresymbolicationd",
+    "com.apple.coredevice.version",
+    "com.apple.coredevice.service",
+    "com.apple.remoted",
+}
+if mach_services is not None and (not isinstance(mach_services, list) or not set(mach_services) <= test_services):
+    raise SystemExit(f"unexpected XCTest mach lookup exception: {mach_services!r}")
+print("sandboxed_adhoc_test_entitlements=verified")
 PY
   exit 3
 fi
