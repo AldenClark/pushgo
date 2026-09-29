@@ -194,12 +194,11 @@ final class PushGo_iOSUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    @MainActor
     override func tearDown() async throws {
-        await MainActor.run {
-            let app = XCUIApplication()
-            if app.state != .notRunning {
-                app.terminate()
-            }
+        let app = XCUIApplication()
+        if app.state != .notRunning {
+            app.terminate()
         }
         let fileManager = FileManager.default
         for runtimeRoot in PushGoIOSUITestRuntimeRoots.consumeAll() {

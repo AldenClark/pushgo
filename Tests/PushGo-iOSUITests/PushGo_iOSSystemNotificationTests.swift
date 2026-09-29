@@ -6,12 +6,11 @@ final class PushGo_iOSSystemNotificationTests: XCTestCase {
         continueAfterFailure = false
     }
 
+    @MainActor
     override func tearDown() async throws {
-        await MainActor.run {
-            let app = XCUIApplication()
-            if app.state != .notRunning {
-                app.terminate()
-            }
+        let app = XCUIApplication()
+        if app.state != .notRunning {
+            app.terminate()
         }
     }
 
