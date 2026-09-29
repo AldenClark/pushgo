@@ -2160,6 +2160,60 @@ final class PushGo_macOSUITests: XCTestCase {
                 "Deterministic history owned by 01H00000000000000000000001."
             ].exists
         )
+
+        relaunched.app.terminate()
+        let deletedRoute = configuredQualityApp(
+            sessionID: sessionID,
+            fixture: "channels.standard",
+            requestName: "message.open",
+            requestArgs: ["message_id": "01H00000000000000000000002"]
+        )
+        launchQuality(deletedRoute, sessionID: sessionID)
+        assertVisibleScreenThroughUI("screen.messages.list", in: deletedRoute.app, timeout: 8)
+        XCTAssertFalse(
+            element(
+                in: deletedRoute.app,
+                identifier: "message.row.00000000-0000-0000-0000-00000000c002"
+            ).exists,
+            "A cold route to the deleted Message must not revive its canonical row."
+        )
+        XCTAssertFalse(
+            element(in: deletedRoute.app, identifier: "screen.message.detail").exists,
+            "The deleted target must not leave stale Message detail visible."
+        )
+        let unavailableFeedback = element(
+            in: deletedRoute.app,
+            identifier: "feedback.message.target_unavailable"
+        )
+        XCTAssertTrue(
+            unavailableFeedback.waitForExistence(timeout: 5),
+            "A cold route to the committed deletion must explain its list fallback."
+        )
+        let feedbackText = [
+            unavailableFeedback.label,
+            unavailableFeedback.value as? String ?? "",
+        ].joined(separator: " ")
+        XCTAssertTrue(
+            [
+                "The requested item was not found or has expired.",
+                "目标不存在，或已失效。",
+                "目標不存在，或已失效。",
+            ].contains(where: feedbackText.contains),
+            "The unavailable-target feedback must state the real outcome."
+        )
+        let survivingRow = element(
+            in: deletedRoute.app,
+            identifier: "message.row.00000000-0000-0000-0000-00000000c001"
+        )
+        XCTAssertTrue(survivingRow.waitForExistence(timeout: 8))
+        survivingRow.click()
+        assertVisibleScreenThroughUI("screen.message.detail", in: deletedRoute.app, timeout: 8)
+        XCTAssertTrue(
+            deletedRoute.app.staticTexts[
+                "Deterministic history owned by 01H00000000000000000000001."
+            ].waitForExistence(timeout: 5),
+            "The surviving canonical Message must remain actionable after the deleted route."
+        )
     }
 
     @MainActor

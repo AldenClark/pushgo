@@ -8,6 +8,7 @@ repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 # their source, so build it before entering SwiftPM's test build lock.
 swift build --package-path "$repo_root" \
   --disable-automatic-resolution \
+  --jobs 2 \
   --product PushGoSQLiteMigrationChild
 
 exec swift test --package-path "$repo_root" \
