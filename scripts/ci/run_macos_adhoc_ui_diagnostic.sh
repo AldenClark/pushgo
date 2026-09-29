@@ -13,7 +13,7 @@ run_attempt="${GITHUB_RUN_ATTEMPT:-1}"
 results_root="$repo_root/build/quality-results/apple-macos-adhoc-ui-diagnostic/trial-${trial}-run-${run_id}-${run_attempt}"
 mkdir -p "$results_root"
 
-test_scope='PushGo-macOSUITests/PushGo_macOSUITests/testThingRelationsOpenAccurateDetailsAndSurviveRelaunch'
+test_scope=''
 source_sha="$(git rev-parse HEAD)"
 product_status=NOT_RUN
 test_system_status=BLOCKED
@@ -53,7 +53,7 @@ payload = {
     "result_bundle": result_bundle or None,
     "runner_exit_code": int(runner_exit) if runner_exit else None,
     "script_exit_code": int(command_status),
-    "claim_limit": "One App-owned macOS Thing journey only; no quality gate, real APNs, keychain, cross-process App Group, Release, or distribution claim.",
+    "claim_limit": "One selected App-owned macOS UI journey only; no quality gate, real APNs, keychain, cross-process App Group, Release, or distribution claim.",
 }
 path = Path(classification)
 if path.exists():
@@ -66,6 +66,19 @@ PY
   exit "$command_status"
 }
 trap write_summary EXIT
+
+case "${DIAGNOSTIC_MACOS_SCOPE:-thing-relations}" in
+  thing-relations)
+    test_scope='PushGo-macOSUITests/PushGo_macOSUITests/testThingRelationsOpenAccurateDetailsAndSurviveRelaunch'
+    ;;
+  message-deletion-route)
+    test_scope='PushGo-macOSUITests/PushGo_macOSUITests/testMessageDeletionRestoresThenCommitsAccurateCanonicalStateAcrossRelaunch'
+    ;;
+  *)
+    reason=unsupported_macos_diagnostic_scope
+    exit 2
+    ;;
+esac
 
 if [[ "$trial" != '1' && "$trial" != '2' ]]; then
   reason=invalid_diagnostic_trial
@@ -220,7 +233,7 @@ fi
 
 # Reuse the exact signed products. The established runner owns zero-retry native
 # execution, the unlocked-console precondition, and strict xcresult verification.
-reason=native_thing_ui_not_executed
+reason=native_selected_ui_not_executed
 mkdir -p "$results_root/native"
 if QUALITY_REUSE_BUILT_TESTS=1 \
     DERIVED_DATA_PATH="$derived_data_path" \
@@ -304,7 +317,7 @@ try:
         classification["product_status"] = "PASSED"
         if runner_exit == "0" and runner_status == "PASSED" and not warnings:
             classification["test_system_status"] = "PASSED"
-            classification["reason"] = "one_clean_native_thing_journey"
+            classification["reason"] = "one_clean_native_selected_journey"
         else:
             classification["reason"] = "product_oracle_passed_but_native_test_system_not_clean"
     elif "QUALITY_PRECONDITION:" in log:
@@ -313,7 +326,7 @@ try:
     else:
         classification["product_status"] = "FAILED"
         classification["test_system_status"] = "FAILED_TEST_SYSTEM" if warnings else "PASSED"
-        classification["reason"] = "native_thing_product_oracle_failed"
+        classification["reason"] = "native_selected_product_oracle_failed"
 except Exception as error:
     classification["reason"] = f"native_result_unreadable:{type(error).__name__}"
 

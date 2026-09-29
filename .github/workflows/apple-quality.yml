@@ -5,7 +5,8 @@ on:
     # Labeled events provide a PR-only entry while this workflow is absent from
     # the default branch. Reapply apple-ui-diagnostic for a separate trial-1 run
     # only after reviewing the first run; each run keeps its own run ID and SHA.
-    # apple-ios-ui-diagnostic selects a separate three-journey Simulator run.
+    # apple-ios-ui-diagnostic selects a separate three-journey Simulator run;
+    # apple-macos-message-delete-diagnostic selects one deletion-route journey.
     types: [opened, synchronize, reopened, labeled]
   push:
     branches: [ main ]
@@ -35,6 +36,7 @@ on:
         options:
           - 'off'
           - macos-adhoc-thing
+          - macos-adhoc-message-deletion
           - apple-release-sdk
           - apple-ios-ui
       diagnostic_sha:
@@ -147,14 +149,15 @@ jobs:
           path: build/quality-results/*-summary.json
 
   macos_adhoc_ui_diagnostic:
-    name: Ad-hoc macOS Thing UI diagnostic (not a quality gate)
-    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'macos-adhoc-thing') || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'apple-ui-diagnostic') }}
+    name: Ad-hoc macOS App-owned UI diagnostic (not a quality gate)
+    if: ${{ (github.event_name == 'workflow_dispatch' && (inputs.diagnostic_mode == 'macos-adhoc-thing' || inputs.diagnostic_mode == 'macos-adhoc-message-deletion')) || (github.event_name == 'pull_request' && github.event.action == 'labeled' && (github.event.label.name == 'apple-ui-diagnostic' || github.event.label.name == 'apple-macos-message-delete-diagnostic')) }}
     runs-on: macos-26
     timeout-minutes: 120
     env:
       DIAGNOSTIC_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || inputs.diagnostic_sha }}
       DIAGNOSTIC_TRIAL: ${{ github.event_name == 'pull_request' && '1' || inputs.diagnostic_trial }}
       DIAGNOSTIC_FIRST_RUN_ID: ${{ inputs.diagnostic_first_run_id }}
+      DIAGNOSTIC_MACOS_SCOPE: ${{ ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'macos-adhoc-message-deletion') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-macos-message-delete-diagnostic')) && 'message-deletion-route' || 'thing-relations' }}
     steps:
       - name: Verify selected ref and requested SHA
         shell: bash
@@ -188,7 +191,7 @@ jobs:
         with:
           xcode-version: '26.4'
 
-      - name: Run one native ad-hoc Thing diagnostic
+      - name: Run one native ad-hoc App-owned diagnostic
         run: bash scripts/ci/run_macos_adhoc_ui_diagnostic.sh
 
       - name: Retain diagnostic build, signing, console, native log, and xcresult
