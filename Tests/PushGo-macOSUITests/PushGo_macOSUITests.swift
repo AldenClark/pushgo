@@ -3321,8 +3321,18 @@ final class PushGo_macOSUITests: XCTestCase {
             "Thing search must publish an App-owned settled result snapshot before the UI Oracle continues."
         )
         XCTAssertTrue(reopenedThingRow.exists)
+        let distractorExists: Bool
+        if ProcessInfo.processInfo.environment["PUSHGO_AX_QOS_SAMPLE_DIAGNOSTIC"] == "1" {
+            guard let sampledExists = sampleThingRowQueryAcrossProcesses(
+                reopenedDistractorRow,
+                sessionID: sessionID
+            ) else { return }
+            distractorExists = sampledExists
+        } else {
+            distractorExists = reopenedDistractorRow.exists
+        }
         XCTAssertFalse(
-            reopenedDistractorRow.exists,
+            distractorExists,
             "Thing search must keep the exact target while excluding a real distractor."
         )
         XCTAssertTrue(reopenedThingRow.label.contains("P2 Thing Rich"))
@@ -5799,6 +5809,190 @@ final class PushGo_macOSUITests: XCTestCase {
     @MainActor
     func element(in app: XCUIApplication, identifier: String) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+    }
+
+    /// Diagnostic-only stack capture around the existing Thing row query. A
+    /// sampled run is never a clean QoS qualification because sampling itself
+    /// changes scheduling; normal UI journeys take the original query path.
+    @MainActor
+    private func sampleThingRowQueryAcrossProcesses(
+        _ row: XCUIElement,
+        sessionID: String
+    ) -> Bool? {
+        let appBundleID = "io.ethan.pushgo"
+        let themeBundleID = "com.apple.appkit.xpc.ThemeWidgetControlViewService"
+        let appProcesses = NSRunningApplication.runningApplications(withBundleIdentifier: appBundleID)
+            .filter { !$0.isTerminated }
+        let themeProcesses = NSRunningApplication.runningApplications(withBundleIdentifier: themeBundleID)
+            .filter { !$0.isTerminated }
+        guard appProcesses.count == 1, themeProcesses.count == 1 else {
+            XCTFail(
+                "QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED expected one live App and ThemeWidget service; "
+                    + "app_count=\(appProcesses.count) theme_count=\(themeProcesses.count)"
+            )
+            return nil
+        }
+
+        let targets: [(role: String, pid: pid_t)] = [
+            ("runner", getpid()),
+            ("app", appProcesses[0].processIdentifier),
+            ("theme-widget", themeProcesses[0].processIdentifier),
+        ]
+        guard Set(targets.map { $0.pid }).count == targets.count,
+              targets.allSatisfy({ $0.pid > 0 && kill($0.pid, 0) == 0 }),
+              FileManager.default.isExecutableFile(atPath: "/usr/bin/sample")
+        else {
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED process identity, liveness, or sampler unavailable")
+            return nil
+        }
+
+        let sampleDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PushGoAXQoSSamples", isDirectory: true)
+            .appendingPathComponent(sessionID, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(
+                at: sampleDirectory,
+                withIntermediateDirectories: true
+            )
+        } catch {
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED cannot create sample directory: \(error)")
+            return nil
+        }
+
+        struct SampleJob {
+            let role: String
+            let targetPID: pid_t
+            let process: Process
+            let outputURL: URL
+            let errorPipe: Pipe
+        }
+
+        func startSample(role: String, pid: pid_t, phase: String, seconds: Int) throws -> SampleJob {
+            let outputURL = sampleDirectory.appendingPathComponent("\(phase)-\(role)-\(pid).txt")
+            let process = Process()
+            let errorPipe = Pipe()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/sample")
+            process.arguments = [String(pid), String(seconds), "1", "-file", outputURL.path]
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = errorPipe
+            try process.run()
+            return SampleJob(
+                role: role, targetPID: pid, process: process,
+                outputURL: outputURL, errorPipe: errorPipe
+            )
+        }
+
+        func finishSample(_ job: SampleJob) -> String? {
+            job.process.waitUntilExit()
+            let errorText = String(
+                data: job.errorPipe.fileHandleForReading.readDataToEndOfFile(),
+                encoding: .utf8
+            ) ?? ""
+            guard job.process.terminationReason == .exit,
+                  job.process.terminationStatus == 0,
+                  let data = try? Data(contentsOf: job.outputURL),
+                  !data.isEmpty,
+                  let stackText = String(data: data, encoding: .utf8),
+                  stackText.contains("(pid \(job.targetPID))"),
+                  stackText.contains("Call graph:")
+            else {
+                XCTFail(
+                    "QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED \(job.role) sample failed "
+                        + "status=\(job.process.terminationStatus) stderr=\(errorText)"
+                )
+                return nil
+            }
+            return stackText
+        }
+
+        let identity = targets.map { "\($0.role)_pid=\($0.pid)" }.joined(separator: "\n")
+        let manifestURL = sampleDirectory.appendingPathComponent("query-timing.txt")
+        do {
+            try identity.write(to: manifestURL, atomically: true, encoding: .utf8)
+        } catch {
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED cannot save process identity: \(error)")
+            return nil
+        }
+        for target in targets {
+            do {
+                let job = try startSample(
+                    role: target.role, pid: target.pid, phase: "permission-preflight", seconds: 1
+                )
+                guard finishSample(job) != nil else { return nil }
+            } catch {
+                XCTFail("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED \(target.role) preflight: \(error)")
+                return nil
+            }
+        }
+        guard targets.allSatisfy({ kill($0.pid, 0) == 0 }) else {
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED target exited after permission preflight")
+            return nil
+        }
+
+        var jobs: [SampleJob] = []
+        do {
+            for target in targets {
+                jobs.append(try startSample(
+                    role: target.role, pid: target.pid, phase: "row-query", seconds: 3
+                ))
+            }
+        } catch {
+            jobs.forEach { $0.process.waitUntilExit() }
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED capture startup: \(error)")
+            return nil
+        }
+        Thread.sleep(forTimeInterval: 0.15)
+        guard jobs.allSatisfy({ $0.process.isRunning }) else {
+            jobs.forEach { $0.process.waitUntilExit() }
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED capture exited before query")
+            return nil
+        }
+
+        let queryStarted = Date()
+        let exists = row.exists
+        let queryEnded = Date()
+        let timing = identity + "\nquery_start_epoch=\(queryStarted.timeIntervalSince1970)"
+            + "\nquery_end_epoch=\(queryEnded.timeIntervalSince1970)"
+            + "\nquery_duration_seconds=\(queryEnded.timeIntervalSince(queryStarted))"
+        do {
+            try timing.write(to: manifestURL, atomically: true, encoding: .utf8)
+        } catch {
+            jobs.forEach { $0.process.waitUntilExit() }
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED cannot save query timing: \(error)")
+            return nil
+        }
+        let timingAttachment = XCTAttachment(string: timing)
+        timingAttachment.name = "thing-ax-qos-query-timing"
+        timingAttachment.lifetime = .keepAlways
+        add(timingAttachment)
+
+        let reportDateFormatter = DateFormatter()
+        reportDateFormatter.locale = Locale(identifier: "en_US_POSIX")
+        reportDateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS Z"
+        for job in jobs {
+            guard let stackText = finishSample(job) else { return nil }
+            let attachment = XCTAttachment(string: stackText)
+            attachment.name = "thing-ax-qos-\(job.role)-sample"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            guard let reportDateLine = stackText.split(separator: "\n").first(where: {
+                $0.hasPrefix("Date/Time:")
+            }),
+                  let reportStarted = reportDateFormatter.date(
+                    from: String(reportDateLine.dropFirst("Date/Time:".count))
+                        .trimmingCharacters(in: .whitespaces)
+                  ),
+                  reportStarted <= queryStarted,
+                  queryEnded <= reportStarted.addingTimeInterval(3)
+            else {
+                XCTFail(
+                    "QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED \(job.role) sample report "
+                        + "does not bracket the AX query interval"
+                )
+                return nil
+            }
+        }
+        return exists
     }
 
     @MainActor

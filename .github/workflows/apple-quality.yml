@@ -12,6 +12,8 @@ on:
     # select the existing filter/read and history-cleanup methods on each OS;
     # apple-ios-message-history-diagnostic and apple-ios-message-facets-diagnostic
     # select those iOS methods separately after the mixed run failed.
+    # apple-macos-thing-ax-qos-sample-diagnostic captures stacks around the
+    # original Thing query; sampled execution never closes the QoS issue.
     types: [opened, synchronize, reopened, labeled]
   push:
     branches: [ main ]
@@ -160,14 +162,14 @@ jobs:
 
   macos_adhoc_ui_diagnostic:
     name: Ad-hoc macOS App-owned UI diagnostic (not a quality gate)
-    if: ${{ (github.event_name == 'workflow_dispatch' && (inputs.diagnostic_mode == 'macos-adhoc-thing' || inputs.diagnostic_mode == 'macos-adhoc-message-deletion' || inputs.diagnostic_mode == 'macos-adhoc-message-list')) || (github.event_name == 'pull_request' && github.event.action == 'labeled' && (github.event.label.name == 'apple-ui-diagnostic' || github.event.label.name == 'apple-macos-message-delete-diagnostic' || github.event.label.name == 'apple-macos-message-list-diagnostic')) }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && (inputs.diagnostic_mode == 'macos-adhoc-thing' || inputs.diagnostic_mode == 'macos-adhoc-message-deletion' || inputs.diagnostic_mode == 'macos-adhoc-message-list')) || (github.event_name == 'pull_request' && github.event.action == 'labeled' && (github.event.label.name == 'apple-ui-diagnostic' || github.event.label.name == 'apple-macos-message-delete-diagnostic' || github.event.label.name == 'apple-macos-message-list-diagnostic' || github.event.label.name == 'apple-macos-thing-ax-qos-sample-diagnostic')) }}
     runs-on: macos-26
     timeout-minutes: 120
     env:
       DIAGNOSTIC_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || inputs.diagnostic_sha }}
       DIAGNOSTIC_TRIAL: ${{ github.event_name == 'pull_request' && '1' || inputs.diagnostic_trial }}
       DIAGNOSTIC_FIRST_RUN_ID: ${{ inputs.diagnostic_first_run_id }}
-      DIAGNOSTIC_MACOS_SCOPE: ${{ ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'macos-adhoc-message-list') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-macos-message-list-diagnostic')) && 'message-list' || ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'macos-adhoc-message-deletion') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-macos-message-delete-diagnostic')) && 'message-deletion-route' || 'thing-relations' }}
+      DIAGNOSTIC_MACOS_SCOPE: ${{ (github.event_name == 'pull_request' && github.event.label.name == 'apple-macos-thing-ax-qos-sample-diagnostic') && 'thing-ax-qos-sample' || ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'macos-adhoc-message-list') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-macos-message-list-diagnostic')) && 'message-list' || ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'macos-adhoc-message-deletion') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-macos-message-delete-diagnostic')) && 'message-deletion-route' || 'thing-relations' }}
     steps:
       - name: Verify selected ref and requested SHA
         shell: bash

@@ -15,6 +15,7 @@ mkdir -p "$results_root"
 
 test_scopes=()
 expected_test_count=1
+sample_capture_mode=0
 source_sha="$(git rev-parse HEAD)"
 product_status=NOT_RUN
 test_system_status=BLOCKED
@@ -29,7 +30,7 @@ write_summary() {
   trap - EXIT
   python3 - "$summary_file" "$classification_file" "$source_sha" "$trial" \
     "$first_run_id" "$product_status" "$test_system_status" "$reason" \
-    "$result_bundle" "$runner_exit" "$command_status" "$expected_test_count" "${test_scopes[@]}" <<'PY'
+    "$result_bundle" "$runner_exit" "$command_status" "$expected_test_count" "$sample_capture_mode" "${test_scopes[@]}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -37,11 +38,11 @@ from pathlib import Path
 (
     output, classification, source_sha, trial, first_run_id, product_status,
     test_system_status, reason, result_bundle, runner_exit, command_status,
-    expected_test_count, *test_scopes,
+    expected_test_count, sample_capture_mode, *test_scopes,
 ) = sys.argv[1:]
 payload = {
     "schema_version": 1,
-    "kind": "direct_native_macos_adhoc_ui_diagnostic",
+    "kind": "direct_native_macos_thing_ax_qos_sample_diagnostic" if sample_capture_mode == "1" else "direct_native_macos_adhoc_ui_diagnostic",
     "quality_gate_status": "NOT_RUN",
     "source_sha": source_sha,
     "trial": int(trial) if trial in {"1", "2"} else trial,
@@ -50,6 +51,7 @@ payload = {
     "selected_tests": test_scopes,
     "expected_test_count": int(expected_test_count),
     "max_retries": 0,
+    "sample_capture_mode": sample_capture_mode == "1",
     "signing_mode": "temporary_sandboxed_ad_hoc_with_xctest_exceptions",
     "product_status": product_status,
     "test_system_status": test_system_status,
@@ -57,7 +59,9 @@ payload = {
     "result_bundle": result_bundle or None,
     "runner_exit_code": int(runner_exit) if runner_exit else None,
     "script_exit_code": int(command_status),
-    "claim_limit": "Only the selected App-owned macOS UI journeys; no quality gate, real APNs, keychain, cross-process App Group, Release, or distribution claim.",
+    "claim_limit": ("Diagnostic stacks and timing around one sampled Thing query only; sampling changes scheduling and cannot close the QoS issue or qualify the product. No formal quality gate."
+                    if sample_capture_mode == "1" else
+                    "Only the selected App-owned macOS UI journeys; no quality gate, real APNs, keychain, cross-process App Group, Release, or distribution claim."),
 }
 path = Path(classification)
 if path.exists():
@@ -72,6 +76,10 @@ PY
 trap write_summary EXIT
 
 case "${DIAGNOSTIC_MACOS_SCOPE:-thing-relations}" in
+  thing-ax-qos-sample)
+    test_scopes=('PushGo-macOSUITests/PushGo_macOSUITests/testThingRelationsOpenAccurateDetailsAndSurviveRelaunch')
+    sample_capture_mode=1
+    ;;
   thing-relations)
     test_scopes=('PushGo-macOSUITests/PushGo_macOSUITests/testThingRelationsOpenAccurateDetailsAndSurviveRelaunch')
     ;;
@@ -172,6 +180,44 @@ if [[ ! -d "$app_bundle" || ! -d "$test_runner" || ! -d "$test_bundle" || "$xcte
 fi
 xctestrun="$(find "$derived_data_path/Build/Products" -maxdepth 1 -name 'PushGo-macOS_*.xctestrun' -print | head -n 1)"
 cp "$xctestrun" "$results_root/$(basename "$xctestrun")"
+sample_xctestrun=''
+if [[ "$sample_capture_mode" == '1' ]]; then
+  reason=ax_qos_sample_xctestrun_injection_failed
+  sample_xctestrun="$derived_data_path/Build/Products/PushGo-macOS_AXQoSSample.xctestrun"
+  python3 - "$xctestrun" "$sample_xctestrun" <<'PY'
+import plistlib
+import sys
+from pathlib import Path
+
+source, output = map(Path, sys.argv[1:])
+specification = plistlib.loads(source.read_bytes())
+targets = [
+    target
+    for configuration in specification.get("TestConfigurations", [])
+    for target in configuration.get("TestTargets", [])
+    if target.get("BlueprintName") == "PushGo-macOSUITests"
+]
+if len(targets) != 1 or not isinstance(targets[0].get("TestingEnvironmentVariables"), dict):
+    raise SystemExit("expected exactly one macOS UI Runner environment")
+environment = targets[0]["TestingEnvironmentVariables"]
+if "PUSHGO_AX_QOS_SAMPLE_DIAGNOSTIC" in environment:
+    raise SystemExit("sample switch already set in the build product")
+environment["PUSHGO_AX_QOS_SAMPLE_DIAGNOSTIC"] = "1"
+output.write_bytes(plistlib.dumps(specification, fmt=plistlib.FMT_XML))
+reloaded = plistlib.loads(output.read_bytes())
+reloaded_targets = [
+    target
+    for configuration in reloaded["TestConfigurations"]
+    for target in configuration["TestTargets"]
+    if target.get("BlueprintName") == "PushGo-macOSUITests"
+]
+if len(reloaded_targets) != 1 or reloaded_targets[0]["TestingEnvironmentVariables"].get("PUSHGO_AX_QOS_SAMPLE_DIAGNOSTIC") != "1":
+    raise SystemExit("sample switch did not survive xctestrun round-trip")
+print("ax_qos_sample_xctestrun_environment=verified")
+PY
+  plutil -lint "$sample_xctestrun" > "$results_root/sample-xctestrun-lint.log" 2>&1
+  cp "$sample_xctestrun" "$results_root/$(basename "$sample_xctestrun")"
+fi
 
 reason=adhoc_signature_or_sandbox_entitlements_invalid
 if ! {
@@ -252,6 +298,7 @@ fi
 reason=native_selected_ui_not_executed
 mkdir -p "$results_root/native"
 if QUALITY_REUSE_BUILT_TESTS=1 \
+    QUALITY_XCTESTRUN_PATH="$sample_xctestrun" \
     DERIVED_DATA_PATH="$derived_data_path" \
     RESULTS_ROOT="$results_root/native" \
     TEST_SCOPES="$test_scopes_csv" \
@@ -297,14 +344,16 @@ fi
 
 if PYTHONPATH="$repo_root" python3 - "$results_root/native-summary-raw.json" \
     "$results_root/native-legacy-object-raw.json" "$results_root/native-test.log" \
-    "$results_root/runner-status.txt" "$runner_exit" "$expected_test_count" "$classification_file" <<'PY'; then
+    "$results_root/runner-status.txt" "$runner_exit" "$expected_test_count" \
+    "$classification_file" "$sample_capture_mode" "$result_bundle" <<'PY'; then
 import json
+import subprocess
 import sys
 from pathlib import Path
 
 from scripts.verify_apple_test_execution import combined_warning_messages
 
-summary_path, legacy_path, log_path, runner_status_path, runner_exit, expected_count, output_path = sys.argv[1:]
+summary_path, legacy_path, log_path, runner_status_path, runner_exit, expected_count, output_path, sample_capture_mode, result_bundle = sys.argv[1:]
 expected_count = int(expected_count)
 classification = {
     "product_status": "NOT_RUN",
@@ -319,7 +368,7 @@ try:
         name: summary.get(name, 0)
         for name in ("passedTests", "failedTests", "skippedTests", "expectedFailures")
     }
-    if any(isinstance(value, bool) or not isinstance(value, int) for value in counts.values()):
+    if any(isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in counts.values()):
         raise ValueError("noninteger native test counts")
     classification["native_counts"] = counts
     classification["runtime_warning_count"] = len(warnings)
@@ -330,6 +379,63 @@ try:
     log = Path(log_path).read_text(errors="replace")
     if executed != expected_count or counts["skippedTests"] or counts["expectedFailures"]:
         classification["reason"] = "selected_native_test_not_exactly_executed"
+    elif sample_capture_mode == "1":
+        failures = summary.get("testFailures", [])
+        if not isinstance(failures, list) or any(
+            not isinstance(item, dict) or not isinstance(item.get("testName"), str)
+            or not isinstance(item.get("failureText"), str)
+            for item in failures
+        ):
+            raise ValueError("sampled method failure details unreadable")
+        if len({item["testName"] for item in failures}) != counts["failedTests"]:
+            raise ValueError("sampled method failures do not match native counts")
+        classification["native_failures"] = failures
+        if counts["failedTests"]:
+            if all("QUALITY_PRECONDITION: AX_QOS_SAMPLE_BLOCKED" in item["failureText"] for item in failures):
+                classification["test_system_status"] = "BLOCKED"
+                classification["reason"] = "three_pid_sample_precondition_blocked"
+            else:
+                classification["product_status"] = "FAILED"
+                classification["reason"] = "sampled_native_method_failed"
+        elif counts["passedTests"] == expected_count:
+            test_id = "PushGo_macOSUITests/testThingRelationsOpenAccurateDetailsAndSurviveRelaunch()"
+            activities = subprocess.run(
+                ["xcrun", "xcresulttool", "get", "test-results", "activities",
+                 "--path", result_bundle, "--test-id", test_id],
+                capture_output=True, text=True, check=True,
+            )
+            Path(output_path).with_name("native-activities-raw.json").write_text(activities.stdout)
+            names = set()
+            def collect_attachments(value):
+                if isinstance(value, dict):
+                    for item in value.get("attachments", []):
+                        if isinstance(item, dict) and isinstance(item.get("name"), str):
+                            names.add(item["name"])
+                    for child in value.values():
+                        collect_attachments(child)
+                elif isinstance(value, list):
+                    for child in value:
+                        collect_attachments(child)
+            collect_attachments(json.loads(activities.stdout))
+            required = {
+                "thing-ax-qos-query-timing",
+                "thing-ax-qos-runner-sample",
+                "thing-ax-qos-app-sample",
+                "thing-ax-qos-theme-widget-sample",
+            }
+            classification["sample_attachment_names"] = sorted(names & required)
+            if not required <= names:
+                classification["reason"] = "three_pid_sample_attachments_missing"
+            elif warnings:
+                classification["sample_capture_status"] = "PASSED"
+                classification["reason"] = "three_pid_sample_captured_with_runtime_warning"
+            elif runner_exit == "0" and runner_status == "PASSED":
+                classification["sample_capture_status"] = "PASSED"
+                classification["test_system_status"] = "PASSED"
+                classification["reason"] = "three_pid_sample_captured"
+            else:
+                classification["sample_capture_status"] = "PASSED"
+                classification["reason"] = "three_pid_sample_captured_but_runner_not_clean"
     elif counts["passedTests"] == expected_count:
         classification["product_status"] = "PASSED"
         if runner_exit == "0" and runner_status == "PASSED" and not warnings:
@@ -349,7 +455,13 @@ except Exception as error:
 
 Path(output_path).write_text(json.dumps(classification, indent=2, sort_keys=True) + "\n")
 print(json.dumps(classification, sort_keys=True))
-raise SystemExit(0 if classification["product_status"] == "PASSED" and classification["test_system_status"] == "PASSED" else 1)
+if sample_capture_mode == "1":
+    success = (classification.get("sample_capture_status") == "PASSED"
+               and classification["test_system_status"] == "PASSED")
+else:
+    success = (classification["product_status"] == "PASSED"
+               and classification["test_system_status"] == "PASSED")
+raise SystemExit(0 if success else 1)
 PY
   exit 0
 else
