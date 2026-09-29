@@ -1245,6 +1245,43 @@ final class PushGo_iOSUITests: XCTestCase {
         assertMessageTitles(allTitles, excluding: [], in: context.app)
         assertMessagesTabBadgeCount(4, in: context.app)
 
+        // This diagnostic snapshots the real foreground/window geometry before
+        // the first filter action. A failed XCTest hit-point report can render
+        // every ancestor as an infinite-origin, zero-size failure snapshot;
+        // these earlier measurements distinguish that from the live UI state.
+        func attachFilterProbe(_ name: String, _ body: String) {
+            let attachment = XCTAttachment(string: body)
+            attachment.name = "message-facet-filter-\(name)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+        attachFilterProbe(
+            "app-state",
+            "epoch=\(Date().timeIntervalSince1970) state=\(context.app.state)"
+        )
+        let filterGeometry: [(String, XCUIElement)] = [
+            ("main-window", context.app.windows.firstMatch),
+            ("filter-button", context.app.buttons["action.messages.filter"]),
+            ("filter-any", element(in: context.app, identifier: "action.messages.filter")),
+            ("messages-tab", context.app.buttons["tab.messages"]),
+            ("refresh-button", context.app.buttons["action.messages.refresh"]),
+            ("mark-all-read-button", context.app.buttons["action.messages.mark_all_read"]),
+        ]
+        for (name, target) in filterGeometry {
+            let started = Date().timeIntervalSince1970
+            let exists = target.exists
+            let frame = exists ? String(describing: target.frame) : "<missing>"
+            attachFilterProbe(
+                name,
+                "query_start_epoch=\(started) query_end_epoch=\(Date().timeIntervalSince1970) "
+                    + "exists=\(exists) frame=\(frame)"
+            )
+        }
+        let filterPixels = XCTAttachment(screenshot: context.app.screenshot())
+        filterPixels.name = "message-facet-filter-before-first-tap"
+        filterPixels.lifetime = .keepAlways
+        add(filterPixels)
+
         openMessageFilters(in: context.app)
         tapWhenHittable(element(in: context.app, identifier: "filter.channel-filter-alpha"), timeout: 5)
         dismissMessageFilters(in: context.app)
