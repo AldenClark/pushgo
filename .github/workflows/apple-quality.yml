@@ -8,6 +8,8 @@ on:
     # apple-ios-ui-diagnostic selects a separate three-journey Simulator run;
     # apple-ios-message-workflow-diagnostic selects its repaired first method;
     # apple-macos-message-delete-diagnostic selects one deletion-route journey.
+    # apple-ios-message-list-diagnostic and apple-macos-message-list-diagnostic
+    # select the existing filter/read and history-cleanup methods on each OS.
     types: [opened, synchronize, reopened, labeled]
   push:
     branches: [ main ]
@@ -38,9 +40,11 @@ on:
           - 'off'
           - macos-adhoc-thing
           - macos-adhoc-message-deletion
+          - macos-adhoc-message-list
           - apple-release-sdk
           - apple-ios-ui
           - apple-ios-message-workflow
+          - apple-ios-message-list
       diagnostic_sha:
         description: Exact 40-character SHA of the selected branch tip (required for diagnostic)
         required: false
@@ -152,14 +156,14 @@ jobs:
 
   macos_adhoc_ui_diagnostic:
     name: Ad-hoc macOS App-owned UI diagnostic (not a quality gate)
-    if: ${{ (github.event_name == 'workflow_dispatch' && (inputs.diagnostic_mode == 'macos-adhoc-thing' || inputs.diagnostic_mode == 'macos-adhoc-message-deletion')) || (github.event_name == 'pull_request' && github.event.action == 'labeled' && (github.event.label.name == 'apple-ui-diagnostic' || github.event.label.name == 'apple-macos-message-delete-diagnostic')) }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && (inputs.diagnostic_mode == 'macos-adhoc-thing' || inputs.diagnostic_mode == 'macos-adhoc-message-deletion' || inputs.diagnostic_mode == 'macos-adhoc-message-list')) || (github.event_name == 'pull_request' && github.event.action == 'labeled' && (github.event.label.name == 'apple-ui-diagnostic' || github.event.label.name == 'apple-macos-message-delete-diagnostic' || github.event.label.name == 'apple-macos-message-list-diagnostic')) }}
     runs-on: macos-26
     timeout-minutes: 120
     env:
       DIAGNOSTIC_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || inputs.diagnostic_sha }}
       DIAGNOSTIC_TRIAL: ${{ github.event_name == 'pull_request' && '1' || inputs.diagnostic_trial }}
       DIAGNOSTIC_FIRST_RUN_ID: ${{ inputs.diagnostic_first_run_id }}
-      DIAGNOSTIC_MACOS_SCOPE: ${{ ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'macos-adhoc-message-deletion') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-macos-message-delete-diagnostic')) && 'message-deletion-route' || 'thing-relations' }}
+      DIAGNOSTIC_MACOS_SCOPE: ${{ ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'macos-adhoc-message-list') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-macos-message-list-diagnostic')) && 'message-list' || ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'macos-adhoc-message-deletion') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-macos-message-delete-diagnostic')) && 'message-deletion-route' || 'thing-relations' }}
     steps:
       - name: Verify selected ref and requested SHA
         shell: bash
@@ -257,12 +261,12 @@ jobs:
 
   ios_ui_diagnostic:
     name: iOS App-owned message UI diagnostic (not a quality gate)
-    if: ${{ (github.event_name == 'workflow_dispatch' && (inputs.diagnostic_mode == 'apple-ios-ui' || inputs.diagnostic_mode == 'apple-ios-message-workflow')) || (github.event_name == 'pull_request' && github.event.action == 'labeled' && (github.event.label.name == 'apple-ios-ui-diagnostic' || github.event.label.name == 'apple-ios-message-workflow-diagnostic')) }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && (inputs.diagnostic_mode == 'apple-ios-ui' || inputs.diagnostic_mode == 'apple-ios-message-workflow' || inputs.diagnostic_mode == 'apple-ios-message-list')) || (github.event_name == 'pull_request' && github.event.action == 'labeled' && (github.event.label.name == 'apple-ios-ui-diagnostic' || github.event.label.name == 'apple-ios-message-workflow-diagnostic' || github.event.label.name == 'apple-ios-message-list-diagnostic')) }}
     runs-on: macos-26
     timeout-minutes: 120
     env:
       DIAGNOSTIC_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || inputs.diagnostic_sha }}
-      DIAGNOSTIC_IOS_SCOPE: ${{ ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'apple-ios-message-workflow') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-ios-message-workflow-diagnostic')) && 'message-workflow' || 'message-three' }}
+      DIAGNOSTIC_IOS_SCOPE: ${{ ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'apple-ios-message-list') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-ios-message-list-diagnostic')) && 'message-list' || ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'apple-ios-message-workflow') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-ios-message-workflow-diagnostic')) && 'message-workflow' || 'message-three' }}
     steps:
       - name: Verify selected ref and requested SHA
         shell: bash

@@ -23,6 +23,10 @@ result_bundle=''
 runner_exit=''
 verify_exit=''
 
+stage() {
+  printf '[%s] diagnostic_stage=%s status=%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$1" "$2"
+}
+
 write_summary() {
   local command_status=$?
   trap - EXIT
@@ -85,6 +89,13 @@ case "${DIAGNOSTIC_IOS_SCOPE:-message-three}" in
       'PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageWorkflowLoadsSecondPageAndPersistsReadActions'
     )
     expected_test_count=1
+    ;;
+  message-list)
+    test_scopes=(
+      'PushGo-iOSUITests/PushGo_iOSUITests/testMessageChannelTagCombinedUngroupedFiltersAndScopedReadPersist'
+      'PushGo-iOSUITests/PushGo_iOSUITests/testHistoryCleanupRemovesOnlyOldMessagesAndPersistsAcrossRelaunch'
+    )
+    expected_test_count=2
     ;;
   *)
     reason=unsupported_ios_diagnostic_scope
@@ -149,10 +160,12 @@ simulator_id="$(xcrun simctl create 'PushGo Quality iPhone' \
   com.apple.CoreSimulator.SimDeviceType.iPhone-17 "$runtime_identifier")"
 printf '%s\n' "$simulator_id" > "$results_root/simulator-udid.txt"
 reason=ios_simulator_boot_failed
+stage simulator_boot started
 if ! { xcrun simctl boot "$simulator_id" && xcrun simctl bootstatus "$simulator_id" -b; } \
   > "$results_root/simulator-boot.log" 2>&1; then
   exit 2
 fi
+stage simulator_boot completed
 xcrun simctl list devices > "$results_root/simulator-devices-after-boot.log"
 
 temporary_root="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/pushgo-ios-ui.XXXXXX")"
@@ -177,11 +190,13 @@ done
 
 reason=ios_build_for_testing_failed
 test_system_status=FAILED_TEST_SYSTEM
+stage build_for_testing started
 if ! xcodebuild "${common_args[@]}" CODE_SIGNING_ALLOWED=NO \
   build-for-testing > "$results_root/build-for-testing.log" 2>&1; then
   tail -n 50 "$results_root/build-for-testing.log"
   exit 3
 fi
+stage build_for_testing completed
 app_bundle="$derived_data_path/Build/Products/Debug-iphonesimulator/PushGo.app"
 test_runner="$derived_data_path/Build/Products/Debug-iphonesimulator/PushGo-iOSUITests-Runner.app"
 if [[ ! -d "$app_bundle" || ! -d "$test_runner" ]]; then
@@ -190,14 +205,17 @@ if [[ ! -d "$app_bundle" || ! -d "$test_runner" ]]; then
 fi
 
 reason=ios_built_app_preinstall_failed
+stage app_install started
 if ! "$repo_root/scripts/prepare_ios_ui_test_app.sh" "$simulator_id" \
   "$app_bundle" io.ethan.pushgo > "$results_root/app-install.log" 2>&1; then
   exit 2
 fi
+stage app_install completed
 xcrun simctl terminate "$simulator_id" io.ethan.pushgo >/dev/null 2>&1 || true
 
 result_bundle="$results_root/message-journeys.xcresult"
 reason=native_ios_message_tests_not_clean
+stage test_without_building started
 if xcodebuild "${common_args[@]}" -resultBundlePath "$result_bundle" \
   CODE_SIGNING_ALLOWED=NO test-without-building \
   > "$results_root/native-test.log" 2>&1; then
@@ -205,6 +223,7 @@ if xcodebuild "${common_args[@]}" -resultBundlePath "$result_bundle" \
 else
   runner_exit=$?
 fi
+stage test_without_building completed
 if [[ ! -d "$result_bundle" ]]; then
   reason=native_ios_xcresult_missing
   exit 3
@@ -225,10 +244,12 @@ capture_xcresult_json() {
 }
 
 reason=native_ios_xcresult_raw_receipts_unreadable
+stage native_receipt started
 if ! capture_xcresult_json "$results_root/native-summary-raw.json" test-results summary ||
    ! capture_xcresult_json "$results_root/native-legacy-object-raw.json" object --legacy; then
   exit 3
 fi
+stage native_receipt completed
 
 if python3 "$repo_root/scripts/verify_apple_test_execution.py" \
   --result-bundle "$result_bundle" --expected-test-count "$expected_test_count" \

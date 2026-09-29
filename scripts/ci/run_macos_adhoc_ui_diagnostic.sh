@@ -13,7 +13,8 @@ run_attempt="${GITHUB_RUN_ATTEMPT:-1}"
 results_root="$repo_root/build/quality-results/apple-macos-adhoc-ui-diagnostic/trial-${trial}-run-${run_id}-${run_attempt}"
 mkdir -p "$results_root"
 
-test_scope=''
+test_scopes=()
+expected_test_count=1
 source_sha="$(git rev-parse HEAD)"
 product_status=NOT_RUN
 test_system_status=BLOCKED
@@ -28,7 +29,7 @@ write_summary() {
   trap - EXIT
   python3 - "$summary_file" "$classification_file" "$source_sha" "$trial" \
     "$first_run_id" "$product_status" "$test_system_status" "$reason" \
-    "$result_bundle" "$runner_exit" "$command_status" "$test_scope" <<'PY'
+    "$result_bundle" "$runner_exit" "$command_status" "$expected_test_count" "${test_scopes[@]}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -36,7 +37,7 @@ from pathlib import Path
 (
     output, classification, source_sha, trial, first_run_id, product_status,
     test_system_status, reason, result_bundle, runner_exit, command_status,
-    test_scope,
+    expected_test_count, *test_scopes,
 ) = sys.argv[1:]
 payload = {
     "schema_version": 1,
@@ -45,7 +46,10 @@ payload = {
     "source_sha": source_sha,
     "trial": int(trial) if trial in {"1", "2"} else trial,
     "first_clean_run_id": first_run_id or None,
-    "selected_test": test_scope,
+    "selected_test": test_scopes[0] if len(test_scopes) == 1 else None,
+    "selected_tests": test_scopes,
+    "expected_test_count": int(expected_test_count),
+    "max_retries": 0,
     "signing_mode": "temporary_sandboxed_ad_hoc_with_xctest_exceptions",
     "product_status": product_status,
     "test_system_status": test_system_status,
@@ -53,7 +57,7 @@ payload = {
     "result_bundle": result_bundle or None,
     "runner_exit_code": int(runner_exit) if runner_exit else None,
     "script_exit_code": int(command_status),
-    "claim_limit": "One selected App-owned macOS UI journey only; no quality gate, real APNs, keychain, cross-process App Group, Release, or distribution claim.",
+    "claim_limit": "Only the selected App-owned macOS UI journeys; no quality gate, real APNs, keychain, cross-process App Group, Release, or distribution claim.",
 }
 path = Path(classification)
 if path.exists():
@@ -69,16 +73,28 @@ trap write_summary EXIT
 
 case "${DIAGNOSTIC_MACOS_SCOPE:-thing-relations}" in
   thing-relations)
-    test_scope='PushGo-macOSUITests/PushGo_macOSUITests/testThingRelationsOpenAccurateDetailsAndSurviveRelaunch'
+    test_scopes=('PushGo-macOSUITests/PushGo_macOSUITests/testThingRelationsOpenAccurateDetailsAndSurviveRelaunch')
     ;;
   message-deletion-route)
-    test_scope='PushGo-macOSUITests/PushGo_macOSUITests/testMessageDeletionRestoresThenCommitsAccurateCanonicalStateAcrossRelaunch'
+    test_scopes=('PushGo-macOSUITests/PushGo_macOSUITests/testMessageDeletionRestoresThenCommitsAccurateCanonicalStateAcrossRelaunch')
+    ;;
+  message-list)
+    test_scopes=(
+      'PushGo-macOSUITests/PushGo_macOSUITests/testMessageChannelTagCombinedUngroupedFiltersAndScopedReadPersist'
+      'PushGo-macOSUITests/PushGo_macOSUITests/testHistoryCleanupRemovesOnlyOldMessagesAndPersistsAcrossRelaunch'
+    )
+    expected_test_count=2
     ;;
   *)
     reason=unsupported_macos_diagnostic_scope
     exit 2
     ;;
 esac
+only_testing_args=()
+for scope in "${test_scopes[@]}"; do
+  only_testing_args+=("-only-testing:$scope")
+done
+test_scopes_csv="$(IFS=,; printf '%s' "${test_scopes[*]}")"
 
 if [[ "$trial" != '1' && "$trial" != '2' ]]; then
   reason=invalid_diagnostic_trial
@@ -133,7 +149,7 @@ if ! xcodebuild \
   -maximum-parallel-testing-workers 1 \
   -collect-test-diagnostics never \
   -jobs 2 \
-  "-only-testing:$test_scope" \
+  "${only_testing_args[@]}" \
   CODE_SIGNING_ALLOWED=YES \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY=- \
@@ -238,8 +254,8 @@ mkdir -p "$results_root/native"
 if QUALITY_REUSE_BUILT_TESTS=1 \
     DERIVED_DATA_PATH="$derived_data_path" \
     RESULTS_ROOT="$results_root/native" \
-    TEST_SCOPES="$test_scope" \
-    QUALITY_EXPECTED_TEST_COUNT=1 \
+    TEST_SCOPES="$test_scopes_csv" \
+    QUALITY_EXPECTED_TEST_COUNT="$expected_test_count" \
     MAX_RETRIES=0 \
     QUALITY_RUNNER_STATUS_FILE="$results_root/runner-status.txt" \
     "$repo_root/scripts/run_macos_ui_tests.sh" \
@@ -281,14 +297,15 @@ fi
 
 if PYTHONPATH="$repo_root" python3 - "$results_root/native-summary-raw.json" \
     "$results_root/native-legacy-object-raw.json" "$results_root/native-test.log" \
-    "$results_root/runner-status.txt" "$runner_exit" "$classification_file" <<'PY'; then
+    "$results_root/runner-status.txt" "$runner_exit" "$expected_test_count" "$classification_file" <<'PY'; then
 import json
 import sys
 from pathlib import Path
 
 from scripts.verify_apple_test_execution import combined_warning_messages
 
-summary_path, legacy_path, log_path, runner_status_path, runner_exit, output_path = sys.argv[1:]
+summary_path, legacy_path, log_path, runner_status_path, runner_exit, expected_count, output_path = sys.argv[1:]
+expected_count = int(expected_count)
 classification = {
     "product_status": "NOT_RUN",
     "test_system_status": "FAILED_TEST_SYSTEM",
@@ -311,13 +328,13 @@ try:
     classification["runner_status"] = runner_status
     executed = counts["passedTests"] + counts["failedTests"] + counts["expectedFailures"]
     log = Path(log_path).read_text(errors="replace")
-    if executed != 1 or counts["skippedTests"] or counts["expectedFailures"]:
+    if executed != expected_count or counts["skippedTests"] or counts["expectedFailures"]:
         classification["reason"] = "selected_native_test_not_exactly_executed"
-    elif counts["passedTests"] == 1:
+    elif counts["passedTests"] == expected_count:
         classification["product_status"] = "PASSED"
         if runner_exit == "0" and runner_status == "PASSED" and not warnings:
             classification["test_system_status"] = "PASSED"
-            classification["reason"] = "one_clean_native_selected_journey"
+            classification["reason"] = "clean_native_selected_journeys"
         else:
             classification["reason"] = "product_oracle_passed_but_native_test_system_not_clean"
     elif "QUALITY_PRECONDITION:" in log:
