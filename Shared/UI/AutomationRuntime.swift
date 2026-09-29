@@ -4566,7 +4566,11 @@ final class PushGoAutomationRuntime {
                 bundle.messages
                     .map { $0.toPushMessage() }
                     .sorted { $0.receivedAt > $1.receivedAt }
-            )
+            ) { phase in
+                await MainActor.run {
+                    environment.markQualityRuntimeReadiness("seeding.messages.\(phase)")
+                }
+            }
             environment.markQualityRuntimeReadiness("seeding.messages.saved")
         }
         if !bundle.entityRecords.isEmpty {

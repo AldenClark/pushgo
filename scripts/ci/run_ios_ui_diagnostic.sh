@@ -97,6 +97,18 @@ case "${DIAGNOSTIC_IOS_SCOPE:-message-three}" in
     )
     expected_test_count=2
     ;;
+  message-history-cleanup)
+    test_scopes=(
+      'PushGo-iOSUITests/PushGo_iOSUITests/testHistoryCleanupRemovesOnlyOldMessagesAndPersistsAcrossRelaunch'
+    )
+    expected_test_count=1
+    ;;
+  message-facets)
+    test_scopes=(
+      'PushGo-iOSUITests/PushGo_iOSUITests/testMessageChannelTagCombinedUngroupedFiltersAndScopedReadPersist'
+    )
+    expected_test_count=1
+    ;;
   *)
     reason=unsupported_ios_diagnostic_scope
     exit 2
@@ -261,7 +273,7 @@ fi
 
 if PYTHONPATH="$repo_root" python3 - "$results_root/native-summary-raw.json" \
   "$results_root/native-legacy-object-raw.json" \
-  "$results_root/native-test.log" "$runner_exit" "$verify_exit" "$expected_test_count" \
+  "$runner_exit" "$verify_exit" "$expected_test_count" \
   "$classification_file" <<'PY'; then
 import json
 import sys
@@ -271,7 +283,7 @@ from scripts.verify_apple_test_execution import (
     combined_warning_messages,
 )
 
-summary_path, legacy_path, log_path, runner_exit, verify_exit, expected, output = sys.argv[1:]
+summary_path, legacy_path, runner_exit, verify_exit, expected, output = sys.argv[1:]
 classification = {
     "product_status": "NOT_RUN",
     "test_system_status": "FAILED_TEST_SYSTEM",
@@ -290,10 +302,51 @@ try:
     classification["native_counts"] = counts
     classification["runtime_warning_count"] = len(warnings)
     executed = counts["passedTests"] + counts["failedTests"] + counts["expectedFailures"]
-    log = Path(log_path).read_text(errors="replace")
+    failures = summary.get("testFailures", [])
+    if not isinstance(failures, list):
+        raise ValueError("invalid native test failures")
+    failure_details = []
+    for failure in failures:
+        if (not isinstance(failure, dict)
+                or not isinstance(failure.get("testName"), str)
+                or not isinstance(failure.get("failureText"), str)):
+            raise ValueError("malformed native test failure")
+        failure_text = failure["failureText"]
+        if "QUALITY_PRECONDITION:" in failure_text:
+            failure_kind = "quality_precondition"
+        elif ("Failed to determine hittability" in failure_text
+              and "Activation point invalid and no suggested hit points based on element frame" in failure_text):
+            # This exact XCTest AX error interrupted the visible-point query
+            # and left every attached element frame infinite/zero. It gives no
+            # completed product oracle, but the failure remains explicit.
+            failure_kind = "ax_actionability_unresolved"
+        else:
+            failure_kind = "non_precondition_failure"
+        failure_details.append({
+            "test_name": failure["testName"],
+            "failure_text": failure_text,
+            "failure_kind": failure_kind,
+        })
+    if counts["failedTests"] and len({item["test_name"] for item in failure_details}) != counts["failedTests"]:
+        raise ValueError("native failure details do not cover every failed test")
+    if not counts["failedTests"] and failure_details:
+        raise ValueError("native failure details contradict the test counts")
+    classification["native_failures"] = failure_details
+    failure_kinds = {item["failure_kind"] for item in failure_details}
     if executed != int(expected) or counts["skippedTests"] or counts["expectedFailures"]:
         classification["reason"] = "selected_native_tests_not_exactly_executed"
-    elif "QUALITY_PRECONDITION:" in log:
+    elif "non_precondition_failure" in failure_kinds:
+        # A second method's precondition or AX error must not erase a real
+        # product assertion failure already recorded by another method.
+        classification["product_status"] = "FAILED"
+        if failure_kinds - {"non_precondition_failure"} or warnings:
+            classification["reason"] = "native_product_failure_with_test_system_failure"
+        else:
+            classification["test_system_status"] = "PASSED"
+            classification["reason"] = "native_message_product_oracle_failed"
+    elif "ax_actionability_unresolved" in failure_kinds:
+        classification["reason"] = "native_ax_actionability_unresolved"
+    elif "quality_precondition" in failure_kinds:
         classification["test_system_status"] = "BLOCKED"
         classification["reason"] = "app_owned_quality_precondition_failed"
     elif counts["passedTests"] == int(expected):
@@ -303,10 +356,6 @@ try:
             classification["reason"] = "selected_native_app_owned_message_journeys_clean"
         else:
             classification["reason"] = "product_oracles_passed_but_native_test_system_not_clean"
-    elif counts["failedTests"] > 0:
-        classification["product_status"] = "FAILED"
-        classification["test_system_status"] = "FAILED_TEST_SYSTEM" if warnings else "PASSED"
-        classification["reason"] = "native_message_product_oracle_failed"
 except Exception as error:
     classification["reason"] = f"native_result_unreadable:{type(error).__name__}"
 

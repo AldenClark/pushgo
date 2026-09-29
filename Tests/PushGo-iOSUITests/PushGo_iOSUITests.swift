@@ -646,6 +646,17 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(recentRow.waitForExistence(timeout: 8))
         assertMessagesTabBadgeCount(2, in: context.app)
 
+        // Preserve the pre-tap toolbar pixels and AX geometry when the iOS
+        // Simulator cannot resolve the filter control's activation point.
+        let filterScreenshot = XCTAttachment(screenshot: context.app.screenshot())
+        filterScreenshot.name = "message-filter-before-history-cleanup"
+        filterScreenshot.lifetime = .keepAlways
+        add(filterScreenshot)
+        let filterHierarchy = XCTAttachment(string: context.app.debugDescription)
+        filterHierarchy.name = "message-filter-ax-before-history-cleanup"
+        filterHierarchy.lifetime = .keepAlways
+        add(filterHierarchy)
+
         openMessageFilters(in: context.app)
         tapWhenHittable(
             element(in: context.app, identifier: "action.messages.history_cleanup"),
@@ -5216,7 +5227,7 @@ final class PushGo_iOSUITests: XCTestCase {
 
     private func openMessageFilters(in app: XCUIApplication) {
         tapWhenHittable(
-            element(in: app, identifier: "action.messages.filter"),
+            app.buttons["action.messages.filter"],
             timeout: 5,
             message: "The production message filter control must be reachable"
         )
