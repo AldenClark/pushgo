@@ -117,41 +117,14 @@ private func leaveCommittedMessageUpdateInWAL(
 
 private final class MigrationChildBundleAnchor: NSObject {}
 
-private func compileMigrationChild(in root: URL) throws -> URL {
-    let packageRoot = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
+private func migrationChildExecutable() throws -> URL {
     let products = Bundle(for: MigrationChildBundleAnchor.self).bundleURL.deletingLastPathComponent()
-    let moduleMap = packageRoot.appendingPathComponent(
-        ".build/checkouts/GRDB.swift/Sources/GRDBSQLite/module.modulemap"
-    )
-    let source = packageRoot.appendingPathComponent("Tests/Fixtures/sqlite_migration_child.swift")
-    let executable = root.appendingPathComponent("sqlite-migration-child")
-    let compilerLog = root.appendingPathComponent("sqlite-migration-child-compile.log")
-    try #require(FileManager.default.fileExists(atPath: products.appendingPathComponent("libPushGoAppleCore.a").path))
-    try #require(FileManager.default.fileExists(atPath: moduleMap.path))
-    FileManager.default.createFile(atPath: compilerLog.path, contents: nil)
-    let output = try FileHandle(forWritingTo: compilerLog)
-    defer { try? output.close() }
-    let compiler = Process()
-    compiler.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
-    compiler.arguments = [
-        "swiftc", "-parse-as-library", "-I", products.path,
-        "-Xcc", "-fmodule-map-file=\(moduleMap.path)",
-        "-L", products.path, "-lPushGoAppleCore",
-        source.path, "-o", executable.path,
-    ]
-    compiler.standardOutput = output
-    compiler.standardError = output
-    try compiler.run()
-    compiler.waitUntilExit()
-    guard compiler.terminationStatus == 0 else {
-        let details = (try? String(contentsOf: compilerLog, encoding: .utf8)) ?? ""
+    let executable = products.appendingPathComponent("PushGoSQLiteMigrationChild")
+    guard FileManager.default.isExecutableFile(atPath: executable.path) else {
         throw NSError(
             domain: "io.ethan.pushgo.store-recovery-child",
-            code: Int(compiler.terminationStatus),
-            userInfo: [NSLocalizedDescriptionKey: "Migration child compile failed: \(details)"]
+            code: 42,
+            userInfo: [NSLocalizedDescriptionKey: "SwiftPM migration child is missing or not executable at \(executable.path). Run `swift build --product PushGoSQLiteMigrationChild` before a bare `swift test`, or use scripts/run_apple_core_tests.sh."]
         )
     }
     return executable
@@ -588,7 +561,7 @@ struct LocalDataStoreStoreRecoveryTests {
             let firstWALBytes = try Data(contentsOf: firstWALURL)
             let controlDirectory = root.appendingPathComponent("migration-control", isDirectory: true)
             try FileManager.default.createDirectory(at: controlDirectory, withIntermediateDirectories: true)
-            let executable = try compileMigrationChild(in: root)
+            let executable = try migrationChildExecutable()
             let lockURL = prepared.targetMain.deletingLastPathComponent()
                 .appendingPathComponent(".pushgo-sqlite-migration.lock")
 
@@ -691,7 +664,7 @@ struct LocalDataStoreStoreRecoveryTests {
             let firstWALBytes = try Data(contentsOf: URL(fileURLWithPath: firstSourceMain.path + "-wal"))
             let controlDirectory = root.appendingPathComponent("migration-crash-control", isDirectory: true)
             try FileManager.default.createDirectory(at: controlDirectory, withIntermediateDirectories: true)
-            let executable = try compileMigrationChild(in: root)
+            let executable = try migrationChildExecutable()
             let lockURL = prepared.targetMain.deletingLastPathComponent()
                 .appendingPathComponent(".pushgo-sqlite-migration.lock")
 

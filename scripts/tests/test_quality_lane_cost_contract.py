@@ -873,10 +873,13 @@ class QualityLaneCostContractTests(unittest.TestCase):
             "        ;;", 1
         )[0]
         self.assertIn(
-            "swift test --package-path \"$repo_root\" --filter "
+            '"$repo_root/scripts/run_apple_core_tests.sh" --filter '
             "currentV24StorePreservesPendingDeletionThroughV25AndReopen",
             store_check,
         )
+        core_runner = (REPO / "scripts/run_apple_core_tests.sh").read_text()
+        self.assertIn("--product PushGoSQLiteMigrationChild", core_runner)
+        self.assertIn('exec swift test --package-path "$repo_root"', core_runner)
         self.assertIn("identity, state, deadline, and Undo semantics", store_check)
 
     def test_core_only_store_impact_uses_a_bounded_disk_reserve_without_weakening_ui_reserve(self) -> None:

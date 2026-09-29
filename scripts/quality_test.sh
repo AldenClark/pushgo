@@ -346,7 +346,7 @@ PY
         ;;
       apple-store-migration-reopen)
         selected_claims+=("old Store migration preserves a pending user action's identity, state, deadline, and Undo semantics through migration and reopen")
-        swift test --package-path "$repo_root" --filter currentV24StorePreservesPendingDeletionThroughV25AndReopen
+        "$repo_root/scripts/run_apple_core_tests.sh" --filter currentV24StorePreservesPendingDeletionThroughV25AndReopen
         claims+=("old Store migration preserves a pending user action's identity, state, deadline, and Undo semantics through migration and reopen")
         ;;
       apple-ios-message-unavailable-route)
@@ -520,7 +520,7 @@ run_core() {
   selected_claims+=("Apple Core/Store/integration suite and localization completeness")
   "$repo_root/scripts/quality_doctor.sh"
   python3 "$repo_root/scripts/verify_apple_localizations.py"
-  swift test --package-path "$repo_root"
+  "$repo_root/scripts/run_apple_core_tests.sh"
   claims+=("Apple Core/Store/integration suite and localization completeness")
 }
 
@@ -544,8 +544,7 @@ run_performance() {
   selected_claims+=("Apple 100k Store plus 10k Watch/concurrency correctness and provisional host regression ceilings")
   selected_claims+=("iOS prepared 1k Store cold-launch-to-accurate-content metrics and purpose oracle")
   "$repo_root/scripts/quality_doctor.sh" --host-only
-  PUSHGO_RUNTIME_QUALITY=1 swift test \
-    --package-path "$repo_root" \
+  PUSHGO_RUNTIME_QUALITY=1 "$repo_root/scripts/run_apple_core_tests.sh" \
     --filter RuntimeQualityLargeScaleTests \
     2>&1 | tee "$performance_log"
   claims+=("Apple 100k Store plus 10k Watch/concurrency correctness and provisional host regression ceilings")

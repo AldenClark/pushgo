@@ -5,8 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 (
   cd "$ROOT"
-  swift test \
-    --disable-automatic-resolution \
+  "$ROOT/scripts/run_apple_core_tests.sh" \
     --filter 'nWriterRollbackShadowsDecode|rollbackShadowWriteFailure|nMinusOneV2AckShadow'
 )
 
