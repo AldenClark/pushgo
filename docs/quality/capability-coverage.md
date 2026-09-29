@@ -2,11 +2,15 @@
 
 此索引防遗漏，不计算覆盖分，不是测试 Oracle。入口或类型存在不能让能力通过；最终判定以真实用户结果和必要数据/系统终点为准。
 
-2026-09-29 Apple ingress 异步边界别名保护：`NotificationPersistenceCoordinator.RemotePayload` 现在构造时递归复制受支持的 property-list 值，避免调用方保留的可变 Foundation 对象在后续 `await` 前改写持久化输入。新增 `remotePayloadSnapshotsMutableFoundationValuesBeforePersistence` 用嵌套 `NSMutableDictionary`/`NSMutableString` 构造、同步变异原对象，再走生产批量持久化和 Store 读取，要求准确原始标题、正文及嵌套字段；当前仅完成源码与静态并发审计，原生 Core 回归等待验证分支 CI，不能记为已通过或真实并发竞态复现。
+2026-09-29 Apple ingress 异步边界别名保护：`NotificationPersistenceCoordinator.RemotePayload` 现在构造时递归复制受支持的 property-list 值，避免调用方保留的可变 Foundation 对象在后续 `await` 前改写持久化输入。新增 `remotePayloadSnapshotsMutableFoundationValuesBeforePersistence` 用嵌套 `NSMutableDictionary`/`NSMutableString` 构造、同步变异原对象，再走生产批量持久化和 Store 读取，要求准确原始标题、正文及嵌套字段。验证分支精确 `2a7376b` 的 [Concurrency CI](https://github.com/AldenClark/pushgo/actions/runs/36522311264) 中该测试原生通过，Core 456 项/42 suites 注册、452 项实际执行，四项规模测试显式跳过；这只证明构造前快照的受控持久化结果，未复现真实并发竞态。
 
 2026-09-29 Apple 跨网关投递 ID 隔离：旧实现把不同 Gateway 的同一 `delivery_id` 当作全局已入库，受控 Core 回归在修复前精确失败（新 Gateway 未拉取，目标消息缺失）；仅修前置判重后仍触发同一 v2 journal entry 的不同 payload 指纹冲突，揭示来源字段必须贯穿所有 durable/canonical 写入。当前修复以实际 Gateway URL 约束 inbox 已入库判断和 canonical request-ID 判重，v2/legacy 拉取均保留真实来源；回归证明 A 的准确标题/正文不变，B 的准确标题/正文独立入库、同一 ID 下保留两行且只有 B 的来源匹配，B 的 durable ACK 最终调用受控 `/v2/messages/ack` 测试路由。聚焦 1/1、相关 Core 116/116；最终 GRDB 7.11.0 Core 455 项/42 suites 列入并通过，其中 4 项显式 opt-in 跳过、451 项实际执行。这里是本机模拟 Gateway/Store 链，不是公开 Gateway、真实 APNs 或物理设备验收；watchOS 来源账本分支另经 SDK 编译与专用模拟器业务运行，但没有跨网关碰撞的 watchOS 端到端重演。
 
 2026-09-29 Apple Store 文件族恢复：`LocalDataStoreStoreRecoveryTests` 的前 4 条在生产 Store 写入后用独立进程提交 WAL 并骤停，分别触发主库已移动/WAL 未移动、共享主库已复制/WAL 未复制以及两种 64 字节部分复制；修复前精确表现为旧标题或损坏库，修复后 4/4 通过。目标目录跨进程 `flock` 另由两个独立 PID 的 barrier/持锁者自发 SIGKILL 场景 2/2 验证，检查来源主库与 WAL 同族、重开后的准确标题和条数；这两条没有旧码红测。主机 10k Watch 快照、10k 并发乱序、100k 旧库升级 opt-in 各 1/1；100k Store 路径首次在并行负载下搜索 22.457 秒超过 20 秒上限，保留 `FAILED` 记录，停止并行 native 负载后的同源码独立诊断搜索 12.833 秒、整例 1/1 通过，支持但不单独证明资源竞争归因。正式 Performance Lane 仍由过期测试系统登记阻断；受控主机证据不能代替实际磁盘 ENOSPC/电源故障/物理设备，P1-STORE 仍 `DEFERRED`。
+
+2026-09-29 Apple fresh-CI Store 核验：验证分支 `2a7376b` 的 [Concurrency CI](https://github.com/AldenClark/pushgo/actions/runs/36522311264) 先构建独立 SwiftPM 迁移子进程产品，再运行两条真实跨 PID 的锁/中断恢复测试，均通过；完整 Core 456 项/42 suites 注册、452 项实际执行、四项显式 opt-in 跳过。之前冷 CI 因缺历史残留 `.a` 而在夹具准备阶段失败，已由显式构建修复；这不是新的磁盘故障或设备证据。
+
+2026-09-29 iOS 26.4.1 Message 诊断边界：验证分支 `719551b` 的 [三方法原生 Simulator 运行](https://github.com/AldenClark/pushgo/actions/runs/36522013477) 实际执行 3 项，Delete/Undo 与 Search 各通过，125-Message Workflow 在准确分页文案断言处失败，未继续执行页失败/Retry、完整 125 ID 和已读重开链；结果为 2 passed/1 failed/0 skipped/0 runtime warning、产品 `FAILED`、测试系统 `PASSED`、正式质量门禁 `NOT RUN`。其定位显示 iOS 26.4 的 AX 将分页 identifier 投影到 spinner，而旧测试还隐含简中 locale；修正的文本/几何 Oracle 在新提交上仍待原生复验，不能把此运行补写为完整分页通过。
 
 2026-09-29 watchOS 独立接收迁移：旧 Gateway/device route 清理由 durable SQLite journal 与退休 key 约束，远端注册、upsert、订阅、teardown、配置切换及清理走同一串行队列；手机 provisioning 中断则由先于 Keychain 写入的 pending marker 阻止混合凭据同步，完整快照同事务提交后恢复。watchOS 27 专用 Simulator 中 app-owned DEBUG harness 的 Gateway 清理 seed/recover 与 provisioning 中断 seed/recover 共 4 阶段 `PASS`，每组保持同一 session、跨实际启动；断言准确旧/新 key、删除与 upsert 请求、SQLite pending/代际、Ready 和重放结果。HTTP 为假传输，存储为 hermetic 沙盒，未执行 native UI、真实 APNs/WC/网关、签名 Release 或物理设备；已发旧 UPSERT 的远端晚到结果依赖下次前台/启动重试，不承诺瞬时强一致。
 
