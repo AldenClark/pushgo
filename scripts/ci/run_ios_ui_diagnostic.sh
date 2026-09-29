@@ -12,11 +12,8 @@ mkdir -p "$results_root"
 source_sha="$(git rev-parse HEAD)"
 summary_file="$results_root/diagnostic-summary.json"
 classification_file="$results_root/native-classification.json"
-test_scopes=(
-  'PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageWorkflowLoadsSecondPageAndPersistsReadActions'
-  'PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail'
-  'PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch'
-)
+test_scopes=()
+expected_test_count=0
 product_status=NOT_RUN
 test_system_status=BLOCKED
 reason=diagnostic_not_started
@@ -32,7 +29,7 @@ write_summary() {
   python3 - "$summary_file" "$classification_file" "$source_sha" \
     "$product_status" "$test_system_status" "$reason" "$simulator_id" \
     "$runtime_version" "$result_bundle" "$runner_exit" "$verify_exit" \
-    "$command_status" "${test_scopes[@]}" <<'PY'
+    "$command_status" "$expected_test_count" "${test_scopes[@]}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -40,7 +37,7 @@ from pathlib import Path
 (
     output, classification, source_sha, product_status, test_system_status,
     reason, simulator_id, runtime_version, result_bundle, runner_exit,
-    verify_exit, command_status, *scopes,
+    verify_exit, command_status, expected_test_count, *scopes,
 ) = sys.argv[1:]
 payload = {
     "schema_version": 1,
@@ -48,7 +45,7 @@ payload = {
     "quality_gate_status": "NOT_RUN",
     "source_sha": source_sha,
     "selected_tests": scopes,
-    "expected_test_count": 3,
+    "expected_test_count": int(expected_test_count),
     "max_retries": 0,
     "signing_mode": "unsigned_simulator_test_build_only",
     "simulator_udid": simulator_id or None,
@@ -60,7 +57,7 @@ payload = {
     "runner_exit_code": int(runner_exit) if runner_exit else None,
     "strict_verifier_exit_code": int(verify_exit) if verify_exit else None,
     "script_exit_code": int(command_status),
-    "claim_limit": "Three App-owned message journeys on iOS Simulator only; no formal quality gate, physical device, provider delivery, Release, or distribution claim.",
+    "claim_limit": "Only the selected App-owned message journeys on iOS Simulator; no formal quality gate, physical device, provider delivery, Release, or distribution claim.",
 }
 path = Path(classification)
 if path.exists():
@@ -73,6 +70,27 @@ PY
   exit "$command_status"
 }
 trap write_summary EXIT
+
+case "${DIAGNOSTIC_IOS_SCOPE:-message-three}" in
+  message-three)
+    test_scopes=(
+      'PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageWorkflowLoadsSecondPageAndPersistsReadActions'
+      'PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageSearchReturnsOnlyTheTargetAndOpensItsRealDetail'
+      'PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageDeleteUndoRestoresTheSameObjectAcrossRelaunch'
+    )
+    expected_test_count=3
+    ;;
+  message-workflow)
+    test_scopes=(
+      'PushGo-iOSUITests/PushGo_iOSUITests/testQualityMessageWorkflowLoadsSecondPageAndPersistsReadActions'
+    )
+    expected_test_count=1
+    ;;
+  *)
+    reason=unsupported_ios_diagnostic_scope
+    exit 2
+    ;;
+esac
 
 if [[ "$run_id" == local || "${MAX_RETRIES:-0}" != 0 ]]; then
   reason=diagnostic_requires_isolated_runner_and_zero_retries
@@ -213,7 +231,7 @@ if ! capture_xcresult_json "$results_root/native-summary-raw.json" test-results 
 fi
 
 if python3 "$repo_root/scripts/verify_apple_test_execution.py" \
-  --result-bundle "$result_bundle" --expected-test-count 3 \
+  --result-bundle "$result_bundle" --expected-test-count "$expected_test_count" \
   --reject-runtime-warnings > "$results_root/strict-verifier.log" 2>&1; then
   verify_exit=0
 else
@@ -222,7 +240,7 @@ fi
 
 if PYTHONPATH="$repo_root" python3 - "$results_root/native-summary-raw.json" \
   "$results_root/native-legacy-object-raw.json" \
-  "$results_root/native-test.log" "$runner_exit" "$verify_exit" \
+  "$results_root/native-test.log" "$runner_exit" "$verify_exit" "$expected_test_count" \
   "$classification_file" <<'PY'; then
 import json
 import sys
@@ -232,7 +250,7 @@ from scripts.verify_apple_test_execution import (
     combined_warning_messages,
 )
 
-summary_path, legacy_path, log_path, runner_exit, verify_exit, output = sys.argv[1:]
+summary_path, legacy_path, log_path, runner_exit, verify_exit, expected, output = sys.argv[1:]
 classification = {
     "product_status": "NOT_RUN",
     "test_system_status": "FAILED_TEST_SYSTEM",
@@ -252,16 +270,16 @@ try:
     classification["runtime_warning_count"] = len(warnings)
     executed = counts["passedTests"] + counts["failedTests"] + counts["expectedFailures"]
     log = Path(log_path).read_text(errors="replace")
-    if executed != 3 or counts["skippedTests"] or counts["expectedFailures"]:
+    if executed != int(expected) or counts["skippedTests"] or counts["expectedFailures"]:
         classification["reason"] = "selected_native_tests_not_exactly_executed"
     elif "QUALITY_PRECONDITION:" in log:
         classification["test_system_status"] = "BLOCKED"
         classification["reason"] = "app_owned_quality_precondition_failed"
-    elif counts["passedTests"] == 3:
+    elif counts["passedTests"] == int(expected):
         classification["product_status"] = "PASSED"
         if runner_exit == "0" and verify_exit == "0" and not warnings:
             classification["test_system_status"] = "PASSED"
-            classification["reason"] = "three_clean_native_app_owned_message_journeys"
+            classification["reason"] = "selected_native_app_owned_message_journeys_clean"
         else:
             classification["reason"] = "product_oracles_passed_but_native_test_system_not_clean"
     elif counts["failedTests"] > 0:
@@ -277,7 +295,7 @@ raise SystemExit(0 if classification["product_status"] == "PASSED" and classific
 PY
   product_status=PASSED
   test_system_status=PASSED
-  reason=three_clean_native_app_owned_message_journeys
+  reason=selected_native_app_owned_message_journeys_clean
   exit 0
 fi
 reason=native_ios_message_tests_not_clean

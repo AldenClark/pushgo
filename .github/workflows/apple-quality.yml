@@ -6,6 +6,7 @@ on:
     # the default branch. Reapply apple-ui-diagnostic for a separate trial-1 run
     # only after reviewing the first run; each run keeps its own run ID and SHA.
     # apple-ios-ui-diagnostic selects a separate three-journey Simulator run;
+    # apple-ios-message-workflow-diagnostic selects its repaired first method;
     # apple-macos-message-delete-diagnostic selects one deletion-route journey.
     types: [opened, synchronize, reopened, labeled]
   push:
@@ -39,6 +40,7 @@ on:
           - macos-adhoc-message-deletion
           - apple-release-sdk
           - apple-ios-ui
+          - apple-ios-message-workflow
       diagnostic_sha:
         description: Exact 40-character SHA of the selected branch tip (required for diagnostic)
         required: false
@@ -255,11 +257,12 @@ jobs:
 
   ios_ui_diagnostic:
     name: iOS App-owned message UI diagnostic (not a quality gate)
-    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'apple-ios-ui') || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'apple-ios-ui-diagnostic') }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && (inputs.diagnostic_mode == 'apple-ios-ui' || inputs.diagnostic_mode == 'apple-ios-message-workflow')) || (github.event_name == 'pull_request' && github.event.action == 'labeled' && (github.event.label.name == 'apple-ios-ui-diagnostic' || github.event.label.name == 'apple-ios-message-workflow-diagnostic')) }}
     runs-on: macos-26
     timeout-minutes: 120
     env:
       DIAGNOSTIC_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || inputs.diagnostic_sha }}
+      DIAGNOSTIC_IOS_SCOPE: ${{ ((github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'apple-ios-message-workflow') || (github.event_name == 'pull_request' && github.event.label.name == 'apple-ios-message-workflow-diagnostic')) && 'message-workflow' || 'message-three' }}
     steps:
       - name: Verify selected ref and requested SHA
         shell: bash
@@ -289,7 +292,7 @@ jobs:
         with:
           xcode-version: '26.4'
 
-      - name: Build, install, and run three App-owned iOS journeys
+      - name: Build, install, and run selected App-owned iOS journeys
         env:
           EXPECTED_SHA: ${{ env.DIAGNOSTIC_SOURCE_SHA }}
           MAX_RETRIES: '0'
