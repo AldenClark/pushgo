@@ -72,11 +72,11 @@ enum NotificationPersistenceCoordinator {
 
         init(payload: [AnyHashable: Any], requestIdentifier: String?) {
             // Snapshot property-list values before the first async suspension;
-            // a caller may otherwise retain mutable Foundation objects.
+            // sanitizer filtering alone may retain bridged mutable Foundation leaves.
             self.payload = UserInfoSanitizer.sanitize(payload).reduce(
                 into: [AnyHashable: Any]()
             ) { result, entry in
-                result[entry.key] = entry.value
+                result[entry.key] = AnyCodable(entry.value).value
             }
             self.requestIdentifier = requestIdentifier
         }
