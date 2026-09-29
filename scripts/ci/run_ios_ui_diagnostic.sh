@@ -107,8 +107,8 @@ runtimes = json.loads(Path(sys.argv[1]).read_text()).get("runtimes", [])
 types = json.loads(Path(sys.argv[2]).read_text()).get("devicetypes", [])
 matches = [
     item for item in runtimes
-    if item.get("version") == "26.4"
-    and item.get("identifier", "").startswith("com.apple.CoreSimulator.SimRuntime.iOS-")
+    if item.get("identifier") == "com.apple.CoreSimulator.SimRuntime.iOS-26-4"
+    and item.get("version", "").startswith("26.4")
     and item.get("isAvailable") is True
 ]
 device = next(
@@ -125,7 +125,7 @@ Path(sys.argv[3]).write_text(json.dumps({
 PY
   exit 2
 fi
-runtime_version=26.4
+runtime_version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["runtime_version"])' "$results_root/simulator-selection.json")"
 runtime_identifier="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["runtime_identifier"])' "$results_root/simulator-selection.json")"
 simulator_id="$(xcrun simctl create 'PushGo Quality iPhone' \
   com.apple.CoreSimulator.SimDeviceType.iPhone-17 "$runtime_identifier")"
