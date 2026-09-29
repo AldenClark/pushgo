@@ -177,6 +177,9 @@ private struct ToastOverlayModifier: ViewModifier {
                     if showsPendingDeletionBar,
                        environment.pendingLocalDeletionController.pendingDeletion != nil {
                         PendingLocalDeletionBar(controller: environment.pendingLocalDeletionController)
+                            // Keep the trailing Undo action inside the window even when
+                            // the split view proposes more width than is visible.
+                            .frame(maxWidth: 640)
                             .padding(.horizontal, 20)
                             .padding(.bottom, 20)
                             .frame(maxWidth: .infinity)
