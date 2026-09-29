@@ -872,7 +872,8 @@ final class PushGo_iOSUITests: XCTestCase {
 
     func testQualityMessageWorkflowLoadsSecondPageAndPersistsReadActions() {
         let sessionID = "ios-message-workflow-\(UUID().uuidString.lowercased())"
-        let context = configuredLaunchContext()
+        let zhHansLaunchArguments = ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        let context = configuredLaunchContext(launchArguments: zhHansLaunchArguments)
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
             fixture: "messages.workflow",
@@ -952,9 +953,20 @@ final class PushGo_iOSUITests: XCTestCase {
             pageLoading.waitForExistence(timeout: 5) && pageLoading.isHittable,
             "A slow next page must expose a visible, reachable bottom progress state instead of looking frozen"
         )
+        // iOS 26.4 can project this combined SwiftUI HStack's identifier onto
+        // the spinner while exposing its localized Text as a sibling node.
+        // Keep both the visible progress and the nearby explanation as oracles.
+        let loadingText = context.app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "正在加载更早的消息")
+        ).firstMatch
+        let nearbyLoadingTextIsVisible = loadingText.exists
+            && loadingText.frame.width > 0
+            && loadingText.frame.height > 0
+            && loadingText.frame.intersects(context.app.windows.firstMatch.frame)
+            && abs(loadingText.frame.midY - pageLoading.frame.midY) < 40
         XCTAssertTrue(
-            pageLoading.label.contains("正在加载更早的消息"),
-            "The bottom progress state must explain that earlier messages are loading"
+            pageLoading.label.contains("正在加载更早的消息") || nearbyLoadingTextIsVisible,
+            "The visible bottom progress must include its nearby zh-Hans explanation, not only a spinner."
         )
         XCTAssertTrue(
             context.app.staticTexts["Quality workflow 75"].exists,
@@ -1139,7 +1151,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
         context.app.terminate()
 
-        let afterSingleRead = configuredLaunchContext()
+        let afterSingleRead = configuredLaunchContext(launchArguments: zhHansLaunchArguments)
         afterSingleRead.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
             fixture: "messages.workflow"
@@ -1168,7 +1180,7 @@ final class PushGo_iOSUITests: XCTestCase {
         )
         afterSingleRead.app.terminate()
 
-        let relaunched = configuredLaunchContext()
+        let relaunched = configuredLaunchContext(launchArguments: zhHansLaunchArguments)
         relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
             fixture: "messages.workflow"
