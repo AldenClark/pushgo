@@ -100,13 +100,12 @@ final class PushGo_macOSUITests: XCTestCase {
         try closeProblemReporter(waitForDelayedAppearance: true)
     }
 
+    @MainActor
     override func tearDown() async throws {
-        await MainActor.run {
-            for app in launchedApps where app.state != .notRunning {
-                app.terminate()
-            }
-            launchedApps.removeAll()
+        for app in launchedApps where app.state != .notRunning {
+            app.terminate()
         }
+        launchedApps.removeAll()
 
         var cleanupError: Error?
         do {
