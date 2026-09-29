@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import json
 from pathlib import Path
 import subprocess
@@ -47,7 +48,47 @@ def runtime_warning_messages(summary: dict[str, object]) -> list[str]:
     return messages
 
 
-def read_native_summary(result_bundle: Path) -> dict[str, object]:
+def legacy_test_warning_messages(result: dict[str, object]) -> list[str]:
+    """Read warnings stored in the xcresult's action issue summaries.
+
+    Xcode 26.4's summary view can omit a warning that is present in the
+    underlying TestIssueSummary. Xcode 27 surfaces that same issue as a
+    runtimeWarning. Both views must agree before a native run is clean.
+    """
+    actions = result.get("actions")
+    if (not isinstance(actions, dict) or not isinstance(actions.get("_values"), list)
+            or not actions["_values"]):
+        raise ValueError("xcresult legacy object has no action issue records")
+    messages: list[str] = []
+    for action in actions["_values"]:
+        if not isinstance(action, dict) or not isinstance(action.get("actionResult"), dict):
+            raise ValueError("xcresult legacy action result is malformed")
+        issues = action["actionResult"].get("issues")
+        if not isinstance(issues, dict):
+            raise ValueError("xcresult legacy action issues are malformed")
+        warnings = issues.get("testWarningSummaries")
+        if warnings is None:
+            continue
+        if not isinstance(warnings, dict) or not isinstance(warnings.get("_values"), list):
+            raise ValueError("xcresult test warning summaries are malformed")
+        for issue in warnings["_values"]:
+            if not isinstance(issue, dict):
+                raise ValueError("xcresult test warning issue is malformed")
+            message = issue.get("message")
+            if not isinstance(message, dict) or not isinstance(message.get("_value"), str):
+                raise ValueError("xcresult test warning issue has no message")
+            messages.append(message["_value"])
+    return messages
+
+
+def combined_warning_messages(summary: dict[str, object], legacy: dict[str, object]) -> list[str]:
+    # Both API views can expose the same issue. Retain repeated occurrences
+    # from distinct tests while avoiding double-counting the two views.
+    return list((Counter(runtime_warning_messages(summary)) |
+                 Counter(legacy_test_warning_messages(legacy))).elements())
+
+
+def _read_native_json(result_bundle: Path, command: list[str]) -> dict[str, object]:
     """Read an xcresult only after its file-backed store has stabilized.
 
     Xcode can return from `test-without-building` before `xcresulttool summary`
@@ -59,17 +100,7 @@ def read_native_summary(result_bundle: Path) -> dict[str, object]:
     for attempt in range(RESULT_READ_ATTEMPTS):
         try:
             completed = subprocess.run(
-                [
-                    "xcrun",
-                    "xcresulttool",
-                    "get",
-                    "test-results",
-                    "summary",
-                    "--path",
-                    str(result_bundle),
-                    "--format",
-                    "json",
-                ],
+                ["xcrun", "xcresulttool", *command, "--path", str(result_bundle), "--format", "json"],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -84,6 +115,14 @@ def read_native_summary(result_bundle: Path) -> dict[str, object]:
                 time.sleep(RESULT_READ_RETRY_SECONDS)
     assert last_error is not None
     raise last_error
+
+
+def read_native_summary(result_bundle: Path) -> dict[str, object]:
+    return _read_native_json(result_bundle, ["get", "test-results", "summary"])
+
+
+def read_native_legacy_result(result_bundle: Path) -> dict[str, object]:
+    return _read_native_json(result_bundle, ["get", "object", "--legacy"])
 
 
 def main() -> int:
@@ -101,6 +140,9 @@ def main() -> int:
             allow_expected_failures=args.allow_expected_failures,
         )
         warnings = runtime_warning_messages(summary)
+        if args.reject_runtime_warnings:
+            legacy = read_native_legacy_result(args.result_bundle)
+            warnings = combined_warning_messages(summary, legacy)
     except (OSError, ValueError, json.JSONDecodeError, subprocess.CalledProcessError) as error:
         print("status=FAILED_TEST_SYSTEM")
         print(f"reason=invalid_apple_test_result:{error}")

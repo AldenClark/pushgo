@@ -192,6 +192,26 @@ if [[ ! -d "$result_bundle" ]]; then
   exit 3
 fi
 
+capture_xcresult_json() {
+  local output="$1"
+  shift
+  local attempt
+  for attempt in 1 2 3 4; do
+    if xcrun xcresulttool get "$@" --path "$result_bundle" --format json \
+      > "$output" 2> "$output.stderr"; then
+      return 0
+    fi
+    [[ "$attempt" == 4 ]] || sleep 1
+  done
+  return 1
+}
+
+reason=native_ios_xcresult_raw_receipts_unreadable
+if ! capture_xcresult_json "$results_root/native-summary-raw.json" test-results summary ||
+   ! capture_xcresult_json "$results_root/native-legacy-object-raw.json" object --legacy; then
+  exit 3
+fi
+
 if python3 "$repo_root/scripts/verify_apple_test_execution.py" \
   --result-bundle "$result_bundle" --expected-test-count 3 \
   --reject-runtime-warnings > "$results_root/strict-verifier.log" 2>&1; then
@@ -200,25 +220,28 @@ else
   verify_exit=$?
 fi
 
-if PYTHONPATH="$repo_root" python3 - "$result_bundle" \
+if PYTHONPATH="$repo_root" python3 - "$results_root/native-summary-raw.json" \
+  "$results_root/native-legacy-object-raw.json" \
   "$results_root/native-test.log" "$runner_exit" "$verify_exit" \
-  "$results_root/native-summary.json" "$classification_file" <<'PY'; then
+  "$classification_file" <<'PY'; then
 import json
 import sys
 from pathlib import Path
 
-from scripts.verify_apple_test_execution import read_native_summary, runtime_warning_messages
+from scripts.verify_apple_test_execution import (
+    combined_warning_messages,
+)
 
-bundle, log_path, runner_exit, verify_exit, raw_output, output = sys.argv[1:]
+summary_path, legacy_path, log_path, runner_exit, verify_exit, output = sys.argv[1:]
 classification = {
     "product_status": "NOT_RUN",
     "test_system_status": "FAILED_TEST_SYSTEM",
     "reason": "native_result_unreadable",
 }
 try:
-    summary = read_native_summary(Path(bundle))
-    Path(raw_output).write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
-    warnings = runtime_warning_messages(summary)
+    summary = json.loads(Path(summary_path).read_text())
+    legacy = json.loads(Path(legacy_path).read_text())
+    warnings = combined_warning_messages(summary, legacy)
     counts = {
         name: summary.get(name, 0)
         for name in ("passedTests", "failedTests", "skippedTests", "expectedFailures")

@@ -3,12 +3,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import subprocess
+import sys
 import unittest
 from unittest.mock import patch
 
 from scripts import verify_apple_test_execution
 from scripts.verify_apple_test_execution import (
+    combined_warning_messages,
     executed_test_count,
+    legacy_test_warning_messages,
     runtime_warning_messages,
     test_count_matches_selection,
 )
@@ -59,6 +62,57 @@ class VerifyAppleTestExecutionTests(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             runtime_warning_messages({"runtimeWarnings": [{"message": 1}]})
+
+    def test_legacy_action_warning_rejects_empty_summary_warning_view(self) -> None:
+        # This is the shape of the retained macOS 26.4 xcresult: the warning
+        # lives below actionResult, while the Xcode 26 summary reported none.
+        warning = "[Internal] Thread running at User-interactive quality-of-service class waiting on a lower QoS thread running at Default quality-of-service class. Investigate ways to avoid priority inversions"
+        legacy = {
+            "actions": {"_values": [
+                {"actionResult": {"issues": {
+                    "testWarningSummaries": {"_values": [
+                        {"message": {"_type": {"_name": "String"}, "_value": warning},
+                         "testCaseName": {"_value": "PushGo_macOSUITests.testThingRelationsOpenAccurateDetailsAndSurviveRelaunch()"}}
+                    ]}
+                }}},
+                {"actionResult": {"issues": {"_type": {"_name": "ResultIssueSummaries"}}}},
+            ]}
+        }
+        self.assertEqual([warning], legacy_test_warning_messages(legacy))
+        with patch.object(verify_apple_test_execution, "read_native_summary", return_value={
+            "passedTests": 1, "failedTests": 0, "runtimeWarnings": []
+        }), patch.object(verify_apple_test_execution, "read_native_legacy_result", return_value=legacy), patch.object(
+            sys, "argv", ["verify", "--result-bundle", "result.xcresult", "--expected-test-count", "1", "--reject-runtime-warnings"]
+        ):
+            self.assertEqual(1, verify_apple_test_execution.main())
+
+    def test_malformed_legacy_warning_fails_closed(self) -> None:
+        legacy = {"actions": {"_values": [{"actionResult": {"issues": {
+            "testWarningSummaries": {"_values": [{"message": {"_value": 4}}]}
+        }}}]}}
+        with self.assertRaisesRegex(ValueError, "warning issue has no message"):
+            legacy_test_warning_messages(legacy)
+
+    def test_legacy_checker_ignores_build_warnings_and_preserves_two_test_occurrences(self) -> None:
+        warning = "internal quality-of-service inversion"
+        action = lambda: {"actionResult": {"issues": {
+            "testWarningSummaries": {"_values": [{"message": {"_value": warning}}]},
+            "warningSummaries": {"_values": [{"message": {"_value": "build warning only"}}]},
+        }}}
+        legacy = {"actions": {"_values": [action(), action()]}}
+        self.assertEqual([warning, warning], legacy_test_warning_messages(legacy))
+        self.assertEqual(
+            [warning, warning],
+            combined_warning_messages({"runtimeWarnings": [{"message": warning}]}, legacy),
+        )
+
+    def test_legacy_checker_rejects_missing_action_issues(self) -> None:
+        for legacy in (
+            {"actions": {"_values": []}},
+            {"actions": {"_values": [{"actionResult": {}}]}},
+        ):
+            with self.assertRaises(ValueError):
+                legacy_test_warning_messages(legacy)
 
     def test_summary_reader_retries_only_receipt_read_until_xcresult_stabilizes(self) -> None:
         transient = subprocess.CalledProcessError(
