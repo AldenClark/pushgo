@@ -5,6 +5,7 @@ on:
     # Labeled events provide a PR-only entry while this workflow is absent from
     # the default branch. Reapply apple-ui-diagnostic for a separate trial-1 run
     # only after reviewing the first run; each run keeps its own run ID and SHA.
+    # apple-ios-ui-diagnostic selects a separate three-journey Simulator run.
     types: [opened, synchronize, reopened, labeled]
   push:
     branches: [ main ]
@@ -35,6 +36,7 @@ on:
           - 'off'
           - macos-adhoc-thing
           - apple-release-sdk
+          - apple-ios-ui
       diagnostic_sha:
         description: Exact 40-character SHA of the selected branch tip (required for diagnostic)
         required: false
@@ -247,6 +249,57 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
           path: build/quality-results/apple-release-sdk-diagnostic/
+
+  ios_ui_diagnostic:
+    name: iOS App-owned message UI diagnostic (not a quality gate)
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'apple-ios-ui') || (github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'apple-ios-ui-diagnostic') }}
+    runs-on: macos-26
+    timeout-minutes: 120
+    env:
+      DIAGNOSTIC_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || inputs.diagnostic_sha }}
+    steps:
+      - name: Verify selected ref and requested SHA
+        shell: bash
+        env:
+          REQUESTED_SHA: ${{ env.DIAGNOSTIC_SOURCE_SHA }}
+          EVENT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          [[ "$REQUESTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'diagnostic_sha must be a lowercase full commit SHA'; exit 2; }
+          [[ "$REQUESTED_SHA" == "$EVENT_SHA" ]] || { echo 'diagnostic SHA must match the event source head'; exit 2; }
+
+      - name: Checkout exact diagnostic commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.DIAGNOSTIC_SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify checked-out byte
+        shell: bash
+        env:
+          REQUESTED_SHA: ${{ env.DIAGNOSTIC_SOURCE_SHA }}
+        run: |
+          [[ "$(git rev-parse HEAD)" == "$REQUESTED_SHA" ]] || { echo 'checked-out SHA differs from requested SHA'; exit 2; }
+
+      - name: Select quality Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: '26.4'
+
+      - name: Build, install, and run three App-owned iOS journeys
+        env:
+          EXPECTED_SHA: ${{ env.DIAGNOSTIC_SOURCE_SHA }}
+          MAX_RETRIES: '0'
+        run: bash scripts/ci/run_ios_ui_diagnostic.sh
+
+      - name: Retain native iOS diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: apple-ios-ui-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: build/quality-results/apple-ios-ui-diagnostic/
 
   observation:
     if: ${{ always() && github.event_name == 'schedule' && github.event.schedule == '17 18 * * *' }}
