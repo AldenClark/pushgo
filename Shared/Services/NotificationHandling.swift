@@ -69,6 +69,17 @@ enum NotificationPersistenceCoordinator {
     struct RemotePayload: @unchecked Sendable {
         let payload: [AnyHashable: Any]
         let requestIdentifier: String?
+
+        init(payload: [AnyHashable: Any], requestIdentifier: String?) {
+            // Snapshot property-list values before the first async suspension;
+            // a caller may otherwise retain mutable Foundation objects.
+            self.payload = UserInfoSanitizer.sanitize(payload).reduce(
+                into: [AnyHashable: Any]()
+            ) { result, entry in
+                result[entry.key] = entry.value
+            }
+            self.requestIdentifier = requestIdentifier
+        }
     }
 
     static func persistRemotePayloadIfNeeded(

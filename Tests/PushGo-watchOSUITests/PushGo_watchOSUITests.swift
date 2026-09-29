@@ -6,8 +6,8 @@ final class PushGo_watchOSUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    override func tearDownWithError() throws {
-        MainActor.assumeIsolated {
+    override func tearDown() async throws {
+        await MainActor.run {
             let app = XCUIApplication()
             if app.state != .notRunning {
                 app.terminate()

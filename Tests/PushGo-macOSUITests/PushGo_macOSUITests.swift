@@ -100,11 +100,13 @@ final class PushGo_macOSUITests: XCTestCase {
         try closeProblemReporter(waitForDelayedAppearance: true)
     }
 
-    override func tearDownWithError() throws {
-        for app in launchedApps where app.state != .notRunning {
-            app.terminate()
+    override func tearDown() async throws {
+        await MainActor.run {
+            for app in launchedApps where app.state != .notRunning {
+                app.terminate()
+            }
+            launchedApps.removeAll()
         }
-        launchedApps.removeAll()
 
         var cleanupError: Error?
         do {
@@ -5642,6 +5644,7 @@ final class PushGo_macOSUITests: XCTestCase {
         RunLoop.current.run(until: Date().addingTimeInterval(0.4))
     }
 
+    @MainActor
     private func hasReadableForegroundContrast(in screenshot: XCUIScreenshot) -> Bool {
         guard let bitmap = NSBitmapImageRep(data: screenshot.pngRepresentation),
               bitmap.pixelsWide > 0,
