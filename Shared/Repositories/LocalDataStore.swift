@@ -8963,7 +8963,7 @@ private actor GRDBStore {
         storedMessages.reserveCapacity(messages.count)
         try write { db in
             let useBulkProjectionHeads = messages.count > 500
-            var existingByMessageID: [String: (id: UUID, receivedAt: Date)] = [:]
+            var existingByMessageID: [String: (id: UUID, receivedAt: Date, isRead: Bool)] = [:]
             var eventProjectionHeads: [String: GRDBMessageRecord] = [:]
             var thingProjectionHeads: [String: GRDBMessageRecord] = [:]
             var affectedEventIDs = Set<String>()
@@ -8971,17 +8971,19 @@ private actor GRDBStore {
             if useBulkProjectionHeads {
                 let rows = try Row.fetchAll(
                     db,
-                    sql: "SELECT id, message_id, received_at FROM messages;"
+                    sql: "SELECT id, message_id, received_at, is_read FROM messages;"
                 )
                 existingByMessageID.reserveCapacity(rows.count + messages.count)
                 for row in rows {
                     let idText: String = row["id"]
                     let messageID: String = row["message_id"]
                     let receivedAtEpoch: Double = row["received_at"]
+                    let isRead: Int64 = row["is_read"]
                     guard let id = UUID(uuidString: idText) else { continue }
                     existingByMessageID[messageID] = (
                         id: id,
-                        receivedAt: Self.dateFromStoredEpoch(receivedAtEpoch)
+                        receivedAt: Self.dateFromStoredEpoch(receivedAtEpoch),
+                        isRead: isRead != 0
                     )
                 }
                 for row in try Row.fetchAll(db, sql: "SELECT * FROM event_projection_heads;") {
@@ -8998,23 +9000,31 @@ private actor GRDBStore {
                 }
             }
             for message in messages {
-                let canonical = message
-                let record = try buildMessageRecord(from: canonical)
+                var canonical = message
+                var record = try buildMessageRecord(from: canonical)
                 if let thingId = referencedThingIdRequiringExistingParent(canonical),
                    try !hasThingParentRecord(thingId: thingId, db: db)
                 {
                     try enqueuePendingInboundMessage(record, thingId: thingId, db: db)
                     continue
                 }
-                let existingIdentity: (id: UUID, receivedAt: Date)?
+                let existingIdentity: (id: UUID, receivedAt: Date, isRead: Bool)?
                 if useBulkProjectionHeads {
                     existingIdentity = existingByMessageID[record.messageId]
                 } else {
                     let existingRecord = try loadMessageRecordByMessageId(record.messageId, db: db)
-                    existingIdentity = existingRecord.map { (id: $0.id, receivedAt: $0.receivedAt) }
+                    existingIdentity = existingRecord.map {
+                        (id: $0.id, receivedAt: $0.receivedAt, isRead: $0.isRead)
+                    }
                 }
                 if let existingIdentity, record.receivedAt < existingIdentity.receivedAt {
                     continue
+                }
+                if let existingIdentity {
+                    // Content refreshes may carry a stale read snapshot. The
+                    // explicit local read transition owns existing row state.
+                    canonical.isRead = existingIdentity.isRead
+                    record = try buildMessageRecord(from: canonical)
                 }
                 try insertOrUpdateMessage(
                     record,
@@ -9041,7 +9051,8 @@ private actor GRDBStore {
                 if useBulkProjectionHeads {
                     existingByMessageID[record.messageId] = (
                         id: existingIdentity?.id ?? record.id,
-                        receivedAt: record.receivedAt
+                        receivedAt: record.receivedAt,
+                        isRead: canonical.isRead
                     )
                 }
                 if let thingId = thingParentIdentity(from: canonical) {

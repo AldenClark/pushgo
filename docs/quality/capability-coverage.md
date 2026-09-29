@@ -2,6 +2,9 @@
 
 此索引防遗漏，不计算覆盖分，不是测试 Oracle。入口或类型存在不能让能力通过；最终判定以真实用户结果和必要数据/系统终点为准。
 
+2026-09-29 Apple Message 已读状态合并修复：同一 `message_id` 的普通内容刷新此前会把本地已读写回未读；新增 Core 回归先在旧实现准确失败，修复后验证准确内容、已读/未读计数、普通重开以及反向手动标未读后的 501 条输入批量刷新，聚焦 1/1、最终完整 Core 448/448（4 项显式 opt-in 跳过）通过。`quality_changed.sh` 因现有 P1-STORE 期限已过及 XCTest QoS flake 登记过期而在脚本合同阶段失败；`quality_test.sh pr`、`nightly` 和 `performance` 因同一登记过期而阻断，独立 10 GiB 磁盘预检也失败。iOS/macOS UI、真实通知、实机及 Release 均未运行。此证据仅关闭受控 Apple Core Store 内容更新的本地已读权威子路径。
+2026-09-29 Apple durable ACK 过期租约恢复：中断中的 ACK 留在 `leased`，原待处理扫描只返回 `pending/retry_wait`，到期唤醒后也无法重新领取。新增 Core 回归在旧实现准确失败，修复后证明未到期租约不被抢占、过期租约可由新 worker 领取、旧 worker 完成动作不能覆盖新租约；聚焦 1/1、最终完整 Core 448/448 通过。Gateway 真正返回、NSE/系统后台调度及实机投递仍未运行。
+
 2026-09-03 iOS 永久删除 helper 回归：提交 `217cf4b` 后，`testQualityMessageDeleteWithoutUndoPermanentlyRemovesOnlyTargetAcrossRelaunch` 在专用 Simulator 精确执行 1/1（79.330 秒），结果束 `build/quality-results/ios-pending-delete-commit-after-helper-clean-20260903/run-1-20260903-115627.xcresult` 严格 `EXECUTED`，收据为双 `PASSED`、源码干净。它继续以目标永久消失、独立控制消息准确可读、重开不复活和失效路由反馈作为真实终点，确认共享 readiness/timeout helper 回归安全；不外推完整 P1 删除生命周期。
 
 2026-09-03 macOS Thing 关系 QoS 告警审计：Terra 复核两份独立结果和既有区分实验后，业务终点仍通过，但 warning 没有可证实的产品低 QoS 根因；严格测试系统继续 `FLAKY/FAILED_TEST_SYSTEM`，P1 Thing 关系保持 `PARTIAL/BLOCKED`。不修改产品调度、不白名单、不重跑求绿；未来若有授权，仅做一次带线程栈的有界诊断。

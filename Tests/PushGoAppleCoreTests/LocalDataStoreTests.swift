@@ -2002,6 +2002,50 @@ struct LocalDataStoreTests {
     }
 
     @Test
+    func contentRefreshDoesNotUndoLocalReadState() async throws {
+        try await withIsolatedAutomationStorage { root, appGroupIdentifier in
+            let store = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
+            let original = makeMessage(
+                messageId: "msg-content-refresh-read-001",
+                notificationRequestId: "req-content-refresh-read-001",
+                title: "Original content",
+                body: "Original body"
+            )
+            try await store.saveMessage(original)
+            try await store.setMessageReadState(id: original.id, isRead: true)
+
+            var refreshed = original
+            refreshed.title = "Recovered content"
+            refreshed.body = "Recovered body"
+            try await store.saveMessages([refreshed])
+
+            let stored = try #require(try await store.loadMessage(messageId: "msg-content-refresh-read-001"))
+            #expect(stored.title == "Recovered content")
+            #expect(stored.body == "Recovered body")
+            #expect(stored.isRead)
+            #expect(try await store.messageCounts().unread == 0)
+
+            LocalDataStore.releaseSharedResourcesForTesting(storageRootURL: root)
+            let reopened = LocalDataStore(appGroupIdentifier: appGroupIdentifier, spotlightIndexer: nil)
+            let persisted = try #require(try await reopened.loadMessage(messageId: "msg-content-refresh-read-001"))
+            #expect(persisted.isRead)
+            #expect(persisted.body == "Recovered body")
+
+            try await reopened.setMessageReadState(id: persisted.id, isRead: false)
+            var staleSnapshot = refreshed
+            staleSnapshot.title = "Updated after marking unread"
+            staleSnapshot.isRead = true
+            // Cross the bulk projection threshold while replaying one stable ID.
+            try await reopened.saveMessagesBatch(Array(repeating: staleSnapshot, count: 501))
+
+            let updated = try #require(try await reopened.loadMessage(messageId: "msg-content-refresh-read-001"))
+            #expect(updated.title == "Updated after marking unread")
+            #expect(!updated.isRead)
+            #expect(try await reopened.messageCounts().unread == 1)
+        }
+    }
+
+    @Test
     func saveMessagesBatchRollsBackAllRowsWhenALaterPrimaryIdentityConflicts() async throws {
         try await withIsolatedLocalDataStore { store, _ in
             let existingID = UUID(uuidString: "40000000-0000-0000-0000-000000000101")!

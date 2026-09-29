@@ -543,6 +543,43 @@ struct NotificationIngressInboxTests {
     }
 
     @Test
+    func expiredAckLeaseReturnsToTheDurableDrainAfterWorkerExit() async throws {
+        try await withIsolatedAutomationStorage { _, appGroupIdentifier in
+            let store = ProviderDeliveryAckFailureStore(appGroupIdentifier: appGroupIdentifier)
+            let identity = testDeliveryIdentity(deliveryId: "delivery-expired-lease-drain-001")
+            #expect(await store.markInboxDurable(
+                identity: identity,
+                source: "nse_inbox_durable",
+                postNotification: false
+            ))
+
+            let start = Date().addingTimeInterval(0.1)
+            let first = try #require(await store.acquireAckLease(
+                identity: identity,
+                owner: "interrupted-worker",
+                leaseDuration: 5,
+                now: start
+            ))
+            #expect(await store.pendingMarkers(now: start.addingTimeInterval(1)).isEmpty)
+
+            let retryTime = start.addingTimeInterval(6)
+            #expect(await store.nextAttemptDate(now: retryTime) != nil)
+            let retryMarker = try #require(await store.pendingMarkers(now: retryTime).first)
+            #expect(retryMarker.record.deliveryId == identity.deliveryId)
+            let second = try #require(await store.acquireAckLease(
+                retryMarker,
+                owner: "recovery-worker",
+                leaseDuration: 5,
+                now: retryTime
+            ))
+            await store.markCompleted(first)
+            #expect(await store.nextAttemptDate(now: retryTime) != nil)
+            await store.markCompleted(second)
+            #expect(await store.nextAttemptDate(now: retryTime) == nil)
+        }
+    }
+
+    @Test
     func v2AckCannotBeClaimedBeforeReferencedIngressIsTerminal() async throws {
         await withIsolatedAutomationStorage { _, appGroupIdentifier in
             let inbox = NotificationIngressInbox(appGroupIdentifier: appGroupIdentifier)

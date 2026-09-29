@@ -1111,8 +1111,9 @@ actor DurableIngressJournal {
                            a.state, a.lease_owner, a.lease_until_ms, a.next_attempt_at_ms,
                            a.created_at_ms, a.updated_at_ms, a.source, a.lease_generation
                     FROM ack_outbox a JOIN ingress_entry i ON i.entry_id = a.entry_id
-                    WHERE a.state IN ('pending','retry_wait')
-                      AND a.next_attempt_at_ms <= ? AND a.created_at_ms <= ?
+                    WHERE ((a.state IN ('pending','retry_wait') AND a.next_attempt_at_ms <= ?)
+                           OR (a.state = 'leased' AND a.lease_until_ms <= ?))
+                      AND a.created_at_ms <= ?
                       AND i.schema_version <= \(Self.schemaVersion)
                       AND i.apply_state != 'quarantined'
                       AND (a.required_entry_state = 'durable' OR i.apply_state IN ('applied','discarded'))
@@ -1121,8 +1122,9 @@ actor DurableIngressJournal {
                 )
                 defer { sqlite3_finalize(statement) }
                 sqlite3_bind_int64(statement, 1, nowMs)
-                sqlite3_bind_int64(statement, 2, minimumCreated)
-                sqlite3_bind_int64(statement, 3, Int64(max(1, limit ?? 10_000)))
+                sqlite3_bind_int64(statement, 2, nowMs)
+                sqlite3_bind_int64(statement, 3, minimumCreated)
+                sqlite3_bind_int64(statement, 4, Int64(max(1, limit ?? 10_000)))
                 var markers: [ProviderDeliveryAckFailureStore.PendingMarker] = []
                 while sqlite3_step(statement) == SQLITE_ROW {
                     guard let marker = decodeAckMarker(statement) else { continue }
