@@ -30,6 +30,7 @@ on:
         options:
           - 'off'
           - macos-adhoc-thing
+          - apple-release-sdk
       diagnostic_sha:
         description: Exact 40-character SHA of the selected branch tip (required for diagnostic)
         required: false
@@ -56,7 +57,7 @@ concurrency:
 
 jobs:
   quality:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.diagnostic_mode != 'macos-adhoc-thing' }}
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.diagnostic_mode == 'off' }}
     runs-on: macos-26
     timeout-minutes: 120
     env:
@@ -192,6 +193,54 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
           path: build/quality-results/apple-macos-adhoc-ui-diagnostic/
+
+  apple_release_sdk_diagnostic:
+    name: Apple iOS/watchOS Release SDK diagnostic (not a quality gate)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'apple-release-sdk' }}
+    runs-on: macos-26
+    timeout-minutes: 120
+    steps:
+      - name: Verify selected ref and requested SHA
+        shell: bash
+        env:
+          REQUESTED_SHA: ${{ inputs.diagnostic_sha }}
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          [[ "$REQUESTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'diagnostic_sha must be a lowercase full commit SHA'; exit 2; }
+          [[ "$REQUESTED_SHA" == "$DISPATCH_SHA" ]] || { echo 'diagnostic_sha must match the selected dispatch ref tip'; exit 2; }
+
+      - name: Checkout exact diagnostic commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.diagnostic_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify checked-out byte
+        shell: bash
+        env:
+          REQUESTED_SHA: ${{ inputs.diagnostic_sha }}
+        run: |
+          [[ "$(git rev-parse HEAD)" == "$REQUESTED_SHA" ]] || { echo 'checked-out SHA differs from requested SHA'; exit 2; }
+
+      - name: Select quality Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: '26.4'
+
+      - name: Build and verify Simulator Release SDK products
+        env:
+          EXPECTED_SHA: ${{ inputs.diagnostic_sha }}
+        run: bash scripts/ci/run_apple_release_sdk_diagnostic.sh
+
+      - name: Retain compact Release SDK diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: apple-release-sdk-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: build/quality-results/apple-release-sdk-diagnostic/
 
   observation:
     if: ${{ always() && github.event_name == 'schedule' && github.event.schedule == '17 18 * * *' }}
