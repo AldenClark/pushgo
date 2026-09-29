@@ -10,6 +10,22 @@ Policy:
 
 ## [Unreleased]
 
+## [v1.3.3]
+
+### Improved
+- Search and message loading now give clearer progress and retry feedback on iPhone and Mac.
+- The Mac status item now restores the main window more reliably.
+
+### Fixed
+- Updating an existing message no longer changes a read or unread choice made on this device.
+- Interrupted notification acknowledgements can resume after their processing lease expires.
+- A delivery from a different gateway no longer disappears when its delivery identifier matches one already stored on this device.
+- Gateway changes now validate the replacement before switching and keep the save result visible in the editor.
+- Opening an unavailable object on Mac no longer shows an unrelated object's detail.
+- Rich message images no longer keep stale attachments or stop a newly restarted animation.
+- Message history recovers more reliably if an app upgrade stops while moving its database.
+- Apple Watch now retries old push-route cleanup after gateway or receiver-mode changes, and waits for a complete iPhone sync before using updated receiver settings.
+
 ## [v1.3.0]
 
 ### Improved

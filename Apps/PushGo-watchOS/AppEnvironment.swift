@@ -38,6 +38,11 @@ final class AppEnvironment {
     @ObservationIgnored private var lastWakeupRouteSyncAt = Date.distantPast
     @ObservationIgnored private var lastWakeupDeviceRegisterAt = Date.distantPast
     @ObservationIgnored private var standaloneRuntimeReconcileTask: Task<Void, Never>?
+    @ObservationIgnored private var gatewayOperationTail: Task<Void, Never>?
+    @ObservationIgnored private var gatewayOperationID: UUID?
+    @ObservationIgnored private var previousGatewayCleanupTask: Task<Void, Never>?
+    @ObservationIgnored private var previousGatewayCleanupRetryTask: Task<Void, Never>?
+    @ObservationIgnored private var previousGatewayCleanupRequested = false
     @ObservationIgnored private var standaloneRuntimeReconcilePending = false
     @ObservationIgnored private var standaloneRuntimeReconcileNeedsDeniedPrompt = false
     @ObservationIgnored private var standaloneReadinessFailureReason: String?
@@ -51,6 +56,9 @@ final class AppEnvironment {
     private(set) var toastMessage: ToastMessage?
 #if DEBUG
     private(set) var startupFailureMessage: String?
+    private(set) var qualityGatewayRouteResult: String?
+    private(set) var qualityGatewayCleanupAttempts = 0
+    private(set) var qualityGatewayCleanupError: String?
 #endif
     private(set) var shouldPresentNotificationPermissionAlert: Bool = false
     var pendingMessageToOpen: String?
@@ -64,7 +72,7 @@ final class AppEnvironment {
     private(set) var channelSubscriptions: [ChannelSubscription] = []
     private var isSceneActive = false
 
-    private let channelSubscriptionService = ChannelSubscriptionService()
+    private var channelSubscriptionService = ChannelSubscriptionService()
     private let notificationIngressInbox = NotificationIngressInbox.shared
     private let ackFailureStore = ProviderDeliveryAckFailureStore.shared
     @ObservationIgnored private var providerIngressCoordinatorStorage: ProviderIngressCoordinator?
@@ -90,6 +98,22 @@ final class AppEnvironment {
             },
             hasPersistedNotification: { [weak self] identity in
                 guard let self else { return false }
+                if let sourceBaseURL = identity.sourceBaseURL,
+                   let deliveryID = identity.deliveryId {
+                    do {
+                        return try await self.dataStore.loadWatchDeliveryRecords().contains {
+                            $0.gatewayKey == sourceBaseURL && $0.deliveryId == deliveryID
+                        }
+                    } catch {
+                        self.recordAutomationRuntimeError(
+                            error,
+                            source: "watch.inbox.provider_source_check",
+                            category: "storage"
+                        )
+                        return false
+                    }
+                }
+                if identity.isWakeup { return false }
                 return await self.hasPersistedNotification(identity: NotificationInboxIdentity(
                     messageId: identity.messageId,
                     deliveryId: identity.deliveryId,
@@ -196,8 +220,9 @@ final class AppEnvironment {
             return
         }
 #endif
-        WatchSessionBridge.shared.activateIfNeeded()
         await loadPersistedState()
+        WatchSessionBridge.shared.activateIfNeeded()
+        schedulePreviousGatewayCleanup()
         _ = await mergeNotificationIngressInbox(
             reason: "bootstrap",
             allowFallbackPull: true
@@ -235,21 +260,30 @@ final class AppEnvironment {
     }
 
     func updateServerConfig(_ config: ServerConfig?) async throws {
-        let previousConfig = serverConfig
-        let previousDeviceKey = await dataStore.cachedDeviceKey(for: platformIdentifier())?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalized = config?.normalized()
-        try await dataStore.saveWatchProvisioningServerConfig(normalized)
-        serverConfig = normalized
-        await refreshChannelSubscriptions()
-        schedulePreviousGatewayDeviceCleanup(
-            previousConfig: previousConfig,
-            previousDeviceKey: previousDeviceKey,
-            nextConfig: normalized
-        )
-        if isStandaloneMode {
-            requestStandaloneRuntimeReconcile(reason: "update_server_config")
+        let result = await withCheckedContinuation { continuation in
+            _ = enqueueGatewayOperation { [self] in
+                do {
+                    let normalized = config?.normalized()
+                    let changedGateway = serverConfig?.gatewayKey != normalized?.gatewayKey
+                    try await dataStore.saveWatchProvisioningServerConfig(normalized)
+                    serverConfig = normalized
+                    await refreshChannelSubscriptions()
+                    schedulePreviousGatewayCleanup()
+                    if isStandaloneMode {
+                        if changedGateway {
+                            lastWakeupRouteSyncAt = .distantPast
+                            lastWakeupDeviceRegisterAt = .distantPast
+                            updateStandaloneReadiness(false, failureReason: nil)
+                        }
+                        requestStandaloneRuntimeReconcile(reason: "update_server_config")
+                    }
+                    continuation.resume(returning: Result<Void, Error>.success(()))
+                } catch {
+                    continuation.resume(returning: Result<Void, Error>.failure(error))
+                }
+            }
         }
+        try result.get()
     }
 
     func refreshWatchLightCountsAndNotify() async {
@@ -500,12 +534,22 @@ final class AppEnvironment {
     }
 
     func applyStandaloneProvisioningFromPhone(_ snapshot: WatchStandaloneProvisioningSnapshot) async {
+        let task = enqueueGatewayOperation { [weak self] in
+            await self?.performStandaloneProvisioningFromPhone(snapshot)
+        }
+        await task.value
+    }
+
+    private func performStandaloneProvisioningFromPhone(_ snapshot: WatchStandaloneProvisioningSnapshot) async {
         guard watchMode == .standalone, snapshot.mode == .standalone else { return }
         let currentProvisioning = await dataStore.loadWatchProvisioningState()
         guard snapshot.generation > (currentProvisioning?.generation ?? 0) else { return }
         var failedStage = "compare_digest"
         do {
-            if currentProvisioning?.contentDigest == snapshot.contentDigest {
+            let pendingGeneration = try await dataStore.pendingWatchProvisioningGeneration()
+            guard snapshot.generation >= (pendingGeneration ?? 0) else { return }
+            if pendingGeneration == nil,
+               currentProvisioning?.contentDigest == snapshot.contentDigest {
                 failedStage = "save_provisioning_state"
                 await dataStore.saveWatchProvisioningState(
                     WatchProvisioningState(
@@ -526,6 +570,7 @@ final class AppEnvironment {
                     generation: snapshot.generation,
                     contentDigest: snapshot.contentDigest
                 )
+                schedulePreviousGatewayCleanup()
                 requestStandaloneRuntimeReconcile(reason: "apply_standalone_provisioning_digest_match")
                 return
             }
@@ -535,7 +580,12 @@ final class AppEnvironment {
                 snapshot,
                 sourceControlGeneration: watchSyncGenerations.controlGeneration
             )
+            let previousGateway = serverConfig?.gatewayKey
             serverConfig = try await dataStore.loadWatchProvisioningServerConfig()?.normalized()
+            if previousGateway != serverConfig?.gatewayKey {
+                lastWakeupRouteSyncAt = .distantPast
+                lastWakeupDeviceRegisterAt = .distantPast
+            }
             await refreshChannelSubscriptions()
             watchSyncGenerations.standaloneProvisioningGeneration = snapshot.generation
             await dataStore.saveWatchSyncGenerationState(watchSyncGenerations)
@@ -544,6 +594,7 @@ final class AppEnvironment {
                 generation: snapshot.generation,
                 contentDigest: appliedState.contentDigest
             )
+            schedulePreviousGatewayCleanup()
             requestStandaloneRuntimeReconcile(reason: "apply_standalone_provisioning")
         } catch {
             recordAutomationRuntimeError(error, source: "watch.apply_standalone_provisioning")
@@ -645,13 +696,30 @@ final class AppEnvironment {
     }
 
     private func tearDownStandaloneInfrastructure() async {
-        guard let runtime = await loadPersistedProvisioningRuntimeState() else { return }
-        let config = runtime.config
+        let task = enqueueGatewayOperation { [weak self] in
+            await self?.performTearDownStandaloneInfrastructure()
+        }
+        await task.value
+    }
+
+    private func performTearDownStandaloneInfrastructure() async {
+        // Teardown can still retire the last committed route while a newer
+        // phone snapshot is waiting for replay after a Keychain interruption.
+        guard let config = await loadPersistedStandaloneServerConfig() else { return }
         let platform = platformIdentifier()
         guard let deviceKey = await dataStore.cachedDeviceKey(for: platform)?
             .trimmingCharacters(in: .whitespacesAndNewlines),
             !deviceKey.isEmpty
         else {
+            return
+        }
+        do {
+            try await dataStore.enqueueWatchGatewayRouteCleanup(
+                config: config,
+                deviceKey: deviceKey
+            )
+        } catch {
+            recordAutomationRuntimeError(error, source: "watch.teardown_route_journal", category: "storage")
             return
         }
         do {
@@ -664,16 +732,7 @@ final class AppEnvironment {
         } catch {
             recordAutomationRuntimeError(error, source: "watch.teardown_subscription_sync")
         }
-        do {
-            try await channelSubscriptionService.deleteDeviceChannel(
-                baseURL: config.baseURL,
-                token: config.token,
-                deviceKey: deviceKey,
-                channelType: "apns"
-            )
-        } catch {
-            recordAutomationRuntimeError(error, source: "watch.teardown_provider_route")
-        }
+        schedulePreviousGatewayCleanup()
     }
 
     private func resolveGateway(_ raw: String) -> String {
@@ -686,13 +745,23 @@ final class AppEnvironment {
 
     private func loadPersistedProvisioningRuntimeState() async -> (
         config: ServerConfig,
-        channels: [(channelId: String, password: String)]
+        channels: [(channelId: String, password: String)],
+        generation: Int64
     )? {
+        if await dataStore.hasPendingWatchProvisioning() {
+            WatchSessionBridge.shared.requestLatestManifestIfReachable()
+            return nil
+        }
+        let generation = await dataStore.loadWatchProvisioningState()?.generation ?? 0
         guard let config = await loadPersistedStandaloneServerConfig() else {
             return nil
         }
         let channels = (try? await dataStore.activeChannelCredentials(gateway: config.gatewayKey)) ?? []
-        return (config, channels)
+        guard generation == (await dataStore.loadWatchProvisioningState()?.generation ?? 0),
+              !(await dataStore.hasPendingWatchProvisioning()) else {
+            return nil
+        }
+        return (config, channels, generation)
     }
 
     private func loadPersistedStandaloneServerConfig() async -> ServerConfig? {
@@ -701,7 +770,8 @@ final class AppEnvironment {
 
     private func loadPersistedStandaloneRuntimeState() async -> (
         config: ServerConfig,
-        channels: [(channelId: String, password: String)]
+        channels: [(channelId: String, password: String)],
+        generation: Int64
     )? {
         guard isStandaloneMode else { return nil }
         return await loadPersistedProvisioningRuntimeState()
@@ -996,7 +1066,8 @@ final class AppEnvironment {
         try await syncStandaloneSubscriptions(
             config: runtime.config,
             credentials: runtime.channels,
-            providerToken: token
+            providerToken: token,
+            expectedGeneration: runtime.generation
         )
     }
 
@@ -1059,6 +1130,7 @@ final class AppEnvironment {
             if isStandaloneMode {
                 requestStandaloneRuntimeReconcile(reason: "scene_phase_active", presentDeniedPrompt: true)
             }
+            schedulePreviousGatewayCleanup()
         case .background, .inactive:
             isSceneActive = false
             Task {
@@ -1147,8 +1219,13 @@ final class AppEnvironment {
             try await syncStandaloneSubscriptions(
                 config: runtime.config,
                 credentials: runtime.channels,
-                providerToken: token
+                providerToken: token,
+                expectedGeneration: runtime.generation
             )
+            guard isCurrentGateway(runtime.config),
+                  runtime.generation == (await dataStore.loadWatchProvisioningState()?.generation ?? 0),
+                  !(await dataStore.hasPendingWatchProvisioning())
+            else { return }
             updateStandaloneReadiness(true, failureReason: nil)
             _ = await syncStandaloneProviderIngress(
                 deliveryId: nil,
@@ -1219,13 +1296,56 @@ final class AppEnvironment {
     private func syncStandaloneSubscriptions(
         config: ServerConfig,
         credentials: [(channelId: String, password: String)],
-        providerToken: String
+        providerToken: String,
+        expectedGeneration: Int64
+    ) async throws {
+        let result = await withCheckedContinuation { continuation in
+            _ = enqueueGatewayOperation { [self] in
+                do {
+                    try await performSyncStandaloneSubscriptions(
+                        config: config,
+                        credentials: credentials,
+                        providerToken: providerToken,
+                        expectedGeneration: expectedGeneration
+                    )
+                    continuation.resume(returning: Result<Void, Error>.success(()))
+                } catch {
+                    continuation.resume(returning: Result<Void, Error>.failure(error))
+                }
+            }
+        }
+        try result.get()
+    }
+
+    private func performSyncStandaloneSubscriptions(
+        config: ServerConfig,
+        credentials: [(channelId: String, password: String)],
+        providerToken: String,
+        expectedGeneration: Int64
     ) async throws {
         guard isStandaloneMode else { return }
+        guard !(await dataStore.hasPendingWatchProvisioning()) else {
+            throw AppError.typedLocal(
+                code: "pending_watch_provisioning",
+                category: .local,
+                message: localizationManager.localized("operation_failed"),
+                detail: "wait for a complete phone provisioning replay"
+            )
+        }
+        guard isCurrentGateway(config),
+              expectedGeneration == (await dataStore.loadWatchProvisioningState()?.generation ?? 0)
+        else {
+            throw AppError.typedLocal(
+                code: "stale_watch_gateway_runtime",
+                category: .local,
+                message: localizationManager.localized("operation_failed"),
+                detail: "gateway changed before subscription sync"
+            )
+        }
         let gatewayKey = config.gatewayKey
-        await persistPushTokenAndRotateRoute(config: config, token: providerToken)
-        await syncProviderPullRoute(config: config, providerToken: providerToken)
-        guard let deviceKey = await ensureProviderDeviceKey(config: config, platform: platformIdentifier()) else {
+        await performPersistPushTokenAndRotateRoute(config: config, token: providerToken)
+        await performSyncProviderPullRoute(config: config, providerToken: providerToken)
+        guard let deviceKey = await performEnsureProviderDeviceKey(config: config, platform: platformIdentifier()) else {
             throw AppError.typedLocal(
                 code: "missing_device_key",
                 category: .notFound,
@@ -1319,8 +1439,35 @@ final class AppEnvironment {
     }
 
     private func ensureProviderDeviceKey(config: ServerConfig, platform: String) async -> String? {
-        let existing = await dataStore.cachedDeviceKey(for: platform)
-        if let existing,
+        await withCheckedContinuation { continuation in
+            _ = enqueueGatewayOperation { [self] in
+                continuation.resume(returning: await performEnsureProviderDeviceKey(
+                    config: config,
+                    platform: platform
+                ))
+            }
+        }
+    }
+
+    private func performEnsureProviderDeviceKey(config: ServerConfig, platform: String) async -> String? {
+        guard isCurrentGateway(config), !(await dataStore.hasPendingWatchProvisioning()) else { return nil }
+        let existing = await dataStore.cachedDeviceKey(for: platform)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let isRetired: Bool
+        if let existing, !existing.isEmpty {
+            do {
+                isRetired = try await dataStore.isRetiredWatchGatewayRouteKey(
+                    baseURL: config.normalizedBaseURL,
+                    deviceKey: existing
+                )
+            } catch {
+                recordAutomationRuntimeError(error, source: "watch.gateway_route_key_check", category: "storage")
+                return nil
+            }
+        } else {
+            isRetired = false
+        }
+        if let existing, !isRetired,
            Date().timeIntervalSince(lastWakeupDeviceRegisterAt) < privateWakeupDeviceRegisterInterval
         {
             return existing
@@ -1329,13 +1476,23 @@ final class AppEnvironment {
             baseURL: config.baseURL,
             token: config.token,
             platform: platform,
-            existingDeviceKey: existing
+            existingDeviceKey: isRetired ? nil : existing
         )
         lastWakeupDeviceRegisterAt = Date()
+        guard isCurrentGateway(config) else { return nil }
         guard let deviceKey = registered?.deviceKey.trimmingCharacters(in: .whitespacesAndNewlines),
-              !deviceKey.isEmpty
-        else { return existing }
-        await dataStore.saveCachedDeviceKey(deviceKey, for: platform)
+              !deviceKey.isEmpty,
+              !isRetired || deviceKey != existing
+        else { return isRetired ? nil : existing }
+        let saved = await dataStore.saveCachedDeviceKey(deviceKey, for: platform)
+        guard saved.didPersist else {
+            recordAutomationRuntimeMessage(
+                "provider device key could not be persisted",
+                source: "watch.gateway_route_key_save",
+                category: "storage"
+            )
+            return nil
+        }
         return deviceKey
     }
 
@@ -1351,41 +1508,104 @@ final class AppEnvironment {
         await syncWidgetPushRegistration()
     }
 
-    private func schedulePreviousGatewayDeviceCleanup(
-        previousConfig: ServerConfig?,
-        previousDeviceKey: String?,
-        nextConfig: ServerConfig?
-    ) {
-        guard let previousConfig else { return }
-        let trimmedDeviceKey = previousDeviceKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !trimmedDeviceKey.isEmpty else { return }
-        guard gatewayIdentity(previousConfig) != gatewayIdentity(nextConfig) else { return }
-        let service = channelSubscriptionService
-        Task(priority: .utility) {
-            do {
-                try await service.deleteDeviceChannel(
-                    baseURL: previousConfig.baseURL,
-                    token: previousConfig.token,
-                    deviceKey: trimmedDeviceKey,
-                    channelType: "apns"
-                )
-            } catch {}
+    private func enqueueGatewayOperation(
+        _ operation: @escaping @MainActor () async -> Void
+    ) -> Task<Void, Never> {
+        let predecessor = gatewayOperationTail
+        let operationID = UUID()
+        let task = Task { @MainActor [weak self] in
+            await predecessor?.value
+            await operation()
+            if self?.gatewayOperationID == operationID {
+                self?.gatewayOperationTail = nil
+                self?.gatewayOperationID = nil
+            }
+        }
+        gatewayOperationID = operationID
+        gatewayOperationTail = task
+        return task
+    }
+
+    private func schedulePreviousGatewayCleanup() {
+        previousGatewayCleanupRetryTask?.cancel()
+        previousGatewayCleanupRetryTask = nil
+        previousGatewayCleanupRequested = true
+        guard previousGatewayCleanupTask == nil else { return }
+        previousGatewayCleanupTask = enqueueGatewayOperation { [weak self] in
+            guard let self else { return }
+            var needsRetry = false
+            repeat {
+                self.previousGatewayCleanupRequested = false
+                needsRetry = await self.drainPreviousGatewayCleanups() || needsRetry
+            } while self.previousGatewayCleanupRequested
+            self.previousGatewayCleanupTask = nil
+            if needsRetry {
+                self.previousGatewayCleanupRetryTask = Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .seconds(60))
+                    guard !Task.isCancelled else { return }
+                    self?.previousGatewayCleanupRetryTask = nil
+                    self?.schedulePreviousGatewayCleanup()
+                }
+            }
         }
     }
 
-    private func gatewayIdentity(_ config: ServerConfig?) -> String {
-        guard let config else { return "" }
-        let token = config.token?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return "\(config.baseURL.absoluteString)|\(token)"
+    private func drainPreviousGatewayCleanups() async -> Bool {
+        let cleanups: [WatchGatewayRouteCleanup]
+        do {
+            cleanups = try await dataStore.pendingWatchGatewayRouteCleanups()
+        } catch {
+            recordAutomationRuntimeError(error, source: "watch.gateway_cleanup.load", category: "storage")
+            return true
+        }
+        var needsRetry = false
+        for cleanup in cleanups {
+            do {
+                do {
+#if DEBUG
+                    qualityGatewayCleanupAttempts += 1
+#endif
+                    try await channelSubscriptionService.deleteDeviceChannel(
+                        baseURL: cleanup.baseURL,
+                        token: cleanup.token,
+                        deviceKey: cleanup.deviceKey,
+                        channelType: "apns"
+                    )
+                } catch let error as AppError where [
+                    "device_key_not_found", "device_not_found",
+                    "route_not_found", "channel_type_mismatch"
+                ].contains(where: { error.matchesGatewayCode($0) }) {
+                    // A previous attempt may have removed the route before
+                    // the watch was interrupted. Absence completes cleanup.
+                }
+                try await dataStore.completeWatchGatewayRouteCleanup(id: cleanup.id)
+            } catch {
+#if DEBUG
+                qualityGatewayCleanupError = error.localizedDescription
+#endif
+                needsRetry = true
+                recordAutomationRuntimeError(error, source: "watch.gateway_cleanup.retry")
+            }
+        }
+        return needsRetry
     }
 
     private func syncProviderPullRoute(config: ServerConfig, providerToken: String) async {
+        let task = enqueueGatewayOperation { [weak self] in
+            await self?.performSyncProviderPullRoute(config: config, providerToken: providerToken)
+        }
+        await task.value
+    }
+
+    private func performSyncProviderPullRoute(config: ServerConfig, providerToken: String) async {
+        guard isStandaloneMode, isCurrentGateway(config),
+              !(await dataStore.hasPendingWatchProvisioning()) else { return }
         let now = Date()
         guard now.timeIntervalSince(lastWakeupRouteSyncAt) >= privateWakeupRouteSyncInterval else {
             return
         }
         let platform = platformIdentifier()
-        guard let deviceKey = await ensureProviderDeviceKey(config: config, platform: platform) else {
+        guard let deviceKey = await performEnsureProviderDeviceKey(config: config, platform: platform) else {
             return
         }
         if let route = try? await channelSubscriptionService.upsertDeviceChannel(
@@ -1405,7 +1625,7 @@ final class AppEnvironment {
     }
 
     private func syncWidgetPushRegistration() async {
-        guard isStandaloneMode else { return }
+        guard isStandaloneMode, !(await dataStore.hasPendingWatchProvisioning()) else { return }
         let platform = platformIdentifier()
         await PushGoWidgetPushRegistrationService.syncPendingRegistration(
             deviceKey: await dataStore.cachedDeviceKey(for: platform),
@@ -1414,6 +1634,15 @@ final class AppEnvironment {
     }
 
     private func persistPushTokenAndRotateRoute(config: ServerConfig, token: String) async {
+        let task = enqueueGatewayOperation { [weak self] in
+            await self?.performPersistPushTokenAndRotateRoute(config: config, token: token)
+        }
+        await task.value
+    }
+
+    private func performPersistPushTokenAndRotateRoute(config: ServerConfig, token: String) async {
+        guard isStandaloneMode, isCurrentGateway(config),
+              !(await dataStore.hasPendingWatchProvisioning()) else { return }
         let normalizedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedToken.isEmpty else { return }
         let platform = platformIdentifier()
@@ -1424,9 +1653,55 @@ final class AppEnvironment {
         guard let previousToken, previousToken != normalizedToken else {
             return
         }
-        await syncProviderPullRoute(config: config, providerToken: normalizedToken)
+        await performSyncProviderPullRoute(config: config, providerToken: normalizedToken)
         await retireProviderToken(config: config, providerToken: previousToken)
     }
+
+    private func isCurrentGateway(_ config: ServerConfig) -> Bool {
+        guard let current = serverConfig else { return false }
+        return current.gatewayKey == config.gatewayKey
+            && current.token?.trimmingCharacters(in: .whitespacesAndNewlines)
+                == config.token?.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+#if DEBUG
+    func installQualityGatewayTransport(
+        _ transport: @escaping @Sendable (URLRequest) async throws -> (Data, URLResponse)
+    ) {
+        channelSubscriptionService = ChannelSubscriptionService(requestTransport: transport)
+        providerIngressCoordinatorStorage = nil
+    }
+
+    func loadQualityServerConfigFromStore() async throws {
+        serverConfig = try await dataStore.loadWatchProvisioningServerConfig()?.normalized()
+    }
+
+    func waitForQualityGatewayOperations() async {
+        await previousGatewayCleanupTask?.value
+        while let tail = gatewayOperationTail {
+            await tail.value
+        }
+    }
+
+    func qualityEnsureDeviceKey(config: ServerConfig) async -> String? {
+        await ensureProviderDeviceKey(config: config, platform: platformIdentifier())
+    }
+
+    func qualitySyncRoute(config: ServerConfig) async {
+        await syncProviderPullRoute(config: config, providerToken: "quality-provider-token")
+    }
+
+    func qualityChangeMode(_ mode: WatchMode) async {
+        let previous = watchMode
+        watchMode = mode
+        await dataStore.saveWatchMode(mode)
+        await handleWatchModeTransition(from: previous, to: mode)
+    }
+
+    func setQualityGatewayRouteResult(_ result: String) {
+        qualityGatewayRouteResult = result
+    }
+#endif
 
     private func retireProviderToken(config: ServerConfig, providerToken: String) async {
         let normalized = providerToken.trimmingCharacters(in: .whitespacesAndNewlines)

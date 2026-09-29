@@ -1256,6 +1256,11 @@ enum NotificationHandling {
                     pulledPayload["delivery_id"] = item.deliveryId
                     let requestIdentifier = normalizedPayloadString(item.deliveryId) ?? deliveryId
                     var durablePayload = UserInfoSanitizer.sanitize(pulledPayload)
+                    // The delivery ID belongs to this Gateway. Keep its source
+                    // with the canonical payload so another Gateway's restored
+                    // database cannot make the same ID look like a replay.
+                    durablePayload["base_url"] = candidate.config.baseURL.absoluteString
+                    durablePayload["provider_device_key"] = deviceKey
                     let ackIdentity: ProviderDeliveryAckFailureStore.DeliveryIdentity?
                     let requiredEntryState: String
                     if pullResult.requiresAck {
@@ -1267,8 +1272,6 @@ enum NotificationHandling {
                         )
                         requiredEntryState = "terminal_local"
                     } else {
-                        durablePayload["base_url"] = candidate.config.baseURL.absoluteString
-                        durablePayload["provider_device_key"] = deviceKey
                         durablePayload[ProviderLegacyDestructivePullMetadata.markerKey] =
                             ProviderLegacyDestructivePullMetadata.markerValue
                         ackIdentity = nil
@@ -1293,7 +1296,7 @@ enum NotificationHandling {
                         allItemsDurable = false
                         continue
                     }
-                    durableResults.append((UserInfoSanitizer.sanitize(pulledPayload), requestIdentifier))
+                    durableResults.append((durablePayload, requestIdentifier))
                 }
                 let selected = durableResults.first { $0.requestIdentifier == deliveryId }
                     ?? durableResults.first

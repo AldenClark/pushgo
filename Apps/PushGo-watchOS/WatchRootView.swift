@@ -11,6 +11,9 @@ struct WatchRootView: View {
 #if DEBUG
             if let startupFailureMessage = environment.startupFailureMessage {
                 WatchStartupFailureView(message: startupFailureMessage)
+            } else if let result = environment.qualityGatewayRouteResult {
+                Text(result)
+                    .accessibilityIdentifier("state.gateway-route.verified")
             } else {
                 watchTabs
             }

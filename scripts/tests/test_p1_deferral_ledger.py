@@ -70,33 +70,64 @@ class P1DeferralLedgerTests(unittest.TestCase):
         for row in self.ledger_rows():
             self.assertTrue(self.expand_scope(row[1]), f"{row[0]} has no P1 capability")
 
+    def assert_closure_row(self, row, today):
+        group, scope, state, evidence, owner, due, trigger, oracle = row
+        self.assertIn(state, {"`DEFERRED`", "`IMPLEMENTED`", "`REMOVED/NA`"}, group)
+        if state == "`IMPLEMENTED`":
+            self.assertIn("build/quality-results/", evidence, group)
+            self.assertRegex(evidence, r"\b\d+/\d+\b", group)
+        if state == "`REMOVED/NA`":
+            self.assertIn("reachability", evidence.lower(), group)
+        self.assertGreaterEqual(len(evidence), 40, group)
+        self.assertTrue(owner.endswith("owner"), group)
+        deadline = dt.date.fromisoformat(due)
+        if state == "`DEFERRED`":
+            self.assertGreaterEqual(deadline, today, f"{group} is overdue")
+        self.assertRegex(
+            trigger,
+            r"Focused|Nightly|Performance|Accessibility|Release",
+            group,
+        )
+        self.assertGreaterEqual(len(oracle), 60, group)
+
     def test_required_closure_fields_and_deadlines(self):
         today = dt.date.today()
         rows = self.ledger_rows()
         self.assertEqual(23, len(rows), "Update the ledger summary after regrouping")
-        implemented = []
-        removed = []
-        for group, scope, state, evidence, owner, due, trigger, oracle in rows:
-            self.assertIn(state, {"`DEFERRED`", "`IMPLEMENTED`", "`REMOVED/NA`"}, group)
-            if state == "`IMPLEMENTED`":
-                implemented.append(group)
-                self.assertIn("build/quality-results/", evidence, group)
-                self.assertRegex(evidence, r"\b\d+/\d+\b", group)
-            if state == "`REMOVED/NA`":
-                removed.append(group)
-                self.assertIn("reachability", evidence.lower(), group)
-            self.assertGreaterEqual(len(evidence), 40, group)
-            self.assertTrue(owner.endswith("owner"), group)
-            deadline = dt.date.fromisoformat(due)
-            self.assertGreaterEqual(deadline, today, f"{group} is overdue")
-            self.assertRegex(
-                trigger,
-                r"Focused|Nightly|Performance|Accessibility|Release",
-                group,
-            )
-            self.assertGreaterEqual(len(oracle), 60, group)
-        self.assertEqual(["P1-EXPORT"], removed)
-        self.assertEqual([], implemented)
+        for row in rows:
+            self.assert_closure_row(row, today)
+
+    def test_deadline_applies_to_deferred_scope_but_allows_evidenced_terminal_state(self):
+        today = dt.date(2026, 9, 29)
+        row = [
+            "P1-FIXTURE",
+            "25.1:fixture..fixture",
+            "`DEFERRED`",
+            "Representative purpose-level fixture evidence with an accountable receipt.",
+            "fixture quality owner",
+            "2026-09-30",
+            "Nightly",
+            "The exact canonical result remains usable after a real user action and ordinary reopen.",
+        ]
+        self.assert_closure_row(row, today)
+
+        row[5] = "2026-09-28"
+        with self.assertRaisesRegex(AssertionError, "P1-FIXTURE is overdue"):
+            self.assert_closure_row(row, today)
+
+        row[2] = "`IMPLEMENTED`"
+        row[3] = "Purpose-level outcome and reopen passed 3/3; build/quality-results/fixture-summary.json"
+        self.assert_closure_row(row, today)
+        row[3] = "No native execution receipt was recorded for this nominally closed group."
+        with self.assertRaises(AssertionError):
+            self.assert_closure_row(row, today)
+
+        row[2] = "`REMOVED/NA`"
+        row[3] = "Documented product reachability decision makes the whole fixture scope inapplicable."
+        self.assert_closure_row(row, today)
+        row[3] = "A nominal removal without a documented product-scope decision or evidence."
+        with self.assertRaises(AssertionError):
+            self.assert_closure_row(row, today)
 
     def test_ledger_does_not_claim_product_pass(self):
         text = LEDGER.read_text()

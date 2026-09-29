@@ -2131,6 +2131,11 @@ actor LocalDataStore {
         return try await backend.loadMessage(deliveryId: deliveryId)
     }
 
+    func loadMessages(deliveryId: String) async throws -> [PushMessage] {
+        let backend = try requireBackend()
+        return try await backend.loadMessages(deliveryId: deliveryId)
+    }
+
     func loadMessage(notificationRequestId: String) async throws -> PushMessage? {
         let backend = try requireBackend()
         return try await backend.loadMessage(notificationRequestId: notificationRequestId)
@@ -8678,7 +8683,18 @@ private actor GRDBStore {
         }
 
         if let notificationRequestId = record.notificationRequestId,
-           let existing = try loadMessageRecordByNotificationRequestId(notificationRequestId, db: db)
+           let existing = try fetchMessageRecords(
+               db: db,
+               where: ["notification_request_id = \(Self.sqlQuoted(notificationRequestId))"],
+               orderBy: "received_at DESC, id DESC",
+               limit: nil
+           ).first(where: {
+               // Notification request IDs and delivery IDs are scoped to the
+               // originating Gateway. An older restored Gateway can reuse one
+               // without making the new message a replay of the old row.
+               $0.toPushMessage(decoder: decoder).providerSourceBaseURL
+                   == canonicalMessage.providerSourceBaseURL
+           })
         {
             let updatedRecord = GRDBMessageRecord(
                 id: existing.id,
@@ -9345,6 +9361,19 @@ private actor GRDBStore {
         return try read { db in
             try loadMessageRecord(where: "delivery_id = \(Self.sqlQuoted(trimmed))", db: db)?
                 .toPushMessage(decoder: decoder)
+        }
+    }
+
+    func loadMessages(deliveryId: String) async throws -> [PushMessage] {
+        let trimmed = deliveryId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        return try read { db in
+            try fetchMessageRecords(
+                db: db,
+                where: ["delivery_id = \(Self.sqlQuoted(trimmed))"],
+                orderBy: "received_at DESC, id DESC",
+                limit: nil
+            ).map { $0.toPushMessage(decoder: decoder) }
         }
     }
 

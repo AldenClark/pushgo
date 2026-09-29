@@ -692,6 +692,124 @@ struct ProviderIngressCoordinatorTests {
     }
 
     @Test
+    func foreignGatewayDeliveryIDReusePullsAndPersistsWithoutChangingOriginalMessage() async throws {
+        try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
+            let deliveryID = "shared-delivery-\(UUID().uuidString.lowercased())"
+            let oldBaseURL = try #require(URL(string: "https://old-gateway.example/Root"))
+            let host = "provider-source-isolation-\(UUID().uuidString.lowercased()).example"
+            let newBaseURL = try #require(URL(string: "https://\(host)/Root"))
+            _ = await store.saveCachedDeviceKey("new-device", for: "macos")
+            let oldMessageID = "old-\(deliveryID)"
+            let newMessageID = "new-\(deliveryID)"
+            let oldOutcome = await NotificationPersistenceCoordinator.persistRemotePayloadIfNeeded(
+                [
+                    "message_id": oldMessageID,
+                    "delivery_id": deliveryID,
+                    "base_url": oldBaseURL.absoluteString,
+                    "provider_device_key": "old-device",
+                    "title": "Original gateway message",
+                    "body": "Original body",
+                ],
+                requestIdentifier: deliveryID,
+                dataStore: store
+            )
+            guard case .persistedMain = oldOutcome else {
+                Issue.record("The original gateway message must be canonical before the collision")
+                return
+            }
+
+            let httpState = ProviderIngressHTTPState(pullPayloads: [
+                """
+                {"success":true,"data":{"items":[{"delivery_id":"\(deliveryID)","payload":{"message_id":"\(newMessageID)","title":"New gateway message","body":"New body"}}],"has_more":false}}
+                """,
+            ])
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.protocolClasses = [ChannelServiceURLProtocol.self]
+            let session = URLSession(configuration: configuration)
+            ChannelServiceURLProtocol.register(host: host) { request in
+                try httpState.handle(request)
+            }
+            defer {
+                session.invalidateAndCancel()
+                ChannelServiceURLProtocol.unregister(host: host)
+            }
+
+            let inbox = NotificationIngressInbox(appGroupIdentifier: appGroupIdentifier)
+            let ackStore = ProviderDeliveryAckFailureStore(appGroupIdentifier: appGroupIdentifier)
+            let coordinator = ProviderIngressCoordinator(
+                platformSuffix: "test",
+                dataStore: store,
+                channelSubscriptionService: ChannelSubscriptionService(session: session),
+                notificationIngressInbox: inbox,
+                ackMarkerStore: ackStore,
+                wakeupPullClaimStore: ProviderWakeupPullClaimStore(appGroupIdentifier: appGroupIdentifier),
+                hooks: .init(
+                    isEnabled: { true },
+                    serverConfig: { ServerConfig(baseURL: newBaseURL, token: "token") },
+                    cachedDeviceKey: { "new-device" },
+                    hasPersistedNotification: { identity in
+                        if let messageID = identity.messageId,
+                           let stored = try? await store.loadMessage(messageId: messageID),
+                           identity.matchesPersisted(stored) {
+                            return true
+                        }
+                        if let deliveryID = identity.deliveryId,
+                           let stored = try? await store.loadMessages(deliveryId: deliveryID),
+                           stored.contains(where: identity.matchesPersisted) {
+                            return true
+                        }
+                        return false
+                    },
+                    persistPayloads: { inputs in
+                        let outcomes = await NotificationPersistenceCoordinator.persistRemotePayloadsIfNeeded(
+                            inputs.map { .init(payload: $0.payload, requestIdentifier: $0.requestIdentifier) },
+                            dataStore: store
+                        )
+                        return outcomes.map(ProviderIngressPersistenceResult.init)
+                    },
+                    applyPersistenceResults: { _ in },
+                    reportInboxProgress: { _ in },
+                    recordProviderError: { _, _ in }
+                )
+            )
+            #expect(await inbox.enqueue(
+                payload: [
+                    "provider_wakeup": "1",
+                    "provider_mode": "wakeup",
+                    "delivery_id": deliveryID,
+                    "base_url": newBaseURL.absoluteString,
+                    "_skip_persist": "1",
+                ],
+                requestIdentifier: deliveryID,
+                source: "test.new_gateway_hint"
+            ))
+
+            _ = await coordinator.mergeInbox(
+                reason: "test_foreign_delivery_id_reuse",
+                allowFallbackPull: true
+            )
+
+            #expect(httpState.recordedPaths().contains("/Root/v2/messages/pull"))
+            #expect(try await store.loadMessage(messageId: oldMessageID)?.title == "Original gateway message")
+            #expect(try await store.loadMessage(messageId: oldMessageID)?.body == "Original body")
+            #expect(try await store.loadMessage(messageId: newMessageID)?.title == "New gateway message")
+            #expect(try await store.loadMessage(messageId: newMessageID)?.body == "New body")
+            let sameDeliveryRows = try await store.loadMessages(deliveryId: deliveryID)
+            #expect(sameDeliveryRows.count == 2)
+            let newGatewayIdentity = coordinator.identity(from: [
+                "provider_wakeup": "1",
+                "delivery_id": deliveryID,
+                "base_url": newBaseURL.absoluteString,
+            ])
+            #expect(sameDeliveryRows.filter(newGatewayIdentity.matchesPersisted).count == 1)
+            #expect(await ackStore.pendingMarkers(limit: 10, minimumAge: 0).count == 1)
+            await coordinator.drainAckMarkers(source: "test_foreign_delivery_id_reuse")
+            #expect(httpState.recordedPaths().contains("/Root/v2/messages/ack"))
+            #expect(await ackStore.pendingMarkers(limit: 10, minimumAge: 0).isEmpty)
+        }
+    }
+
+    @Test
     func inboxMergeWithFallbackDisabledCannotReachDestructiveLegacyPull() async throws {
         try await withProviderIngressLocalDataStore { store, appGroupIdentifier in
             let host = "provider-no-legacy-merge-\(UUID().uuidString.lowercased()).example"

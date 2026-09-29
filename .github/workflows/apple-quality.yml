@@ -22,6 +22,30 @@ on:
           - performance
           - release-isolation
           - release
+      diagnostic_mode:
+        description: Separate native diagnostic; does not run or pass the product quality gate
+        required: true
+        default: 'off'
+        type: choice
+        options:
+          - 'off'
+          - macos-adhoc-thing
+      diagnostic_sha:
+        description: Exact 40-character SHA of the selected branch tip (required for diagnostic)
+        required: false
+        type: string
+      diagnostic_trial:
+        description: Run trial 2 only after trial 1 has clean native product and test-system evidence
+        required: true
+        default: '1'
+        type: choice
+        options:
+          - '1'
+          - '2'
+      diagnostic_first_run_id:
+        description: Clean trial 1 GitHub run ID; required only for diagnostic trial 2
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -32,6 +56,7 @@ concurrency:
 
 jobs:
   quality:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.diagnostic_mode != 'macos-adhoc-thing' }}
     runs-on: macos-26
     timeout-minutes: 120
     env:
@@ -113,6 +138,60 @@ jobs:
           if-no-files-found: error
           retention-days: 21
           path: build/quality-results/*-summary.json
+
+  macos_adhoc_ui_diagnostic:
+    name: Ad-hoc macOS Thing UI diagnostic (not a quality gate)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.diagnostic_mode == 'macos-adhoc-thing' }}
+    runs-on: macos-26
+    timeout-minutes: 120
+    steps:
+      - name: Verify selected ref and requested SHA
+        shell: bash
+        env:
+          REQUESTED_SHA: ${{ inputs.diagnostic_sha }}
+          DISPATCH_SHA: ${{ github.sha }}
+          DIAGNOSTIC_TRIAL: ${{ inputs.diagnostic_trial }}
+          FIRST_RUN_ID: ${{ inputs.diagnostic_first_run_id }}
+        run: |
+          [[ "$REQUESTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'diagnostic_sha must be a lowercase full commit SHA'; exit 2; }
+          [[ "$REQUESTED_SHA" == "$DISPATCH_SHA" ]] || { echo 'diagnostic_sha must match the selected dispatch ref tip'; exit 2; }
+          if [[ "$DIAGNOSTIC_TRIAL" == '2' ]]; then
+            [[ "$FIRST_RUN_ID" =~ ^[0-9]+$ ]] || { echo 'trial 2 requires a reviewed clean trial 1 run ID'; exit 2; }
+          fi
+
+      - name: Checkout exact diagnostic commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.diagnostic_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify checked-out byte
+        shell: bash
+        env:
+          REQUESTED_SHA: ${{ inputs.diagnostic_sha }}
+        run: |
+          [[ "$(git rev-parse HEAD)" == "$REQUESTED_SHA" ]] || { echo 'checked-out SHA differs from requested SHA'; exit 2; }
+
+      - name: Select quality Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: '26.4'
+
+      - name: Run one native ad-hoc Thing diagnostic
+        env:
+          DIAGNOSTIC_TRIAL: ${{ inputs.diagnostic_trial }}
+          DIAGNOSTIC_FIRST_RUN_ID: ${{ inputs.diagnostic_first_run_id }}
+        run: bash scripts/ci/run_macos_adhoc_ui_diagnostic.sh
+
+      - name: Retain diagnostic build, signing, console, native log, and xcresult
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: apple-macos-adhoc-ui-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: build/quality-results/apple-macos-adhoc-ui-diagnostic/
 
   observation:
     if: ${{ always() && github.event_name == 'schedule' && github.event.schedule == '17 18 * * *' }}

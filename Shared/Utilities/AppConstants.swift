@@ -1111,29 +1111,31 @@ enum AppConstants {
             try fileManager.createDirectory(at: databaseDirectory, withIntermediateDirectories: true)
         }
 
-        try migrateSQLiteFileFamily(
-            fileManager: fileManager,
-            directory: databaseDirectory,
-            legacyFilenames: legacyDatabaseStoreMigrationFilenames(
+        try withSQLiteMigrationLock(directory: databaseDirectory) {
+            try migrateSQLiteFileFamily(
                 fileManager: fileManager,
-                directory: databaseDirectory
-            ),
-            targetFilename: databaseStoreFilename
-        )
-        try migrateSQLiteFileFamily(
-            fileManager: fileManager,
-            directory: databaseDirectory,
-            legacyFilenames: legacyMessageIndexDatabaseMigrationFilenames(
+                directory: databaseDirectory,
+                legacyFilenames: legacyDatabaseStoreMigrationFilenames(
+                    fileManager: fileManager,
+                    directory: databaseDirectory
+                ),
+                targetFilename: databaseStoreFilename
+            )
+            try migrateSQLiteFileFamily(
                 fileManager: fileManager,
-                directory: databaseDirectory
-            ),
-            targetFilename: messageIndexDatabaseFilename
-        )
-        try migrateSharedDatabaseArtifactsIntoAppLocal(
-            fileManager: fileManager,
-            appGroupIdentifier: appGroupIdentifier,
-            targetDirectory: databaseDirectory
-        )
+                directory: databaseDirectory,
+                legacyFilenames: legacyMessageIndexDatabaseMigrationFilenames(
+                    fileManager: fileManager,
+                    directory: databaseDirectory
+                ),
+                targetFilename: messageIndexDatabaseFilename
+            )
+            try migrateSharedDatabaseArtifactsIntoAppLocal(
+                fileManager: fileManager,
+                appGroupIdentifier: appGroupIdentifier,
+                targetDirectory: databaseDirectory
+            )
+        }
         return databaseDirectory
     }
 
@@ -1156,24 +1158,48 @@ enum AppConstants {
             try fileManager.createDirectory(at: databaseDirectory, withIntermediateDirectories: true)
         }
 
-        try migrateSQLiteFileFamily(
-            fileManager: fileManager,
-            directory: databaseDirectory,
-            legacyFilenames: legacyDatabaseStoreMigrationFilenames(
+        try withSQLiteMigrationLock(directory: databaseDirectory) {
+            try migrateSQLiteFileFamily(
                 fileManager: fileManager,
-                directory: databaseDirectory
-            ),
-            targetFilename: databaseStoreFilename
-        )
-        try migrateSQLiteFileFamily(
-            fileManager: fileManager,
-            directory: databaseDirectory,
-            legacyFilenames: legacyMessageIndexDatabaseMigrationFilenames(
+                directory: databaseDirectory,
+                legacyFilenames: legacyDatabaseStoreMigrationFilenames(
+                    fileManager: fileManager,
+                    directory: databaseDirectory
+                ),
+                targetFilename: databaseStoreFilename
+            )
+            try migrateSQLiteFileFamily(
                 fileManager: fileManager,
-                directory: databaseDirectory
-            ),
-            targetFilename: messageIndexDatabaseFilename
-        )
+                directory: databaseDirectory,
+                legacyFilenames: legacyMessageIndexDatabaseMigrationFilenames(
+                    fileManager: fileManager,
+                    directory: databaseDirectory
+                ),
+                targetFilename: messageIndexDatabaseFilename
+            )
+        }
+    }
+
+    private static func withSQLiteMigrationLock<T>(
+        directory: URL,
+        operation: () throws -> T
+    ) throws -> T {
+        // App, extension, and watch processes can open the same store. Keep
+        // source discovery, marker writes, and every SQLite sidecar move under
+        // one target-directory lock so they cannot publish mixed file families.
+        let lockPath = directory.appendingPathComponent(".pushgo-sqlite-migration.lock").path
+        let descriptor = Darwin.open(lockPath, O_CREAT | O_RDWR | O_CLOEXEC, 0o600)
+        guard descriptor >= 0 else {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+        }
+        defer { Darwin.close(descriptor) }
+        while flock(descriptor, LOCK_EX) != 0 {
+            guard errno == EINTR else {
+                throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+            }
+        }
+        defer { flock(descriptor, LOCK_UN) }
+        return try operation()
     }
 
     private static func migrateSQLiteFileFamily(
@@ -1183,18 +1209,31 @@ enum AppConstants {
         targetFilename: String
     ) throws {
         let targetBaseURL = directory.appendingPathComponent(targetFilename)
+        let markerURL = directory.appendingPathComponent(targetFilename + ".legacy-migration-source")
+        let markedSource = try readSQLiteMigrationSource(
+            fileManager: fileManager,
+            markerURL: markerURL,
+            candidates: legacyFilenames,
+            targetFilename: targetFilename
+        )
         if fileManager.fileExists(atPath: targetBaseURL.path) {
             let targetSize = (try? fileManager.attributesOfItem(atPath: targetBaseURL.path)[.size] as? NSNumber)?
                 .int64Value ?? 0
-            if targetSize > 0 {
+            if targetSize > 0, markedSource == nil {
                 return
             }
-            try? fileManager.removeItem(at: targetBaseURL)
+            if targetSize == 0 {
+                try? fileManager.removeItem(at: targetBaseURL)
+            }
         }
-        guard let sourceFilename = legacyFilenames.first(where: {
+        guard let sourceFilename = markedSource ?? legacyFilenames.first(where: {
             fileManager.fileExists(atPath: directory.appendingPathComponent($0).path)
         }) else {
             return
+        }
+
+        if markedSource == nil {
+            try sourceFilename.write(to: markerURL, atomically: true, encoding: .utf8)
         }
 
         let suffixes = ["", "-wal", "-shm", "-journal"]
@@ -1209,6 +1248,29 @@ enum AppConstants {
                 targetURL: targetURL
             )
         }
+        try fileManager.removeItem(at: markerURL)
+    }
+
+    private static func readSQLiteMigrationSource(
+        fileManager: FileManager,
+        markerURL: URL,
+        candidates: [String],
+        targetFilename: String
+    ) throws -> String? {
+        guard fileManager.fileExists(atPath: markerURL.path) else { return nil }
+        let source = try String(contentsOf: markerURL, encoding: .utf8)
+        let isDiscoverableLegacyName = targetFilename == databaseStoreFilename
+            ? legacyDatabaseVersion(from: source) != nil
+            : targetFilename == messageIndexDatabaseFilename
+                && legacyMessageIndexVersion(from: source) != nil
+        guard candidates.contains(source) || isDiscoverableLegacyName else {
+            throw NSError(
+                domain: "io.ethan.pushgo.sqlite-migration",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Invalid SQLite migration source marker."]
+            )
+        }
+        return source
     }
 
     private static func migrateSingleFile(
@@ -1219,7 +1281,11 @@ enum AppConstants {
         do {
             try fileManager.moveItem(at: sourceURL, to: targetURL)
         } catch {
-            try fileManager.copyItem(at: sourceURL, to: targetURL)
+            try copySingleFile(
+                fileManager: fileManager,
+                sourceURL: sourceURL,
+                targetURL: targetURL
+            )
             try? fileManager.removeItem(at: sourceURL)
         }
     }
@@ -1240,26 +1306,28 @@ enum AppConstants {
             return
         }
 
-        try migrateSQLiteFileFamilyBetweenDirectories(
-            fileManager: fileManager,
-            sourceDirectory: sharedDatabaseDirectory,
-            targetDirectory: targetDirectory,
-            sourceCandidates: databaseStoreSourceCandidates(
+        try withSQLiteMigrationLock(directory: sharedDatabaseDirectory) {
+            try migrateSQLiteFileFamilyBetweenDirectories(
                 fileManager: fileManager,
-                sourceDirectory: sharedDatabaseDirectory
-            ),
-            targetFilename: databaseStoreFilename
-        )
-        try migrateSQLiteFileFamilyBetweenDirectories(
-            fileManager: fileManager,
-            sourceDirectory: sharedDatabaseDirectory,
-            targetDirectory: targetDirectory,
-            sourceCandidates: messageIndexDatabaseSourceCandidates(
+                sourceDirectory: sharedDatabaseDirectory,
+                targetDirectory: targetDirectory,
+                sourceCandidates: databaseStoreSourceCandidates(
+                    fileManager: fileManager,
+                    sourceDirectory: sharedDatabaseDirectory
+                ),
+                targetFilename: databaseStoreFilename
+            )
+            try migrateSQLiteFileFamilyBetweenDirectories(
                 fileManager: fileManager,
-                sourceDirectory: sharedDatabaseDirectory
-            ),
-            targetFilename: messageIndexDatabaseFilename
-        )
+                sourceDirectory: sharedDatabaseDirectory,
+                targetDirectory: targetDirectory,
+                sourceCandidates: messageIndexDatabaseSourceCandidates(
+                    fileManager: fileManager,
+                    sourceDirectory: sharedDatabaseDirectory
+                ),
+                targetFilename: messageIndexDatabaseFilename
+            )
+        }
     }
 
     private static func migrateSQLiteFileFamilyBetweenDirectories(
@@ -1270,21 +1338,33 @@ enum AppConstants {
         targetFilename: String
     ) throws {
         let targetBaseURL = targetDirectory.appendingPathComponent(targetFilename)
+        let markerURL = targetDirectory.appendingPathComponent(targetFilename + ".shared-migration-source")
+        let markedSource = try readSQLiteMigrationSource(
+            fileManager: fileManager,
+            markerURL: markerURL,
+            candidates: sourceCandidates,
+            targetFilename: targetFilename
+        )
         if fileManager.fileExists(atPath: targetBaseURL.path) {
             let targetSize = (try? fileManager.attributesOfItem(atPath: targetBaseURL.path)[.size] as? NSNumber)?
                 .int64Value ?? 0
-            if targetSize > 0 {
+            if targetSize > 0, markedSource == nil {
                 return
             }
-            try? fileManager.removeItem(at: targetBaseURL)
+            if targetSize == 0 {
+                try? fileManager.removeItem(at: targetBaseURL)
+            }
         }
 
-        let sourceFilename = preferredSQLiteSourceFilename(
+        let sourceFilename = markedSource ?? preferredSQLiteSourceFilename(
             fileManager: fileManager,
             directory: sourceDirectory,
             candidates: sourceCandidates
         )
         guard let sourceFilename else { return }
+        if markedSource == nil {
+            try sourceFilename.write(to: markerURL, atomically: true, encoding: .utf8)
+        }
 
         let suffixes = ["", "-wal", "-shm", "-journal"]
         for suffix in suffixes {
@@ -1298,6 +1378,7 @@ enum AppConstants {
                 targetURL: targetURL
             )
         }
+        try fileManager.removeItem(at: markerURL)
     }
 
     private static func copySingleFile(
@@ -1305,12 +1386,27 @@ enum AppConstants {
         sourceURL: URL,
         targetURL: URL
     ) throws {
+        // Copy into the destination directory first. A failed copy may leave
+        // a short file; publishing that as SQLite's main file can make a
+        // subsequent launch skip the complete source and its WAL.
+        let temporaryURL = URL(fileURLWithPath: targetURL.path + ".copying")
+        if fileManager.fileExists(atPath: temporaryURL.path) {
+            try fileManager.removeItem(at: temporaryURL)
+        }
         do {
-            try fileManager.copyItem(at: sourceURL, to: targetURL)
-        } catch {
-            if fileManager.fileExists(atPath: targetURL.path) {
-                return
+            try fileManager.copyItem(at: sourceURL, to: temporaryURL)
+            let sourceSize = try fileManager.attributesOfItem(atPath: sourceURL.path)[.size] as? NSNumber
+            let copiedSize = try fileManager.attributesOfItem(atPath: temporaryURL.path)[.size] as? NSNumber
+            guard let sourceSize, let copiedSize, sourceSize == copiedSize else {
+                throw NSError(
+                    domain: "io.ethan.pushgo.sqlite-migration",
+                    code: 2,
+                    userInfo: [NSLocalizedDescriptionKey: "Incomplete SQLite family copy."]
+                )
             }
+            try fileManager.moveItem(at: temporaryURL, to: targetURL)
+        } catch {
+            try? fileManager.removeItem(at: temporaryURL)
             throw error
         }
     }

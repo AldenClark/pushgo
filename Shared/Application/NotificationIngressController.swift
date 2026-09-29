@@ -408,12 +408,14 @@ final class NotificationIngressController {
     private func hasPersistedNotification(identity: ProviderIngressIdentity) async -> Bool {
         do {
             if let messageId = identity.messageId,
-               try await dataStore.loadMessage(messageId: messageId) != nil
+               let stored = try await dataStore.loadMessage(messageId: messageId),
+               identity.matchesPersisted(stored)
             {
                 return true
             }
             if let deliveryId = identity.deliveryId,
-               try await dataStore.loadMessage(deliveryId: deliveryId) != nil
+               try await dataStore.loadMessages(deliveryId: deliveryId)
+                   .contains(where: identity.matchesPersisted)
             {
                 return true
             }

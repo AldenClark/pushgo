@@ -283,6 +283,12 @@ extension PushMessage {
         stringValue(forKeys: ["delivery_id"])
     }
 
+    var providerSourceBaseURL: String? {
+        let value = (rawPayload["base_url"]?.value as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return value?.isEmpty == false ? value : nil
+    }
+
     var operationId: String? {
         stringValue(forKeys: ["op_id"])
     }

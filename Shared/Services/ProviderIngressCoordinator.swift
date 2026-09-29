@@ -117,19 +117,34 @@ struct ProviderIngressIdentity: Sendable, Equatable {
     let requestIdentifier: String?
     let entityType: String?
     let entityId: String?
+    let sourceBaseURL: String?
+    let isWakeup: Bool
 
     init(
         messageId: String?,
         deliveryId: String?,
         requestIdentifier: String? = nil,
         entityType: String? = nil,
-        entityId: String? = nil
+        entityId: String? = nil,
+        sourceBaseURL: String? = nil,
+        isWakeup: Bool = false
     ) {
         self.messageId = messageId
         self.deliveryId = deliveryId
         self.requestIdentifier = requestIdentifier
         self.entityType = entityType
         self.entityId = entityId
+        self.sourceBaseURL = sourceBaseURL
+        self.isWakeup = isWakeup
+    }
+
+    func matchesPersisted(_ message: PushMessage) -> Bool {
+        if let sourceBaseURL {
+            return message.providerSourceBaseURL == sourceBaseURL
+        }
+        // A source-less wakeup is only a hint. A globally equal delivery ID
+        // cannot prove that its Gateway's payload was stored.
+        return !isWakeup
     }
 }
 
@@ -262,7 +277,9 @@ final class ProviderIngressCoordinator {
             deliveryId: providerDeliveryId(from: sanitized),
             requestIdentifier: requestIdentifier,
             entityType: entityTarget?.entityType,
-            entityId: entityTarget?.entityId
+            entityId: entityTarget?.entityId,
+            sourceBaseURL: normalizedText(sanitized["base_url"] as? String),
+            isWakeup: NotificationHandling.providerWakeupPullDeliveryId(from: sanitized) != nil
         )
     }
 
@@ -615,6 +632,8 @@ final class ProviderIngressCoordinator {
                         result[element.key] = element.value
                     }
                     payload["delivery_id"] = item.deliveryId
+                    payload["base_url"] = config.baseURL.absoluteString
+                    payload["provider_device_key"] = deviceKey
                     guard let ingressIdentity = ProviderDeliveryAckFailureStore.DeliveryIdentity(
                         deliveryId: item.deliveryId,
                         baseURL: config.baseURL,
@@ -1000,9 +1019,9 @@ final class ProviderIngressCoordinator {
             : nil
         if requiresAck, identity == nil { return false }
         var durablePayload = UserInfoSanitizer.sanitize(payload)
+        durablePayload["base_url"] = baseURL.absoluteString
+        durablePayload["provider_device_key"] = deviceKey
         if !requiresAck {
-            durablePayload["base_url"] = baseURL.absoluteString
-            durablePayload["provider_device_key"] = deviceKey
             durablePayload[ProviderLegacyDestructivePullMetadata.markerKey] =
                 ProviderLegacyDestructivePullMetadata.markerValue
         }

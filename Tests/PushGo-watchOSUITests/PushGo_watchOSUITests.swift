@@ -239,6 +239,44 @@ final class PushGo_watchOSUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Degraded in eu-west."].waitForExistence(timeout: 5))
     }
 
+    func testGatewayRouteCleanupRecoversAfterRelaunchAndNeverReusesRetiredKey() {
+        let app = XCUIApplication()
+        let sessionID = UUID().uuidString
+        configureHermeticLaunch(app, sessionID: sessionID, scenario: "watch.gateway-cleanup-seed")
+        app.launch()
+        XCTAssertTrue(
+            app.staticTexts["Gateway cleanup seed passed"].waitForExistence(timeout: 15),
+            startupFailureDescription(in: app)
+        )
+
+        app.terminate()
+        configureHermeticLaunch(app, sessionID: sessionID, scenario: "watch.gateway-cleanup-recover")
+        app.launch()
+        XCTAssertTrue(
+            app.staticTexts["Gateway cleanup recovery passed"].waitForExistence(timeout: 15),
+            startupFailureDescription(in: app)
+        )
+    }
+
+    func testInterruptedPhoneProvisioningBlocksMixedCredentialsUntilReplay() {
+        let app = XCUIApplication()
+        let sessionID = UUID().uuidString
+        configureHermeticLaunch(app, sessionID: sessionID, scenario: "watch.provisioning-interrupted-seed")
+        app.launch()
+        XCTAssertTrue(
+            app.staticTexts["Provisioning interruption seed passed"].waitForExistence(timeout: 15),
+            startupFailureDescription(in: app)
+        )
+
+        app.terminate()
+        configureHermeticLaunch(app, sessionID: sessionID, scenario: "watch.provisioning-interrupted-recover")
+        app.launch()
+        XCTAssertTrue(
+            app.staticTexts["Provisioning interruption recovery passed"].waitForExistence(timeout: 15),
+            startupFailureDescription(in: app)
+        )
+    }
+
     private func configureHermeticLaunch(
         _ app: XCUIApplication,
         sessionID: String,
