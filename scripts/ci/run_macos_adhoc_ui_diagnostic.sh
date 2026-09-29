@@ -165,7 +165,7 @@ from pathlib import Path
 
 app, output = sys.argv[1:]
 process = subprocess.run(
-    ["codesign", "-d", "--entitlements", "-", app],
+    ["codesign", "-d", "--entitlements", "-", "--xml", app],
     capture_output=True,
     check=True,
 )
