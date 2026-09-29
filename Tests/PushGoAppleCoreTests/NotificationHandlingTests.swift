@@ -771,6 +771,45 @@ struct NotificationHandlingTests {
     }
 
     @Test
+    func remotePayloadSnapshotsMutableFoundationValuesBeforePersistence() async throws {
+        try await withIsolatedLocalDataStore { store, _ in
+            let title = NSMutableString(string: "Original ingress title")
+            let nestedValue = NSMutableString(string: "original nested value")
+            let attributes = NSMutableDictionary(dictionary: ["source": nestedValue])
+            let input = NotificationPersistenceCoordinator.RemotePayload(
+                payload: [
+                    "message_id": "mutable-alias-message-001",
+                    "delivery_id": "mutable-alias-delivery-001",
+                    "entity_type": "message",
+                    "title": title,
+                    "body": "Original ingress body",
+                    "attrs": attributes,
+                ],
+                requestIdentifier: "mutable-alias-delivery-001"
+            )
+
+            title.setString("Mutated ingress title")
+            nestedValue.setString("mutated nested value")
+            attributes["late"] = "mutation after construction"
+
+            let outcomes = await NotificationPersistenceCoordinator.persistRemotePayloadsIfNeeded(
+                [input],
+                dataStore: store
+            )
+            guard outcomes.count == 1, case .persistedMain = outcomes[0] else {
+                Issue.record("The production persistence path must accept the snapshotted payload.")
+                return
+            }
+            let stored = try #require(try await store.loadMessages().first)
+            #expect(stored.title == "Original ingress title")
+            #expect(stored.body == "Original ingress body")
+            let storedAttributes = try #require(stored.rawPayload["attrs"]?.value as? [String: Any])
+            #expect(storedAttributes["source"] as? String == "original nested value")
+            #expect(storedAttributes["late"] == nil)
+        }
+    }
+
+    @Test
     func persistRemotePayloadIfNeededPersistsEventWithoutMessageIdUsingDeliveryIdentity() async throws {
         try await withIsolatedLocalDataStore { store, _ in
             let payload: [AnyHashable: Any] = [

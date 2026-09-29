@@ -2,6 +2,8 @@
 
 此索引防遗漏，不计算覆盖分，不是测试 Oracle。入口或类型存在不能让能力通过；最终判定以真实用户结果和必要数据/系统终点为准。
 
+2026-09-29 Apple ingress 异步边界别名保护：`NotificationPersistenceCoordinator.RemotePayload` 现在构造时递归复制受支持的 property-list 值，避免调用方保留的可变 Foundation 对象在后续 `await` 前改写持久化输入。新增 `remotePayloadSnapshotsMutableFoundationValuesBeforePersistence` 用嵌套 `NSMutableDictionary`/`NSMutableString` 构造、同步变异原对象，再走生产批量持久化和 Store 读取，要求准确原始标题、正文及嵌套字段；当前仅完成源码与静态并发审计，原生 Core 回归等待验证分支 CI，不能记为已通过或真实并发竞态复现。
+
 2026-09-29 Apple 跨网关投递 ID 隔离：旧实现把不同 Gateway 的同一 `delivery_id` 当作全局已入库，受控 Core 回归在修复前精确失败（新 Gateway 未拉取，目标消息缺失）；仅修前置判重后仍触发同一 v2 journal entry 的不同 payload 指纹冲突，揭示来源字段必须贯穿所有 durable/canonical 写入。当前修复以实际 Gateway URL 约束 inbox 已入库判断和 canonical request-ID 判重，v2/legacy 拉取均保留真实来源；回归证明 A 的准确标题/正文不变，B 的准确标题/正文独立入库、同一 ID 下保留两行且只有 B 的来源匹配，B 的 durable ACK 最终调用受控 `/v2/messages/ack` 测试路由。聚焦 1/1、相关 Core 116/116；最终 GRDB 7.11.0 Core 455 项/42 suites 列入并通过，其中 4 项显式 opt-in 跳过、451 项实际执行。这里是本机模拟 Gateway/Store 链，不是公开 Gateway、真实 APNs 或物理设备验收；watchOS 来源账本分支另经 SDK 编译与专用模拟器业务运行，但没有跨网关碰撞的 watchOS 端到端重演。
 
 2026-09-29 Apple Store 文件族恢复：`LocalDataStoreStoreRecoveryTests` 的前 4 条在生产 Store 写入后用独立进程提交 WAL 并骤停，分别触发主库已移动/WAL 未移动、共享主库已复制/WAL 未复制以及两种 64 字节部分复制；修复前精确表现为旧标题或损坏库，修复后 4/4 通过。目标目录跨进程 `flock` 另由两个独立 PID 的 barrier/持锁者自发 SIGKILL 场景 2/2 验证，检查来源主库与 WAL 同族、重开后的准确标题和条数；这两条没有旧码红测。主机 10k Watch 快照、10k 并发乱序、100k 旧库升级 opt-in 各 1/1；100k Store 路径首次在并行负载下搜索 22.457 秒超过 20 秒上限，保留 `FAILED` 记录，停止并行 native 负载后的同源码独立诊断搜索 12.833 秒、整例 1/1 通过，支持但不单独证明资源竞争归因。正式 Performance Lane 仍由过期测试系统登记阻断；受控主机证据不能代替实际磁盘 ENOSPC/电源故障/物理设备，P1-STORE 仍 `DEFERRED`。

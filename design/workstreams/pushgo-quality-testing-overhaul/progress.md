@@ -2,6 +2,8 @@
 
 ## 状态
 
+2026-09-29 Apple ingress 异步边界审计：`RemotePayload` 的动态 notification dictionary 改为在构造时递归快照，避免可变 Foundation 值在后续异步持久化前被调用方改写；新增生产 `persistRemotePayloadsIfNeeded`→`LocalDataStore` 业务 Oracle，以嵌套 `NSMutableDictionary`/`NSMutableString` 的构造后变异校验落库原文。此项是预防性别名保护，未复现真实并发故障；静态并发审计通过，Native Core 回归及 Xcode 26.4 XCTest actor 兼容仍待验证分支 CI，不改变 P1 或 QoS 退出状态。
+
 2026-09-29 Apple 1.3.3 发布准备：10 个 Apple 发布 target 的 Debug/Release 版本已准备为 `1.3.3 (91)`，UI-test 版本保持独立；Xcode Textual 固定提交为远端可解析的 `0039bfbf016c9cb6e54da7c8af0b8f6a8ad7d12e`，三语更新说明、Release Notes 和 Changelog 已准备，历史 v1.3.0 Sparkle appcast 保留原有真实签名元数据。跨网关同 `delivery_id` 的 inbox→受控 Gateway v2 pull→canonical Store→durable ACK 旅程先红后绿，修复前置误判、v2 journal 来源丢失及本地 request-ID 串源；聚焦 1/1、相关 116/116。当前 GRDB 与生产 Xcode 固定的 7.11.0 同 revision，最终完整 Core 455 项/42 suites 列入并通过，其中 4 项显式 opt-in 跳过、451 项实际执行。
 
 2026-09-29 Apple Store 迁移中断和并发：新测试用生产 `LocalDataStore` 写入真实消息、由独立进程提交未 checkpoint 的 WAL 后骤停，确认旧主库先 move、共享主库先 copy、两种 64 字节部分复制在修复前会丢失已提交标题或打不开库。修复先持久记录来源 marker，重启继续同一文件族；复制先在目标目录暂存、校验完整大小后发布。另为目标 Database 目录增加跨进程 `flock`，覆盖来源枚举、marker、主库/sidecar 和清理，shared→local 期间也锁住 shared 来源。4 条中断/短写回归与 2 条独立 PID 的 barrier/SIGKILL 竞态回归合计 6/6 通过；后两条未执行无锁旧码红测，不把它们记为先红。受控 SQLite quota 仍仅证明既有子项，真实磁盘 ENOSPC、电源故障、物理设备和 P1-STORE 全部边界未关闭。
