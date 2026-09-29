@@ -3191,12 +3191,12 @@ final class PushGo_macOSUITests: XCTestCase {
         launchQuality(context, sessionID: sessionID)
 
         openSidebarTab("things", in: context.app)
-        let thingRow = element(in: context.app, identifier: "thing.row.quality-thing-rich")
+        let thingList = context.app.windows["PushGoMainWindow"]
+            .descendants(matching: .any).matching(identifier: "list.things").firstMatch
+        XCTAssertTrue(thingList.waitForExistence(timeout: 8))
+        let thingRow = thingList.buttons["thing.row.quality-thing-rich"]
         XCTAssertTrue(thingRow.waitForExistence(timeout: 8))
-        let distractorRow = element(
-            in: context.app,
-            identifier: "thing.row.quality-thing-distractor"
-        )
+        let distractorRow = thingList.buttons["thing.row.quality-thing-distractor"]
         XCTAssertTrue(distractorRow.waitForExistence(timeout: 8))
         distractorRow.click()
         let deleteThing = element(in: context.app, identifier: "action.thing.delete")
@@ -3235,18 +3235,18 @@ final class PushGo_macOSUITests: XCTestCase {
             .appendingPathComponent("artifacts", isDirectory: true)
             .appendingPathComponent("automation-events.jsonl")
         openSidebarTab("things", in: app)
-        let reopenedThingRow = element(in: app, identifier: "thing.row.quality-thing-rich")
-        let reopenedDistractorRow = element(
-            in: app,
-            identifier: "thing.row.quality-thing-distractor"
+        let reopenedThingList = app.windows["PushGoMainWindow"]
+            .descendants(matching: .any).matching(identifier: "list.things").firstMatch
+        XCTAssertTrue(reopenedThingList.waitForExistence(timeout: 8))
+        let reopenedThingRow = reopenedThingList.buttons["thing.row.quality-thing-rich"]
+        let reopenedDistractorRow = reopenedThingList.buttons["thing.row.quality-thing-distractor"]
+        XCTAssertTrue(
+            reopenedThingRow.waitForExistence(timeout: 8),
+            "The surviving Thing must remain inside the owned list after relaunch."
         )
         XCTAssertTrue(
             reopenedDistractorRow.waitForNonExistence(timeout: 8),
             "The deleted Thing must not return after the production deadline commits and the App relaunches."
-        )
-        XCTAssertTrue(
-            reopenedThingRow.waitForExistence(timeout: 8),
-            "Deleting one Thing must preserve the independent control Thing across relaunch."
         )
 
         assertVisibleScreenThroughUI("screen.things.list", in: app, timeout: 8)
@@ -3320,11 +3320,11 @@ final class PushGo_macOSUITests: XCTestCase {
             settledSearch,
             "Thing search must publish an App-owned settled result snapshot before the UI Oracle continues."
         )
+        XCTAssertTrue(reopenedThingRow.exists)
         XCTAssertFalse(
             reopenedDistractorRow.exists,
             "Thing search must keep the exact target while excluding a real distractor."
         )
-        XCTAssertTrue(reopenedThingRow.exists)
         XCTAssertTrue(reopenedThingRow.label.contains("P2 Thing Rich"))
         reopenedThingRow.click()
         assertVisibleScreenThroughUI("screen.things.detail", in: app, timeout: 8)

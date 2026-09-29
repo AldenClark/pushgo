@@ -82,6 +82,7 @@ struct ThingListScreen: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(EntityVisualTokens.pageBackground)
+        .accessibilityIdentifier("list.things")
     }
 
     private func thingAccessibilityActions(for thing: ThingProjection) -> some ViewModifier {
