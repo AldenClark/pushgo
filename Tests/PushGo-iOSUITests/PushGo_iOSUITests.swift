@@ -626,7 +626,8 @@ final class PushGo_iOSUITests: XCTestCase {
 
     func testHistoryCleanupRemovesOnlyOldMessagesAndPersistsAcrossRelaunch() {
         let sessionID = "ios-cleanup-\(UUID().uuidString.lowercased())"
-        let context = configuredLaunchContext()
+        let englishLocale = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        let context = configuredLaunchContext(launchArguments: englishLocale)
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
             fixture: "messages.cleanup"
@@ -672,10 +673,43 @@ final class PushGo_iOSUITests: XCTestCase {
             rangeSheet.swipeUp()
         }
         tapWhenHittable(thirtyDays, timeout: 5)
+        let confirm = element(
+            in: context.app,
+            identifier: "action.messages.history_cleanup.confirm"
+        )
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        guard let cancel = context.app.buttons
+            .matching(NSPredicate(format: "label == %@", "Cancel"))
+            .allElementsBoundByIndex
+            .first(where: { $0.isHittable }) else {
+            XCTFail("The history cleanup confirmation must offer a usable Cancel action.")
+            return
+        }
+        cancel.tap()
+        XCTAssertTrue(confirm.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(rangeSheet.waitForExistence(timeout: 5))
+        context.app.terminate()
+        launch(context.app)
+        assertQualityRuntimeReady(in: context.app, timeout: 15)
+        XCTAssertTrue(oldRow.waitForExistence(timeout: 5))
+        XCTAssertTrue(recentRow.waitForExistence(timeout: 5))
+        assertMessagesTabBadgeCount(
+            2,
+            in: context.app,
+            message: "Cancel must not delete either message or change unread state across relaunch"
+        )
+
+        openMessageFilters(in: context.app)
         tapWhenHittable(
-            element(in: context.app, identifier: "action.messages.history_cleanup.confirm"),
+            element(in: context.app, identifier: "action.messages.history_cleanup"),
             timeout: 5
         )
+        XCTAssertTrue(rangeSheet.waitForExistence(timeout: 8))
+        if !thirtyDays.waitForExistence(timeout: 2) || !thirtyDays.isHittable {
+            rangeSheet.swipeUp()
+        }
+        tapWhenHittable(thirtyDays, timeout: 5)
+        tapWhenHittable(confirm, timeout: 5)
         tapWhenHittable(
             element(in: context.app, identifier: "action.messages.history_cleanup.done"),
             timeout: 8
@@ -686,7 +720,7 @@ final class PushGo_iOSUITests: XCTestCase {
         assertMessagesTabBadgeCount(1, in: context.app)
 
         context.app.terminate()
-        let relaunched = configuredLaunchContext()
+        let relaunched = configuredLaunchContext(launchArguments: englishLocale)
         relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
             sessionID: sessionID,
             fixture: "messages.cleanup"
