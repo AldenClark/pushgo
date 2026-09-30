@@ -7,6 +7,8 @@ import unittest
 from datetime import date
 from pathlib import Path
 
+from scripts.tests.quality_registry_fixture import copy_quality_scripts_with_nonexpiring_registry
+
 
 REPO = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
@@ -103,6 +105,7 @@ class QualityTestSystemIssueTests(unittest.TestCase):
 
     def test_runner_signature_after_product_test_started_is_not_classified(self):
         with tempfile.TemporaryDirectory() as directory:
+            root = copy_quality_scripts_with_nonexpiring_registry(Path(directory) / "fixture")
             log = Path(directory) / "mixed.log"
             log.write_text(
                 "Test Case '-[PushGoUITests testPurpose]' started.\n"
@@ -113,6 +116,8 @@ class QualityTestSystemIssueTests(unittest.TestCase):
                 [
                     "python3",
                     str(REPO / "scripts/quality_test_system_issues.py"),
+                    "--registry",
+                    str(root / "config/quality-test-system-issues.json"),
                     "--match-file",
                     str(log),
                     "--reject-if-matches",
@@ -131,6 +136,7 @@ class QualityTestSystemIssueTests(unittest.TestCase):
 
     def test_quality_precondition_inside_test_is_zero_retry_blocking_attribution(self):
         with tempfile.TemporaryDirectory() as directory:
+            root = copy_quality_scripts_with_nonexpiring_registry(Path(directory) / "fixture")
             log = Path(directory) / "precondition.log"
             log.write_text(
                 "Test Case '-[PushGoUITests testPurpose]' started.\n"
@@ -141,6 +147,8 @@ class QualityTestSystemIssueTests(unittest.TestCase):
                 [
                     "python3",
                     str(REPO / "scripts/quality_test_system_issues.py"),
+                    "--registry",
+                    str(root / "config/quality-test-system-issues.json"),
                     "--match-file",
                     str(log),
                 ],
@@ -154,6 +162,8 @@ class QualityTestSystemIssueTests(unittest.TestCase):
                 [
                     "python3",
                     str(REPO / "scripts/quality_test_system_issues.py"),
+                    "--registry",
+                    str(root / "config/quality-test-system-issues.json"),
                     "--match-file",
                     str(log),
                     "--retryable-only",
