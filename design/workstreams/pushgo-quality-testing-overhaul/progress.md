@@ -1,5 +1,7 @@
 # PushGo 全栈质量体系实施进度
 
+
+2026-09-30 iOS 历史清理取消复验：精确 `d16c906` 的 [零重试原生 CI](https://github.com/AldenClark/pushgo/actions/runs/36713305900) 已执行既有历史清理方法，新增真实确认框 Cancel → 同 session 普通重开，核对新旧 canonical 行及未读徽标均保留；随后重新选择 30 天并确认，保留旧消息移除、新消息保留、准确徽标与最终重开的原断言。Native summary 与全部 legacy action 均为 1 passed/0 failed/0 skipped/0 expected、零 warning，strict verifier `EXECUTED=1`；产品/测试系统 `PASSED/PASSED`，正式质量门禁 `NOT_RUN`。原始收据 `build/quality-results/apple-133-ci-20260930/36713305900/`。只关闭受控 iOS Cancel 持久化子目的，不代表全部截止时间、其它平台、实机或完整 P1 组通过。
 ## 状态
 
 2026-09-29 Apple ingress 异步边界审计：`RemotePayload` 的动态 notification dictionary 改为在构造时递归快照，避免可变 Foundation 值在后续异步持久化前被调用方改写；新增生产 `persistRemotePayloadsIfNeeded`→`LocalDataStore` 业务 Oracle，以嵌套 `NSMutableDictionary`/`NSMutableString` 的构造后变异校验落库原文。此项是预防性别名保护，未复现真实并发故障；静态并发审计通过，Native Core 回归及 Xcode 26.4 XCTest actor 兼容仍待验证分支 CI，不改变 P1 或 QoS 退出状态。
