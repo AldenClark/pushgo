@@ -127,6 +127,14 @@ class AppleReleaseIsolationLaneTests(unittest.TestCase):
             self.assertEqual(1, receipt["extension_count"])
             self.assertEqual(2, len(receipt["bundles"]))
 
+            app_only_settings = root / "macos-app-only-settings.log"
+            app_only_settings.write_text(
+                settings.read_text().split("Build settings for action build and target PushGo-macOS-Widgets:")[0]
+            )
+            with patch.object(macos_architectures.subprocess, "run", return_value=complete):
+                with self.assertRaisesRegex(macos_architectures.ArchitectureError, "no Release ARCHS"):
+                    macos_architectures.verify(app, app_only_settings)
+
             missing_extension = root / "missing-extension"
             extension.rename(missing_extension)
             with patch.object(macos_architectures.subprocess, "run", return_value=complete):

@@ -129,6 +129,34 @@ run_product_settings() {
     "$@" -showBuildSettings > "$results_root/$label-release-settings.log" 2>&1
 }
 
+# A scheme's -showBuildSettings output only includes its primary target, even
+# when the build embeds a dependent app extension. Capture that declared target
+# separately so the architecture verifier can compare every shipped binary to
+# its own effective Release ARCHS instead of inferring slices from the App.
+run_macos_extension_settings() {
+  local target output
+  # Both targets are declared in the PushGo-macOS Embed Foundation Extensions
+  # phase. A new embedded extension will fail bundle_record until its own
+  # target settings are added here; no architecture is inferred from the App.
+  for target in PushGoNSE-macOS PushGoWidgets-macOS; do
+    output="$results_root/$target-release-settings.log"
+    if ! xcodebuild \
+      -project "$repo_root/pushgo.xcodeproj" \
+      -target "$target" \
+      -configuration Release \
+      -sdk macosx \
+      -onlyUsePackageVersionsFromResolvedFile \
+      -disableAutomaticPackageResolution \
+      -skipPackageUpdates \
+      CODE_SIGNING_ALLOWED=NO CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
+      PROVISIONING_PROFILE_SPECIFIER= PROVISIONING_PROFILE= \
+      -showBuildSettings > "$output" 2>&1; then
+      return 1
+    fi
+    cat "$output" >> "$results_root/macos-release-settings.log"
+  done
+}
+
 reason=ios_simulator_release_build_failed
 if ! run_product_build ios PushGo-iOS 'generic/platform=iOS Simulator' "$ios_derived_data"; then
   ios_build_status=FAILED
@@ -170,6 +198,10 @@ reason=macos_release_settings_failed
 if ! run_product_settings macos PushGo-macOS 'generic/platform=macOS' "$macos_derived_data" \
   CODE_SIGNING_ALLOWED=NO CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
   PROVISIONING_PROFILE_SPECIFIER= PROVISIONING_PROFILE=; then
+  macos_settings_status=FAILED
+  exit 3
+fi
+if ! run_macos_extension_settings; then
   macos_settings_status=FAILED
   exit 3
 fi
