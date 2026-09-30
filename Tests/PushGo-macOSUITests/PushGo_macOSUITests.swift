@@ -2482,12 +2482,31 @@ final class PushGo_macOSUITests: XCTestCase {
             messageRefreshScenario: "fail_once_then_new_message"
         )
         launchQuality(relaunched, sessionID: sessionID)
+        let persistedRow = relaunched.app.buttons
+            .matching(NSPredicate(format: "label CONTAINS %@", "P2 Refresh Result"))
+            .firstMatch
         XCTAssertTrue(
-            relaunched.app.buttons
-                .matching(NSPredicate(format: "label CONTAINS %@", "P2 Refresh Result"))
-                .firstMatch
-                .waitForExistence(timeout: 8),
+            persistedRow.waitForExistence(timeout: 8),
             "The provider refresh result did not survive a real process relaunch."
+        )
+        XCTAssertTrue(
+            element(
+                in: relaunched.app,
+                identifier: "message.row.00000000-0000-0000-0000-000000000001"
+            ).exists,
+            "The original canonical message must survive the refresh and relaunch."
+        )
+        XCTAssertTrue(
+            (persistedRow.value as? String)?.contains(
+                "Persisted through the provider refresh ingress path."
+            ) == true,
+            "The persisted provider result must retain its accurate body after relaunch."
+        )
+        persistedRow.click()
+        XCTAssertTrue(
+            relaunched.app.staticTexts["Persisted through the provider refresh ingress path."]
+                .waitForExistence(timeout: 5),
+            "The persisted provider result must reopen its accurate detail after relaunch."
         )
         let relaunchedBadge = relaunched.app.staticTexts["sidebar.messages.unread_badge"]
         XCTAssertTrue(relaunchedBadge.waitForExistence(timeout: 8))
