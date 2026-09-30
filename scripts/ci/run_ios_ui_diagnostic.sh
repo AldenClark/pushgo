@@ -228,6 +228,7 @@ xcrun simctl terminate "$simulator_id" io.ethan.pushgo >/dev/null 2>&1 || true
 result_bundle="$results_root/message-journeys.xcresult"
 reason=native_ios_message_tests_not_clean
 stage test_without_building started
+touch "$results_root/test-start-stamp"
 if xcodebuild "${common_args[@]}" -resultBundlePath "$result_bundle" \
   CODE_SIGNING_ALLOWED=NO test-without-building \
   > "$results_root/native-test.log" 2>&1; then
@@ -236,6 +237,26 @@ else
   runner_exit=$?
 fi
 stage test_without_building completed
+
+# Keep the app's own Simulator crash report when a user journey terminates it.
+# XCTest's assertion can otherwise appear to be only a missing UI element.
+if [[ "$runner_exit" != 0 ]]; then
+  for report_kind in host simulator; do
+    if [[ "$report_kind" == host ]]; then
+      report_source="$HOME/Library/Logs/DiagnosticReports"
+    else
+      report_source="$HOME/Library/Developer/CoreSimulator/Devices/$simulator_id/data/Library/Logs/DiagnosticReports"
+    fi
+    [[ -d "$report_source" ]] || continue
+    report_destination="$results_root/app-crash-reports/$report_kind"
+    mkdir -p "$report_destination"
+    while IFS= read -r -d '' report; do
+      cp -p "$report" "$report_destination/"
+    done < <(find "$report_source" -type f \
+      \( -name 'PushGo-*.ips' -o -name 'PushGo-*.crash' \) \
+      -newer "$results_root/test-start-stamp" -print0)
+  done
+fi
 if [[ ! -d "$result_bundle" ]]; then
   reason=native_ios_xcresult_missing
   exit 3
