@@ -241,19 +241,36 @@ stage test_without_building completed
 # Keep the app's own Simulator crash report when a user journey terminates it.
 # XCTest's assertion can otherwise appear to be only a missing UI element.
 if [[ "$runner_exit" != 0 ]]; then
-  for report_kind in host simulator; do
-    if [[ "$report_kind" == host ]]; then
-      report_source="$HOME/Library/Logs/DiagnosticReports"
-    else
-      report_source="$HOME/Library/Developer/CoreSimulator/Devices/$simulator_id/data/Library/Logs/DiagnosticReports"
-    fi
+  app_executable="$(/usr/libexec/PlistBuddy -c 'Print CFBundleExecutable' "$app_bundle/Info.plist")"
+  printf 'bundle_executable=%s\n' "$app_executable" > "$results_root/app-crash-report-inventory.txt"
+  report_sources=(
+    "$HOME/Library/Logs/DiagnosticReports"
+    "$HOME/Library/Developer/CoreSimulator/Devices/$simulator_id/data/Library/Logs/DiagnosticReports"
+    "/Library/Logs/DiagnosticReports"
+  )
+  # A per-device diagnose can retain reports even when the usual host and
+  # device crash-report directories have not surfaced an .ips file yet.
+  diagnostic_root="$temporary_root/simulator-diagnose"
+  mkdir -p "$diagnostic_root"
+  if xcrun simctl diagnose -b --udid "$simulator_id" --no-archive \
+    --timeout=45 --output "$diagnostic_root" \
+    > "$results_root/simulator-diagnose.log" 2>&1; then
+    report_sources+=("$diagnostic_root")
+  fi
+  for report_index in "${!report_sources[@]}"; do
+    report_source="${report_sources[$report_index]}"
     [[ -d "$report_source" ]] || continue
-    report_destination="$results_root/app-crash-reports/$report_kind"
-    mkdir -p "$report_destination"
+    report_destination="$results_root/app-crash-reports/source-$report_index"
     while IFS= read -r -d '' report; do
-      cp -p "$report" "$report_destination/"
+      basename_report="$(basename "$report")"
+      printf 'source=%s name=%s\n' "$report_index" "$basename_report" \
+        >> "$results_root/app-crash-report-inventory.txt"
+      if [[ "$basename_report" == *"$app_executable"* ]]; then
+        mkdir -p "$report_destination"
+        cp -p "$report" "$report_destination/"
+      fi
     done < <(find "$report_source" -type f \
-      \( -name 'PushGo-*.ips' -o -name 'PushGo-*.crash' \) \
+      \( -name '*.ips' -o -name '*.crash' \) \
       -newer "$results_root/test-start-stamp" -print0)
   done
 fi
