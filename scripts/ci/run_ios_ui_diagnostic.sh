@@ -252,7 +252,7 @@ if [[ "$runner_exit" != 0 ]]; then
   # device crash-report directories have not surfaced an .ips file yet.
   diagnostic_root="$temporary_root/simulator-diagnose"
   mkdir -p "$diagnostic_root"
-  if xcrun simctl diagnose -b --udid "$simulator_id" --no-archive \
+  if xcrun simctl diagnose -b --udid="$simulator_id" --no-archive \
     --timeout=45 --output "$diagnostic_root" \
     > "$results_root/simulator-diagnose.log" 2>&1; then
     report_sources+=("$diagnostic_root")
