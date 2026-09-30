@@ -15,8 +15,11 @@ mkdir -p "$results_root"
 
 ios_build_status=NOT_RUN
 watch_build_status=NOT_RUN
+macos_build_status=NOT_RUN
 ios_settings_status=NOT_RUN
 watch_settings_status=NOT_RUN
+macos_settings_status=NOT_RUN
+macos_architecture_status=NOT_RUN
 release_isolation_status=NOT_RUN
 reason=diagnostic_not_started
 
@@ -24,15 +27,18 @@ write_summary() {
   local command_status=$?
   trap - EXIT
   python3 - "$results_root/diagnostic-summary.json" "$source_sha" "$expected_sha" \
-    "$ios_build_status" "$watch_build_status" "$ios_settings_status" \
-    "$watch_settings_status" "$release_isolation_status" "$reason" "$command_status" <<'PY'
+    "$ios_build_status" "$watch_build_status" "$macos_build_status" \
+    "$ios_settings_status" "$watch_settings_status" "$macos_settings_status" \
+    "$macos_architecture_status" "$release_isolation_status" "$reason" \
+    "$command_status" "$results_root/macos-architectures.json" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 (
-    output, source_sha, expected_sha, ios_build, watch_build, ios_settings,
-    watch_settings, release_isolation, reason, exit_code,
+    output, source_sha, expected_sha, ios_build, watch_build, macos_build,
+    ios_settings, watch_settings, macos_settings, macos_architecture,
+    release_isolation, reason, exit_code, architecture_path,
 ) = sys.argv[1:]
 payload = {
     "schema_version": 1,
@@ -41,16 +47,24 @@ payload = {
     "requested_sha": expected_sha or None,
     "ios_simulator_release_build_status": ios_build,
     "watchos_simulator_release_build_status": watch_build,
+    "macos_unsigned_release_build_status": macos_build,
     "ios_release_settings_status": ios_settings,
     "watchos_release_settings_status": watch_settings,
+    "macos_release_settings_status": macos_settings,
+    "macos_release_architecture_status": macos_architecture,
     "release_isolation_contract_status": release_isolation,
     "quality_gate_status": "NOT_RUN",
     "product_runtime_status": "NOT_RUN",
     "distribution_signing_status": "NOT_RUN",
     "reason": reason,
     "script_exit_code": int(exit_code),
-    "claim_limit": "Simulator Release SDK products and compile-time Quality Runtime isolation only; no App launch, physical device, signer, distribution, or complete Release gate.",
+    "claim_limit": "iOS/watchOS Simulator and unsigned macOS Release SDK products for the recorded architectures, with compile-time Quality Runtime isolation only; no App launch, physical device, signer, distribution, or complete Release gate.",
 }
+architecture_file = Path(architecture_path)
+if architecture_file.is_file():
+    architecture_receipt = json.loads(architecture_file.read_text())
+    payload["macos_release_architecture_scope"] = architecture_receipt.get("architecture_scope")
+    payload["macos_embedded_extension_count"] = architecture_receipt.get("extension_count")
 Path(output).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 print(f"diagnostic_summary={output}")
 print(f"release_isolation_contract_status={release_isolation}")
@@ -68,6 +82,7 @@ fi
 temporary_root="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/pushgo-release-sdk.XXXXXX")"
 ios_derived_data="$temporary_root/derived-data/ios"
 watch_derived_data="$temporary_root/derived-data/watch"
+macos_derived_data="$temporary_root/derived-data/macos"
 mkdir -p "$temporary_root/build-logs"
 xcodebuild -version > "$results_root/xcode-version.log" 2>&1
 sw_vers -productVersion > "$results_root/macos-version.log" 2>&1
@@ -142,14 +157,46 @@ if ! run_product_settings watchos PushGo-watchOS 'generic/platform=watchOS Simul
 fi
 watch_settings_status=PASSED
 
+reason=macos_unsigned_release_build_failed
+if ! run_product_build macos PushGo-macOS 'generic/platform=macOS' "$macos_derived_data" \
+  CODE_SIGNING_ALLOWED=NO CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
+  PROVISIONING_PROFILE_SPECIFIER= PROVISIONING_PROFILE=; then
+  macos_build_status=FAILED
+  exit 3
+fi
+macos_build_status=PASSED
+
+reason=macos_release_settings_failed
+if ! run_product_settings macos PushGo-macOS 'generic/platform=macOS' "$macos_derived_data" \
+  CODE_SIGNING_ALLOWED=NO CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
+  PROVISIONING_PROFILE_SPECIFIER= PROVISIONING_PROFILE=; then
+  macos_settings_status=FAILED
+  exit 3
+fi
+macos_settings_status=PASSED
+
+reason=macos_release_architecture_verification_failed
+if ! python3 "$repo_root/scripts/verify_macos_release_architectures.py" \
+  --app "$macos_derived_data/Build/Products/Release/PushGo.app" \
+  --build-settings "$results_root/macos-release-settings.log" \
+  --output "$results_root/macos-architectures.json" \
+  > "$results_root/macos-architecture-verifier.log" 2>&1; then
+  cat "$results_root/macos-architecture-verifier.log"
+  macos_architecture_status=FAILED
+  exit 3
+fi
+macos_architecture_status=PASSED
+
 reason=release_isolation_contract_failed
 release_isolation_status=FAILED
 if ! python3 "$repo_root/scripts/verify_apple_release_isolation.py" \
   --source-root "$repo_root" \
   --ios-derived-data "$ios_derived_data" \
   --watch-derived-data "$watch_derived_data" \
+  --macos-derived-data "$macos_derived_data" \
   --ios-build-settings "$results_root/ios-release-settings.log" \
   --watch-build-settings "$results_root/watchos-release-settings.log" \
+  --macos-build-settings "$results_root/macos-release-settings.log" \
   --output "$results_root/apple-release-isolation.json" \
   > "$results_root/release-isolation-verifier.log" 2>&1; then
   cat "$results_root/release-isolation-verifier.log"
@@ -159,7 +206,8 @@ fi
 shasum -a 256 \
   "$ios_derived_data/Build/Products/Release-iphonesimulator/PushGo.app/PushGo" \
   "$watch_derived_data/Build/Products/Release-watchsimulator/PushGoWatch.app/PushGoWatch" \
+  "$macos_derived_data/Build/Products/Release/PushGo.app/Contents/MacOS/PushGo" \
   > "$results_root/product-executable-sha256.log"
 df -h "$repo_root" > "$results_root/disk-after-build.log" 2>&1
 release_isolation_status=PASSED
-reason=simulator_release_sdk_isolation_verified
+reason=apple_release_sdk_isolation_verified
