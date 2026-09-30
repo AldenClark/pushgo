@@ -1,5 +1,6 @@
 # Apple 能力覆盖索引
 
+2026-09-30 Apple device SDK Release 缺口补齐：冻结干净 `bf0b9e5` 使用 Xcode 27.0 / 27A266a，顺序完成 iOS `iphoneos27.0` 与 watchOS `watchos27.0` 的真实 Release build/settings，所有命令显式 `CODE_SIGNING_ALLOWED=NO`、Manual、空 team/profile，不运行安装/签名导入/发布。root 直接核对实际 Mach-O：iOS App 包内完整六个自有 App/扩展（iOS 主 App/NSE/Widget + Watch App/NSE/Widget），独立 Watch 包完整三个；九份实际二进制均 `1.3.3/91`，每个与自身 Release settings 的 ARCHS 相等，iOS arm64 / IOS，Watch arm64+arm64_32 / WATCHOS，fresh executable、SHA、未签名且无 mobileprovision，20 项 source Release guards 通过。原始完整 build log/settings、真实 App 与逐二进制收据保留于 `build/quality-results/apple-device-sdk-bf0-20260930/`。这新增 device SDK/arm64_32 编译库存证据，不替代既有 Simulator UI、macOS 双架构或正式 quality/实际签名/实机/runtime 验收。
 
 2026-09-30 iOS 历史清理取消复验：精确 `d16c906` 的 [零重试原生 CI](https://github.com/AldenClark/pushgo/actions/runs/36713305900) 已执行既有历史清理方法，新增真实确认框 Cancel → 同 session 普通重开，核对新旧 canonical 行及未读徽标均保留；随后重新选择 30 天并确认，保留旧消息移除、新消息保留、准确徽标与最终重开的原断言。Native summary 与全部 legacy action 均为 1 passed/0 failed/0 skipped/0 expected、零 warning，strict verifier `EXECUTED=1`；产品/测试系统 `PASSED/PASSED`，正式质量门禁 `NOT_RUN`。原始收据 `build/quality-results/apple-133-ci-20260930/36713305900/`。只关闭受控 iOS Cancel 持久化子目的，不代表全部截止时间、其它平台、实机或完整 P1 组通过。
 此索引防遗漏，不计算覆盖分，不是测试 Oracle。入口或类型存在不能让能力通过；最终判定以真实用户结果和必要数据/系统终点为准。
