@@ -931,6 +931,19 @@ private extension MessageListScreen {
             .disabled(isPullRefreshing)
             .accessibilityLabel(localizationManager.localized("refresh"))
             .accessibilityIdentifier("action.messages.refresh")
+            if !isShowingSearchResults && viewModel.hasUnreadMessagesInCurrentScope {
+                Button {
+                    Task { await markAllCurrentScopeMessagesAsRead() }
+                } label: {
+                    Image(systemName: "envelope.open.fill")
+                }
+                .accessibilityLabel(localizationManager.localized("mark_all_as_read"))
+                .accessibilityIdentifier("action.messages.mark_all_read")
+            }
+        }
+        // Give the popover its own stable toolbar item: selecting a channel can
+        // remove the conditional mark-read action while the popover is open.
+        ToolbarItem(id: "message-filter", placement: .primaryAction) {
             Button {
                 isFilterPopoverPresented = true
             } label: {
@@ -945,17 +958,6 @@ private extension MessageListScreen {
                 } else {
                     filterPopoverPresentationContent
                 }
-            }
-            // Keep the popover anchor ahead of actions that can disappear when
-            // selecting a scope changes its unread count.
-            if !isShowingSearchResults && viewModel.hasUnreadMessagesInCurrentScope {
-                Button {
-                    Task { await markAllCurrentScopeMessagesAsRead() }
-                } label: {
-                    Image(systemName: "envelope.open.fill")
-                }
-                .accessibilityLabel(localizationManager.localized("mark_all_as_read"))
-                .accessibilityIdentifier("action.messages.mark_all_read")
             }
         }
     }
