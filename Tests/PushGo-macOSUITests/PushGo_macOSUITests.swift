@@ -2435,6 +2435,10 @@ final class PushGo_macOSUITests: XCTestCase {
             "The provider refresh failure must be visible on the Messages owner."
         )
         XCTAssertTrue(originalRow.exists, "A failed refresh must retain the last accurate snapshot.")
+        XCTAssertFalse(
+            context.app.staticTexts["P2 Refresh Result"].exists,
+            "The failed attempt must not present a provider result before Retry."
+        )
         XCTAssertTrue(refresh.isHittable, "The same real Refresh control must remain usable for retry.")
         refresh.click()
 

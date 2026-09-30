@@ -106,6 +106,9 @@ case "${DIAGNOSTIC_MACOS_SCOPE:-thing-relations}" in
     )
     expected_test_count=2
     ;;
+  message-refresh-failure)
+    test_scopes=('PushGo-macOSUITests/PushGo_macOSUITests/testMessageRefreshFailureKeepsSnapshotAndRetryPersistsAccurateResult')
+    ;;
   *)
     reason=unsupported_macos_diagnostic_scope
     exit 2

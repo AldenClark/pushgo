@@ -109,6 +109,12 @@ case "${DIAGNOSTIC_IOS_SCOPE:-message-three}" in
     )
     expected_test_count=1
     ;;
+  message-refresh-failure)
+    test_scopes=(
+      'PushGo-iOSUITests/PushGo_iOSUITests/testMessageRefreshFailureKeepsSnapshotAndRetryRecoversPersistedResult'
+    )
+    expected_test_count=1
+    ;;
   *)
     reason=unsupported_ios_diagnostic_scope
     exit 2

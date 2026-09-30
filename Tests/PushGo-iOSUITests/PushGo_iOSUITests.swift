@@ -1733,9 +1733,10 @@ final class PushGo_iOSUITests: XCTestCase {
     }
 
     func testMessageRefreshFailureKeepsSnapshotAndRetryRecoversPersistedResult() {
+        let sessionID = "ios-refresh-recovery-\(UUID().uuidString.lowercased())"
         let context = configuredLaunchContext()
         context.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
-            sessionID: "ios-refresh-recovery-\(UUID().uuidString.lowercased())",
+            sessionID: sessionID,
             fixture: "messages.standard",
             messageRefreshScenario: "fail_once_then_new_message"
         )
@@ -1748,6 +1749,10 @@ final class PushGo_iOSUITests: XCTestCase {
 
         assertElementExists("state.messages.refresh.failed", in: context.app, timeout: 5)
         XCTAssertTrue(originalTitle.exists)
+        XCTAssertFalse(
+            context.app.staticTexts["P2 Refresh Result"].exists,
+            "The failed attempt must not report the provider result as persisted."
+        )
         let retry = context.app.buttons["action.messages.refresh"]
         XCTAssertTrue(retry.isHittable)
         retry.tap()
@@ -1762,6 +1767,38 @@ final class PushGo_iOSUITests: XCTestCase {
         XCTAssertTrue(
             context.app.staticTexts["Persisted through the provider refresh ingress path."]
                 .waitForExistence(timeout: 5)
+        )
+
+        context.app.terminate()
+        let relaunched = configuredLaunchContext()
+        relaunched.app.launchEnvironment["PUSHGO_QUALITY_SESSION_BASE64"] = qualitySessionPayload(
+            sessionID: sessionID,
+            fixture: "messages.standard",
+            messageRefreshScenario: "fail_once_then_new_message"
+        )
+        launch(relaunched.app)
+        assertQualityRuntimeReady(in: relaunched.app, timeout: 15)
+        XCTAssertTrue(
+            relaunched.app.staticTexts["P2 Split Seed Message"].waitForExistence(timeout: 8),
+            "The failed refresh must not lose the prior canonical message after relaunch."
+        )
+        let persistedRefresh = relaunched.app.staticTexts["P2 Refresh Result"]
+        XCTAssertTrue(
+            persistedRefresh.waitForExistence(timeout: 8),
+            "The successful retry must persist the new canonical message across relaunch."
+        )
+        XCTAssertEqual(
+            relaunched.app.staticTexts
+                .matching(NSPredicate(format: "label == %@", "P2 Refresh Result")).count,
+            1,
+            "Retry must persist the provider result once, without a duplicate row."
+        )
+        persistedRefresh.tap()
+        assertElementExists("sheet.message.detail", in: relaunched.app, timeout: 8)
+        XCTAssertTrue(
+            relaunched.app.staticTexts["Persisted through the provider refresh ingress path."]
+                .waitForExistence(timeout: 5),
+            "The persisted retry result must reopen its exact body after relaunch."
         )
     }
 
