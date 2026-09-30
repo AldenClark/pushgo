@@ -16,6 +16,7 @@ mkdir -p "$results_root"
 test_scopes=()
 expected_test_count=1
 sample_capture_mode=0
+host_sample_capture_mode=0
 source_sha="$(git rev-parse HEAD)"
 product_status=NOT_RUN
 test_system_status=BLOCKED
@@ -30,7 +31,8 @@ write_summary() {
   trap - EXIT
   python3 - "$summary_file" "$classification_file" "$source_sha" "$trial" \
     "$first_run_id" "$product_status" "$test_system_status" "$reason" \
-    "$result_bundle" "$runner_exit" "$command_status" "$expected_test_count" "$sample_capture_mode" "${test_scopes[@]}" <<'PY'
+    "$result_bundle" "$runner_exit" "$command_status" "$expected_test_count" \
+    "$sample_capture_mode" "$host_sample_capture_mode" "${test_scopes[@]}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -38,11 +40,15 @@ from pathlib import Path
 (
     output, classification, source_sha, trial, first_run_id, product_status,
     test_system_status, reason, result_bundle, runner_exit, command_status,
-    expected_test_count, sample_capture_mode, *test_scopes,
+    expected_test_count, sample_capture_mode, host_sample_capture_mode, *test_scopes,
 ) = sys.argv[1:]
 payload = {
     "schema_version": 1,
-    "kind": "direct_native_macos_thing_ax_qos_sample_diagnostic" if sample_capture_mode == "1" else "direct_native_macos_adhoc_ui_diagnostic",
+    "kind": ("direct_native_macos_thing_ax_qos_host_sample_diagnostic"
+             if host_sample_capture_mode == "1" else
+             "direct_native_macos_thing_ax_qos_sample_diagnostic"
+             if sample_capture_mode == "1" else
+             "direct_native_macos_adhoc_ui_diagnostic"),
     "quality_gate_status": "NOT_RUN",
     "source_sha": source_sha,
     "trial": int(trial) if trial in {"1", "2"} else trial,
@@ -52,6 +58,7 @@ payload = {
     "expected_test_count": int(expected_test_count),
     "max_retries": 0,
     "sample_capture_mode": sample_capture_mode == "1",
+    "host_sample_capture_mode": host_sample_capture_mode == "1",
     "signing_mode": "temporary_sandboxed_ad_hoc_with_xctest_exceptions",
     "product_status": product_status,
     "test_system_status": test_system_status,
@@ -59,7 +66,9 @@ payload = {
     "result_bundle": result_bundle or None,
     "runner_exit_code": int(runner_exit) if runner_exit else None,
     "script_exit_code": int(command_status),
-    "claim_limit": ("Diagnostic stacks and timing around one sampled Thing query only; sampling changes scheduling and cannot close the QoS issue or qualify the product. No formal quality gate."
+    "claim_limit": ("Host-side stacks and binary maps for only the App and UI Runner around one Thing AX query; sampling changes scheduling and cannot close the QoS issue or qualify the product. No formal quality gate."
+                    if host_sample_capture_mode == "1" else
+                    "Diagnostic stacks and timing around one sampled Thing query only; sampling changes scheduling and cannot close the QoS issue or qualify the product. No formal quality gate."
                     if sample_capture_mode == "1" else
                     "Only the selected App-owned macOS UI journeys; no quality gate, real APNs, keychain, cross-process App Group, Release, or distribution claim."),
 }
@@ -76,6 +85,10 @@ PY
 trap write_summary EXIT
 
 case "${DIAGNOSTIC_MACOS_SCOPE:-thing-relations}" in
+  thing-ax-qos-host-sample)
+    test_scopes=('PushGo-macOSUITests/PushGo_macOSUITests/testThingRelationsOpenAccurateDetailsAndSurviveRelaunch')
+    host_sample_capture_mode=1
+    ;;
   thing-ax-qos-sample)
     test_scopes=('PushGo-macOSUITests/PushGo_macOSUITests/testThingRelationsOpenAccurateDetailsAndSurviveRelaunch')
     sample_capture_mode=1
@@ -181,15 +194,20 @@ fi
 xctestrun="$(find "$derived_data_path/Build/Products" -maxdepth 1 -name 'PushGo-macOS_*.xctestrun' -print | head -n 1)"
 cp "$xctestrun" "$results_root/$(basename "$xctestrun")"
 sample_xctestrun=''
-if [[ "$sample_capture_mode" == '1' ]]; then
+if [[ "$sample_capture_mode" == '1' || "$host_sample_capture_mode" == '1' ]]; then
   reason=ax_qos_sample_xctestrun_injection_failed
+  diagnostic_env_key=PUSHGO_AX_QOS_SAMPLE_DIAGNOSTIC
+  if [[ "$host_sample_capture_mode" == '1' ]]; then
+    diagnostic_env_key=PUSHGO_AX_QOS_HOST_SAMPLE_DIAGNOSTIC
+  fi
   sample_xctestrun="$derived_data_path/Build/Products/PushGo-macOS_AXQoSSample.xctestrun"
-  python3 - "$xctestrun" "$sample_xctestrun" <<'PY'
+  python3 - "$xctestrun" "$sample_xctestrun" "$diagnostic_env_key" "$run_id" <<'PY'
 import plistlib
 import sys
 from pathlib import Path
 
-source, output = map(Path, sys.argv[1:])
+source, output = map(Path, sys.argv[1:3])
+key, run_id = sys.argv[3:]
 specification = plistlib.loads(source.read_bytes())
 targets = [
     target
@@ -200,9 +218,11 @@ targets = [
 if len(targets) != 1 or not isinstance(targets[0].get("TestingEnvironmentVariables"), dict):
     raise SystemExit("expected exactly one macOS UI Runner environment")
 environment = targets[0]["TestingEnvironmentVariables"]
-if "PUSHGO_AX_QOS_SAMPLE_DIAGNOSTIC" in environment:
+if key in environment:
     raise SystemExit("sample switch already set in the build product")
-environment["PUSHGO_AX_QOS_SAMPLE_DIAGNOSTIC"] = "1"
+environment[key] = "1"
+if key == "PUSHGO_AX_QOS_HOST_SAMPLE_DIAGNOSTIC":
+    environment["PUSHGO_AX_QOS_HOST_RUN_ID"] = run_id
 output.write_bytes(plistlib.dumps(specification, fmt=plistlib.FMT_XML))
 reloaded = plistlib.loads(output.read_bytes())
 reloaded_targets = [
@@ -211,8 +231,10 @@ reloaded_targets = [
     for target in configuration["TestTargets"]
     if target.get("BlueprintName") == "PushGo-macOSUITests"
 ]
-if len(reloaded_targets) != 1 or reloaded_targets[0]["TestingEnvironmentVariables"].get("PUSHGO_AX_QOS_SAMPLE_DIAGNOSTIC") != "1":
+if len(reloaded_targets) != 1 or reloaded_targets[0]["TestingEnvironmentVariables"].get(key) != "1":
     raise SystemExit("sample switch did not survive xctestrun round-trip")
+if key == "PUSHGO_AX_QOS_HOST_SAMPLE_DIAGNOSTIC" and reloaded_targets[0]["TestingEnvironmentVariables"].get("PUSHGO_AX_QOS_HOST_RUN_ID") != run_id:
+    raise SystemExit("host run identity did not survive xctestrun round-trip")
 print("ax_qos_sample_xctestrun_environment=verified")
 PY
   plutil -lint "$sample_xctestrun" > "$results_root/sample-xctestrun-lint.log" 2>&1
@@ -297,6 +319,20 @@ fi
 # execution, the unlocked-console precondition, and strict xcresult verification.
 reason=native_selected_ui_not_executed
 mkdir -p "$results_root/native"
+host_sample_dir="$results_root/host-sample"
+host_sampler_done="$results_root/host-sampler-native-done"
+host_sampler_pid=''
+host_sampler_exit=''
+if [[ "$host_sample_capture_mode" == '1' ]]; then
+  touch "$results_root/native-test.log"
+  python3 "$repo_root/scripts/ci/capture_macos_thing_ax_qos_host.py" \
+    --native-log "$results_root/native-test.log" \
+    --done-marker "$host_sampler_done" \
+    --output "$host_sample_dir" \
+    --run-id "$run_id" \
+    > "$results_root/host-sampler.log" 2>&1 &
+  host_sampler_pid=$!
+fi
 if QUALITY_REUSE_BUILT_TESTS=1 \
     QUALITY_XCTESTRUN_PATH="$sample_xctestrun" \
     DERIVED_DATA_PATH="$derived_data_path" \
@@ -310,6 +346,15 @@ if QUALITY_REUSE_BUILT_TESTS=1 \
   runner_exit=0
 else
   runner_exit=$?
+fi
+if [[ "$host_sample_capture_mode" == '1' ]]; then
+  touch "$host_sampler_done"
+  if wait "$host_sampler_pid"; then
+    host_sampler_exit=0
+  else
+    host_sampler_exit=$?
+  fi
+  printf 'host_sampler_exit=%s\n' "$host_sampler_exit" > "$results_root/host-sampler-exit.txt"
 fi
 
 result_count="$(find "$results_root/native" -maxdepth 1 -name '*.xcresult' -print | wc -l | tr -d ' ')"
@@ -345,7 +390,8 @@ fi
 if PYTHONPATH="$repo_root" python3 - "$results_root/native-summary-raw.json" \
     "$results_root/native-legacy-object-raw.json" "$results_root/native-test.log" \
     "$results_root/runner-status.txt" "$runner_exit" "$expected_test_count" \
-    "$classification_file" "$sample_capture_mode" "$result_bundle" <<'PY'; then
+    "$classification_file" "$sample_capture_mode" "$host_sample_capture_mode" \
+    "$host_sample_dir/host-sample-summary.json" "$result_bundle" <<'PY'; then
 import json
 import subprocess
 import sys
@@ -353,7 +399,7 @@ from pathlib import Path
 
 from scripts.verify_apple_test_execution import combined_warning_messages
 
-summary_path, legacy_path, log_path, runner_status_path, runner_exit, expected_count, output_path, sample_capture_mode, result_bundle = sys.argv[1:]
+summary_path, legacy_path, log_path, runner_status_path, runner_exit, expected_count, output_path, sample_capture_mode, host_sample_capture_mode, host_sample_summary_path, result_bundle = sys.argv[1:]
 expected_count = int(expected_count)
 classification = {
     "product_status": "NOT_RUN",
@@ -379,6 +425,42 @@ try:
     log = Path(log_path).read_text(errors="replace")
     if executed != expected_count or counts["skippedTests"] or counts["expectedFailures"]:
         classification["reason"] = "selected_native_test_not_exactly_executed"
+    elif host_sample_capture_mode == "1":
+        failures = summary.get("testFailures", [])
+        if not isinstance(failures, list) or any(
+            not isinstance(item, dict) or not isinstance(item.get("testName"), str)
+            or not isinstance(item.get("failureText"), str)
+            for item in failures
+        ):
+            raise ValueError("host-sampled method failure details unreadable")
+        if len({item["testName"] for item in failures}) != counts["failedTests"]:
+            raise ValueError("host-sampled method failures do not match native counts")
+        classification["native_failures"] = failures
+        host_summary_file = Path(host_sample_summary_path)
+        host_summary = json.loads(host_summary_file.read_text()) if host_summary_file.exists() else {}
+        classification["host_sample_status"] = host_summary.get("status", "MISSING")
+        classification["host_sample_reason"] = host_summary.get("reason")
+        if counts["failedTests"]:
+            if all("QUALITY_PRECONDITION: AX_QOS_HOST_SAMPLE_BLOCKED" in item["failureText"] for item in failures):
+                classification["test_system_status"] = "BLOCKED"
+                classification["reason"] = "two_owned_pid_host_sample_precondition_blocked"
+            else:
+                classification["product_status"] = "FAILED"
+                classification["reason"] = "host_sampled_native_method_failed"
+        elif counts["passedTests"] == expected_count:
+            if host_summary.get("status") != "CAPTURED":
+                classification["test_system_status"] = "BLOCKED"
+                classification["reason"] = "two_owned_pid_host_sample_incomplete"
+            elif warnings:
+                classification["sample_capture_status"] = "PASSED"
+                classification["reason"] = "two_owned_pid_host_sample_captured_with_runtime_warning"
+            elif runner_exit == "0" and runner_status == "PASSED":
+                classification["sample_capture_status"] = "PASSED"
+                classification["test_system_status"] = "PASSED"
+                classification["reason"] = "two_owned_pid_host_sample_captured"
+            else:
+                classification["sample_capture_status"] = "PASSED"
+                classification["reason"] = "two_owned_pid_host_sample_captured_but_runner_not_clean"
     elif sample_capture_mode == "1":
         failures = summary.get("testFailures", [])
         if not isinstance(failures, list) or any(
@@ -455,7 +537,7 @@ except Exception as error:
 
 Path(output_path).write_text(json.dumps(classification, indent=2, sort_keys=True) + "\n")
 print(json.dumps(classification, sort_keys=True))
-if sample_capture_mode == "1":
+if sample_capture_mode == "1" or host_sample_capture_mode == "1":
     success = (classification.get("sample_capture_status") == "PASSED"
                and classification["test_system_status"] == "PASSED")
 else:

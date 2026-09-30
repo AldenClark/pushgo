@@ -3322,7 +3322,13 @@ final class PushGo_macOSUITests: XCTestCase {
         )
         XCTAssertTrue(reopenedThingRow.exists)
         let distractorExists: Bool
-        if ProcessInfo.processInfo.environment["PUSHGO_AX_QOS_SAMPLE_DIAGNOSTIC"] == "1" {
+        if ProcessInfo.processInfo.environment["PUSHGO_AX_QOS_HOST_SAMPLE_DIAGNOSTIC"] == "1" {
+            guard let sampledExists = hostSampleThingRowQuery(
+                reopenedDistractorRow,
+                sessionID: sessionID
+            ) else { return }
+            distractorExists = sampledExists
+        } else if ProcessInfo.processInfo.environment["PUSHGO_AX_QOS_SAMPLE_DIAGNOSTIC"] == "1" {
             guard let sampledExists = sampleThingRowQueryAcrossProcesses(
                 reopenedDistractorRow,
                 sessionID: sessionID
@@ -5809,6 +5815,92 @@ final class PushGo_macOSUITests: XCTestCase {
     @MainActor
     func element(in app: XCUIApplication, identifier: String) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+    }
+
+    /// Coordinate a diagnostic-only sample from the CI host. The Runner names
+    /// its own PID and the App's exact bundle-ID process; the host validates
+    /// both before sampling. The ordinary AX query and product Oracle remain.
+    @MainActor
+    private func hostSampleThingRowQuery(
+        _ row: XCUIElement,
+        sessionID: String
+    ) -> Bool? {
+        guard let runID = ProcessInfo.processInfo.environment["PUSHGO_AX_QOS_HOST_RUN_ID"],
+              !runID.isEmpty,
+              runID.allSatisfy(\.isNumber),
+              sessionID.range(of: "^[A-Za-z0-9-]{1,100}$", options: .regularExpression) != nil
+        else {
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_HOST_SAMPLE_BLOCKED invalid diagnostic identity")
+            return nil
+        }
+        let appProcesses = NSRunningApplication.runningApplications(
+            withBundleIdentifier: "io.ethan.pushgo"
+        ).filter { !$0.isTerminated }
+        guard appProcesses.count == 1,
+              appProcesses[0].processIdentifier > 0,
+              getpid() > 0,
+              appProcesses[0].processIdentifier != getpid()
+        else {
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_HOST_SAMPLE_BLOCKED expected one live App PID")
+            return nil
+        }
+
+        let controlDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PushGoAXQoSHostSamples", isDirectory: true)
+            .appendingPathComponent(sessionID, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(
+                at: controlDirectory,
+                withIntermediateDirectories: true
+            )
+        } catch {
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_HOST_SAMPLE_BLOCKED cannot create control directory: \(error)")
+            return nil
+        }
+        let marker = "PUSHGO_AX_QOS_HOST_BEGIN run=\(runID) runner=\(getpid()) "
+            + "app=\(appProcesses[0].processIdentifier) control=\(controlDirectory.path)\n"
+        FileHandle.standardError.write(Data(marker.utf8))
+
+        let readyURL = controlDirectory.appendingPathComponent("host-ready")
+        let blockedURL = controlDirectory.appendingPathComponent("host-blocked")
+        let deadline = Date().addingTimeInterval(20)
+        while Date() < deadline {
+            if FileManager.default.fileExists(atPath: readyURL.path) { break }
+            if FileManager.default.fileExists(atPath: blockedURL.path) { break }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        guard FileManager.default.fileExists(atPath: readyURL.path),
+              !FileManager.default.fileExists(atPath: blockedURL.path),
+              kill(getpid(), 0) == 0,
+              kill(appProcesses[0].processIdentifier, 0) == 0
+        else {
+            let reason = (try? String(contentsOf: blockedURL, encoding: .utf8)) ?? "host handshake timed out"
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_HOST_SAMPLE_BLOCKED \(reason)")
+            return nil
+        }
+
+        let queryStarted = Date()
+        let exists = row.exists
+        let queryEnded = Date()
+        let timing = "runner_pid=\(getpid())\napp_pid=\(appProcesses[0].processIdentifier)"
+            + "\nquery_start_epoch=\(queryStarted.timeIntervalSince1970)"
+            + "\nquery_end_epoch=\(queryEnded.timeIntervalSince1970)"
+            + "\nquery_duration_seconds=\(queryEnded.timeIntervalSince(queryStarted))\n"
+        do {
+            try timing.write(
+                to: controlDirectory.appendingPathComponent("query-timing.txt"),
+                atomically: true,
+                encoding: .utf8
+            )
+        } catch {
+            XCTFail("QUALITY_PRECONDITION: AX_QOS_HOST_SAMPLE_BLOCKED cannot save query timing: \(error)")
+            return nil
+        }
+        let timingAttachment = XCTAttachment(string: timing)
+        timingAttachment.name = "thing-ax-qos-host-query-timing"
+        timingAttachment.lifetime = .keepAlways
+        add(timingAttachment)
+        return exists
     }
 
     /// Diagnostic-only stack capture around the existing Thing row query. A
