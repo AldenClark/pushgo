@@ -1,0 +1,315 @@
+{
+  "schema_version": 1,
+  "scope": "Read-only remote metadata preflight, no product changes or credential-store writes",
+  "runs": [
+    {
+      "ci": {
+        "conclusion": "failure",
+        "headSha": "1db1cfa8d60dd1cf0adba5b7dc9f2dfa0e99952d",
+        "jobs": [
+          {
+            "completedAt": "2026-10-02T13:17:04Z",
+            "conclusion": "failure",
+            "databaseId": 110853499140,
+            "name": "metadata",
+            "startedAt": "2026-10-02T13:16:55Z",
+            "status": "completed",
+            "steps": [
+              {
+                "completedAt": "2026-10-02T13:16:57Z",
+                "conclusion": "success",
+                "name": "Set up job",
+                "number": 1,
+                "startedAt": "2026-10-02T13:16:56Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-02T13:16:59Z",
+                "conclusion": "success",
+                "name": "Run actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
+                "number": 2,
+                "startedAt": "2026-10-02T13:16:57Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-02T13:17:00Z",
+                "conclusion": "failure",
+                "name": "Check configured assets without importing or installing them",
+                "number": 3,
+                "startedAt": "2026-10-02T13:16:59Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-02T13:17:01Z",
+                "conclusion": "success",
+                "name": "Retain only the public metadata verdict",
+                "number": 4,
+                "startedAt": "2026-10-02T13:17:00Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-02T13:17:02Z",
+                "conclusion": "success",
+                "name": "Post Run actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
+                "number": 8,
+                "startedAt": "2026-10-02T13:17:01Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-02T13:17:02Z",
+                "conclusion": "success",
+                "name": "Complete job",
+                "number": 9,
+                "startedAt": "2026-10-02T13:17:02Z",
+                "status": "completed"
+              }
+            ],
+            "url": "https://github.com/AldenClark/pushgo/actions/runs/37011936821/job/110853499140"
+          }
+        ],
+        "status": "completed",
+        "url": "https://github.com/AldenClark/pushgo/actions/runs/37011936821"
+      },
+      "verdict": {
+        "schema_version": 1,
+        "source_revision": "1db1cfa8d60dd1cf0adba5b7dc9f2dfa0e99952d",
+        "metadata_status": "BLOCKED",
+        "assets": {
+          "APPLE_DISTRIBUTION": {
+            "decoded": true,
+            "purpose_matches": true,
+            "team_matches": true,
+            "currently_valid": true,
+            "private_component_present": true
+          },
+          "MAC_INSTALLER_DISTRIBUTION": {
+            "decoded": true,
+            "purpose_matches": true,
+            "team_matches": true,
+            "currently_valid": true,
+            "private_component_present": true
+          },
+          "DEVELOPER_ID_APPLICATION": {
+            "decoded": true,
+            "purpose_matches": true,
+            "team_matches": true,
+            "currently_valid": true,
+            "private_component_present": true
+          },
+          "APP_STORE_PROFILE_IOS_WIDGET": {
+            "decoded_and_cms_signature_checked": true,
+            "bundle_matches": true,
+            "platform_matches": true,
+            "team_matches": true,
+            "currently_valid": true,
+            "distribution_matches": true,
+            "certificate_matches": true,
+            "app_groups_match": true,
+            "production_push_matches": true
+          },
+          "APP_STORE_PROFILE_WATCH_WIDGET": {
+            "decoded_and_cms_signature_checked": true,
+            "bundle_matches": true,
+            "platform_matches": true,
+            "team_matches": true,
+            "currently_valid": true,
+            "distribution_matches": true,
+            "certificate_matches": true,
+            "app_groups_match": true,
+            "production_push_matches": true
+          },
+          "DEVELOPER_ID_PROFILE_MACOS_WIDGET": {
+            "decoded_and_cms_signature_checked": true,
+            "bundle_matches": true,
+            "platform_matches": true,
+            "team_matches": true,
+            "currently_valid": true,
+            "distribution_matches": false,
+            "certificate_matches": true,
+            "app_groups_match": true,
+            "production_push_matches": true
+          }
+        },
+        "actual_signing": "NOT_RUN",
+        "publication": "NOT_RUN",
+        "limitations": [
+          "No key import or profile installation",
+          "No trust-chain, archive/export, notarization or ASC API permission qualification",
+          "Only the three explicitly supplied widget profiles; automatic profiles for other targets are not qualified"
+        ]
+      },
+      "verdict_sha256": "8a3c427c2ba0619404728ca4074797e331182c4a3b4c169905afebe42c7d886f",
+      "classification": "FAILED_TEST_SYSTEM: preflight incorrectly required the iOS get-task-allow field on macOS; asset failure not established"
+    },
+    {
+      "ci": {
+        "conclusion": "success",
+        "headSha": "0f978bdd626094a9442dc3b3ae819803e23e9740",
+        "jobs": [
+          {
+            "completedAt": "2026-10-02T13:18:56Z",
+            "conclusion": "success",
+            "databaseId": 110854135213,
+            "name": "metadata",
+            "startedAt": "2026-10-02T13:18:45Z",
+            "status": "completed",
+            "steps": [
+              {
+                "completedAt": "2026-10-02T13:18:47Z",
+                "conclusion": "success",
+                "name": "Set up job",
+                "number": 1,
+                "startedAt": "2026-10-02T13:18:46Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-02T13:18:50Z",
+                "conclusion": "success",
+                "name": "Run actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
+                "number": 2,
+                "startedAt": "2026-10-02T13:18:47Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-02T13:18:51Z",
+                "conclusion": "success",
+                "name": "Check configured assets without importing or installing them",
+                "number": 3,
+                "startedAt": "2026-10-02T13:18:50Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-02T13:18:52Z",
+                "conclusion": "success",
+                "name": "Retain only the public metadata verdict",
+                "number": 4,
+                "startedAt": "2026-10-02T13:18:51Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-02T13:18:53Z",
+                "conclusion": "success",
+                "name": "Post Run actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803",
+                "number": 8,
+                "startedAt": "2026-10-02T13:18:52Z",
+                "status": "completed"
+              },
+              {
+                "completedAt": "2026-10-02T13:18:53Z",
+                "conclusion": "success",
+                "name": "Complete job",
+                "number": 9,
+                "startedAt": "2026-10-02T13:18:53Z",
+                "status": "completed"
+              }
+            ],
+            "url": "https://github.com/AldenClark/pushgo/actions/runs/37012129661/job/110854135213"
+          }
+        ],
+        "status": "completed",
+        "url": "https://github.com/AldenClark/pushgo/actions/runs/37012129661"
+      },
+      "verdict": {
+        "schema_version": 1,
+        "source_revision": "0f978bdd626094a9442dc3b3ae819803e23e9740",
+        "metadata_status": "PASSED",
+        "assets": {
+          "APPLE_DISTRIBUTION": {
+            "decoded": true,
+            "purpose_matches": true,
+            "team_matches": true,
+            "currently_valid": true,
+            "private_component_present": true
+          },
+          "MAC_INSTALLER_DISTRIBUTION": {
+            "decoded": true,
+            "purpose_matches": true,
+            "team_matches": true,
+            "currently_valid": true,
+            "private_component_present": true
+          },
+          "DEVELOPER_ID_APPLICATION": {
+            "decoded": true,
+            "purpose_matches": true,
+            "team_matches": true,
+            "currently_valid": true,
+            "private_component_present": true
+          },
+          "APP_STORE_PROFILE_IOS_WIDGET": {
+            "decoded_and_cms_signature_checked": true,
+            "bundle_matches": true,
+            "platform_matches": true,
+            "team_matches": true,
+            "currently_valid": true,
+            "debugging_disabled": true,
+            "devices_unrestricted": true,
+            "distribution_scope_matches": true,
+            "distribution_matches": true,
+            "certificate_matches": true,
+            "app_groups_match": true,
+            "production_push_matches": true
+          },
+          "APP_STORE_PROFILE_WATCH_WIDGET": {
+            "decoded_and_cms_signature_checked": true,
+            "bundle_matches": true,
+            "platform_matches": true,
+            "team_matches": true,
+            "currently_valid": true,
+            "debugging_disabled": true,
+            "devices_unrestricted": true,
+            "distribution_scope_matches": true,
+            "distribution_matches": true,
+            "certificate_matches": true,
+            "app_groups_match": true,
+            "production_push_matches": true
+          },
+          "DEVELOPER_ID_PROFILE_MACOS_WIDGET": {
+            "decoded_and_cms_signature_checked": true,
+            "bundle_matches": true,
+            "platform_matches": true,
+            "team_matches": true,
+            "currently_valid": true,
+            "debugging_disabled": true,
+            "devices_unrestricted": true,
+            "distribution_scope_matches": true,
+            "distribution_matches": true,
+            "certificate_matches": true,
+            "app_groups_match": true,
+            "production_push_matches": true
+          }
+        },
+        "actual_signing": "NOT_RUN",
+        "publication": "NOT_RUN",
+        "limitations": [
+          "No key import or profile installation",
+          "No trust-chain, archive/export, notarization or ASC API permission qualification",
+          "Only the three explicitly supplied widget profiles; automatic profiles for other targets are not qualified"
+        ]
+      },
+      "verdict_sha256": "70cc365a21750967046a5205b58209e784f6304da8c2428f8a5f8049ff956b2f",
+      "classification": "PASSED: metadata contracts only; actual signing NOT_RUN"
+    }
+  ],
+  "local_checks": {
+    "metadata_contract_tests": {
+      "passed": 8,
+      "failed": 0
+    },
+    "workflow_security": "PASSED",
+    "release_distribution_contract": "PASSED",
+    "impact_plan": "READY; recommended pr; quality-system-trustworthiness",
+    "quality_changed": "BLOCKED by preserved expired P1/test-system registrations; not waived",
+    "product_lane": "NOT_RUN (CI-only change)"
+  },
+  "remaining": [
+    "Actual archive/export/signature/trust/notarization and automatic target profile qualification NOT_RUN",
+    "Apple QoS cause and expired registry unresolved",
+    "Existing P1 deferrals remain open"
+  ],
+  "platform_boundaries": {
+    "android": "Existing formal CI SUCCESS retained; no rerun",
+    "gateway": "Existing CI/artifact qualification retained; no rerun",
+    "windows": "Source changes only; no release tests",
+    "website": "Prepared locally; not deployed"
+  }
+}
