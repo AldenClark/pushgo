@@ -1,5 +1,7 @@
 # Apple 能力覆盖索引
 
+2026-10-02 签名执行边界复核：远端 metadata/ASC GET 已通过，本机现存有效 Store profile 引用仍为 0。实际签名需要人工准备可消费的临时 keychain/九 profile 引用或脱敏签名诊断回执；此前凭据库写入审批拒绝保持，产品/正式签名门禁不降级。公开汇总沿用 apple-signing-metadata-20261002.json；QoS/P1 未关闭。
+
 2026-10-02 ASC 只读权限补齐：[Actions](https://github.com/AldenClark/pushgo/actions/runs/37013035334) 在 `24d306c` SUCCESS，现有密钥完成 ES256 认证，五个自动 profile 目标 Bundle ID 均存在，profiles 与 App record 的 GET 可读；同场六项显式签名资产元数据仍 PASS。4 项 Ruby 合同测试（18 assertions）及既有 Python 入口通过，完整 241 项脚本检查仅原 P1-STORE 逾期 failure / QoS 登记过期 error，未延期或豁免。仅证明读取权限，不声称创建、上传或实际签名通过；详情沿用 apple-signing-metadata-20261002.json。
 
 2026-10-02 Apple 签名资产只读预检：[Actions](https://github.com/AldenClark/pushgo/actions/runs/37012129661) 在 `0f978bdd` SUCCESS，metadata job 11s；三证书和三显式 Widget profiles 的元数据合同全部通过。首轮 `1db1cfa` 因预检误用 iOS 调试字段而失败，修正 macOS 判定后通过；原失败保留。8 项脚本测试、工作流凭据作用域和分发合同检查通过，未执行产品测试、密钥导入、profile 安装、实际签名或发布。详细边界和两轮收据见 [公开证据](evidence/apple-signing-metadata-20261002.json)。QoS 原因、逾期 P1 和实际签名资格仍开放。

@@ -503,5 +503,17 @@
         "Preserved expired QoS registration"
       ]
     }
+  },
+  "current_local_reference_blocker": {
+    "checked_on": "2026-10-02T13:34:20.739118+00:00",
+    "scope": "Existing local signing references only; no private-key export or credential-store writes",
+    "valid_codesigning_identity_count": 5,
+    "profile_file_count": 5,
+    "parsed_profile_count": 5,
+    "parse_errors": 0,
+    "nonexpired_store_profile_count": 0,
+    "actual_signing": "NOT_RUN",
+    "next_prerequisite": "Existing prepared runner keychain and nine matching Store profile references, or approved human-operated credential preparation",
+    "remote_metadata_evidence": "docs/quality/evidence/apple-signing-metadata-20261002.json"
   }
 }
