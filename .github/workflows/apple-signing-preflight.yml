@@ -27,11 +27,20 @@ jobs:
           APP_STORE_PROFILE_IOS_WIDGET_BASE64: ${{ secrets.APP_STORE_PROFILE_IOS_WIDGET_BASE64 }}
           APP_STORE_PROFILE_WATCH_WIDGET_BASE64: ${{ secrets.APP_STORE_PROFILE_WATCH_WIDGET_BASE64 }}
           DEVELOPER_ID_PROFILE_MACOS_WIDGET_BASE64: ${{ secrets.DEVELOPER_ID_PROFILE_MACOS_WIDGET_BASE64 }}
-      - name: Retain only the public metadata verdict
+      - name: Check read-only App Store Connect access
+        run: ruby scripts/ci/check_apple_asc_access.rb build/quality-results/apple-asc-access.json
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_KEY_IS_BASE64: ${{ vars.ASC_KEY_IS_BASE64 || 'false' }}
+      - name: Retain only the public metadata verdicts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: apple-signing-metadata-${{ github.run_id }}
-          path: build/quality-results/apple-signing-preflight.json
+          path: |
+            build/quality-results/apple-signing-preflight.json
+            build/quality-results/apple-asc-access.json
           if-no-files-found: error
           retention-days: 7
