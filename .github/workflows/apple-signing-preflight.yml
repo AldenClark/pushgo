@@ -1,0 +1,37 @@
+name: Apple Signing Metadata Preflight
+
+on:
+  push:
+    branches: [validation/apple-signing-preflight-133]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  metadata:
+    runs-on: macos-26
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Check configured assets without importing or installing them
+        run: python3 scripts/ci/check_apple_signing_metadata.py --output build/quality-results/apple-signing-preflight.json
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_DISTRIBUTION_P12_BASE64: ${{ secrets.APPLE_DISTRIBUTION_P12_BASE64 }}
+          APPLE_DISTRIBUTION_P12_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_P12_PASSWORD }}
+          MAC_INSTALLER_DISTRIBUTION_P12_BASE64: ${{ secrets.MAC_INSTALLER_DISTRIBUTION_P12_BASE64 }}
+          MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD: ${{ secrets.MAC_INSTALLER_DISTRIBUTION_P12_PASSWORD }}
+          DEVELOPER_ID_APPLICATION_P12_BASE64: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_BASE64 }}
+          DEVELOPER_ID_APPLICATION_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_PASSWORD }}
+          APP_STORE_PROFILE_IOS_WIDGET_BASE64: ${{ secrets.APP_STORE_PROFILE_IOS_WIDGET_BASE64 }}
+          APP_STORE_PROFILE_WATCH_WIDGET_BASE64: ${{ secrets.APP_STORE_PROFILE_WATCH_WIDGET_BASE64 }}
+          DEVELOPER_ID_PROFILE_MACOS_WIDGET_BASE64: ${{ secrets.DEVELOPER_ID_PROFILE_MACOS_WIDGET_BASE64 }}
+      - name: Retain only the public metadata verdict
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: apple-signing-metadata-${{ github.run_id }}
+          path: build/quality-results/apple-signing-preflight.json
+          if-no-files-found: error
+          retention-days: 7
