@@ -51,6 +51,32 @@ class SigningMetadataTests(unittest.TestCase):
         self.assertFalse(self.check(profile)["currently_valid"])
         self.assertFalse(self.check(self.profile, b"different certificate digest")["certificate_matches"])
 
+    def test_mac_direct_distribution_allows_absent_debug_entitlement_but_rejects_debugging(self):
+        contract = MODULE.PROFILES["DEVELOPER_ID_PROFILE_MACOS_WIDGET"]
+        profile = copy.deepcopy(self.profile)
+        profile["Platform"] = ["OSX"]
+        profile["ProvisionsAllDevices"] = True
+        granted = profile["Entitlements"]
+        granted["application-identifier"] = "FIXTURE_TEAM." + contract[0]
+        del granted["get-task-allow"]
+        def check():
+            return MODULE.profile_checks(profile, contract, "FIXTURE_TEAM", self.digest, self.now, self.entitlements)
+        self.assertTrue(all(check().values()))
+        for key in ["get-task-allow", "com.apple.security.get-task-allow"]:
+            granted[key] = True
+            self.assertFalse(check()["distribution_matches"])
+            del granted[key]
+        profile["ProvisionedDevices"] = ["fixture-device"]
+        self.assertFalse(check()["distribution_matches"])
+        del profile["ProvisionedDevices"]
+        profile["ProvisionsAllDevices"] = False
+        self.assertFalse(check()["distribution_matches"])
+
+    def test_missing_ios_debugging_restriction_is_rejected(self):
+        profile = copy.deepcopy(self.profile)
+        del profile["Entitlements"]["get-task-allow"]
+        self.assertFalse(self.check(profile)["distribution_matches"])
+
     def test_wrong_bundle_team_group_or_push_environment_cannot_pass(self):
         mutations = [("application-identifier", "FIXTURE_TEAM.wrong.widget", "bundle_matches"), ("com.apple.security.application-groups", [], "app_groups_match"), ("aps-environment", "development", "production_push_matches")]
         for key, value, expected in mutations:

@@ -73,13 +73,24 @@ def profile_checks(profile, contract, team, certificate_hash, now, entitlements)
         return isinstance(value, dt.datetime) and (value.replace(tzinfo=dt.timezone.utc) <= now if before else now < value.replace(tzinfo=dt.timezone.utc))
     required_groups = entitlements.get("com.apple.security.application-groups", [])
     granted_groups = granted.get("com.apple.security.application-groups", [])
+    # TN3125: macOS get-task-allow is not profile-managed and may be absent.
+    # iOS distribution profiles must explicitly disallow debugging.
+    debugging_disabled = (
+        all(granted.get(key, False) is False for key in ("get-task-allow", "com.apple.security.get-task-allow"))
+        if platform == "OSX" else granted.get("get-task-allow") is False
+    )
+    devices_unrestricted = not profile.get("ProvisionedDevices")
+    distribution_scope_matches = bool(profile.get("ProvisionsAllDevices")) == direct
     return {
         "decoded_and_cms_signature_checked": True,
         "bundle_matches": bundle_id_from_profile(profile) == bundle,
         "platform_matches": platform in profile.get("Platform", []),
         "team_matches": bool(team) and team in profile.get("TeamIdentifier", []),
         "currently_valid": current(created, True) and current(expiry, False),
-        "distribution_matches": granted.get("get-task-allow") is False and not profile.get("ProvisionedDevices") and bool(profile.get("ProvisionsAllDevices")) == direct,
+        "debugging_disabled": debugging_disabled,
+        "devices_unrestricted": devices_unrestricted,
+        "distribution_scope_matches": distribution_scope_matches,
+        "distribution_matches": debugging_disabled and devices_unrestricted and distribution_scope_matches,
         "certificate_matches": certificate_hash is not None and certificate_hash in [hashlib.sha256(c).digest() for c in profile.get("DeveloperCertificates", [])],
         "app_groups_match": all(any(group_is_authorized(g, permitted) for permitted in granted_groups) for g in required_groups),
         "production_push_matches": not has_aps(entitlements) or any(granted.get(k) == "production" for k in ("aps-environment", "com.apple.developer.aps-environment")),
